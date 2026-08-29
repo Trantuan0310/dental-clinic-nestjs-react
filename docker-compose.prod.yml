@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dental-clinic-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: dental_clinic
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Init scripts run once on first volume init, in alphabetical order:
+      #   01-extensions.sql — enable uuid-ossp, pgcrypto
+      #   02-uuid-v7.sql   — create public.uuid_generate_v7() used by Prisma defaults
+      - ./backend/01-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+      - ./backend/02-uuid-v7.sql:/docker-entrypoint-initdb.d/02-uuid-v7.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - dental-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runner
+    container_name: dental-clinic-backend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/dental_clinic
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3000/api/v1/health\").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - dental-network
+
+volumes:
+  postgres_data:
+
+networks:
+  dental-network:
+    driver: bridge

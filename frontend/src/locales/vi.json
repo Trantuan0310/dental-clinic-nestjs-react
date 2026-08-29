@@ -1,0 +1,151 @@
+{
+  "shell": {
+    "brand": "GENSMILE",
+    "version": "v2.993",
+    "clinicName": "Nha Khoa An Việt",
+    "search": {
+      "placeholder": "Tìm bệnh nhân (tên, mã, SĐT)...",
+      "label": "Tìm bệnh nhân",
+      "clearLabel": "Xóa nội dung tìm",
+      "tooltip": "Tìm theo {{name}}, {{code}} hoặc {{phone}}. Nhấn Enter để tìm."
+    },
+    "tabs": {
+      "overview": "Tổng quan",
+      "reports": "Báo cáo",
+      "dentists": "Bác sĩ"
+    },
+    "menu": {
+      "open": "Mở menu",
+      "close": "Đóng menu",
+      "dialogLabel": "Menu điều hướng"
+    },
+    "sidebar": {
+      "collapse": "Thu gọn sidebar",
+      "expand": "Mở rộng sidebar",
+      "collapseShort": "Thu gọn"
+    },
+    "user": {
+      "profile": "Hồ sơ của tôi",
+      "logout": "Đăng xuất",
+      "notifications": "Thông báo"
+    }
+  },
+  "theme": {
+    "light": "Sáng",
+    "dark": "Tối",
+    "system": "Hệ thống",
+    "toggleLabel": "Chuyển sang giao diện {{mode}}",
+    "switchToLight": "Chuyển sang giao diện sáng",
+    "switchToDark": "Chuyển sang giao diện tối"
+  },
+  "language": {
+    "switchLabel": "Ngôn ngữ: {{native}}",
+    "title": "Ngôn ngữ"
+  },
+  "command": {
+    "trigger": "Tìm nhanh…",
+    "triggerLabel": "Mở Command Palette",
+    "placeholder": "Tìm trang, bệnh nhân, lịch hẹn, hóa đơn… (↑ ↓ để di chuyển, Enter để chọn)",
+    "tooltip": "Nhấn ⌘K để mở",
+    "empty": "Không tìm thấy kết quả cho \"{{query}}\"",
+    "footer": {
+      "navigate": "di chuyển",
+      "select": "chọn",
+      "close": "đóng",
+      "count": "{{count}} mục"
+    },
+    "groups": {
+      "recent": "Gần đây",
+      "actions": "Thao tác"
+    },
+    "entityGroups": {
+      "patient": "Bệnh nhân",
+      "appointment": "Lịch hẹn",
+      "invoice": "Hóa đơn"
+    },
+    "actions": {
+      "toggleTheme": "Đổi sáng/tối"
+    },
+    "searching": "Đang tìm kiếm…"
+  },
+  "common": {
+    "loading": "Đang tải…",
+    "error": "Đã có lỗi xảy ra",
+    "retry": "Thử lại",
+    "cancel": "Hủy",
+    "confirm": "Xác nhận",
+    "save": "Lưu",
+    "delete": "Xóa",
+    "edit": "Sửa",
+    "create": "Tạo mới",
+    "search": "Tìm",
+    "back": "Quay lại",
+    "next": "Tiếp theo",
+    "previous": "Trước",
+    "submit": "Gửi",
+    "yes": "Có",
+    "no": "Không"
+  },
+  "auth": {
+    "login": {
+      "title": "Đăng nhập",
+      "subtitle": "Nhập thông tin tài khoản để tiếp tục",
+      "email": "Email",
+      "password": "Mật khẩu",
+      "submit": "Đăng nhập",
+      "forgotPassword": "Quên mật khẩu?",
+      "hero": {
+        "headlinePrefix": "Phòng khám ",
+        "headlineHighlight": "vận hành gọn gàng",
+        "headlineSuffix": ", bắt đầu từ đây",
+        "subtitle": "Dành thời gian cho bệnh nhân — để hệ thống lo phần còn lại",
+        "bullets": [
+          "Lịch hẹn, check-in, hàng chờ rõ ràng theo thời gian thực",
+          "Hồ sơ bệnh nhân, bệnh án tập trung một nơi",
+          "Doanh thu, công nợ rõ ràng từng ngày, từng bác sĩ",
+          "Tồn kho vật tư được theo dõi tự động"
+        ]
+      },
+      "errors": {
+        "invalid": "Email hoặc mật khẩu không đúng",
+        "required": "Vui lòng nhập email và mật khẩu"
+      }
+    },
+    "logout": "Đăng xuất",
+    "session": {
+      "expired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+    }
+  },
+  "a11y": {
+    "skipToMain": "Chuyển tới nội dung chính"
+  },
+  "nav": {
+    "Dashboard": "Dashboard",
+    "Patients": "Bệnh nhân",
+    "Appointments": "Lịch hẹn",
+    "Today": "Hôm nay",
+    "MyQueue": "Hàng chờ của tôi",
+    "MedicalRecords": "Bệnh án",
+    "MyPatients": "Bệnh nhân của tôi",
+    "Billing": "Hóa đơn",
+    "Expenses": "Chi phí",
+    "Inventory": "Kho vật tư",
+    "Payroll": "Bảng lương",
+    "MyPayroll": "Lương của tôi",
+    "MyShifts": "Ca của tôi",
+    "Reports": "Báo cáo doanh thu",
+    "Users": "Người dùng",
+    "Roles": "Vai trò & quyền",
+    "AuditLogs": "Audit logs",
+    "Settings": "Cài đặt",
+    "groups": {
+      "Chung": "Chung",
+      "Lễ tân": "Lễ tân",
+      "Lâm sàng": "Lâm sàng",
+      "Tài chính": "Tài chính",
+      "Nhân sự & Lương": "Nhân sự & Lương",
+      "Báo cáo": "Báo cáo",
+      "Quản trị": "Quản trị"
+    }
+  }
+}

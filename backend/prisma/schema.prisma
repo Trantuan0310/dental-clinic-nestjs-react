@@ -1,0 +1,1217 @@
+// =============================================================================
+// Prisma Schema — Dental Clinic Management System
+// =============================================================================
+//
+// File này là SOURCE OF TRUTH cho runtime database.
+// Các file SQL chi tiết (CREATE TABLE, indexes, constraints, seed):
+//   docs/04_Database/schema-per-module/<module>.md
+//
+// Phase 5 — Database Design (2026-07-13)
+// Spec: docs/03_Specification/<Module>/SPEC.md
+// ADR liên quan:
+//   - ADR-0005: UUID v7 làm PK
+//   - ADR-0006: Soft Delete mặc định
+//   - ADR-0007: Cross-Module Event Bus
+//   - ADR-0008: Transactional Encounter Close
+//
+// Lưu ý:
+// - Prisma xài native Postgres enum cho status
+// - Composite PK cho bảng join
+// - Extensions: pg_trgm, btree_gist, uuid-ossp (Postgres generate UUID v7)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// AUTH MODULE (8 bảng)
+// =============================================================================
+
+enum UserStatus {
+  ACTIVE
+  PENDING_SETUP
+  DEACTIVATED
+}
+
+enum ActionAudit {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  REFRESH_REUSE_DETECTED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_DONE
+  PASSWORD_CHANGED
+  USER_CREATED
+  USER_ROLE_CHANGED
+  USER_DEACTIVATED
+  USER_REACTIVATED
+  USER_PASSWORD_RESET_BY_ADMIN
+  ROLE_CREATED
+  ROLE_PERMISSIONS_CHANGED
+  LOGOUT_ALL
+}
+
+model User {
+  id                     String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  email                  String         @db.VarChar(255)
+  passwordHash           String         @map("password_hash")
+  fullName               String         @map("full_name") @db.VarChar(200)
+  status                 UserStatus     @default(ACTIVE)
+  failedLoginAttempts    Int            @default(0) @map("failed_login_attempts")
+  lockedUntil            DateTime?      @map("locked_until") @db.Timestamptz()
+  lastLoginAt            DateTime?      @map("last_login_at") @db.Timestamptz()
+  deactivatedAt          DateTime?      @map("deactivated_at") @db.Timestamptz()
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy              String?        @map("created_by") @db.Uuid
+  updatedBy              String?        @map("updated_by") @db.Uuid
+  deletedAt              DateTime?      @map("deleted_at") @db.Timestamptz()
+
+  // Self-references
+  creator                User?          @relation("UserCreator", fields: [createdBy], references: [id])
+  updater                User?          @relation("UserUpdater", fields: [updatedBy], references: [id])
+  created                User[]         @relation("UserCreator")
+  updated                User[]         @relation("UserUpdater")
+
+  // Relations
+  userRoles              UserRole[]
+  refreshTokens          RefreshToken[]
+  passwordResetTokens    PasswordResetToken[]
+  auditLogs              AuditLog[]
+
+  // Patient-owned relations (created_by, updated_by FK to user)
+  createdPatients        Patient[]      @relation("PatientCreator")
+  updatedPatients        Patient[]      @relation("PatientUpdater")
+  createdPatientIdentifiers PatientIdentifier[] @relation("PatientIdentifierCreator")
+
+  // Appointments
+  appointmentsAsDentist  Appointment[]  @relation("AppointmentDentist")
+  createdAppointments    Appointment[]  @relation("AppointmentCreator")
+  updatedAppointments    Appointment[]  @relation("AppointmentUpdater")
+  confirmedAppointments  Appointment[]  @relation("AppointmentConfirmedBy")
+  checkedInAppointments  Appointment[]  @relation("AppointmentCheckedInBy")
+  cancelledAppointments  Appointment[]  @relation("AppointmentCancelledBy")
+  workingSchedules       WorkingSchedule[]
+  timeOffs               TimeOff[]
+  // Note: createdShiftRegistrationsAsAdmin was removed — admin-on-behalf-of
+  // creation uses the same createdByUserId column with the existing
+  // ShiftRegistrationCreator relation. The audit log records the actor.
+
+  // Encounters
+  encountersAsDentist    Encounter[]
+  lastClinicalNoteEdit   ClinicalNote[] @relation("ClinicalNoteLastEditor")
+  createdClinicalNoteAddendums ClinicalNoteAddendum[]   @relation("AddendumAddedBy")
+  // Without this, prisma validation fails.
+  createdEncounterAudits EncounterAudit[]
+  createdTreatments      Treatment[]    @relation("TreatmentCreator")
+  createdPrescriptions   Prescription[] @relation("PrescriptionCreator")
+  snapshottedCharts      DentalChartSnapshot[]
+
+  // Billing
+  issuedInvoices         Invoice[]      @relation("InvoiceIssuer")
+  createdInvoices        Invoice[]      @relation("InvoiceCreator")
+  voidedInvoices         Invoice[]      @relation("InvoiceVoidedBy")
+  receivedPayments       Payment[]
+  invoiceAuditActors     InvoiceAudit[]
+
+  // Inventory
+  createdCategories      InventoryCategory[]   @relation("InventoryCategoryCreator")
+  updatedCategories      InventoryCategory[]   @relation("InventoryCategoryUpdater")
+  createdItems           InventoryItem[]
+  performedMovements     StockMovement[]
+
+  // Expense (BR-EXP-001)
+  createdExpenses     Expense[]    @relation("ExpenseCreator")
+  updatedExpenses     Expense[]    @relation("ExpenseUpdater")
+
+  // Payroll (Phase 9)
+  compensations              DentistCompensation[]   @relation("CompensationDentist")
+  approvedCompensations      DentistCompensation[]  @relation("CompensationApprover")
+  shiftRegistrations         ShiftRegistration[]    @relation("ShiftRegistrationDentist")
+  approvedShiftRegistrations ShiftRegistration[]    @relation("ShiftRegistrationApprover")
+  createdShiftRegistrations  ShiftRegistration[]    @relation("ShiftRegistrationCreator")
+  payrollLineItems           PayrollLineItem[]
+  createdPayrollPeriods      PayrollPeriod[]        @relation("PayrollPeriodCreator")
+  lockedPayrollPeriods       PayrollPeriod[]        @relation("PayrollPeriodLocker")
+  approvedPayrollPeriods     PayrollPeriod[]        @relation("PayrollPeriodApprover")
+  paidPayrollPeriods         PayrollPeriod[]        @relation("PayrollPeriodPayer")
+  createdPayrollAdjustments  PayrollAdjustment[]    @relation("PayrollAdjustmentActor")
+  payrollConfigUpdated       PayrollConfig? @relation("PayrollConfigUpdater")
+
+  @@unique([email])
+  @@index([status])
+  @@index([deactivatedAt])
+  @@index([fullName])
+  @@index([status, fullName])
+  @@map("users")
+}
+
+model Role {
+  id              String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code            String         @db.VarChar(50)
+  name            String         @db.VarChar(100)
+  description     String?
+  isSystem        Boolean        @default(false) @map("is_system")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy       String?        @map("created_by") @db.Uuid
+  deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz()
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@unique([code])
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code        String           @db.VarChar(100)
+  resource    String           @db.VarChar(50)
+  action      String           @db.VarChar(50)
+  description String?
+  isSystem    Boolean          @default(true) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+
+  rolePermissions RolePermission[]
+
+  @@unique([code])
+  @@index([resource])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId      String    @map("user_id") @db.Uuid
+  roleId      String    @map("role_id") @db.Uuid
+  assignedAt  DateTime  @default(now()) @map("assigned_at") @db.Timestamptz()
+  assignedBy  String?   @map("assigned_by") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id                String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  tokenHash         String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz()
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz()
+  replacedByToken   String?   @map("replaced_by_token") @db.Uuid
+  userAgent         String?   @map("user_agent")
+  ipAddress         String?   @map("ip_address") @db.VarChar(45)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz()
+  usedAt    DateTime? @map("used_at") @db.Timestamptz()
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model AuditLog {
+  id              String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  actorUserId     String?  @map("actor_user_id") @db.Uuid
+  actorEmailAtTime String? @map("actor_email_at_time") @db.VarChar(255)
+  action          String   @db.VarChar(100)
+  targetType      String?  @map("target_type") @db.VarChar(50)
+  targetId        String?  @map("target_id") @db.Uuid
+  metadata        Json?    @db.JsonB
+  ipAddress       String?  @map("ip_address") @db.VarChar(45)
+  userAgent       String?  @map("user_agent")
+  occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz()
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([actorUserId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// PATIENTS MODULE (4 bảng)
+// =============================================================================
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum IdentifierType {
+  CCCD
+  CMND
+  PASSPORT
+}
+
+model Patient {
+  id                  String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code                String   @db.VarChar(20)
+  fullName            String   @map("full_name") @db.VarChar(200)
+  dob                 DateTime @db.Date
+  gender              Gender
+  primaryPhone        String?  @map("primary_phone") @db.VarChar(20)
+  email               String?  @db.VarChar(255)
+  address             String?
+  occupation          String?  @db.VarChar(100)
+  allergies           Json     @default("[]") @db.JsonB
+  chronicDiseases     Json     @default("[]") @map("chronic_diseases") @db.JsonB
+  currentMedications  Json     @default("[]") @map("current_medications") @db.JsonB
+  contactPersonName   String?  @map("contact_person_name") @db.VarChar(200)
+  contactPersonPhone  String?  @map("contact_person_phone") @db.VarChar(20)
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy           String?  @map("created_by") @db.Uuid
+  updatedBy           String?  @map("updated_by") @db.Uuid
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz()
+  deletedBy           String?  @map("deleted_by") @db.Uuid
+
+  creator User? @relation("PatientCreator", fields: [createdBy], references: [id])
+  updater User? @relation("PatientUpdater", fields: [updatedBy], references: [id])
+
+  phoneHistory  PatientPhoneHistory[]
+  identifiers   PatientIdentifier[]
+  mergeLogs     PatientMergeLog[] @relation("MergeTarget")
+  mergedFrom    PatientMergeLog[] @relation("MergeSource")
+
+  appointments  Appointment[]
+  encounters    Encounter[]
+  invoices      Invoice[]
+
+  @@unique([code])
+  @@index([primaryPhone])
+  @@index([fullName])
+  @@index([createdAt(sort: Desc)])
+  // Note: GIN indexes on allergies/chronic_diseases/current_medications are
+  // created via raw SQL in migration 010_perf_indexes (CONCURRENTLY).
+  @@map("patients")
+}
+
+model PatientPhoneHistory {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId  String   @map("patient_id") @db.Uuid
+  oldPhone   String?  @map("old_phone") @db.VarChar(20)
+  newPhone   String   @map("new_phone") @db.VarChar(20)
+  changedBy  String?  @map("changed_by") @db.Uuid
+  changedAt  DateTime @default(now()) @map("changed_at") @db.Timestamptz()
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId, changedAt(sort: Desc)])
+  @@map("patient_phone_history")
+}
+
+model PatientIdentifier {
+  id         String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId  String         @map("patient_id") @db.Uuid
+  type       IdentifierType
+  value      String         @db.VarChar(50)
+  issuedAt   DateTime?      @map("issued_at") @db.Date
+  issuedBy   String?        @map("issued_by") @db.VarChar(200)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy  String?        @map("created_by") @db.Uuid
+  deletedAt  DateTime?      @map("deleted_at") @db.Timestamptz()
+
+  patient Patient @relation(fields: [patientId], references: [id])
+  creator User?  @relation("PatientIdentifierCreator", fields: [createdBy], references: [id])
+
+  @@unique([type, value])
+  @@index([patientId])
+  @@map("patient_identifiers")
+}
+
+model PatientMergeLog {
+  id               String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  sourcePatientId  String   @map("source_patient_id") @db.Uuid
+  targetPatientId  String   @map("target_patient_id") @db.Uuid
+  fieldMapping     Json     @map("field_mapping") @db.JsonB
+  migratedFkCount  Json     @map("migrated_fk_count") @db.JsonB
+  mergedBy         String   @map("merged_by") @db.Uuid
+  mergedAt         DateTime @default(now()) @map("merged_at") @db.Timestamptz()
+
+  source Patient @relation("MergeSource", fields: [sourcePatientId], references: [id])
+  target Patient @relation("MergeTarget", fields: [targetPatientId], references: [id])
+
+  @@index([targetPatientId, mergedAt(sort: Desc)])
+  @@map("patient_merge_logs")
+}
+
+// =============================================================================
+// APPOINTMENTS MODULE (4 bảng)
+// =============================================================================
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  WALK_IN
+  PHONE
+  ONLINE
+  RETURNING
+}
+
+enum TimeOffType {
+  VACATION
+  SICK
+  TRAINING
+  OTHER
+}
+
+model Appointment {
+  id                String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId         String              @map("patient_id") @db.Uuid
+  dentistId         String              @map("dentist_id") @db.Uuid
+  startAt           DateTime            @map("start_at") @db.Timestamptz()
+  endAt             DateTime            @map("end_at") @db.Timestamptz()
+  status            AppointmentStatus   @default(SCHEDULED)
+  reason            String?
+  notes             String?
+  source            AppointmentSource   @default(PHONE)
+  confirmedAt       DateTime?           @map("confirmed_at") @db.Timestamptz()
+  confirmedBy       String?             @map("confirmed_by") @db.Uuid
+  checkedInAt       DateTime?           @map("checked_in_at") @db.Timestamptz()
+  checkedInBy       String?             @map("checked_in_by") @db.Uuid
+  cancelledAt       DateTime?           @map("cancelled_at") @db.Timestamptz()
+  cancelledBy       String?             @map("cancelled_by") @db.Uuid
+  cancelledReason   String?             @map("cancelled_reason")
+  noShowAt          DateTime?           @map("no_show_at") @db.Timestamptz()
+  rescheduleCount   Int                 @default(0) @map("reschedule_count")
+  lastRescheduleAt  DateTime?           @map("last_reschedule_at") @db.Timestamptz()
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy         String?             @map("created_by") @db.Uuid
+  updatedBy         String?             @map("updated_by") @db.Uuid
+  deletedAt         DateTime?           @map("deleted_at") @db.Timestamptz()
+
+  patient     Patient @relation(fields: [patientId], references: [id])
+  dentist     User    @relation("AppointmentDentist", fields: [dentistId], references: [id])
+  creator     User?   @relation("AppointmentCreator", fields: [createdBy], references: [id])
+  updater     User?   @relation("AppointmentUpdater", fields: [updatedBy], references: [id])
+  confirmedByUser User? @relation("AppointmentConfirmedBy", fields: [confirmedBy], references: [id])
+  checkedInByUser User? @relation("AppointmentCheckedInBy", fields: [checkedInBy], references: [id])
+  cancelledByUser User? @relation("AppointmentCancelledBy", fields: [cancelledBy], references: [id])
+
+  encounter        Encounter?
+  rescheduleLogs   AppointmentRescheduleLog[]
+
+  @@unique([dentistId, startAt], name: "unique_active_slot")
+  @@index([dentistId, startAt])
+  @@index([patientId, startAt(sort: Desc)])
+  @@index([startAt])
+  @@index([status, startAt])
+  // Note: composite (status, startAt, dentistId) created in migration 010.
+  @@map("appointments")
+}
+
+model WorkingSchedule {
+  id               String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  dentistId        String   @map("dentist_id") @db.Uuid
+  dayOfWeek        Int      @map("day_of_week")
+  startTime        DateTime @map("start_time") @db.Time(0)
+  endTime          DateTime @map("end_time") @db.Time(0)
+  slotDurationMin  Int      @default(30) @map("slot_duration_min")
+  validFrom        DateTime @map("valid_from") @db.Date
+  validTo          DateTime? @map("valid_to") @db.Date
+  isPaidShift      Boolean  @default(true) @map("is_paid_shift")
+  shiftType        ShiftType @default(FULL_DAY) @map("shift_type")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy        String?  @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz()
+
+  dentist User @relation(fields: [dentistId], references: [id])
+
+  @@index([dentistId, dayOfWeek, validFrom(sort: Desc)])
+  @@map("working_schedules")
+}
+
+model TimeOff {
+  id          String      @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  dentistId   String      @map("dentist_id") @db.Uuid
+  startAt     DateTime    @map("start_at") @db.Timestamptz()
+  endAt       DateTime    @map("end_at") @db.Timestamptz()
+  type        TimeOffType
+  reason      String?
+  createdBy   String      @map("created_by") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz()
+  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz()
+
+  dentist User @relation(fields: [dentistId], references: [id])
+
+  @@index([dentistId, startAt, endAt])
+  @@map("time_offs")
+}
+
+model AppointmentRescheduleLog {
+  id              String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId   String   @map("appointment_id") @db.Uuid
+  oldDentistId    String?  @map("old_dentist_id") @db.Uuid
+  oldStartAt      DateTime @map("old_start_at") @db.Timestamptz()
+  oldEndAt        DateTime @map("old_end_at") @db.Timestamptz()
+  newDentistId    String?  @map("new_dentist_id") @db.Uuid
+  newStartAt      DateTime @map("new_start_at") @db.Timestamptz()
+  newEndAt        DateTime @map("new_end_at") @db.Timestamptz()
+  reason          String?
+  changedBy       String   @map("changed_by") @db.Uuid
+  changedAt       DateTime @default(now()) @map("changed_at") @db.Timestamptz()
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([appointmentId, changedAt(sort: Desc)])
+  @@map("appointment_reschedule_logs")
+}
+
+// =============================================================================
+// MEDICAL RECORDS MODULE (9 bảng)
+// =============================================================================
+
+enum EncounterStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PatientType {
+  ADULT
+  CHILD
+}
+
+model Encounter {
+  id                 String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId      String          @unique @map("appointment_id") @db.Uuid
+  patientId          String          @map("patient_id") @db.Uuid
+  dentistId          String          @map("dentist_id") @db.Uuid
+  status             EncounterStatus @default(IN_PROGRESS)
+  startedAt          DateTime        @default(now()) @map("started_at") @db.Timestamptz()
+  closedAt           DateTime?       @map("closed_at") @db.Timestamptz()
+  summary            String?
+  chiefComplaint     String?         @map("chief_complaint")
+  diagnosis          String?
+  treatmentPlanText  String?         @map("treatment_plan_text")
+  cancelledAt        DateTime?       @map("cancelled_at") @db.Timestamptz()
+  cancelledBy        String?         @map("cancelled_by") @db.Uuid
+  cancelledReason    String?         @map("cancelled_reason")
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
+
+  appointment       Appointment            @relation(fields: [appointmentId], references: [id])
+  patient           Patient                @relation(fields: [patientId], references: [id])
+  dentist           User                   @relation(fields: [dentistId], references: [id])
+  clinicalNote      ClinicalNote?
+  treatments        Treatment[]
+  prescription      Prescription?
+  dentalChart       DentalChartSnapshot?
+  audits            EncounterAudit[]
+  invoice           Invoice?
+  payrollDetails    PayrollEncounterDetail[]
+
+  @@index([patientId, startedAt(sort: Desc)])
+  @@index([dentistId, startedAt(sort: Desc)])
+  @@index([status, startedAt])
+  @@map("encounters")
+}
+
+model ClinicalNote {
+  id             String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  encounterId    String    @unique @map("encounter_id") @db.Uuid
+  chiefComplaint String?   @map("chief_complaint")
+  diagnosis      String?
+  treatmentPlan  String?   @map("treatment_plan")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  lastEditedBy   String?   @map("last_edited_by") @db.Uuid
+  isLocked       Boolean   @default(false) @map("is_locked")
+  lockedAt       DateTime? @map("locked_at") @db.Timestamptz()
+
+  encounter  Encounter              @relation(fields: [encounterId], references: [id])
+  lastEditor User?                  @relation("ClinicalNoteLastEditor", fields: [lastEditedBy], references: [id])
+  addendums  ClinicalNoteAddendum[]
+
+  @@map("clinical_notes")
+}
+
+model ClinicalNoteAddendum {
+  id            String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  clinicalNoteId String  @map("clinical_note_id") @db.Uuid
+  content       String
+  addedBy       String   @map("added_by") @db.Uuid
+  addedAt       DateTime @default(now()) @map("added_at") @db.Timestamptz()
+
+  clinicalNote ClinicalNote @relation(fields: [clinicalNoteId], references: [id])
+  addedByUser  User         @relation("AddendumAddedBy", fields: [addedBy], references: [id])
+
+  @@index([clinicalNoteId, addedAt(sort: Desc)])
+  @@map("clinical_note_addendums")
+}
+
+model Treatment {
+  id              String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  encounterId     String    @map("encounter_id") @db.Uuid
+  toothNumbers    Json?     @map("tooth_numbers") @db.JsonB
+  procedure       String
+  description     String?
+  unitPrice       Decimal   @map("unit_price") @db.Decimal(12, 2)
+  durationMinutes Int?      @map("duration_minutes")
+  sequence        Int       @default(0)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy       String?   @map("created_by") @db.Uuid
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
+
+  encounter         Encounter                  @relation(fields: [encounterId], references: [id])
+  creator               User?               @relation("TreatmentCreator", fields: [createdBy], references: [id])
+  inventoryUsages       TreatmentInventoryUsage[]
+  invoiceItems          InvoiceItem[]
+  payrollDetails        PayrollEncounterDetail[]
+
+  @@index([encounterId, sequence])
+  @@map("treatments")
+}
+
+model TreatmentInventoryUsage {
+  id              String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  treatmentId     String   @map("treatment_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  quantity        Decimal  @db.Decimal(12, 4)
+  unit            String   @db.VarChar(20)
+
+  treatment   Treatment    @relation(fields: [treatmentId], references: [id])
+  // inventoryItem FK is soft (no onDelete cascade) — see schema-per-module/inventory.md
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([treatmentId])
+  @@index([inventoryItemId])
+  @@map("treatment_inventory_usages")
+}
+
+model Prescription {
+  id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  encounterId   String    @unique @map("encounter_id") @db.Uuid
+  diagnosis     String?
+  instructions  String?
+  followUpNote  String?   @map("follow_up_note")
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy     String?   @map("created_by") @db.Uuid
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz()
+  // NEW: optimistic concurrency token — clients echo the value they read,
+  // and a stale write triggers HTTP 409 so users re-fetch + retry.
+  version       Int       @default(0)
+
+  encounter Encounter           @relation(fields: [encounterId], references: [id])
+  creator   User?               @relation("PrescriptionCreator", fields: [createdBy], references: [id])
+  lines     PrescriptionLine[]
+
+  @@map("prescriptions")
+}
+
+model PrescriptionLine {
+  id             String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  prescriptionId String    @map("prescription_id") @db.Uuid
+  sequence       Int       @default(0)
+  drugName       String    @map("drug_name") @db.VarChar(255)
+  dosage         String    @db.VarChar(100)
+  frequency      String    @db.VarChar(100)
+  duration       String    @db.VarChar(100)
+  instructions   String?
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id])
+
+  @@index([prescriptionId, sequence])
+  @@map("prescription_lines")
+}
+
+model DentalChartSnapshot {
+  id          String      @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  encounterId String      @unique @map("encounter_id") @db.Uuid
+  patientType PatientType @map("patient_type")
+  teeth       Json        @db.JsonB
+  snapshotAt  DateTime    @default(now()) @map("snapshot_at") @db.Timestamptz()
+  snapshotBy  String?     @map("snapshot_by") @db.Uuid
+
+  encounter    Encounter @relation(fields: [encounterId], references: [id])
+  snapshotByUser User?   @relation(fields: [snapshotBy], references: [id])
+
+  @@map("dental_chart_snapshots")
+}
+
+model EncounterAudit {
+  id          String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  encounterId String   @map("encounter_id") @db.Uuid
+  action      String   @db.VarChar(50)
+  actorId     String   @map("actor_id") @db.Uuid
+  before      Json?    @db.JsonB
+  after       Json?    @db.JsonB
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz()
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+  actor     User      @relation(fields: [actorId], references: [id])
+
+  @@index([encounterId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@map("encounter_audits")
+}
+
+// =============================================================================
+// BILLING MODULE (4 bảng)
+// =============================================================================
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIAL
+  PAID
+  VOIDED
+}
+
+enum DiscountType {
+  PERCENT
+  AMOUNT
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  COMPLETED
+  VOIDED
+}
+
+model Invoice {
+  id                String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code              String         @db.VarChar(20)
+  encounterId       String         @unique @map("encounter_id") @db.Uuid
+  patientId         String         @map("patient_id") @db.Uuid
+  status            InvoiceStatus  @default(DRAFT)
+  subtotal          Decimal        @default(0) @db.Decimal(12, 2)
+  discountType      DiscountType?  @map("discount_type")
+  discountValue     Decimal?       @map("discount_value") @db.Decimal(12, 2)
+  total             Decimal        @default(0) @db.Decimal(12, 2)
+  paidAmount        Decimal        @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  outstandingAmount Decimal        @default(0) @map("outstanding_amount") @db.Decimal(12, 2)
+  notes             String?
+  issuedAt          DateTime?      @map("issued_at") @db.Timestamptz()
+  issuedBy          String?        @map("issued_by") @db.Uuid
+  voidedAt          DateTime?      @map("voided_at") @db.Timestamptz()
+  voidedBy          String?        @map("voided_by") @db.Uuid
+  voidReason        String?        @map("void_reason")
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy         String?        @map("created_by") @db.Uuid
+  version           Int            @default(0)
+  deletedAt         DateTime?      @map("deleted_at") @db.Timestamptz()
+
+  encounter Encounter     @relation(fields: [encounterId], references: [id])
+  patient   Patient       @relation(fields: [patientId], references: [id])
+  issuer    User?         @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
+  voider    User?         @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
+  creator   User?         @relation("InvoiceCreator", fields: [createdBy], references: [id])
+  items     InvoiceItem[]
+  payments  Payment[]
+  audits    InvoiceAudit[]
+
+  @@unique([code])
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([status])
+  // Note: composite (status, createdAt DESC) created in migration 010.
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  invoiceId   String    @map("invoice_id") @db.Uuid
+  treatmentId String?   @map("treatment_id") @db.Uuid
+  sequence    Int       @default(0)
+  description String
+  quantity    Decimal   @default(1) @db.Decimal(8, 2)
+  unitPrice   Decimal   @map("unit_price") @db.Decimal(12, 2)
+  lineTotal   Decimal   @map("line_total") @db.Decimal(12, 2)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id])
+  treatment Treatment? @relation(fields: [treatmentId], references: [id])
+
+  @@index([invoiceId, sequence])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id          String        @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  invoiceId   String        @map("invoice_id") @db.Uuid
+  amount      Decimal       @db.Decimal(12, 2)
+  method      PaymentMethod
+  status      PaymentStatus @default(COMPLETED)
+  paidAt      DateTime      @default(now()) @map("paid_at") @db.Timestamptz()
+  note        String?
+  receivedBy  String        @map("received_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+
+  invoice    Invoice @relation(fields: [invoiceId], references: [id])
+  receivedByUser User @relation(fields: [receivedBy], references: [id])
+
+  @@index([invoiceId, paidAt(sort: Desc)])
+  @@map("payments")
+}
+
+model InvoiceAudit {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  invoiceId  String   @map("invoice_id") @db.Uuid
+  action     String   @db.VarChar(50)
+  actorId    String?  @map("actor_id") @db.Uuid
+  before     Json?    @db.JsonB
+  after      Json?    @db.JsonB
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz()
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  actor   User?   @relation(fields: [actorId], references: [id])
+
+  @@index([invoiceId, occurredAt(sort: Desc)])
+  @@map("invoice_audits")
+}
+
+// =============================================================================
+// INVENTORY MODULE (3 bảng)
+// =============================================================================
+
+enum ItemStatus {
+  ACTIVE
+  DISCONTINUED
+}
+
+enum MovementType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+}
+
+enum MovementRefType {
+  ENCOUNTER
+  MANUAL
+  ADJUSTMENT
+}
+
+model InventoryCategory {
+  id          String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?
+  parentId    String?  @map("parent_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy   String?  @map("created_by") @db.Uuid
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+
+  parent   InventoryCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children InventoryCategory[] @relation("CategoryTree")
+  items    InventoryItem[]
+  // Explicit relation names required because User has both createdCategories
+  // and updatedCategories fields pointing here (ambiguous default).
+  creator  User?               @relation("InventoryCategoryCreator", fields: [createdBy], references: [id])
+  updater  User?               @relation("InventoryCategoryUpdater", fields: [updatedBy], references: [id])
+
+  @@index([parentId])
+  @@index([name])
+  @@map("inventory_categories")
+}
+
+model InventoryItem {
+  id              String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  sku             String     @db.VarChar(50)
+  categoryId      String?    @map("category_id") @db.Uuid
+  name            String     @db.VarChar(200)
+  description     String?
+  quantityOnHand  Decimal    @default(0) @map("quantity_on_hand") @db.Decimal(12, 4)
+  minStockLevel   Decimal    @default(0) @map("min_stock_level") @db.Decimal(12, 4)
+  unit            String     @db.VarChar(20)
+  costPrice       Decimal?   @map("cost_price") @db.Decimal(12, 4)
+  status          ItemStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy       String?    @map("created_by") @db.Uuid
+  deletedAt       DateTime?  @map("deleted_at") @db.Timestamptz()
+
+  category         InventoryCategory? @relation(fields: [categoryId], references: [id])
+  creator          User?              @relation(fields: [createdBy], references: [id])
+  movements        StockMovement[]
+  treatmentUsages  TreatmentInventoryUsage[]
+
+  @@unique([sku])
+  @@index([categoryId])
+  @@index([status])
+  @@map("inventory_items")
+}
+
+model StockMovement {
+  id              String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  inventoryItemId String         @map("inventory_item_id") @db.Uuid
+  type            MovementType
+  refType         MovementRefType? @map("ref_type")
+  refId           String?        @map("ref_id") @db.Uuid
+  quantityBefore  Decimal        @map("quantity_before") @db.Decimal(12, 4)
+  quantityAfter   Decimal        @map("quantity_after") @db.Decimal(12, 4)
+  diff            Decimal        @db.Decimal(12, 4)
+  reason          String?
+  performedBy     String?        @map("performed_by") @db.Uuid
+  performedAt     DateTime       @default(now()) @map("performed_at") @db.Timestamptz()
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  performedByUser User?       @relation(fields: [performedBy], references: [id])
+
+  @@index([inventoryItemId, performedAt(sort: Desc)])
+  @@index([type, performedAt])
+  @@index([refType, refId])
+  @@map("stock_movements")
+}
+
+// =============================================================================
+// PAYROLL MODULE (Phase 9 — BD-0009, BD-0010)
+// 6 bảng chính + 1 bảng ShiftRegistration (Module Appointments)
+// =============================================================================
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  FULL_DAY
+  NIGHT
+}
+
+enum PayrollCycle {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum PayrollPeriodStatus {
+  DRAFT
+  REVIEWING
+  APPROVED
+  PAID
+  LOCKED
+}
+
+enum PayrollAdjustmentType {
+  BONUS
+  PENALTY
+  DEDUCTION
+  MANUAL_OVERRIDE
+}
+
+enum ShiftRegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model ShiftRegistration {
+  id              String                 @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  dentistId       String                 @map("dentist_id") @db.Uuid
+  date            DateTime               @db.Date
+  startTime       String                 @map("start_time") @db.VarChar(5)
+  endTime         String                 @map("end_time") @db.VarChar(5)
+  maxEncounters   Int?                   @map("max_encounters")
+  notes           String?
+  status          ShiftRegistrationStatus @default(PENDING)
+  approvedByUserId String?               @map("approved_by_user_id") @db.Uuid
+  approvedAt      DateTime?              @map("approved_at") @db.Timestamptz()
+  rejectionReason String?                @map("rejection_reason")
+  cancelledAt     DateTime?              @map("cancelled_at") @db.Timestamptz()
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz()
+  createdByUserId String?                @map("created_by_user_id") @db.Uuid
+  deletedAt       DateTime?              @map("deleted_at") @db.Timestamptz()
+
+  dentist        User  @relation("ShiftRegistrationDentist", fields: [dentistId], references: [id])
+  approvedByUser User? @relation("ShiftRegistrationApprover", fields: [approvedByUserId], references: [id])
+  creator        User? @relation("ShiftRegistrationCreator", fields: [createdByUserId], references: [id])
+
+  @@index([dentistId, date])
+  @@index([status, date])
+  @@map("shift_registrations")
+}
+
+model PayrollConfig {
+  id                     String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  payrollCycle           PayrollCycle @default(MONTHLY) @map("payroll_cycle")
+  overtimeMultiplier     Decimal  @default(1.50) @map("overtime_multiplier") @db.Decimal(4, 2)
+  defaultTaxTncnPct      Decimal  @default(0.10) @map("default_tax_tncn_pct") @db.Decimal(5, 4)
+  bhxhPct                Decimal  @default(0.08) @map("bhxh_pct") @db.Decimal(5, 4)
+  bhytPct                Decimal  @default(0.015) @map("bhyt_pct") @db.Decimal(5, 4)
+  bhtnPct                Decimal  @default(0.01) @map("bhtn_pct") @db.Decimal(5, 4)
+  minGrossForBhxh        Decimal  @default(4680000) @map("min_gross_for_bhxh") @db.Decimal(15, 0)
+  probationSalaryPct     Decimal  @default(0.85) @map("probation_salary_pct") @db.Decimal(4, 2)
+  taxBrackets            Json     @map("tax_brackets") @db.JsonB
+  updatedByUserId        String?  @unique          @map("updated_by_user_id") @db.Uuid
+  updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user User? @relation("PayrollConfigUpdater", fields: [updatedByUserId], references: [id])
+
+  @@map("payroll_config")
+}
+
+model DentistCompensation {
+  id                  String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  dentistId           String   @map("dentist_id") @db.Uuid
+  effectiveFrom       DateTime @map("effective_from") @db.Date
+  effectiveTo         DateTime? @map("effective_to") @db.Date
+  baseSalaryVnd       Decimal  @map("base_salary_vnd") @db.Decimal(15, 0)
+  commissionPct       Decimal  @default(0) @map("commission_pct") @db.Decimal(5, 4)
+  overtimeHourlyVnd   Decimal  @default(0) @map("overtime_hourly_vnd") @db.Decimal(15, 0)
+  approvedByUserId    String?  @map("approved_by_user_id") @db.Uuid
+  approvedAt          DateTime? @map("approved_at") @db.Timestamptz()
+  notes               String?
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz()
+
+  dentist        User  @relation("CompensationDentist", fields: [dentistId], references: [id])
+  approvedByUser User? @relation("CompensationApprover", fields: [approvedByUserId], references: [id])
+
+  @@index([dentistId, effectiveFrom(sort: Desc)])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("dentist_compensations")
+}
+
+model PayrollPeriod {
+  id                   String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  periodStart          DateTime            @map("period_start") @db.Date
+  periodEnd            DateTime            @map("period_end") @db.Date
+  payrollCycle         PayrollCycle        @map("payroll_cycle")
+  status               PayrollPeriodStatus @default(DRAFT)
+  /// BR-PAY-023: Frozen snapshot of PayrollConfig captured at period creation.
+  /// Re-computing this period will always use THIS snapshot, not the live config,
+  /// so later config edits do not retroactively change historical payroll.
+  configSnapshot       Json                @map("config_snapshot") @db.JsonB
+  /// BR-PAY-019: Optional link to a prior period this was opened from.
+  openedFromPeriodId   String?             @map("opened_from_period_id") @db.Uuid
+  createdByUserId      String?             @map("created_by_user_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz()
+  lockedByUserId       String?             @map("locked_by_user_id") @db.Uuid
+  lockedAt             DateTime?           @map("locked_at") @db.Timestamptz()
+  approvedByUserId     String?             @map("approved_by_user_id") @db.Uuid
+  approvedAt           DateTime?           @map("approved_at") @db.Timestamptz()
+  markedPaidByUserId   String?             @map("marked_paid_by_user_id") @db.Uuid
+  paidAt               DateTime?           @map("paid_at") @db.Timestamptz()
+  paymentReference     String?             @map("payment_reference")
+  lockedImmutableAt    DateTime?           @map("locked_immutable_at") @db.Timestamptz()
+
+  creator       User?           @relation("PayrollPeriodCreator", fields: [createdByUserId], references: [id])
+  locker        User?           @relation("PayrollPeriodLocker", fields: [lockedByUserId], references: [id])
+  approver      User?           @relation("PayrollPeriodApprover", fields: [approvedByUserId], references: [id])
+  payer         User?           @relation("PayrollPeriodPayer", fields: [markedPaidByUserId], references: [id])
+  openedFrom    PayrollPeriod?  @relation("PeriodReopen", fields: [openedFromPeriodId], references: [id])
+  reopens       PayrollPeriod[] @relation("PeriodReopen")
+
+  lineItems  PayrollLineItem[]
+  encounters PayrollEncounterDetail[]
+
+  // BR-PAY-003 + BR-PAY-019: Partial unique constraint lives in migration SQL,
+  // not in Prisma schema. We need:
+  //   - UNIQUE(period_start, period_end) for non-LOCKED rows (active period)
+  //   - UNIQUE(period_start, period_end) for non-adjustment rows
+  // Prisma @@unique cannot express partial indexes, so this is enforced via:
+  //   CREATE UNIQUE INDEX idx_payroll_periods_no_overlap
+  //     ON payroll_periods (period_start, period_end)
+  //     WHERE status != 'LOCKED' AND opened_from_period_id IS NULL;
+  // See: docs/04_Database/migrations/009_payroll.sql (R2-3.2 fix)
+  @@index([status, periodStart(sort: Desc)])
+  @@index([openedFromPeriodId])
+  @@map("payroll_periods")
+}
+
+model PayrollLineItem {
+  id                  String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  payrollPeriodId     String   @map("payroll_period_id") @db.Uuid
+  dentistId           String   @map("dentist_id") @db.Uuid
+  encountersCount     Int      @default(0) @map("encounters_count")
+  totalRevenueVnd     Decimal  @default(0) @map("total_revenue_vnd") @db.Decimal(15, 0)
+  workedShifts        Int      @default(0) @map("worked_shifts")
+  totalHours          Decimal  @default(0) @map("total_hours") @db.Decimal(8, 2)
+  overtimeHours       Decimal  @default(0) @map("overtime_hours") @db.Decimal(8, 2)
+  baseSalaryVnd       Decimal  @default(0) @map("base_salary_vnd") @db.Decimal(15, 0)
+  commissionVnd       Decimal  @default(0) @map("commission_vnd") @db.Decimal(15, 0)
+  overtimePayVnd      Decimal  @default(0) @map("overtime_pay_vnd") @db.Decimal(15, 0)
+  bonusVnd            Decimal  @default(0) @map("bonus_vnd") @db.Decimal(15, 0)
+  penaltyVnd          Decimal  @default(0) @map("penalty_vnd") @db.Decimal(15, 0)
+  grossPayVnd         Decimal  @default(0) @map("gross_pay_vnd") @db.Decimal(15, 0)
+  taxTncnVnd          Decimal  @default(0) @map("tax_tncn_vnd") @db.Decimal(15, 0)
+  bhxhVnd             Decimal  @default(0) @map("bhxh_vnd") @db.Decimal(15, 0)
+  netPayVnd           Decimal  @default(0) @map("net_pay_vnd") @db.Decimal(15, 0)
+  computationLog      Json     @map("computation_log") @db.JsonB
+  manuallyAdjusted    Boolean  @default(false) @map("manually_adjusted")
+  adjustmentNote      String?  @map("adjustment_note")
+  computedAt          DateTime @default(now()) @map("computed_at") @db.Timestamptz()
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  period        PayrollPeriod              @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  dentist       User                       @relation(fields: [dentistId], references: [id])
+  adjustments   PayrollAdjustment[]
+  encounterDetails PayrollEncounterDetail[]
+
+  @@unique([payrollPeriodId, dentistId])
+  @@index([dentistId, computedAt(sort: Desc)])
+  @@map("payroll_line_items")
+}
+
+model PayrollEncounterDetail {
+  id                    String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  payrollLineItemId     String   @map("payroll_line_item_id") @db.Uuid
+  payrollPeriodId       String   @map("payroll_period_id") @db.Uuid
+  encounterId           String   @map("encounter_id") @db.Uuid
+  treatmentId           String   @map("treatment_id") @db.Uuid
+  treatmentRevenueVnd   Decimal  @map("treatment_revenue_vnd") @db.Decimal(15, 0)
+  encounterStartAt      DateTime @map("encounter_start_at") @db.Timestamptz()
+  encounterEndAt        DateTime @map("encounter_end_at") @db.Timestamptz()
+  durationMinutes       Int      @map("duration_minutes")
+  treatmentBreakdown    Json     @map("treatment_breakdown") @db.JsonB
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  lineItem    PayrollLineItem @relation(fields: [payrollLineItemId], references: [id], onDelete: Cascade)
+  period      PayrollPeriod   @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  encounter   Encounter       @relation(fields: [encounterId], references: [id])
+  treatment   Treatment       @relation(fields: [treatmentId], references: [id])
+
+  @@unique([payrollLineItemId, encounterId, treatmentId])
+  @@index([encounterId])
+  @@index([payrollPeriodId, encounterId])
+  @@map("payroll_encounter_details")
+}
+
+model PayrollAdjustment {
+  id                   String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  payrollLineItemId    String                @map("payroll_line_item_id") @db.Uuid
+  type                 PayrollAdjustmentType
+  amountVnd            Decimal               @map("amount_vnd") @db.Decimal(15, 0)
+  reason               String
+  adjustedByUserId     String                @map("adjusted_by_user_id") @db.Uuid
+  adjustedAt           DateTime              @default(now()) @map("adjusted_at") @db.Timestamptz()
+
+  lineItem     PayrollLineItem @relation(fields: [payrollLineItemId], references: [id], onDelete: Cascade)
+  adjustedByUser User          @relation("PayrollAdjustmentActor", fields: [adjustedByUserId], references: [id])
+
+  @@index([payrollLineItemId, adjustedAt(sort: Desc)])
+  @@map("payroll_adjustments")
+}
+
+// =============================================================================
+// EXPENSE MODULE (BR-EXP-001 — wired from billing.service.ts financeSummary)
+// =============================================================================
+
+enum ExpenseStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+enum ExpenseType {
+  OPERATING
+  INVESTMENT
+  OTHER
+}
+
+model ExpenseCategory {
+  id          String       @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  name        String       @db.VarChar(100)
+  description String?
+  type        ExpenseType  @default(OPERATING)
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
+
+  expenses Expense[]
+
+  @@unique([name])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id           String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code         String         @unique @db.VarChar(20)
+  amount      Decimal        @db.Decimal(15, 0)
+  description  String
+  expenseDate  DateTime      @map("expense_date") @db.Date
+  status       ExpenseStatus  @default(DRAFT)
+  categoryId   String?       @map("category_id") @db.Uuid
+  notes        String?
+  receiptUrl   String?       @map("receipt_url")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy    String?       @map("created_by") @db.Uuid
+  updatedBy    String?       @map("updated_by") @db.Uuid
+  deletedAt    DateTime?     @map("deleted_at") @db.Timestamptz()
+  version      Int           @default(1)
+
+  category   ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  creator    User?           @relation("ExpenseCreator", fields: [createdBy], references: [id])
+  updater    User?           @relation("ExpenseUpdater", fields: [updatedBy], references: [id])
+  audits     ExpenseAudit[]
+
+  @@index([status, expenseDate(sort: Desc)])
+  @@index([categoryId])
+  @@index([createdBy])
+  @@map("expenses")
+}
+
+model ExpenseAudit {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  expenseId  String   @map("expense_id") @db.Uuid
+  action     String
+  before     Json?    @db.JsonB
+  after      Json?    @db.JsonB
+  actorId    String?  @map("actor_id") @db.Uuid
+  actorEmail String?  @map("actor_email") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId, createdAt(sort: Desc)])
+  @@map("expense_audits")
+}

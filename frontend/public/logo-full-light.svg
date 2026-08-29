@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  GENSMILE — Logo (full, dark bg)
+  Same composition as logo-full.svg, but wordmark + tagline in white
+  for use on dark backgrounds (login hero, dark mode, social cards).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200" role="img" aria-label="GENSMILE — Nha khoa thẩm mỹ">
+  <defs>
+    <linearGradient id="gsToothG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2BA3A0"/>
+      <stop offset="100%" stop-color="#1B7A78"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(10,30)">
+    <path d="M 100 0
+             C 145 0, 170 15, 175 40
+             C 180 65, 172 95, 158 120
+             C 148 140, 132 157, 114 165
+             C 100 172, 86 172, 72 165
+             C 54 157, 38 140, 28 120
+             C 14 95, 6 65, 11 40
+             C 16 15, 41 0, 86 0
+             C 93 -5, 100 -5, 100 0 Z"
+          fill="url(#gsToothG)"/>
+    <path d="M 68 33 C 82 37, 100 45, 108 65 C 115 83, 112 103, 100 120"
+          fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="6" stroke-linecap="round"/>
+    <g transform="translate(30,18)">
+      <path fill="#F4B860"
+            d="M 0 -14 L 3.5 -3.5 L 14 0 L 3.5 3.5 L 0 14 L -3.5 3.5 L -14 0 L -3.5 -3.5 Z"/>
+    </g>
+    <g transform="translate(162,138) scale(0.6)">
+      <path fill="#FFFFFF" opacity="0.75"
+            d="M 0 -14 L 3.5 -3.5 L 14 0 L 3.5 3.5 L 0 14 L -3.5 3.5 L -14 0 L -3.5 -3.5 Z"/>
+    </g>
+  </g>
+
+  <g fill="#FFFFFF" transform="translate(210,60)">
+    <path d="M 30 18
+             C 26 8, 16 2, 8 4
+             C -4 8, -4 38, 8 54
+             C 16 60, 26 60, 30 52
+             L 30 30
+             L 16 30
+             L 16 38
+             L 24 38
+             L 24 48
+             C 20 52, 12 52, 8 48
+             C 0 38, 0 18, 8 12
+             C 16 6, 24 10, 24 16
+             L 30 18 Z"/>
+    <path d="M 40 8 L 68 8 L 68 14 L 46 14 L 46 30 L 64 30 L 64 36 L 46 36 L 46 52 L 68 52 L 68 58 L 40 58 Z"/>
+    <path d="M 78 8 L 86 8 L 104 46 L 104 8 L 110 8 L 110 58 L 102 58 L 84 20 L 84 58 L 78 58 Z"/>
+    <path d="M 148 14
+             C 144 8, 134 4, 128 8
+             C 122 14, 128 22, 136 26
+             C 142 29, 148 32, 148 38
+             C 148 46, 140 52, 134 49
+             C 130 47, 128 43, 128 39
+             L 124 39
+             C 124 47, 130 56, 138 56
+             C 146 56, 154 50, 154 38
+             C 154 30, 146 26, 140 23
+             C 134 20, 130 18, 130 14
+             C 130 8, 136 6, 140 8
+             C 144 10, 144 14, 144 16
+             L 148 16 Z"/>
+    <path d="M 160 8 L 168 8 L 178 38 L 188 8 L 196 8 L 196 58 L 190 58 L 190 22 L 182 50 L 174 50 L 166 22 L 166 58 L 160 58 Z"/>
+    <path d="M 206 8 L 220 8 L 220 14 L 216 14 L 216 52 L 220 52 L 220 58 L 206 58 L 206 52 L 210 52 L 210 14 L 206 14 Z"/>
+    <path d="M 230 8 L 236 8 L 236 52 L 252 52 L 252 58 L 230 58 Z"/>
+    <path d="M 262 8 L 290 8 L 290 14 L 268 14 L 268 30 L 286 30 L 286 36 L 268 36 L 268 52 L 290 52 L 290 58 L 262 58 Z"/>
+  </g>
+
+  <text x="214" y="148"
+        fill="#E6FAF8"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-style="italic"
+        font-weight="500"
+        font-size="20"
+        letter-spacing="0.5">Nha khoa thẩm mỹ</text>
+
+  <g transform="translate(440,128) scale(0.32)">
+    <path fill="#F4B860"
+          d="M 0 -14 L 3.5 -3.5 L 14 0 L 3.5 3.5 L 0 14 L -3.5 3.5 L -14 0 L -3.5 -3.5 Z"/>
+  </g>
+</svg>

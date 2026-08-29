@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2BA3A0" />
+    <meta name="description" content="GENSMILE — Hệ thống quản lý phòng khám nha khoa thẩm mỹ" />
+    <title>GENSMILE — Quản lý phòng khám nha khoa</title>
+    <script>
+      // Apply stored theme before React mounts to avoid flash of wrong theme.
+      (function () {
+        try {
+          var raw = localStorage.getItem('gensmile.theme');
+          var mode = raw ? (JSON.parse(raw).state && JSON.parse(raw).state.mode) || 'light' : 'light';
+          var resolved = mode === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : mode;
+          if (resolved === 'dark') document.documentElement.classList.add('dark');
+        } catch (_) { /* noop */ }
+      })();
+    </script>
+  </head>
+  <body class="bg-surface-50 text-surface-900 antialiased dark:bg-surface-950 dark:text-surface-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

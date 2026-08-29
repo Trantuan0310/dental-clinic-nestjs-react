@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  GENSMILE — Logo (full, light bg)
+  Pure SVG vector. Layout matches the brand reference:
+    - Centered tooth icon with bold outline (gradient teal)
+    - 4 gold sparkles around the tooth (large top-left, top-right, small bottom-left, bottom-right)
+    - GENSMILE wordmark below the icon
+    - Tagline "Nha khoa thẩm mỹ" under the wordmark
+  ViewBox: 360 x 360. UTF-8 declared so any accented glyphs render correctly.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" role="img" aria-label="GENSMILE — Nha khoa thẩm mỹ">
+  <defs>
+    <linearGradient id="gsToothG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#34B5B2"/>
+      <stop offset="100%" stop-color="#1B7A78"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ========== TOOTH ICON (centered, top) ========== -->
+  <g transform="translate(180,110)">
+    <!-- Outer tooth silhouette (bold crown + roots) -->
+    <path d="M -8 -78
+             C 32 -78, 68 -70, 73 -44
+             C 78 -16, 70 16, 56 40
+             C 47 58, 33 72, 17 78
+             C 5 82, -5 82, -17 78
+             C -33 72, -47 58, -56 40
+             C -70 16, -78 -16, -73 -44
+             C -68 -70, -32 -78, -17 -78
+             C -13 -81, -12 -81, -8 -78 Z"
+          fill="url(#gsToothG)"
+          stroke="#0E5A58"
+          stroke-width="3"
+          stroke-linejoin="round"/>
+
+    <!-- Center crease -->
+    <path d="M 0 -62 C -3 -30, -3 0, 0 30 C 3 0, 3 -30, 0 -62 Z"
+          fill="#FFFFFF" opacity="0.30"/>
+
+    <!-- Left gloss highlight -->
+    <path d="M -38 -42 C -42 -22, -42 0, -38 22"
+          fill="none" stroke="#FFFFFF" stroke-opacity="0.55"
+          stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Crown wave separator -->
+    <path d="M -56 -22 C -30 -28, -10 -30, 0 -30 C 10 -30, 30 -28, 56 -22"
+          fill="none" stroke="#0E5A58" stroke-opacity="0.45"
+          stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- ========== SPARKLES (4 stars around the tooth) ========== -->
+  <!-- Sparkle 1: large top-left -->
+  <g transform="translate(72,58)">
+    <path fill="#F4B860"
+          d="M 0 -22 L 6 -6 L 22 0 L 6 6 L 0 22 L -6 6 L -22 0 L -6 -6 Z"/>
+    <circle r="4" fill="#FFD9A0"/>
+  </g>
+
+  <!-- Sparkle 2: large top-right -->
+  <g transform="translate(288,58)">
+    <path fill="#F4B860"
+          d="M 0 -22 L 6 -6 L 22 0 L 6 6 L 0 22 L -6 6 L -22 0 L -6 -6 Z"/>
+    <circle r="4" fill="#FFD9A0"/>
+  </g>
+
+  <!-- Sparkle 3: small bottom-left -->
+  <g transform="translate(80,182)">
+    <path fill="#F4B860"
+          d="M 0 -11 L 3 -3 L 11 0 L 3 3 L 0 11 L -3 3 L -11 0 L -3 -3 Z"/>
+  </g>
+
+  <!-- Sparkle 4: small bottom-right -->
+  <g transform="translate(285,182)">
+    <path fill="#F4B860"
+          d="M 0 -11 L 3 -3 L 11 0 L 3 3 L 0 11 L -3 3 L -11 0 L -3 -3 Z"/>
+  </g>
+
+  <!-- ========== WORDMARK "GENSMILE" ========== -->
+  <g fill="#1B7A78" transform="translate(180,270)">
+    <!-- Each letter ~22 wide, 32 tall. 8 letters + 7 spacings: 8*22 + 7*4 = 204. Center start x = -102 -->
+    <path d="M 22 12 C 19 5, 12 0, 6 1 C -3 4, -3 26, 6 36 C 12 39, 19 39, 22 34 L 22 18 L 11 18 L 11 24 L 17 24 L 17 30 C 14 32, 9 32, 6 30 C 1 24, 1 12, 6 8 C 11 4, 17 6, 17 10 L 22 12 Z" transform="translate(-102,0)"/>
+    <path d="M 0 4 L 22 4 L 22 8 L 5 8 L 5 16 L 19 16 L 19 20 L 5 20 L 5 28 L 22 28 L 22 32 L 0 32 Z" transform="translate(-76,0)"/>
+    <path d="M 0 4 L 5 4 L 18 25 L 18 4 L 22 4 L 22 32 L 17 32 L 4 11 L 4 32 L 0 32 Z" transform="translate(-50,0)"/>
+    <path d="M 20 8 C 17 4, 10 2, 6 4 C 1 8, 5 13, 10 16 C 14 18, 20 20, 20 24 C 20 30, 14 33, 10 31 C 7 30, 5 28, 5 25 L 1 25 C 1 30, 5 35, 11 35 C 17 35, 24 31, 24 24 C 24 19, 18 16, 13 14 C 9 12, 5 11, 5 8 C 5 4, 10 3, 13 5 C 16 6, 16 8, 16 10 L 20 10 Z" transform="translate(-24,0)"/>
+    <path d="M 0 4 L 6 4 L 11 22 L 16 4 L 22 4 L 22 32 L 18 32 L 18 13 L 13 29 L 9 29 L 4 13 L 4 32 L 0 32 Z" transform="translate(2,0)"/>
+    <path d="M 0 4 L 14 4 L 14 8 L 11 8 L 11 28 L 14 28 L 14 32 L 0 32 L 0 28 L 3 28 L 3 8 L 0 8 Z" transform="translate(28,0)"/>
+    <path d="M 0 4 L 4 4 L 4 28 L 18 28 L 18 32 L 0 32 Z" transform="translate(46,0)"/>
+    <path d="M 0 4 L 22 4 L 22 8 L 5 8 L 5 16 L 19 16 L 19 20 L 5 20 L 5 28 L 22 28 L 22 32 L 0 32 Z" transform="translate(68,0)"/>
+  </g>
+
+  <!-- ========== TAGLINE ========== -->
+  <text x="180" y="318"
+        text-anchor="middle"
+        fill="#1B7A78"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-style="italic"
+        font-weight="500"
+        font-size="16"
+        letter-spacing="0.5">Nha khoa thẩm mỹ</text>
+</svg>

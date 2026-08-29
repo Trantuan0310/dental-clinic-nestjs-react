@@ -1,0 +1,6037 @@
+openapi: 3.0.3
+info:
+  title: Dental Clinic Management API
+  description: |
+    REST API for Dental Clinic Management System (MVP).
+
+    ## Authentication
+    - Public endpoints: `POST /api/v1/auth/login`, `POST /api/v1/auth/forgot-password`, `POST /api/v1/auth/reset-password`
+    - All other endpoints require `Authorization: Bearer <accessToken>`
+    - Access token: JWT, TTL 15 minutes
+    - Refresh token: httpOnly cookie, TTL 7 days, rotation enabled
+
+    ## Conventions
+    - Base URL: `/api/v1/`
+    - All timestamps: ISO 8601 UTC (`2026-07-15T10:00:00Z`)
+    - All monetary amounts: integer cents (e.g., `3500000` = 35,000,000 VND = 3,500,000 VND)
+    - All IDs: UUID v7 strings
+    - Pagination: cursor-based (`?pageSize=20&cursor=<lastId>&sort=createdAt:desc`)
+    - Errors: RFC 7807 Problem Details format
+    - Idempotency: `Idempotency-Key` header for POST endpoints
+
+    ## Rate Limits
+    - `/auth/login`: 5 req/min/IP
+    - `/auth/forgot-password`: 3 req/min/IP
+    - Authenticated read endpoints: 120 req/min/user
+    - Authenticated write endpoints: 30 req/min/user
+  version: 1.9.0
+  # Phase 9: Payroll + ShiftRegistration added (BD-0009, BD-0010)
+  contact:
+    name: Dental Clinic Dev Team
+    email: dev@clinic.local
+
+servers:
+  - url: https://api.clinic.local/api/v1
+    description: Production
+  - url: http://localhost:3000/api/v1
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Authentication & identity
+  - name: Users
+    description: User management (admin)
+  - name: Roles
+    description: Role & permission management (admin)
+  - name: Audit
+    description: Audit logs (admin)
+  - name: Patients
+    description: Patient management
+  - name: Appointments
+    description: Appointments, check-in, cancel, reschedule
+  - name: Schedule
+    description: Working schedules & time-offs
+  - name: WaitingQueue
+    description: FIFO waiting queue
+  - name: Calendar
+    description: Calendar view
+  - name: Encounters
+    description: Medical encounters
+  - name: ClinicalNotes
+    description: Clinical notes (SOAP)
+  - name: Treatments
+    description: Treatment plans & procedures
+  - name: Prescriptions
+    description: Drug prescriptions
+  - name: DentalCharts
+    description: Dental chart snapshots (32 teeth FDI)
+  - name: Invoices
+    description: Billing invoices
+  - name: Payments
+    description: Payment collection
+  - name: Reports
+    description: Revenue & outstanding reports
+  - name: Inventory
+    description: Inventory items & stock
+  - name: InventoryCategories
+    description: Inventory categories
+  - name: InventoryAlerts
+    description: Low-stock alerts
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from `/auth/login`
+
+    RefreshTokenCookie:
+      type: apiKey
+      in: cookie
+      name: refreshToken
+      description: httpOnly refresh token cookie
+
+  schemas:
+    # ─── Common ──────────────────────────────────────────────────────────────
+
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference to the problem type
+          example: https://api.clinic.local/problems/validation-error
+        title:
+          type: string
+          description: Short, human-readable summary
+          example: Validation Error
+        status:
+          type: integer
+          description: HTTP status code
+          example: 422
+        detail:
+          type: string
+          description: Detailed explanation
+        instance:
+          type: string
+          format: uri
+          description: Request path that caused the error
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+
+    FieldError:
+      type: object
+      required: [field, code]
+      properties:
+        field:
+          type: string
+          description: Field name that failed validation
+          example: primaryPhone
+        code:
+          type: string
+          enum: [REQUIRED, INVALID_FORMAT, OUT_OF_RANGE, TOO_SHORT, TOO_LONG, INVALID_ENUM, DUPLICATE, BUSINESS_RULE]
+          example: INVALID_FORMAT
+        message:
+          type: string
+          example: Số điện thoại không hợp lệ
+
+    Pagination:
+      type: object
+      required: [pageSize, nextCursor, hasMore]
+      properties:
+        pageSize:
+          type: integer
+          description: Number of items per page
+          example: 20
+        nextCursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page (UUID of last item), null if no more
+          example: 0191a7b0-0000-7000-8000-000000000000
+        hasMore:
+          type: boolean
+          description: Whether there are more items after this page
+          example: true
+
+    # ─── Auth ─────────────────────────────────────────────────────────────────
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Lowercase email address
+          example: admin@clinic.local
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 200
+          example: Secret123
+
+    LoginResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accessToken, accessTokenExpiresIn, user]
+          properties:
+            accessToken:
+              type: string
+              description: JWT access token (15 min TTL)
+              example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+            accessTokenExpiresIn:
+              type: integer
+              description: Seconds until expiry
+              example: 900
+            user:
+              $ref: '#/components/schemas/UserInfo'
+
+    UserInfo:
+      type: object
+      required: [id, email, fullName, status, roles, permissions]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 0191a7b0-0000-7000-8000-000000000001
+        email:
+          type: string
+          format: email
+          example: admin@clinic.local
+        fullName:
+          type: string
+          example: Nguyen Van A
+        status:
+          type: string
+          enum: [active, pending_setup, deactivated]
+        roles:
+          type: array
+          items:
+            type: string
+          example: [clinic_admin]
+        permissions:
+          type: array
+          items:
+            type: string
+          example: [user.create, patient.create, appointment.create]
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@clinic.local
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          format: uuid
+          description: UUID reset token from email
+          example: 0191a7b0-0000-7000-8000-000000000002
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          description: |
+            Must contain ≥1 letter + ≥1 digit. Cannot contain email local-part. Cannot be in top 100k common passwords.
+          example: NewSecret456
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+
+    LoginHistoryEntry:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+          example: 2026-07-13T10:00:00Z
+        action:
+          type: string
+          enum: [login_success, login_failed, logout, logout_all, password_reset_requested, password_changed, password_reset_by_admin]
+          example: login_success
+        ipAddress:
+          type: string
+          example: 10.0.0.5
+        userAgent:
+          type: string
+          example: Mozilla/5.0...
+
+    # ─── Users ────────────────────────────────────────────────────────────────
+
+    User:
+      type: object
+      required: [id, email, fullName, status, roles, permissions, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        status:
+          type: string
+          enum: [active, pending_setup, deactivated]
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        failedLoginAttempts:
+          type: integer
+          example: 0
+        lockedUntil:
+          type: string
+          format: date-time
+          nullable: true
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        deactivatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [email, fullName, roleIds]
+      properties:
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        roleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+        sendInvite:
+          type: boolean
+          default: true
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        status:
+          type: string
+          enum: [active]
+
+    UpdateUserRolesRequest:
+      type: object
+      required: [roleIds]
+      properties:
+        roleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    DeactivateUserRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          example: Resigned
+
+    ResetUserPasswordRequest:
+      type: object
+      properties:
+        sendEmail:
+          type: boolean
+          default: true
+
+    # ─── Roles ────────────────────────────────────────────────────────────────
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: receptionist
+        name:
+          type: string
+          example: Lễ tân
+        description:
+          type: string
+        isSystem:
+          type: boolean
+        permissionCount:
+          type: integer
+        userCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateRoleRequest:
+      type: object
+      required: [code, name, permissionCodes]
+      properties:
+        code:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{2,49}$'
+          example: senior_dentist
+        name:
+          type: string
+          maxLength: 100
+          example: Bác sĩ cao cấp
+        description:
+          type: string
+          maxLength: 500
+        permissionCodes:
+          type: array
+          items:
+            type: string
+          example: [patient.create, patient.read, appointment.create]
+
+    UpdateRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissionCodes:
+          type: array
+          items:
+            type: string
+
+    Permission:
+      type: object
+      properties:
+        code:
+          type: string
+          example: patient.create
+        description:
+          type: string
+        resource:
+          type: string
+          example: patient
+        action:
+          type: string
+          example: create
+
+    # ─── Audit ───────────────────────────────────────────────────────────────
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorUserId:
+          type: string
+          format: uuid
+          nullable: true
+        actorEmailAtTime:
+          type: string
+        action:
+          type: string
+          example: patient_created
+        targetType:
+          type: string
+          nullable: true
+          example: Patient
+        targetId:
+          type: string
+          format: uuid
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+
+    # ─── Patients ─────────────────────────────────────────────────────────────
+
+    Patient:
+      type: object
+      required: [id, code, fullName, dateOfBirth, gender, primaryPhone, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: '^PAT-\d{4}-\d{5}$'
+          example: PAT-2026-00045
+        fullName:
+          type: string
+          example: Nguyen Van A
+        dateOfBirth:
+          type: string
+          format: date
+          example: 1990-05-15
+        age:
+          type: integer
+          description: Calculated from dateOfBirth
+          example: 36
+        gender:
+          type: string
+          enum: [male, female, other]
+        primaryPhone:
+          type: string
+          description: May be masked based on caller permission (BR-PT-021)
+          example: 0987654321
+        additionalPhones:
+          type: array
+          items:
+            type: string
+          example: [0912345678]
+        email:
+          type: string
+          format: email
+          nullable: true
+        address:
+          $ref: '#/components/schemas/Address'
+        allergies:
+          type: array
+          items:
+            type: string
+          example: [Penicillin]
+        medicalHistory:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          example: [VIP]
+        status:
+          type: string
+          enum: [active, deceased, merged]
+        createdByUserId:
+          type: string
+          format: uuid
+        lastVisitAt:
+          type: string
+          format: date-time
+          nullable: true
+        mergedIntoPatientId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Address:
+      type: object
+      properties:
+        line1:
+          type: string
+          example: 123 Nguyen Trai
+        line2:
+          type: string
+          nullable: true
+        ward:
+          type: string
+        district:
+          type: string
+        city:
+          type: string
+          example: TP.HCM
+        country:
+          type: string
+          example: VN
+
+    CreatePatientRequest:
+      type: object
+      required: [fullName, dateOfBirth, gender, primaryPhone, consentGiven]
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        dateOfBirth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [male, female, other]
+        primaryPhone:
+          type: string
+          pattern: '^0[0-9]{9,10}$'
+        email:
+          type: string
+          format: email
+        address:
+          $ref: '#/components/schemas/Address'
+        allergies:
+          type: array
+          items:
+            type: string
+        medicalHistory:
+          type: string
+          maxLength: 2000
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 30
+          maxItems: 20
+        consentGiven:
+          type: boolean
+          description: Patient consent for data processing (BR-PT-018)
+
+    UpdatePatientRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+        tags:
+          type: array
+          items:
+            type: string
+        allergies:
+          type: array
+          items:
+            type: string
+        medicalHistory:
+          type: string
+
+    CheckDuplicateRequest:
+      type: object
+      required: [primaryPhone]
+      properties:
+        primaryPhone:
+          type: string
+        fullName:
+          type: string
+
+    DuplicateCheckResponse:
+      type: object
+      properties:
+        isExactPhoneMatch:
+          type: boolean
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientMatch'
+
+    PatientMatch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        fullName:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        primaryPhone:
+          type: string
+        matchType:
+          type: string
+          enum: [exact_phone, phone_and_name_exact, phone_and_name_fuzzy]
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+
+    PatientPhone:
+      type: object
+      properties:
+        phone:
+          type: string
+        isPrimary:
+          type: boolean
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: string
+          format: date-time
+          nullable: true
+        recordedByUserId:
+          type: string
+          format: uuid
+        note:
+          type: string
+          nullable: true
+
+    AddPhoneRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          pattern: '^0[0-9]{9,10}$'
+        isPrimary:
+          type: boolean
+          default: false
+        note:
+          type: string
+
+    UpdatePrimaryPhoneRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+        note:
+          type: string
+
+    MergePatientRequest:
+      type: object
+      required: [intoPatientId]
+      properties:
+        intoPatientId:
+          type: string
+          format: uuid
+        reassignments:
+          type: object
+          properties:
+            appointments:
+              type: boolean
+              default: true
+            invoices:
+              type: boolean
+              default: true
+            encounters:
+              type: boolean
+              default: true
+            mergePhones:
+              type: boolean
+              default: true
+        note:
+          type: string
+
+    MergePatientResponse:
+      type: object
+      properties:
+        mergedPatientId:
+          type: string
+          format: uuid
+        intoPatientId:
+          type: string
+          format: uuid
+        reassignedCounts:
+          type: object
+          properties:
+            appointments:
+              type: integer
+            encounters:
+              type: integer
+            invoices:
+              type: integer
+            phones:
+              type: integer
+
+    # ─── Appointments ────────────────────────────────────────────────────────
+
+    Appointment:
+      type: object
+      required: [id, patientId, dentistId, startsAt, endsAt, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        patientId:
+          type: string
+          format: uuid
+        patientCode:
+          type: string
+        patientName:
+          type: string
+        patientPhone:
+          type: string
+        dentistId:
+          type: string
+          format: uuid
+        dentistName:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+        status:
+          type: string
+          enum: [scheduled, confirmed, checked_in, in_consultation, completed, cancelled, no_show]
+        appointmentType:
+          type: string
+          enum: [consultation, treatment, follow_up]
+        chiefComplaint:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        checkInAt:
+          type: string
+          format: date-time
+          nullable: true
+        checkedInByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        encounterId:
+          type: string
+          format: uuid
+          nullable: true
+        rescheduledFromAppointmentId:
+          type: string
+          format: uuid
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        cancellationReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateAppointmentRequest:
+      type: object
+      required: [patientId, dentistId, startsAt, endsAt, appointmentType]
+      properties:
+        patientId:
+          type: string
+          format: uuid
+        dentistId:
+          type: string
+          format: uuid
+        startsAt:
+          type: string
+          format: date-time
+          description: Must be in the future (BR-APPT-022)
+        endsAt:
+          type: string
+          format: date-time
+        appointmentType:
+          type: string
+          enum: [consultation, treatment, follow_up]
+        chiefComplaint:
+          type: string
+          maxLength: 500
+        notes:
+          type: string
+          maxLength: 1000
+        sendSmsReminder:
+          type: boolean
+          default: false
+
+    CheckInRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    CheckInResponse:
+      type: object
+      properties:
+        appointment:
+          $ref: '#/components/schemas/Appointment'
+        queueEntry:
+          type: object
+          properties:
+            queueId:
+              type: string
+              format: uuid
+            positionInQueue:
+              type: integer
+            estimatedWaitMinutes:
+              type: integer
+
+    CancelAppointmentRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+        notifyPatient:
+          type: boolean
+          default: false
+
+    RescheduleRequest:
+      type: object
+      required: [newStartsAt, newEndsAt]
+      properties:
+        newStartsAt:
+          type: string
+          format: date-time
+        newEndsAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        notifyPatient:
+          type: boolean
+          default: false
+
+    RescheduleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        rescheduleLog:
+          type: object
+          properties:
+            oldStartsAt:
+              type: string
+              format: date-time
+            newStartsAt:
+              type: string
+              format: date-time
+            reason:
+              type: string
+            rescheduledByUserId:
+              type: string
+              format: uuid
+            rescheduledAt:
+              type: string
+              format: date-time
+
+    # ─── Working Schedule ────────────────────────────────────────────────────
+
+    WorkingSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: 0=Sunday, 1=Monday...
+        weekdayLabel:
+          type: string
+          example: Thứ 2
+        startTime:
+          type: string
+          format: time
+          example: "08:00:00"
+        endTime:
+          type: string
+          format: time
+          example: "17:00:00"
+        validFrom:
+          type: string
+          format: date
+        validTo:
+          type: string
+          format: date
+          nullable: true
+        recurrenceType:
+          type: string
+          enum: [weekly]
+        isActive:
+          type: boolean
+
+    CreateWorkingScheduleRequest:
+      type: object
+      required: [weekday, startTime, endTime, recurrenceType, validFrom]
+      properties:
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+        startTime:
+          type: string
+          format: time
+        endTime:
+          type: string
+          format: time
+        recurrenceType:
+          type: string
+          enum: [weekly]
+          default: weekly
+        validFrom:
+          type: string
+          format: date
+
+    # ─── Time-Off ────────────────────────────────────────────────────────────
+
+    TimeOff:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        isAllDay:
+          type: boolean
+        createdByUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateTimeOffRequest:
+      type: object
+      required: [startsAt, endsAt]
+      properties:
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        isAllDay:
+          type: boolean
+          default: true
+
+    TimeOffWithImpact:
+      allOf:
+        - $ref: '#/components/schemas/TimeOff'
+        - type: object
+          properties:
+            affectedAppointments:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  startsAt:
+                    type: string
+                    format: date-time
+                  patientCode:
+                    type: string
+                  patientName:
+                    type: string
+
+    # ─── Waiting Queue ───────────────────────────────────────────────────────
+
+    QueueEntry:
+      type: object
+      properties:
+        queueId:
+          type: string
+          format: uuid
+        appointmentId:
+          type: string
+          format: uuid
+        patientCode:
+          type: string
+        patientName:
+          type: string
+        patientPhone:
+          type: string
+        chiefComplaint:
+          type: string
+          nullable: true
+        checkedInAt:
+          type: string
+          format: date-time
+        positionInQueue:
+          type: integer
+        estimatedWaitMinutes:
+          type: integer
+        appointmentScheduledAt:
+          type: string
+          format: date-time
+
+    QueueSummary:
+      type: object
+      properties:
+        totalWaiting:
+          type: integer
+        currentlyInConsultation:
+          type: integer
+
+    # ─── Calendar ───────────────────────────────────────────────────────────
+
+    CalendarDay:
+      type: object
+      properties:
+        dateRange:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        appointmentsByDay:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                startsAt:
+                  type: string
+                  format: date-time
+                endsAt:
+                  type: string
+                  format: date-time
+                status:
+                  type: string
+                patientName:
+                  type: string
+                dentistName:
+                  type: string
+        workingSchedulesByDentist:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: object
+              properties:
+                start:
+                  type: string
+                end:
+                  type: string
+
+    # ─── Encounters ─────────────────────────────────────────────────────────
+
+    Encounter:
+      type: object
+      required: [id, patientId, dentistId, status, startedAt, isLocked]
+      properties:
+        id:
+          type: string
+          format: uuid
+        patient:
+          $ref: '#/components/schemas/PatientSummary'
+        dentist:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            fullName:
+              type: string
+        appointmentId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [in_progress, closed, cancelled]
+        startedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        chiefComplaint:
+          type: string
+          nullable: true
+        diagnosis:
+          type: string
+          nullable: true
+        clinicalNote:
+          $ref: '#/components/schemas/ClinicalNote'
+          nullable: true
+        treatments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Treatment'
+        prescriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prescription'
+        dentalChartSnapshotId:
+          type: string
+          format: uuid
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancellationReason:
+          type: string
+          nullable: true
+        isLocked:
+          type: boolean
+        lockedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PatientSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        fullName:
+          type: string
+        allergies:
+          type: array
+          items:
+            type: string
+
+    CreateEncounterRequest:
+      type: object
+      required: [patientId]
+      properties:
+        patientId:
+          type: string
+          format: uuid
+        appointmentId:
+          type: string
+          format: uuid
+        chiefComplaint:
+          type: string
+        walkIn:
+          type: boolean
+          default: false
+
+    CloseEncounterRequest:
+      type: object
+      required: [diagnosis]
+      properties:
+        diagnosis:
+          type: string
+        finalNotes:
+          type: string
+
+    CloseEncounterResponse:
+      allOf:
+        - $ref: '#/components/schemas/Encounter'
+        - type: object
+          properties:
+            sideEffects:
+              type: object
+              properties:
+                stockMovementsCreated:
+                  type: integer
+                invoiceDraftId:
+                  type: string
+                  format: uuid
+                treatmentCount:
+                  type: integer
+
+    # ─── Clinical Notes ──────────────────────────────────────────────────────
+
+    ClinicalNote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        subjective:
+          type: string
+        objective:
+          type: string
+        assessment:
+          type: string
+        plan:
+          type: string
+        rawNotes:
+          type: string
+          nullable: true
+          description: Only visible to dentist admin (BR-MR-018)
+        isLocked:
+          type: boolean
+        createdByUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UpsertClinicalNoteRequest:
+      type: object
+      required: [subjective, objective, assessment, plan]
+      properties:
+        subjective:
+          type: string
+        objective:
+          type: string
+        assessment:
+          type: string
+        plan:
+          type: string
+        rawNotes:
+          type: string
+
+    Addendum:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        authorUserId:
+          type: string
+          format: uuid
+        authorName:
+          type: string
+        text:
+          type: string
+        reason:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+
+    AddAddendumRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        reason:
+          type: string
+
+    # ─── Treatments ─────────────────────────────────────────────────────────
+
+    Treatment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        toothNumber:
+          type: integer
+          minimum: 1
+          maximum: 32
+          description: FDI tooth numbering system
+        treatmentCode:
+          type: string
+        treatmentName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        priceCents:
+          type: integer
+          description: Price in cents
+        currency:
+          type: string
+          default: VND
+        quantity:
+          type: integer
+        lineTotalCents:
+          type: integer
+        inventoryItemsUsed:
+          type: array
+          items:
+            type: object
+            properties:
+              inventoryItemId:
+                type: string
+                format: uuid
+              inventoryItemName:
+                type: string
+              quantityUsed:
+                type: integer
+        performedAt:
+          type: string
+          format: date-time
+        performedByUserId:
+          type: string
+          format: uuid
+
+    CreateTreatmentRequest:
+      type: object
+      required: [treatmentCode, priceCents, quantity]
+      properties:
+        toothNumber:
+          type: integer
+          minimum: 1
+          maximum: 32
+        treatmentCode:
+          type: string
+        description:
+          type: string
+        priceCents:
+          type: integer
+          minimum: 0
+        quantity:
+          type: integer
+          minimum: 1
+        inventoryItemsUsed:
+          type: array
+          items:
+            type: object
+            required: [inventoryItemId, quantityUsed]
+            properties:
+              inventoryItemId:
+                type: string
+                format: uuid
+              quantityUsed:
+                type: integer
+                minimum: 1
+
+    # ─── Prescriptions ────────────────────────────────────────────────────────
+
+    Prescription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        note:
+          type: string
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescriptionLine'
+        issuedByUserId:
+          type: string
+          format: uuid
+        issuedAt:
+          type: string
+          format: date-time
+        isLocked:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescriptionWarning'
+
+    PrescriptionLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        drugName:
+          type: string
+        dosage:
+          type: string
+        frequency:
+          type: string
+        durationDays:
+          type: integer
+        quantity:
+          type: integer
+        instructions:
+          type: string
+          nullable: true
+        isAllergyWarning:
+          type: boolean
+
+    PrescriptionWarning:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [allergy, drug_interaction]
+        severity:
+          type: string
+          enum: [low, medium, high]
+        message:
+          type: string
+        lineIndex:
+          type: integer
+
+    CreatePrescriptionRequest:
+      type: object
+      required: [lines]
+      properties:
+        note:
+          type: string
+        lines:
+          type: array
+          items:
+            type: object
+            required: [drugName, dosage, frequency, durationDays, quantity]
+            properties:
+              drugName:
+                type: string
+                maxLength: 200
+              dosage:
+                type: string
+                maxLength: 100
+              frequency:
+                type: string
+                maxLength: 200
+              durationDays:
+                type: integer
+                minimum: 1
+                maximum: 30
+              quantity:
+                type: integer
+                minimum: 1
+              instructions:
+                type: string
+
+    # ─── Dental Chart ────────────────────────────────────────────────────────
+
+    DentalChartSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        snapshot:
+          type: object
+          properties:
+            teeth:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, cavity, filled, crowned, missing, implant, extraction_needed]
+                  notes:
+                    type: string
+                    maxLength: 200
+            schemaVersion:
+              type: string
+              default: "1.0"
+            capturedAt:
+              type: string
+              format: date-time
+        capturedByUserId:
+          type: string
+          format: uuid
+
+    UpdateDentalChartRequest:
+      type: object
+      required: [teeth]
+      properties:
+        teeth:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [healthy, cavity, filled, crowned, missing, implant, extraction_needed]
+              notes:
+                type: string
+                maxLength: 200
+          description: Must include all 32 teeth (FDI numbering 1-32)
+
+    # ─── Invoices ───────────────────────────────────────────────────────────
+
+    Invoice:
+      type: object
+      required: [id, code, patientId, status, totalAmountCents, currency, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          pattern: '^INV-\d{4}-\d{5}$'
+          example: INV-2026-00123
+        patient:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            code:
+              type: string
+            fullName:
+              type: string
+            primaryPhone:
+              type: string
+        encounterId:
+          type: string
+          format: uuid
+          nullable: true
+        encounterSummary:
+          type: object
+          nullable: true
+          properties:
+            occurredAt:
+              type: string
+              format: date-time
+            chiefComplaint:
+              type: string
+        status:
+          type: string
+          enum: [draft, issued, partial, paid, void]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceItem'
+        subtotalCents:
+          type: integer
+        discountCents:
+          type: integer
+        totalAmountCents:
+          type: integer
+        paidAmountCents:
+          type: integer
+        outstandingAmountCents:
+          type: integer
+        currency:
+          type: string
+          default: VND
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+        issuedAt:
+          type: string
+          format: date-time
+          nullable: true
+        issuedByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        voidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        voidReason:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    InvoiceItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        treatmentId:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        toothNumber:
+          type: integer
+          nullable: true
+        quantity:
+          type: integer
+        unitPriceCents:
+          type: integer
+        lineTotalCents:
+          type: integer
+
+    CreateInvoiceRequest:
+      type: object
+      required: [patientId, items]
+      properties:
+        patientId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            type: object
+            required: [description, quantity, unitPriceCents]
+            properties:
+              description:
+                type: string
+              quantity:
+                type: integer
+                minimum: 1
+              unitPriceCents:
+                type: integer
+                minimum: 0
+        notes:
+          type: string
+
+    IssueInvoiceRequest:
+      type: object
+      properties:
+        note:
+          type: string
+
+    VoidInvoiceRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        adminPassword:
+          type: string
+
+    # ─── Payments ────────────────────────────────────────────────────────────
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+        method:
+          type: string
+          enum: [cash, bank_transfer, card, e_wallet]
+        currency:
+          type: string
+          default: VND
+        receivedAt:
+          type: string
+          format: date-time
+        receivedByUserId:
+          type: string
+          format: uuid
+        receivedByName:
+          type: string
+        referenceNumber:
+          type: string
+          nullable: true
+        note:
+          type: string
+          nullable: true
+
+    CreatePaymentRequest:
+      type: object
+      required: [amountCents, method]
+      properties:
+        amountCents:
+          type: integer
+          minimum: 1
+          description: Must be ≤ outstanding amount
+        method:
+          type: string
+          enum: [cash, bank_transfer, card, e_wallet]
+        paidAt:
+          type: string
+          format: date-time
+          default: now
+        referenceNumber:
+          type: string
+          maxLength: 100
+        note:
+          type: string
+
+    ReversePaymentRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        adminPassword:
+          type: string
+
+    # ─── Reports ─────────────────────────────────────────────────────────────
+
+    RevenueReport:
+      type: object
+      properties:
+        dateRange:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        byGroup:
+          type: array
+          items:
+            type: object
+            properties:
+              period:
+                type: string
+              totalInvoicedCents:
+                type: integer
+              totalCollectedCents:
+                type: integer
+              totalOutstandingCents:
+                type: integer
+              invoiceCount:
+                type: integer
+              paymentCount:
+                type: integer
+        summary:
+          type: object
+          properties:
+            totalInvoicedCents:
+              type: integer
+            totalCollectedCents:
+              type: integer
+            outstandingCents:
+              type: integer
+
+    OutstandingReport:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              invoiceId:
+                type: string
+                format: uuid
+              invoiceCode:
+                type: string
+              patientCode:
+                type: string
+              patientName:
+                type: string
+              patientPhone:
+                type: string
+              outstandingAmountCents:
+                type: integer
+              daysOutstanding:
+                type: integer
+              issuedAt:
+                type: string
+                format: date
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ─── Inventory ───────────────────────────────────────────────────────────
+
+    InventoryCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        itemCount:
+          type: integer
+        lowStockItemCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateCategoryRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]{2,29}$'
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+          format: uuid
+        categoryName:
+          type: string
+        unit:
+          type: string
+        quantityOnHand:
+          type: integer
+        reservedQuantity:
+          type: integer
+        availableQuantity:
+          type: integer
+        reorderPoint:
+          type: integer
+        reorderQuantity:
+          type: integer
+        costPerUnitCents:
+          type: integer
+        currency:
+          type: string
+          default: VND
+        isLowStock:
+          type: boolean
+        isActive:
+          type: boolean
+        lastMovementAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateInventoryItemRequest:
+      type: object
+      required: [sku, name, unit, categoryId]
+      properties:
+        sku:
+          type: string
+          maxLength: 50
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        unit:
+          type: string
+          maxLength: 20
+        reorderPoint:
+          type: integer
+          minimum: 0
+          default: 10
+        reorderQuantity:
+          type: integer
+          minimum: 0
+          default: 50
+        costPerUnitCents:
+          type: integer
+          minimum: 0
+        initialQuantityOnHand:
+          type: integer
+          minimum: 0
+          default: 0
+        isActive:
+          type: boolean
+          default: true
+
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [in, out, adjust]
+        quantity:
+          type: integer
+          description: Negative for out/adjust reducing stock
+        quantityBefore:
+          type: integer
+        quantityAfter:
+          type: integer
+        reason:
+          type: string
+          enum: [initial_stock, treatment_consumption, stock_in, broken, lost, count_correction, returned_to_supplier, received_from_supplier]
+        note:
+          type: string
+          nullable: true
+        relatedEncounterId:
+          type: string
+          format: uuid
+          nullable: true
+        relatedTreatmentId:
+          type: string
+          format: uuid
+          nullable: true
+        performedByUserId:
+          type: string
+          format: uuid
+        performedAt:
+          type: string
+          format: date-time
+
+    AdjustStockRequest:
+      type: object
+      required: [deltaQuantity, reason]
+      properties:
+        deltaQuantity:
+          type: integer
+          description: Positive = increase stock, Negative = decrease. Must be non-zero.
+          example: -3
+        reason:
+          type: string
+          enum: [stock_in, broken, lost, count_correction, returned_to_supplier, received_from_supplier]
+        note:
+          type: string
+        relatedEncounterId:
+          type: string
+          format: uuid
+
+    AdjustStockResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        quantityOnHand:
+          type: integer
+        movement:
+          $ref: '#/components/schemas/StockMovement'
+        noop:
+          type: boolean
+          description: True if deltaQuantity was zero and no change was made (BR-INV-023)
+
+    InventoryAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [low_stock, critical_stock, out_of_stock]
+        severity:
+          type: string
+          enum: [low, critical, out]
+        itemId:
+          type: string
+          format: uuid
+        itemSku:
+          type: string
+        itemName:
+          type: string
+        currentQuantity:
+          type: integer
+        threshold:
+          type: integer
+        triggeredAt:
+          type: string
+          format: date-time
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedByUserId:
+          type: string
+          format: uuid
+          nullable: true
+
+    AcknowledgeAlertRequest:
+      type: object
+      properties:
+        note:
+          type: string
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: refreshToken=xxx; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=604800
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        "429":
+          description: Account temporarily locked (too many failed attempts)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token using refresh token cookie
+      security:
+        - RefreshTokenCookie: []
+      responses:
+        "200":
+          description: Token refreshed
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "401":
+          description: Refresh token invalid, expired, or reused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout current session (revoke refresh token)
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Logged out
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: refreshToken=; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=0
+
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      summary: Logout all sessions (revoke all refresh tokens)
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: All sessions logged out
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request password reset link (always returns 204 even if email not found)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        "204":
+          description: If email exists, reset link is sent. Always returns 204.
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password using token from email
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        "200":
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+        "400":
+          description: Token invalid/expired/used
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user info
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserInfo'
+
+  /auth/me/login-history:
+    get:
+      tags: [Auth]
+      summary: Get current user's login history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Cursor (UUID of last entry)
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: occurredAt:desc
+      responses:
+        "200":
+          description: Login history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoginHistoryEntry'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change own password (requires current password)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        "204":
+          description: Password changed, all refresh tokens revoked
+        "401":
+          description: Current password incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ── Admin Users ────────────────────────────────────────────────────────────
+
+  /admin/users:
+    get:
+      tags: [Users]
+      summary: List all users (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, pending_setup, deactivated]
+        - name: roleId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: createdAt:desc
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Users]
+      summary: Create new user (admin)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+                  meta:
+                    type: object
+                    properties:
+                      created:
+                        type: boolean
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        "404":
+          description: User not found
+    patch:
+      tags: [Users]
+      summary: Update user (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        "200":
+          description: User updated
+        "409":
+          description: Email conflict
+
+  /admin/users/{id}/roles:
+    put:
+      tags: [Users]
+      summary: Replace user's roles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRolesRequest'
+      responses:
+        "200":
+          description: Roles updated
+        "409":
+          description: Cannot remove last admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/users/{id}/deactivate:
+    post:
+      tags: [Users]
+      summary: Deactivate user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivateUserRequest'
+      responses:
+        "204":
+          description: User deactivated
+        "409":
+          description: Cannot deactivate last admin
+
+  /admin/users/{id}/reactivate:
+    post:
+      tags: [Users]
+      summary: Reactivate deactivated user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: User reactivated
+
+  /admin/users/{id}/reset-password:
+    post:
+      tags: [Users]
+      summary: Reset user password (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetUserPasswordRequest'
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      temporaryPassword:
+                        type: string
+                        description: Only returned if sendEmail=false
+
+  /admin/users/{id}/login-history:
+    get:
+      tags: [Users]
+      summary: Get specific user's login history (admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Login history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoginHistoryEntry'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ── Admin Roles ────────────────────────────────────────────────────────────
+
+  /admin/roles:
+    get:
+      tags: [Roles]
+      summary: List all roles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Role list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+    post:
+      tags: [Roles]
+      summary: Create new role
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        "201":
+          description: Role created
+        "409":
+          description: Role code already exists
+
+  /admin/roles/{id}:
+    patch:
+      tags: [Roles]
+      summary: Update role
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        "200":
+          description: Role updated
+    delete:
+      tags: [Roles]
+      summary: Soft-delete role (only if no users)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Role deleted
+        "409":
+          description: Cannot delete system role or role with active users
+
+  /admin/permissions:
+    get:
+      tags: [Roles]
+      summary: List all available permissions
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Permission list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Permission'
+
+  # ── Audit Logs ─────────────────────────────────────────────────────────────
+
+  /admin/audit-logs:
+    get:
+      tags: [Audit]
+      summary: Query audit logs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: actor
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: targetType
+          in: query
+          schema:
+            type: string
+        - name: targetId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: occurredAt:desc
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ── Patients ──────────────────────────────────────────────────────────────
+
+  /patients:
+    get:
+      tags: [Patients]
+      summary: List patients (search + filter)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, deceased, merged]
+        - name: gender
+          in: query
+          schema:
+            type: string
+            enum: [male, female, other]
+        - name: from
+          in: query
+          description: Birthdate range start
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: createdAt:desc
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Patient list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Patient'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Patients]
+      summary: Create new patient
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+          description: Required for idempotency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientRequest'
+      responses:
+        "201":
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Patient'
+                  meta:
+                    type: object
+                    properties:
+                      codeGenerated:
+                        type: string
+        "409":
+          description: Primary phone already belongs to another patient
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ProblemDetails'
+                  - type: object
+                    properties:
+                      duplicateCandidate:
+                        $ref: '#/components/schemas/PatientMatch'
+        "422":
+          description: Validation error (e.g., consent not given)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /patients/check-duplicate:
+    post:
+      tags: [Patients]
+      summary: Check for duplicate patients before creating
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckDuplicateRequest'
+      responses:
+        "200":
+          description: Duplicate check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DuplicateCheckResponse'
+
+  /patients/{id}:
+    get:
+      tags: [Patients]
+      summary: Get patient by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Patient detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Patient'
+        "404":
+          description: Patient not found
+    patch:
+      tags: [Patients]
+      summary: Update patient
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePatientRequest'
+      responses:
+        "200":
+          description: Patient updated
+        "409":
+          description: Phone conflict
+    delete:
+      tags: [Patients]
+      summary: Deactivate patient (soft-delete)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "204":
+          description: Patient deactivated
+        "409":
+          description: Cannot delete patient with active treatment
+
+  /patients/{id}/merge:
+    post:
+      tags: [Patients]
+      summary: Merge duplicate patient into another
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergePatientRequest'
+      responses:
+        "200":
+          description: Merge result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MergePatientResponse'
+
+  /patients/{id}/phones:
+    get:
+      tags: [Patients]
+      summary: Get patient phone history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Phone history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PatientPhone'
+    post:
+      tags: [Patients]
+      summary: Add new phone number for patient
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPhoneRequest'
+      responses:
+        "201":
+          description: Phone added
+        "409":
+          description: Phone belongs to another patient
+
+  /patients/{id}/phones/primary:
+    put:
+      tags: [Patients]
+      summary: Change patient's primary phone number
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrimaryPhoneRequest'
+      responses:
+        "200":
+          description: Primary phone updated
+
+  /patients/{id}/encounters:
+    get:
+      tags: [Patients, Encounters]
+      summary: Get patient's encounter history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Encounter list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        occurredAt:
+                          type: string
+                          format: date-time
+                        dentistName:
+                          type: string
+                        chiefComplaint:
+                          type: string
+                        status:
+                          type: string
+                        isLocked:
+                          type: boolean
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /patients/{id}/invoices:
+    get:
+      tags: [Patients, Invoices]
+      summary: Get patient's invoices
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invoice'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ── Appointments ───────────────────────────────────────────────────────────
+
+  /appointments:
+    get:
+      tags: [Appointments]
+      summary: List appointments (filterable)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [scheduled, confirmed, checked_in, in_consultation, completed, cancelled, no_show]
+        - name: dentistId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: patientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: startsAt:asc
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Appointment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Appointment'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Appointments]
+      summary: Create new appointment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+      responses:
+        "201":
+          description: Appointment created
+        "409":
+          description: Slot already booked
+        "422":
+          description: Outside working schedule, on time-off, or in past
+
+  /appointments/{id}:
+    get:
+      tags: [Appointments]
+      summary: Get appointment by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Appointment detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Appointment'
+    patch:
+      tags: [Appointments]
+      summary: Update appointment notes/complaint (not time/dentist — use reschedule)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chiefComplaint:
+                  type: string
+                notes:
+                  type: string
+      responses:
+        "200":
+          description: Appointment updated
+
+  /appointments/{id}/check-in:
+    post:
+      tags: [Appointments]
+      summary: Check-in patient for appointment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInRequest'
+      responses:
+        "200":
+          description: Checked in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CheckInResponse'
+        "422":
+          description: Outside check-in window [startsAt-15min, startsAt+30min]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /appointments/{id}/cancel:
+    post:
+      tags: [Appointments]
+      summary: Cancel appointment (cascades to cancel encounter if in_progress)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAppointmentRequest'
+      responses:
+        "200":
+          description: Appointment cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Appointment'
+        "409":
+          description: Cannot cancel completed appointment
+
+  /appointments/{id}/reschedule:
+    post:
+      tags: [Appointments]
+      summary: Reschedule appointment to new time
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleRequest'
+      responses:
+        "200":
+          description: Appointment rescheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RescheduleResponse'
+        "422":
+          description: Outside schedule or conflict
+
+  /appointments/{id}/start:
+    post:
+      tags: [Appointments, Encounters]
+      summary: Start encounter for checked-in appointment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Encounter started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      appointment:
+                        $ref: '#/components/schemas/Appointment'
+                      encounter:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          status:
+                            type: string
+                            example: in_progress
+                          startedAt:
+                            type: string
+                            format: date-time
+
+  /appointments/{id}/finish:
+    post:
+      tags: [Appointments]
+      summary: Mark appointment as finished (manual completion)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Appointment finished
+
+  /appointments/{id}/no-show:
+    post:
+      tags: [Appointments]
+      summary: Mark appointment as no-show (cron job only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Marked no-show
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      markedCount:
+                        type: integer
+                      appointmentIds:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+
+  # ── Working Schedule ────────────────────────────────────────────────────────
+
+  /dentists/{id}/working-schedules:
+    get:
+      tags: [Schedule]
+      summary: Get dentist's working schedule
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Working schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkingSchedule'
+    post:
+      tags: [Schedule]
+      summary: Create working schedule entry
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkingScheduleRequest'
+      responses:
+        "201":
+          description: Schedule created
+        "422":
+          description: Overlapping schedule
+
+  /dentists/{id}/working-schedules/{scheduleId}:
+    patch:
+      tags: [Schedule]
+      summary: Update working schedule entry
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Schedule updated
+    delete:
+      tags: [Schedule]
+      summary: Soft-delete working schedule entry
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: scheduleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Schedule deleted
+
+  /dentists/{id}/time-offs:
+    get:
+      tags: [Schedule]
+      summary: Get dentist's time-offs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Time-off list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimeOff'
+    post:
+      tags: [Schedule]
+      summary: Create time-off for dentist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTimeOffRequest'
+      responses:
+        "201":
+          description: Time-off created (may include affected appointments)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TimeOffWithImpact'
+
+  /dentists/{id}/time-offs/{timeOffId}:
+    delete:
+      tags: [Schedule]
+      summary: Delete time-off
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: timeOffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Time-off deleted
+
+  # ── Waiting Queue ──────────────────────────────────────────────────────────
+
+  /waiting-queue:
+    get:
+      tags: [WaitingQueue]
+      summary: Get FIFO waiting queue for today
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dentistId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Defaults to today
+      responses:
+        "200":
+          description: Waiting queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueEntry'
+                  summary:
+                    $ref: '#/components/schemas/QueueSummary'
+
+  /waiting-queue/me:
+    get:
+      tags: [WaitingQueue]
+      summary: Get current dentist's waiting queue
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Dentist's queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QueueEntry'
+                  summary:
+                    $ref: '#/components/schemas/QueueSummary'
+
+  # ── Calendar ───────────────────────────────────────────────────────────────
+
+  /calendar:
+    get:
+      tags: [Calendar]
+      summary: Get calendar view (appointments + schedules by date range)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: dentistId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: week
+      responses:
+        "200":
+          description: Calendar data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CalendarDay'
+
+  # ── Encounters ──────────────────────────────────────────────────────────────
+
+  /encounters:
+    get:
+      tags: [Encounters]
+      summary: List encounters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: patientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: dentistId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [in_progress, closed, cancelled]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: startedAt:desc
+      responses:
+        "200":
+          description: Encounter list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Encounter'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Encounters]
+      summary: Create walk-in encounter (usually done via appointment start)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEncounterRequest'
+      responses:
+        "201":
+          description: Encounter created
+
+  /encounters/{id}:
+    get:
+      tags: [Encounters]
+      summary: Get encounter by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Encounter detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Encounter'
+    patch:
+      tags: [Encounters]
+      summary: Update encounter (chiefComplaint, diagnosis — only while in_progress)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chiefComplaint:
+                  type: string
+                diagnosis:
+                  type: string
+      responses:
+        "200":
+          description: Encounter updated
+        "409":
+          description: Encounter is locked (already closed)
+
+  /encounters/{id}/close:
+    post:
+      tags: [Encounters]
+      summary: Close encounter (ATOMIC: close + stock-out + auto invoice draft)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseEncounterRequest'
+      responses:
+        "200":
+          description: Encounter closed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CloseEncounterResponse'
+        "422":
+          description: No clinical note or treatments, or missing treatment prices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /encounters/{id}/cancel:
+    post:
+      tags: [Encounters]
+      summary: Cancel encounter (usually cascade from appointment cancel)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Encounter cancelled
+        "409":
+          description: Cannot cancel closed encounter
+
+  # ── Clinical Notes ─────────────────────────────────────────────────────────
+
+  /encounters/{id}/clinical-note:
+    get:
+      tags: [ClinicalNotes]
+      summary: Get clinical note for encounter
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Clinical note
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ClinicalNote'
+    put:
+      tags: [ClinicalNotes]
+      summary: Upsert clinical note (create or update — only while in_progress)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertClinicalNoteRequest'
+      responses:
+        "200":
+          description: Clinical note saved
+        "409":
+          description: Encounter is locked
+
+  /encounters/{id}/clinical-note/addendums:
+    get:
+      tags: [ClinicalNotes]
+      summary: Get clinical note addendums
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Addendum list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Addendum'
+    post:
+      tags: [ClinicalNotes]
+      summary: Add addendum to closed encounter (within 30 days)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddAddendumRequest'
+      responses:
+        "201":
+          description: Addendum added
+        "422":
+          description: Encounter not closed or addendum window exceeded (30 days)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ── Treatments ────────────────────────────────────────────────────────────
+
+  /encounters/{id}/treatments:
+    get:
+      tags: [Treatments]
+      summary: List treatments for encounter
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Treatment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Treatment'
+    post:
+      tags: [Treatments]
+      summary: Add treatment to encounter (reserves inventory)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTreatmentRequest'
+      responses:
+        "201":
+          description: Treatment added
+        "422":
+          description: Insufficient stock or invalid item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /treatments/{id}:
+    patch:
+      tags: [Treatments]
+      summary: Update treatment (only while encounter in_progress)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTreatmentRequest'
+      responses:
+        "200":
+          description: Treatment updated
+    delete:
+      tags: [Treatments]
+      summary: Remove treatment (releases inventory reservation)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Treatment removed
+
+  # ── Prescriptions ──────────────────────────────────────────────────────────
+
+  /encounters/{id}/prescriptions:
+    get:
+      tags: [Prescriptions]
+      summary: List prescriptions for encounter
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Prescription list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Prescription'
+    post:
+      tags: [Prescriptions]
+      summary: Create prescription (checks allergy/drug interaction warnings)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrescriptionRequest'
+      responses:
+        "201":
+          description: Prescription created (may include allergy/drug interaction warnings)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Prescription'
+
+  /prescriptions/{id}:
+    patch:
+      tags: [Prescriptions]
+      summary: Update prescription (only while encounter in_progress)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Prescription updated
+    delete:
+      tags: [Prescriptions]
+      summary: Delete prescription
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Prescription deleted
+
+  # ── Dental Charts ─────────────────────────────────────────────────────────
+
+  /encounters/{id}/dental-chart:
+    get:
+      tags: [DentalCharts]
+      summary: Get dental chart snapshot for encounter
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dental chart
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DentalChartSnapshot'
+    put:
+      tags: [DentalCharts]
+      summary: Save dental chart snapshot (32 teeth, FDI numbering)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDentalChartRequest'
+      responses:
+        "200":
+          description: Dental chart saved
+        "422":
+          description: Invalid tooth number or status
+
+  # ── Invoices ───────────────────────────────────────────────────────────────
+
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: List invoices
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, issued, partial, paid, void]
+        - name: patientId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: encounterId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: minOutstandingCents
+          in: query
+          schema:
+            type: integer
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: issuedAt:desc
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invoice'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Invoices]
+      summary: Create ad-hoc invoice (not auto-generated from encounter)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceRequest'
+      responses:
+        "201":
+          description: Invoice created (draft status)
+
+  /invoices/{id}:
+    get:
+      tags: [Invoices]
+      summary: Get invoice by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Invoice detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Invoice'
+    patch:
+      tags: [Invoices]
+      summary: Update invoice (issued only — dueDate, notes; not items)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dueDate:
+                  type: string
+                  format: date
+                notes:
+                  type: string
+                discountCents:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: Invoice updated
+        "409":
+          description: Cannot modify items of issued invoice
+
+  /invoices/from-encounter/{encounterId}:
+    post:
+      tags: [Invoices]
+      summary: Create invoice from encounter treatments (for reconciliation)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: encounterId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: Invoice created
+        "409":
+          description: Encounter already has invoice
+
+  /invoices/{id}/issue:
+    post:
+      tags: [Invoices]
+      summary: Issue invoice (draft → issued)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueInvoiceRequest'
+      responses:
+        "200":
+          description: Invoice issued
+        "422":
+          description: Invoice has no items
+
+  /invoices/{id}/void:
+    post:
+      tags: [Invoices]
+      summary: Void invoice (admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoidInvoiceRequest'
+      responses:
+        "200":
+          description: Invoice voided
+        "409":
+          description: Cannot void paid invoice without reversing payments
+
+  # ── Payments ───────────────────────────────────────────────────────────────
+
+  /invoices/{id}/payments:
+    get:
+      tags: [Payments]
+      summary: List payments for invoice
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Payment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payment'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Payments]
+      summary: Record payment for invoice
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Required — prevents double payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        "201":
+          description: Payment recorded
+        "422":
+          description: Payment exceeds outstanding amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /payments/{id}/reverse:
+    post:
+      tags: [Payments]
+      summary: Reverse payment (admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversePaymentRequest'
+      responses:
+        "200":
+          description: Payment reversed
+
+  # ── Reports ───────────────────────────────────────────────────────────────
+
+  /reports/revenue:
+    get:
+      tags: [Reports]
+      summary: Revenue report
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: groupBy
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+        - name: paymentMethod
+          in: query
+          schema:
+            type: string
+            enum: [cash, bank_transfer, card, e_wallet]
+      responses:
+        "200":
+          description: Revenue report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RevenueReport'
+
+  /reports/outstanding:
+    get:
+      tags: [Reports]
+      summary: Outstanding invoices report
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: asOf
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: minAmountCents
+          in: query
+          schema:
+            type: integer
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [amount, days]
+            default: days
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Outstanding report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutstandingReport'
+
+  # ── Inventory ──────────────────────────────────────────────────────────────
+
+  /inventory/categories:
+    get:
+      tags: [InventoryCategories]
+      summary: List inventory categories
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryCategory'
+    post:
+      tags: [InventoryCategories]
+      summary: Create inventory category
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        "201":
+          description: Category created
+
+  /inventory/categories/{id}:
+    patch:
+      tags: [InventoryCategories]
+      summary: Update category
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category updated
+    delete:
+      tags: [InventoryCategories]
+      summary: Soft-delete category
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Category deleted
+
+  /inventory/items:
+    get:
+      tags: [Inventory]
+      summary: List inventory items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: lowStockOnly
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: name:asc
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Item list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryItem'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Inventory]
+      summary: Create inventory item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryItemRequest'
+      responses:
+        "201":
+          description: Item created
+        "409":
+          description: SKU already exists
+
+  /inventory/items/{id}:
+    get:
+      tags: [Inventory]
+      summary: Get inventory item by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Item detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InventoryItem'
+    patch:
+      tags: [Inventory]
+      summary: Update inventory item (not quantity — use adjust)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                reorderPoint:
+                  type: integer
+                reorderQuantity:
+                  type: integer
+                costPerUnitCents:
+                  type: integer
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Item updated
+
+  /inventory/items/{id}/deactivate:
+    post:
+      tags: [Inventory]
+      summary: Deactivate inventory item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "204":
+          description: Item deactivated
+
+  /inventory/items/{id}/adjust:
+    post:
+      tags: [Inventory]
+      summary: Adjust stock quantity (stock-in, break, count correction)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustStockRequest'
+      responses:
+        "200":
+          description: Stock adjusted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdjustStockResponse'
+        "422":
+          description: Adjustment would result in negative stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /inventory/items/{id}/movements:
+    get:
+      tags: [Inventory]
+      summary: Get stock movement history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [in, out, adjust]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: performedAt:desc
+      responses:
+        "200":
+          description: Movement history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StockMovement'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /inventory/low-stock:
+    get:
+      tags: [Inventory]
+      summary: Get low-stock items for dashboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Low-stock items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        sku:
+                          type: string
+                        name:
+                          type: string
+                        categoryName:
+                          type: string
+                        quantityOnHand:
+                          type: integer
+                        reservedQuantity:
+                          type: integer
+                        availableQuantity:
+                          type: integer
+                        reorderPoint:
+                          type: integer
+                        reorderQuantity:
+                          type: integer
+                        lowStockSinceAt:
+                          type: string
+                          format: date-time
+                  summary:
+                    type: object
+                    properties:
+                      totalLowStockItems:
+                        type: integer
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /inventory/alerts:
+    get:
+      tags: [InventoryAlerts]
+      summary: Get stock alerts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, critical, out]
+        - name: acknowledged
+          in: query
+          schema:
+            type: boolean
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryAlert'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /inventory/alerts/{id}/acknowledge:
+    post:
+      tags: [InventoryAlerts]
+      summary: Acknowledge stock alert
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcknowledgeAlertRequest'
+      responses:
+        "200":
+          description: Alert acknowledged
+
+  # ============================================================
+  # PAYROLL (Phase 9 — BD-0009)
+  # ============================================================
+
+  /payroll/config:
+    get:
+      tags: [Payroll]
+      summary: Get payroll config (singleton)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Payroll config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollConfig'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Payroll]
+      summary: Update payroll config
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollConfigUpdateRequest'
+      responses:
+        "200":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollConfig'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+
+  /payroll/compensations:
+    get:
+      tags: [Payroll]
+      summary: List dentist compensations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dentistId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: activeOn
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Compensation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DentistCompensation'
+    post:
+      tags: [Payroll]
+      summary: Create dentist compensation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCompensationRequest'
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistCompensation'
+        "422":
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /payroll/compensations/{id}:
+    patch:
+      tags: [Payroll]
+      summary: Update compensation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompensationRequest'
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistCompensation'
+    delete:
+      tags: [Payroll]
+      summary: Soft-delete compensation (sets effectiveTo = today)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /payroll/periods:
+    get:
+      tags: [Payroll]
+      summary: List payroll periods
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, REVIEWING, APPROVED, PAID, LOCKED]
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Period list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayrollPeriod'
+    post:
+      tags: [Payroll]
+      summary: Create new payroll period
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePayrollPeriodRequest'
+      responses:
+        "201":
+          description: Created (DRAFT)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+        "422":
+          description: Period overlap
+
+  /payroll/periods/{id}:
+    get:
+      tags: [Payroll]
+      summary: Get period detail with line items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Period detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriodDetail'
+
+  /payroll/periods/{id}/compute:
+    post:
+      tags: [Payroll]
+      summary: Compute or re-compute payroll period
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Computed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollComputeResult'
+        "422":
+          description: Period status not DRAFT/REVIEWING
+
+  /payroll/periods/{id}/adjustments:
+    post:
+      tags: [Payroll]
+      summary: Add manual adjustment to line item
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddAdjustmentRequest'
+      responses:
+        "200":
+          description: Adjustment added, line item re-computed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollLineItem'
+
+  /payroll/periods/{id}/lock:
+    post:
+      tags: [Payroll]
+      summary: Lock period (DRAFT → REVIEWING)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+
+  /payroll/periods/{id}/approve:
+    post:
+      tags: [Payroll]
+      summary: Approve period (REVIEWING → APPROVED)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+
+  /payroll/periods/{id}/mark-paid:
+    post:
+      tags: [Payroll]
+      summary: Mark period as paid (APPROVED → PAID)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkPaidRequest'
+      responses:
+        "200":
+          description: Paid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollPeriod'
+
+  /payroll/me/history:
+    get:
+      tags: [Payroll]
+      summary: My payroll history (Dentist own)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: My periods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayrollHistoryItem'
+
+  /payroll/me/payslip/{periodId}:
+    get:
+      tags: [Payroll]
+      summary: My payslip for a period
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: periodId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Payslip
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payslip'
+        "403":
+          description: Period not yet APPROVED
+
+  /payroll/me/compensation:
+    get:
+      tags: [Payroll]
+      summary: My current compensation (Dentist)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: My compensation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DentistCompensation'
+
+  /payroll/me/preview:
+    get:
+      tags: [Payroll]
+      summary: Preview estimated pay for current DRAFT period
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollLineItem'
+
+  # ============================================================
+  # SHIFT REGISTRATIONS (Phase 9 — BD-0010)
+  # ============================================================
+
+  /shifts/registrations:
+    get:
+      tags: [ShiftRegistrations]
+      summary: List shift registrations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dentistId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Shift registration list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShiftRegistration'
+    post:
+      tags: [ShiftRegistrations]
+      summary: Register a new shift
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShiftRegistrationRequest'
+      responses:
+        "201":
+          description: Registered (PENDING)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftRegistration'
+        "422":
+          description: Overlaps with working schedule (BR-PAY-020)
+
+  /shifts/registrations/{id}:
+    get:
+      tags: [ShiftRegistrations]
+      summary: Get shift registration detail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftRegistration'
+
+  /shifts/registrations/{id}/approve:
+    post:
+      tags: [ShiftRegistrations]
+      summary: Approve shift (admin/receptionist)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftRegistration'
+        "422":
+          description: Ca đã qua giờ (BR-APPT-029)
+
+  /shifts/registrations/{id}/reject:
+    post:
+      tags: [ShiftRegistrations]
+      summary: Reject shift (admin/receptionist)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 5
+                  maxLength: 500
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftRegistration'
+
+  /shifts/registrations/{id}/cancel:
+    post:
+      tags: [ShiftRegistrations]
+      summary: Cancel own shift (BS or admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftRegistration'
+        "403":
+          description: BS cancel < 24h (BR-APPT-028)
+
+components:
+  schemas:
+    PayrollConfig:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        payrollCycle:
+          type: string
+          enum: [WEEKLY, BIWEEKLY, MONTHLY]
+        overtimeMultiplier: { type: number, format: decimal }
+        defaultTaxTncnPct: { type: number, format: decimal }
+        bhxhPct: { type: number, format: decimal }
+        bhytPct: { type: number, format: decimal }
+        bhtnPct: { type: number, format: decimal }
+        minGrossForBhxh: { type: integer, format: int64 }
+        probationSalaryPct: { type: number, format: decimal }
+        taxBrackets:
+          type: object
+          properties:
+            personalDeductionVnd: { type: integer, format: int64 }
+            brackets:
+              type: array
+              items:
+                type: object
+                properties:
+                  thresholdVnd: { type: integer, format: int64, nullable: true }
+                  rate: { type: number, format: decimal }
+        updatedAt: { type: string, format: date-time }
+
+    PayrollConfigUpdateRequest:
+      type: object
+      required: [payrollCycle, overtimeMultiplier, bhxhPct, bhytPct, bhtnPct, minGrossForBhxh, taxBrackets]
+      properties:
+        payrollCycle: { type: string, enum: [WEEKLY, BIWEEKLY, MONTHLY] }
+        overtimeMultiplier: { type: number, format: decimal }
+        bhxhPct: { type: number, format: decimal }
+        bhytPct: { type: number, format: decimal }
+        bhtnPct: { type: number, format: decimal }
+        minGrossForBhxh: { type: integer, format: int64 }
+        taxBrackets:
+          type: object
+
+    DentistCompensation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        dentistId: { type: string, format: uuid }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, format: date, nullable: true }
+        baseSalaryVnd: { type: integer, format: int64 }
+        commissionPct: { type: number, format: decimal }
+        overtimeHourlyVnd: { type: integer, format: int64 }
+        notes: { type: string, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+
+    CreateCompensationRequest:
+      type: object
+      required: [dentistId, effectiveFrom, baseSalaryVnd, commissionPct]
+      properties:
+        dentistId: { type: string, format: uuid }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, format: date, nullable: true }
+        baseSalaryVnd: { type: integer, format: int64, minimum: 0 }
+        commissionPct: { type: number, format: decimal, minimum: 0, maximum: 1 }
+        overtimeHourlyVnd: { type: integer, format: int64, minimum: 0 }
+        notes: { type: string, maxLength: 1000 }
+
+    UpdateCompensationRequest:
+      type: object
+      properties:
+        effectiveTo: { type: string, format: date }
+        baseSalaryVnd: { type: integer, format: int64, minimum: 0 }
+        commissionPct: { type: number, format: decimal, minimum: 0, maximum: 1 }
+        overtimeHourlyVnd: { type: integer, format: int64, minimum: 0 }
+        notes: { type: string, maxLength: 1000 }
+
+    PayrollPeriod:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        payrollCycle: { type: string, enum: [WEEKLY, BIWEEKLY, MONTHLY] }
+        status: { type: string, enum: [DRAFT, REVIEWING, APPROVED, PAID, LOCKED] }
+        createdAt: { type: string, format: date-time }
+        lockedAt: { type: string, format: date-time, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        paymentReference: { type: string, nullable: true }
+
+    CreatePayrollPeriodRequest:
+      type: object
+      required: [periodStart, periodEnd]
+      properties:
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+
+    PayrollPeriodDetail:
+      allOf:
+        - $ref: '#/components/schemas/PayrollPeriod'
+        - type: object
+          properties:
+            lineItems:
+              type: array
+              items:
+                $ref: '#/components/schemas/PayrollLineItem'
+            summary:
+              type: object
+              properties:
+                totalGrossPayVnd: { type: integer, format: int64 }
+                totalNetPayVnd: { type: integer, format: int64 }
+                totalEncounters: { type: integer }
+
+    PayrollLineItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        payrollPeriodId: { type: string, format: uuid }
+        dentistId: { type: string, format: uuid }
+        dentistName: { type: string }
+        encountersCount: { type: integer }
+        totalRevenueVnd: { type: integer, format: int64 }
+        workedShifts: { type: integer }
+        totalHours: { type: number, format: decimal }
+        overtimeHours: { type: number, format: decimal }
+        baseSalaryVnd: { type: integer, format: int64 }
+        commissionVnd: { type: integer, format: int64 }
+        overtimePayVnd: { type: integer, format: int64 }
+        bonusVnd: { type: integer, format: int64 }
+        penaltyVnd: { type: integer, format: int64 }
+        grossPayVnd: { type: integer, format: int64 }
+        taxTncnVnd: { type: integer, format: int64 }
+        bhxhVnd: { type: integer, format: int64 }
+        netPayVnd: { type: integer, format: int64 }
+        manuallyAdjusted: { type: boolean }
+        computationLog:
+          type: object
+          additionalProperties: true
+        computedAt: { type: string, format: date-time }
+
+    PayrollComputeResult:
+      type: object
+      properties:
+        lineItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollLineItem'
+        summary:
+          type: object
+
+    AddAdjustmentRequest:
+      type: object
+      required: [lineItemId, type, amountVnd, reason]
+      properties:
+        lineItemId: { type: string, format: uuid }
+        type: { type: string, enum: [BONUS, PENALTY, DEDUCTION, MANUAL_OVERRIDE] }
+        amountVnd: { type: integer, format: int64 }
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+          description: |
+            MANUAL_OVERRIDE requires ≥ 50 chars (BR-PAY-018).
+
+    MarkPaidRequest:
+      type: object
+      required: [paymentReference, paymentDate]
+      properties:
+        paymentReference: { type: string, maxLength: 200 }
+        paymentDate: { type: string, format: date }
+
+    PayrollHistoryItem:
+      type: object
+      properties:
+        periodId: { type: string, format: uuid }
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        status: { type: string, enum: [DRAFT, REVIEWING, APPROVED, PAID, LOCKED] }
+        netPayVnd: { type: integer, format: int64 }
+        paidAt: { type: string, format: date-time, nullable: true }
+
+    Payslip:
+      type: object
+      properties:
+        periodId: { type: string, format: uuid }
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        dentistName: { type: string }
+        lineItem:
+          $ref: '#/components/schemas/PayrollLineItem'
+        adjustments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollAdjustment'
+        encounterDetails:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollEncounterDetail'
+
+    PayrollAdjustment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [BONUS, PENALTY, DEDUCTION, MANUAL_OVERRIDE] }
+        amountVnd: { type: integer, format: int64 }
+        reason: { type: string }
+        adjustedByUserId: { type: string, format: uuid }
+        adjustedAt: { type: string, format: date-time }
+
+    PayrollEncounterDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        encounterId: { type: string, format: uuid }
+        treatmentRevenueVnd: { type: integer, format: int64 }
+        encounterStartAt: { type: string, format: date-time }
+        encounterEndAt: { type: string, format: date-time }
+        durationMinutes: { type: integer }
+        treatmentBreakdown: { type: object, additionalProperties: true }
+
+    ShiftRegistration:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        dentistId: { type: string, format: uuid }
+        date: { type: string, format: date }
+        startTime: { type: string, format: time }
+        endTime: { type: string, format: time }
+        maxEncounters: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED] }
+        approvedByUserId: { type: string, format: uuid, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        rejectionReason: { type: string, nullable: true }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    CreateShiftRegistrationRequest:
+      type: object
+      required: [date, startTime, endTime]
+      properties:
+        dentistId:
+          type: string
+          format: uuid
+          description: Required for admin creating on behalf of dentist. Default = currentUser for BS.
+        date: { type: string, format: date }
+        startTime: { type: string, format: time }
+        endTime: { type: string, format: time }
+        maxEncounters: { type: integer, nullable: true, minimum: 1 }
+        notes: { type: string, maxLength: 1000 }

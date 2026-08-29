@@ -1,0 +1,151 @@
+{
+  "shell": {
+    "brand": "GENSMILE",
+    "version": "v2.993",
+    "clinicName": "An Viet Dental Clinic",
+    "search": {
+      "placeholder": "Search patients (name, code, phone)...",
+      "label": "Search patient",
+      "clearLabel": "Clear search",
+      "tooltip": "Search by {{name}}, {{code}}, or {{phone}}. Press Enter to search."
+    },
+    "tabs": {
+      "overview": "Overview",
+      "reports": "Reports",
+      "dentists": "Dentists"
+    },
+    "menu": {
+      "open": "Open menu",
+      "close": "Close menu",
+      "dialogLabel": "Navigation menu"
+    },
+    "sidebar": {
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar",
+      "collapseShort": "Collapse"
+    },
+    "user": {
+      "profile": "My profile",
+      "logout": "Log out",
+      "notifications": "Notifications"
+    }
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "toggleLabel": "Switch to {{mode}} theme",
+    "switchToLight": "Switch to light theme",
+    "switchToDark": "Switch to dark theme"
+  },
+  "language": {
+    "switchLabel": "Language: {{native}}",
+    "title": "Language"
+  },
+  "command": {
+    "trigger": "Quick search…",
+    "triggerLabel": "Open Command Palette",
+    "placeholder": "Search pages, patients, appointments, invoices… (↑ ↓ to navigate, Enter to select)",
+    "tooltip": "Press ⌘K to open",
+    "empty": "No results for \"{{query}}\"",
+    "footer": {
+      "navigate": "navigate",
+      "select": "select",
+      "close": "close",
+      "count": "{{count}} items"
+    },
+    "groups": {
+      "recent": "Recent",
+      "actions": "Actions"
+    },
+    "entityGroups": {
+      "patient": "Patients",
+      "appointment": "Appointments",
+      "invoice": "Invoices"
+    },
+    "actions": {
+      "toggleTheme": "Toggle light/dark"
+    },
+    "searching": "Searching…"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "subtitle": "Enter your account details to continue",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "forgotPassword": "Forgot password?",
+      "hero": {
+        "headlinePrefix": "A ",
+        "headlineHighlight": "smoother-running clinic",
+        "headlineSuffix": " starts here",
+        "subtitle": "Spend time on patients — let the system handle the rest",
+        "bullets": [
+          "Real-time appointments, check-in and waiting queue",
+          "Patient records and charts in one place",
+          "Clear revenue and outstanding balances per day, per dentist",
+          "Inventory tracked automatically"
+        ]
+      },
+      "errors": {
+        "invalid": "Invalid email or password",
+        "required": "Please enter your email and password"
+      }
+    },
+    "logout": "Log out",
+    "session": {
+      "expired": "Your session has expired. Please sign in again."
+    }
+  },
+  "a11y": {
+    "skipToMain": "Skip to main content"
+  },
+  "nav": {
+    "Dashboard": "Dashboard",
+    "Patients": "Patients",
+    "Appointments": "Appointments",
+    "Today": "Today",
+    "MyQueue": "My queue",
+    "MedicalRecords": "Medical records",
+    "MyPatients": "My patients",
+    "Billing": "Billing",
+    "Expenses": "Expenses",
+    "Inventory": "Inventory",
+    "Payroll": "Payroll",
+    "MyPayroll": "My payroll",
+    "MyShifts": "My shifts",
+    "Reports": "Revenue reports",
+    "Users": "Users",
+    "Roles": "Roles & permissions",
+    "AuditLogs": "Audit logs",
+    "Settings": "Settings",
+    "groups": {
+      "Chung": "General",
+      "Lễ tân": "Reception",
+      "Lâm sàng": "Clinical",
+      "Tài chính": "Finance",
+      "Nhân sự & Lương": "HR & Payroll",
+      "Báo cáo": "Reports",
+      "Quản trị": "Administration"
+    }
+  }
+}

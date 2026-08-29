@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 dark:bg-surface-950 dark:text-surface-100;
+    /* smoother color transitions on theme toggle */
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-surface-900;
+  }
+
+  /* touch-friendly target: ensure buttons + links ≥ 44px on mobile */
+  @media (max-width: 767px) {
+    button:not(.no-touch-target),
+    a[role='button']:not(.no-touch-target) {
+      min-height: 44px;
+    }
+  }
+
+  /* respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  h1 {
+    @apply text-2xl font-semibold;
+  }
+  h2 {
+    @apply text-xl font-semibold;
+  }
+  h3 {
+    @apply text-lg font-medium;
+  }
+  h4 {
+    @apply text-base font-semibold;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-gray-200 bg-white dark:border-surface-700 dark:bg-surface-900 p-6 shadow-sm;
+  }
+
+  .label {
+    @apply mb-1 block text-sm font-medium text-gray-700 dark:text-surface-200;
+  }
+
+  .input-base {
+    @apply w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm
+      focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500
+      disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500
+      dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100
+      dark:placeholder:text-surface-500
+      dark:disabled:bg-surface-900 dark:disabled:text-surface-500;
+  }
+
+  .table-base {
+    @apply w-full text-left text-sm;
+  }
+
+  .table-base thead {
+    @apply border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-600 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-400;
+  }
+
+  .table-base th {
+    @apply px-4 py-3 font-medium;
+  }
+
+  .table-base tbody tr {
+    @apply border-b border-gray-100 hover:bg-gray-50 dark:border-surface-800 dark:hover:bg-surface-800/60;
+  }
+
+  .table-base td {
+    @apply px-4 py-3 text-gray-700 dark:text-surface-200;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gray-300;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-surface-600;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-500;
+  }
+
+  /* selection styling for dark mode */
+  ::selection {
+    @apply bg-brand-200 text-brand-900;
+  }
+  .dark ::selection {
+    @apply bg-brand-700 text-white;
+  }
+
+  /* smooth focus ring for interactive elements */
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply transition-colors;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-rx,
+  .print-rx * {
+    visibility: visible;
+  }
+  .print-rx {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 16px;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

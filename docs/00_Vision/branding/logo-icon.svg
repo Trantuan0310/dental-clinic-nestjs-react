@@ -1,0 +1,49 @@
+<!--
+  GENSMILE  Icon-only variant (no wordmark / no tagline)
+  Use for: favicon, PWA manifest, sidebar collapsed, loading screen, app icon.
+
+  Single color version uses brand-primary (#2BA3A0) for monochrome contexts.
+  For colored use, use the full logo SVG.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="GENSMILE">
+  <defs>
+    <style>
+      .gs-tooth   { fill: #2BA3A0; }
+      .gs-stroke  { fill: none; stroke: #1B7A78; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+      .gs-sparkle { fill: #F4B860; }
+      .gs-sparkle-alt { fill: #2BA3A0; opacity: 0.7; }
+    </style>
+  </defs>
+
+  <!-- Tooth silhouette -->
+  <path class="gs-tooth"
+        d="M 100 15
+           C 145 15, 170 30, 175 55
+           C 180 80, 172 110, 158 135
+           C 148 155, 132 172, 114 180
+           C 100 187, 86 187, 72 180
+           C 54 172, 38 155, 28 135
+           C 14 110, 6 80, 11 55
+           C 16 30, 41 15, 86 15
+           C 93 10, 100 10, 100 15 Z"/>
+
+  <!-- Inner highlight / gloss (gives 3-D feel) -->
+  <path d="M 68 48 C 82 52, 100 60, 108 80 C 115 98, 112 118, 100 135"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.60" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Subtle internal line separating crown from roots -->
+  <path d="M 42 90 C 60 85, 80 83, 100 83 C 120 83, 140 85, 158 90"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.30" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Sparkle 1  top-left (large, gold) -->
+  <g transform="translate(30,28)">
+    <path class="gs-sparkle"
+          d="M 0 -13 L 3.2 -3.2 L 13 0 L 3.2 3.2 L 0 13 L -3.2 3.2 L -13 0 L -3.2 -3.2 Z"/>
+  </g>
+
+  <!-- Sparkle 2  bottom-right (small, teal) -->
+  <g transform="translate(162,148) scale(0.55)">
+    <path class="gs-sparkle-alt"
+          d="M 0 -13 L 3.2 -3.2 L 13 0 L 3.2 3.2 L 0 13 L -3.2 3.2 L -13 0 L -3.2 -3.2 Z"/>
+  </g>
+</svg>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  GENSMILE — Monochrome icon (uses currentColor)
+  Single-color version for inline contexts where the icon should pick up CSS color.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="currentColor" role="img" aria-label="GENSMILE">
+  <path d="M 100 15
+           C 145 15, 170 30, 175 55
+           C 180 80, 172 110, 158 135
+           C 148 155, 132 172, 114 180
+           C 100 187, 86 187, 72 180
+           C 54 172, 38 155, 28 135
+           C 14 110, 6 80, 11 55
+           C 16 30, 41 15, 86 15
+           C 93 10, 100 10, 100 15 Z"/>
+
+  <path d="M 68 48 C 82 52, 100 60, 108 80 C 115 98, 112 118, 100 135"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.40" stroke-width="10" stroke-linecap="round"/>
+
+  <g transform="translate(30,28)" opacity="0.85">
+    <path d="M 0 -13 L 3.2 -3.2 L 13 0 L 3.2 3.2 L 0 13 L -3.2 3.2 L -13 0 L -3.2 -3.2 Z"/>
+  </g>
+  <g transform="translate(162,148) scale(0.55)" opacity="0.7">
+    <path d="M 0 -13 L 3.2 -3.2 L 13 0 L 3.2 3.2 L 0 13 L -3.2 3.2 L -13 0 L -3.2 -3.2 Z"/>
+  </g>
+</svg>

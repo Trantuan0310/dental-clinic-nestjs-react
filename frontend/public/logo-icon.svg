@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  GENSMILE — Icon-only (200 x 200)
+  Used for: favicon, PWA manifest, sidebar collapsed, app icon, social avatar.
+  Pure vector, no <text>.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="GENSMILE">
+  <defs>
+    <linearGradient id="gsToothIcon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2BA3A0"/>
+      <stop offset="100%" stop-color="#1B7A78"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Tooth silhouette -->
+  <path d="M 100 15
+           C 145 15, 170 30, 175 55
+           C 180 80, 172 110, 158 135
+           C 148 155, 132 172, 114 180
+           C 100 187, 86 187, 72 180
+           C 54 172, 38 155, 28 135
+           C 14 110, 6 80, 11 55
+           C 16 30, 41 15, 86 15
+           C 93 10, 100 10, 100 15 Z"
+        fill="url(#gsToothIcon)"/>
+
+  <!-- Inner highlight / gloss -->
+  <path d="M 68 48 C 82 52, 100 60, 108 80 C 115 98, 112 118, 100 135"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.60" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Crown / roots separation -->
+  <path d="M 42 90 C 60 85, 80 83, 100 83 C 120 83, 140 85, 158 90"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.30" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Sparkle 1 — top-left (large, gold) -->
+  <g transform="translate(30,28)">
+    <path fill="#F4B860"
+          d="M 0 -13 L 3.2 -3.2 L 13 0 L 3.2 3.2 L 0 13 L -3.2 3.2 L -13 0 L -3.2 -3.2 Z"/>
+  </g>
+
+  <!-- Sparkle 2 — bottom-right (small, white) -->
+  <g transform="translate(162,148) scale(0.55)">
+    <path fill="#FFFFFF" opacity="0.75"
+          d="M 0 -13 L 3.2 -3.2 L 13 0 L 3.2 3.2 L 0 13 L -3.2 3.2 L -13 0 L -3.2 -3.2 Z"/>
+  </g>
+</svg>

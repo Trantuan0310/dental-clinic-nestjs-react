@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dental-clinic-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dental_clinic
+    ports:
+      - '15432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Init scripts run once on first volume init, in alphabetical order:
+      #   01-extensions.sql — enable uuid-ossp, pgcrypto
+      #   02-uuid-v7.sql   — create public.uuid_generate_v7() used by Prisma defaults
+      # If the volume already exists (db:up was run before), run `pnpm db:reset`
+      # or `docker compose down -v postgres` to recreate and re-run init scripts.
+      - ./01-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+      - ./02-uuid-v7.sql:/docker-entrypoint-initdb.d/02-uuid-v7.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # restart: unless-stopped  # Uncomment for production use
+    networks:
+      - dental-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: dental-clinic-backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dental_clinic
+      JWT_SECRET: change-this-to-a-secure-secret-in-production
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+    command: npm run start:dev
+    # restart: unless-stopped  # Uncomment for production use
+    networks:
+      - dental-network
+
+volumes:
+  postgres_data:
+
+networks:
+  dental-network:
+    driver: bridge
