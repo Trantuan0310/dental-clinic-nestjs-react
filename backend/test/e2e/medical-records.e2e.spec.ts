@@ -25,15 +25,17 @@ function authHeaders(t: string) {
 
 describe('Medical Records E2E', () => {
   beforeAll(async () => {
-    try { token = await getAdminToken(); } catch { /* skip */ }
+    try {
+      token = await getAdminToken();
+    } catch {
+      /* skip */
+    }
   });
 
   describe('GET /medical-records/today', () => {
     it('returns today encounters', async () => {
       if (!token) return;
-      const res = await request(BASE)
-        .get('/medical-records/today')
-        .set(authHeaders(token));
+      const res = await request(BASE).get('/medical-records/today').set(authHeaders(token));
       expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
     });
   });
@@ -41,9 +43,7 @@ describe('Medical Records E2E', () => {
   describe('GET /medical-records/queue', () => {
     it('returns queue', async () => {
       if (!token) return;
-      const res = await request(BASE)
-        .get('/medical-records/queue')
-        .set(authHeaders(token));
+      const res = await request(BASE).get('/medical-records/queue').set(authHeaders(token));
       expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
     });
   });

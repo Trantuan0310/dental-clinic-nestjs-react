@@ -15,7 +15,8 @@ async function getAdminToken(): Promise<string> {
   const res = await request(BASE)
     .post('/auth/login')
     .send({ email: 'admin@clinic.local', password: 'Admin123!' });
-  if (res.status !== HttpStatus.OK) throw new Error(`Login failed: ${res.status} ${JSON.stringify(res.body)}`);
+  if (res.status !== HttpStatus.OK)
+    throw new Error(`Login failed: ${res.status} ${JSON.stringify(res.body)}`);
   adminToken = res.body.data?.accessToken ?? res.body.accessToken;
   return adminToken;
 }

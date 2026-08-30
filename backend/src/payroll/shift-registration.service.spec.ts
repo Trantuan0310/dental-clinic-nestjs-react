@@ -245,7 +245,7 @@ describe('ShiftRegistrationService', () => {
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
-        date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())),
+        date: new Date(Date.UTC(oneHourLater.getUTCFullYear(), oneHourLater.getUTCMonth(), oneHourLater.getUTCDate())),
         startTime: `${hh}:${mm}`,
         endTime: '23:00',
       });
@@ -264,7 +264,7 @@ describe('ShiftRegistrationService', () => {
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
-        date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())),
+        date: new Date(Date.UTC(oneHourLater.getUTCFullYear(), oneHourLater.getUTCMonth(), oneHourLater.getUTCDate())),
         startTime: `${hh}:${mm}`,
         status: ShiftRegistrationStatus.APPROVED,
       });

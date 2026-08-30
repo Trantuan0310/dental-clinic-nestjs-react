@@ -25,7 +25,11 @@ function authHeaders(t: string) {
 
 describe('Appointments E2E', () => {
   beforeAll(async () => {
-    try { token = await getAdminToken(); } catch { /* skip if server not running */ }
+    try {
+      token = await getAdminToken();
+    } catch {
+      /* skip if server not running */
+    }
   });
 
   describe('GET /appointments', () => {

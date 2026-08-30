@@ -703,13 +703,15 @@ export class AppointmentsService {
           }
         : {}),
       ...(q.status?.length ? { status: { in: q.status } } : {}),
-      ...(q.q ? {
-        OR: [
-          { patient: { fullName: { contains: q.q } } },
-          { patient: { primaryPhone: { contains: q.q } } },
-          { notes: { contains: q.q } },
-        ],
-      } : {}),
+      ...(q.q
+        ? {
+            OR: [
+              { patient: { fullName: { contains: q.q } } },
+              { patient: { primaryPhone: { contains: q.q } } },
+              { notes: { contains: q.q } },
+            ],
+          }
+        : {}),
     };
     const pageSize = q.pageSize ?? 50;
     const items = await this.prisma.appointment.findMany({

@@ -38,8 +38,7 @@ export class TokenReuseDetectedException extends HttpException {
         statusCode: HttpStatus.UNAUTHORIZED,
         error: 'Unauthorized',
         code: 'TOKEN_REUSE_DETECTED',
-        message:
-          'Token reuse detected. All sessions have been revoked for security.',
+        message: 'Token reuse detected. All sessions have been revoked for security.',
       },
       HttpStatus.UNAUTHORIZED,
     );

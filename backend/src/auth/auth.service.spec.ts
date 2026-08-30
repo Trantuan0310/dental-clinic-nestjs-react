@@ -20,7 +20,6 @@ import {
   AccountLockedException,
   PasswordTooWeakException,
   InvalidTokenException,
-  TokenReuseDetectedException,
 } from '../common/exceptions/auth.exception';
 
 jest.mock('argon2');

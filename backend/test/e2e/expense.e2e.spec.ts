@@ -25,7 +25,11 @@ function authHeaders(t: string) {
 
 describe('Expense E2E', () => {
   beforeAll(async () => {
-    try { token = await getAdminToken(); } catch { /* skip */ }
+    try {
+      token = await getAdminToken();
+    } catch {
+      /* skip */
+    }
   });
 
   describe('GET /expenses/categories', () => {
@@ -36,9 +40,7 @@ describe('Expense E2E', () => {
 
     it('lists categories with auth', async () => {
       if (!token) return;
-      const res = await request(BASE)
-        .get('/expenses/categories')
-        .set(authHeaders(token));
+      const res = await request(BASE).get('/expenses/categories').set(authHeaders(token));
       expect(res.status).toBe(HttpStatus.OK);
       expect(Array.isArray(res.body.data)).toBe(true);
     });
@@ -67,10 +69,7 @@ describe('Expense E2E', () => {
         notes: 'Created by E2E test',
       };
 
-      const res = await request(BASE)
-        .post('/expenses')
-        .set(authHeaders(token))
-        .send(payload);
+      const res = await request(BASE).post('/expenses').set(authHeaders(token)).send(payload);
 
       expect([HttpStatus.CREATED, HttpStatus.FORBIDDEN]).toContain(res.status);
       if (res.status === HttpStatus.CREATED) {

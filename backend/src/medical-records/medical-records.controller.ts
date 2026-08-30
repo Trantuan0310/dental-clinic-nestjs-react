@@ -193,10 +193,7 @@ export class MedicalRecordsController {
   @Delete('prescriptions/:id')
   @RequirePermissions('prescription.write')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deletePrescription(
-    @Param('id', ParseUUIDPipe) id: string,
-    @User() actor: JwtPayload,
-  ) {
+  async deletePrescription(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
     await this.mr.deletePrescription(id, actor);
   }
 

@@ -23,7 +23,9 @@ export class UpdatePayrollConfigDto {
   @IsNumber()
   overtimeMultiplier?: number;
 
-  @ApiPropertyOptional({ description: 'Thuế TNCN mặc định (0-1), áp dụng khi chưa có bracket override' })
+  @ApiPropertyOptional({
+    description: 'Thuế TNCN mặc định (0-1), áp dụng khi chưa có bracket override',
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)

@@ -185,7 +185,10 @@ export class BillingService {
       where: { id },
       include: {
         items: { orderBy: { sequence: 'asc' } },
-        payments: { orderBy: { paidAt: 'desc' }, include: { receivedByUser: { select: { fullName: true, email: true } } } },
+        payments: {
+          orderBy: { paidAt: 'desc' },
+          include: { receivedByUser: { select: { fullName: true, email: true } } },
+        },
         audits: { orderBy: { occurredAt: 'desc' }, take: 50 },
         patient: true,
         encounter: { include: { dentist: { select: { fullName: true } } } },

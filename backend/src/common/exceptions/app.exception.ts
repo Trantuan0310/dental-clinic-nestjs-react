@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException } from '@nestjs/common';
 
 const STATUS_NAME: Record<number, string> = {
   400: 'Bad Request',

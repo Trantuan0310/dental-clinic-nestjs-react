@@ -72,11 +72,7 @@ describe('InventoryService', () => {
         .mockResolvedValueOnce(validInventoryItem({ quantityOnHand: new Prisma.Decimal(120) }));
       (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
 
-      const result = await service.stockIn(
-        'item-1',
-        { quantity: 20, reason: 'Restock' } as any,
-        adminActor,
-      );
+      await service.stockIn('item-1', { quantity: 20, reason: 'Restock' } as any, adminActor);
 
       expect(prisma.inventoryItem.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({

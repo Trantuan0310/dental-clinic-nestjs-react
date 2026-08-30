@@ -8,7 +8,7 @@ import {
   CannotDeleteSystemRoleException,
   CannotDeleteRoleWithUsersException,
 } from '../common/exceptions/business-rule.exception';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 
 describe('RolesService', () => {
   let service: RolesService;
