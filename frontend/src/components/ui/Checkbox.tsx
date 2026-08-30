@@ -19,21 +19,22 @@ export function Checkbox({ checked, onChange, label, disabled, className }: Chec
         className,
       )}
     >
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span
         className={cn(
           'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+          'peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-1',
           checked ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 bg-white text-transparent',
         )}
       >
         <Check className="h-3 w-3" strokeWidth={3} />
       </span>
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
       {label && <span className="text-sm text-gray-700">{label}</span>}
     </label>
   );

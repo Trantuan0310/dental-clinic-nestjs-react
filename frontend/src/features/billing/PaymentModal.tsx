@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, Input, Select } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
 import { billingApi } from '@/features/billing/billingApi';
 import type { Invoice, PaymentMethod } from '@/types/billing';
@@ -17,16 +19,33 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [notes, setNotes] = useState('');
 
+  // This modal never unmounts between opens (only Modal's `isOpen` toggles),
+  // so state from a previous payment (e.g. a partial amount + note) would
+  // otherwise stick around and default to a stale amountDue next time it's
+  // opened. Re-sync to the current invoice whenever it (re)opens.
+  useEffect(() => {
+    if (isOpen) {
+      setAmount(invoice.amountDue.toString());
+      setMethod('cash');
+      setNotes('');
+    }
+  }, [isOpen, invoice.amountDue]);
+
+  const parsedAmount = parseFloat(amount);
+
   const mutation = useMutation({
     mutationFn: () =>
       billingApi.createPayment(invoice.id, {
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         method,
         notes: notes || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
       onClose();
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể ghi nhận thanh toán'));
     },
   });
 
@@ -113,7 +132,12 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
           <Button
             onClick={handleSubmit}
             isLoading={mutation.isPending}
-            disabled={!amount || parseInt(amount) <= 0 || parseInt(amount) > invoice.amountDue}
+            disabled={
+              !amount ||
+              !Number.isFinite(parsedAmount) ||
+              parsedAmount <= 0 ||
+              parsedAmount > invoice.amountDue
+            }
           >
             Xác nhận
           </Button>

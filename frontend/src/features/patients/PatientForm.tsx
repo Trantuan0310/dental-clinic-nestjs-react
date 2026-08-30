@@ -9,16 +9,24 @@ import { patientsApi } from '@/features/patients/imperativeApi';
 import { Button, Card, Input, Textarea, Alert } from '@/components/ui';
 import type { CreatePatientPayload, PatientLookupResult } from '@/types/patients';
 
+// VN mobile numbers: 10 digits starting 0, next digit one of 3/5/7/8/9.
+const VN_PHONE_REGEX = /^0(3|5|7|8|9)[0-9]{8}$/;
+const vnPhone = z
+  .string()
+  .regex(VN_PHONE_REGEX, 'Số điện thoại không hợp lệ (VD: 0912345678)')
+  .optional()
+  .or(z.literal(''));
+
 const patientSchema = z.object({
   fullName: z.string().min(1, 'Họ tên là bắt buộc'),
   dateOfBirth: z.string().min(1, 'Ngày sinh là bắt buộc'),
   gender: z.enum(['male', 'female', 'other']),
-  phone: z.string().optional(),
+  phone: vnPhone,
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
   address: z.string().optional(),
   occupation: z.string().optional(),
   emergencyContactName: z.string().optional(),
-  emergencyContactPhone: z.string().optional(),
+  emergencyContactPhone: vnPhone,
   notes: z.string().optional(),
   allergies: z.array(z.string()).optional(),
   chronicDiseases: z.array(z.string()).optional(),
@@ -106,17 +114,20 @@ export function PatientForm({ patientId }: PatientFormProps) {
     value: string,
     field: keyof typeof newTag,
   ) => {
-    if (value.trim()) {
-      setter((prev) => [...prev, value.trim()]);
-      setNewTag((prev) => ({ ...prev, [field]: '' }));
-    }
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setter((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+    setNewTag((prev) => ({ ...prev, [field]: '' }));
   };
 
+  // Removes by index, not by value — two entries with the same text (e.g.
+  // two "Penicillin" allergies entered before dedup existed) must be
+  // removable independently instead of both vanishing on one click.
   const removeTag = (
     setter: React.Dispatch<React.SetStateAction<string[]>>,
-    tag: string,
+    index: number,
   ) => {
-    setter((prev) => prev.filter((t) => t !== tag));
+    setter((prev) => prev.filter((_, i) => i !== index));
   };
 
   const onSubmit = (data: PatientFormData) => {
@@ -222,6 +233,7 @@ export function PatientForm({ patientId }: PatientFormProps) {
             <Input
               label="SĐT chính"
               type="tel"
+              error={errors.phone?.message}
               {...register('phone')}
               onChange={(e) => {
                 register('phone').onChange(e);
@@ -261,6 +273,7 @@ export function PatientForm({ patientId }: PatientFormProps) {
               <Input
                 label="SĐT người liên hệ"
                 type="tel"
+                error={errors.emergencyContactPhone?.message}
                 {...register('emergencyContactPhone')}
               />
             </div>
@@ -274,15 +287,15 @@ export function PatientForm({ patientId }: PatientFormProps) {
               Dị ứng
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
-              {allergies.map((tag) => (
+              {allergies.map((tag, index) => (
                 <span
-                  key={tag}
+                  key={`${tag}-${index}`}
                   className="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-sm text-red-700"
                 >
                   {tag}
                   <button
                     type="button"
-                    onClick={() => removeTag(setAllergies, tag)}
+                    onClick={() => removeTag(setAllergies, index)}
                     className="text-red-400 hover:text-red-600"
                   >
                     <X className="h-3 w-3" />
@@ -322,15 +335,15 @@ export function PatientForm({ patientId }: PatientFormProps) {
               Bệnh mãn tính
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
-              {chronicDiseases.map((tag) => (
+              {chronicDiseases.map((tag, index) => (
                 <span
-                  key={tag}
+                  key={`${tag}-${index}`}
                   className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-sm text-amber-700"
                 >
                   {tag}
                   <button
                     type="button"
-                    onClick={() => removeTag(setChronicDiseases, tag)}
+                    onClick={() => removeTag(setChronicDiseases, index)}
                     className="text-amber-400 hover:text-amber-600"
                   >
                     <X className="h-3 w-3" />
@@ -375,15 +388,15 @@ export function PatientForm({ patientId }: PatientFormProps) {
               Thuốc đang dùng
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
-              {currentMedications.map((tag) => (
+              {currentMedications.map((tag, index) => (
                 <span
-                  key={tag}
+                  key={`${tag}-${index}`}
                   className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-700"
                 >
                   {tag}
                   <button
                     type="button"
-                    onClick={() => removeTag(setCurrentMedications, tag)}
+                    onClick={() => removeTag(setCurrentMedications, index)}
                     className="text-blue-400 hover:text-blue-600"
                   >
                     <X className="h-3 w-3" />

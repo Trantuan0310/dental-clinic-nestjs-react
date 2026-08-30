@@ -18,6 +18,7 @@ export function DropdownMenu({
 }: DropdownMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -25,14 +26,29 @@ export function DropdownMenu({
         setIsOpen(false);
       }
     };
+    const handleEscape = (event: KeyboardEvent) => {
+      // Guard on isOpen — without this, every Escape press anywhere on the
+      // page (e.g. closing an unrelated modal) would steal focus to this
+      // menu's trigger button, since the component stays mounted (closed)
+      // between opens.
+      if (event.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen]);
 
   return (
     <div className="relative" ref={menuRef}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800"
@@ -42,6 +58,10 @@ export function DropdownMenu({
 
       {isOpen && (
         <div
+          // Close on any click inside (item onClick fires first, then this
+          // bubbles) — without this, the menu stays visually open after
+          // picking an action, e.g. behind a modal it just triggered.
+          onClick={() => setIsOpen(false)}
           className={cn(
             'absolute z-50 mt-1 min-w-[160px] rounded-md border border-gray-200 bg-white py-1 shadow-lg',
             'animate-in fade-in zoom-in-95 duration-100',

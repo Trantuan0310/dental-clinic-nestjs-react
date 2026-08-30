@@ -54,10 +54,17 @@ export function Alert({
   children,
   className,
   onClose,
-  announce = true,
+  announce,
 }: AlertProps) {
   const { t } = useTranslation();
   const resolved: AlertType = type ?? (variant ? VARIANT_TO_TYPE[variant] : 'info');
+
+  // Errors are actionable and time-critical, so they announce assertively by
+  // default. success/info/warning are most often static page content (e.g. a
+  // banner shown on mount) — announcing those with role="alert" interrupts
+  // screen readers even though nothing new just happened. Callers can still
+  // opt in/out explicitly via the `announce` prop.
+  const shouldAnnounce = announce ?? resolved === 'danger';
 
   const Icon = ICONS[resolved];
 
@@ -68,7 +75,7 @@ export function Alert({
         STYLES[resolved],
         className,
       )}
-      role={announce ? 'alert' : 'status'}
+      role={shouldAnnounce ? 'alert' : 'status'}
     >
       <Icon className={cn('h-5 w-5 shrink-0', ICON_STYLES[resolved])} aria-hidden="true" />
       <div className="flex-1">

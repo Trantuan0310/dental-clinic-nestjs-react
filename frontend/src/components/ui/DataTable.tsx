@@ -7,10 +7,24 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
+
+function rowInteractionProps<TData>(onRowClick: ((row: TData) => void) | undefined, row: TData) {
+  if (!onRowClick) return {};
+  return {
+    role: 'button' as const,
+    tabIndex: 0,
+    onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onRowClick(row);
+      }
+    },
+  };
+}
 
 interface DataTableProps<TData> {
   data: TData[];
@@ -126,6 +140,7 @@ export function DataTable<TData>({
                     <tr
                       key={rowKey ? rowKey(row.original) : row.id}
                       onClick={() => onRowClick?.(row.original)}
+                      {...rowInteractionProps(onRowClick, row.original)}
                       style={{
                         position: 'absolute',
                         top: 0,
@@ -135,7 +150,9 @@ export function DataTable<TData>({
                         display: 'table',
                         tableLayout: 'auto',
                       }}
-                      className={cn(onRowClick && 'cursor-pointer')}
+                      className={cn(
+                        onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
+                      )}
                     >
                       {row.getVisibleCells().map((cell) => (
                         <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
@@ -164,7 +181,10 @@ export function DataTable<TData>({
                   <tr
                     key={rowKey ? rowKey(row.original) : row.id}
                     onClick={() => onRowClick?.(row.original)}
-                    className={cn(onRowClick && 'cursor-pointer')}
+                    {...rowInteractionProps(onRowClick, row.original)}
+                    className={cn(
+                      onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>

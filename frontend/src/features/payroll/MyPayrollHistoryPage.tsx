@@ -1,39 +1,31 @@
-import { useState } from 'react';
 import { DollarSign, Calendar, Eye } from 'lucide-react';
 import { Button, Card, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMyPayrollHistory } from './payrollApi';
 
-interface Payslip {
-  id: string;
-  periodId: string;
-  period: string;
-  netSalary: number;
-  status: 'APPROVED' | 'PAID' | 'LOCKED';
-  paidAt?: string;
+const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  DRAFT: { bg: 'bg-gray-50', text: 'text-gray-700', label: 'Nháp' },
+  REVIEWING: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Đang xét duyệt' },
+  APPROVED: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Đã duyệt' },
+  PAID: { bg: 'bg-green-50', text: 'text-green-700', label: 'Đã trả lương' },
+  LOCKED: { bg: 'bg-gray-50', text: 'text-gray-700', label: 'Đã khóa' },
+};
+
+function getStatusBadge(status: string) {
+  const style = STATUS_STYLES[status] ?? { bg: 'bg-gray-50', text: 'text-gray-700', label: status };
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}>
+      {style.label}
+    </span>
+  );
 }
 
 export default function MyPayrollHistoryPage() {
-  const [payslips] = useState<Payslip[]>([
-    { id: '1', periodId: '1', period: '06/2026', netSalary: 25000000, status: 'PAID', paidAt: '2026-07-05' },
-    { id: '2', periodId: '2', period: '05/2026', netSalary: 23000000, status: 'PAID', paidAt: '2026-06-05' },
-  ]);
-
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, { bg: string; text: string; label: string }> = {
-      APPROVED: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Đã duyệt' },
-      PAID: { bg: 'bg-green-50', text: 'text-green-700', label: 'Đã trả lương' },
-      LOCKED: { bg: 'bg-gray-50', text: 'text-gray-700', label: 'Đã khóa' },
-    };
-    const style = styles[status] || { bg: 'bg-gray-50', text: 'text-gray-700', label: status };
-    return (
-      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}>
-        {style.label}
-      </span>
-    );
-  };
+  const navigate = useNavigate();
+  const { data: payslips, isLoading } = useMyPayrollHistory();
 
   return (
     <div className="space-y-4">
@@ -60,7 +52,13 @@ export default function MyPayrollHistoryPage() {
 
         <TabsContent value="paid">
           <Card noPadding>
-            {payslips.length === 0 ? (
+            {isLoading ? (
+              <div className="space-y-3 p-6">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-12 animate-pulse rounded bg-gray-100" />
+                ))}
+              </div>
+            ) : !payslips || payslips.length === 0 ? (
               <EmptyState
                 icon={<DollarSign className="h-10 w-10 text-gray-400" />}
                 title="Chưa có kỳ lương nào"
@@ -81,7 +79,9 @@ export default function MyPayrollHistoryPage() {
                   {payslips.map((payslip) => (
                     <tr key={payslip.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900">
-                        {payslip.period}
+                        {format(new Date(payslip.periodStart), 'dd/MM', { locale: vi })}
+                        {' – '}
+                        {format(new Date(payslip.periodEnd), 'dd/MM/yyyy', { locale: vi })}
                       </td>
                       <td className="px-4 py-3 text-right text-green-600 font-semibold">
                         {formatCurrency(payslip.netSalary)}
@@ -96,7 +96,7 @@ export default function MyPayrollHistoryPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Link
-                          to={`/my-payroll/${payslip.periodId}`}
+                          to={`/my-payroll/payslip/${payslip.periodId}`}
                           className="text-brand-600 hover:underline"
                         >
                           Chi tiết
@@ -118,7 +118,7 @@ export default function MyPayrollHistoryPage() {
               <p className="mt-1 text-sm text-gray-500">
                 Ước tính lương tháng hiện tại dựa trên các lịch hẹn đã hoàn thành
               </p>
-              <Button variant="outline" className="mt-4">
+              <Button variant="outline" className="mt-4" onClick={() => navigate('/my-payroll/preview')}>
                 <Eye className="h-4 w-4" />
                 Xem ước tính
               </Button>

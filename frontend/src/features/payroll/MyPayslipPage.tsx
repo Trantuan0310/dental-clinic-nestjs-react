@@ -1,52 +1,60 @@
-import { Card, Button, Badge } from '@/components/ui';
+import { Card, Button, Badge, EmptyState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, FileX } from 'lucide-react';
+import { useMyPayslip } from './payrollApi';
 
 export default function MyPayslipPage() {
-  const { periodId: _periodId } = useParams<{ periodId: string }>();
+  const { periodId } = useParams<{ periodId: string }>();
+  const { data: payslip, isLoading } = useMyPayslip(periodId);
 
-  // Mock data
-  const payslip = {
-    period: '06/2026',
-    status: 'PAID',
-    baseSalary: 15000000,
-    commission: 8500000,
-    overtime: 1500000,
-    bonus: 0,
-    grossSalary: 25000000,
-    taxTNCN: 2500000,
-    bhxh: 1200000,
-    bhyt: 150000,
-    bhtn: 150000,
-    otherDeductions: 0,
-    netSalary: 21000000,
-    encounters: [
-      { date: '2026-06-01', summary: 'Hàn răng Composite 16', revenue: 350000 },
-      { date: '2026-06-03', summary: 'Nhổ răng khôn 48', revenue: 800000 },
-      { date: '2026-06-05', summary: 'Khám định kỳ', revenue: 200000 },
-    ],
-  };
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-64 animate-pulse rounded bg-gray-100" />
+        <div className="h-96 animate-pulse rounded bg-gray-100" />
+      </div>
+    );
+  }
+
+  if (!payslip) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" asChild>
+          <Link to="/my-payroll/history">
+            <ArrowLeft className="h-4 w-4" />
+            Quay lại
+          </Link>
+        </Button>
+        <Card>
+          <EmptyState
+            icon={<FileX className="h-10 w-10 text-gray-400" />}
+            title="Không tìm thấy phiếu lương"
+            description="Kỳ lương này chưa được tính toán hoặc bạn không có quyền xem"
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  const totalDeductions = payslip.taxTNCN + payslip.bhxh + payslip.bhyt + payslip.bhtn;
+  const bonusAdjustments = payslip.adjustments.filter((a) => a.type === 'BONUS');
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" asChild>
-          <Link to="/my-payroll">
+          <Link to="/my-payroll/history">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-gray-900">
-            Phiếu lương {payslip.period}
+            Phiếu lương {format(new Date(payslip.computedAt), 'MM/yyyy', { locale: vi })}
           </h1>
         </div>
-        <Button variant="outline">
-          <Download className="h-4 w-4" />
-          Tải PDF
-        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -66,12 +74,12 @@ export default function MyPayslipPage() {
                 <span className="text-gray-600">Làm thêm giờ</span>
                 <span className="font-medium">{formatCurrency(payslip.overtime)}</span>
               </div>
-              {payslip.bonus > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Thưởng</span>
-                  <span className="font-medium text-green-600">{formatCurrency(payslip.bonus)}</span>
+              {bonusAdjustments.map((adj) => (
+                <div key={adj.id} className="flex justify-between text-sm">
+                  <span className="text-gray-600">Thưởng — {adj.reason}</span>
+                  <span className="font-medium text-green-600">{formatCurrency(adj.amountVnd)}</span>
                 </div>
-              )}
+              ))}
               <div className="flex justify-between border-t border-gray-200 pt-3 font-semibold">
                 <span>Tổng thu nhập</span>
                 <span>{formatCurrency(payslip.grossSalary)}</span>
@@ -87,15 +95,15 @@ export default function MyPayslipPage() {
                 <span className="font-medium text-red-600">-{formatCurrency(payslip.taxTNCN)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">BHXH (8%)</span>
+                <span className="text-gray-600">BHXH</span>
                 <span className="font-medium text-red-600">-{formatCurrency(payslip.bhxh)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">BHYT (1.5%)</span>
+                <span className="text-gray-600">BHYT</span>
                 <span className="font-medium text-red-600">-{formatCurrency(payslip.bhyt)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">BHTN (1%)</span>
+                <span className="text-gray-600">BHTN</span>
                 <span className="font-medium text-red-600">-{formatCurrency(payslip.bhtn)}</span>
               </div>
               {payslip.otherDeductions > 0 && (
@@ -106,28 +114,32 @@ export default function MyPayslipPage() {
               )}
               <div className="flex justify-between border-t border-gray-200 pt-3 font-semibold text-red-600">
                 <span>Tổng khấu trừ</span>
-                <span>
-                  -{formatCurrency(payslip.taxTNCN + payslip.bhxh + payslip.bhyt + payslip.bhtn)}
-                </span>
+                <span>-{formatCurrency(totalDeductions)}</span>
               </div>
             </div>
           </Card>
 
           {/* Encounters */}
           <Card title="Lịch sử khám trong kỳ">
-            <div className="space-y-2">
-              {payslip.encounters.map((enc, i) => (
-                <div key={i} className="flex items-center justify-between rounded border border-gray-100 p-3">
-                  <div>
-                    <p className="font-medium text-gray-900">{enc.summary}</p>
-                    <p className="text-sm text-gray-500">
-                      {format(new Date(enc.date), 'dd/MM/yyyy', { locale: vi })}
-                    </p>
+            {payslip.encounters.length === 0 ? (
+              <p className="py-4 text-center text-sm text-gray-500">Không có ca khám nào trong kỳ này</p>
+            ) : (
+              <div className="space-y-2">
+                {payslip.encounters.map((enc) => (
+                  <div key={enc.id} className="flex items-center justify-between rounded border border-gray-100 p-3">
+                    <div>
+                      <p className="font-medium text-gray-900">{enc.patientName}</p>
+                      <p className="text-sm text-gray-500">
+                        {enc.chiefComplaint || enc.summary || '—'}
+                      </p>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {format(new Date(enc.startedAt), 'dd/MM/yyyy', { locale: vi })}
+                    </span>
                   </div>
-                  <span className="font-medium text-gray-900">{formatCurrency(enc.revenue)}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -140,11 +152,9 @@ export default function MyPayslipPage() {
                 {formatCurrency(payslip.netSalary)}
               </p>
               <p className="mt-2 text-sm text-gray-500">
-                Kỳ {payslip.period}
+                Kỳ {format(new Date(payslip.computedAt), 'MM/yyyy', { locale: vi })}
               </p>
-              <Badge variant={payslip.status === 'PAID' ? 'success' : 'info'}>
-                {payslip.status === 'PAID' ? 'Đã trả lương' : 'Đã duyệt'}
-              </Badge>
+              <Badge variant="success">Đã tính lương</Badge>
             </div>
           </Card>
         </div>

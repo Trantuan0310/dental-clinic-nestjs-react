@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
@@ -91,8 +92,22 @@ function ExpenseFormModal({
 
 export default function ExpenseListPage() {
   const qc = useQueryClient();
-  const [filters, setFilters] = useState<ExpenseFilters>({ page: 1, pageSize: 20 });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState<ExpenseFilters>(() => ({
+    page: Number(searchParams.get('page')) || 1,
+    pageSize: 20,
+    status: (searchParams.get('status') as ExpenseFilters['status']) || undefined,
+  }));
   const [search, setSearch] = useState('');
+
+  // Keep the filter/page selection in the URL — otherwise a refresh or a
+  // shared link silently drops the current status filter and page.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (filters.status) next.set('status', filters.status);
+    if (filters.page && filters.page !== 1) next.set('page', String(filters.page));
+    setSearchParams(next, { replace: true });
+  }, [filters.status, filters.page, setSearchParams]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Expense | undefined>();
   const [confirmDelete, setConfirmDelete] = useState<Expense | null>(null);

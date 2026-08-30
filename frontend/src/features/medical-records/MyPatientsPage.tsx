@@ -1,33 +1,50 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
-import { Button, Card, SearchInput, EmptyState, StatusBadge } from '@/components/ui';
+import { ArrowRight, Users } from 'lucide-react';
+import { Button, Card, SearchInput, EmptyState } from '@/components/ui';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { useAuthStore } from '@/stores/authStore';
+import { useEncounterList } from './medicalRecordsApi';
 
-interface Patient {
+interface PatientRow {
   id: string;
-  code: string;
   fullName: string;
-  lastVisit?: string;
-  status: 'active' | 'inactive';
+  lastVisit: string;
 }
-
-// Mock data - replace with actual API call
-const mockPatients: Patient[] = [
-  { id: '1', code: 'PAT-2026-00012', fullName: 'Nguyễn Văn A', lastVisit: '2026-07-15', status: 'active' },
-  { id: '2', code: 'PAT-2026-00045', fullName: 'Trần Thị B', lastVisit: '2026-07-10', status: 'active' },
-  { id: '3', code: 'PAT-2026-00078', fullName: 'Lê Văn C', lastVisit: '2026-05-20', status: 'inactive' },
-];
 
 export default function MyPatientsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [patients] = useState<Patient[]>(mockPatients);
+  const dentistId = useAuthStore((s) => s.user?.id);
 
-  const filteredPatients = patients.filter(p =>
-    p.fullName.toLowerCase().includes(search.toLowerCase()) ||
-    p.code.toLowerCase().includes(search.toLowerCase())
+  const { data: encounters, isLoading } = useEncounterList({
+    dentistId,
+    pageSize: 500,
+  });
+
+  // No dedicated "my patients" endpoint exists — derive the distinct patient
+  // list from this dentist's encounters, keeping the most recent visit date
+  // per patient.
+  const patients = useMemo<PatientRow[]>(() => {
+    const byId = new Map<string, PatientRow>();
+    for (const enc of encounters ?? []) {
+      const existing = byId.get(enc.patientId);
+      if (!existing || new Date(enc.startedAt) > new Date(existing.lastVisit)) {
+        byId.set(enc.patientId, {
+          id: enc.patientId,
+          fullName: enc.patientName,
+          lastVisit: enc.startedAt,
+        });
+      }
+    }
+    return Array.from(byId.values()).sort(
+      (a, b) => new Date(b.lastVisit).getTime() - new Date(a.lastVisit).getTime(),
+    );
+  }, [encounters]);
+
+  const filteredPatients = patients.filter((p) =>
+    p.fullName.toLowerCase().includes(search.toLowerCase()),
   );
 
   const handleSearch = useCallback((value: string) => {
@@ -46,18 +63,26 @@ export default function MyPatientsPage() {
       <Card noPadding>
         <div className="p-4">
           <SearchInput
-            placeholder="Tìm theo tên, mã BN..."
+            placeholder="Tìm theo tên bệnh nhân..."
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             onClear={() => handleSearch('')}
           />
         </div>
 
-        {filteredPatients.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-16 animate-pulse rounded bg-gray-100" />
+            ))}
+          </div>
+        ) : filteredPatients.length === 0 ? (
           <EmptyState
-            icon={<div className="text-4xl">👤</div>}
-            title="Không tìm thấy bệnh nhân"
-            description="Thử tìm kiếm với từ khóa khác"
+            icon={<Users className="h-10 w-10 text-gray-400" />}
+            title={search ? 'Không tìm thấy bệnh nhân' : 'Chưa có bệnh nhân nào'}
+            description={
+              search ? 'Thử tìm kiếm với từ khóa khác' : 'Bệnh nhân sẽ xuất hiện sau khi bạn hoàn thành ca khám đầu tiên'
+            }
           />
         ) : (
           <div className="divide-y divide-gray-100">
@@ -73,26 +98,14 @@ export default function MyPatientsPage() {
                       {patient.fullName.charAt(0).toUpperCase()}
                     </span>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-gray-900">{patient.fullName}</p>
-                      <StatusBadge status={patient.status} />
-                    </div>
-                    <p className="text-sm text-gray-500">{patient.code}</p>
-                  </div>
+                  <p className="font-medium text-gray-900">{patient.fullName}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    {patient.lastVisit ? (
-                      <>
-                        <p className="text-sm text-gray-500">Lần cuối khám</p>
-                        <p className="font-medium text-gray-900">
-                          {format(new Date(patient.lastVisit), 'dd/MM/yyyy', { locale: vi })}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-gray-400">Chưa từng khám</p>
-                    )}
+                    <p className="text-sm text-gray-500">Lần cuối khám</p>
+                    <p className="font-medium text-gray-900">
+                      {format(new Date(patient.lastVisit), 'dd/MM/yyyy', { locale: vi })}
+                    </p>
                   </div>
                   <Button variant="ghost" size="sm">
                     <ArrowRight className="h-4 w-4" />

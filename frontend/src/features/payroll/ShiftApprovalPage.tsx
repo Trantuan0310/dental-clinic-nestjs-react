@@ -5,6 +5,8 @@ import { vi } from 'date-fns/locale';
 import { CheckCircle, XCircle, Clock } from 'lucide-react';
 import { shiftApi } from '@/types/shift';
 import { Button, Card, EmptyState, Modal, Textarea } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import type { ShiftRegistration } from '@/types/shift';
 
 export function ShiftApprovalPage() {
@@ -23,6 +25,9 @@ export function ShiftApprovalPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shift-approvals'] });
     },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể duyệt đăng ký ca'));
+    },
   });
 
   const bulkApproveMutation = useMutation({
@@ -30,6 +35,9 @@ export function ShiftApprovalPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shift-approvals'] });
       setSelectedIds([]);
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể duyệt hàng loạt'));
     },
   });
 
@@ -40,6 +48,9 @@ export function ShiftApprovalPage() {
       queryClient.invalidateQueries({ queryKey: ['shift-approvals'] });
       setRejectModal(null);
       setRejectReason('');
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể từ chối đăng ký ca'));
     },
   });
 
@@ -121,7 +132,7 @@ export function ShiftApprovalPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => approveMutation.mutate(shift.id)}
-                    isLoading={approveMutation.isPending}
+                    isLoading={approveMutation.isPending && approveMutation.variables === shift.id}
                   >
                     <CheckCircle className="h-4 w-4 text-green-600" />
                     Duyệt

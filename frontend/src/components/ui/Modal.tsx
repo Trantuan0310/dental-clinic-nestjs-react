@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useCallback, useId, useRef } from 'react';
+import { type ReactNode, useEffect, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -48,23 +48,18 @@ export function Modal({
     onEscape: onClose,
   });
 
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    },
-    [onClose],
-  );
-
+  // Escape handling lives in useFocusTrap above — a second document-level
+  // keydown listener here previously fired onClose() a second time on every
+  // Escape press (both listeners are on `document`, and stopPropagation()
+  // doesn't stop sibling listeners on the same target).
   useEffect(() => {
     if (resolvedOpen) {
-      document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
     }
     return () => {
-      document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [resolvedOpen, handleEscape]);
+  }, [resolvedOpen]);
 
   if (!resolvedOpen) return null;
 

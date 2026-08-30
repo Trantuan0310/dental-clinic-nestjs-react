@@ -42,7 +42,7 @@ export function ThemeToggle({ variant = 'icon', className }: ThemeToggleProps) {
     return (
       <div
         role="radiogroup"
-        aria-label={t('language.title')}
+        aria-label={t('theme.title')}
         className={cn(
           'inline-flex items-center gap-0.5 rounded-md border border-gray-200 bg-white p-0.5 text-xs shadow-sm dark:border-surface-700 dark:bg-surface-800',
           className,

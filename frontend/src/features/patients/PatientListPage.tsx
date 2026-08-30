@@ -1,11 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Loader2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { patientsApi } from '@/features/patients/imperativeApi';
-import { Button, Card, StatusBadge, SearchInput, EmptyState, Modal, FormSkeleton, Select } from '@/components/ui';
+import {
+  Button,
+  Card,
+  StatusBadge,
+  SearchInput,
+  EmptyState,
+  Modal,
+  FormSkeleton,
+  Select,
+  DropdownMenu,
+  DropdownMenuItem,
+} from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import type { PatientFilters, Patient } from '@/types/patients';
 import { formatPhone } from '@/lib/format';
@@ -182,17 +193,15 @@ export default function PatientListPage() {
                         <StatusBadge status={patient.status} />
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="relative">
-                          <button
-                            className="rounded p-1 hover:bg-gray-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Toggle dropdown
-                            }}
+                        <DropdownMenu trigger={<MoreHorizontal className="h-4 w-4 text-gray-400" />}>
+                          <DropdownMenuItem
+                            variant="danger"
+                            icon={<Trash2 className="h-4 w-4" />}
+                            onClick={() => setDeleteId(patient.id)}
                           >
-                            <MoreHorizontal className="h-4 w-4 text-gray-400" />
-                          </button>
-                        </div>
+                            Xóa
+                          </DropdownMenuItem>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}

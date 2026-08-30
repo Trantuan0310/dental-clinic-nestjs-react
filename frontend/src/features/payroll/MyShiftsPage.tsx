@@ -5,6 +5,8 @@ import { vi } from 'date-fns/locale';
 import { Plus, Clock } from 'lucide-react';
 import { shiftApi } from '@/types/shift';
 import { Button, Card, EmptyState, StatusBadge } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { RegisterShiftModal } from './RegisterShiftModal';
 import type { ShiftRegistration, ShiftRegistrationStatus } from '@/types/shift';
 
@@ -16,13 +18,17 @@ export function MyShiftsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['my-shifts', statusFilter],
     queryFn: () => {
-      const params: { status?: ShiftRegistrationStatus; from?: string } = {};
+      const today = new Date().toISOString().split('T')[0];
+      const params: { status?: ShiftRegistrationStatus; from?: string; to?: string } = {};
       if (statusFilter === 'upcoming') {
-        params.from = new Date().toISOString().split('T')[0];
+        params.from = today;
       } else if (statusFilter === 'past') {
-        params.status = statusFilter.toUpperCase() as ShiftRegistrationStatus;
-      } else {
-        params.status = statusFilter.toUpperCase() as ShiftRegistrationStatus;
+        // 'PAST' is a UI-only concept, not a value of ShiftRegistrationStatus
+        // (PENDING/APPROVED/REJECTED/CANCELLED) — filter by date range instead
+        // of casting an invalid string to the status enum.
+        params.to = today;
+      } else if (statusFilter === 'cancelled') {
+        params.status = 'CANCELLED';
       }
       return shiftApi.listMyShifts(params);
     },
@@ -33,6 +39,9 @@ export function MyShiftsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-shifts'] });
     },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể hủy ca làm việc'));
+    },
   });
 
   const shifts = data?.data ?? [];
@@ -40,8 +49,12 @@ export function MyShiftsPage() {
   const canCancel = (shift: ShiftRegistration) => {
     if (shift.status !== 'PENDING' && shift.status !== 'APPROVED') return false;
     if (shift.status === 'APPROVED') {
-      const shiftDate = new Date(shift.date);
-      const hoursUntilShift = (shiftDate.getTime() - Date.now()) / (1000 * 60 * 60);
+      // Combine date + startTime — using just `shift.date` (midnight) instead
+      // of the actual shift start time under-counts hours remaining for any
+      // shift not starting at 00:00, blocking cancellation earlier than the
+      // real 24h rule allows.
+      const shiftStart = new Date(`${shift.date.slice(0, 10)}T${shift.startTime}:00`);
+      const hoursUntilShift = (shiftStart.getTime() - Date.now()) / (1000 * 60 * 60);
       return hoursUntilShift >= 24;
     }
     return true;
@@ -152,7 +165,7 @@ export function MyShiftsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => cancelMutation.mutate(shift.id)}
-                    isLoading={cancelMutation.isPending}
+                    isLoading={cancelMutation.isPending && cancelMutation.variables === shift.id}
                   >
                     Hủy ca
                   </Button>

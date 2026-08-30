@@ -114,7 +114,7 @@ export default function InvoiceDetailPage() {
               Hủy HĐ
             </Button>
           )}
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => window.print()}>
             <Printer className="h-4 w-4" />
             In
           </Button>

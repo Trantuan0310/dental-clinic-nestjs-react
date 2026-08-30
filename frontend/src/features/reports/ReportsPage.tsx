@@ -90,11 +90,14 @@ export default function ReportsPage() {
   }, []);
 
   const colors = isDark ? CHART_COLORS_DARK : CHART_COLORS_LIGHT;
+  // ISO 'yyyy-MM-dd' strings compare correctly lexicographically.
+  const isDateRangeValid = fromDate <= toDate;
 
   // Main revenue report
   const { data: report, isLoading: reportLoading } = useQuery({
     queryKey: ['revenue-report', fromDate, toDate],
     queryFn: () => billingApi.getRevenueReport({ from: fromDate, to: toDate }),
+    enabled: isDateRangeValid,
   });
 
   // Daily revenue for line chart
@@ -235,8 +238,11 @@ export default function ReportsPage() {
             <input
               type="date"
               value={fromDate}
+              max={toDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+              className={`rounded-md border bg-white px-3 py-2 text-sm text-gray-900 dark:bg-gray-800 dark:text-white ${
+                isDateRangeValid ? 'border-gray-300 dark:border-gray-600' : 'border-red-500'
+              }`}
             />
           </div>
           <div>
@@ -244,11 +250,19 @@ export default function ReportsPage() {
             <input
               type="date"
               value={toDate}
+              min={fromDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+              className={`rounded-md border bg-white px-3 py-2 text-sm text-gray-900 dark:bg-gray-800 dark:text-white ${
+                isDateRangeValid ? 'border-gray-300 dark:border-gray-600' : 'border-red-500'
+              }`}
             />
           </div>
         </div>
+        {!isDateRangeValid && (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+            "Từ ngày" phải trước hoặc bằng "Đến ngày".
+          </p>
+        )}
       </Card>
 
       {/* KPI Cards */}

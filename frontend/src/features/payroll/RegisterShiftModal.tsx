@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { shiftApi } from '@/types/shift';
 import { Modal, Button, Input, Textarea } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 
 interface RegisterShiftModalProps {
   isOpen: boolean;
@@ -30,7 +32,12 @@ export function RegisterShiftModal({ isOpen, onClose }: RegisterShiftModalProps)
       onClose();
       resetForm();
     },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể đăng ký ca làm việc'));
+    },
   });
+
+  const isTimeRangeValid = !startTime || !endTime || startTime < endTime;
 
   const resetForm = () => {
     setDate('');
@@ -69,6 +76,7 @@ export function RegisterShiftModal({ isOpen, onClose }: RegisterShiftModalProps)
             type="time"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
+            error={!isTimeRangeValid ? 'Giờ kết thúc phải sau giờ bắt đầu' : undefined}
             required
           />
         </div>
@@ -97,7 +105,7 @@ export function RegisterShiftModal({ isOpen, onClose }: RegisterShiftModalProps)
           <Button
             onClick={handleSubmit}
             isLoading={mutation.isPending}
-            disabled={!date || !startTime || !endTime}
+            disabled={!date || !startTime || !endTime || !isTimeRangeValid}
           >
             Đăng ký
           </Button>

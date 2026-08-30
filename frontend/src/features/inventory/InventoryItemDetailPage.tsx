@@ -6,6 +6,8 @@ import { vi } from 'date-fns/locale';
 import { ArrowLeft, Package, Plus, Minus, Settings } from 'lucide-react';
 import { inventoryApi, stockMovementLabel } from '@/types/inventory';
 import { Button, Card, StatusBadge, Modal, Input, Textarea } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
 import type { StockMovementType } from '@/types/inventory';
 
@@ -31,16 +33,17 @@ export default function InventoryItemDetailPage() {
     enabled: !!id,
   });
 
+  const parsedAdjustQty = parseInt(adjustmentQuantity, 10) || 0;
+  const adjustDelta =
+    adjustmentType === 'STOCK_IN' || adjustmentType === 'RETURNED' ? parsedAdjustQty : -parsedAdjustQty;
+  const previewQuantity = item ? item.currentQuantity + adjustDelta : null;
+
   const adjustMutation = useMutation({
     mutationFn: () => {
-      const parsedQty = parseInt(adjustmentQuantity) || 0;
-      const isPositive = adjustmentType === 'STOCK_IN' || adjustmentType === 'RETURNED';
-      const delta = isPositive ? parsedQty : -parsedQty;
-      const newQuantity = item ? item.currentQuantity + delta : parsedQty;
       // BR-INV-004: adjustment is an ABSOLUTE set of `quantityOnHand`,
       // not a delta. Send only the target value + reason.
       return inventoryApi.adjust(id!, {
-        newQuantity,
+        newQuantity: previewQuantity ?? 0,
         reason: adjustmentReason,
       });
     },
@@ -50,6 +53,9 @@ export default function InventoryItemDetailPage() {
       setShowAdjustModal(false);
       setAdjustmentQuantity('');
       setAdjustmentReason('');
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể điều chỉnh tồn kho'));
     },
   });
 
@@ -298,14 +304,19 @@ export default function InventoryItemDetailPage() {
             rows={2}
           />
 
-          {adjustmentQuantity && (
-            <div className="rounded-lg bg-brand-50 p-2.5">
-              <p className="text-sm text-brand-700">
+          {adjustmentQuantity && previewQuantity !== null && (
+            <div className={`rounded-lg p-2.5 ${previewQuantity < 0 ? 'bg-red-50' : 'bg-brand-50'}`}>
+              <p className={`text-sm ${previewQuantity < 0 ? 'text-red-700' : 'text-brand-700'}`}>
                 Sau điều chỉnh:{' '}
                 <span className="font-semibold">
-                  {item.currentQuantity + (adjustmentType === 'STOCK_IN' || adjustmentType === 'RETURNED' ? parseInt(adjustmentQuantity) || 0 : -parseInt(adjustmentQuantity) || 0)} {item.unit}
+                  {previewQuantity} {item.unit}
                 </span>
               </p>
+              {previewQuantity < 0 && (
+                <p className="mt-1 text-xs text-red-600">
+                  Số lượng điều chỉnh vượt quá tồn kho hiện có ({item.currentQuantity} {item.unit}).
+                </p>
+              )}
             </div>
           )}
 
@@ -316,7 +327,13 @@ export default function InventoryItemDetailPage() {
             <Button
               onClick={() => adjustMutation.mutate()}
               isLoading={adjustMutation.isPending}
-              disabled={!adjustmentQuantity || !adjustmentReason}
+              disabled={
+                !adjustmentQuantity ||
+                !adjustmentReason ||
+                parsedAdjustQty <= 0 ||
+                previewQuantity === null ||
+                previewQuantity < 0
+              }
             >
               Xác nhận
             </Button>

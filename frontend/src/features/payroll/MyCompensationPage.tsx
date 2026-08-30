@@ -1,41 +1,12 @@
-import { useState } from 'react';
-import { Card, Badge } from '@/components/ui';
+import { Card, Badge, EmptyState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-
-interface CompensationVersion {
-  id: string;
-  effectiveFrom: string;
-  effectiveTo?: string;
-  baseSalary: number;
-  commissionPercentage: number;
-  overtimeHourlyRate: number;
-  isActive: boolean;
-}
+import { DollarSign } from 'lucide-react';
+import { useMyCompensation } from './payrollApi';
 
 export default function MyCompensationPage() {
-  const [versions] = useState<CompensationVersion[]>([
-    {
-      id: '1',
-      effectiveFrom: '2026-01-01',
-      baseSalary: 15000000,
-      commissionPercentage: 30,
-      overtimeHourlyRate: 100000,
-      isActive: true,
-    },
-    {
-      id: '2',
-      effectiveFrom: '2025-06-01',
-      effectiveTo: '2025-12-31',
-      baseSalary: 12000000,
-      commissionPercentage: 25,
-      overtimeHourlyRate: 80000,
-      isActive: false,
-    },
-  ]);
-
-  const activeComp = versions.find(v => v.isActive);
+  const { data: comp, isLoading } = useMyCompensation();
 
   return (
     <div className="space-y-4">
@@ -46,7 +17,19 @@ export default function MyCompensationPage() {
         </p>
       </div>
 
-      {activeComp && (
+      {isLoading ? (
+        <Card>
+          <div className="h-40 animate-pulse rounded bg-gray-100" />
+        </Card>
+      ) : !comp ? (
+        <Card>
+          <EmptyState
+            icon={<DollarSign className="h-10 w-10 text-gray-400" />}
+            title="Chưa có chính sách lương"
+            description="Liên hệ quản trị viên để thiết lập chính sách lương cho bạn"
+          />
+        </Card>
+      ) : (
         <Card>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900">Chính sách hiện tại</h2>
@@ -56,47 +39,31 @@ export default function MyCompensationPage() {
           <div className="grid gap-6 sm:grid-cols-3">
             <div>
               <p className="text-sm text-gray-500">Lương cơ bản</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(activeComp.baseSalary)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(comp.baseSalary)}</p>
               <p className="text-xs text-gray-400">/ tháng</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Hoa hồng</p>
-              <p className="text-2xl font-bold text-gray-900">{activeComp.commissionPercentage}%</p>
+              <p className="text-2xl font-bold text-gray-900">{comp.commissionPercentage}%</p>
               <p className="text-xs text-gray-400">trên doanh thu</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Lương làm thêm</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(activeComp.overtimeHourlyRate)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(comp.overtimeHourlyRate)}</p>
               <p className="text-xs text-gray-400">/ giờ</p>
             </div>
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-100">
             <p className="text-sm text-gray-500">
-              Hiệu lực từ: {format(new Date(activeComp.effectiveFrom), 'dd/MM/yyyy', { locale: vi })}
+              Hiệu lực từ: {format(new Date(comp.effectiveFrom), 'dd/MM/yyyy', { locale: vi })}
+              {comp.effectiveTo &&
+                ` — đến ${format(new Date(comp.effectiveTo), 'dd/MM/yyyy', { locale: vi })}`}
             </p>
+            {comp.notes && <p className="mt-1 text-sm text-gray-500">Ghi chú: {comp.notes}</p>}
           </div>
         </Card>
       )}
-
-      <Card title="Lịch sử thay đổi">
-        <div className="space-y-4">
-          {versions.filter(v => !v.isActive).map((version) => (
-            <div key={version.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-              <div>
-                <p className="font-medium text-gray-900">
-                  {format(new Date(version.effectiveFrom), 'dd/MM/yyyy', { locale: vi })}
-                  {version.effectiveTo && ` - ${format(new Date(version.effectiveTo), 'dd/MM/yyyy', { locale: vi })}`}
-                </p>
-                <p className="text-sm text-gray-500">
-                  Lương cơ bản: {formatCurrency(version.baseSalary)} • Hoa hồng: {version.commissionPercentage}%
-                </p>
-              </div>
-              <Badge variant="default">Đã kết thúc</Badge>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
