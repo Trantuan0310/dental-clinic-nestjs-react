@@ -246,14 +246,29 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
 
       (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
         const tx = {
+          payrollPeriod: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'period-1',
+              status: PayrollPeriodStatus.DRAFT,
+              configSnapshot,
+            }),
+          },
+          payrollLineItem: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'line-1',
+              payrollPeriodId: 'period-1',
+              dentistId: 'dentist-any',
+              baseSalaryVnd: new Prisma.Decimal(10_000_000),
+              commissionVnd: new Prisma.Decimal(0),
+              overtimePayVnd: new Prisma.Decimal(0),
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
           payrollAdjustment: {
             create: jest.fn().mockResolvedValue({ id: 'adj-1' }),
             findMany: jest
               .fn()
               .mockResolvedValue([{ type: 'BONUS', amountVnd: new Prisma.Decimal(500_000) }]),
-          },
-          payrollLineItem: {
-            update: jest.fn().mockResolvedValue({}),
           },
           payrollConfig: { findFirst: jest.fn().mockResolvedValue(null) },
         };
@@ -293,12 +308,27 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
       });
       (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
         const tx = {
+          payrollPeriod: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'period-1',
+              status: PayrollPeriodStatus.DRAFT,
+              configSnapshot,
+            }),
+          },
+          payrollLineItem: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'line-1',
+              payrollPeriodId: 'period-1',
+              dentistId: 'dentist-1',
+              baseSalaryVnd: new Prisma.Decimal(0),
+              commissionVnd: new Prisma.Decimal(0),
+              overtimePayVnd: new Prisma.Decimal(0),
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
           payrollAdjustment: {
             create: jest.fn().mockResolvedValue({ id: 'adj-1' }),
             findMany: jest.fn().mockResolvedValue([]),
-          },
-          payrollLineItem: {
-            update: jest.fn().mockResolvedValue({}),
           },
         };
         return cb(tx);
@@ -341,12 +371,27 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
       });
       (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
         const tx = {
+          payrollPeriod: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'period-1',
+              status: PayrollPeriodStatus.DRAFT,
+              configSnapshot,
+            }),
+          },
+          payrollLineItem: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'line-1',
+              payrollPeriodId: 'period-1',
+              dentistId: 'dentist-1',
+              baseSalaryVnd: new Prisma.Decimal(0),
+              commissionVnd: new Prisma.Decimal(0),
+              overtimePayVnd: new Prisma.Decimal(0),
+            }),
+            update: jest.fn().mockResolvedValue({}),
+          },
           payrollAdjustment: {
             create: jest.fn().mockResolvedValue({ id: 'adj-1' }),
             findMany: jest.fn().mockResolvedValue([]),
-          },
-          payrollLineItem: {
-            update: jest.fn().mockResolvedValue({}),
           },
         };
         return cb(tx);
@@ -365,6 +410,119 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
           metadata: expect.objectContaining({ severity: 'NORMAL' }),
         }),
       );
+    });
+  });
+
+  // ============================================================================
+  // Bug fix: addAdjustment must re-read period/line item INSIDE the transaction
+  // instead of trusting the pre-check snapshot (stale read race with a
+  // concurrent computePeriod()/lockPeriod()/approvePeriod()).
+  // ============================================================================
+
+  describe('addAdjustment re-reads state inside the transaction', () => {
+    it('computes gross/net pay from the line item values read inside tx, not the stale pre-check', async () => {
+      // Pre-check (outside tx) sees stale baseSalaryVnd — as if a concurrent
+      // computePeriod() has NOT happened yet at this point.
+      (prisma.payrollPeriod.findUnique as jest.Mock).mockResolvedValue({
+        id: 'period-1',
+        status: PayrollPeriodStatus.DRAFT,
+        configSnapshot,
+      });
+      (prisma.payrollLineItem.findUnique as jest.Mock).mockResolvedValue({
+        id: 'line-1',
+        payrollPeriodId: 'period-1',
+        dentistId: 'admin-1',
+        baseSalaryVnd: new Prisma.Decimal(5_000_000), // stale
+        commissionVnd: new Prisma.Decimal(0),
+        overtimePayVnd: new Prisma.Decimal(0),
+      });
+
+      let capturedUpdateData: any;
+      (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
+        const tx = {
+          payrollPeriod: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'period-1',
+              status: PayrollPeriodStatus.DRAFT,
+              configSnapshot,
+            }),
+          },
+          payrollLineItem: {
+            // Inside the transaction, a concurrent computePeriod() has already
+            // recomputed this line item with a NEW baseSalaryVnd.
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'line-1',
+              payrollPeriodId: 'period-1',
+              dentistId: 'admin-1',
+              baseSalaryVnd: new Prisma.Decimal(8_000_000), // fresh
+              commissionVnd: new Prisma.Decimal(0),
+              overtimePayVnd: new Prisma.Decimal(0),
+            }),
+            update: jest.fn().mockImplementation(({ data }) => {
+              capturedUpdateData = data;
+              return Promise.resolve({});
+            }),
+          },
+          payrollAdjustment: {
+            create: jest.fn().mockResolvedValue({ id: 'adj-1' }),
+            findMany: jest.fn().mockResolvedValue([]),
+          },
+        };
+        return cb(tx);
+      });
+
+      await service.addAdjustment(
+        'period-1',
+        { lineItemId: 'line-1', type: 'BONUS', amountVnd: 0, reason: 'Regression test' },
+        'admin-1',
+        ['payroll.admin'],
+      );
+
+      // Must reflect the FRESH baseSalaryVnd (8,000,000), not the stale
+      // pre-check value (5,000,000).
+      expect(capturedUpdateData.grossPayVnd).toBe(8_000_000);
+    });
+
+    it('rejects the adjustment if the period was locked/approved after the pre-check but before the tx commits', async () => {
+      (prisma.payrollPeriod.findUnique as jest.Mock).mockResolvedValue({
+        id: 'period-1',
+        status: PayrollPeriodStatus.DRAFT, // pre-check sees adjustable state
+        configSnapshot,
+      });
+      (prisma.payrollLineItem.findUnique as jest.Mock).mockResolvedValue({
+        id: 'line-1',
+        payrollPeriodId: 'period-1',
+        dentistId: 'admin-1',
+        baseSalaryVnd: new Prisma.Decimal(5_000_000),
+        commissionVnd: new Prisma.Decimal(0),
+        overtimePayVnd: new Prisma.Decimal(0),
+      });
+
+      (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
+        const tx = {
+          payrollPeriod: {
+            // A concurrent approvePeriod() committed between the pre-check and
+            // this transaction — status is now APPROVED (not adjustable).
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'period-1',
+              status: PayrollPeriodStatus.APPROVED,
+              configSnapshot,
+            }),
+          },
+          payrollLineItem: { findUnique: jest.fn(), update: jest.fn() },
+          payrollAdjustment: { create: jest.fn(), findMany: jest.fn() },
+        };
+        return cb(tx);
+      });
+
+      await expect(
+        service.addAdjustment(
+          'period-1',
+          { lineItemId: 'line-1', type: 'BONUS', amountVnd: 0, reason: 'Regression test' },
+          'admin-1',
+          ['payroll.admin'],
+        ),
+      ).rejects.toThrow(PayrollStateException);
     });
   });
 

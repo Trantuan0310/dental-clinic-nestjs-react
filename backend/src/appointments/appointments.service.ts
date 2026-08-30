@@ -1184,10 +1184,13 @@ export class AppointmentsService {
     txClient?: Prisma.TransactionClient,
   ) {
     const client = (txClient ?? this.prisma) as PrismaService;
+    // Overlap check (not exact startAt match): two appointments conflict when
+    // newStart < existing.endAt AND existing.startAt < newEnd.
     const conflict = await client.appointment.findFirst({
       where: {
         dentistId,
-        startAt,
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
         status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
         deletedAt: null,
         ...(excludeAppointmentId ? { NOT: { id: excludeAppointmentId } } : {}),

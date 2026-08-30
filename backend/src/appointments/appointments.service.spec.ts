@@ -179,6 +179,58 @@ describe('AppointmentsService', () => {
     });
   });
 
+  describe('create — slot overlap detection', () => {
+    const dentist = {
+      id: 'dentist-1',
+      status: 'ACTIVE',
+      userRoles: [{ role: { code: 'dentist' } }],
+    };
+    const patient = { id: 'patient-1', deletedAt: null };
+    const workingSchedule = {
+      dayOfWeek: new Date('2027-03-15T09:15:00Z').getUTCDay(),
+      startTime: new Date('1970-01-01T00:00:00Z'),
+      endTime: new Date('1970-01-01T23:00:00Z'),
+    };
+
+    beforeEach(() => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(dentist);
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patient);
+      (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue(workingSchedule);
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.create as jest.Mock).mockResolvedValue({ id: 'appt-new' });
+    });
+
+    it('queries appointments using a time-range overlap, not an exact startAt match', async () => {
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await service.create(
+        { dentistId: 'dentist-1', patientId: 'patient-1', startAt: '2027-03-15T09:15:00Z' } as any,
+        actor,
+      );
+
+      const whereArg = (prisma.appointment.findFirst as jest.Mock).mock.calls[0][0].where;
+      expect(whereArg.startAt).toEqual({ lt: new Date('2027-03-15T09:45:00Z') });
+      expect(whereArg.endAt).toEqual({ gt: new Date('2027-03-15T09:15:00Z') });
+    });
+
+    it('rejects a booking that overlaps an existing appointment with a different startAt', async () => {
+      // Existing appointment: 09:00–09:30. New request: 09:15–09:45 (overlaps
+      // by 15 min but has a different startAt) — must still be rejected.
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue({ id: 'appt-existing' });
+
+      await expect(
+        service.create(
+          {
+            dentistId: 'dentist-1',
+            patientId: 'patient-1',
+            startAt: '2027-03-15T09:15:00Z',
+          } as any,
+          actor,
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
   describe('markNoShow', () => {
     it('transitions to no_show when patient misses appointment', async () => {
       const existing = {

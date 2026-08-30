@@ -61,14 +61,11 @@ export const proRateBaseSalary = (
   // Open-ended comp (no effective_to) covers the period entirely.
   if (compensationRange.openEnded) return monthlySalary;
 
-  const compDays = daysBetweenInclusive(compensationRange.start, compensationRange.end);
-  if (compDays <= 0) return 0;
-
-  // BR-PAY-013: pro-rate by overlap / max(compDays, periodDays).
-  // When comp spans the full period (overlap == periodDays), ratio is 1.
-  // When comp is shorter than the period (e.g. mid-month change), denominator
-  // is compDays so partial comp contributes proportionally.
-  const ratio = overlap / Math.max(compDays, periodDays);
+  // BR-PAY-013 (docs/03_Specification/Payroll/SPEC.md): pro-rate = actual_days / period_days.
+  // Ratio is always overlap / periodDays, so a comp that fully covers the pay
+  // period (overlap == periodDays) always yields ratio 1, regardless of how
+  // long the comp's own effective range is.
+  const ratio = overlap / periodDays;
   return Math.round(monthlySalary * ratio);
 };
 

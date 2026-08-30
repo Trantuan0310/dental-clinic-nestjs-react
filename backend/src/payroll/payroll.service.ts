@@ -778,22 +778,27 @@ export class PayrollService {
     actorUserId: string,
     actorPermissions: string[] = [],
   ) {
-    const period = await this.prisma.payrollPeriod.findUnique({
+    // Cheap pre-check outside the transaction — UX-only fast fail. The
+    // authoritative checks are re-run INSIDE the transaction below, since a
+    // concurrent computePeriod() (which deletes+recreates line items) or a
+    // concurrent lockPeriod()/approvePeriod() could invalidate this snapshot
+    // between the pre-check and the transaction actually committing.
+    const periodPrecheck = await this.prisma.payrollPeriod.findUnique({
       where: { id: periodId },
     });
-    if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
-    if (!isAdjustable(period.status)) {
+    if (!periodPrecheck) throw new PayrollNotFoundException('PayrollPeriod', periodId);
+    if (!isAdjustable(periodPrecheck.status)) {
       throw new PayrollStateException(
-        `Cannot add adjustment in status ${period.status}. Only DRAFT/REVIEWING allowed.`,
+        `Cannot add adjustment in status ${periodPrecheck.status}. Only DRAFT/REVIEWING allowed.`,
       );
     }
 
     validateAdjustmentReason(dto.type as PayrollAdjustmentType, dto.reason);
 
-    const lineItem = await this.prisma.payrollLineItem.findUnique({
+    const lineItemPrecheck = await this.prisma.payrollLineItem.findUnique({
       where: { id: dto.lineItemId },
     });
-    if (!lineItem || lineItem.payrollPeriodId !== periodId) {
+    if (!lineItemPrecheck || lineItemPrecheck.payrollPeriodId !== periodId) {
       throw new PayrollNotFoundException('PayrollLineItem', dto.lineItemId);
     }
 
@@ -802,7 +807,7 @@ export class PayrollService {
     // ONLY their own line item (self-adjustment is a no-op; in practice for
     // MVP dentists never have permission for this, but guard anyway).
     const isAdmin = actorPermissions.includes('payroll.admin');
-    if (!isAdmin && lineItem.dentistId !== actorUserId) {
+    if (!isAdmin && lineItemPrecheck.dentistId !== actorUserId) {
       throw new PayrollNotFoundException('PayrollLineItem', dto.lineItemId); // 404, don't leak
     }
 
@@ -813,6 +818,25 @@ export class PayrollService {
 
     const _adjustment = await this.prisma.$transaction(
       async tx => {
+        // Re-read period + line item INSIDE the transaction so the numbers we
+        // compute from (and the status we gate on) reflect the current
+        // committed state, not the pre-check snapshot taken before the
+        // transaction opened.
+        const period = await tx.payrollPeriod.findUnique({ where: { id: periodId } });
+        if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
+        if (!isAdjustable(period.status)) {
+          throw new PayrollStateException(
+            `Cannot add adjustment in status ${period.status}. Only DRAFT/REVIEWING allowed.`,
+          );
+        }
+
+        const lineItem = await tx.payrollLineItem.findUnique({
+          where: { id: dto.lineItemId },
+        });
+        if (!lineItem || lineItem.payrollPeriodId !== periodId) {
+          throw new PayrollNotFoundException('PayrollLineItem', dto.lineItemId);
+        }
+
         const created = await tx.payrollAdjustment.create({
           data: {
             payrollLineItemId: dto.lineItemId,
