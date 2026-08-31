@@ -108,6 +108,80 @@ describe('RolesService', () => {
     });
   });
 
+  describe('update', () => {
+    beforeEach(() => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...validRole(),
+        rolePermissions: [{ permission: { code: 'patient.read' } }],
+        userRoles: [],
+      });
+    });
+
+    it('updates name/description without touching permissions when permissionCodes is omitted', async () => {
+      await service.update(
+        'role-1',
+        { name: 'New Name' } as any,
+        adminActor.sub,
+        adminActor.email,
+        null,
+        null,
+      );
+
+      expect(prisma.rolePermission.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.role.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ name: 'New Name' }) }),
+      );
+    });
+
+    it('replaces permissions when permissionCodes has values', async () => {
+      (prisma.permission.findMany as jest.Mock).mockResolvedValue([
+        { id: 'perm-2', code: 'patient.write' },
+      ]);
+
+      await service.update(
+        'role-1',
+        { permissionCodes: ['patient.write'] } as any,
+        adminActor.sub,
+        adminActor.email,
+        null,
+        null,
+      );
+
+      expect(prisma.rolePermission.deleteMany).toHaveBeenCalledWith({
+        where: { roleId: 'role-1' },
+      });
+      expect(prisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [{ roleId: 'role-1', permissionId: 'perm-2' }],
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ROLE_PERMISSIONS_CHANGED' }),
+      );
+    });
+
+    it('clears ALL permissions when permissionCodes is an empty array (regression: was previously a no-op)', async () => {
+      await service.update(
+        'role-1',
+        { permissionCodes: [] } as any,
+        adminActor.sub,
+        adminActor.email,
+        null,
+        null,
+      );
+
+      expect(prisma.rolePermission.deleteMany).toHaveBeenCalledWith({
+        where: { roleId: 'role-1' },
+      });
+      expect(prisma.rolePermission.createMany).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ROLE_PERMISSIONS_CHANGED',
+          metadata: { newPermissions: [] },
+        }),
+      );
+    });
+  });
+
   describe('delete', () => {
     it('throws CannotDeleteSystemRoleException when role is system', async () => {
       (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({

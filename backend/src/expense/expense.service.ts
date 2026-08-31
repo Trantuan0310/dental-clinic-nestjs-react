@@ -16,6 +16,15 @@ import {
 } from './dto/expense.dto';
 import { Prisma, ExpenseStatus } from '@prisma/client';
 
+// DRAFT → APPROVED / REJECTED; APPROVED → REIMBURSED. REJECTED/REIMBURSED
+// are terminal. (See expense.controller.ts operation summaries.)
+const VALID_EXPENSE_TRANSITIONS: Record<ExpenseStatus, ExpenseStatus[]> = {
+  [ExpenseStatus.DRAFT]: [ExpenseStatus.APPROVED, ExpenseStatus.REJECTED],
+  [ExpenseStatus.APPROVED]: [ExpenseStatus.REIMBURSED],
+  [ExpenseStatus.REJECTED]: [],
+  [ExpenseStatus.REIMBURSED]: [],
+};
+
 @Injectable()
 export class ExpenseService {
   constructor(
@@ -242,11 +251,13 @@ export class ExpenseService {
       throw new NotFoundException(`Expense ${id} not found`);
     }
 
-    if (
-      existing.status === ExpenseStatus.APPROVED ||
-      existing.status === ExpenseStatus.REIMBURSED
-    ) {
-      throw new ConflictException(`Expense is already ${existing.status}`);
+    // This guard used to block ANY transition once status was APPROVED —
+    // which also blocked the one transition APPROVED is actually for
+    // (APPROVED -> REIMBURSED), making markReimbursed() 409 on every call.
+    if (!VALID_EXPENSE_TRANSITIONS[existing.status].includes(newStatus)) {
+      throw new ConflictException(
+        `Cannot transition expense from ${existing.status} to ${newStatus}`,
+      );
     }
 
     const updated = await this.prisma.expense.update({

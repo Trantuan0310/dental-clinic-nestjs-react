@@ -118,6 +118,10 @@ export class AuthService {
     });
 
     if (!user || user.deactivatedAt !== null) {
+      // Run a dummy argon2 verify so this branch takes roughly the same time
+      // as a real "user exists, wrong password" attempt — otherwise the
+      // response-time gap leaks whether an email is registered.
+      await this.verifyPassword(password, await this.getDummyHash());
       await this.auditService.log({
         action: 'LOGIN_FAILED',
         ipAddress,
@@ -143,19 +147,27 @@ export class AuthService {
     const isPasswordValid = await this.verifyPassword(password, user.passwordHash);
 
     if (!isPasswordValid) {
-      const failedAttempts = user.failedLoginAttempts + 1;
+      // Atomic increment at the SQL level (UPDATE ... SET x = x + 1) so
+      // concurrent failed attempts on the same account can't lose updates —
+      // a read-then-write (user.failedLoginAttempts + 1 written back) lets
+      // parallel requests all read the same stale count and each write "1",
+      // never crossing MAX_FAILED_ATTEMPTS and bypassing lockout entirely.
+      const updated = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: { increment: 1 } },
+      });
+      const failedAttempts = updated.failedLoginAttempts;
       const lockedUntil =
         failedAttempts > this.MAX_FAILED_ATTEMPTS
           ? new Date(Date.now() + this.LOCKOUT_DURATION_MS)
           : null;
 
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          failedLoginAttempts: failedAttempts,
-          lockedUntil,
-        },
-      });
+      if (lockedUntil) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { lockedUntil },
+        });
+      }
 
       await this.auditService.log({
         action: 'LOGIN_FAILED',
@@ -248,17 +260,34 @@ export class AuthService {
     };
   }
 
-  async logout(refreshTokenId: string): Promise<void> {
-    await this.prisma.refreshToken.update({
-      where: { id: refreshTokenId },
+  async logout(request: Request): Promise<void> {
+    const cookieToken = this.extractRefreshTokenFromCookie(request);
+    if (!cookieToken) return;
+
+    const tokenHash = this.hashToken(cookieToken);
+    // updateMany (not update) so an already-revoked or unknown cookie is a
+    // harmless no-op instead of throwing — logout should never error.
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
 
-  async logoutAll(userId: string): Promise<void> {
+  async logoutAll(
+    userId: string,
+    ipAddress: string | null,
+    userAgent: string | null,
+  ): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
+    });
+
+    await this.auditService.log({
+      action: 'LOGOUT_ALL',
+      actorUserId: userId,
+      ipAddress,
+      userAgent,
     });
   }
 
@@ -600,6 +629,17 @@ export class AuthService {
     } catch {
       return false;
     }
+  }
+
+  // Lazily computed once per process and reused — gives the "user not
+  // found" login branch a real argon2 hash to verify against, so its
+  // timing matches a genuine wrong-password attempt.
+  private dummyHashPromise: Promise<string> | null = null;
+  private getDummyHash(): Promise<string> {
+    if (!this.dummyHashPromise) {
+      this.dummyHashPromise = this.hashPassword('dummy-password-for-constant-time-login');
+    }
+    return this.dummyHashPromise;
   }
 
   private validatePasswordStrength(password: string, email: string): void {

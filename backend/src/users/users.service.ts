@@ -112,11 +112,13 @@ export class UsersService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<{ id: string; email: string; status: string; createdAt: Date }> {
+    // `email` is a GLOBAL unique constraint (schema.prisma: @@unique([email]),
+    // not scoped to active users) — checking only active users here missed
+    // deactivated users with the same email, so the later prisma.user.create()
+    // hit the DB constraint directly and threw an uncaught Prisma error
+    // instead of this intended 409.
     const existingUser = await this.prisma.user.findFirst({
-      where: {
-        email: createUserDto.email,
-        deactivatedAt: null,
-      },
+      where: { email: createUserDto.email },
     });
 
     if (existingUser) {
@@ -184,19 +186,25 @@ export class UsersService {
     userId: string,
     updateUserDto: UpdateUserDto,
     actorUserId: string,
-    _actorEmail: string,
-    _ipAddress: string | null,
-    _userAgent: string | null,
+    actorEmail: string,
+    ipAddress: string | null,
+    userAgent: string | null,
   ): Promise<UserResponse> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
+
+    // login() gates on deactivatedAt (not status) — setting status=ACTIVE
+    // here without clearing deactivatedAt leaves the user still locked out
+    // while the UI shows them as active again.
+    const reactivating = updateUserDto.status === 'ACTIVE' && user.deactivatedAt !== null;
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         fullName: updateUserDto.fullName ?? user.fullName,
         status: updateUserDto.status ?? user.status,
+        deactivatedAt: reactivating ? null : user.deactivatedAt,
         updatedBy: actorUserId,
       },
       include: {
@@ -204,6 +212,17 @@ export class UsersService {
           include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
         },
       },
+    });
+
+    await this.auditService.log({
+      action: 'USER_UPDATED',
+      actorUserId,
+      actorEmail,
+      targetType: 'user',
+      targetId: userId,
+      metadata: { changes: updateUserDto, reactivated: reactivating },
+      ipAddress,
+      userAgent,
     });
 
     return this.mapToUserResponse(updated);
@@ -217,12 +236,7 @@ export class UsersService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<UserResponse> {
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      include: { userRoles: { include: { role: true } } },
-    });
-
-    await this.checkLastAdminGuard(user.id, updateRolesDto.roleIds);
+    await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
     const roles = await this.prisma.role.findMany({
       where: { id: { in: updateRolesDto.roleIds } },
@@ -232,24 +246,35 @@ export class UsersService {
       throw new NotFoundException('One or more roles not found');
     }
 
-    await this.prisma.$transaction(async tx => {
-      await tx.userRole.deleteMany({
-        where: { userId },
-      });
+    await this.prisma.$transaction(
+      async tx => {
+        // Guard check + write happen inside the SAME Serializable
+        // transaction as the role change below, so Postgres detects the
+        // read/write conflict if this races with another admin's
+        // deactivate()/updateRoles() call — otherwise two concurrent
+        // "demote the last two admins" requests can each read
+        // adminCount=2, both pass, and leave zero admins.
+        await this.checkLastAdminGuard(tx, userId, updateRolesDto.roleIds);
 
-      await tx.userRole.createMany({
-        data: updateRolesDto.roleIds.map(roleId => ({
-          userId,
-          roleId,
-          assignedBy: actorUserId,
-        })),
-      });
+        await tx.userRole.deleteMany({
+          where: { userId },
+        });
 
-      await tx.refreshToken.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-    });
+        await tx.userRole.createMany({
+          data: updateRolesDto.roleIds.map(roleId => ({
+            userId,
+            roleId,
+            assignedBy: actorUserId,
+          })),
+        });
+
+        await tx.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     const updated = await this.getUserWithRolesAndPermissions(userId);
 
@@ -275,28 +300,30 @@ export class UsersService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<void> {
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      include: { userRoles: { include: { role: true } } },
-    });
+    await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
-    await this.checkLastAdminGuardForDeactivation(user.id);
+    await this.prisma.$transaction(
+      async tx => {
+        // See updateRoles() — same Serializable-transaction fix for the
+        // last-admin race.
+        await this.checkLastAdminGuardForDeactivation(tx, userId);
 
-    await this.prisma.$transaction(async tx => {
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          deactivatedAt: new Date(),
-          status: 'DEACTIVATED',
-          updatedBy: actorUserId,
-        },
-      });
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            deactivatedAt: new Date(),
+            status: 'DEACTIVATED',
+            updatedBy: actorUserId,
+          },
+        });
 
-      await tx.refreshToken.updateMany({
-        where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-    });
+        await tx.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     await this.auditService.log({
       action: 'USER_DEACTIVATED',
@@ -455,14 +482,18 @@ export class UsersService {
     });
   }
 
-  private async checkLastAdminGuard(userId: string, newRoleIds: string[]): Promise<void> {
-    const clinicAdminRole = await this.prisma.role.findUnique({
+  private async checkLastAdminGuard(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    newRoleIds: string[],
+  ): Promise<void> {
+    const clinicAdminRole = await tx.role.findUnique({
       where: { code: 'clinic_admin' },
     });
 
     if (!clinicAdminRole) return;
 
-    const user = await this.prisma.user.findUnique({
+    const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
         userRoles: { include: { role: true } },
@@ -473,7 +504,7 @@ export class UsersService {
     const willHaveAdminRole = newRoleIds.includes(clinicAdminRole.id);
 
     if (hasCurrentAdminRole && !willHaveAdminRole) {
-      const adminCount = await this.prisma.user.count({
+      const adminCount = await tx.user.count({
         where: {
           deactivatedAt: null,
           userRoles: {
@@ -488,14 +519,17 @@ export class UsersService {
     }
   }
 
-  private async checkLastAdminGuardForDeactivation(userId: string): Promise<void> {
-    const clinicAdminRole = await this.prisma.role.findUnique({
+  private async checkLastAdminGuardForDeactivation(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    const clinicAdminRole = await tx.role.findUnique({
       where: { code: 'clinic_admin' },
     });
 
     if (!clinicAdminRole) return;
 
-    const user = await this.prisma.user.findUnique({
+    const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
         userRoles: { include: { role: true } },
@@ -505,7 +539,7 @@ export class UsersService {
     const hasAdminRole = user?.userRoles.some(ur => ur.role.code === 'clinic_admin');
 
     if (hasAdminRole) {
-      const adminCount = await this.prisma.user.count({
+      const adminCount = await tx.user.count({
         where: {
           id: { not: userId },
           deactivatedAt: null,

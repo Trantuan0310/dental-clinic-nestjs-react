@@ -35,9 +35,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
         details = resp.details;
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
-      code = exception.name.toUpperCase().replace(/EXCEPTION$/, '');
-
+      // Never surface a raw, unexpected error's message to the client — it
+      // can leak internal details (Prisma constraint/table/column names,
+      // stack-adjacent info). Keep the generic 'Internal server error' /
+      // 'INTERNAL_ERROR' defaults declared above; the real message and
+      // stack are still logged server-side for debugging.
       this.logger.error(`Unhandled exception: ${exception.message}`, exception.stack);
     }
 

@@ -7,11 +7,13 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard, JwtPayload } from '../common/guards/permissions.guard';
@@ -82,12 +84,12 @@ export class ExpenseController {
   @RequirePermissions('expense.create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new expense (DRAFT)' })
-  async create(
-    @Body() dto: CreateExpenseDto,
-    @User() actor: JwtPayload,
-    @Query('ip') ip?: string,
-    @Query('ua') ua?: string,
-  ) {
+  async create(@Body() dto: CreateExpenseDto, @User() actor: JwtPayload, @Req() req: Request) {
+    // ip/ua must come from the request itself, not client-supplied query
+    // params — otherwise anyone can forge the IP/UA recorded in
+    // expense_audits / audit_logs for this action (e.g. POST /expenses?ip=1.2.3.4).
+    const ip = req.ip;
+    const ua = req.get('user-agent');
     return { data: await this.expense.create(dto, actor, ip, ua) };
   }
 
