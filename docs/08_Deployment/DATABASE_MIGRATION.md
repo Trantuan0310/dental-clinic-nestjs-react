@@ -44,11 +44,10 @@ Migrations nằm trong `backend/prisma/migrations/`:
 
 | Migration | Mô tả |
 |-----------|--------|
-| `001_init` | Schema ban đầu (auth, users, roles, patients) |
-| `009_payroll` | Payroll module (config, compensations, periods) |
-| `010_appointments_shift_registration` | Appointments + Shift registration |
-| `011_payroll_config_snapshot_backfill` | Backfill payroll config |
-| `013_expense` | Expense module (BR-EXP-001) |
+| `001_init` | Schema ban đầu — toàn bộ module (auth, users, roles, patients, appointments, medical records, billing, inventory, payroll, shift) |
+| `010_perf_indexes` | Index tối ưu hiệu năng (dùng `CREATE INDEX CONCURRENTLY` — **không** chạy được qua `prisma migrate deploy` trực tiếp trên môi trường chưa hỗ trợ, xem comment đầu file migration) |
+| `011_prescription_extra_fields` | Bổ sung field cho đơn thuốc |
+| `012_expense_tables` | Expense module (BR-EXP-001) |
 
 ---
 

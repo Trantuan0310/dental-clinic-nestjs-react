@@ -94,7 +94,7 @@ VITE_API_BASE_URL=https://<backend-domain>.railway.app/api/v1
 ## 5. Health Check
 
 ```bash
-curl https://your-backend.railway.app/api/health
+curl https://your-backend.railway.app/health
 ```
 
 Expected response:

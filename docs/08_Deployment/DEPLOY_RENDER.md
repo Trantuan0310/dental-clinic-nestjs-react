@@ -55,7 +55,7 @@ GEMINI_API_KEY=<your-key>
 ## 4. Backend Health Check
 
 ```bash
-curl https://your-backend.onrender.com/api/health
+curl https://your-backend.onrender.com/health
 ```
 
 ---

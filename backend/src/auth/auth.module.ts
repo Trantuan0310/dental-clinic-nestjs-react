@@ -23,7 +23,7 @@ import { AuditModule } from '../audit/audit.module';
         return {
           secret,
           signOptions: {
-            expiresIn: '15m',
+            expiresIn: configService.get<string>('JWT_ACCESS_TTL') || '15m',
           },
         };
       },

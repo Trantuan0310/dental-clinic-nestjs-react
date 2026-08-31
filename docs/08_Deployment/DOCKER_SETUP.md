@@ -67,16 +67,18 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-clinic_user}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-dental_clinic}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis-pass}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
       NODE_ENV: production
       PORT: 3000
+    ports:
+      - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -185,7 +187,7 @@ docker-compose exec backend npx prisma migrate deploy
 docker-compose exec backend npx prisma db seed
 
 # 5. Kiểm tra
-curl http://localhost:3001/api/health
+curl http://localhost:3000/health
 ```
 
 ---

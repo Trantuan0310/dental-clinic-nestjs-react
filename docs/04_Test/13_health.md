@@ -14,7 +14,7 @@ Verify health check endpoint responds OK for load balancer / Docker healthcheck.
 
 | Endpoint | Method | Permission |
 |---|---|---|
-| `/api/v1/health` | GET | public |
+| `/health` (ngoài global prefix `/api`, xem `main.ts`) | GET | public |
 
 ## 3. Test cases
 
