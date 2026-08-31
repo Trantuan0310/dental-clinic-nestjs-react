@@ -82,7 +82,8 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout current session' })
   @ApiResponse({ status: 204, description: 'Logged out successfully' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    await this.authService.logout(req);
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -97,8 +98,10 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout all sessions' })
   @ApiResponse({ status: 204, description: 'All sessions logged out' })
-  async logoutAll(@User() user: JwtPayload) {
-    await this.authService.logoutAll(user.sub);
+  async logoutAll(@User() user: JwtPayload, @Req() req: Request) {
+    const ipAddress = req.ip || null;
+    const userAgent = req.get('user-agent') || null;
+    await this.authService.logoutAll(user.sub, ipAddress, userAgent);
     return;
   }
 

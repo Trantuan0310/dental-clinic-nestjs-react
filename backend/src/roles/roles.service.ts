@@ -160,24 +160,35 @@ export class RolesService {
       include: { rolePermissions: true, userRoles: true },
     });
 
+    // `permissionCodes` omitted (undefined) means "don't touch permissions";
+    // `permissionCodes: []` means "revoke all". Collapsing both to the same
+    // empty array via `?? []` and branching on `.length > 0` made the second
+    // case indistinguishable from the first — there was no way to ever clear
+    // every permission from a role through this API.
+    const permissionsProvided = updateRoleDto.permissionCodes !== undefined;
     const newPermissionCodes: string[] = updateRoleDto.permissionCodes ?? [];
 
-    if (newPermissionCodes.length > 0) {
-      const foundPerms = await this.prisma.permission.findMany({
-        where: { code: { in: newPermissionCodes } },
-      });
-      if (foundPerms.length !== newPermissionCodes.length) {
-        throw new NotFoundException('One or more permissions not found');
+    if (permissionsProvided) {
+      let foundPerms: { id: string; code: string }[] = [];
+      if (newPermissionCodes.length > 0) {
+        foundPerms = await this.prisma.permission.findMany({
+          where: { code: { in: newPermissionCodes } },
+        });
+        if (foundPerms.length !== newPermissionCodes.length) {
+          throw new NotFoundException('One or more permissions not found');
+        }
       }
 
       await this.prisma.$transaction(async tx => {
         await tx.rolePermission.deleteMany({ where: { roleId } });
-        await tx.rolePermission.createMany({
-          data: foundPerms.map(p => ({
-            roleId,
-            permissionId: p.id,
-          })),
-        });
+        if (foundPerms.length > 0) {
+          await tx.rolePermission.createMany({
+            data: foundPerms.map(p => ({
+              roleId,
+              permissionId: p.id,
+            })),
+          });
+        }
         await tx.role.update({
           where: { id: roleId },
           data: {

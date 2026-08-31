@@ -145,6 +145,28 @@ describe('UsersService', () => {
       ).rejects.toThrow(EmailAlreadyExistsException);
     });
 
+    it('throws EmailAlreadyExistsException when a DEACTIVATED user has the same email (global unique constraint)', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
+        validUser({ deactivatedAt: new Date() }),
+      );
+      await expect(
+        service.create(
+          { email: 'dup@x.com', fullName: 'Dup' },
+          'admin-1',
+          'admin@x.com',
+          null,
+          null,
+        ),
+      ).rejects.toThrow(EmailAlreadyExistsException);
+      // Must not filter by deactivatedAt: null — email is unique globally
+      // (schema.prisma @@unique([email])), so a deactivated user with the
+      // same email must still be caught here, not surfaced as an uncaught
+      // Prisma constraint error from the create() call below.
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: 'dup@x.com' },
+      });
+    });
+
     it('throws NotFoundException when one or more roleIds not found', async () => {
       (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.role.findMany as jest.Mock).mockResolvedValue([]);
@@ -219,6 +241,54 @@ describe('UsersService', () => {
           }),
         }),
       );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'USER_UPDATED', actorUserId: 'admin-1' }),
+      );
+    });
+
+    it('clears deactivatedAt when setting status=ACTIVE on a deactivated user', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({ deactivatedAt: new Date(), status: UserStatus.DEACTIVATED }),
+      );
+      (prisma.user.update as jest.Mock).mockResolvedValue(
+        validUser({ status: UserStatus.ACTIVE, deactivatedAt: null }),
+      );
+
+      await service.update(
+        'user-1',
+        { status: 'ACTIVE' as any },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'ACTIVE', deactivatedAt: null }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'USER_UPDATED',
+          metadata: expect.objectContaining({ reactivated: true }),
+        }),
+      );
+    });
+
+    it('does not touch deactivatedAt when the user was already active', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({ deactivatedAt: null, status: UserStatus.ACTIVE }),
+      );
+      (prisma.user.update as jest.Mock).mockResolvedValue(validUser());
+
+      await service.update('user-1', { fullName: 'X' }, 'admin-1', 'admin@x.com', null, null);
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ deactivatedAt: null }),
+        }),
+      );
     });
   });
 
@@ -274,12 +344,17 @@ describe('UsersService', () => {
         }),
       );
       (prisma.role.findUnique as jest.Mock).mockResolvedValue(adminRole);
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([validRole({ id: 'r-other' })]);
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(
         validUser({
           userRoles: [{ ...validUserRole({ roleId: adminRole.id }), role: adminRole }],
         }),
       );
       (prisma.user.count as jest.Mock).mockResolvedValue(1);
+      // The guard now runs inside $transaction(tx => ...) — route tx calls
+      // to the same mocked `prisma` client so role.findUnique/user.findUnique/
+      // user.count above are the ones actually hit.
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
 
       await expect(
         service.updateRoles(
@@ -317,6 +392,38 @@ describe('UsersService', () => {
           action: ACTION_AUDIT.USER_DEACTIVATED,
           metadata: { reason: 'left the company' },
         }),
+      );
+    });
+
+    it('throws CannotRemoveLastAdminException when deactivating the last clinic_admin', async () => {
+      const adminRole = validRole({ code: 'clinic_admin' });
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser());
+      (prisma.role.findUnique as jest.Mock).mockResolvedValue(adminRole);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        validUser({
+          userRoles: [{ ...validUserRole({ roleId: adminRole.id }), role: adminRole }],
+        }),
+      );
+      (prisma.user.count as jest.Mock).mockResolvedValue(0); // no other active admins
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+
+      await expect(
+        service.deactivate('user-1', 'left the company', 'admin-1', 'admin@x.com', null, null),
+      ).rejects.toThrow(CannotRemoveLastAdminException);
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('runs the last-admin guard + deactivation inside a Serializable transaction', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser());
+      (prisma.role.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+
+      await service.deactivate('user-1', 'left the company', 'admin-1', 'admin@x.com', null, null);
+
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ isolationLevel: 'Serializable' }),
       );
     });
   });

@@ -148,6 +148,9 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     permission: buildModel(),
     userRole: buildModel(),
     rolePermission: buildModel(),
+    expense: buildModel(),
+    expenseCategory: buildModel(),
+    expenseAudit: buildModel(),
 
     ...overrides,
   };

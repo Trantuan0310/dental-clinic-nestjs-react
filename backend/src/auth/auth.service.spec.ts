@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import type { Request } from 'express';
 import * as argon2 from 'argon2';
 import { UserStatus } from '@prisma/client';
 import { ACTION_AUDIT } from '../../test/helpers/fixtures';
@@ -145,7 +146,8 @@ describe('AuthService', () => {
         buildUserWithRoles({ failedLoginAttempts: 5 }),
       );
       (argon2.verify as jest.Mock).mockResolvedValue(false);
-      (prisma.user.update as jest.Mock).mockResolvedValue({});
+      // Simulates the DB-side atomic increment: 5 -> 6.
+      (prisma.user.update as jest.Mock).mockResolvedValue({ failedLoginAttempts: 6 });
 
       await expect(
         service.login({ email: 'test@example.com', password: 'wrong' }, null, null),
@@ -153,10 +155,12 @@ describe('AuthService', () => {
 
       expect(prisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            failedLoginAttempts: 6,
-            lockedUntil: expect.any(Date) as unknown as Date,
-          }),
+          data: expect.objectContaining({ failedLoginAttempts: { increment: 1 } }),
+        }),
+      );
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lockedUntil: expect.any(Date) as unknown as Date }),
         }),
       );
     });
@@ -166,42 +170,54 @@ describe('AuthService', () => {
         buildUserWithRoles({ failedLoginAttempts: 0 }),
       );
       (argon2.verify as jest.Mock).mockResolvedValue(false);
-      (prisma.user.update as jest.Mock).mockResolvedValue({});
+      (prisma.user.update as jest.Mock).mockResolvedValue({ failedLoginAttempts: 1 });
 
       await expect(
         service.login({ email: 'test@example.com', password: 'wrong' }, null, null),
       ).rejects.toThrow(InvalidCredentialsException);
 
+      expect(prisma.user.update).toHaveBeenCalledTimes(1);
       expect(prisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            failedLoginAttempts: 1,
-            lockedUntil: null,
-          }),
+          data: expect.objectContaining({ failedLoginAttempts: { increment: 1 } }),
         }),
       );
     });
   });
 
   describe('logout', () => {
-    it('revokes the refresh token', async () => {
-      (prisma.refreshToken.update as jest.Mock).mockResolvedValue(validRefreshToken());
-      await service.logout('rt-1');
-      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
-        where: { id: 'rt-1' },
-        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+    it('revokes the refresh token matching the request cookie', async () => {
+      (prisma.refreshToken.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      const req = { cookies: { refreshToken: 'raw-cookie-token' } } as unknown as Request;
+
+      await service.logout(req);
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { tokenHash: expect.any(String) as string, revokedAt: null },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) as unknown as Date }),
       });
+    });
+
+    it('is a no-op when the request has no refresh token cookie', async () => {
+      const req = { cookies: {} } as unknown as Request;
+
+      await service.logout(req);
+
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
     });
   });
 
   describe('logoutAll', () => {
-    it('revokes all non-revoked refresh tokens for a user', async () => {
+    it('revokes all non-revoked refresh tokens for a user and writes an audit log', async () => {
       (prisma.refreshToken.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
-      await service.logoutAll('user-1');
+      await service.logoutAll('user-1', '127.0.0.1', 'jest');
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { userId: 'user-1', revokedAt: null },
         }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: ActionAudit.LOGOUT_ALL, actorUserId: 'user-1' }),
       );
     });
   });
