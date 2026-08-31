@@ -125,6 +125,7 @@ export default function PatientListPage() {
             </div>
             <div className="flex gap-2">
               <Select
+                aria-label="Trạng thái"
                 value={filters.status || 'all'}
                 onChange={(e) => handleStatusFilter(e.target.value)}
                 options={[
