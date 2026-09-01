@@ -80,7 +80,7 @@ export default function PatientDetailPage() {
             <Edit className="h-4 w-4" />
             Sửa
           </Button>
-          <Button onClick={() => navigate(`/appointments/new?patientId=${id}`)}>
+          <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>
             <Calendar className="h-4 w-4" />
             Đặt lịch hẹn
           </Button>
@@ -245,7 +245,7 @@ export default function PatientDetailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => navigate(`/appointments/new?patientId=${id}`)}
+                    onClick={() => navigate(`/appointments?patientId=${id}`)}
                   >
                     <Plus className="h-4 w-4" />
                     Đặt lịch hẹn
@@ -308,14 +308,14 @@ export default function PatientDetailPage() {
               <Card
                 title="Hóa đơn"
                 actions={
-                  <Button variant="outline" size="sm" onClick={() => navigate(`/invoices?patientId=${id}`)}>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/billing/list')}>
                     Xem tất cả
                   </Button>
                 }
               >
                 <p className="text-sm text-gray-500">
                   Xem danh sách hóa đơn tại trang{' '}
-                  <Link to="/invoices" className="text-brand-500 hover:underline">
+                  <Link to="/billing/list" className="text-brand-500 hover:underline">
                     Hóa đơn
                   </Link>
                 </p>

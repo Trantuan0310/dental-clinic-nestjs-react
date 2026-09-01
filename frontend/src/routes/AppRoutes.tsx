@@ -47,9 +47,6 @@ const CompensationListPage = lazy(() =>
   import('@/features/payroll/CompensationListPage').then((m) => ({ default: m.CompensationListPage })),
 );
 const MyCompensationPage = lazy(() => import('@/features/payroll/MyCompensationPage'));
-const MyPayrollPreviewPage = lazy(
-  () => import('@/features/payroll/MyPayrollPreviewPage'),
-);
 const MyPayslipPage = lazy(() => import('@/features/payroll/MyPayslipPage'));
 const MyPayrollHistoryPage = lazy(
   () => import('@/features/payroll/MyPayrollHistoryPage'),
@@ -307,14 +304,6 @@ export function AppRoutes() {
                 element={
                   <ProtectedRoute permission="payroll.read_self">
                     <MyPayrollHistoryPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="my-payroll/preview"
-                element={
-                  <ProtectedRoute permission="payroll.read_self">
-                    <MyPayrollPreviewPage />
                   </ProtectedRoute>
                 }
               />

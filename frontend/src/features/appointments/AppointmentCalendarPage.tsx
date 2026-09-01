@@ -28,11 +28,14 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
 
 export default function AppointmentCalendarPage() {
   const [searchParams] = useSearchParams();
+  // Arriving from a patient's profile with ?patientId= opens the create
+  // modal pre-filled with that patient, instead of landing on a plain calendar.
+  const prefilledPatientId = searchParams.get('patientId') ?? undefined;
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(searchParams.get('view') as 'day' | 'week' | 'month' || 'day');
   const [selectedDentistId] = useState<string>('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId);
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 
@@ -253,6 +256,7 @@ export default function AppointmentCalendarPage() {
               appointment={selectedAppointment}
               defaultDate={selectedSlot?.date}
               defaultStartTime={selectedSlot?.time}
+              defaultPatientId={prefilledPatientId}
             />
           </Suspense>
         )}

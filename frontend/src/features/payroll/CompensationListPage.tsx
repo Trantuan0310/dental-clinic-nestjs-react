@@ -4,8 +4,9 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { DollarSign, Plus } from 'lucide-react';
 import { payrollApi } from '@/types/payroll';
-import { Modal, Input, Button, Card, EmptyState } from '@/components/ui';
+import { Modal, Input, Select, Button, Card, EmptyState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
+import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import type { DentistCompensation } from '@/types/payroll';
 
 export function CompensationListPage() {
@@ -19,6 +20,8 @@ export function CompensationListPage() {
     queryKey: ['compensations'],
     queryFn: () => payrollApi.listCompensations(),
   });
+
+  const { data: dentists } = useDentistOptions();
 
   const createMutation = useMutation({
     mutationFn: (payload: {
@@ -109,11 +112,14 @@ export function CompensationListPage() {
         size="sm"
       >
         <div className="space-y-4">
-          <Input
-            label="Mã bác sĩ"
+          <Select
+            label="Bác sĩ"
             value={selectedDentist}
             onChange={(e) => setSelectedDentist(e.target.value)}
-            placeholder="Nhập mã bác sĩ"
+            options={[
+              { value: '', label: '-- Chọn bác sĩ --' },
+              ...(dentists ?? []).map((d) => ({ value: d.id, label: d.fullName })),
+            ]}
           />
           <Input
             label="Lương cơ bản (VND)"

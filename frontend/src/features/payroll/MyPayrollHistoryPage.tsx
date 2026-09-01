@@ -1,9 +1,9 @@
 import { DollarSign, Calendar, Eye } from 'lucide-react';
-import { Button, Card, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState } from '@/components/ui';
+import { Card, Tabs, TabsList, TabsTrigger, TabsContent, EmptyState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useMyPayrollHistory } from './payrollApi';
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -24,7 +24,6 @@ function getStatusBadge(status: string) {
 }
 
 export default function MyPayrollHistoryPage() {
-  const navigate = useNavigate();
   const { data: payslips, isLoading } = useMyPayrollHistory();
 
   return (
@@ -114,14 +113,11 @@ export default function MyPayrollHistoryPage() {
           <Card>
             <div className="text-center py-8">
               <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900">Xem ước tính lương</h3>
+              <h3 className="text-lg font-medium text-gray-900">Ước tính lương tháng này</h3>
               <p className="mt-1 text-sm text-gray-500">
-                Ước tính lương tháng hiện tại dựa trên các lịch hẹn đã hoàn thành
+                Tính năng đang được phát triển. Ước tính lương dựa trên các lịch hẹn đã hoàn
+                thành sẽ hiển thị ở đây.
               </p>
-              <Button variant="outline" className="mt-4" onClick={() => navigate('/my-payroll/preview')}>
-                <Eye className="h-4 w-4" />
-                Xem ước tính
-              </Button>
             </div>
           </Card>
         </TabsContent>
