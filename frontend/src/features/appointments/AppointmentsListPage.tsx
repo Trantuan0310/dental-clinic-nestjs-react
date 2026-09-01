@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -287,10 +288,13 @@ export default function AppointmentsListPage() {
   return (
     <div>
       <PageHeader
-        title="Lịch hẹn"
-        description="Quản lý lịch hẹn bệnh nhân: xem theo ngày/tuần/tháng, check-in, đổi lịch và no-show."
+        title="Lịch hẹn — dạng bảng"
+        description="Tìm kiếm, lọc và thao tác nhanh trên danh sách lịch hẹn (check-in, đổi lịch, no-show)."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Link to="/appointments">
+              <Button variant="outline">Xem dạng lịch</Button>
+            </Link>
             <Button
               variant="outline"
               leftIcon={<Download className="h-4 w-4" />}

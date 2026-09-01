@@ -42,16 +42,9 @@ const ExpenseListPage = lazy(() => import('@/features/expense/ExpenseListPage'))
 
 const PayrollDashboardPage = lazy(() => import('@/features/payroll/PayrollDashboardPage'));
 const PeriodDetailPage = lazy(() => import('@/features/payroll/PeriodDetailPage'));
-const PeriodListPage = lazy(() => import('@/features/payroll/PeriodListPage'));
 const PayrollConfigPage = lazy(() => import('@/features/payroll/PayrollConfigPage'));
-const CompensationEditorPage = lazy(
-  () => import('@/features/payroll/CompensationEditorPage'),
-);
 const CompensationListPage = lazy(() =>
   import('@/features/payroll/CompensationListPage').then((m) => ({ default: m.CompensationListPage })),
-);
-const ShiftApprovalPage = lazy(() =>
-  import('@/features/payroll/ShiftApprovalPage').then((m) => ({ default: m.ShiftApprovalPage })),
 );
 const MyCompensationPage = lazy(() => import('@/features/payroll/MyCompensationPage'));
 const MyPayrollPreviewPage = lazy(
@@ -276,14 +269,7 @@ export function AppRoutes() {
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="payroll/periods"
-                element={
-                  <ProtectedRoute permission="payroll.read">
-                    <PeriodListPage />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="payroll/periods" element={<Navigate to="/payroll" replace />} />
               <Route
                 path="payroll/periods/:id"
                 element={
@@ -309,18 +295,10 @@ export function AppRoutes() {
                 }
               />
               <Route
-                path="payroll/compensations/:id"
-                element={
-                  <ProtectedRoute permission="payroll.compensation.read">
-                    <CompensationEditorPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="payroll/shifts/approval"
                 element={
                   <ProtectedRoute permission="shift.approve">
-                    <ShiftApprovalPage />
+                    <ShiftApprovalInbox />
                   </ProtectedRoute>
                 }
               />

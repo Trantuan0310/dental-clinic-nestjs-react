@@ -3,7 +3,7 @@ import { Calendar, DollarSign, Users } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
 import { PayrollListPage } from './PayrollListPage';
 import { CompensationListPage } from './CompensationListPage';
-import { ShiftApprovalPage } from './ShiftApprovalPage';
+import ShiftApprovalInbox from '@/features/shift/ShiftApprovalInbox';
 
 export default function PayrollDashboardPage() {
   const [activeTab, setActiveTab] = useState('periods');
@@ -44,7 +44,7 @@ export default function PayrollDashboardPage() {
         </TabsContent>
 
         <TabsContent value="shifts">
-          <ShiftApprovalPage />
+          <ShiftApprovalInbox />
         </TabsContent>
       </Tabs>
     </div>

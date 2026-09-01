@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Plus, CalendarPlus } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -11,6 +10,7 @@ import { PageLoader } from '@/components/ui/Loading';
 import { ShiftStatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useCancelShift, useShiftRegistrations } from '@/features/payroll/payrollApi';
+import { RegisterShiftModal } from './RegisterShiftModal';
 import { formatDate } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
@@ -39,6 +39,7 @@ export default function MyShiftsPage() {
   const cancel = useCancelShift();
   const [confirmCancel, setConfirmCancel] = useState<ShiftRegistration | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
 
   const filtered = useMemo(() => {
     if (!shifts) return [];
@@ -138,9 +139,9 @@ export default function MyShiftsPage() {
         title="Ca đăng ký của tôi"
         description="Lịch sử các ca tự đăng ký (ngoài lịch cố định)"
         actions={
-          <Link to="/my-shifts/new">
-            <Button leftIcon={<Plus className="h-4 w-4" />}>Đăng ký ca mới</Button>
-          </Link>
+          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
+            Đăng ký ca mới
+          </Button>
         }
       />
 
@@ -168,9 +169,9 @@ export default function MyShiftsPage() {
             }
             action={
               tab === 'upcoming' && (
-                <Link to="/my-shifts/new">
-                  <Button leftIcon={<Plus className="h-4 w-4" />}>Đăng ký ca mới</Button>
-                </Link>
+                <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
+                  Đăng ký ca mới
+                </Button>
               )
             }
           />
@@ -198,6 +199,8 @@ export default function MyShiftsPage() {
         confirmVariant="danger"
         isLoading={cancel.isPending}
       />
+
+      <RegisterShiftModal open={showRegisterModal} onClose={() => setShowRegisterModal(false)} />
     </div>
   );
 }

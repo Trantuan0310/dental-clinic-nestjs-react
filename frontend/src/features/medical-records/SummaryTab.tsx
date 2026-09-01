@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/format';
 import { CheckCircle2 } from 'lucide-react';
-import { Button, Textarea } from '@/components/ui';
+import { Button, Textarea, Alert } from '@/components/ui';
 import type { Encounter } from '@/types/medical-records';
 
 interface SummaryTabProps {
@@ -127,6 +127,12 @@ export function SummaryTab({ encounter, onClose, isClosing }: SummaryTabProps) {
           </span>
         </label>
       </div>
+
+      <Alert type="info">
+        Khi đóng Encounter, hệ thống sẽ tự động: tạo hóa đơn (draft) với các điều trị đã thực
+        hiện, trừ tồn kho vật tư đã dùng, khóa ghi chú lâm sàng (read-only) và cập nhật trạng
+        thái lịch hẹn = completed. Hành động này <strong>không thể hoàn tác</strong>.
+      </Alert>
 
       {/* Close Button */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">

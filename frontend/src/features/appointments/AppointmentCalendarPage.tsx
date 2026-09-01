@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -122,15 +122,20 @@ export default function AppointmentCalendarPage() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Lịch hẹn</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Lịch hẹn — dạng lịch</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            Quản lý lịch hẹn của phòng khám
+            Xem lịch hẹn theo ngày/tuần/tháng
           </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="h-4 w-4" />
-          Tạo lịch hẹn
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/appointments/list">
+            <Button variant="outline">Xem dạng bảng</Button>
+          </Link>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4" />
+            Tạo lịch hẹn
+          </Button>
+        </div>
       </div>
 
       <Card noPadding>

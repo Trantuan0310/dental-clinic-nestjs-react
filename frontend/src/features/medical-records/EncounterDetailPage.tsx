@@ -13,7 +13,7 @@ import {
   ListChecks,
 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
-import { Button, Card, Modal, StatusBadge, Alert } from '@/components/ui';
+import { Button, Card, StatusBadge } from '@/components/ui';
 import { cn } from '@/lib/cn';
 
 // Tabs are heavy (rich-text editor, dental chart canvas, etc.) — only the
@@ -50,7 +50,6 @@ export default function EncounterDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
-  const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('notes');
   const [focusTooth, setFocusTooth] = useState<number | null>(null);
   const [initialTreatmentTooth, setInitialTreatmentTooth] = useState<number | null>(null);
@@ -66,7 +65,6 @@ export default function EncounterDetailPage() {
     mutationFn: (summary: string) => medicalRecordsApi.closeEncounter(id!, summary),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', id] });
-      setShowCloseDialog(false);
     },
   });
 
@@ -129,9 +127,9 @@ export default function EncounterDetailPage() {
             )}
           </p>
         </div>
-        {!isCompleted && (
+        {!isCompleted && activeTab !== 'summary' && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowCloseDialog(true)}>
+            <Button variant="outline" onClick={() => setActiveTab('summary')}>
               <CheckCircle className="h-4 w-4" />
               Đóng Encounter
             </Button>
@@ -270,42 +268,6 @@ export default function EncounterDetailPage() {
           </div>
         </Card>
       )}
-
-      {/* Close Dialog */}
-      <Modal
-        isOpen={showCloseDialog}
-        onClose={() => setShowCloseDialog(false)}
-        title="Đóng Encounter"
-        size="md"
-      >
-        <div className="space-y-4">
-          <Alert type="info">
-            Khi đóng Encounter, hệ thống sẽ tự động:
-            <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
-              <li>Tạo hóa đơn (draft) với các điều trị đã thực hiện</li>
-              <li>Trừ tồn kho vật tư đã dùng</li>
-              <li>Khóa ghi chú lâm sàng (read-only)</li>
-              <li>Cập nhật trạng thái lịch hẹn = completed</li>
-            </ul>
-          </Alert>
-          <p className="text-sm text-gray-600">
-            Hành động này <strong>không thể hoàn tác</strong>.
-          </p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <Button variant="outline" onClick={() => setShowCloseDialog(false)}>
-              Hủy
-            </Button>
-            <Button
-              onClick={() => {
-                closeMutation.mutate('Hoàn thành khám');
-              }}
-              isLoading={closeMutation.isPending}
-            >
-              Xác nhận đóng
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Tooth Detail Drawer (page-level so it survives tab switches) */}
       <Suspense fallback={null}>

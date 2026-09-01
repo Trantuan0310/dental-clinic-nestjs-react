@@ -85,9 +85,7 @@ export default function PeriodDetailPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          {/* /payroll/periods still resolves to the unfinished PeriodListPage
-              stub — the real, wired periods list lives in the "Kỳ lương" tab
-              of the payroll dashboard at /payroll. */}
+          {/* Periods list lives in the "Kỳ lương" tab of the payroll dashboard. */}
           <Link
             to="/payroll"
             className="mb-1 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"

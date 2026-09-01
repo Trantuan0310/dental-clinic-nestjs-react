@@ -1,41 +1,22 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { shiftApi } from '@/types/shift';
 import { Modal, Button, Input, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
+import { useCreateShift } from '@/features/payroll/payrollApi';
 
 interface RegisterShiftModalProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
 }
 
-export function RegisterShiftModal({ isOpen, onClose }: RegisterShiftModalProps) {
-  const queryClient = useQueryClient();
+export function RegisterShiftModal({ open, onClose }: RegisterShiftModalProps) {
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
   const [maxEncounters, setMaxEncounters] = useState('');
   const [notes, setNotes] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      shiftApi.register({
-        date,
-        startTime,
-        endTime,
-        maxEncounters: maxEncounters ? parseInt(maxEncounters) : undefined,
-        notes: notes || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-shifts'] });
-      onClose();
-      resetForm();
-    },
-    onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể đăng ký ca làm việc'));
-    },
-  });
+  const createShift = useCreateShift();
 
   const isTimeRangeValid = !startTime || !endTime || startTime < endTime;
 
@@ -47,12 +28,25 @@ export function RegisterShiftModal({ isOpen, onClose }: RegisterShiftModalProps)
     setNotes('');
   };
 
-  const handleSubmit = () => {
-    mutation.mutate();
+  const handleSubmit = async () => {
+    try {
+      await createShift.mutateAsync({
+        date,
+        startTime,
+        endTime,
+        maxEncounters: maxEncounters ? parseInt(maxEncounters, 10) : undefined,
+        notes: notes || undefined,
+      });
+      notify.success('Đã đăng ký ca làm việc');
+      resetForm();
+      onClose();
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể đăng ký ca làm việc'));
+    }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Đăng ký ca làm việc" size="sm">
+    <Modal open={open} onClose={onClose} title="Đăng ký ca làm việc" size="sm">
       <div className="space-y-4">
         <Input
           label="Ngày"
@@ -104,7 +98,7 @@ export function RegisterShiftModal({ isOpen, onClose }: RegisterShiftModalProps)
           </Button>
           <Button
             onClick={handleSubmit}
-            isLoading={mutation.isPending}
+            isLoading={createShift.isPending}
             disabled={!date || !startTime || !endTime || !isTimeRangeValid}
           >
             Đăng ký
