@@ -16,6 +16,8 @@ import { expenseApi } from './expenseApi';
 import { Button, Card, Modal, Input, Select, DatePicker, Textarea, StatusBadge } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
+import { getApiErrorMessage } from '@/lib/errors';
+import { useAuthStore } from '@/stores/authStore';
 import type { Expense, ExpenseCategory, CreateExpensePayload, ExpenseFilters } from './types';
 
 function ExpenseFormModal({
@@ -92,6 +94,7 @@ function ExpenseFormModal({
 
 export default function ExpenseListPage() {
   const qc = useQueryClient();
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<ExpenseFilters>(() => ({
     page: Number(searchParams.get('page')) || 1,
@@ -161,7 +164,7 @@ export default function ExpenseListPage() {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       notify.success('Duyệt chi phí thành công');
     },
-    onError: () => notify.error('Không thể duyệt chi phí. Vui lòng thử lại.'),
+    onError: (err) => notify.error(getApiErrorMessage(err, 'Không thể duyệt chi phí. Vui lòng thử lại.')),
   });
 
   const rejectMutation = useMutation({
@@ -315,20 +318,31 @@ export default function ExpenseListPage() {
                           >
                             <Edit className="h-4 w-4 text-gray-500" />
                           </button>
-                          <button
-                            onClick={() => approveMutation.mutate(expense.id)}
-                            className="rounded p-1.5 hover:bg-green-100 dark:hover:bg-green-900"
-                            title="Duyệt"
-                          >
-                            <Check className="h-4 w-4 text-green-600" />
-                          </button>
-                          <button
-                            onClick={() => rejectMutation.mutate(expense.id)}
-                            className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
-                            title="Từ chối"
-                          >
-                            <X className="h-4 w-4 text-red-600" />
-                          </button>
+                          {expense.createdBy && expense.createdBy === currentUserId ? (
+                            <span
+                              className="px-1.5 text-xs text-gray-400"
+                              title="Cần một người khác duyệt khoản chi do bạn tạo"
+                            >
+                              Chờ duyệt
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => approveMutation.mutate(expense.id)}
+                                className="rounded p-1.5 hover:bg-green-100 dark:hover:bg-green-900"
+                                title="Duyệt"
+                              >
+                                <Check className="h-4 w-4 text-green-600" />
+                              </button>
+                              <button
+                                onClick={() => rejectMutation.mutate(expense.id)}
+                                className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
+                                title="Từ chối"
+                              >
+                                <X className="h-4 w-4 text-red-600" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => setConfirmDelete(expense)}
                             className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"

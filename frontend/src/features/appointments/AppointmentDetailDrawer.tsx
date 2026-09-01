@@ -46,7 +46,16 @@ interface AppointmentDetailDrawerProps {
   onEdit?: (appointment: Appointment) => void;
 }
 
-type ActionKey = 'check_in' | 'cancel' | 'no_show' | 'reschedule' | 'start';
+type ActionKey = 'cancel' | 'no_show' | 'reschedule';
+
+const CANCEL_REASONS = [
+  'Bệnh nhân yêu cầu',
+  'Bác sĩ bận đột xuất',
+  'Trùng lịch khác',
+  'Bệnh nhân không xác nhận được',
+];
+
+const NO_SHOW_REASONS = ['Không liên lạc được', 'Bệnh nhân báo đến muộn quá giờ', 'Không rõ lý do'];
 
 const STATUS_ORDER: AppointmentStatus[] = [
   'scheduled',
@@ -144,14 +153,12 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
   const handleCheckIn = async () => {
     if (!appointment) return;
-    setError(null);
     try {
       await checkIn.mutateAsync({ id: appointment.id });
       notify.success(`Đã check-in cho ${appointment.patientName}`);
-      closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể check-in'));
+      notify.error(getApiErrorMessage(err, 'Không thể check-in'));
     }
   };
 
@@ -220,14 +227,12 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
   const handleStart = async () => {
     if (!appointment) return;
-    setError(null);
     try {
       await start.mutateAsync(appointment.id);
       notify.success(`Đã mở encounter cho ${appointment.patientName}`);
-      closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể mở encounter'));
+      notify.error(getApiErrorMessage(err, 'Không thể mở encounter'));
     }
   };
 
@@ -402,7 +407,8 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                     <Button
                       size="sm"
                       leftIcon={<CheckCircle2 className="h-4 w-4" />}
-                      onClick={() => setActionModal('check_in')}
+                      onClick={handleCheckIn}
+                      isLoading={checkIn.isPending}
                     >
                       Check-in
                     </Button>
@@ -482,26 +488,6 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       </Drawer>
 
       {/* Action modals */}
-      <ConfirmDialog
-        open={actionModal === 'check_in'}
-        onClose={closeAction}
-        onConfirm={handleCheckIn}
-        title="Xác nhận check-in"
-        description={
-          appointment ? (
-            <span>
-              Check-in cho <strong>{appointment.patientName}</strong> lúc{' '}
-              <strong>{formatTimeOnly(appointment.startsAt)}</strong>?
-            </span>
-          ) : (
-            ''
-          )
-        }
-        confirmLabel="Check-in"
-        confirmVariant="primary"
-        isLoading={checkIn.isPending}
-      />
-
       <ActionDialog
         open={actionModal === 'cancel'}
         onClose={closeAction}
@@ -509,6 +495,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         description="Vui lòng nhập lý do hủy. Lý do sẽ được ghi vào lịch sử."
         reason={reason}
         setReason={setReason}
+        quickReasons={CANCEL_REASONS}
         error={error}
         onConfirm={handleCancel}
         isLoading={cancel.isPending}
@@ -523,6 +510,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         description="Bệnh nhân không đến sau khi quá thời gian check-in?"
         reason={reason}
         setReason={setReason}
+        quickReasons={NO_SHOW_REASONS}
         error={error}
         onConfirm={handleNoShow}
         isLoading={noShow.isPending}
@@ -681,6 +669,7 @@ interface ActionDialogProps {
   description: string;
   reason: string;
   setReason: (v: string) => void;
+  quickReasons?: string[];
   error: string | null;
   onConfirm: () => void;
   isLoading: boolean;
@@ -695,6 +684,7 @@ function ActionDialog({
   description,
   reason,
   setReason,
+  quickReasons,
   error,
   onConfirm,
   isLoading,
@@ -711,6 +701,25 @@ function ActionDialog({
         <div className="space-y-3">
           <p className="text-sm text-gray-600">{description}</p>
           {error && <AlertInline message={error} />}
+          {quickReasons && quickReasons.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {quickReasons.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setReason(preset)}
+                  className={cn(
+                    'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                    reason === preset
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:bg-brand-50',
+                  )}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          )}
           <Textarea
             label="Lý do *"
             value={reason}

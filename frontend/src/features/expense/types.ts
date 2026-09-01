@@ -23,6 +23,7 @@ export interface Expense {
   receiptUrl?: string | null;
   createdAt: string;
   updatedAt?: string;
+  createdBy?: string;
   creatorName?: string;
   version: number;
 }

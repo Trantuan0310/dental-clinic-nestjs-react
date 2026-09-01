@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -260,6 +261,14 @@ export class ExpenseService {
       );
     }
 
+    // Segregation of duties: the person who submitted an expense cannot also
+    // be the one who approves it, otherwise the approval step is a no-op.
+    if (newStatus === ExpenseStatus.APPROVED && existing.createdBy === actor.sub) {
+      throw new ForbiddenException(
+        'Không thể tự duyệt chi phí do chính bạn tạo. Cần một người khác có quyền duyệt xác nhận khoản chi này.',
+      );
+    }
+
     const updated = await this.prisma.expense.update({
       where: { id },
       data: {
@@ -310,6 +319,7 @@ export class ExpenseService {
       receiptUrl: expense.receiptUrl,
       createdAt: expense.createdAt,
       updatedAt: expense.updatedAt,
+      createdBy: expense.createdBy,
       creatorName: (expense.creator as { fullName: string } | null)?.fullName,
       version: expense.version,
     };

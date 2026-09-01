@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ExpenseStatus } from '@prisma/client';
 import { ExpenseService } from './expense.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -51,13 +51,17 @@ describe('ExpenseService', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('transition (approve / reject / markReimbursed)', () => {
+    // A second admin, distinct from baseExpense()'s createdBy: 'admin-1' —
+    // approving requires someone other than the submitter (segregation of duties).
+    const approverActor = adminPayload('admin-2');
+
     it('approves a DRAFT expense (DRAFT -> APPROVED)', async () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
       (prisma.expense.update as jest.Mock).mockResolvedValue(
         baseExpense({ status: ExpenseStatus.APPROVED }),
       );
 
-      const result = await service.approve('exp-1', {}, actor);
+      const result = await service.approve('exp-1', {}, approverActor);
 
       expect(result.status).toBe(ExpenseStatus.APPROVED);
       expect(prisma.expense.update).toHaveBeenCalledWith(
@@ -65,6 +69,13 @@ describe('ExpenseService', () => {
           data: expect.objectContaining({ status: ExpenseStatus.APPROVED }),
         }),
       );
+    });
+
+    it('rejects self-approval — the creator cannot approve their own expense', async () => {
+      (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
+
+      await expect(service.approve('exp-1', {}, actor)).rejects.toThrow(ForbiddenException);
+      expect(prisma.expense.update).not.toHaveBeenCalled();
     });
 
     it('rejects a DRAFT expense (DRAFT -> REJECTED)', async () => {

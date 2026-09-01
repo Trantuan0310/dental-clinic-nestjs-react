@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Save, Building2, Clock, Bell } from 'lucide-react';
-import { Button, Card, Input, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
+import { Button, Card, Input, Tabs, TabsList, TabsTrigger, TabsContent, Alert } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { useSettings, useUpdateSettings } from './adminApi';
 
@@ -115,10 +115,13 @@ export default function SettingsPage() {
 
         <TabsContent value="hours">
           <Card title="Giờ làm việc mặc định">
-            <p className="text-sm text-gray-500 mb-6">
+            <Alert type="info">
+              Tính năng đang được phát triển. Các trường bên dưới chỉ là bản xem trước và chưa được lưu vào hệ thống.
+            </Alert>
+            <p className="text-sm text-gray-500 my-4">
               Đặt giờ làm việc mặc định cho tất cả nhân viên. Giờ làm việc cá nhân có thể được cấu hình riêng.
             </p>
-            <div className="space-y-4">
+            <fieldset disabled className="space-y-4 opacity-60">
               {['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6'].map((day) => (
                 <div key={day} className="flex items-center gap-4">
                   <span className="w-24 text-sm font-medium text-gray-700">{day}</span>
@@ -145,19 +148,22 @@ export default function SettingsPage() {
                 <span className="w-24 text-sm font-medium text-gray-700">Chủ nhật</span>
                 <span className="text-sm text-gray-400">Nghỉ</span>
               </div>
-            </div>
-            <div className="flex justify-end pt-6 border-t border-gray-100">
-              <Button>
-                <Save className="h-4 w-4" />
-                Lưu giờ làm việc
-              </Button>
-            </div>
+              <div className="flex justify-end pt-6 border-t border-gray-100">
+                <Button type="button" title="Tính năng chưa khả dụng">
+                  <Save className="h-4 w-4" />
+                  Lưu giờ làm việc
+                </Button>
+              </div>
+            </fieldset>
           </Card>
         </TabsContent>
 
         <TabsContent value="notifications">
           <Card title="Cấu hình thông báo">
-            <div className="space-y-4">
+            <Alert type="info">
+              Tính năng đang được phát triển. Các tùy chọn bên dưới chỉ là bản xem trước và chưa được lưu vào hệ thống.
+            </Alert>
+            <fieldset disabled className="space-y-4 mt-4 opacity-60">
               <label className="flex items-start gap-3">
                 <input type="checkbox" defaultChecked className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-500" />
                 <div>
@@ -186,13 +192,13 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-500">Gửi email tổng kết hoạt động cuối ngày</p>
                 </div>
               </label>
-            </div>
-            <div className="flex justify-end pt-6 border-t border-gray-100">
-              <Button>
-                <Save className="h-4 w-4" />
-                Lưu cài đặt
-              </Button>
-            </div>
+              <div className="flex justify-end pt-6 border-t border-gray-100">
+                <Button type="button" title="Tính năng chưa khả dụng">
+                  <Save className="h-4 w-4" />
+                  Lưu cài đặt
+                </Button>
+              </div>
+            </fieldset>
           </Card>
         </TabsContent>
       </Tabs>
