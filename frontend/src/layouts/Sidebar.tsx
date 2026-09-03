@@ -148,13 +148,12 @@ export function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse
         aria-label={t('shell.menu.dialogLabel')}
       >
         <div className="flex h-full flex-col">
-          <SidebarContent collapsed={collapsed} showBrand={false} />
           <button
             type="button"
             onClick={onToggleCollapsed}
             aria-label={collapsed ? t('shell.sidebar.expand') : t('shell.sidebar.collapse')}
             aria-expanded={!collapsed}
-            className="flex items-center justify-center gap-1 border-t border-gray-100 px-3 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800"
+            className="flex items-center justify-center gap-1 border-b border-gray-100 px-3 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800"
           >
             {collapsed ? <Menu className="h-4 w-4" aria-hidden="true" /> : (
               <>
@@ -162,6 +161,7 @@ export function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse
               </>
             )}
           </button>
+          <SidebarContent collapsed={collapsed} showBrand={false} />
         </div>
       </aside>
 
