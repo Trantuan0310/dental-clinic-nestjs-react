@@ -132,11 +132,13 @@ export class BillingService {
   }
 
   async listInvoices(query: {
+    q?: string;
     patientId?: string;
     dentistId?: string;
     from?: string;
     to?: string;
     status?: InvoiceStatus[];
+    pageSize?: number;
     actor: JwtPayload;
   }) {
     const where: Prisma.InvoiceWhereInput = {
@@ -148,6 +150,12 @@ export class BillingService {
           ...(query.from && { gte: new Date(query.from) }),
           ...(query.to && { lte: new Date(query.to) }),
         },
+      }),
+      ...(query.q && {
+        OR: [
+          { code: { contains: query.q, mode: 'insensitive' } },
+          { patient: { fullName: { contains: query.q, mode: 'insensitive' } } },
+        ],
       }),
     };
 
@@ -161,10 +169,10 @@ export class BillingService {
       where.encounter = { dentistId: query.actor.sub };
     }
 
-    return this.prisma.invoice.findMany({
+    const invoices = await this.prisma.invoice.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: query.pageSize ?? 100,
       include: {
         patient: { select: { id: true, code: true, fullName: true } },
         encounter: {
@@ -178,6 +186,23 @@ export class BillingService {
         items: { orderBy: { sequence: 'asc' } },
       },
     });
+    return invoices.map(inv => this.formatInvoice(inv));
+  }
+
+  // Flattens the `patient` relation into patientCode/patientName — the
+  // frontend Invoice type expects these as top-level fields, not nested.
+  // Only meaningful when `patient` was actually included in the query
+  // (listInvoices/getInvoiceById); other mutation return values don't
+  // carry it and their callers re-fetch via getInvoiceById anyway.
+  private formatInvoice<T extends { patient?: { code: string; fullName: string } | null }>(
+    invoice: T,
+  ) {
+    const { patient, ...rest } = invoice;
+    return {
+      ...rest,
+      patientCode: patient?.code,
+      patientName: patient?.fullName,
+    };
   }
 
   async getInvoiceById(id: string, actor?: JwtPayload) {
@@ -207,7 +232,7 @@ export class BillingService {
       throw new InvoiceNotFoundException(id);
     }
 
-    return inv;
+    return this.formatInvoice(inv);
   }
 
   async getInvoiceByEncounterId(encounterId: string) {

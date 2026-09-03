@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsDateString, IsEnum, IsUUID, IsNumber, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsDateString,
+  IsEnum,
+  IsUUID,
+  IsNumber,
+  IsInt,
+  Min,
+  Max,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { InvoiceStatus, PaymentMethod } from '@prisma/client';
 
@@ -61,6 +71,11 @@ export class VoidInvoiceDto {
 }
 
 export class ListInvoicesQueryDto {
+  @ApiPropertyOptional({ description: 'Search by invoice code or patient name' })
+  @IsOptional()
+  @IsString()
+  q?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
@@ -84,6 +99,13 @@ export class ListInvoicesQueryDto {
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   status?: InvoiceStatus[];
+
+  @ApiPropertyOptional({ description: 'Page size (1-100). Defaults to 100.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
 }
 
 export class RevenueReportQueryDto {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -157,7 +157,10 @@ export default function AppointmentsListPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Appointment | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // Arriving with ?open=<id> (e.g. from the command palette's search results)
+  // opens that appointment's detail drawer directly.
+  const [searchParams] = useSearchParams();
+  const [detailId, setDetailId] = useState<string | null>(searchParams.get('open'));
 
   const { data: dentists } = useDentistOptions();
 

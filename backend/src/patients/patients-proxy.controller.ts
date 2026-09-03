@@ -101,7 +101,10 @@ export class PatientsProxyController {
       metadata: { kind: 'encounters-full', count: rows.length },
     });
 
-    return { data: rows };
+    // Flatten dentist.fullName → dentistName to match the basic-payload
+    // branch above and the frontend's EncounterListItem type, which
+    // declares dentistName as a required top-level field.
+    return { data: rows.map(e => ({ ...e, dentistName: e.dentist.fullName })) };
   }
 
   @Get('dental-chart')

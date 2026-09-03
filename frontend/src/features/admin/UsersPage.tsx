@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Plus, MoreHorizontal, Trash2 } from 'lucide-react';
-import { Button, Card, StatusBadge, SearchInput, Modal, Input, Select, Spinner } from '@/components/ui';
+import { Plus, MoreHorizontal, UserX, UserCheck } from 'lucide-react';
+import { Button, Card, StatusBadge, SearchInput, Modal, Input, Select, Textarea, Spinner } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import {
   useUsers,
   useRoles,
   useCreateUser,
   useUpdateUser,
-  useDeleteUser,
+  useDeactivateUser,
+  useReactivateUser,
 } from './adminApi';
 import type { AdminUser, CreateAdminUserPayload } from '@/types/admin';
 
@@ -18,7 +20,8 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
-  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<AdminUser | null>(null);
+  const [deactivateReason, setDeactivateReason] = useState('');
 
   const { data, isLoading } = useUsers({
     limit: PAGE_SIZE,
@@ -27,7 +30,8 @@ export default function UsersPage() {
 
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser(editingUser?.id ?? '');
-  const deleteMutation = useDeleteUser();
+  const deactivateMutation = useDeactivateUser();
+  const reactivateMutation = useReactivateUser();
 
   const allUsers = data?.data ?? [];
   const filteredUsers = allUsers.filter((user) => {
@@ -61,14 +65,27 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteUserId) return;
+  const handleDeactivate = async () => {
+    if (!deactivateTarget) return;
     try {
-      await deleteMutation.mutateAsync(deleteUserId);
-      notify.success('Đã xóa người dùng');
-      setDeleteUserId(null);
-    } catch {
-      notify.error('Không thể xóa người dùng. Vui lòng thử lại.');
+      await deactivateMutation.mutateAsync({
+        id: deactivateTarget.id,
+        reason: deactivateReason.trim() || undefined,
+      });
+      notify.success('Đã vô hiệu hóa người dùng');
+      setDeactivateTarget(null);
+      setDeactivateReason('');
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể vô hiệu hóa người dùng. Vui lòng thử lại.'));
+    }
+  };
+
+  const handleReactivate = async (user: AdminUser) => {
+    try {
+      await reactivateMutation.mutateAsync(user.id);
+      notify.success('Đã kích hoạt lại người dùng');
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể kích hoạt lại người dùng. Vui lòng thử lại.'));
     }
   };
 
@@ -164,13 +181,24 @@ export default function UsersPage() {
                         >
                           <MoreHorizontal className="h-4 w-4 text-gray-400" />
                         </button>
-                        <button
-                          className="rounded p-1 hover:bg-red-50"
-                          onClick={() => setDeleteUserId(user.id)}
-                          title="Xóa"
-                        >
-                          <Trash2 className="h-4 w-4 text-red-400" />
-                        </button>
+                        {user.status === 'DEACTIVATED' ? (
+                          <button
+                            className="rounded p-1 hover:bg-green-50"
+                            onClick={() => handleReactivate(user)}
+                            disabled={reactivateMutation.isPending && reactivateMutation.variables === user.id}
+                            title="Kích hoạt lại"
+                          >
+                            <UserCheck className="h-4 w-4 text-green-500" />
+                          </button>
+                        ) : (
+                          <button
+                            className="rounded p-1 hover:bg-red-50"
+                            onClick={() => setDeactivateTarget(user)}
+                            title="Vô hiệu hóa"
+                          >
+                            <UserX className="h-4 w-4 text-red-400" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -206,26 +234,36 @@ export default function UsersPage() {
         />
       )}
 
-      {/* Delete Confirmation */}
+      {/* Deactivate Confirmation */}
       <Modal
-        isOpen={!!deleteUserId}
-        onClose={() => setDeleteUserId(null)}
-        title="Xác nhận xóa người dùng"
+        isOpen={!!deactivateTarget}
+        onClose={() => { setDeactivateTarget(null); setDeactivateReason(''); }}
+        title="Xác nhận vô hiệu hóa người dùng"
         size="sm"
       >
         <p className="text-sm text-gray-600">
-          Bạn có chắc muốn xóa người dùng này? Hành động này không thể hoàn tác.
+          Vô hiệu hóa <strong>{deactivateTarget?.fullName}</strong>? Tài khoản sẽ bị đăng xuất
+          khỏi mọi phiên đang hoạt động và không thể đăng nhập lại cho đến khi được kích hoạt lại.
         </p>
+        <div className="mt-3">
+          <Textarea
+            label="Lý do (không bắt buộc)"
+            value={deactivateReason}
+            onChange={(e) => setDeactivateReason(e.target.value)}
+            placeholder="VD: Nghỉ việc, chuyển công tác..."
+            rows={2}
+          />
+        </div>
         <div className="mt-4 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setDeleteUserId(null)}>
+          <Button variant="outline" onClick={() => { setDeactivateTarget(null); setDeactivateReason(''); }}>
             Hủy
           </Button>
           <Button
             variant="danger"
-            isLoading={deleteMutation.isPending}
-            onClick={handleDelete}
+            isLoading={deactivateMutation.isPending}
+            onClick={handleDeactivate}
           >
-            Xóa
+            Vô hiệu hóa
           </Button>
         </div>
       </Modal>
@@ -309,15 +347,14 @@ function EditUserModal({
   user: AdminUser;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (payload: { fullName?: string; status?: AdminUser['status'] }) => void;
+  onSubmit: (payload: { fullName?: string }) => void;
   isLoading: boolean;
 }) {
   const [fullName, setFullName] = useState(user.fullName);
-  const [status, setStatus] = useState<AdminUser['status']>(user.status);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ fullName, status });
+    onSubmit({ fullName });
   };
 
   return (
@@ -330,16 +367,9 @@ function EditUserModal({
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
         />
-        <Select
-          label="Trạng thái"
-          value={status}
-          onChange={(e) => setStatus(e.target.value as AdminUser['status'])}
-          options={[
-            { value: 'ACTIVE', label: 'Hoạt động' },
-            { value: 'PENDING_SETUP', label: 'Chờ thiết lập' },
-            { value: 'DEACTIVATED', label: 'Đã vô hiệu' },
-          ]}
-        />
+        {/* Status is changed via the dedicated deactivate/reactivate actions
+            in the table row, not here — the generic update endpoint doesn't
+            accept a status field (see adminApi.ts). */}
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
           <Button variant="outline" type="button" onClick={onClose}>
             Hủy

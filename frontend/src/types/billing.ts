@@ -3,15 +3,16 @@
 // Source: backend API + docs/03_Specification/Billing/SPEC.md
 // =============================================================================
 
-export type InvoiceStatus = 'draft' | 'issued' | 'partial' | 'paid' | 'void';
-export type PaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'insurance' | 'other';
+export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'PAID' | 'VOIDED';
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER';
 
 export interface InvoiceLineItem {
   id: string;
+  sequence: number;
   description: string;
   quantity: number;
   unitPrice: number;
-  total: number;
+  lineTotal: number;
 }
 
 export interface Payment {
@@ -19,7 +20,7 @@ export interface Payment {
   invoiceId: string;
   amount: number;
   method: PaymentMethod;
-  notes?: string | null;
+  note?: string | null;
   paidAt: string;
   receivedByUser?: { fullName: string; email: string } | null;
 }
@@ -28,16 +29,19 @@ export interface Invoice {
   id: string;
   code: string;
   patientId: string;
+  // Flattened server-side from the `patient` relation (see
+  // billing.service.ts formatInvoice()) — not present on the raw Prisma row.
   patientCode: string;
   patientName: string;
   status: InvoiceStatus;
   subtotal: number;
-  discount: number;
+  discountType?: 'PERCENT' | 'AMOUNT' | null;
+  discountValue?: number | null;
   total: number;
-  amountPaid: number;
-  amountDue: number;
+  paidAmount: number;
+  outstandingAmount: number;
   version: number;
-  lineItems?: InvoiceLineItem[];
+  items?: InvoiceLineItem[];
   payments?: Payment[];
   notes?: string | null;
   voidReason?: string | null;
@@ -65,7 +69,7 @@ export interface InvoiceFilters {
 export interface CreateInvoicePayload {
   patientId: string;
   encounterId?: string;
-  lineItems: Omit<InvoiceLineItem, 'id' | 'total'>[];
+  lineItems: Omit<InvoiceLineItem, 'id' | 'sequence' | 'lineTotal'>[];
   discount?: number;
   notes?: string;
 }
@@ -96,7 +100,7 @@ export interface CreatePaymentPayload {
   invoiceId: string;
   amount: number;
   method: PaymentMethod;
-  notes?: string;
+  note?: string;
 }
 
 export interface RevenueReportByMonthEntry {

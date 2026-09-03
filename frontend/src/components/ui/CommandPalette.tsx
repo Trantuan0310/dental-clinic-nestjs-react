@@ -226,7 +226,7 @@ export function CommandPalette() {
         return (res.data ?? []).map((a) => ({
           kind: 'appointment' as const,
           id: `appointment:${a.id}`,
-          to: `/appointments/${a.id}`,
+          to: `/appointments/list?open=${a.id}`,
           label: a.patientName ?? 'Cuộc hẹn',
           hint: `${a.patientCode ?? ''}${a.startsAt ? ` · ${new Date(a.startsAt).toLocaleString('vi-VN')}` : ''}`,
           icon: FileText,
@@ -251,11 +251,11 @@ export function CommandPalette() {
             status: string;
             total?: number;
           }>;
-        }>('/invoices', { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT } });
+        }>('/billing/invoices', { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT } });
         return (res.data ?? []).map((inv) => ({
           kind: 'invoice' as const,
           id: `invoice:${inv.id}`,
-          to: `/invoices/${inv.id}`,
+          to: `/billing/invoices/${inv.id}`,
           label: `${inv.code} · ${inv.patientName}`,
           hint: `Trạng thái: ${inv.status}`,
           icon: Receipt,

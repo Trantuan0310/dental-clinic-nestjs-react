@@ -1,5 +1,5 @@
 // Imperative (non-hook) Medical Records API methods. The hook-based
-// equivalents (useEncounterList, useCreateEncounter, etc.) live in
+// equivalents (useEncounterList, useCloseEncounter, etc.) live in
 // `medicalRecordsApi.ts`. This file exposes the bare HTTP methods so
 // forms and dialogs can call them imperatively from mutationFn.
 
@@ -7,7 +7,6 @@ import { api, unwrap } from '@/lib/api';
 import type {
   Encounter,
   EncounterSummary,
-  CreateEncounterPayload,
   Treatment,
   Prescription,
   ClinicalNote,
@@ -39,10 +38,9 @@ export const medicalRecordsApi = {
     return unwrap(data);
   },
 
-  async createEncounter(payload: CreateEncounterPayload): Promise<Encounter> {
-    const { data } = await api.post<{ data: Encounter }>(`${BASE}/encounters`, payload);
-    return unwrap(data);
-  },
+  // Encounters are created via the appointment "start encounter" action
+  // (POST /appointments/:id/start-encounter), not a route on this module —
+  // see useStartEncounter in features/appointments/appointmentApi.ts.
 
   async closeEncounter(id: string, summary: string): Promise<Encounter> {
     const { data } = await api.post<{ data: Encounter }>(`${BASE}/encounters/${id}/close`, { summary });

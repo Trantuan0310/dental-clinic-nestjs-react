@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { DollarSign, Plus } from 'lucide-react';
-import { payrollApi } from '@/types/payroll';
+import { useCompensations, useCreateCompensation } from './payrollApi';
 import { Modal, Input, Select, Button, Card, EmptyState } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import type { DentistCompensation } from '@/types/payroll';
@@ -16,25 +17,30 @@ export function CompensationListPage() {
   const [commission, setCommission] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState('');
 
-  const { data: compensations, isLoading, refetch } = useQuery({
-    queryKey: ['compensations'],
-    queryFn: () => payrollApi.listCompensations(),
-  });
+  const { data: compensations, isLoading } = useCompensations();
 
   const { data: dentists } = useDentistOptions();
 
-  const createMutation = useMutation({
-    mutationFn: (payload: {
-      dentistId: string;
-      effectiveFrom: string;
-      baseSalary: number;
-      commissionPercentage: number;
-    }) => payrollApi.createCompensation(payload),
-    onSuccess: () => {
-      refetch();
+  const createMutation = useCreateCompensation();
+
+  const handleCreate = async () => {
+    try {
+      await createMutation.mutateAsync({
+        dentistId: selectedDentist,
+        effectiveFrom,
+        baseSalary: parseInt(baseSalary, 10),
+        commissionPercentage: parseFloat(commission),
+      });
+      notify.success('Đã thêm chính sách lương');
       setShowAddModal(false);
-    },
-  });
+      setSelectedDentist('');
+      setBaseSalary('');
+      setCommission('');
+      setEffectiveFrom('');
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể thêm chính sách lương'));
+    }
+  };
 
   // Group compensations by dentist
   const compensationsByDentist = compensations?.reduce((acc, comp) => {
@@ -147,12 +153,7 @@ export function CompensationListPage() {
               Hủy
             </Button>
             <Button
-              onClick={() => createMutation.mutate({
-                dentistId: selectedDentist,
-                effectiveFrom,
-                baseSalary: parseInt(baseSalary),
-                commissionPercentage: parseFloat(commission),
-              })}
+              onClick={handleCreate}
               isLoading={createMutation.isPending}
               disabled={!selectedDentist || !baseSalary || !commission || !effectiveFrom}
             >

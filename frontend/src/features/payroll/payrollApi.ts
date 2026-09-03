@@ -323,22 +323,6 @@ export function useNoShowDetection() {
   });
 }
 
-// Users
-export interface AdminUserListItem {
-  id: string;
-  email: string;
-  fullName: string;
-  status: string;
-  roles: string[];
-}
-
-export function useDentistList() {
-  return useQuery({
-    queryKey: ['users', 'dentists'],
-    queryFn: () =>
-      get<AdminUserListItem[]>('/users', {
-        params: { role: 'dentist', pageSize: 200 },
-      }),
-    staleTime: 5 * 60 * 1000,
-  });
-}
+// Dentist lookups go through useDentistOptions (features/appointments/appointmentApi.ts),
+// which hits the real /appointments/dentists endpoint — there is no plain
+// GET /users route on this API.

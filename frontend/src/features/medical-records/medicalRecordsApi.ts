@@ -79,26 +79,10 @@ export function useEncounter(id: string | undefined) {
   });
 }
 
-export function useCreateEncounter() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: { patientId: string; appointmentId?: string; chiefComplaint?: string; walkIn?: boolean }) =>
-      post<Encounter>(`${MR_BASE}/encounters`, payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: mrKeys.all }),
-  });
-}
-
-export function useUpdateEncounter(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: { chiefComplaint?: string; diagnosis?: string }) =>
-      patch<Encounter>(`${MR_BASE}/encounters/${id}`, payload),
-    onSuccess: (data) => {
-      qc.setQueryData(mrKeys.detail(id), data);
-      qc.invalidateQueries({ queryKey: mrKeys.list() });
-    },
-  });
-}
+// Encounters are created via useStartEncounter (features/appointments/appointmentApi.ts,
+// POST /appointments/:id/start-encounter) and have no separate freeform-create
+// or partial-update route — chiefComplaint/diagnosis are recorded as clinical
+// notes instead (see useUpsertClinicalNote below).
 
 export function useCloseEncounter(id: string) {
   const qc = useQueryClient();
@@ -404,16 +388,6 @@ export function usePatientEncounters(patientId: string | undefined) {
   });
 }
 
-// ----- Appointment start (kicks off Encounter) -----
-
-export function useStartAppointment() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ appointmentId, idempotencyKey }: { appointmentId: string; idempotencyKey: string }) =>
-      post<Encounter>(`/appointments/${appointmentId}/start`, {}, { headers: { 'Idempotency-Key': idempotencyKey } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: mrKeys.all });
-      qc.invalidateQueries({ queryKey: ['appointments'] });
-    },
-  });
-}
+// Starting an encounter from an appointment is useStartEncounter
+// (features/appointments/appointmentApi.ts, POST /appointments/:id/start-encounter),
+// not a route on this module.

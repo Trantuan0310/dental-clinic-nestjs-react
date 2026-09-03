@@ -64,22 +64,23 @@ export default function InvoiceDetailPage() {
     return (
       <div className="text-center py-10">
         <p className="text-gray-500">Không tìm thấy hóa đơn</p>
-        <Button variant="outline" className="mt-3" onClick={() => navigate('/invoices')}>
+        <Button variant="outline" className="mt-3" onClick={() => navigate('/billing/list')}>
           Quay lại danh sách
         </Button>
       </div>
     );
   }
 
-  const canIssue = invoice.status === 'draft';
-  const canPay = invoice.status === 'issued' || invoice.status === 'partial';
-  const canVoid = invoice.status !== 'void' && invoice.status !== 'paid';
+  const canIssue = invoice.status === 'DRAFT';
+  const canPay = invoice.status === 'ISSUED' || invoice.status === 'PARTIAL';
+  const canVoid = invoice.status !== 'VOIDED' && invoice.status !== 'PAID';
+  const discountAmount = invoice.subtotal - invoice.total;
 
   return (
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/invoices')}>
+        <Button variant="ghost" onClick={() => navigate('/billing/list')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -162,7 +163,7 @@ export default function InvoiceDetailPage() {
 
           {/* Line Items */}
           <Card title="Chi tiết hóa đơn">
-            {invoice.lineItems && invoice.lineItems.length > 0 ? (
+            {invoice.items && invoice.items.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
@@ -174,13 +175,13 @@ export default function InvoiceDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoice.lineItems.map((item, index) => (
+                  {invoice.items.map((item, index) => (
                     <tr key={item.id} className="border-b border-gray-50">
                       <td className="py-2 text-gray-500">{index + 1}</td>
                       <td className="py-2">{item.description}</td>
                       <td className="py-2 text-right">{item.quantity}</td>
                       <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>
-                      <td className="py-2 text-right font-medium">{formatCurrency(item.total)}</td>
+                      <td className="py-2 text-right font-medium">{formatCurrency(item.lineTotal)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -194,10 +195,15 @@ export default function InvoiceDetailPage() {
                 <span className="text-gray-600">Tổng cộng</span>
                 <span className="font-medium">{formatCurrency(invoice.subtotal)}</span>
               </div>
-              {invoice.discount > 0 && (
+              {discountAmount > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
-                  <span>Giảm giá</span>
-                  <span>-{formatCurrency(invoice.discount)}</span>
+                  <span>
+                    Giảm giá
+                    {invoice.discountType === 'PERCENT' && invoice.discountValue
+                      ? ` (${invoice.discountValue}%)`
+                      : ''}
+                  </span>
+                  <span>-{formatCurrency(discountAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm font-medium border-t border-gray-100 pt-2">
@@ -206,12 +212,12 @@ export default function InvoiceDetailPage() {
               </div>
               <div className="flex justify-between text-sm text-green-600">
                 <span>Đã thu</span>
-                <span>{formatCurrency(invoice.amountPaid)}</span>
+                <span>{formatCurrency(invoice.paidAmount)}</span>
               </div>
-              {invoice.amountDue > 0 && (
+              {invoice.outstandingAmount > 0 && (
                 <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-100 pt-2">
                   <span>Còn nợ</span>
-                  <span>{formatCurrency(invoice.amountDue)}</span>
+                  <span>{formatCurrency(invoice.outstandingAmount)}</span>
                 </div>
               )}
             </div>
@@ -246,10 +252,9 @@ export default function InvoiceDetailPage() {
                       </span>
                     </div>
                     <div className="mt-0.5 text-xs text-gray-500">
-                      {payment.method === 'cash' && 'Tiền mặt'}
-                      {payment.method === 'bank_transfer' && 'Chuyển khoản'}
-                      {payment.method === 'card' && 'Thẻ'}
-                      {payment.notes && <span> • {payment.notes}</span>}
+                      {payment.method === 'CASH' && 'Tiền mặt'}
+                      {payment.method === 'BANK_TRANSFER' && 'Chuyển khoản'}
+                      {payment.note && <span> • {payment.note}</span>}
                     </div>
                     <p className="text-xs text-gray-400">Bởi: {payment.receivedByUser?.fullName ?? '-'}</p>
                   </div>

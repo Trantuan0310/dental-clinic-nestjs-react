@@ -44,6 +44,10 @@ const del = async (url: string) => {
   await api.delete(url);
 };
 
+const postVoid = async (url: string, body?: unknown) => {
+  await api.post(url, body);
+};
+
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
@@ -89,10 +93,23 @@ export function useUpdateUser(id: string) {
   });
 }
 
-export function useDeleteUser() {
+// Users have no hard-delete endpoint — status changes go through the
+// dedicated deactivate/reactivate routes, which enforce the "can't
+// deactivate the last admin" guard and revoke active sessions. The generic
+// PATCH :id endpoint deliberately does not accept a status field.
+export function useDeactivateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => del(`/admin/users/${id}`),
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) =>
+      postVoid(`/admin/users/${id}/deactivate`, { reason }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+export function useReactivateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => postVoid(`/admin/users/${id}/reactivate`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   });
 }

@@ -15,21 +15,21 @@ interface PaymentModalProps {
 
 export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   const queryClient = useQueryClient();
-  const [amount, setAmount] = useState(invoice.amountDue.toString());
-  const [method, setMethod] = useState<PaymentMethod>('cash');
-  const [notes, setNotes] = useState('');
+  const [amount, setAmount] = useState(invoice.outstandingAmount.toString());
+  const [method, setMethod] = useState<PaymentMethod>('CASH');
+  const [note, setNote] = useState('');
 
   // This modal never unmounts between opens (only Modal's `isOpen` toggles),
   // so state from a previous payment (e.g. a partial amount + note) would
-  // otherwise stick around and default to a stale amountDue next time it's
-  // opened. Re-sync to the current invoice whenever it (re)opens.
+  // otherwise stick around and default to a stale outstandingAmount next
+  // time it's opened. Re-sync to the current invoice whenever it (re)opens.
   useEffect(() => {
     if (isOpen) {
-      setAmount(invoice.amountDue.toString());
-      setMethod('cash');
-      setNotes('');
+      setAmount(invoice.outstandingAmount.toString());
+      setMethod('CASH');
+      setNote('');
     }
-  }, [isOpen, invoice.amountDue]);
+  }, [isOpen, invoice.outstandingAmount]);
 
   const parsedAmount = parseFloat(amount);
 
@@ -38,7 +38,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
       billingApi.createPayment(invoice.id, {
         amount: parsedAmount,
         method,
-        notes: notes || undefined,
+        note: note || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
@@ -50,7 +50,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   });
 
   const handlePayAll = () => {
-    setAmount(invoice.amountDue.toString());
+    setAmount(invoice.outstandingAmount.toString());
   };
 
   const handleSubmit = () => {
@@ -58,11 +58,8 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   };
 
   const paymentMethods: { value: PaymentMethod; label: string }[] = [
-    { value: 'cash', label: 'Tiền mặt' },
-    { value: 'bank_transfer', label: 'Chuyển khoản' },
-    { value: 'card', label: 'Thẻ' },
-    { value: 'insurance', label: 'BHYT' },
-    { value: 'other', label: 'Khác' },
+    { value: 'CASH', label: 'Tiền mặt' },
+    { value: 'BANK_TRANSFER', label: 'Chuyển khoản' },
   ];
 
   return (
@@ -76,11 +73,11 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
           </div>
           <div className="flex justify-between text-sm text-green-600">
             <span>Đã thu</span>
-            <span>{formatCurrency(invoice.amountPaid)}</span>
+            <span>{formatCurrency(invoice.paidAmount)}</span>
           </div>
           <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-200 pt-2">
             <span>Còn nợ</span>
-            <span>{formatCurrency(invoice.amountDue)}</span>
+            <span>{formatCurrency(invoice.outstandingAmount)}</span>
           </div>
         </div>
 
@@ -91,7 +88,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           min={1}
-          max={invoice.amountDue}
+          max={invoice.outstandingAmount}
           required
         />
 
@@ -100,7 +97,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
           onClick={handlePayAll}
           className="text-sm text-brand-600 hover:text-brand-700 hover:underline"
         >
-          Thu hết ({formatCurrency(invoice.amountDue)})
+          Thu hết ({formatCurrency(invoice.outstandingAmount)})
         </button>
 
         {/* Payment Method */}
@@ -116,8 +113,8 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
         <div>
           <label className="block text-sm font-medium text-gray-700">Ghi chú</label>
           <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
             className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             rows={2}
             placeholder="VD: Khách trả trước một phần..."
@@ -136,7 +133,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
               !amount ||
               !Number.isFinite(parsedAmount) ||
               parsedAmount <= 0 ||
-              parsedAmount > invoice.amountDue
+              parsedAmount > invoice.outstandingAmount
             }
           >
             Xác nhận

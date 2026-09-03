@@ -13,14 +13,12 @@ import type {
   CreatePatientPayload,
   UpdatePatientPayload,
   PatientLookupResult,
-  PatientMini,
   Gender,
 } from '@/types/patients';
 import {
   fromBackendDetail,
   fromBackendListItem,
   fromBackendLookup,
-  fromBackendMini,
   type BackendLookupResponse,
   type BackendPatientDetail,
   type BackendPatientListItem,
@@ -82,11 +80,6 @@ export const patientsApi = {
   async get(id: string): Promise<PatientWithRelations> {
     const { data } = await api.get<{ data: BackendPatientDetail }>(`/patients/${id}`);
     return fromBackendDetail(unwrap(data));
-  },
-
-  async getMini(id: string): Promise<PatientMini> {
-    const { data } = await api.get<{ data: BackendPatientDetail }>(`/patients/${id}/mini`);
-    return fromBackendMini(unwrap(data));
   },
 
   async create(payload: CreatePatientPayload): Promise<Patient> {

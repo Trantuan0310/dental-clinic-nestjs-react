@@ -33,7 +33,6 @@ export interface CreateAdminUserPayload {
 export interface UpdateAdminUserPayload {
   fullName?: string;
   roleIds?: string[];
-  status?: AdminUser['status'];
 }
 
 export interface AdminRole {

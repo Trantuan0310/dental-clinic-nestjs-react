@@ -265,7 +265,7 @@ export default function PatientDetailPage() {
               <Card
                 title="Lịch sử khám"
                 actions={
-                  <Button variant="outline" size="sm" onClick={() => navigate(`/patients/${id}/encounters`)}>
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/medical-records/${id}`)}>
                     Xem tất cả
                   </Button>
                 }

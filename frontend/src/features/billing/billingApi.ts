@@ -8,7 +8,6 @@ import type {
   Invoice,
   InvoiceListResponse,
   InvoiceFilters,
-  CreateInvoicePayload,
   CreateAdhocInvoicePayload,
   Payment,
   PaymentListResponse,
@@ -35,11 +34,9 @@ export const billingApi = {
     return unwrap(data);
   },
 
-  async createInvoice(payload: CreateInvoicePayload): Promise<Invoice> {
-    const { data } = await api.post<{ data: Invoice }>(`${BASE}/invoices`, payload);
-    return unwrap(data);
-  },
-
+  // No plain `POST /billing/invoices` endpoint exists — invoices are only
+  // ever produced as a side effect of closing an encounter.
+  //
   // No `/billing/invoices/adhoc` endpoint exists in the current backend.
   // Ad-hoc invoices must be created via `createInvoice` (linked to an
   // encounter) or the legacy `/invoices/adhoc` route handled elsewhere.
