@@ -98,7 +98,13 @@ export default function ExpenseListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<ExpenseFilters>(() => ({
     page: Number(searchParams.get('page')) || 1,
-    pageSize: 20,
+    // The summary cards and the search box below both derive from
+    // whatever page `data.data` holds (see `filteredData`), not a
+    // separate all-records total — a pageSize of 20 made "Tổng chi phí"
+    // silently mean "total of the 20 rows currently on screen" and made
+    // search only look within those 20. 200 keeps everything on one
+    // page for any clinic-realistic expense count so both are accurate.
+    pageSize: 200,
     status: (searchParams.get('status') as ExpenseFilters['status']) || undefined,
   }));
   const [search, setSearch] = useState('');
