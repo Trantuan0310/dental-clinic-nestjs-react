@@ -112,11 +112,15 @@ export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
     startsAt: startIso,
     endsAt: endIso,
     durationMinutes: Math.round((endMs - startMs) / 60_000),
-    status: raw.status as Appointment['status'],
+    // Backend enums (AppointmentStatus, AppointmentSource) are upper-case
+    // Prisma enum members (e.g. "SCHEDULED", "CHECKED_IN") — the frontend's
+    // Appointment['status']/['source'] unions, and every comparison against
+    // them (STATUS_DOT maps, "can check in" checks, etc.), are lower-case.
+    status: raw.status.toLowerCase() as Appointment['status'],
     reason: raw.reason ?? null,
     notes: raw.notes ?? null,
     chiefComplaint: raw.chiefComplaint ?? null,
-    source: (raw.source as Appointment['source']) ?? 'phone',
+    source: (raw.source?.toLowerCase() as Appointment['source']) ?? 'phone',
     appointmentType:
       (raw.appointmentType as Appointment['appointmentType']) ?? 'consultation',
     checkInAt: toIso(raw.checkedInAt),
@@ -582,7 +586,7 @@ export function useRescheduleAppointment() {
       id: string;
       payload: RescheduleAppointmentPayload;
     }): Promise<Appointment> => {
-      const row = await post<PrismaAppointmentRow>(
+      const row = await patch<PrismaAppointmentRow>(
         `/appointments/${id}/reschedule`,
         buildRescheduleBody(payload),
       );
@@ -598,10 +602,26 @@ export function useStartEncounter() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string): Promise<Appointment> => {
+      // Two separate backend concerns, neither complete on its own:
+      // - POST /appointments/:id/start-encounter only flips the appointment
+      //   to IN_PROGRESS; it does not create an Encounter row.
+      // - POST /medical-records/encounters/start (get-or-create, idempotent)
+      //   creates the Encounter, but requires the appointment to already be
+      //   CHECKED_IN or IN_PROGRESS.
+      // Call them in that order so every "start encounter" action actually
+      // produces a documentable encounter instead of a dead
+      // status-only transition.
       const row = await post<PrismaAppointmentRow>(
         `/appointments/${id}/start-encounter`,
       );
-      return transformAppointment(row);
+      const { encounterId } = await post<{ encounterId: string }>(
+        '/medical-records/encounters/start',
+        { appointmentId: id },
+      );
+      // start-encounter's own response has no `encounter` relation to derive
+      // encounterId from — use the id the second call just authoritatively
+      // returned instead of whatever transformAppointment guessed.
+      return { ...transformAppointment(row), encounterId };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: appointmentKeys.all });

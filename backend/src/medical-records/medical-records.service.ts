@@ -4,6 +4,7 @@ import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { endOfDayInclusive } from '../common/date-range.util';
 import { ENCOUNTER_CLOSED_EVENT, EncounterClosedEvent } from '../common/events/domain-events';
 import {
   EncounterNotClosableException,
@@ -116,13 +117,23 @@ export class MedicalRecordsService {
     const e = await this.prisma.encounter.findUnique({
       where: { id },
       include: {
-        clinicalNote: { include: { addendums: { orderBy: { addedAt: 'desc' } } } },
+        clinicalNote: {
+          include: {
+            addendums: { orderBy: { addedAt: 'desc' } },
+            lastEditor: { select: { fullName: true } },
+          },
+        },
         treatments: {
           where: { deletedAt: null },
           include: { inventoryUsages: true },
           orderBy: { sequence: 'asc' },
         },
-        prescription: { include: { lines: { orderBy: { sequence: 'asc' } } } },
+        prescription: {
+          include: {
+            lines: { orderBy: { sequence: 'asc' } },
+            creator: { select: { fullName: true } },
+          },
+        },
         dentalChart: true,
         patient: { select: { id: true, code: true, fullName: true, dob: true, deletedAt: true } },
         dentist: { select: { id: true, fullName: true } },
@@ -130,7 +141,100 @@ export class MedicalRecordsService {
       },
     });
     if (!e) throw new EncounterNotFoundException(id);
-    return e;
+    return this.formatEncounter(e);
+  }
+
+  // The frontend's Encounter shape wants flat patientName/dentistName,
+  // lowercase status, a synthesized `notes` list (the clinical note is one
+  // upsertable row, not a list of typed entries — older UI code still
+  // renders it as one), and treatments/prescription reshaped from the raw
+  // Prisma column names (`procedure`/`unitPrice`/`toothNumbers`) to the
+  // names the tabs read (`treatmentName`/`priceCents`/`toothNumber`, etc).
+  private formatEncounter(e: Record<string, any>) {
+    return {
+      ...e,
+      patientId: e.patient?.id ?? e.patientId,
+      patientCode: e.patient?.code ?? '',
+      patientName: e.patient?.fullName ?? '',
+      dentistId: e.dentist?.id ?? e.dentistId,
+      dentistName: e.dentist?.fullName ?? '',
+      status: String(e.status).toLowerCase(),
+      treatments: (e.treatments ?? []).map((t: Record<string, any>) => this.formatTreatment(t)),
+      prescriptions: e.prescription ? [this.formatPrescription(e.prescription)] : [],
+      notes: this.formatClinicalNoteList(e.clinicalNote),
+    };
+  }
+
+  private formatTreatment(t: Record<string, any>) {
+    const toothNumbers: unknown[] = Array.isArray(t.toothNumbers) ? t.toothNumbers : [];
+    const unitPrice = Number(t.unitPrice);
+    return {
+      id: t.id,
+      encounterId: t.encounterId,
+      toothNumber: toothNumbers[0] ?? '',
+      treatmentName: t.procedure,
+      procedureName: t.procedure,
+      description: t.description,
+      notes: t.description,
+      priceCents: unitPrice,
+      unitPrice,
+      quantity: 1,
+      lineTotalCents: unitPrice,
+      total: unitPrice,
+      createdAt: t.createdAt,
+      inventoryItemsUsed: (t.inventoryUsages ?? []).map((u: Record<string, any>) => ({
+        inventoryItemId: u.inventoryItemId,
+        quantityUsed: Number(u.quantity),
+      })),
+    };
+  }
+
+  private formatPrescription(p: Record<string, any>) {
+    const lines = (p.lines ?? []).map((l: Record<string, any>) => ({
+      id: l.id,
+      drugName: l.drugName,
+      medicationName: l.drugName,
+      dosage: l.dosage,
+      frequency: l.frequency,
+      duration: l.duration,
+      durationDays: Number(l.duration) || undefined,
+      instructions: l.instructions,
+    }));
+    return {
+      id: p.id,
+      encounterId: p.encounterId,
+      diagnosis: p.diagnosis,
+      note: p.notes,
+      notes: p.notes,
+      instructions: p.instructions,
+      followUpNote: p.followUpNote,
+      issuedAt: p.createdAt,
+      prescribedAt: p.createdAt,
+      prescribedByUserId: p.createdBy,
+      prescribedByUserName: p.creator?.fullName,
+      items: lines,
+      lines,
+    };
+  }
+
+  // Explodes the single upsertable clinical-note row into the typed-entry
+  // list shape the Notes tab renders (one entry per non-empty section).
+  private formatClinicalNoteList(note: Record<string, any> | null) {
+    if (!note) return [];
+    const sections: Array<{ type: string; content: string }> = [];
+    if (note.chiefComplaint) sections.push({ type: 'chief_complaint', content: note.chiefComplaint });
+    if (note.diagnosis) sections.push({ type: 'diagnosis', content: note.diagnosis });
+    if (note.treatmentPlan) sections.push({ type: 'other', content: note.treatmentPlan });
+    if (note.notes) sections.push({ type: 'other', content: note.notes });
+    return sections.map((section, i) => ({
+      id: `${note.id}-${i}`,
+      encounterId: note.encounterId,
+      type: section.type,
+      content: section.content,
+      createdAt: note.updatedAt ?? note.createdAt,
+      createdByUserId: note.lastEditedBy,
+      createdByUserName: note.lastEditor?.fullName,
+    }));
   }
 
   async listEncounters(query: {
@@ -143,10 +247,13 @@ export class MedicalRecordsService {
     const where: Prisma.EncounterWhereInput = {
       ...(query.patientId && { patientId: query.patientId }),
       ...(query.dentistId && { dentistId: query.dentistId }),
+      // `lte: new Date(query.to)` on a bare YYYY-MM-DD date is UTC midnight
+      // — a zero-width instant, not "through end of that day". A same-day
+      // from/to filter (e.g. "today") would always match nothing.
       ...((query.from || query.to) && {
         startedAt: {
           ...(query.from && { gte: new Date(query.from) }),
-          ...(query.to && { lte: new Date(query.to) }),
+          ...(query.to && { lte: endOfDayInclusive(query.to) }),
         },
       }),
     };
@@ -159,7 +266,7 @@ export class MedicalRecordsService {
       where.dentistId = query.actor.sub;
     }
 
-    return this.prisma.encounter.findMany({
+    const rows = await this.prisma.encounter.findMany({
       where,
       orderBy: { startedAt: 'desc' },
       take: 100,
@@ -168,6 +275,13 @@ export class MedicalRecordsService {
         dentist: { select: { id: true, fullName: true } },
       },
     });
+
+    return rows.map(e => ({
+      ...e,
+      patientName: e.patient?.fullName ?? '',
+      dentistName: e.dentist?.fullName ?? '',
+      status: String(e.status).toLowerCase(),
+    }));
   }
 
   /**

@@ -3,6 +3,7 @@ import { Prisma, InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { endOfDayInclusive } from '../common/date-range.util';
 import { ExpenseService } from '../expense/expense.service';
 import {
   InvoiceDiscountInvalidException,
@@ -145,10 +146,13 @@ export class BillingService {
       deletedAt: null,
       ...(query.patientId && { patientId: query.patientId }),
       ...(query.status && { status: { in: query.status } }),
+      // `lte: new Date(query.to)` on a bare YYYY-MM-DD date is UTC midnight
+      // — a zero-width instant, not "through end of that day". A same-day
+      // from/to filter (e.g. "today") would always match nothing.
       ...((query.from || query.to) && {
         createdAt: {
           ...(query.from && { gte: new Date(query.from) }),
-          ...(query.to && { lte: new Date(query.to) }),
+          ...(query.to && { lte: endOfDayInclusive(query.to) }),
         },
       }),
       ...(query.q && {

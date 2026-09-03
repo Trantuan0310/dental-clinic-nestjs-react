@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { PaginatedResult, PaginationSchema } from '../common/dto/pagination.dto';
+import { endOfDayInclusive } from '../common/date-range.util';
 import {
   CreatePatientDto,
   LookupPatientDto,
@@ -497,10 +498,13 @@ export class PatientsService {
         ],
       }),
       ...(query.gender && { gender: query.gender }),
+      // `lte: new Date(query.dobTo)` on a bare YYYY-MM-DD date is UTC
+      // midnight — a zero-width instant, not "through end of that day". A
+      // single-day range (dobFrom === dobTo) would always match nothing.
       ...((query.dobFrom || query.dobTo) && {
         dob: {
           ...(query.dobFrom && { gte: new Date(query.dobFrom) }),
-          ...(query.dobTo && { lte: new Date(query.dobTo) }),
+          ...(query.dobTo && { lte: endOfDayInclusive(query.dobTo) }),
         },
       }),
     };

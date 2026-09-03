@@ -3,6 +3,7 @@ import { Appointment, AppointmentStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { endOfDayInclusive } from '../common/date-range.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppointmentCancelledEvent,
@@ -604,6 +605,11 @@ export class AppointmentsService {
       include: {
         patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
         dentist: { select: { id: true, fullName: true } },
+        // The FK lives on Encounter (appointmentId), not Appointment — the
+        // frontend navigates from an in-progress/completed appointment to
+        // its encounter and needs this id even though nothing here
+        // otherwise displays details about the encounter itself.
+        encounter: { select: { id: true } },
       },
     });
     if (!appt) throw new AppointmentNotFoundException(id);
@@ -694,11 +700,16 @@ export class AppointmentsService {
       deletedAt: null,
       ...(isDentist ? { dentistId: actor.sub } : q.dentistId ? { dentistId: q.dentistId } : {}),
       ...(q.patientId ? { patientId: q.patientId } : {}),
+      // `q.to` is a bare YYYY-MM-DD date. `new Date(q.to)` parses that as
+      // UTC midnight, so a naive `lte` on it makes the upper bound a
+      // zero-width instant instead of "through the end of that day" — every
+      // same-day query (from === to, e.g. "today") matched nothing. Push
+      // the bound to the end of that UTC day instead.
       ...(q.from || q.to
         ? {
             startAt: {
               ...(q.from ? { gte: new Date(q.from) } : {}),
-              ...(q.to ? { lte: new Date(q.to) } : {}),
+              ...(q.to ? { lte: endOfDayInclusive(q.to) } : {}),
             },
           }
         : {}),
@@ -722,6 +733,11 @@ export class AppointmentsService {
       include: {
         patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
         dentist: { select: { id: true, fullName: true } },
+        // The FK lives on Encounter (appointmentId), not Appointment — the
+        // frontend navigates from an in-progress/completed appointment to
+        // its encounter and needs this id even though nothing here
+        // otherwise displays details about the encounter itself.
+        encounter: { select: { id: true } },
       },
     });
     const hasMore = items.length > pageSize;
@@ -756,6 +772,11 @@ export class AppointmentsService {
       include: {
         patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
         dentist: { select: { id: true, fullName: true } },
+        // The FK lives on Encounter (appointmentId), not Appointment — the
+        // frontend navigates from an in-progress/completed appointment to
+        // its encounter and needs this id even though nothing here
+        // otherwise displays details about the encounter itself.
+        encounter: { select: { id: true } },
       },
     });
     return { data: items };
@@ -1093,11 +1114,13 @@ export class AppointmentsService {
       ...(isAdmin && query.dentistId ? { dentistId: query.dentistId } : {}),
       ...(!isAdmin ? { dentistId: actor.sub } : {}),
       ...(query.status ? { status: query.status as any } : {}),
+      // See list() above — `lte: new Date(query.to)` on a bare date is a
+      // zero-width UTC-midnight instant, not "through end of that day".
       ...(query.from || query.to
         ? {
             date: {
               ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: new Date(query.to) } : {}),
+              ...(query.to ? { lte: endOfDayInclusive(query.to) } : {}),
             },
           }
         : {}),

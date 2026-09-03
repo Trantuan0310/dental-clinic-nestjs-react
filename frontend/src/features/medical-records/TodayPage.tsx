@@ -4,13 +4,17 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Play, ArrowRight } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
+import { useStartEncounter } from '@/features/appointments/appointmentApi';
 import { Button, Card, StatusBadge } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
 
 export default function TodayPage() {
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const today = format(currentDate, 'yyyy-MM-dd');
+  const startEncounter = useStartEncounter();
 
   const { data } = useQuery({
     queryKey: ['appointments', { from: today, to: today }],
@@ -20,6 +24,15 @@ export default function TodayPage() {
       pageSize: 100,
     }),
   });
+
+  const handleStart = async (appointmentId: string) => {
+    try {
+      const updated = await startEncounter.mutateAsync(appointmentId);
+      navigate(`/encounters/${updated.encounterId}`);
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể bắt đầu khám'));
+    }
+  };
 
   const appointments = data?.data ?? [];
   const checkedIn = appointments.filter(a => a.status === 'checked_in' || a.status === 'in_progress');
@@ -133,7 +146,8 @@ export default function TodayPage() {
                         {apt.status === 'checked_in' && (
                           <Button
                             size="sm"
-                            onClick={() => navigate(`/encounters/${apt.encounterId || apt.id}`)}
+                            onClick={() => handleStart(apt.id)}
+                            isLoading={startEncounter.isPending && startEncounter.variables === apt.id}
                           >
                             <Play className="h-4 w-4" />
                             Bắt đầu khám

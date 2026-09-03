@@ -19,6 +19,63 @@ import type {
 
 const BASE = '/medical-records';
 
+// Raw Prisma `Treatment` row shape (see backend medical-records.service.ts /
+// prisma/schema.prisma) — column names differ from the frontend's Treatment
+// type (procedure vs treatmentName, unitPrice vs priceCents, toothNumbers[]
+// vs toothNumber).
+interface PrismaTreatmentRow {
+  id: string;
+  encounterId: string;
+  toothNumbers?: unknown[] | null;
+  procedure: string;
+  description?: string | null;
+  unitPrice: number | string;
+  createdAt: string;
+}
+
+function toCreateTreatmentBody(payload: CreateTreatmentPayload) {
+  return {
+    procedure: payload.treatmentName || payload.treatmentCode || '',
+    description: payload.description ?? payload.notes,
+    unitPrice: payload.priceCents,
+    toothNumbers:
+      payload.toothNumber !== undefined && payload.toothNumber !== ''
+        ? [Number(payload.toothNumber)]
+        : undefined,
+  };
+}
+
+function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
+  return {
+    ...(payload.treatmentName !== undefined && { procedure: payload.treatmentName }),
+    ...((payload.description !== undefined || payload.notes !== undefined) && {
+      description: payload.description ?? payload.notes,
+    }),
+    ...(payload.priceCents !== undefined && { unitPrice: payload.priceCents }),
+  };
+}
+
+function transformTreatment(raw: PrismaTreatmentRow): Treatment {
+  const toothNumbers = Array.isArray(raw.toothNumbers) ? raw.toothNumbers : [];
+  const unitPrice = Number(raw.unitPrice);
+  return {
+    id: raw.id,
+    encounterId: raw.encounterId,
+    toothNumber: (toothNumbers[0] as number | string) ?? '',
+    treatmentCode: '',
+    treatmentName: raw.procedure,
+    procedureName: raw.procedure,
+    description: raw.description,
+    notes: raw.description,
+    priceCents: unitPrice,
+    unitPrice,
+    quantity: 1,
+    lineTotalCents: unitPrice,
+    total: unitPrice,
+    createdAt: raw.createdAt,
+  };
+}
+
 export const medicalRecordsApi = {
   // Encounters
   async listEncounters(params?: {
@@ -73,13 +130,15 @@ export const medicalRecordsApi = {
     return unwrap(data);
   },
 
-  // Treatments
+  // Treatments — the backend DTO uses column names (procedure/unitPrice/
+  // toothNumbers) that don't match the form's field names, so requests and
+  // responses are translated here rather than sent/read as-is.
   async createTreatment(payload: CreateTreatmentPayload): Promise<Treatment> {
-    const { data } = await api.post<{ data: Treatment }>(
+    const { data } = await api.post<{ data: PrismaTreatmentRow }>(
       `${BASE}/encounters/${payload.encounterId}/treatments`,
-      payload,
+      toCreateTreatmentBody(payload),
     );
-    return unwrap(data);
+    return transformTreatment(unwrap(data));
   },
 
   async updateTreatment(
@@ -87,11 +146,11 @@ export const medicalRecordsApi = {
     treatmentId: string,
     payload: Partial<CreateTreatmentPayload>,
   ): Promise<Treatment> {
-    const { data } = await api.patch<{ data: Treatment }>(
+    const { data } = await api.patch<{ data: PrismaTreatmentRow }>(
       `${BASE}/encounters/${encounterId}/treatments/${treatmentId}`,
-      payload,
+      toUpdateTreatmentBody(payload),
     );
-    return unwrap(data);
+    return transformTreatment(unwrap(data));
   },
 
   async deleteTreatment(encounterId: string, treatmentId: string): Promise<void> {

@@ -3,6 +3,7 @@ import { Prisma, ItemStatus, MovementType, MovementRefType } from '@prisma/clien
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { endOfDayInclusive } from '../common/date-range.util';
 import {
   InventoryItemNotFoundException,
   InsufficientStockException,
@@ -354,10 +355,13 @@ export class InventoryService {
     const where: Prisma.StockMovementWhereInput = {
       ...(query.inventoryItemId && { inventoryItemId: query.inventoryItemId }),
       ...(query.type && { type: query.type }),
+      // `lte: new Date(query.to)` on a bare YYYY-MM-DD date is UTC midnight
+      // — a zero-width instant, not "through end of that day". A same-day
+      // from/to filter (e.g. "today") would always match nothing.
       ...((query.from || query.to) && {
         performedAt: {
           ...(query.from && { gte: new Date(query.from) }),
-          ...(query.to && { lte: new Date(query.to) }),
+          ...(query.to && { lte: endOfDayInclusive(query.to) }),
         },
       }),
     };

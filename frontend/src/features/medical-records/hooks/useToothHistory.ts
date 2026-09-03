@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
 import type {
@@ -123,13 +123,13 @@ export function useToothHistory({ patientId, fdi, pageSize = 50, includeCancelle
     })),
   });
 
-  // Mirror query data into a plain Encounter[] so useMemo deps stay stable.
-  const [detailResults, setDetailResults] = useState<Encounter[]>([]);
-  useEffect(() => {
-    setDetailResults(
-      detailQueries.map((q) => q.data).filter((d): d is Encounter => !!d),
-    );
-  }, [detailQueries]);
+  // `useQueries` returns a new array reference every render even when the
+  // underlying data hasn't changed. Mirroring it into state via a
+  // useEffect keyed on that array (as this used to do) re-fires on every
+  // render — new state -> new render -> new `detailQueries` reference ->
+  // effect fires again, forever. Derive it inline instead; the `useMemo`
+  // below still only recomputes `history` when data actually changes.
+  const detailResults = detailQueries.map((q) => q.data).filter((d): d is Encounter => !!d);
 
   const history = useMemo<ToothHistory>(() => {
     if (!patientId || !fdi) return { ...EMPTY, fdi };
