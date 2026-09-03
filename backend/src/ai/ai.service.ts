@@ -190,12 +190,15 @@ export class AiService {
     }
 
     return {
-      bullets: this.parseBullets(parsed),
+      bullets: this.parseBullets(parsed, input),
       model: this.model,
     };
   }
 
-  private parseBullets(raw: { allergy?: string; open?: string; next?: string }): SummaryBullet[] {
+  private parseBullets(
+    raw: { allergy?: string; open?: string; next?: string },
+    input: SummaryInput,
+  ): SummaryBullet[] {
     const bullets: SummaryBullet[] = [];
     if (raw.allergy?.trim()) {
       bullets.push({
@@ -203,6 +206,7 @@ export class AiService {
         icon: 'alert',
         label: 'Dị ứng',
         text: this.cleanText(raw.allergy),
+        basis: this.allergyBasis(input),
       });
     }
     if (raw.open?.trim()) {
@@ -211,6 +215,7 @@ export class AiService {
         icon: 'clock',
         label: 'Đang chờ',
         text: this.cleanText(raw.open),
+        basis: 'Từ số phiên khám đang mở và hóa đơn chưa thanh toán trong hồ sơ',
       });
     }
     if (raw.next?.trim()) {
@@ -219,9 +224,28 @@ export class AiService {
         icon: 'stethoscope',
         label: 'Lần tới',
         text: this.cleanText(raw.next),
+        basis: this.nextVisitBasis(input),
       });
     }
     return bullets;
+  }
+
+  // These mirror what actually feeds each bullet in both callGemini() and
+  // ruleBasedSummary() — the AI/fallback distinction only changes who wrote
+  // the sentence, not which record it's about, so the same basis text is
+  // accurate either way.
+  private allergyBasis(input: SummaryInput): string {
+    const parts: string[] = [];
+    if (input.allergies.length) parts.push('dị ứng');
+    if (input.chronicDiseases.length) parts.push('bệnh nền');
+    if (input.currentMedications.length) parts.push('thuốc đang dùng');
+    return parts.length ? `Từ hồ sơ bệnh nhân (${parts.join(', ')})` : 'Từ hồ sơ bệnh nhân';
+  }
+
+  private nextVisitBasis(input: SummaryInput): string {
+    const latest = input.recentEncounters[0];
+    if (!latest) return 'Từ hồ sơ bệnh nhân';
+    return `Từ ghi chú khám ngày ${latest.date}${latest.treatmentPlan ? ' (kế hoạch điều trị)' : ''}`;
   }
 
   private cleanText(text: string): string {
@@ -245,6 +269,7 @@ export class AiService {
         icon: 'alert',
         label: 'Dị ứng',
         text: allergyParts.join(' · '),
+        basis: this.allergyBasis(input),
       });
     }
 
@@ -256,7 +281,13 @@ export class AiService {
       openParts.push(`${input.outstandingInvoiceCount} hóa đơn chưa thanh toán`);
     }
     if (openParts.length) {
-      bullets.push({ id: 'open', icon: 'clock', label: 'Đang chờ', text: openParts.join(' · ') });
+      bullets.push({
+        id: 'open',
+        icon: 'clock',
+        label: 'Đang chờ',
+        text: openParts.join(' · '),
+        basis: 'Từ số phiên khám đang mở và hóa đơn chưa thanh toán trong hồ sơ',
+      });
     }
 
     const latest = input.recentEncounters[0];
@@ -266,6 +297,7 @@ export class AiService {
         icon: 'stethoscope',
         label: 'Lần tới',
         text: `${latest.date}: ${latest.treatmentPlan}`,
+        basis: this.nextVisitBasis(input),
       });
     } else if (latest) {
       bullets.push({
@@ -273,6 +305,7 @@ export class AiService {
         icon: 'stethoscope',
         label: 'Lần tới',
         text: `${latest.date}: ${latest.diagnosis || latest.chiefComplaint || 'Theo dõi chung'}`,
+        basis: this.nextVisitBasis(input),
       });
     }
 

@@ -194,18 +194,47 @@ export class BillingService {
   }
 
   // Flattens the `patient` relation into patientCode/patientName — the
-  // frontend Invoice type expects these as top-level fields, not nested.
-  // Only meaningful when `patient` was actually included in the query
-  // (listInvoices/getInvoiceById); other mutation return values don't
-  // carry it and their callers re-fetch via getInvoiceById anyway.
-  private formatInvoice<T extends { patient?: { code: string; fullName: string } | null }>(
-    invoice: T,
-  ) {
+  // frontend Invoice type expects these as top-level fields, not nested —
+  // and converts Decimal columns to real numbers. Prisma Decimals
+  // JSON-serialize as strings, but the frontend Invoice type declares
+  // `total`/`paidAmount`/etc as `number`; any caller that sums them
+  // (rather than just formatting one for display) got string concatenation
+  // instead of addition. Only meaningful when `patient` was actually
+  // included in the query (listInvoices/getInvoiceById); other mutation
+  // return values don't carry it and their callers re-fetch via
+  // getInvoiceById anyway.
+  private formatInvoice<
+    T extends {
+      patient?: { code: string; fullName: string } | null;
+      subtotal: unknown;
+      discountValue?: unknown;
+      total: unknown;
+      paidAmount: unknown;
+      outstandingAmount: unknown;
+      items?: Array<{ quantity: unknown; unitPrice: unknown; lineTotal: unknown }>;
+      payments?: Array<{ amount: unknown }>;
+    },
+  >(invoice: T) {
     const { patient, ...rest } = invoice;
     return {
       ...rest,
       patientCode: patient?.code,
       patientName: patient?.fullName,
+      subtotal: Number(invoice.subtotal),
+      discountValue:
+        invoice.discountValue === null || invoice.discountValue === undefined
+          ? invoice.discountValue
+          : Number(invoice.discountValue),
+      total: Number(invoice.total),
+      paidAmount: Number(invoice.paidAmount),
+      outstandingAmount: Number(invoice.outstandingAmount),
+      items: invoice.items?.map(item => ({
+        ...item,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+        lineTotal: Number(item.lineTotal),
+      })),
+      payments: invoice.payments?.map(p => ({ ...p, amount: Number(p.amount) })),
     };
   }
 

@@ -6,9 +6,11 @@ import {
   IsUUID,
   IsNumber,
   IsInt,
+  IsArray,
   Min,
   Max,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { InvoiceStatus, PaymentMethod } from '@prisma/client';
 
@@ -96,8 +98,15 @@ export class ListInvoicesQueryDto {
   @IsDateString()
   to?: string;
 
+  // A single `?status=PAID` query value arrives as the bare string "PAID",
+  // not `["PAID"]` — Prisma's `where.status.in` needs an actual array, and
+  // silently got a string, which 500'd. Coerce single values into a
+  // one-element array so both single- and multi-select filters work.
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @IsEnum(InvoiceStatus, { each: true })
   status?: InvoiceStatus[];
 
   @ApiPropertyOptional({ description: 'Page size (1-100). Defaults to 100.' })

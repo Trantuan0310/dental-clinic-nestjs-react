@@ -1,6 +1,7 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { JwtPayload } from '../common/guards/permissions.guard';
 import { PayrollCycle, PayrollPeriodStatus, PayrollAdjustmentType, Prisma } from '@prisma/client';
 import {
   PeriodOverlapException,
@@ -142,11 +143,22 @@ export class PayrollService {
   // Compensation CRUD
   // ============================================================================
 
-  async listCompensations(filter: { dentistId?: string; activeOn?: Date }) {
+  async listCompensations(filter: { dentistId?: string; activeOn?: Date; actor: JwtPayload }) {
+    // BR-PAY-024: `payroll.compensation.read` has no .any/.own split — it's
+    // held by clinic_admin (see everyone) AND dentist (should see only their
+    // own comp terms). Without this, any dentist reaching this list — e.g.
+    // via the admin payroll dashboard, which they can navigate to even
+    // though the sensitive actions there 403 — could read every colleague's
+    // base salary and commission rate. Reuse payroll.read.any (already
+    // correctly admin-only) as the "see everyone" gate.
+    const dentistId = filter.actor.permissions.includes('payroll.read.any')
+      ? filter.dentistId
+      : filter.actor.sub;
+
     const rows = await this.prisma.dentistCompensation.findMany({
       where: {
         deletedAt: null,
-        ...(filter.dentistId && { dentistId: filter.dentistId }),
+        ...(dentistId && { dentistId }),
         ...(filter.activeOn && {
           effectiveFrom: { lte: filter.activeOn },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: filter.activeOn } }],

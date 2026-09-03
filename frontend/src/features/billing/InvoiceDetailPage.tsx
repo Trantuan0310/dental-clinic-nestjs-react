@@ -11,7 +11,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
-import { Button, Card, StatusBadge, Modal, Alert, Textarea, Spinner } from '@/components/ui';
+import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } from '@/components/ui';
 import { PaymentModal } from './PaymentModal';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
@@ -86,7 +86,7 @@ export default function InvoiceDetailPage() {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold text-gray-900">{invoice.code}</h1>
-            <StatusBadge status={invoice.status} />
+            <InvoiceStatusBadge status={invoice.status} />
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
             {invoice.patientName} • {invoice.patientCode}

@@ -191,6 +191,10 @@ const PERMISSIONS = [
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   clinic_admin: [...PERMISSIONS.map((p) => p.code), 'expense.read', 'expense.create', 'expense.update', 'expense.delete', 'expense.approve'],
+  // Note: no shift_registration.approve/shift.approve here — approving a
+  // dentist's registered work shift feeds directly into payroll (worked
+  // hours -> compensation), so it belongs to admin/management, not front
+  // desk, even though front desk coordinates the calendar day-to-day.
   receptionist: [
     'user.change_password.own',
     'patient.create',
@@ -226,13 +230,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'inventory.stock_out',
     'shift_registration.write',
     'shift_registration.read',
-    'shift_registration.approve',
     'shift.read.any',
-    'shift.approve',
     'shift.read_self',
+    // Front desk reconciles daily cash/card intake and chases outstanding
+    // balances, so revenue/outstanding reports are part of the job —
+    // report.read is only a nav-gating alias, the actual data endpoints
+    // check these canonical permissions.
+    'report.revenue.read',
+    'report.outstanding.read',
     // Frontend aliases (Phase 10.5)
     'medical_record.read',
-    'payroll.read',
     'report.read',
     'ai.summary.read',
   ],
@@ -285,14 +292,19 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'payroll.read.own',
     'payroll.compensation.read',
     'payslip.read.own',
-    // Frontend aliases (Phase 10.5)
+    // Frontend aliases (Phase 10.5). Note: no payroll.read or payroll.config
+    // — those gated the admin-only /payroll dashboard and /payroll/config
+    // page respectively, which now require payroll.read.any/
+    // payroll.config.read (admin-only). payroll.read_self covers the
+    // dentist's own payroll pages.
+    // No report.read: clinic-wide revenue/outstanding reconciliation isn't
+    // a dentist's job (that's front desk's), so they don't get the Reports
+    // page either — it would otherwise be a nav link to a page that can
+    // never show real data for this role.
     'medical_record.read',
-    'payroll.read',
     'payroll.read_self',
-    'payroll.config',
     'shift.read_self',
     'appointment.mark_no_show',
-    'report.read',
     'ai.summary.read',
   ],
 };
@@ -347,7 +359,21 @@ async function main() {
         },
       });
     }
-    console.log(`Assigned ${permissionCodes.length} permissions to ${roleCode}`);
+
+    // Reconcile: drop any grant this role holds that ROLE_PERMISSIONS no
+    // longer lists, so re-running the seed after a permission is removed
+    // here (e.g. tightening a role's access) actually revokes it instead of
+    // only ever adding new grants.
+    const keepIds = permissionCodes
+      .map((code) => createdPermissions[code]?.id)
+      .filter((id): id is string => !!id);
+    const removed = await prisma.rolePermission.deleteMany({
+      where: { roleId: role.id, permissionId: { notIn: keepIds } },
+    });
+    console.log(
+      `Assigned ${permissionCodes.length} permissions to ${roleCode}` +
+        (removed.count ? ` (revoked ${removed.count} stale grant(s))` : ''),
+    );
   }
 
   // Create super admin user

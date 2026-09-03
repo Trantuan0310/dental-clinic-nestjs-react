@@ -145,6 +145,9 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{b.label}</p>
                     <p className="mt-0.5 text-sm text-gray-800">{b.text}</p>
+                    {b.basis && (
+                      <p className="mt-1 text-[11px] italic text-gray-400">{b.basis}</p>
+                    )}
                   </div>
                 </li>
               );

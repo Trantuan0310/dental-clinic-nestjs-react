@@ -6,6 +6,12 @@ export interface SummaryBullet {
   icon: SummaryIcon;
   label: string;
   text: string;
+  /**
+   * Human-readable pointer to where this bullet's content came from in the
+   * patient's record, so staff can verify it themselves instead of taking
+   * the AI's word for it (per the card's own "AI có thể sai" disclaimer).
+   */
+  basis: string;
 }
 
 export interface AiPatientSummary {

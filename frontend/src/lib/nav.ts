@@ -100,7 +100,12 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         to: '/payroll',
         labelKey: 'Payroll',
         icon: Calculator,
-        anyPermission: ['payroll.read', 'payroll.read_self'],
+        // Admin-only: full period/compensation/shift-approval management for
+        // every dentist. Non-admins already have their own entries below
+        // ("Lương của tôi", "Ca của tôi") — this used to also match
+        // payroll.read/payroll.read_self, which dentist and receptionist
+        // both hold, surfacing the admin dashboard to them too.
+        permission: 'payroll.read.any',
       },
       {
         to: '/my-payroll',

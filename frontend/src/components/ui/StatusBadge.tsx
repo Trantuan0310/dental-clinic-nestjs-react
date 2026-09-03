@@ -106,8 +106,24 @@ export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }
   return <StatusBadge status={status} />;
 }
 
+// `statusConfig` above is a flat, cross-domain map keyed by raw status
+// string — "PAID" is also a PayrollPeriod status ("Đã trả lương"), so an
+// invoice rendered via plain `<StatusBadge status={invoice.status} />`
+// picked up the payroll label instead of its own. ISSUED/PARTIAL/VOIDED
+// have no entry there at all and rendered as raw, untranslated English.
+// This wrapper supplies invoice-specific type+label explicitly so it can't
+// collide with (or be broken by) any other domain's statuses.
+const INVOICE_STATUS_CONFIG: Record<InvoiceStatus, { type: StatusType; label: string }> = {
+  DRAFT: { type: 'neutral', label: 'Bản nháp' },
+  ISSUED: { type: 'info', label: 'Đã phát hành' },
+  PARTIAL: { type: 'warning', label: 'Thanh toán một phần' },
+  PAID: { type: 'success', label: 'Đã thanh toán' },
+  VOIDED: { type: 'danger', label: 'Đã hủy' },
+};
+
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
-  return <StatusBadge status={status} />;
+  const config = INVOICE_STATUS_CONFIG[status];
+  return <StatusBadge status={status} type={config?.type} label={config?.label} />;
 }
 
 export function ShiftStatusBadge({ status }: { status: string }) {

@@ -12,6 +12,8 @@ export interface SummaryBullet {
   icon: 'alert' | 'clock' | 'stethoscope';
   label: string;
   text: string;
+  /** Where this bullet's content came from in the patient's record. */
+  basis: string;
 }
 
 export interface AiPatientSummary {

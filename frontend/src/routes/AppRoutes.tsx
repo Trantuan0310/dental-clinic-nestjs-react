@@ -32,6 +32,7 @@ const EncounterDetailPage = lazy(
 );
 
 const InvoiceDetailPage = lazy(() => import('@/features/billing/InvoiceDetailPage'));
+const InvoiceListPage = lazy(() => import('@/features/billing/InvoiceListPage'));
 
 const InventoryListPage = lazy(() => import('@/features/inventory/InventoryListPage'));
 const InventoryItemDetailPage = lazy(
@@ -219,7 +220,7 @@ export function AppRoutes() {
                 path="billing/list"
                 element={
                   <ProtectedRoute permission="invoice.read">
-                    <InvoiceDetailPage />
+                    <InvoiceListPage />
                   </ProtectedRoute>
                 }
               />
@@ -261,7 +262,7 @@ export function AppRoutes() {
               <Route
                 path="payroll"
                 element={
-                  <ProtectedRoute anyPermission={['payroll.read', 'payroll.read_self']}>
+                  <ProtectedRoute permission="payroll.read.any">
                     <PayrollDashboardPage />
                   </ProtectedRoute>
                 }
@@ -270,7 +271,7 @@ export function AppRoutes() {
               <Route
                 path="payroll/periods/:id"
                 element={
-                  <ProtectedRoute permission="payroll.read">
+                  <ProtectedRoute permission="payroll.read.any">
                     <PeriodDetailPage />
                   </ProtectedRoute>
                 }
@@ -278,7 +279,7 @@ export function AppRoutes() {
               <Route
                 path="payroll/config"
                 element={
-                  <ProtectedRoute permission="payroll.config">
+                  <ProtectedRoute permission="payroll.config.read">
                     <PayrollConfigPage />
                   </ProtectedRoute>
                 }

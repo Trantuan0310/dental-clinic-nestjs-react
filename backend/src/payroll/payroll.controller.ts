@@ -65,13 +65,14 @@ export class PayrollController {
 
   @Get('compensations')
   @RequirePermissions('payroll.compensation.read')
-  @ApiOperation({ summary: 'List dentist compensations' })
+  @ApiOperation({ summary: 'List dentist compensations (BR-PAY-024 row-level for dentist)' })
   @ApiResponse({ status: 200, description: 'Paginated compensations' })
-  async listCompensations(@Query() query: ListCompensationsQueryDto) {
+  async listCompensations(@Query() query: ListCompensationsQueryDto, @User() user: JwtPayload) {
     return wrapAsPaginated(
       await this.payroll.listCompensations({
         dentistId: query.dentistId,
         activeOn: query.activeOn ? new Date(query.activeOn) : undefined,
+        actor: user,
       }),
     );
   }
