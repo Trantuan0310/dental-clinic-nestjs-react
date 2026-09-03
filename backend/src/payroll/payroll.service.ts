@@ -143,7 +143,7 @@ export class PayrollService {
   // ============================================================================
 
   async listCompensations(filter: { dentistId?: string; activeOn?: Date }) {
-    return this.prisma.dentistCompensation.findMany({
+    const rows = await this.prisma.dentistCompensation.findMany({
       where: {
         deletedAt: null,
         ...(filter.dentistId && { dentistId: filter.dentistId }),
@@ -153,7 +153,9 @@ export class PayrollService {
         }),
       },
       orderBy: { effectiveFrom: 'desc' },
+      include: { dentist: { select: { fullName: true } } },
     });
+    return rows.map(r => ({ ...r, dentistName: r.dentist?.fullName ?? '' }));
   }
 
   async createCompensation(dto: CreateCompensationDto, actorUserId: string) {

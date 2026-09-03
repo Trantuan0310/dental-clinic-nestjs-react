@@ -72,14 +72,59 @@ export function useUpdatePayrollConfig() {
   });
 }
 
-// Compensations
+// Compensations — the backend DTO/columns are baseSalaryVnd/commissionPct
+// (0-1 fraction)/overtimeHourlyVnd, not this file's baseSalary/
+// commissionPercentage (0-100)/overtimeHourlyRate, so both directions are
+// translated here.
+interface PrismaCompensationRow {
+  id: string;
+  dentistId: string;
+  dentistName?: string;
+  baseSalaryVnd: number | string;
+  commissionPct: number | string;
+  overtimeHourlyVnd: number | string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+function mapCompensation(raw: PrismaCompensationRow): DentistCompensation {
+  return {
+    id: raw.id,
+    dentistId: raw.dentistId,
+    dentistName: raw.dentistName ?? '',
+    baseSalary: Number(raw.baseSalaryVnd),
+    commissionPercentage: Number(raw.commissionPct) * 100,
+    overtimeHourlyRate: Number(raw.overtimeHourlyVnd),
+    effectiveFrom: raw.effectiveFrom,
+    effectiveTo: raw.effectiveTo,
+    notes: raw.notes,
+    createdAt: raw.createdAt,
+  };
+}
+
+function toCompensationBody(payload: CreateCompensationPayload | UpdateCompensationPayload) {
+  return {
+    ...(payload.dentistId !== undefined && { dentistId: payload.dentistId }),
+    ...(payload.effectiveFrom !== undefined && { effectiveFrom: payload.effectiveFrom }),
+    ...(payload.effectiveTo !== undefined && { effectiveTo: payload.effectiveTo }),
+    ...(payload.baseSalary !== undefined && { baseSalaryVnd: payload.baseSalary }),
+    ...(payload.commissionPercentage !== undefined && {
+      commissionPct: payload.commissionPercentage / 100,
+    }),
+    ...(payload.overtimeHourlyRate !== undefined && { overtimeHourlyVnd: payload.overtimeHourlyRate }),
+    ...(payload.notes !== undefined && { notes: payload.notes }),
+  };
+}
+
 export function useCompensations(filters?: { dentistId?: string; activeOn?: string }) {
   return useQuery({
     queryKey: payrollKeys.compensations(filters),
     queryFn: () =>
-      get<DentistCompensation[]>('/payroll/compensations', {
+      get<PrismaCompensationRow[]>('/payroll/compensations', {
         params: filters,
-      }),
+      }).then((rows) => rows.map(mapCompensation)),
   });
 }
 
@@ -87,7 +132,9 @@ export function useCreateCompensation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateCompensationPayload) =>
-      post<DentistCompensation>('/payroll/compensations', payload),
+      post<PrismaCompensationRow>('/payroll/compensations', toCompensationBody(payload)).then(
+        mapCompensation,
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'compensations'] }),
   });
 }
@@ -96,7 +143,9 @@ export function useUpdateCompensation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateCompensationPayload }) =>
-      patch<DentistCompensation>(`/payroll/compensations/${id}`, payload),
+      patch<PrismaCompensationRow>(`/payroll/compensations/${id}`, toCompensationBody(payload)).then(
+        mapCompensation,
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['payroll', 'compensations'] }),
   });
 }
@@ -160,8 +209,14 @@ export function useComputePeriod() {
   return useMutation({
     mutationFn: (id: string) =>
       post<PayrollPeriodDetail>(`/payroll/periods/${id}/compute`).then(mapPeriodDetail),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: payrollKeys.period(data.id) });
+    // The compute endpoint's response is `{ periodId, lineItems }`, not a
+    // full period (no `.id`), so `data.id` was always undefined here and
+    // invalidated a query key nothing was subscribed to — the period
+    // detail page silently kept showing pre-compute (zeroed) data until
+    // the user navigated away and back. Invalidate by the id the caller
+    // passed in instead, which is always correct.
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: payrollKeys.period(id) });
       qc.invalidateQueries({ queryKey: ['payroll', 'periods'] });
     },
   });

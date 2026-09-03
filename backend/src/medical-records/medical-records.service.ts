@@ -222,7 +222,8 @@ export class MedicalRecordsService {
   private formatClinicalNoteList(note: Record<string, any> | null) {
     if (!note) return [];
     const sections: Array<{ type: string; content: string }> = [];
-    if (note.chiefComplaint) sections.push({ type: 'chief_complaint', content: note.chiefComplaint });
+    if (note.chiefComplaint)
+      sections.push({ type: 'chief_complaint', content: note.chiefComplaint });
     if (note.diagnosis) sections.push({ type: 'diagnosis', content: note.diagnosis });
     if (note.treatmentPlan) sections.push({ type: 'other', content: note.treatmentPlan });
     if (note.notes) sections.push({ type: 'other', content: note.notes });
