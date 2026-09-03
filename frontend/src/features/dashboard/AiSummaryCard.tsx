@@ -2,7 +2,7 @@
 // AI Patient Summary card — Mount ở Dashboard / Reception.
 // Hiển thị 3 bullet ngắn: dị ứng, đang chờ, lần tới. Cache 1h.
 // =============================================================================
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarClock, ChevronDown, RefreshCw, Sparkles, Stethoscope } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardSkeleton, EmptyState, Tooltip } from '@/components/ui';
@@ -28,6 +28,18 @@ const ICON_BG: Record<SummaryBullet['icon'], string> = {
 export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps) {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientId ?? patientOptions?.[0]?.id ?? null);
   const [refreshTick, setRefreshTick] = useState(0);
+
+  // `patientOptions` arrives from an async "today's appointments" query on
+  // the parent, so on first render (before it resolves) it's empty and the
+  // useState initializer above locks in `null` — later renders that pass a
+  // non-empty list don't re-run that initializer, so the card got stuck on
+  // the "no appointments today" empty state even once real options existed.
+  useEffect(() => {
+    if (patientId || selectedPatientId) return;
+    if (patientOptions && patientOptions.length > 0) {
+      setSelectedPatientId(patientOptions[0].id);
+    }
+  }, [patientId, patientOptions, selectedPatientId]);
 
   const effectivePatientId = patientId ?? selectedPatientId;
 

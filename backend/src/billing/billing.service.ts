@@ -729,10 +729,17 @@ export class BillingService {
   // ==========================================================================
 
   private resolveRange(from?: string, to?: string): { fromDate: Date; toDate: Date } {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    const toDate = to ? new Date(to) : today;
-    if (toDate.getHours() === 0 && toDate.getMinutes() === 0) {
+    // `to` (when provided) is a bare YYYY-MM-DD string, which Date parses as
+    // UTC midnight. The previous check for "is this UTC midnight" read
+    // toDate.getHours()/getMinutes() — LOCAL time — so on any server whose
+    // local timezone isn't UTC (e.g. UTC+7), a same-day "today" range like
+    // from=to=2026-09-03 resolved to just [00:00, 07:00) local instead of
+    // the whole day, silently dropping everything from mid-morning on.
+    let toDate: Date;
+    if (to) {
+      toDate = endOfDayInclusive(to);
+    } else {
+      toDate = new Date();
       toDate.setHours(23, 59, 59, 999);
     }
     let fromDate: Date;
