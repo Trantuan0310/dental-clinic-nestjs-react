@@ -110,30 +110,144 @@ export interface InventoryCategoryOption {
   name: string;
 }
 
+// Raw Prisma `InventoryItem` row (see backend inventory.service.ts /
+// prisma/schema.prisma) — column names differ from this file's InventoryItem
+// type (sku vs code, quantityOnHand vs currentQuantity), and Decimal columns
+// serialize as strings over the wire.
+interface PrismaInventoryItemRow {
+  id: string;
+  sku: string;
+  name: string;
+  categoryId?: string | null;
+  category?: { id: string; name: string } | null;
+  unit: string;
+  quantityOnHand: number | string;
+  minStockLevel: number | string;
+  costPrice?: number | string | null;
+  description?: string | null;
+  status: 'ACTIVE' | 'DISCONTINUED';
+  createdAt: string;
+  updatedAt?: string;
+}
+
+function mapInventoryItem(raw: PrismaInventoryItemRow): InventoryItem {
+  return {
+    id: raw.id,
+    code: raw.sku,
+    name: raw.name,
+    categoryId: raw.categoryId,
+    category: raw.category,
+    unit: raw.unit,
+    currentQuantity: Number(raw.quantityOnHand),
+    minStockLevel: Number(raw.minStockLevel),
+    // No selling-price concept on the backend — items are consumed by
+    // treatments, not sold directly — so this is always unset.
+    costPrice: Number(raw.costPrice ?? 0),
+    sellingPrice: 0,
+    description: raw.description,
+    status: raw.status,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+interface PrismaStockMovementRow {
+  id: string;
+  inventoryItemId: string;
+  inventoryItem?: { id: string; sku: string; name: string; unit: string } | null;
+  type: StockMovementType;
+  refType?: string | null;
+  refId?: string | null;
+  diff: number | string;
+  quantityAfter: number | string;
+  reason?: string | null;
+  performedBy?: string | null;
+  performedByUser?: { id: string; fullName: string } | null;
+  performedAt: string;
+}
+
+function mapStockMovement(raw: PrismaStockMovementRow): StockMovement {
+  return {
+    id: raw.id,
+    itemId: raw.inventoryItemId,
+    itemCode: raw.inventoryItem?.sku ?? '',
+    itemName: raw.inventoryItem?.name ?? '',
+    type: raw.type,
+    quantity: Number(raw.diff),
+    balanceAfter: Number(raw.quantityAfter),
+    referenceType: raw.refType,
+    referenceId: raw.refId,
+    reason: raw.reason,
+    performedByUserId: raw.performedBy ?? '',
+    performedByUserName: raw.performedByUser?.fullName ?? '',
+    createdAt: raw.performedAt,
+  };
+}
+
+// Outbound payload for create/update — only fields the backend DTO
+// actually accepts (sku/quantityOnHand, not code/currentQuantity).
+interface InventoryItemWritePayload {
+  sku?: string;
+  categoryId?: string | null;
+  name?: string;
+  description?: string | null;
+  quantityOnHand?: number;
+  minStockLevel?: number;
+  unit?: string;
+  costPrice?: number;
+  status?: 'ACTIVE' | 'DISCONTINUED';
+}
+
+function toWritePayload(item: Partial<InventoryItem>): InventoryItemWritePayload {
+  return {
+    ...(item.code !== undefined && { sku: item.code }),
+    ...(item.categoryId !== undefined && { categoryId: item.categoryId }),
+    ...(item.name !== undefined && { name: item.name }),
+    ...(item.description !== undefined && { description: item.description }),
+    ...(item.currentQuantity !== undefined && { quantityOnHand: item.currentQuantity }),
+    ...(item.minStockLevel !== undefined && { minStockLevel: item.minStockLevel }),
+    ...(item.unit !== undefined && { unit: item.unit }),
+    ...(item.costPrice !== undefined && { costPrice: item.costPrice }),
+    ...(item.status !== undefined && { status: item.status }),
+  };
+}
+
 export const inventoryApi = {
   async list(params?: InventoryFilters): Promise<InventoryItemListResponse> {
-    const { data } = await api.get<InventoryItemListResponse>('/inventory/items', { params });
-    return data;
+    const { data } = await api.get<{ data: PrismaInventoryItemRow[]; total?: number }>(
+      '/inventory/items',
+      { params },
+    );
+    return { data: data.data.map(mapInventoryItem), total: data.total ?? data.data.length };
   },
 
   async get(id: string): Promise<InventoryItem> {
-    const { data } = await api.get<{ data: InventoryItem }>(`/inventory/items/${id}`);
-    return unwrap(data);
+    const { data } = await api.get<{ data: PrismaInventoryItemRow }>(`/inventory/items/${id}`);
+    return mapInventoryItem(unwrap(data));
   },
 
   async create(payload: Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<InventoryItem> {
-    const { data } = await api.post<{ data: InventoryItem }>('/inventory/items', payload);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaInventoryItemRow }>(
+      '/inventory/items',
+      toWritePayload(payload),
+    );
+    return mapInventoryItem(unwrap(data));
   },
 
   async update(id: string, payload: Partial<InventoryItem>): Promise<InventoryItem> {
-    const { data } = await api.patch<{ data: InventoryItem }>(`/inventory/items/${id}`, payload);
-    return unwrap(data);
+    const { data } = await api.patch<{ data: PrismaInventoryItemRow }>(
+      `/inventory/items/${id}`,
+      toWritePayload(payload),
+    );
+    return mapInventoryItem(unwrap(data));
   },
 
   async adjust(id: string, payload: StockAdjustmentPayload): Promise<InventoryItem> {
-    const { data } = await api.post<{ data: InventoryItem }>(`/inventory/items/${id}/adjust`, payload);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaInventoryItemRow }>(
+      `/inventory/items/${id}/adjust`,
+      payload,
+    );
+    return mapInventoryItem(unwrap(data));
   },
 
   async listMovements(params?: {
@@ -144,8 +258,13 @@ export const inventoryApi = {
     page?: number;
     pageSize?: number;
   }): Promise<StockMovementListResponse> {
-    const { data } = await api.get<StockMovementListResponse>('/inventory/movements', { params });
-    return data;
+    // Backend query param is `inventoryItemId`, not `itemId`.
+    const { itemId, ...rest } = params ?? {};
+    const { data } = await api.get<{ data: PrismaStockMovementRow[]; total?: number }>(
+      '/inventory/movements',
+      { params: { ...rest, inventoryItemId: itemId } },
+    );
+    return { data: data.data.map(mapStockMovement), total: data.total ?? data.data.length };
   },
 
   async listCategories(): Promise<InventoryCategoryOption[]> {
@@ -154,7 +273,7 @@ export const inventoryApi = {
   },
 
   async getLowStockAlerts(): Promise<InventoryItem[]> {
-    const { data } = await api.get<{ data: InventoryItem[] }>('/inventory/items/low-stock');
-    return unwrap(data);
+    const { data } = await api.get<{ data: PrismaInventoryItemRow[] }>('/inventory/items/low-stock');
+    return unwrap(data).map(mapInventoryItem);
   },
 };

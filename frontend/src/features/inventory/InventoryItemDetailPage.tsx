@@ -246,10 +246,6 @@ export default function InventoryItemDetailPage() {
                 <span className="text-gray-500">Giá nhập</span>
                 <span className="font-medium">{formatCurrency(item.costPrice)}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Giá bán</span>
-                <span className="font-medium">{formatCurrency(item.sellingPrice)}</span>
-              </div>
             </div>
           </Card>
         </div>
