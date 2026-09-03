@@ -181,7 +181,7 @@ export default function UsersPage() {
                         >
                           <MoreHorizontal className="h-4 w-4 text-gray-400" />
                         </button>
-                        {user.status === 'DEACTIVATED' ? (
+                        {user.status === 'deactivated' ? (
                           <button
                             className="rounded p-1 hover:bg-green-50"
                             onClick={() => handleReactivate(user)}

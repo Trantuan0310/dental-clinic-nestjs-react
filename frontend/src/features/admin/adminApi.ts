@@ -30,6 +30,16 @@ const get = async <T>(url: string, config?: Parameters<typeof api.get>[1]) => {
   return unwrap(data);
 };
 
+// Paginated list endpoints (users/roles/audit-logs) already respond with
+// { data: T[], pagination } as their whole body — that shape IS the
+// *ListResponse type, not something to unwrap a `data` layer out of. Using
+// `get()` on these silently drops `pagination` and leaves callers reading
+// `.data` off a bare array (always undefined -> "no results" with no error).
+const getList = async <T>(url: string, config?: Parameters<typeof api.get>[1]): Promise<T> => {
+  const { data } = await api.get<T>(url, config);
+  return data;
+};
+
 const post = async <T>(url: string, body: unknown) => {
   const { data } = await api.post<{ data: T }>(url, body);
   return unwrap(data);
@@ -63,7 +73,7 @@ export function useUsers(params?: ListUsersParams) {
   return useQuery({
     queryKey: ['admin', 'users', params],
     queryFn: (): Promise<AdminUserListResponse> =>
-      get<AdminUserListResponse>('/admin/users', { params }),
+      getList<AdminUserListResponse>('/admin/users', { params }),
   });
 }
 
@@ -121,7 +131,7 @@ export function useReactivateUser() {
 export function useRoles() {
   return useQuery({
     queryKey: ['admin', 'roles'],
-    queryFn: (): Promise<AdminRoleListResponse> => get<AdminRoleListResponse>('/admin/roles'),
+    queryFn: (): Promise<AdminRoleListResponse> => getList<AdminRoleListResponse>('/admin/roles'),
   });
 }
 
@@ -175,7 +185,7 @@ export function useAuditLogs(params?: AuditLogFilters) {
     queryKey: ['admin', 'audit-logs', params],
     queryFn: (): Promise<AuditLogListResponse> => {
       const { cursor, ...rest } = params ?? {};
-      return get<AuditLogListResponse>('/admin/audit-logs', {
+      return getList<AuditLogListResponse>('/admin/audit-logs', {
         params: { ...rest, ...(cursor ? { cursor } : {}) },
       });
     },

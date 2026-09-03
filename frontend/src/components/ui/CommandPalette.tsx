@@ -193,11 +193,11 @@ export function CommandPalette() {
     enabled: entityEnabled,
     queryKey: ['command-palette', 'patients', debouncedQuery],
     queryFn: async (): Promise<EntityHit[]> => {
-      const res = await get<{ data: Array<{ id: string; code: string; fullName: string; primaryPhone?: string | null }> }>(
+      const res = await get<Array<{ id: string; code: string; fullName: string; primaryPhone?: string | null }>>(
         '/patients',
         { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT, status: 'active' } },
       );
-      return res.data.map((p) => ({
+      return res.map((p) => ({
         kind: 'patient',
         id: `patient:${p.id}`,
         to: `/patients/${p.id}`,
@@ -214,21 +214,18 @@ export function CommandPalette() {
     queryKey: ['command-palette', 'appointments', debouncedQuery],
     queryFn: async (): Promise<EntityHit[]> => {
       try {
-        const res = await get<{
-          data: Array<{
-            id: string;
-            patientName?: string;
-            patientCode?: string;
-            startsAt?: string;
-            status?: string;
-          }>;
-        }>('/appointments', { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT } });
-        return (res.data ?? []).map((a) => ({
+        const res = await get<Array<{
+          id: string;
+          startAt?: string;
+          status?: string;
+          patient?: { fullName?: string; code?: string } | null;
+        }>>('/appointments', { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT } });
+        return (res ?? []).map((a) => ({
           kind: 'appointment' as const,
           id: `appointment:${a.id}`,
           to: `/appointments/list?open=${a.id}`,
-          label: a.patientName ?? 'Cuộc hẹn',
-          hint: `${a.patientCode ?? ''}${a.startsAt ? ` · ${new Date(a.startsAt).toLocaleString('vi-VN')}` : ''}`,
+          label: a.patient?.fullName ?? 'Cuộc hẹn',
+          hint: `${a.patient?.code ?? ''}${a.startAt ? ` · ${new Date(a.startAt).toLocaleString('vi-VN')}` : ''}`,
           icon: FileText,
         }));
       } catch {
@@ -243,16 +240,14 @@ export function CommandPalette() {
     queryKey: ['command-palette', 'invoices', debouncedQuery],
     queryFn: async (): Promise<EntityHit[]> => {
       try {
-        const res = await get<{
-          data: Array<{
-            id: string;
-            code: string;
-            patientName: string;
-            status: string;
-            total?: number;
-          }>;
-        }>('/billing/invoices', { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT } });
-        return (res.data ?? []).map((inv) => ({
+        const res = await get<Array<{
+          id: string;
+          code: string;
+          patientName: string;
+          status: string;
+          total?: number;
+        }>>('/billing/invoices', { params: { q: debouncedQuery, pageSize: ENTITY_LIMIT } });
+        return (res ?? []).map((inv) => ({
           kind: 'invoice' as const,
           id: `invoice:${inv.id}`,
           to: `/billing/invoices/${inv.id}`,

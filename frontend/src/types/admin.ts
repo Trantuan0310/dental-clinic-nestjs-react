@@ -7,7 +7,10 @@ export interface AdminUser {
   id: string;
   email: string;
   fullName: string;
-  status: 'ACTIVE' | 'PENDING_SETUP' | 'DEACTIVATED';
+  // The API lowercases this in every response (list/create/me) even though
+  // the underlying Prisma enum and the ?status= list filter are uppercase —
+  // see users.service.ts. Not a typo; keep this lowercase to match reality.
+  status: 'active' | 'pending_setup' | 'deactivated';
   roles: string[];
   lastLoginAt?: string | null;
   createdAt: string;
