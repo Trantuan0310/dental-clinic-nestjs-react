@@ -4,6 +4,11 @@
 // file directly from `@/features/appointments/imperativeApi`.
 
 import { api, unwrap } from '@/lib/api';
+import {
+  transformAppointment,
+  transformAppointmentList,
+  type PrismaAppointmentRow,
+} from './appointmentApi';
 import type {
   Appointment,
   AppointmentListResponse,
@@ -16,40 +21,52 @@ import type {
   DentistAvailability,
 } from '@/types/appointment';
 
+// The backend returns Prisma rows (startAt/endAt, nested patient/dentist,
+// upper-case status) — every method here transforms them into the frontend
+// Appointment shape (startsAt/endsAt, flat patientName/dentistName) via the
+// same transform appointmentApi.ts's hooks use, rather than passing the raw
+// row through under an `Appointment`-typed lie.
 export const appointmentsApi = {
   async list(params?: AppointmentFilters): Promise<AppointmentListResponse> {
-    const { data } = await api.get<AppointmentListResponse>('/appointments', { params });
-    return data;
+    const { data } = await api.get<{ data: PrismaAppointmentRow[]; pagination?: AppointmentListResponse['pagination'] }>(
+      '/appointments',
+      { params },
+    );
+    return {
+      data: transformAppointmentList(data.data),
+      pagination: data.pagination,
+      total: data.data.length,
+    };
   },
 
   async get(id: string): Promise<Appointment> {
-    const { data } = await api.get<{ data: Appointment }>(`/appointments/${id}`);
-    return unwrap(data);
+    const { data } = await api.get<{ data: PrismaAppointmentRow }>(`/appointments/${id}`);
+    return transformAppointment(unwrap(data));
   },
 
   async create(payload: CreateAppointmentPayload): Promise<Appointment> {
-    const { data } = await api.post<{ data: Appointment }>('/appointments', payload);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaAppointmentRow }>('/appointments', payload);
+    return transformAppointment(unwrap(data));
   },
 
   async update(id: string, payload: UpdateAppointmentPayload): Promise<Appointment> {
-    const { data } = await api.patch<{ data: Appointment }>(`/appointments/${id}`, payload);
-    return unwrap(data);
+    const { data } = await api.patch<{ data: PrismaAppointmentRow }>(`/appointments/${id}`, payload);
+    return transformAppointment(unwrap(data));
   },
 
   async cancel(id: string, payload: CancelAppointmentPayload): Promise<Appointment> {
-    const { data } = await api.post<{ data: Appointment }>(`/appointments/${id}/cancel`, payload);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaAppointmentRow }>(`/appointments/${id}/cancel`, payload);
+    return transformAppointment(unwrap(data));
   },
 
   async reschedule(id: string, payload: RescheduleAppointmentPayload): Promise<Appointment> {
-    const { data } = await api.post<{ data: Appointment }>(`/appointments/${id}/reschedule`, payload);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaAppointmentRow }>(`/appointments/${id}/reschedule`, payload);
+    return transformAppointment(unwrap(data));
   },
 
   async checkIn(id: string, payload?: CheckInPayload): Promise<Appointment> {
-    const { data } = await api.post<{ data: Appointment }>(`/appointments/${id}/check-in`, payload);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaAppointmentRow }>(`/appointments/${id}/check-in`, payload);
+    return transformAppointment(unwrap(data));
   },
 
   async getDentistAvailability(
@@ -64,7 +81,7 @@ export const appointmentsApi = {
   },
 
   async markNoShow(id: string): Promise<Appointment> {
-    const { data } = await api.post<{ data: Appointment }>(`/appointments/${id}/no-show`);
-    return unwrap(data);
+    const { data } = await api.post<{ data: PrismaAppointmentRow }>(`/appointments/${id}/no-show`);
+    return transformAppointment(unwrap(data));
   },
 };

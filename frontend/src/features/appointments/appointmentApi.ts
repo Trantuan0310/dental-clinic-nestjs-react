@@ -30,6 +30,17 @@ const get = async <T>(url: string, config?: Parameters<typeof api.get>[1]) => {
   return unwrap(data);
 };
 
+// Paginated list endpoints (appointments, today, waiting-queue, calendar
+// range) already respond with { data: T[], pagination } as their whole
+// body — that IS the shape callers want, not something to unwrap a `data`
+// layer out of. Using `get()` on these silently drops `pagination` and
+// leaves callers destructuring `.data`/`.pagination` off a bare array
+// (both undefined -> empty list, no error).
+const getList = async <T>(url: string, config?: Parameters<typeof api.get>[1]): Promise<T> => {
+  const { data } = await api.get<T>(url, config);
+  return data;
+};
+
 const post = async <T>(url: string, body?: unknown) => {
   const { data } = await api.post<AuthEnvelope<T>>(url, body);
   return unwrap(data);
@@ -45,7 +56,7 @@ const patch = async <T>(url: string, body?: unknown) => {
 // (Prisma uses snake_case fields, the FE uses camelCase)
 // ---------------------------------------------------------------------------
 
-type PrismaAppointmentRow = {
+export type PrismaAppointmentRow = {
   id: string;
   patientId: string;
   dentistId: string;
@@ -83,7 +94,7 @@ const toIso = (v: Date | string | null | undefined): string | null => {
   return v.toISOString();
 };
 
-function transformAppointment(raw: PrismaAppointmentRow): Appointment {
+export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
   const patient = raw.patient ?? { id: raw.patientId };
   const dentist = raw.dentist ?? { id: raw.dentistId };
   const startIso = toIso(raw.startAt) ?? new Date().toISOString();
@@ -121,7 +132,7 @@ function transformAppointment(raw: PrismaAppointmentRow): Appointment {
   };
 }
 
-function transformAppointmentList(raws: PrismaAppointmentRow[]): Appointment[] {
+export function transformAppointmentList(raws: PrismaAppointmentRow[]): Appointment[] {
   return raws.map(transformAppointment);
 }
 
@@ -199,7 +210,7 @@ export function useAppointments(filters?: AppointmentFilters) {
   return useQuery({
     queryKey: appointmentKeys.list(filters),
     queryFn: async (): Promise<AppointmentListResponse> => {
-      const { data, pagination } = await get<{
+      const { data, pagination } = await getList<{
         data: PrismaAppointmentRow[];
         pagination?: { pageSize: number; nextCursor: string | null; hasMore: boolean };
       }>('/appointments', { params: toListParams(filters) });
@@ -227,7 +238,7 @@ export function useTodayAppointments() {
   return useQuery({
     queryKey: appointmentKeys.today,
     queryFn: async (): Promise<AppointmentListResponse> => {
-      const { data, pagination } = await get<{
+      const { data, pagination } = await getList<{
         data: PrismaAppointmentRow[];
         pagination?: { pageSize: number; nextCursor: string | null; hasMore: boolean };
       }>('/appointments/today');
@@ -250,7 +261,7 @@ export function useWaitingQueue(params?: { dentistId?: string; date?: string }) 
   return useQuery({
     queryKey: appointmentKeys.waitingQueue(params),
     queryFn: async (): Promise<WaitingQueueEntry[]> => {
-      const { data } = await get<{
+      const { data } = await getList<{
         data: Array<{
           id: string;
           patient: { id: string; code: string; fullName: string };
@@ -290,7 +301,7 @@ export function useCalendar(params: CalendarFetchParams) {
       dentistId: params.dentistId,
     }),
     queryFn: async (): Promise<Appointment[]> => {
-      const { data } = await get<{ data: PrismaAppointmentRow[] }>(
+      const { data } = await getList<{ data: PrismaAppointmentRow[] }>(
         '/appointments',
         {
           params: {
