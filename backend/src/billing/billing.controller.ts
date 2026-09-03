@@ -138,11 +138,13 @@ export class BillingController {
   @Get('reports/revenue')
   @RequirePermissions('report.revenue.read')
   async revenueReport(@Query() q: RevenueReportQueryDto) {
-    return this.billing.revenueReport({
-      from: q.from,
-      to: q.to,
-      dentistId: q.dentistId,
-    });
+    return {
+      data: await this.billing.revenueReport({
+        from: q.from,
+        to: q.to,
+        dentistId: q.dentistId,
+      }),
+    };
   }
 
   @Get('reports/outstanding')
