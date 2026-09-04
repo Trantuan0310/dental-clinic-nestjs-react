@@ -8,3 +8,7 @@ dist-ssr
 .idea
 *.log
 .DS_Store
+e2e/.auth
+test-results
+playwright-report
+blob-report

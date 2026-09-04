@@ -1,5 +1,10 @@
 import { test, expect } from './fixtures';
 
+// This file exercises the login flow itself (including the "not logged in
+// yet" redirect), so it must start unauthenticated — override the
+// pre-authenticated storageState the rest of the suite uses by default.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe('Smoke — public surfaces', () => {
   test('login page renders correctly', async ({ page }) => {
     await page.goto('/login');

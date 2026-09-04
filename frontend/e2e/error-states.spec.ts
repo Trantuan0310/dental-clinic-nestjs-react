@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Error and Loading States E2E Test
@@ -6,7 +6,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Error & Loading States', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('shows empty state when no patients', async ({ page }) => {

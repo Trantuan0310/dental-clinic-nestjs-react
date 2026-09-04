@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Appointment Booking E2E Test
@@ -6,7 +6,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Appointment Booking', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('calendar page loads with view toolbar', async ({ page }) => {

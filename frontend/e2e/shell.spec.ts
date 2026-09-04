@@ -1,8 +1,8 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 test.describe('Shell — post-login', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('dashboard loads with KPI cards', async ({ page }) => {

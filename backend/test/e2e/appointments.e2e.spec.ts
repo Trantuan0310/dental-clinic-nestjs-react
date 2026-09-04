@@ -45,12 +45,15 @@ describe('Appointments E2E', () => {
     });
   });
 
-  describe('GET /appointments/calendar', () => {
-    it('returns calendar events', async () => {
+  // There is no dedicated /appointments/calendar route — the calendar view
+  // fetches from GET /appointments with a from/to range (see
+  // frontend/src/features/appointments/appointmentApi.ts useCalendar()).
+  describe('GET /appointments with a date range', () => {
+    it('returns appointments for a same-day range', async () => {
       if (!token) return;
       const today = new Date().toISOString().slice(0, 10);
       const res = await request(BASE)
-        .get('/appointments/calendar')
+        .get('/appointments')
         .query({ from: today, to: today })
         .set(authHeaders(token));
       expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);

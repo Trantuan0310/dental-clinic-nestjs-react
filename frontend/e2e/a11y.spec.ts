@@ -1,8 +1,8 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 test.describe('A11y — keyboard & landmarks', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
     await page.waitForLoadState('networkidle');
   });
 

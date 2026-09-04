@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Permission boundary tests.
@@ -7,13 +7,13 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Permission boundaries', () => {
   test('admin can access admin-only routes', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
 
     // Admin-only routes
     const adminRoutes = [
       '/admin/users',
       '/admin/roles',
-      '/admin/audit-logs',
+      '/admin/audit',
       '/admin/settings',
     ];
 
@@ -29,7 +29,6 @@ test.describe('Permission boundaries', () => {
   });
 
   test('admin can view dashboard with KPIs', async ({ page }) => {
-    await login(page);
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -40,7 +39,6 @@ test.describe('Permission boundaries', () => {
   });
 
   test('admin can view patient list', async ({ page }) => {
-    await login(page);
     await page.goto('/patients');
     await page.waitForLoadState('networkidle');
 
@@ -51,7 +49,6 @@ test.describe('Permission boundaries', () => {
   });
 
   test('admin can view appointment calendar', async ({ page }) => {
-    await login(page);
     await page.goto('/appointments');
     await page.waitForLoadState('networkidle');
 
@@ -61,8 +58,7 @@ test.describe('Permission boundaries', () => {
   });
 
   test('admin can view billing invoices', async ({ page }) => {
-    await login(page);
-    await page.goto('/billing/invoices');
+    await page.goto('/billing/list');
     await page.waitForLoadState('networkidle');
 
     // Invoices page should render
@@ -71,7 +67,6 @@ test.describe('Permission boundaries', () => {
   });
 
   test('admin can view payroll dashboard', async ({ page }) => {
-    await login(page);
     await page.goto('/payroll');
     await page.waitForLoadState('networkidle');
 
@@ -81,7 +76,6 @@ test.describe('Permission boundaries', () => {
   });
 
   test('admin can view inventory', async ({ page }) => {
-    await login(page);
     await page.goto('/inventory');
     await page.waitForLoadState('networkidle');
 
@@ -93,7 +87,7 @@ test.describe('Permission boundaries', () => {
 
 test.describe('403 handling', () => {
   test('should not show 500 error on permission denied', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
 
     // Try to navigate to a non-existent route
     const response = await page.goto('/this-route-does-not-exist');

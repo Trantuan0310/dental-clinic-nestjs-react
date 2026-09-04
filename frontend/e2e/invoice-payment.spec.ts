@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Invoice and Billing E2E Test
@@ -6,7 +6,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Billing', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('billing page loads and shows invoice list', async ({ page }) => {

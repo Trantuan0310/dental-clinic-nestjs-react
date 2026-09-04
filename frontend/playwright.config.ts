@@ -20,8 +20,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'list',
+  // Logs in once per role and saves the session so tests start
+  // pre-authenticated (see global-setup.ts for why — POST /auth/login is
+  // throttled to 5/60s, which a full suite of individual per-test logins
+  // blows through in seconds).
+  globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173',
+    storageState: 'e2e/.auth/admin.json',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

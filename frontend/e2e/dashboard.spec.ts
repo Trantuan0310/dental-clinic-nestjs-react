@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Dashboard rendering tests.
@@ -6,7 +6,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
     await page.goto('/');
     await page.waitForLoadState('networkidle');
   });
@@ -44,7 +44,7 @@ test.describe('Dashboard', () => {
 
 test.describe('Reports page', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('reports page loads', async ({ page }) => {

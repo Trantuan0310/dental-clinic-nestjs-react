@@ -32,18 +32,21 @@ describe('Medical Records E2E', () => {
     }
   });
 
-  describe('GET /medical-records/today', () => {
-    it('returns today encounters', async () => {
+  // The "today" clinical view and waiting queue are served by the
+  // appointments module, not a /medical-records/* route — there is no such
+  // route on this controller.
+  describe('GET /appointments/today', () => {
+    it("returns today's appointments", async () => {
       if (!token) return;
-      const res = await request(BASE).get('/medical-records/today').set(authHeaders(token));
+      const res = await request(BASE).get('/appointments/today').set(authHeaders(token));
       expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
     });
   });
 
-  describe('GET /medical-records/queue', () => {
-    it('returns queue', async () => {
+  describe('GET /appointments/waiting-queue', () => {
+    it('returns the waiting queue', async () => {
       if (!token) return;
-      const res = await request(BASE).get('/medical-records/queue').set(authHeaders(token));
+      const res = await request(BASE).get('/appointments/waiting-queue').set(authHeaders(token));
       expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
     });
   });

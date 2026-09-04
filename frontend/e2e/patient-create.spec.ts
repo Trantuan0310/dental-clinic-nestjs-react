@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Patient Creation E2E Test
@@ -6,7 +6,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Patient Creation', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('admin can create new patient and see it in list', async ({ page }) => {

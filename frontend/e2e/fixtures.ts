@@ -8,8 +8,8 @@ import { test as base, expect, type Page } from '@playwright/test';
  * otherwise we fall back to the seeded admin credentials.
  */
 export async function login(page: Page): Promise<void> {
-  const username = process.env.E2E_USERNAME ?? 'admin@gensmile.vn';
-  const password = process.env.E2E_PASSWORD ?? 'Admin@123';
+  const username = process.env.E2E_USERNAME ?? 'admin@clinic.local';
+  const password = process.env.E2E_PASSWORD ?? 'Admin123!';
 
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(username);

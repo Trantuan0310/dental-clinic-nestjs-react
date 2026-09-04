@@ -214,6 +214,18 @@ Hệ thống gồm **30 Prisma models** trong **7 modules**:
 
 ### E.2 Frontend E2E Tests (Playwright)
 
+Chạy thủ công qua `npm run test:e2e` (frontend) — **chưa được gắn vào
+GitHub Actions CI**, nên không tự chạy lại mỗi lần push. Bộ test này từng
+không chạy được: `fixtures.ts` dùng sai email/mật khẩu mặc định
+(`admin@gensmile.vn`, tài khoản không tồn tại) và mỗi test tự đăng nhập lại
+từ đầu, nhanh chóng vượt giới hạn throttle của `/auth/login` (5 lần/60s) —
+gộp lại khiến gần như toàn bộ 55 test timeout ở bước đăng nhập. Đã sửa: dùng
+đúng tài khoản seed, và chuyển sang đăng nhập một lần trong `global-setup.ts`
+rồi tái sử dụng session đã lưu cho các test còn lại (`playwright.config.ts`).
+Kết quả sau khi sửa: **38/55 pass**. 17 test còn fail là các vấn đề riêng lẻ
+(selector/thời gian chờ không khớp UI hiện tại, một route test cũ trỏ sai) —
+chưa rà hết từng cái.
+
 | File | Coverage |
 |------|----------|
 | `login.spec.ts` | Login page, redirect |
@@ -232,6 +244,16 @@ Hệ thống gồm **30 Prisma models** trong **7 modules**:
 
 ### E.3 Backend E2E Tests (Supertest)
 
+Chạy thủ công qua `npm run test:e2e` (backend, cần DB thật) — cũng chưa nằm
+trong CI. Bộ này trước đó **không chạy được** (`test/jest-e2e.json` khai báo
+cả `testMatch` và `testRegex` — Jest từ chối chạy khi có cả hai, và pattern
+còn sai đuôi file: tìm `.e2e-spec.ts` trong khi file thật là `.e2e.spec.ts`).
+Sau khi sửa config và cập nhật 3 test trỏ nhầm route
+(`/appointments/calendar`, `/medical-records/today`, `/medical-records/queue`
+— không route nào trong số này tồn tại; route thật là `GET /appointments` có
+tham số ngày, `/appointments/today`, `/appointments/waiting-queue`):
+**14/14 pass**.
+
 | File | Coverage |
 |------|----------|
 | `billing.e2e.spec.ts` | Invoice CRUD, reports |
@@ -247,9 +269,8 @@ Hệ thống gồm **30 Prisma models** trong **7 modules**:
 
 | Variable | Required | Default | Mô tả |
 |----------|----------|---------|--------|
-| `DATABASE_URL` | ✓ | — | PostgreSQL connection string |
+| `DATABASE_URL` | ✓ | — | PostgreSQL connection string. Production yêu cầu `sslmode=require`/`verify-ca`/`verify-full` — app từ chối khởi động nếu thiếu |
 | `JWT_SECRET` | ✓ | — | JWT signing secret (32+ chars) |
-| `JWT_REFRESH_SECRET` | ✓ | — | Refresh token secret |
 | `JWT_ACCESS_EXPIRY` | — | `15m` | Access token TTL |
 | `JWT_REFRESH_EXPIRY` | — | `7d` | Refresh token TTL |
 | `REDIS_URL` | — | `redis://localhost:6379` | Redis connection |
@@ -277,13 +298,18 @@ Hệ thống gồm **30 Prisma models** trong **7 modules**:
 
 ---
 
-## H. Deployment Platforms Tested
+## H. Deployment Platforms
 
 | Platform | Backend | Frontend | Database | Redis | Status |
 |----------|---------|----------|---------|-------|--------|
 | Docker (local) | ✓ | ✓ | ✓ | ✓ | ✅ Tested |
-| Railway | ✓ | ✓ | ✓ (plugin) | ✓ (plugin) | ✅ Tested |
+| Railway | ✓ | ✓ | ✓ (plugin) | ✓ (plugin) | ✅ Config ready |
 | Render | ✓ | ✓ | ✓ (managed) | ✓ (managed) | ✅ Config ready |
 | VPS (Nginx) | ✓ | ✓ | ✓ | ✓ | ✅ Config ready |
-| Vercel | — | ✓ | — | — | ✅ Config Ready |
-| GitHub Actions | ✓ | ✓ | ✓ | — | ✅ CI/CD Ready |
+| Vercel | — | ✓ | — | — | ✅ Config ready |
+
+**GitHub Actions CI** (`.github/workflows/ci.yml`) chạy lint, typecheck, unit
+test và build cho cả backend/frontend trên mỗi push/PR — **không có bước
+deploy tự động** lên bất kỳ platform nào ở trên. Việc đưa code lên các
+platform trong bảng vẫn cần thao tác thủ công theo hướng dẫn tương ứng trong
+`docs/08_Deployment/`.

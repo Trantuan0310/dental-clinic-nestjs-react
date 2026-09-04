@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Critical-path smoke tests covering the patient and appointment modules.
@@ -7,7 +7,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Critical paths', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('patients list renders rows', async ({ page }) => {

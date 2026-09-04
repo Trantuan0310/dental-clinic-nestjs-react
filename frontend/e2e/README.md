@@ -29,10 +29,10 @@ npm run test:e2e:ui
 
 ## Auth
 
-By default, tests log in as `admin@gensmile.vn` / `Admin@123`. Override with env vars:
+By default, tests log in as the seeded admin `admin@clinic.local` / `Admin123!`. Override with env vars:
 
 ```bash
-E2E_USERNAME=alice@gensmile.vn E2E_PASSWORD=Secret#1 npm run test:e2e
+E2E_USERNAME=admin@clinic.local E2E_PASSWORD=Admin123! npm run test:e2e
 ```
 
 ## Configuration

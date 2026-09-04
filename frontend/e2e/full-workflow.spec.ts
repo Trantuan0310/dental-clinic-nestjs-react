@@ -1,4 +1,4 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 /**
  * Full workflow smoke test.
@@ -7,7 +7,7 @@ import { test, expect, login } from './fixtures';
  */
 test.describe('Full workflow', () => {
   test('logged-in user can navigate the main shell', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
 
     // Verify shell is rendered
     const header = page.locator('header');
@@ -23,7 +23,7 @@ test.describe('Full workflow', () => {
   });
 
   test('user can search for a patient via header search', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
 
     // Header search input exists
     const search = page.locator('header input[type="search"]').first();
@@ -36,7 +36,7 @@ test.describe('Full workflow', () => {
   });
 
   test('opening profile page works', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
     await page.goto('/me');
     await page.waitForLoadState('networkidle');
     const main = page.locator('main');
@@ -44,7 +44,7 @@ test.describe('Full workflow', () => {
   });
 
   test('logout works', async ({ page }) => {
-    await login(page);
+    await page.goto('/');
 
     // Find logout button (usually in user menu)
     const trigger = page.locator('header button:has(svg)').last();

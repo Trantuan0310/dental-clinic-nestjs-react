@@ -58,10 +58,10 @@ describe('Billing E2E', () => {
         .set(authHeaders(token));
 
       expect(res.status).toBe(HttpStatus.OK);
-      expect(res.body).toHaveProperty('totalInvoiced');
-      expect(res.body).toHaveProperty('totalCollected');
-      expect(res.body).toHaveProperty('byMonth');
-      expect(Array.isArray(res.body.byMonth)).toBe(true);
+      expect(res.body).toHaveProperty('data.totalInvoiced');
+      expect(res.body).toHaveProperty('data.totalCollected');
+      expect(res.body).toHaveProperty('data.byMonth');
+      expect(Array.isArray(res.body.data.byMonth)).toBe(true);
     });
   });
 

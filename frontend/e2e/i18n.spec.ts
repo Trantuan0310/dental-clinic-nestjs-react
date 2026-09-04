@@ -1,8 +1,8 @@
-import { test, expect, login } from './fixtures';
+import { test, expect } from './fixtures';
 
 test.describe('i18n', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    await page.goto('/');
   });
 
   test('default locale renders Vietnamese UI', async ({ page }) => {
