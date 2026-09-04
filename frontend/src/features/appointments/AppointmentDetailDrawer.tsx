@@ -416,7 +416,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                 ) : null}
 
                 {appointment.status === 'checked_in' ? (
-                  <PermissionGuard permission="encounter.create">
+                  <PermissionGuard permission="encounter.start">
                     <Button
                       size="sm"
                       variant="primary"

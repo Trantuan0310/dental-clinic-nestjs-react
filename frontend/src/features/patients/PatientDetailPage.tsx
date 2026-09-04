@@ -18,12 +18,21 @@ import {
 import { patientsApi } from '@/features/patients/imperativeApi';
 import { Button, Card, StatusBadge, Tabs, TabsList, TabsTrigger, TabsContent, Alert } from '@/components/ui';
 import { formatPhone } from '@/lib/format';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function PatientDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
   const [activeTab, setActiveTab] = useState('overview');
+
+  // /encounters/:id (full clinical detail) only accepts encounter.read.any/
+  // .own — a receptionist with only encounter.read.basic can see this
+  // summary list (via /patients/:id/encounters) but must not be offered a
+  // drill-down link into a page their permissions can't actually load.
+  const canViewEncounterDetail = useAuthStore((s) =>
+    s.hasAnyPermission(['encounter.read.any', 'encounter.read.own']),
+  );
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -277,8 +286,14 @@ export default function PatientDetailPage() {
                     {patient.encounters.slice(0, 5).map((encounter) => (
                       <div
                         key={encounter.id}
-                        className="flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 hover:bg-gray-50 cursor-pointer"
-                        onClick={() => navigate(`/encounters/${encounter.id}`)}
+                        className={`flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 ${
+                          canViewEncounterDetail ? 'cursor-pointer hover:bg-gray-50' : ''
+                        }`}
+                        onClick={
+                          canViewEncounterDetail
+                            ? () => navigate(`/encounters/${encounter.id}`)
+                            : undefined
+                        }
                       >
                         <FileText className="h-5 w-5 text-gray-400 shrink-0" />
                         <div className="flex-1 min-w-0">

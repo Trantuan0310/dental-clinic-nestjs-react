@@ -9,6 +9,7 @@ import { Button, Card, StatusBadge, Modal, Input, Textarea } from '@/components/
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
+import { PermissionGuard } from '@/components/PermissionGuard';
 import type { StockMovementType } from '@/types/inventory';
 
 export default function InventoryItemDetailPage() {
@@ -126,10 +127,12 @@ export default function InventoryItemDetailPage() {
           </div>
           <p className="mt-0.5 text-sm text-gray-500 font-mono">{item.code}</p>
         </div>
-        <Button onClick={() => setShowAdjustModal(true)}>
-          <Settings className="h-4 w-4" />
-          Điều chỉnh
-        </Button>
+        <PermissionGuard permission="inventory.update">
+          <Button onClick={() => setShowAdjustModal(true)}>
+            <Settings className="h-4 w-4" />
+            Điều chỉnh
+          </Button>
+        </PermissionGuard>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

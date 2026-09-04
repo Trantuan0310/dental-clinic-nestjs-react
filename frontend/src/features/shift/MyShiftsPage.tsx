@@ -9,11 +9,13 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Loading';
 import { ShiftStatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { PermissionGuard } from '@/components/PermissionGuard';
 import { useCancelShift, useShiftRegistrations } from '@/features/payroll/payrollApi';
 import { RegisterShiftModal } from './RegisterShiftModal';
 import { formatDate } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
+import { useAuthStore } from '@/stores/authStore';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { ShiftRegistration } from '@/types/payroll';
 
@@ -34,7 +36,13 @@ function canCancel(s: ShiftRegistration): { allowed: boolean; reason?: string } 
 
 export default function MyShiftsPage() {
   const [tab, setTab] = useState<'upcoming' | 'past' | 'cancelled'>('upcoming');
-  const { data: shiftsEnvelope, isLoading } = useShiftRegistrations();
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  // Backend treats any actor holding shift.read.any (e.g. receptionist, for
+  // the approval inbox elsewhere) as "admin mode" and returns EVERY
+  // dentist's shifts when no dentistId filter is given. This page is "my
+  // shifts" regardless of what other read permissions the viewer holds, so
+  // always scope explicitly to self.
+  const { data: shiftsEnvelope, isLoading } = useShiftRegistrations({ dentistId: currentUserId });
   const shifts = useMemo(() => shiftsEnvelope ?? [], [shiftsEnvelope]);
   const cancel = useCancelShift();
   const [confirmCancel, setConfirmCancel] = useState<ShiftRegistration | null>(null);
@@ -111,7 +119,7 @@ export default function MyShiftsPage() {
       cell: ({ row }) => {
         const check = canCancel(row.original);
         return (
-          <div>
+          <PermissionGuard permission="shift.cancel">
             <Button
               size="sm"
               variant="outline"
@@ -121,7 +129,7 @@ export default function MyShiftsPage() {
             >
               Hủy
             </Button>
-          </div>
+          </PermissionGuard>
         );
       },
     },
@@ -139,9 +147,11 @@ export default function MyShiftsPage() {
         title="Ca đăng ký của tôi"
         description="Lịch sử các ca tự đăng ký (ngoài lịch cố định)"
         actions={
-          <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
-            Đăng ký ca mới
-          </Button>
+          <PermissionGuard permission="shift.register">
+            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
+              Đăng ký ca mới
+            </Button>
+          </PermissionGuard>
         }
       />
 
@@ -169,9 +179,11 @@ export default function MyShiftsPage() {
             }
             action={
               tab === 'upcoming' && (
-                <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
-                  Đăng ký ca mới
-                </Button>
+                <PermissionGuard permission="shift.register">
+                  <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
+                    Đăng ký ca mới
+                  </Button>
+                </PermissionGuard>
               )
             }
           />

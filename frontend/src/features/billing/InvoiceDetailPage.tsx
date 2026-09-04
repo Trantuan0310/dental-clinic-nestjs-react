@@ -15,6 +15,7 @@ import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } fro
 import { PaymentModal } from './PaymentModal';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
+import { PermissionGuard } from '@/components/PermissionGuard';
 
 export default function InvoiceDetailPage() {
   const navigate = useNavigate();
@@ -110,10 +111,12 @@ export default function InvoiceDetailPage() {
             </Button>
           )}
           {canVoid && (
-            <Button variant="ghost" onClick={() => setShowVoidModal(true)}>
-              <XCircle className="h-4 w-4" />
-              Hủy HĐ
-            </Button>
+            <PermissionGuard permission="invoice.void">
+              <Button variant="ghost" onClick={() => setShowVoidModal(true)}>
+                <XCircle className="h-4 w-4" />
+                Hủy HĐ
+              </Button>
+            </PermissionGuard>
           )}
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="h-4 w-4" />

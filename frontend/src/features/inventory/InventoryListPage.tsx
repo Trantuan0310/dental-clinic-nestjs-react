@@ -7,6 +7,8 @@ import { Button, Card, StatusBadge, SearchInput, Pagination, EmptyState, Modal, 
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
+import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import type { InventoryItem, InventoryFilters } from '@/types/inventory';
 
 const PAGE_SIZE = 20;
@@ -14,6 +16,10 @@ const PAGE_SIZE = 20;
 export default function InventoryListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // Backend POST /inventory/items requires inventory.create — receptionist
+  // only has stock_in/stock_out (issue/receive against existing items), not
+  // create, so without this the button is always live but always fails.
+  const canCreateInventoryItem = useAuthStore((s) => s.hasPermission('inventory.create'));
 
   // categoryId is a UUID fetched from /inventory/categories; UI keeps
   // the selection as the raw UUID and forwards it to the backend.
@@ -126,10 +132,12 @@ export default function InventoryListPage() {
             Quản lý tồn kho của phòng khám
           </p>
         </div>
-        <Button onClick={() => setShowAddModal(true)}>
-          <Plus className="h-4 w-4" />
-          Thêm vật tư
-        </Button>
+        <PermissionGuard permission="inventory.create">
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="h-4 w-4" />
+            Thêm vật tư
+          </Button>
+        </PermissionGuard>
       </div>
 
       <Card noPadding>
@@ -181,10 +189,11 @@ export default function InventoryListPage() {
             icon={<Package className="h-10 w-10 text-gray-400" />}
             title="Chưa có vật tư nào"
             description="Bắt đầu bằng việc thêm vật tư đầu tiên"
-            action={{
-              label: 'Thêm vật tư',
-              onClick: () => setShowAddModal(true),
-            }}
+            action={
+              canCreateInventoryItem
+                ? { label: 'Thêm vật tư', onClick: () => setShowAddModal(true) }
+                : undefined
+            }
           />
         ) : (
           <>
