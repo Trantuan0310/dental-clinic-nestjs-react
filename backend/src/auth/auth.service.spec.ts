@@ -121,14 +121,24 @@ describe('AuthService', () => {
       );
     });
 
-    it('throws InvalidCredentialsException when user is deactivated', async () => {
-      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
-        buildUserWithRoles({ deactivatedAt: new Date() }),
-      );
+    it('throws InvalidCredentialsException when the only matching user is deactivated', async () => {
+      // The partial unique index (migration 013_soft_delete_partial_unique)
+      // lets a deactivated user's email be reused by a new active account,
+      // so this is no longer a post-hoc check on the returned row — the
+      // deactivated row must never come back from the query in the first
+      // place, or a lucky findFirst could return it instead of the active
+      // account that reused the email.
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(
         service.login({ email: 'test@example.com', password: 'x' }, null, null),
       ).rejects.toThrow(InvalidCredentialsException);
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ deactivatedAt: null, deletedAt: null }),
+        }),
+      );
     });
 
     it('throws AccountLockedException when lockedUntil > now', async () => {
@@ -319,6 +329,23 @@ describe('AuthService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: ActionAudit.PASSWORD_RESET_REQUESTED }),
       );
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ deactivatedAt: null, deletedAt: null }),
+        }),
+      );
+    });
+
+    it('does nothing when the only matching user is deactivated (email reused by a new account)', async () => {
+      // Same active-row scoping as login() — a deactivated user must not be
+      // able to consume the reset-token flow meant for whoever now holds
+      // their old email address.
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await service.forgotPassword('test@example.com', null, null);
+
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 

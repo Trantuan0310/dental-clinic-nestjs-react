@@ -101,9 +101,13 @@ export class AuthService {
     const { email, password } = loginDto;
 
     // email is no longer a schema-level @@unique (see migration
-    // 013_soft_delete_partial_unique) — findFirst instead of findUnique.
+    // 013_soft_delete_partial_unique) — findFirst scoped to the same
+    // active-row condition the partial index enforces (deactivatedAt/
+    // deletedAt both null), so a deactivated user's freed-up email can't
+    // shadow the new active account that reused it (findFirst with no
+    // orderBy gives no guarantee which row comes back otherwise).
     const user = await this.prisma.user.findFirst({
-      where: { email },
+      where: { email, deactivatedAt: null, deletedAt: null },
       include: {
         userRoles: {
           include: {
@@ -119,7 +123,7 @@ export class AuthService {
       },
     });
 
-    if (!user || user.deactivatedAt !== null) {
+    if (!user) {
       // Run a dummy argon2 verify so this branch takes roughly the same time
       // as a real "user exists, wrong password" attempt — otherwise the
       // response-time gap leaks whether an email is registered.
@@ -365,8 +369,12 @@ export class AuthService {
     userAgent: string | null,
   ): Promise<void> {
     const normalizedEmail = email.toLowerCase().trim();
+    // Same active-row scoping as login() — without it, a deactivated user
+    // whose email was reused by a new active account could receive the
+    // reset token meant for that new account instead (or vice versa),
+    // depending on which row findFirst happens to return.
     const user = await this.prisma.user.findFirst({
-      where: { email: normalizedEmail },
+      where: { email: normalizedEmail, deactivatedAt: null, deletedAt: null },
     });
 
     if (!user) {
