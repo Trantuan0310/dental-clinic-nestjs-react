@@ -112,13 +112,13 @@ export class UsersService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<{ id: string; email: string; status: string; createdAt: Date }> {
-    // `email` is a GLOBAL unique constraint (schema.prisma: @@unique([email]),
-    // not scoped to active users) — checking only active users here missed
-    // deactivated users with the same email, so the later prisma.user.create()
-    // hit the DB constraint directly and threw an uncaught Prisma error
-    // instead of this intended 409.
+    // `email` uniqueness is enforced at the DB layer by a partial unique
+    // index scoped to active rows only (deactivated_at IS NULL AND
+    // deleted_at IS NULL — see migration 013_soft_delete_partial_unique).
+    // Mirror that scope here so a deactivated user's old email is free to
+    // reuse instead of throwing on a constraint the DB no longer enforces.
     const existingUser = await this.prisma.user.findFirst({
-      where: { email: createUserDto.email },
+      where: { email: createUserDto.email, deactivatedAt: null, deletedAt: null },
     });
 
     if (existingUser) {

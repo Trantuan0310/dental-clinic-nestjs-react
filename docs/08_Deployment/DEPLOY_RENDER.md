@@ -27,12 +27,15 @@ Triển khai lên Render (render.com).
 ```env
 NODE_ENV=production
 PORT=3000
-DATABASE_URL=<PostgreSQL connection string>
+DATABASE_URL=<PostgreSQL connection string>?sslmode=require
 REDIS_URL=redis://<host>:<port>
 JWT_SECRET=<32+ char>
-JWT_REFRESH_SECRET=<32+ char>
 GEMINI_API_KEY=<your-key>
 ```
+
+> Không có `JWT_REFRESH_SECRET` — refresh token không phải JWT, là random
+> token hash rồi lưu DB (xem `docs/08_Deployment/ENVIRONMENT_VARIABLES.md`).
+> Đặt biến này không có tác dụng gì, code không đọc.
 
 ---
 

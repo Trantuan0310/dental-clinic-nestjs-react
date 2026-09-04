@@ -143,7 +143,11 @@ model User {
   createdPayrollAdjustments  PayrollAdjustment[]    @relation("PayrollAdjustmentActor")
   payrollConfigUpdated       PayrollConfig? @relation("PayrollConfigUpdater")
 
-  @@unique([email])
+  // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
+  // and email must stay reusable once a user is deactivated/deleted. The
+  // real constraint is a partial unique index — active rows only — created
+  // in migration 013_soft_delete_partial_unique (users_email_active_key).
+  @@index([email])
   @@index([status])
   @@index([deactivatedAt])
   @@index([fullName])
@@ -351,7 +355,11 @@ model PatientIdentifier {
   patient Patient @relation(fields: [patientId], references: [id])
   creator User?  @relation("PatientIdentifierCreator", fields: [createdBy], references: [id])
 
-  @@unique([type, value])
+  // NOT a plain @@unique — see migration 013_soft_delete_partial_unique
+  // (patient_identifiers_type_value_active_key), a partial unique index that
+  // excludes soft-deleted rows so a previously-removed identifier value can
+  // be re-added without hitting a raw DB constraint error.
+  @@index([type, value])
   @@index([patientId])
   @@map("patient_identifiers")
 }

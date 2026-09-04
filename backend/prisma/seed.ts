@@ -378,7 +378,7 @@ async function main() {
 
   // Create super admin user
   const adminEmail = 'admin@clinic.local';
-  const existingAdmin = await prisma.user.findUnique({
+  const existingAdmin = await prisma.user.findFirst({
     where: { email: adminEmail },
   });
 

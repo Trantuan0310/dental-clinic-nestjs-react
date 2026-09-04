@@ -100,7 +100,9 @@ export class AuthService {
   ): Promise<LoginResponse> {
     const { email, password } = loginDto;
 
-    const user = await this.prisma.user.findUnique({
+    // email is no longer a schema-level @@unique (see migration
+    // 013_soft_delete_partial_unique) — findFirst instead of findUnique.
+    const user = await this.prisma.user.findFirst({
       where: { email },
       include: {
         userRoles: {
@@ -363,7 +365,7 @@ export class AuthService {
     userAgent: string | null,
   ): Promise<void> {
     const normalizedEmail = email.toLowerCase().trim();
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { email: normalizedEmail },
     });
 

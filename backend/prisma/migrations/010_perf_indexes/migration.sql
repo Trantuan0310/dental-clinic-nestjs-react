@@ -2,14 +2,16 @@
 -- Migration 010_perf_indexes — Performance indexes (Phase: Audit & Optimization)
 -- Generated for mid-term optimization plan.
 --
--- All indexes use CREATE INDEX CONCURRENTLY so they do not block writes
--- against large tables. This migration should be run during a low-traffic
--- window or applied via psql outside Prisma migrate deploy.
---
--- Prisma migration runner does NOT natively support CONCURRENTLY. We wrap
--- each statement in a DO block that is a no-op when CONCURRENTLY is not
--- supported (e.g. inside a transaction), and we mark this migration as
--- non-transactional by splitting each index into its own file step.
+-- NOT CONCURRENTLY: CREATE INDEX CONCURRENTLY cannot run inside a transaction,
+-- and `prisma migrate deploy` executes a migration.sql file as one implicit
+-- transaction — it has no built-in way to run a statement outside of it. An
+-- earlier version of this file used CONCURRENTLY assuming a manual psql-only
+-- deploy path; nothing enforced that, so a standard `prisma migrate deploy`
+-- would abort partway through this file. Plain CREATE INDEX takes a brief
+-- ACCESS EXCLUSIVE lock on the target table, which is acceptable at this
+-- project's current scale (no live production traffic yet). If write-lock
+-- avoidance becomes necessary once tables are large, recreate the specific
+-- index CONCURRENTLY by hand via psql and DROP the plain one created here.
 --
 -- Targets:
 --   - users:           search staff by fullName + filter by status
@@ -23,11 +25,11 @@
 -- USERS
 -- ---------------------------------------------------------------------------
 -- @@index([fullName]) for staff search.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_full_name_idx"
+CREATE INDEX IF NOT EXISTS "users_full_name_idx"
   ON "users" ("full_name");
 
 -- @@index([status, fullName]) for "active staff" filtered search.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_status_full_name_idx"
+CREATE INDEX IF NOT EXISTS "users_status_full_name_idx"
   ON "users" ("status", "full_name");
 
 -- ---------------------------------------------------------------------------
@@ -36,17 +38,17 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "users_status_full_name_idx"
 -- Allows queries like: WHERE allergies @> '["penicillin"]' OR
 --                       WHERE chronic_diseases @> '["diabetes"]'
 -- Using jsonb_path_ops for smaller, faster index on containment (@>).
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "patients_allergies_gin_idx"
+CREATE INDEX IF NOT EXISTS "patients_allergies_gin_idx"
   ON "patients" USING GIN ("allergies" jsonb_path_ops);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "patients_chronic_diseases_gin_idx"
+CREATE INDEX IF NOT EXISTS "patients_chronic_diseases_gin_idx"
   ON "patients" USING GIN ("chronic_diseases" jsonb_path_ops);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "patients_current_medications_gin_idx"
+CREATE INDEX IF NOT EXISTS "patients_current_medications_gin_idx"
   ON "patients" USING GIN ("current_medications" jsonb_path_ops);
 
 -- Trigram index for fuzzy name search (autocomplete patient lookup).
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "patients_full_name_trgm_idx"
+CREATE INDEX IF NOT EXISTS "patients_full_name_trgm_idx"
   ON "patients" USING GIN ("full_name" gin_trgm_ops);
 
 -- ---------------------------------------------------------------------------
@@ -56,7 +58,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "patients_full_name_trgm_idx"
 --           patient_id+start_at DESC, start_at, status+start_at.
 -- Add composite (status, start_at, dentist_id) so calendar queries that
 -- filter by status and dentist benefit from a covering index.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "appointments_status_start_dentist_idx"
+CREATE INDEX IF NOT EXISTS "appointments_status_start_dentist_idx"
   ON "appointments" ("status", "start_at", "dentist_id");
 
 -- ---------------------------------------------------------------------------
@@ -64,7 +66,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "appointments_status_start_dentist_idx"
 -- ---------------------------------------------------------------------------
 -- Existing: patient_id+created_at DESC, status.
 -- Add composite (status, created_at DESC) for "revenue by period" reports.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "invoices_status_created_at_idx"
+CREATE INDEX IF NOT EXISTS "invoices_status_created_at_idx"
   ON "invoices" ("status", "created_at" DESC);
 
 -- ---------------------------------------------------------------------------
@@ -75,5 +77,5 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS "invoices_status_created_at_idx"
 -- items for a dentist sorted by computation time".
 -- Note: payroll_line_items has no deletedAt column; this is purely a covering
 -- composite to give the query planner a single index to use.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "payroll_line_items_dentist_computed_idx"
+CREATE INDEX IF NOT EXISTS "payroll_line_items_dentist_computed_idx"
   ON "payroll_line_items" ("dentist_id", "computed_at" DESC);

@@ -30,24 +30,20 @@ cd ../frontend && pnpm install
 
 ### 2. Chạy migration index
 
-Prisma không hỗ trợ `CREATE INDEX CONCURRENTLY` trong transaction wrapper.
-Chạy file SQL **bên ngoài** Prisma migrate, ví dụ:
+`010_perf_indexes` từng dùng `CREATE INDEX CONCURRENTLY`, không chạy được qua
+`prisma migrate deploy` (statement này không được phép trong transaction, mà
+Prisma luôn bọc cả file migration trong 1 transaction ngầm). Đã sửa: bỏ
+`CONCURRENTLY`, dùng `CREATE INDEX` thường (khoá bảng ngắn khi tạo — chấp
+nhận được ở quy mô hiện tại). Giờ chạy bình thường cùng các migration khác:
 
 ```bash
-# Cách 1: qua psql trực tiếp (khuyến nghị)
-psql "$DATABASE_URL" -f backend/prisma/migrations/010_perf_indexes/migration.sql
-
-# Cách 2: nếu dùng docker-compose
-docker compose exec -T postgres \
-  psql -U postgres -d dental_clinic \
-  -f /docker-entrypoint-initdb.d/010_perf_indexes.sql
+npx prisma migrate deploy
 ```
 
-Sau khi áp dụng thành công, đánh dấu migration đã chạy để Prisma không cố tạo lại:
-
-```bash
-psql "$DATABASE_URL" -c "INSERT INTO _prisma_migrations (id, checksum, migration_name, finished_at, applied_steps_count) VALUES (gen_random_uuid()::text, 'manual', '010_perf_indexes', NOW(), 1);"
-```
+Không cần chạy `psql` thủ công hay tự chèn `_prisma_migrations` nữa. Nếu sau
+này bảng đủ lớn để việc khoá khi tạo index trở thành vấn đề, tạo lại đúng
+index đó bằng `CREATE INDEX CONCURRENTLY` qua `psql` rồi `DROP` bản không
+concurrent tương ứng.
 
 ### 3. Khởi động & kiểm tra
 
@@ -96,7 +92,7 @@ cd ../frontend && pnpm exec tsc --noEmit
 
 ## Rollback
 
-- Migration 010 chỉ thêm index — an toàn để `DROP INDEX CONCURRENTLY`.
+- Migration 010 chỉ thêm index — an toàn để `DROP INDEX` (thêm `CONCURRENTLY` nếu muốn tránh khoá bảng lúc drop).
 - Code thay đổi: revert qua git, không có schema thay đổi.
 
 ## KPI mong đợi

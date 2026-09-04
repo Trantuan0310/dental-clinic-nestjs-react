@@ -113,8 +113,12 @@ vào file compose.
 2. **Sử dụng secrets manager** (Railway Variables, Render Secret) trên production.
 3. **`JWT_SECRET` phải dài tối thiểu 32 ký tự** — app tự kiểm tra và refuse
    to start nếu không đạt.
-4. **`DATABASE_URL`** nên dùng SSL connection string trên production
-   (`?sslmode=require`).
+4. **`DATABASE_URL` bắt buộc có `?sslmode=require` (hoặc `verify-ca`/
+   `verify-full`) khi `NODE_ENV=production`** — app tự kiểm tra ở
+   `PrismaService.onModuleInit()` và refuse to start nếu thiếu (xem
+   `backend/src/prisma/prisma.service.ts`). `sslmode=prefer` (mặc định của
+   libpq) hay không set gì đều bị chặn, vì cả hai đều âm thầm cho phép rớt
+   về kết nối không mã hoá nếu server không hỗ trợ TLS.
 5. **Cập nhật `CORS_ORIGIN`** với đúng domain frontend thật trước khi deploy
    — nếu quên set, CORS sẽ fallback về `http://localhost:5173` và chặn mọi
    request từ domain production.

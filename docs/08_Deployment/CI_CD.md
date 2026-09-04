@@ -1,207 +1,58 @@
 # CI/CD Pipeline
 
-GitHub Actions workflow cho automated testing và deployment.
+GitHub Actions workflow cho automated linting/typecheck/test/build.
+
+> **Không có auto-deploy.** `.github/workflows/ci.yml` chỉ chạy kiểm tra và
+> build — không có job nào deploy tới Railway, Render, hay bất kỳ môi trường
+> nào. Một phiên bản trước của tài liệu này mô tả một job `deploy` tự động
+> push lên Railway khi merge vào `main`; job đó **chưa từng được implement**
+> trong workflow thật, tài liệu mô tả sai. Muốn deploy, làm theo hướng dẫn
+> thủ công/GitHub-integration trong [DEPLOY_RAILWAY.md](./DEPLOY_RAILWAY.md)
+> hoặc [DEPLOY_RENDER.md](./DEPLOY_RENDER.md) — cả hai đều dùng cơ chế
+> auto-deploy-on-push riêng của nền tảng đó (cấu hình phía Railway/Render),
+> không phải qua GitHub Actions.
 
 ---
 
-## `.github/workflows/ci.yml`
+## `.github/workflows/ci.yml` (nội dung thật)
 
-```yaml
-name: CI/CD
+Trigger: `push`/`pull_request` vào `main`. 6 job độc lập, không job nào chạm
+database hay bất kỳ credential nào — an toàn chạy trên mọi PR kể cả từ fork.
 
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+| Job | Làm gì |
+|---|---|
+| `backend-lint` | `npm run lint` (ESLint) trong `backend/` |
+| `backend-typecheck` | `prisma generate` rồi `tsc --noEmit` |
+| `backend-test` | `prisma generate` rồi `npm run test` (unit test, dùng Prisma mock — không cần Postgres thật) |
+| `backend-build` | `npm run build`, upload `backend/dist` làm artifact (7 ngày), phụ thuộc 3 job trên |
+| `frontend-lint` | `npm run lint` trong `frontend/` |
+| `frontend-typecheck` | `npm run typecheck` |
+| `frontend-build` | `npm run build`, upload `frontend/dist` làm artifact, phụ thuộc 2 job lint/typecheck |
 
-env:
-  NODE_VERSION: '20'
+Không có `services: postgres`, không cần `DATABASE_URL`/`JWT_SECRET` trong
+CI — vì unit test dùng Prisma mock (`test/helpers/prisma-mock.ts`), không kết
+nối DB thật. Không có e2e/Playwright job trong CI hiện tại (setup e2e tồn
+tại ở `frontend/e2e/`, nhưng cần Docker/Postgres nên chưa wire vào workflow).
 
-jobs:
-  lint-and-test-backend:
-    name: Backend — Lint & Test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: dental_clinic_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma Client
-        run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/dental_clinic_test
-
-      - name: Run migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/dental_clinic_test
-
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Run tests
-        run: npm test -- --coverage
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/dental_clinic_test
-          JWT_SECRET: test-jwt-secret-for-ci-minimum-32-chars
-          JWT_REFRESH_SECRET: test-refresh-secret-for-ci-minimum-32
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./backend/coverage/lcov.info
-          fail_ci_if_error: false
-
-  lint-and-test-frontend:
-    name: Frontend — Lint & Test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: TypeScript check
-        run: npx tsc --noEmit
-
-      - name: Build
-        run: npm run build
-        env:
-          VITE_API_BASE_URL: http://localhost:3000/api/v1
-
-  e2e-tests:
-    name: E2E Tests
-    runs-on: ubuntu-latest
-    needs: [lint-and-test-backend, lint-and-test-frontend]
-    defaults:
-      run:
-        working-directory: frontend
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: dental_clinic_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps chromium
-
-      - name: Start backend
-        run: |
-          cd ../backend
-          npm ci
-          npx prisma generate
-          npx prisma migrate deploy
-          npx prisma db seed
-          npm run start:prod &
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/dental_clinic_test
-          JWT_SECRET: test-jwt-secret-for-e2e-minimum-32-chars
-          JWT_REFRESH_SECRET: test-refresh-secret-for-e2e-minimum-32
-
-      - name: Start frontend dev server
-        run: npm run dev &
-        env:
-          VITE_API_BASE_URL: http://localhost:3000/api/v1
-
-      - name: Run Playwright tests
-        run: npx playwright test
-        env:
-          PLAYWRIGHT_BASE_URL: http://localhost:5173
-
-  deploy:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    needs: e2e-tests
-    if: github.ref == 'refs/heads/main'
-    environment: production
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Railway
-        uses: railway-deploy-action@v1
-        with:
-          token: ${{ secrets.RAILWAY_TOKEN }}
-          project: ${{ secrets.RAILWAY_PROJECT_ID }}
-          service: backend
-          directory: backend
-```
+Xem file gốc: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml).
 
 ---
 
-## Secrets cần thiết
+## Muốn thêm auto-deploy thật sự?
 
-Trong GitHub repo → Settings → Secrets:
+Cần làm thêm (chưa có sẵn, đây là việc cần làm nếu muốn tự động hóa):
 
-| Secret | Mô tả |
-|--------|--------|
-| `RAILWAY_TOKEN` | Railway API token |
-| `RAILWAY_PROJECT_ID` | Railway project ID |
+1. Chọn nền tảng (Railway/Render) và tạo project theo [DEPLOY_RAILWAY.md](./DEPLOY_RAILWAY.md) / [DEPLOY_RENDER.md](./DEPLOY_RENDER.md).
+2. Cách đơn giản nhất: bật GitHub-integration auto-deploy ngay trên dashboard
+   của Railway/Render — không cần sửa `ci.yml` gì cả, nền tảng tự deploy khi
+   có push mới vào `main`.
+3. Nếu muốn deploy chạy *sau khi* CI xanh (thay vì độc lập): thêm job mới
+   vào `ci.yml`, `needs: [backend-build, frontend-build]`,
+   `if: github.ref == 'refs/heads/main'`, gọi CLI/action của nền tảng đã
+   chọn, và thêm token tương ứng vào GitHub repo → Settings → Secrets.
+4. Trước khi bật bất kỳ auto-deploy nào: xem lại phần "Security Notes" ở
+   [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) và đổi mật khẩu
+   tài khoản admin mặc định do `prisma/seed.ts` tạo ra.
 
 ---
 

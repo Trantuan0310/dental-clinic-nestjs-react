@@ -81,7 +81,7 @@ describe('AuthService', () => {
   describe('login', () => {
     it('returns access + refresh token for valid credentials', async () => {
       const user = buildUserWithRoles();
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(user);
       (prisma.user.update as jest.Mock).mockResolvedValue(user);
       (prisma.refreshToken.create as jest.Mock).mockResolvedValue(validRefreshToken());
 
@@ -107,7 +107,7 @@ describe('AuthService', () => {
     });
 
     it('throws InvalidCredentialsException when user not found', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 
       await expect(
         service.login({ email: 'nobody@example.com', password: 'x' }, null, null),
@@ -122,7 +122,7 @@ describe('AuthService', () => {
     });
 
     it('throws InvalidCredentialsException when user is deactivated', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
         buildUserWithRoles({ deactivatedAt: new Date() }),
       );
 
@@ -132,7 +132,7 @@ describe('AuthService', () => {
     });
 
     it('throws AccountLockedException when lockedUntil > now', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
         buildUserWithRoles({ lockedUntil: new Date(Date.now() + 60_000) }),
       );
 
@@ -142,7 +142,7 @@ describe('AuthService', () => {
     });
 
     it('locks account after exceeding MAX_FAILED_ATTEMPTS', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
         buildUserWithRoles({ failedLoginAttempts: 5 }),
       );
       (argon2.verify as jest.Mock).mockResolvedValue(false);
@@ -166,7 +166,7 @@ describe('AuthService', () => {
     });
 
     it('throws InvalidCredentialsException when password is wrong (no lockout yet)', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
         buildUserWithRoles({ failedLoginAttempts: 0 }),
       );
       (argon2.verify as jest.Mock).mockResolvedValue(false);
@@ -302,14 +302,14 @@ describe('AuthService', () => {
 
   describe('forgotPassword', () => {
     it('does nothing when email not found (no information leak)', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
       await service.forgotPassword('nobody@example.com', null, null);
       expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
       expect(audit.log).not.toHaveBeenCalled();
     });
 
     it('creates reset token and logs audit when email exists', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(validUser());
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(validUser());
       (prisma.passwordResetToken.create as jest.Mock).mockResolvedValue({});
 
       await service.forgotPassword('test@example.com', '127.0.0.1', 'jest');

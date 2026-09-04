@@ -143,12 +143,25 @@ describe('UsersService', () => {
           null,
         ),
       ).rejects.toThrow(EmailAlreadyExistsException);
+      // The DB constraint is a partial unique index scoped to active rows
+      // (migration 013_soft_delete_partial_unique) — this check must mirror
+      // that scope so it doesn't reject emails the DB would happily allow.
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: 'dup@x.com', deactivatedAt: null, deletedAt: null },
+      });
     });
 
-    it('throws EmailAlreadyExistsException when a DEACTIVATED user has the same email (global unique constraint)', async () => {
-      (prisma.user.findFirst as jest.Mock).mockResolvedValue(
-        validUser({ deactivatedAt: new Date() }),
+    it('allows creating a new user with the same email as a DEACTIVATED user', async () => {
+      // findFirst is scoped to active rows, so a deactivated user with the
+      // same email is invisible here and the create proceeds — matching the
+      // partial unique index, which no longer reserves a deactivated user's
+      // email.
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.user.create as jest.Mock).mockResolvedValue(
+        validUser({ id: 'new-user', email: 'dup@x.com', status: UserStatus.PENDING_SETUP }),
       );
+
       await expect(
         service.create(
           { email: 'dup@x.com', fullName: 'Dup' },
@@ -157,14 +170,7 @@ describe('UsersService', () => {
           null,
           null,
         ),
-      ).rejects.toThrow(EmailAlreadyExistsException);
-      // Must not filter by deactivatedAt: null — email is unique globally
-      // (schema.prisma @@unique([email])), so a deactivated user with the
-      // same email must still be caught here, not surfaced as an uncaught
-      // Prisma constraint error from the create() call below.
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'dup@x.com' },
-      });
+      ).resolves.toMatchObject({ email: 'dup@x.com' });
     });
 
     it('throws NotFoundException when one or more roleIds not found', async () => {

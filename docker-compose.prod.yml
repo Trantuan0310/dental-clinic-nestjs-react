@@ -1,6 +1,15 @@
 version: '3.8'
 
 services:
+  # This bundled Postgres has no TLS configured (no cert/key, ssl=off) — it's
+  # a same-host convenience container reachable only over the internal
+  # `dental-network` bridge, not exposed publicly. The backend's startup
+  # check below now REFUSES to start in production without an encrypted
+  # DATABASE_URL, so pointing `backend` at this container as-is will fail to
+  # boot. For a real deployment, either point DATABASE_URL at a managed
+  # Postgres that terminates TLS for you (see docs/08_Deployment/DEPLOY_RAILWAY.md
+  # or DEPLOY_RENDER.md — both do this automatically), or configure this
+  # container with SSL certs and add `ssl = on` before using it in production.
   postgres:
     image: postgres:16-alpine
     container_name: dental-clinic-db
@@ -33,7 +42,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/dental_clinic
+      # Must point at a TLS-enabled Postgres — the bundled `postgres` service
+      # above does not have one configured. Override DATABASE_URL via your
+      # env file/secrets manager to a real host with sslmode=require (or
+      # verify-ca/verify-full); the backend refuses to start otherwise.
+      DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: ${CORS_ORIGIN}
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}

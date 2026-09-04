@@ -17,10 +17,9 @@ Triển khai lên Railway (railway.app).
 
 1. Connect GitHub repo trên Railway dashboard
 2. Add environment variables:
-   - `DATABASE_URL` → PostgreSQL plugin
+   - `DATABASE_URL` → PostgreSQL plugin (Railway's managed Postgres enforces TLS by default)
    - `REDIS_URL` → Redis plugin
    - `JWT_SECRET`
-   - `JWT_REFRESH_SECRET`
    - `GEMINI_API_KEY`
    - `NODE_ENV=production`
 3. Set root directory: `backend`
@@ -35,7 +34,6 @@ railway init
 railway add postgres
 railway add redis
 railway variables set JWT_SECRET "your-secret"
-railway variables set JWT_REFRESH_SECRET "your-refresh-secret"
 railway variables set GEMINI_API_KEY "your-api-key"
 railway variables set NODE_ENV production
 railway up
@@ -69,11 +67,14 @@ Trên Railway dashboard → Backend project → Variables:
 NODE_ENV=production
 PORT=3000
 JWT_SECRET=<32+ char random string>
-JWT_REFRESH_SECRET=<32+ char random string>
 GEMINI_API_KEY=<your-key>
 REDIS_URL=<from Redis plugin>
-# DATABASE_URL set automatically by PostgreSQL plugin
+# DATABASE_URL set automatically by PostgreSQL plugin (TLS enforced by Railway)
 ```
+
+> Không có `JWT_REFRESH_SECRET` — refresh token không phải JWT, là random
+> token hash rồi lưu DB (xem `docs/08_Deployment/ENVIRONMENT_VARIABLES.md`).
+> Đặt biến này không có tác dụng gì, code không đọc.
 
 Frontend (Vercel):
 

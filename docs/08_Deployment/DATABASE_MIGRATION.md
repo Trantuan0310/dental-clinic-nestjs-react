@@ -45,9 +45,10 @@ Migrations nằm trong `backend/prisma/migrations/`:
 | Migration | Mô tả |
 |-----------|--------|
 | `001_init` | Schema ban đầu — toàn bộ module (auth, users, roles, patients, appointments, medical records, billing, inventory, payroll, shift) |
-| `010_perf_indexes` | Index tối ưu hiệu năng (dùng `CREATE INDEX CONCURRENTLY` — **không** chạy được qua `prisma migrate deploy` trực tiếp trên môi trường chưa hỗ trợ, xem comment đầu file migration) |
+| `010_perf_indexes` | Index tối ưu hiệu năng (users, patients GIN/trigram, appointments, invoices, payroll_line_items) — chạy bình thường qua `prisma migrate deploy` |
 | `011_prescription_extra_fields` | Bổ sung field cho đơn thuốc |
 | `012_expense_tables` | Expense module (BR-EXP-001) |
+| `013_soft_delete_partial_unique` | Partial unique index cho `users.email` và `patient_identifiers` — chỉ enforce trên bản ghi còn active, cho phép tái sử dụng sau khi vô hiệu hóa/xóa mềm |
 
 ---
 
