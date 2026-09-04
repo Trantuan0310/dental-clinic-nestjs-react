@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { DollarSign, Plus } from 'lucide-react';
+import { DollarSign, Plus, AlertCircle } from 'lucide-react';
 import { useCompensations, useCreateCompensation } from './payrollApi';
 import { Modal, Input, Select, Button, Card, EmptyState } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -17,7 +17,7 @@ export function CompensationListPage() {
   const [commission, setCommission] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState('');
 
-  const { data: compensations, isLoading } = useCompensations();
+  const { data: compensations, isLoading, isError, refetch } = useCompensations();
 
   const { data: dentists } = useDentistOptions();
 
@@ -69,6 +69,13 @@ export function CompensationListPage() {
               ))}
             </div>
           </div>
+        ) : isError && !compensations?.length ? (
+          <EmptyState
+            icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
+            title="Không thể tải chính sách lương"
+            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
+            action={{ label: 'Thử lại', onClick: () => refetch() }}
+          />
         ) : !compensationsByDentist || Object.keys(compensationsByDentist).length === 0 ? (
           <EmptyState
             icon={<DollarSign className="h-10 w-10 text-gray-400" />}

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Package, AlertTriangle, AlertCircle } from 'lucide-react';
 import { inventoryApi, type InventoryCategoryOption } from '@/types/inventory';
 import { Button, Card, StatusBadge, SearchInput, Pagination, EmptyState, Modal, Input, Select } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -38,7 +38,7 @@ export default function InventoryListPage() {
   const [newMinStock, setNewMinStock] = useState('');
   const [newCostPrice, setNewCostPrice] = useState('');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['inventory', filters],
     queryFn: () => inventoryApi.list(filters),
   });
@@ -184,6 +184,13 @@ export default function InventoryListPage() {
               ))}
             </div>
           </div>
+        ) : isError && items.length === 0 ? (
+          <EmptyState
+            icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
+            title="Không thể tải danh sách vật tư"
+            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
+            action={{ label: 'Thử lại', onClick: () => refetch() }}
+          />
         ) : items.length === 0 ? (
           <EmptyState
             icon={<Package className="h-10 w-10 text-gray-400" />}

@@ -121,7 +121,7 @@ export default function ExpenseListPage() {
   const [editing, setEditing] = useState<Expense | undefined>();
   const [confirmDelete, setConfirmDelete] = useState<Expense | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['expenses', filters],
     queryFn: () => expenseApi.list(filters),
   });
@@ -289,6 +289,15 @@ export default function ExpenseListPage() {
               {isLoading ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-gray-400">Đang tải...</td>
+                </tr>
+              ) : isError && filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-red-400 dark:text-red-500">
+                    Không thể tải danh sách chi phí.{' '}
+                    <button type="button" onClick={() => refetch()} className="underline hover:no-underline">
+                      Thử lại
+                    </button>
+                  </td>
                 </tr>
               ) : filteredData.length === 0 ? (
                 <tr>

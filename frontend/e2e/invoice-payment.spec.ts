@@ -24,8 +24,10 @@ test.describe('Billing', () => {
     await page.goto('/reports');
     await page.waitForLoadState('networkidle');
 
-    // Check KPI cards are visible
-    await expect(page.getByText(/doanh thu|revenue/i)).toBeVisible();
+    // Check KPI cards are visible. The page has many revenue-related
+    // headings/labels — .first() avoids a strict-mode violation since we
+    // only care that at least one is rendered.
+    await expect(page.getByText(/doanh thu|revenue/i).first()).toBeVisible();
 
     // Date range inputs should be visible
     const dateInputs = page.locator('input[type="date"]');

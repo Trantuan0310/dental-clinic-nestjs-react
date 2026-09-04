@@ -14,16 +14,20 @@ test.describe('Patient Creation', () => {
     await page.goto('/patients');
     await page.waitForLoadState('networkidle');
 
-    // Click "New Patient" button
-    const newPatientBtn = page.getByRole('button', { name: /thêm bệnh nhân|thêm mới|tạo bệnh nhân/i });
+    // Click "New Patient" button. The header action and the empty-state's
+    // own CTA share the same label when the list has no rows yet — .first()
+    // (the header button) avoids a strict-mode violation.
+    const newPatientBtn = page.getByRole('button', { name: /thêm bệnh nhân|thêm mới|tạo bệnh nhân/i }).first();
     await newPatientBtn.click();
 
     // Fill form
     const testName = `Test Patient ${Date.now()}`;
     const testPhone = `090${Math.floor(Math.random() * 90000000 + 10000000)}`;
 
-    await page.getByLabel(/họ tên|fullname/i).fill(testName);
-    await page.getByLabel(/điện thoại|phone/i).first().fill(testPhone);
+    // Real labels are "Họ và tên (bắt buộc)" and "SĐT chính" — match
+    // substrings that actually appear rather than a full literal phrase.
+    await page.getByLabel(/họ.*tên|fullname/i).fill(testName);
+    await page.getByLabel(/sđt|điện thoại|phone/i).first().fill(testPhone);
 
     // Select gender if dropdown exists
     const genderSelect = page.locator('select').first();
@@ -48,8 +52,9 @@ test.describe('Patient Creation', () => {
     await page.goto('/patients');
     await page.waitForLoadState('networkidle');
 
-    // Type in search box
-    const searchInput = page.getByPlaceholder(/tìm kiếm|search/i);
+    // Type in search box. Real placeholder is "Tìm theo tên, mã BN, SĐT...",
+    // which doesn't match a generic "tìm kiếm" pattern.
+    const searchInput = page.getByPlaceholder(/tìm theo tên|search/i);
     await searchInput.fill('test');
 
     // Wait for filtered results

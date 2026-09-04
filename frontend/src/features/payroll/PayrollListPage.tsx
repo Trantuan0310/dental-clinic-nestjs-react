@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { Plus, Calculator, Calendar, CheckCircle, Wallet } from 'lucide-react';
+import { Plus, Calculator, Calendar, CheckCircle, Wallet, AlertCircle } from 'lucide-react';
 import { Button, Card, StatusBadge, EmptyState, Modal, Input, Select } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -23,7 +23,7 @@ export function PayrollListPage() {
   const [newPeriodCycle, setNewPeriodCycle] = useState<'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('MONTHLY');
   const [markPaidPeriodId, setMarkPaidPeriodId] = useState<string | null>(null);
 
-  const { data: periods, isLoading } = usePeriods(
+  const { data: periods, isLoading, isError, refetch } = usePeriods(
     statusFilter !== 'all' ? { status: statusFilter } : undefined,
   );
 
@@ -99,6 +99,13 @@ export function PayrollListPage() {
               ))}
             </div>
           </div>
+        ) : isError && rows.length === 0 ? (
+          <EmptyState
+            icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
+            title="Không thể tải danh sách kỳ lương"
+            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
+            action={{ label: 'Thử lại', onClick: () => refetch() }}
+          />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-10 w-10 text-gray-400" />}

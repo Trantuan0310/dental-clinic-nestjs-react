@@ -27,10 +27,14 @@ import { HealthController } from './common/health.controller';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // THROTTLE_TTL/THROTTLE_LIMIT are documented in .env.example as the
+    // levers for this, but were previously hardcoded here — the env vars
+    // were silently ignored, so there was no way to relax the limit for a
+    // dev/E2E environment without also weakening it in production.
     ThrottlerModule.forRoot([
       {
-        ttl: 60000,
-        limit: 100,
+        ttl: Number(process.env.THROTTLE_TTL) || 60000,
+        limit: Number(process.env.THROTTLE_LIMIT) || 100,
       },
     ]),
     EventEmitterModule.forRoot(),

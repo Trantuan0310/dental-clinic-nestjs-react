@@ -89,10 +89,14 @@ test.describe('403 handling', () => {
   test('should not show 500 error on permission denied', async ({ page }) => {
     await page.goto('/');
 
-    // Try to navigate to a non-existent route
+    // Try to navigate to a non-existent route. This is a client-rendered
+    // SPA — the server always answers 200 (it just serves index.html) and
+    // React Router renders the not-found UI client-side, so a literal HTTP
+    // 404 is never the right assertion here.
     const response = await page.goto('/this-route-does-not-exist');
-    expect(response?.status()).toBe(404);
-    // Should not crash the app
-    expect(page.url()).toMatch(/.*/);
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByText(/không tìm thấy|not found|404/i).or(page.getByRole('heading', { name: /404/i })),
+    ).toBeVisible({ timeout: 5_000 });
   });
 });

@@ -17,9 +17,12 @@ test.describe('Dentist View', () => {
   test('dentist sees Today page in sidebar', async ({ page }) => {
     await page.goto('/');
 
-    // Sidebar should show dentist-specific items
-    await expect(page.getByText(/today|hôm nay/i)).toBeVisible();
-    await expect(page.getByText(/queue|hàng chờ/i)).toBeVisible();
+    // Sidebar should show dentist-specific items. Scope to the nav —
+    // "Hôm nay" / queue-related text also appears in the dashboard body
+    // (strict-mode violation otherwise).
+    const nav = page.getByRole('navigation', { name: /menu điều hướng/i });
+    await expect(nav.getByText(/today|hôm nay/i).first()).toBeVisible();
+    await expect(nav.getByText(/queue|hàng chờ/i).first()).toBeVisible();
   });
 
   test('dentist can access Today page', async ({ page }) => {

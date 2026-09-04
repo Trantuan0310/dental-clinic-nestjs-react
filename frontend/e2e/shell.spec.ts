@@ -23,9 +23,10 @@ test.describe('Shell — post-login', () => {
     const palette = page.getByRole('dialog', { name: /command palette/i });
     await expect(palette).toBeVisible();
 
-    // Type a search query and press Enter. Use "patients" since it's the
-    // /patients route — matches both VI ("bệnh nhân") and EN ("patients").
-    await palette.getByRole('searchbox').fill('patients');
+    // Type a search query and press Enter. The palette only matches the
+    // active locale's translated label (see CommandPalette's getHaystack),
+    // and the app defaults to Vietnamese, so search the VI term.
+    await palette.getByRole('searchbox').fill('bệnh nhân');
     await page.keyboard.press('Enter');
 
     // Should navigate to /patients.

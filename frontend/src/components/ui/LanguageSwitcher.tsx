@@ -62,6 +62,7 @@ export function LanguageSwitcher({ variant = 'icon', className }: LanguageSwitch
       <div className={cn('relative', className)}>
         <details className="group">
           <summary
+            role="button"
             aria-label={t('language.title')}
             className={cn(
               'flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800',

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, MoreHorizontal, Loader2, Trash2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Loader2, Trash2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { patientsApi } from '@/features/patients/imperativeApi';
@@ -38,7 +38,7 @@ export default function PatientListPage() {
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['patients', filters, cursor],
     queryFn: () => patientsApi.list({ ...filters, cursor }),
   });
@@ -142,6 +142,16 @@ export default function PatientListPage() {
           <div className="p-4">
             <FormSkeleton rows={5} columns={5} />
           </div>
+        ) : isError && patients.length === 0 ? (
+          <EmptyState
+            icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
+            title="Không thể tải danh sách bệnh nhân"
+            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
+            action={{
+              label: 'Thử lại',
+              onClick: () => refetch(),
+            }}
+          />
         ) : patients.length === 0 ? (
           <EmptyState
             title="Chưa có bệnh nhân nào"

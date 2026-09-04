@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
+  AlertCircle,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -202,7 +203,7 @@ export default function AppointmentsListPage() {
 
   // Pull ALL appointments in the date range (no status filter) so the per-tab
   // counts and the filtered list both come from the same source.
-  const { data, isLoading } = useAppointments({
+  const { data, isLoading, isError, refetch } = useAppointments({
     from,
     to,
     q: search || undefined,
@@ -445,6 +446,13 @@ export default function AppointmentsListPage() {
         {/* Table */}
         {isLoading ? (
           <PageLoader />
+        ) : isError && visibleRows.length === 0 ? (
+          <EmptyState
+            icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
+            title="Không thể tải danh sách lịch hẹn"
+            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
+            action={{ label: 'Thử lại', onClick: () => refetch() }}
+          />
         ) : visibleRows.length === 0 ? (
           <EmptyState
             title="Chưa có lịch hẹn nào"

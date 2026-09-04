@@ -7,8 +7,12 @@ test.describe('A11y — keyboard & landmarks', () => {
   });
 
   test('skip-link is reachable by Tab and jumps to #main-content', async ({ page }) => {
-    // Reload to put the skip link first in tab order.
+    // Reload to put the skip link first in tab order. Without waiting for
+    // the reload to settle, Tab can fire before React has mounted/hydrated
+    // — there's nothing focusable yet, so it's a no-op and the assertion
+    // below sees "inactive" instead of the skip link.
     await page.reload();
+    await page.waitForLoadState('networkidle');
     await page.keyboard.press('Tab');
     const skipLink = page.getByRole('link', { name: /skip to main|chuyển tới/i }).first();
     await expect(skipLink).toBeFocused();

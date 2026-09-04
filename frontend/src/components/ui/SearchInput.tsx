@@ -8,7 +8,7 @@ export interface SearchInputProps extends Omit<InputHTMLAttributes<HTMLInputElem
 }
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
-  ({ className, value, onClear, icon, ...props }, ref) => {
+  ({ className, value, onClear, icon, placeholder, ...props }, ref) => {
     return (
       <div className="relative">
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -17,6 +17,10 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
         <input
           ref={ref}
           type="text"
+          // placeholder text disappears on focus/typing and isn't a valid
+          // accessible name (WCAG) — fall back to it for aria-label only
+          // when the caller hasn't supplied a more specific one.
+          aria-label={placeholder}
           className={cn(
             'w-full rounded-md border border-gray-300 bg-white py-2 pl-10 pr-10 text-sm shadow-sm transition-colors',
             'placeholder:text-gray-400 dark:placeholder:text-surface-500',
@@ -27,6 +31,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
             className,
           )}
           value={value}
+          placeholder={placeholder}
           {...props}
         />
         {value && onClear && (

@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronLeft, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -178,6 +178,19 @@ interface MobileSidebarProps {
 
 function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const { t } = useTranslation();
+
+  // role="dialog" aria-modal="true" implies Escape closes it (same as the
+  // command palette) — without this, keyboard users can only close via the
+  // backdrop click or the explicit X button.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   return (
     <div
       className={cn(

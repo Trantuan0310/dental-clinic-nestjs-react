@@ -69,7 +69,10 @@ export function KpiCard({
   ) : null;
 
   return (
-    <div className={cn('rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-surface-700 dark:bg-surface-900', className)}>
+    <div
+      data-testid="kpi-card"
+      className={cn('rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-surface-700 dark:bg-surface-900', className)}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-3">
           {icon && (

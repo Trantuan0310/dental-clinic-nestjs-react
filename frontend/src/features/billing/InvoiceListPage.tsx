@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { DollarSign, Check, Receipt, AlertTriangle } from 'lucide-react';
+import { DollarSign, Check, Receipt, AlertTriangle, AlertCircle } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
 import { Card, InvoiceStatusBadge, SearchInput, Select } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
@@ -23,7 +23,7 @@ export default function InvoiceListPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<InvoiceStatus | 'all'>('all');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoices', search, status],
     queryFn: () =>
       billingApi.listInvoices({
@@ -115,6 +115,21 @@ export default function InvoiceListPage() {
                 <div key={i} className="h-12 animate-pulse rounded bg-gray-100 dark:bg-surface-800" />
               ))}
             </div>
+          </div>
+        ) : isError && invoices.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />
+            <p className="mt-3 font-medium text-gray-900 dark:text-white">Không thể tải danh sách hóa đơn</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại.
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-3 text-sm font-medium text-brand-600 underline hover:no-underline dark:text-brand-400"
+            >
+              Thử lại
+            </button>
           </div>
         ) : invoices.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">

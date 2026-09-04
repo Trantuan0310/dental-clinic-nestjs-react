@@ -483,13 +483,23 @@ function renderGroups(
   commit: (item: PaletteItem) => void,
   t: ReturnType<typeof useTranslation>['t'],
 ) {
-  // Group by group label while preserving order.
+  // Group by group label, preserving first-seen order. Items are sorted by
+  // fuzzy score first, so two items sharing a group title are frequently
+  // NOT adjacent — merging only into the last-seen group (as opposed to
+  // looking the title up) produced two groups with the same title and thus
+  // duplicate React keys below, which corrupts reconciliation between
+  // keystrokes (stale rows lingering after the query changes).
+  const groupIndex = new Map<string, number>();
   const groups: Array<{ title: string; items: PaletteItem[] }> = [];
   for (const item of items) {
-    const last = groups[groups.length - 1];
     const title = getGroupLabel(item, t);
-    if (last && last.title === title) last.items.push(item);
-    else groups.push({ title, items: [item] });
+    const existingIdx = groupIndex.get(title);
+    if (existingIdx !== undefined) {
+      groups[existingIdx].items.push(item);
+    } else {
+      groupIndex.set(title, groups.length);
+      groups.push({ title, items: [item] });
+    }
   }
 
   const showRecent = !query && recent.length > 0;
