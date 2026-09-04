@@ -203,7 +203,9 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         id: 'shift-1',
         dentistId: 'dentist-1',
-        date: new Date(Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate())),
+        date: new Date(
+          Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate()),
+        ),
         startTime: `${hh}:${mm}`,
         status: ShiftRegistrationStatus.APPROVED,
       });
@@ -258,7 +260,9 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         id: 'shift-3',
         dentistId: 'dentist-1',
-        date: new Date(Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate())),
+        date: new Date(
+          Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate()),
+        ),
         startTime: `${hh}:${mm}`,
         status: ShiftRegistrationStatus.APPROVED,
       });

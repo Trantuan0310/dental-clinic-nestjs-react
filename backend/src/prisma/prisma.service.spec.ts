@@ -12,7 +12,9 @@ describe('PrismaService', () => {
   });
 
   const assertSsl = (service: PrismaService) =>
-    (service as unknown as { assertProductionDatabaseSsl: () => void }).assertProductionDatabaseSsl();
+    (
+      service as unknown as { assertProductionDatabaseSsl: () => void }
+    ).assertProductionDatabaseSsl();
 
   it('does not throw outside production regardless of DATABASE_URL', () => {
     process.env.NODE_ENV = 'development';
