@@ -22,12 +22,14 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  AlertTriangle,
   Calendar,
   CreditCard,
   DollarSign,
   Eye,
   Megaphone,
   PlusCircle,
+  RefreshCw,
   Stethoscope,
   Users,
   Wallet,
@@ -60,6 +62,37 @@ import {
 } from './types';
 
 // -----------------------------------------------------------------------------
+// Shared card error state — a genuine API failure, distinct from "still
+// loading" or "genuinely no data yet" so the admin gets a signal and a retry.
+// -----------------------------------------------------------------------------
+
+interface CardErrorStateProps {
+  onRetry?: () => void;
+}
+
+function CardErrorState({ onRetry }: CardErrorStateProps) {
+  return (
+    <EmptyState
+      icon={<AlertTriangle className="h-10 w-10 text-red-500" />}
+      title="Không thể tải dữ liệu"
+      description="Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại."
+      action={
+        onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Thử lại
+          </button>
+        ) : undefined
+      }
+    />
+  );
+}
+
+// -----------------------------------------------------------------------------
 // KPI Row
 // -----------------------------------------------------------------------------
 
@@ -67,18 +100,40 @@ interface KpiRowProps {
   kpis: DashboardKpis | undefined;
   range: TimeRange;
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function KpiRow({ kpis, range, isLoading }: KpiRowProps) {
+export function KpiRow({ kpis, range, isLoading, isError, onRetry }: KpiRowProps) {
   const comparisonLabel = `So với ${RANGE_DESCRIPTIONS[range]} cùng kỳ trước`;
 
-  if (isLoading || !kpis) {
+  if (isLoading) {
     return (
       <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <CardSkeleton key={i} />
         ))}
       </div>
+    );
+  }
+
+  if (isError || !kpis) {
+    return (
+      <Alert type="danger" title="Không thể tải số liệu KPI">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.</span>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-surface-900 dark:text-red-300 dark:hover:bg-red-950/40"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Thử lại
+            </button>
+          )}
+        </div>
+      </Alert>
     );
   }
 
@@ -171,9 +226,18 @@ interface CustomerTypeCardProps {
   patientNew: number;
   patientReturning: number;
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function CustomerTypeCard({ rows, patientNew, patientReturning, isLoading }: CustomerTypeCardProps) {
+export function CustomerTypeCard({
+  rows,
+  patientNew,
+  patientReturning,
+  isLoading,
+  isError,
+  onRetry,
+}: CustomerTypeCardProps) {
   const data = useMemo(
     () => buildCustomerTypeSplit(rows, patientNew, patientReturning),
     [rows, patientNew, patientReturning],
@@ -186,6 +250,14 @@ export function CustomerTypeCard({ rows, patientNew, patientReturning, isLoading
     return (
       <Card title="Doanh số theo loại khách" description="Phân bổ doanh thu giữa khách mới và quay lại">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Doanh số theo loại khách" description="Phân bổ doanh thu giữa khách mới và quay lại">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -261,13 +333,23 @@ export function CustomerTypeCard({ rows, patientNew, patientReturning, isLoading
 interface SourceCardProps {
   rows: RevenueBySource[];
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function SourceCard({ rows, isLoading }: SourceCardProps) {
+export function SourceCard({ rows, isLoading, isError, onRetry }: SourceCardProps) {
   if (isLoading) {
     return (
       <Card title="Doanh số theo nguồn khách hàng" description="Top kênh đưa khách đến phòng khám">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Doanh số theo nguồn khách hàng" description="Top kênh đưa khách đến phòng khám">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -335,13 +417,23 @@ export function SourceCard({ rows, isLoading }: SourceCardProps) {
 interface ProcedureCardProps {
   rows: RevenueByProcedure[];
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function ProcedureCard({ rows, isLoading }: ProcedureCardProps) {
+export function ProcedureCard({ rows, isLoading, isError, onRetry }: ProcedureCardProps) {
   if (isLoading) {
     return (
       <Card title="Doanh số nhóm thủ thuật" description="Top 10 thủ thuật đem lại doanh thu cao nhất">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Doanh số nhóm thủ thuật" description="Top 10 thủ thuật đem lại doanh thu cao nhất">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -422,13 +514,23 @@ export function ProcedureCard({ rows, isLoading }: ProcedureCardProps) {
 interface DentistRankingCardProps {
   rows: RevenueByDentistRow[];
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function DentistRankingCard({ rows, isLoading }: DentistRankingCardProps) {
+export function DentistRankingCard({ rows, isLoading, isError, onRetry }: DentistRankingCardProps) {
   if (isLoading) {
     return (
       <Card title="Doanh số bác sĩ" description="Xếp hạng doanh thu theo bác sĩ">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Doanh số bác sĩ" description="Xếp hạng doanh thu theo bác sĩ">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -550,9 +652,11 @@ export function DentistRankingCard({ rows, isLoading }: DentistRankingCardProps)
 interface DailyChartCardProps {
   rows: DailyRevenuePoint[];
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function DailyChartCard({ rows, isLoading }: DailyChartCardProps) {
+export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChartCardProps) {
   const data = useMemo(
     () => rows.map((r) => ({ ...r, label: formatDayLabel(r.date), revenueM: r.revenue / 1_000_000 })),
     [rows],
@@ -562,6 +666,14 @@ export function DailyChartCard({ rows, isLoading }: DailyChartCardProps) {
     return (
       <Card title="Thống kê lịch sử 15 ngày gần nhất" description="Doanh số và số phiếu khám theo ngày">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Thống kê lịch sử 15 ngày gần nhất" description="Doanh số và số phiếu khám theo ngày">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -624,9 +736,11 @@ export function DailyChartCard({ rows, isLoading }: DailyChartCardProps) {
 interface MonthlyChartCardProps {
   rows: MonthlyRevenuePoint[];
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function MonthlyChartCard({ rows, isLoading }: MonthlyChartCardProps) {
+export function MonthlyChartCard({ rows, isLoading, isError, onRetry }: MonthlyChartCardProps) {
   const data = useMemo(
     () => rows.map((r) => ({ ...r, label: formatMonthLabel(r.month), revenueM: r.revenue / 1_000_000 })),
     [rows],
@@ -636,6 +750,14 @@ export function MonthlyChartCard({ rows, isLoading }: MonthlyChartCardProps) {
     return (
       <Card title="Thống kê doanh số 6 tháng" description="Xu hướng doanh thu theo tháng">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Thống kê doanh số 6 tháng" description="Xu hướng doanh thu theo tháng">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -682,15 +804,25 @@ export function MonthlyChartCard({ rows, isLoading }: MonthlyChartCardProps) {
 interface AppointmentsCardProps {
   rows: AppointmentPoint[];
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function AppointmentsCard({ rows, isLoading }: AppointmentsCardProps) {
+export function AppointmentsCard({ rows, isLoading, isError, onRetry }: AppointmentsCardProps) {
   const data = useMemo(() => rows.map((r) => ({ ...r, label: formatDayLabel(r.date) })), [rows]);
 
   if (isLoading) {
     return (
       <Card title="Lịch hẹn 7 ngày" description="Số lượng lịch hẹn theo ngày">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card title="Lịch hẹn 7 ngày" description="Số lượng lịch hẹn theo ngày">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -746,13 +878,23 @@ export function AppointmentsCard({ rows, isLoading }: AppointmentsCardProps) {
 interface FinanceCardProps {
   finance: FinanceSummary | undefined;
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function FinanceCard({ finance, isLoading }: FinanceCardProps) {
-  if (isLoading || !finance) {
+export function FinanceCard({ finance, isLoading, isError, onRetry }: FinanceCardProps) {
+  if (isLoading) {
     return (
       <Card title="Thu chi" description="Tổng thu và tổng chi trong kỳ">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError || !finance) {
+    return (
+      <Card title="Thu chi" description="Tổng thu và tổng chi trong kỳ">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
@@ -789,13 +931,23 @@ export function FinanceCard({ finance, isLoading }: FinanceCardProps) {
 interface OutstandingCardProps {
   outstanding: OutstandingSummary | undefined;
   isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
-export function OutstandingCard({ outstanding, isLoading }: OutstandingCardProps) {
-  if (isLoading || !outstanding) {
+export function OutstandingCard({ outstanding, isLoading, isError, onRetry }: OutstandingCardProps) {
+  if (isLoading) {
     return (
       <Card title="Tổng KH nợ" description="Số dư công nợ hiện tại">
         <CardSkeleton />
+      </Card>
+    );
+  }
+
+  if (isError || !outstanding) {
+    return (
+      <Card title="Tổng KH nợ" description="Số dư công nợ hiện tại">
+        <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
