@@ -15,6 +15,7 @@ import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } fro
 import { PaymentModal } from './PaymentModal';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
+import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 
 export default function InvoiceDetailPage() {
@@ -38,7 +39,14 @@ export default function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       notify.success('Phát hành hóa đơn thành công');
     },
-    onError: () => notify.error('Không thể phát hành hóa đơn. Vui lòng thử lại.'),
+    onError: (err) => {
+      // A stale `invoice.version` (another tab already issued/paid/voided
+      // this invoice) 409s here — without refetching, the cached version
+      // never updates, so every retry fails identically until a manual
+      // page refresh.
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      notify.error(getApiErrorMessage(err, 'Không thể phát hành hóa đơn. Vui lòng thử lại.'));
+    },
   });
 
   const voidMutation = useMutation({
@@ -48,8 +56,9 @@ export default function InvoiceDetailPage() {
       setShowVoidModal(false);
       notify.success('Hủy hóa đơn thành công');
     },
-    onError: () => {
-      notify.error('Không thể hủy hóa đơn. Vui lòng thử lại.');
+    onError: (err) => {
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      notify.error(getApiErrorMessage(err, 'Không thể hủy hóa đơn. Vui lòng thử lại.'));
     },
   });
 

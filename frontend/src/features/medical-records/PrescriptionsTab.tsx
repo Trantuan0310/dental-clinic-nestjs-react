@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Printer } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
 import { Button, Modal, Input, Textarea } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import type { Encounter, PrescriptionItem, CreatePrescriptionPayload } from '@/types/medical-records';
 
 interface PrescriptionsTabProps {
@@ -23,6 +25,9 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
       resetForm();
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể lưu đơn thuốc'));
     },
   });
 

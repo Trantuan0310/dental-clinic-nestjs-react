@@ -5,7 +5,6 @@
 // =============================================================================
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { addDays, format } from 'date-fns';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
 import { useTodayAppointments } from '@/features/appointments/appointmentApi';
 import { resolveRange, type TimeRange } from './dashboard/types';
@@ -92,12 +91,8 @@ export default function DashboardPage() {
     isError: appointmentsByDayError,
     refetch: refetchAppointmentsByDay,
   } = useQuery({
-    queryKey: ['dashboard-appointments-by-day'],
-    queryFn: () =>
-      dashboardApi.appointmentsByDay({
-        from: format(addDays(new Date(), -6), 'yyyy-MM-dd'),
-        to: format(new Date(), 'yyyy-MM-dd'),
-      }),
+    queryKey: ['dashboard-appointments-by-day', dateRange],
+    queryFn: () => dashboardApi.appointmentsByDay(commonParams),
   });
 
   const {

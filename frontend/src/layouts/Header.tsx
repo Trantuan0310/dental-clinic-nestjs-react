@@ -87,15 +87,15 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
         >
           <div className="relative mx-auto w-full max-w-md">
             <Tooltip
-              label={
-                <span>
-                  {t('shell.search.tooltip', {
-                    name: <strong>tên</strong>,
-                    code: <strong>mã BN</strong>,
-                    phone: <strong>số điện thoại</strong>,
-                  })}
-                </span>
-              }
+              // i18next's t() returns a plain string — it interpolates
+              // values with String(value), so passing JSX elements here
+              // (as opposed to plain strings) rendered the literal text
+              // "[object Object]" for each placeholder instead of bold text.
+              label={t('shell.search.tooltip', {
+                name: 'tên',
+                code: 'mã BN',
+                phone: 'số điện thoại',
+              })}
               side="bottom"
             >
               <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-surface-500" />

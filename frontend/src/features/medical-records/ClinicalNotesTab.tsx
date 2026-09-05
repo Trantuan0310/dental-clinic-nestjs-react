@@ -5,6 +5,8 @@ import { vi } from 'date-fns/locale';
 import { Plus } from 'lucide-react';
 import { medicalRecordsApi } from './imperativeApi';
 import { Button, Modal, Select, Textarea } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { AddendumModal } from './AddendumModal';
 import type { Encounter, ClinicalNote, NoteType } from '@/types/medical-records';
 
@@ -66,6 +68,9 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
       setEditingNote(null);
       setNoteContent('');
       setNoteType('progress_note');
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể lưu ghi chú lâm sàng'));
     },
   });
 

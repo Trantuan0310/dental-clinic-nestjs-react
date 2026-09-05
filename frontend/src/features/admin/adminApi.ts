@@ -16,8 +16,6 @@ import type {
   UpdateAdminRolePayload,
   AuditLogListResponse,
   AuditLogFilters,
-  ClinicSettings,
-  UpdateClinicSettingsPayload,
   Permission,
 } from '@/types/admin';
 
@@ -189,45 +187,5 @@ export function useAuditLogs(params?: AuditLogFilters) {
         params: { ...rest, ...(cursor ? { cursor } : {}) },
       });
     },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Settings (stub — backend does not yet expose a settings endpoint)
-// ---------------------------------------------------------------------------
-
-export function useSettings() {
-  return useQuery({
-    queryKey: ['admin', 'settings'],
-    queryFn: async (): Promise<ClinicSettings> => {
-      // TODO: wire to backend when /admin/settings endpoint is available
-      // Returns hardcoded defaults until backend implements this.
-      return {
-        clinicName: 'Nha khoa GENSMILE',
-        taxCode: '',
-        address: '',
-        phone: '',
-        email: '',
-        website: '',
-      };
-    },
-  });
-}
-
-export function useUpdateSettings() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (_payload: UpdateClinicSettingsPayload): Promise<ClinicSettings> => {
-      // TODO: wire to backend PUT /admin/settings when available
-      return {
-        clinicName: 'Nha khoa GENSMILE',
-        taxCode: '',
-        address: '',
-        phone: '',
-        email: '',
-        website: '',
-      };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'settings'] }),
   });
 }

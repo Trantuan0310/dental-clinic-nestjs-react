@@ -65,7 +65,7 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
             </span>
           </Tooltip>
 
-          <Tooltip label="Khoảng thời gian áp dụng cho tất cả chỉ số trên Dashboard.">
+          <Tooltip label="Khoảng thời gian áp dụng cho hầu hết chỉ số trên Dashboard (riêng biểu đồ xu hướng theo tháng luôn hiển thị các tháng gần nhất, không đổi theo lựa chọn này).">
             <div className="inline-flex cursor-help items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-surface-700 dark:bg-surface-800">
               <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />
               <select

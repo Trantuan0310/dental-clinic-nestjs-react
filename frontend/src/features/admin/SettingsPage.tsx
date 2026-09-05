@@ -1,37 +1,16 @@
 import { useState } from 'react';
 import { Save, Building2, Clock, Bell } from 'lucide-react';
 import { Button, Card, Input, Tabs, TabsList, TabsTrigger, TabsContent, Alert } from '@/components/ui';
-import { notify } from '@/components/ui/Toast';
-import { useSettings, useUpdateSettings } from './adminApi';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('info');
-  const updateSettings = useUpdateSettings();
 
-  const { data: settings, isLoading } = useSettings();
-
-  const [clinicName, setClinicName] = useState(settings?.clinicName ?? 'Nha khoa GENSMILE');
-  const [taxCode, setTaxCode] = useState(settings?.taxCode ?? '');
-  const [address, setAddress] = useState(settings?.address ?? '');
-  const [phone, setPhone] = useState(settings?.phone ?? '');
-  const [email, setEmail] = useState(settings?.email ?? '');
-  const [website, setWebsite] = useState(settings?.website ?? '');
-
-  const handleSave = async () => {
-    try {
-      await updateSettings.mutateAsync({
-        clinicName,
-        taxCode,
-        address,
-        phone,
-        email,
-        website,
-      });
-      notify.success('Lưu cài đặt thành công');
-    } catch {
-      notify.error('Không thể lưu cài đặt. Vui lòng thử lại.');
-    }
-  };
+  const [clinicName, setClinicName] = useState('Nha khoa GENSMILE');
+  const [taxCode, setTaxCode] = useState('');
+  const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [website, setWebsite] = useState('');
 
   return (
     <div className="space-y-6">
@@ -60,13 +39,10 @@ export default function SettingsPage() {
 
         <TabsContent value="info">
           <Card>
-            <form
-              className="space-y-6"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSave();
-              }}
-            >
+            <Alert type="info">
+              Tính năng đang được phát triển. Các trường bên dưới chỉ là bản xem trước và chưa được lưu vào hệ thống.
+            </Alert>
+            <fieldset disabled className="space-y-6 mt-4 opacity-60">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input
                   label="Tên phòng khám"
@@ -104,12 +80,12 @@ export default function SettingsPage() {
                 onChange={(e) => setWebsite(e.target.value)}
               />
               <div className="flex justify-end pt-4 border-t border-gray-100">
-                <Button type="submit" isLoading={updateSettings.isPending} disabled={isLoading}>
+                <Button type="button" title="Tính năng chưa khả dụng">
                   <Save className="h-4 w-4" />
                   Lưu thay đổi
                 </Button>
               </div>
-            </form>
+            </fieldset>
           </Card>
         </TabsContent>
 

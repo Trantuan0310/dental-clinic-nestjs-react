@@ -132,7 +132,11 @@ export default function RolesPage() {
       </Card>
 
       {/* Create/Edit Role Modal */}
+      {/* key forces a remount per role so its internal useState (seeded from
+          the `role` prop) re-initializes instead of keeping stale values
+          from whichever role was edited previously. */}
       <RoleModal
+        key={editingRole?.id ?? 'create'}
         isOpen={showCreateModal || !!editingRole}
         onClose={() => {
           setShowCreateModal(false);

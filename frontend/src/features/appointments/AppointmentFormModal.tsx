@@ -148,13 +148,16 @@ export function AppointmentFormModal({
 
   const isSlotAvailable = useMemo(() => {
     if (!availability) return null;
-    // Compare by minute-of-day since mock slots may be at slightly different ms.
+    // availableSlots only ever lists free slots (the backend never returns
+    // a busy one), so a match means available and no match means this
+    // start time isn't free — not "unknown", as `slot?.available ?? null`
+    // used to report (every entry always has available: true, so a miss
+    // fell through to null and the conflict warning below could never render).
     const targetMin = timeStringToMinutes(startTime);
-    const slot = availability.availableSlots.find((s) => {
+    return availability.availableSlots.some((s) => {
       const slotMin = new Date(s.startTime).getHours() * 60 + new Date(s.startTime).getMinutes();
       return slotMin === targetMin;
     });
-    return slot?.available ?? null;
   }, [availability, startTime]);
 
   const handleSubmit = async () => {

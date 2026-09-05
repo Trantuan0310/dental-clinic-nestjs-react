@@ -72,7 +72,16 @@ export class AppointmentsService {
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
 
-    const endAt = new Date(startAt.getTime() + this.defaultSlotMinutes(dentist) * 60_000);
+    // Honor a client-provided endAt (e.g. a chosen duration) instead of
+    // always defaulting — this DTO field has always been accepted and
+    // validated but was silently discarded here, so every appointment was
+    // persisted at defaultSlotMinutes regardless of what was requested.
+    const endAt = dto.endAt
+      ? new Date(dto.endAt)
+      : new Date(startAt.getTime() + this.defaultSlotMinutes(dentist) * 60_000);
+    if (endAt.getTime() <= startAt.getTime()) {
+      throw new BackDatedAppointmentException();
+    }
 
     // Wrap the overlap check + insert in a single $transaction under an
     // advisory lock keyed by dentistId. This prevents two concurrent

@@ -8,9 +8,12 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
+import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import type { DentistCompensation } from '@/types/payroll';
 
 export function CompensationListPage() {
+  const canCreateCompensation = useAuthStore((s) => s.hasPermission('payroll.compensation.update'));
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDentist, setSelectedDentist] = useState('');
   const [baseSalary, setBaseSalary] = useState('');
@@ -54,10 +57,12 @@ export function CompensationListPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <Button onClick={() => setShowAddModal(true)}>
-          <Plus className="h-4 w-4" />
-          Thêm chính sách
-        </Button>
+        <PermissionGuard permission="payroll.compensation.update">
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="h-4 w-4" />
+            Thêm chính sách
+          </Button>
+        </PermissionGuard>
       </div>
 
       <Card noPadding>
@@ -81,10 +86,11 @@ export function CompensationListPage() {
             icon={<DollarSign className="h-10 w-10 text-gray-400" />}
             title="Chưa có chính sách lương nào"
             description="Thêm chính sách lương cho bác sĩ"
-            action={{
-              label: 'Thêm chính sách',
-              onClick: () => setShowAddModal(true),
-            }}
+            action={
+              canCreateCompensation
+                ? { label: 'Thêm chính sách', onClick: () => setShowAddModal(true) }
+                : undefined
+            }
           />
         ) : (
           <div className="divide-y divide-gray-100">

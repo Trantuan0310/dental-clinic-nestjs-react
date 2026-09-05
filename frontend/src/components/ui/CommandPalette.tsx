@@ -186,8 +186,12 @@ export function CommandPalette() {
     return () => window.clearTimeout(handle);
   }, [query]);
 
-  const entityEnabled =
-    !!user && debouncedQuery.trim().length >= ENTITY_QUERY_MIN && /^\d{3,}/.test(debouncedQuery.trim()) === false;
+  // No digit-based exclusion here: patient/appointment/invoice lookup by
+  // phone number is an explicitly supported search path (see SearchInput's
+  // placeholder text), and Vietnamese mobile numbers are all-digit — a
+  // previous `/^\d{3,}/` guard disabled entity search the moment 3 digits
+  // were typed, breaking phone search entirely after the first few keystrokes.
+  const entityEnabled = !!user && debouncedQuery.trim().length >= ENTITY_QUERY_MIN;
 
   const { data: patientHits = [], isFetching: patientsFetching } = useQuery({
     enabled: entityEnabled,
@@ -299,7 +303,14 @@ export function CommandPalette() {
 
   const filtered = useMemo<PaletteItem[]>(() => {
     if (!query) {
-      return [...recentItems, ...allItems];
+      // recentItems are looked up from allItems by id, so every recent
+      // item is also present in allItems — without de-duping, each one
+      // rendered twice (its "Recent" copy plus its normal-group copy),
+      // with the same id used as both entries' React key.
+      const seenRecent = new Set<string>();
+      return [...recentItems, ...allItems].filter((item) =>
+        seenRecent.has(item.id) ? false : (seenRecent.add(item.id), true),
+      );
     }
     const scoredNav = allItems.map((item) => ({
       item,
@@ -483,6 +494,13 @@ function renderGroups(
   commit: (item: PaletteItem) => void,
   t: ReturnType<typeof useTranslation>['t'],
 ) {
+  const showRecent = !query && recent.length > 0;
+  // Items already shown in the dedicated "Recent" section below must not
+  // also appear in their normal category group — `items` (== `filtered`)
+  // still contains them (it has to, for keyboard nav / the no-query "show
+  // everything" list), so skip them here instead of dropping them upstream.
+  const recentIds = showRecent ? new Set(recent.map((r) => r.id)) : null;
+
   // Group by group label, preserving first-seen order. Items are sorted by
   // fuzzy score first, so two items sharing a group title are frequently
   // NOT adjacent — merging only into the last-seen group (as opposed to
@@ -492,6 +510,7 @@ function renderGroups(
   const groupIndex = new Map<string, number>();
   const groups: Array<{ title: string; items: PaletteItem[] }> = [];
   for (const item of items) {
+    if (recentIds?.has(item.id)) continue;
     const title = getGroupLabel(item, t);
     const existingIdx = groupIndex.get(title);
     if (existingIdx !== undefined) {
@@ -502,7 +521,6 @@ function renderGroups(
     }
   }
 
-  const showRecent = !query && recent.length > 0;
   let cursor = 0;
 
   return (

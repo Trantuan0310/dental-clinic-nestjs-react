@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { ArrowLeft, Package, Plus, Minus, Settings } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Settings } from 'lucide-react';
 import { inventoryApi, stockMovementLabel } from '@/types/inventory';
 import { Button, Card, StatusBadge, Modal, Input, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -35,12 +35,22 @@ export default function InventoryItemDetailPage() {
   });
 
   const parsedAdjustQty = parseInt(adjustmentQuantity, 10) || 0;
-  const adjustDelta =
-    adjustmentType === 'STOCK_IN' || adjustmentType === 'RETURNED' ? parsedAdjustQty : -parsedAdjustQty;
+  const adjustDelta = adjustmentType === 'STOCK_IN' ? parsedAdjustQty : -parsedAdjustQty;
   const previewQuantity = item ? item.currentQuantity + adjustDelta : null;
 
   const adjustMutation = useMutation({
     mutationFn: () => {
+      // Route to the endpoint that matches the selected type instead of
+      // always calling /adjust — that endpoint hardcodes MovementType.
+      // ADJUSTMENT regardless of what the picker shows, so choosing
+      // "Nhập kho"/"Xuất kho" was always silently recorded as a generic
+      // stocktake in movement history.
+      if (adjustmentType === 'STOCK_IN') {
+        return inventoryApi.stockIn(id!, { quantity: parsedAdjustQty, reason: adjustmentReason });
+      }
+      if (adjustmentType === 'STOCK_OUT') {
+        return inventoryApi.stockOut(id!, { quantity: parsedAdjustQty, reason: adjustmentReason });
+      }
       // BR-INV-004: adjustment is an ABSOLUTE set of `quantityOnHand`,
       // not a delta. Send only the target value + reason.
       return inventoryApi.adjust(id!, {
@@ -88,13 +98,16 @@ export default function InventoryItemDetailPage() {
   const stockStatus = getStockStatus();
   const movementsList = movements?.data ?? [];
 
+  // Limited to the 3 movement types the backend can actually record
+  // distinctly (Prisma MovementType enum: STOCK_IN | STOCK_OUT |
+  // ADJUSTMENT) — other labels in StockMovementType exist only for
+  // displaying historical/legacy movement records, not for creating new
+  // ones, so offering them here silently collapsed into a generic
+  // ADJUSTMENT movement no matter which was picked.
   const adjustmentTypes: { value: StockMovementType; label: string; icon: typeof Plus }[] = [
     { value: 'STOCK_IN', label: 'Nhập kho', icon: Plus },
     { value: 'STOCK_OUT', label: 'Xuất kho', icon: Minus },
     { value: 'ADJUSTMENT', label: 'Kiểm kê', icon: Settings },
-    { value: 'RETURNED', label: 'Khách trả', icon: Package },
-    { value: 'EXPIRED', label: 'Hết hạn', icon: Minus },
-    { value: 'DAMAGED', label: 'Hư hỏng', icon: Minus },
   ];
 
   const getMovementIcon = (type: StockMovementType | string) => {
