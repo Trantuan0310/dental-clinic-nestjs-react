@@ -102,6 +102,11 @@ export interface StockAdjustmentPayload {
   reason?: string;
 }
 
+export interface StockInOutPayload {
+  quantity: number;
+  reason?: string;
+}
+
 // API functions
 import { api, unwrap } from '@/lib/api';
 
@@ -245,6 +250,22 @@ export const inventoryApi = {
   async adjust(id: string, payload: StockAdjustmentPayload): Promise<InventoryItem> {
     const { data } = await api.post<{ data: PrismaInventoryItemRow }>(
       `/inventory/items/${id}/adjust`,
+      payload,
+    );
+    return mapInventoryItem(unwrap(data));
+  },
+
+  async stockIn(id: string, payload: StockInOutPayload): Promise<InventoryItem> {
+    const { data } = await api.post<{ data: PrismaInventoryItemRow }>(
+      `/inventory/items/${id}/stock-in`,
+      payload,
+    );
+    return mapInventoryItem(unwrap(data));
+  },
+
+  async stockOut(id: string, payload: StockInOutPayload): Promise<InventoryItem> {
+    const { data } = await api.post<{ data: PrismaInventoryItemRow }>(
+      `/inventory/items/${id}/stock-out`,
       payload,
     );
     return mapInventoryItem(unwrap(data));

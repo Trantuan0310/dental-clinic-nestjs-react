@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Languages, Check } from 'lucide-react';
 import { useLocaleStore } from '@/stores/localeStore';
@@ -20,6 +21,32 @@ export function LanguageSwitcher({ variant = 'icon', className }: LanguageSwitch
   const { t } = useTranslation();
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  // Native <details> has no built-in outside-click/Escape close behavior —
+  // only picking a locale (below) or clicking the summary again closed it,
+  // so clicking anywhere else on the page left the menu open, overlapping
+  // subsequent content. Runs regardless of `variant` (hooks can't be
+  // called conditionally); it's a no-op for 'segmented', which never
+  // attaches `detailsRef`.
+  useEffect(() => {
+    function handlePointerDown(e: MouseEvent) {
+      if (detailsRef.current && !detailsRef.current.contains(e.target as Node)) {
+        detailsRef.current.removeAttribute('open');
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        detailsRef.current?.removeAttribute('open');
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   if (variant === 'segmented') {
     return (
@@ -60,7 +87,7 @@ export function LanguageSwitcher({ variant = 'icon', className }: LanguageSwitch
   return (
     <Tooltip label={t('language.switchLabel', { native: current.native })} side="bottom">
       <div className={cn('relative', className)}>
-        <details className="group">
+        <details ref={detailsRef} className="group">
           <summary
             role="button"
             aria-label={t('language.title')}

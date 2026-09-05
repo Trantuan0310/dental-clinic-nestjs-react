@@ -111,14 +111,3 @@ export interface AuditLogFilters {
   limit?: number;
   cursor?: string;
 }
-
-export interface ClinicSettings {
-  clinicName: string;
-  taxCode?: string;
-  address?: string;
-  phone?: string;
-  email?: string;
-  website?: string;
-}
-
-export interface UpdateClinicSettingsPayload extends Partial<ClinicSettings> {}

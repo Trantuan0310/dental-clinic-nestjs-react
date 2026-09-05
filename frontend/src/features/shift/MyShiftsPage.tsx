@@ -24,7 +24,14 @@ const HOURS_24 = 24;
 function canCancel(s: ShiftRegistration): { allowed: boolean; reason?: string } {
   if (s.status === 'PENDING') return { allowed: true };
   if (s.status === 'APPROVED') {
-    const shiftStart = new Date(`${s.date}T${s.startTime}:00`);
+    // Must match backend's interpretation exactly (shift-registration.service.ts
+    // cancel(): new Date(shift.date) + setUTCHours(hh, mm)) — `${date}T${time}:00`
+    // with no timezone designator parses as browser-LOCAL time instead, which
+    // disagreed with the backend by a fixed offset (e.g. 7h for UTC+7) and could
+    // disable this button for shifts the backend would still allow cancelling.
+    const shiftStart = new Date(s.date);
+    const [hh, mm] = s.startTime.split(':').map(Number);
+    shiftStart.setUTCHours(hh, mm, 0, 0);
     const hoursUntil = (shiftStart.getTime() - Date.now()) / (1000 * 60 * 60);
     if (hoursUntil < HOURS_24) {
       return { allowed: false, reason: 'Phải hủy ca trước 24h' };

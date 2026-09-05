@@ -17,6 +17,7 @@ import { Button, Card, Modal, Input, Select, DatePicker, Textarea, StatusBadge }
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
+import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import type { Expense, ExpenseCategory, CreateExpensePayload, ExpenseFilters } from './types';
 
@@ -182,6 +183,15 @@ export default function ExpenseListPage() {
     onError: () => notify.error('Không thể từ chối chi phí. Vui lòng thử lại.'),
   });
 
+  const reimburseMutation = useMutation({
+    mutationFn: (id: string) => expenseApi.markReimbursed(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      notify.success('Đánh dấu hoàn tiền thành công');
+    },
+    onError: (err) => notify.error(getApiErrorMessage(err, 'Không thể đánh dấu hoàn tiền. Vui lòng thử lại.')),
+  });
+
   const filteredData = (data?.data ?? []).filter((e) =>
     e.description.toLowerCase().includes(search.toLowerCase()) ||
     e.code.toLowerCase().includes(search.toLowerCase())
@@ -200,10 +210,12 @@ export default function ExpenseListPage() {
             Theo dõi chi phí hoạt động của phòng khám
           </p>
         </div>
-        <Button onClick={() => { setEditing(undefined); setShowForm(true); }}>
-          <Plus className="h-4 w-4" />
-          Thêm chi phí
-        </Button>
+        <PermissionGuard permission="expense.create">
+          <Button onClick={() => { setEditing(undefined); setShowForm(true); }}>
+            <Plus className="h-4 w-4" />
+            Thêm chi phí
+          </Button>
+        </PermissionGuard>
       </div>
 
       {/* Summary Cards */}
@@ -326,13 +338,15 @@ export default function ExpenseListPage() {
                     <div className="flex items-center justify-center gap-1">
                       {expense.status === 'DRAFT' && (
                         <>
-                          <button
-                            onClick={() => { setEditing(expense); setShowForm(true); }}
-                            className="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
-                            title="Sửa"
-                          >
-                            <Edit className="h-4 w-4 text-gray-500" />
-                          </button>
+                          <PermissionGuard permission="expense.update">
+                            <button
+                              onClick={() => { setEditing(expense); setShowForm(true); }}
+                              className="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
+                              title="Sửa"
+                            >
+                              <Edit className="h-4 w-4 text-gray-500" />
+                            </button>
+                          </PermissionGuard>
                           {expense.createdBy && expense.createdBy === currentUserId ? (
                             <span
                               className="px-1.5 text-xs text-gray-400"
@@ -342,43 +356,48 @@ export default function ExpenseListPage() {
                             </span>
                           ) : (
                             <>
-                              <button
-                                onClick={() => approveMutation.mutate(expense.id)}
-                                className="rounded p-1.5 hover:bg-green-100 dark:hover:bg-green-900"
-                                title="Duyệt"
-                              >
-                                <Check className="h-4 w-4 text-green-600" />
-                              </button>
-                              <button
-                                onClick={() => rejectMutation.mutate(expense.id)}
-                                className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
-                                title="Từ chối"
-                              >
-                                <X className="h-4 w-4 text-red-600" />
-                              </button>
+                              <PermissionGuard permission="expense.approve">
+                                <button
+                                  onClick={() => approveMutation.mutate(expense.id)}
+                                  className="rounded p-1.5 hover:bg-green-100 dark:hover:bg-green-900"
+                                  title="Duyệt"
+                                >
+                                  <Check className="h-4 w-4 text-green-600" />
+                                </button>
+                              </PermissionGuard>
+                              <PermissionGuard permission="expense.approve">
+                                <button
+                                  onClick={() => rejectMutation.mutate(expense.id)}
+                                  className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
+                                  title="Từ chối"
+                                >
+                                  <X className="h-4 w-4 text-red-600" />
+                                </button>
+                              </PermissionGuard>
                             </>
                           )}
-                          <button
-                            onClick={() => setConfirmDelete(expense)}
-                            className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
-                            title="Xóa"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </button>
+                          <PermissionGuard permission="expense.delete">
+                            <button
+                              onClick={() => setConfirmDelete(expense)}
+                              className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
+                              title="Xóa"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </button>
+                          </PermissionGuard>
                         </>
                       )}
                       {expense.status === 'APPROVED' && (
-                        <button
-                          onClick={async () => {
-                            await expenseApi.markReimbursed(expense.id);
-                            qc.invalidateQueries({ queryKey: ['expenses'] });
-                            notify.success('Đánh dấu hoàn tiền thành công');
-                          }}
-                          className="rounded p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900"
-                          title="Đánh dấu hoàn tiền"
-                        >
-                          <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        </button>
+                        <PermissionGuard permission="expense.approve">
+                          <button
+                            onClick={() => reimburseMutation.mutate(expense.id)}
+                            disabled={reimburseMutation.isPending}
+                            className="rounded p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900 disabled:opacity-50"
+                            title="Đánh dấu hoàn tiền"
+                          >
+                            <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          </button>
+                        </PermissionGuard>
                       )}
                     </div>
                   </td>

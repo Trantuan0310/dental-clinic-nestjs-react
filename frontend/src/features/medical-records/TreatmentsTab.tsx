@@ -3,7 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/format';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
-import { Button, Modal, Input, Textarea } from '@/components/ui';
+import { Button, Modal, Input, Textarea, ConfirmDialog } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import type { Encounter, Treatment, CreateTreatmentPayload } from '@/types/medical-records';
 
 interface TreatmentsTabProps {
@@ -17,6 +19,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTreatment, setEditingTreatment] = useState<Treatment | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Treatment | null>(null);
 
   const [toothNumber, setToothNumber] = useState('');
   const [procedureCode, setProcedureCode] = useState('');
@@ -44,6 +47,9 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
       resetForm();
     },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể thêm dịch vụ'));
+    },
   });
 
   const updateMutation = useMutation({
@@ -53,12 +59,20 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
       setEditingTreatment(null);
     },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể cập nhật dịch vụ'));
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => medicalRecordsApi.deleteTreatment(encounter.id, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
+      setConfirmDelete(null);
+    },
+    onError: (err) => {
+      setConfirmDelete(null);
+      notify.error(getApiErrorMessage(err, 'Không thể xoá dịch vụ'));
     },
   });
 
@@ -164,7 +178,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => deleteMutation.mutate(treatment.id)}
+                        onClick={() => setConfirmDelete(treatment)}
                         className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -259,6 +273,21 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete && deleteMutation.mutate(confirmDelete.id)}
+        title="Xoá dịch vụ?"
+        description={
+          confirmDelete
+            ? `Dịch vụ "${confirmDelete.procedureName}" sẽ bị xoá khỏi phiếu điều trị. Hành động này không thể hoàn tác.`
+            : ''
+        }
+        confirmLabel="Xoá"
+        confirmVariant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

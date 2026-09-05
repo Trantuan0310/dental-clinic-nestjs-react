@@ -229,6 +229,51 @@ describe('AppointmentsService', () => {
         ),
       ).rejects.toThrow();
     });
+
+    it('honors a client-provided endAt instead of always defaulting the slot length', async () => {
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await service.create(
+        {
+          dentistId: 'dentist-1',
+          patientId: 'patient-1',
+          startAt: '2027-03-15T09:15:00Z',
+          endAt: '2027-03-15T10:45:00Z',
+        } as any,
+        actor,
+      );
+
+      const createArg = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+      expect(createArg.endAt).toEqual(new Date('2027-03-15T10:45:00Z'));
+    });
+
+    it('defaults endAt from the slot length when endAt is not provided', async () => {
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await service.create(
+        { dentistId: 'dentist-1', patientId: 'patient-1', startAt: '2027-03-15T09:15:00Z' } as any,
+        actor,
+      );
+
+      const createArg = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+      expect(createArg.endAt).toEqual(new Date('2027-03-15T09:45:00Z'));
+    });
+
+    it('rejects a client-provided endAt that is not after startAt', async () => {
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          {
+            dentistId: 'dentist-1',
+            patientId: 'patient-1',
+            startAt: '2027-03-15T09:15:00Z',
+            endAt: '2027-03-15T09:00:00Z',
+          } as any,
+          actor,
+        ),
+      ).rejects.toThrow();
+    });
   });
 
   describe('markNoShow', () => {

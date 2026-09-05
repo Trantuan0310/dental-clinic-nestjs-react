@@ -269,6 +269,16 @@ function NavItemWithChildren({
   const location = useLocation();
   const childPaths = children.map((c) => c.to);
   const hasActiveChild = childPaths.some((p) => location.pathname.startsWith(p));
+
+  // The comment above promises this auto-opens for an active child route,
+  // but nothing ever synced `open` to `hasActiveChild` — a deep link or
+  // refresh straight into a child route highlighted the parent but left
+  // its children collapsed, hiding the very link that's currently active.
+  // Only forces it open, never closes it, so a manual collapse while still
+  // on a child page isn't fought.
+  useEffect(() => {
+    if (hasActiveChild) setOpen(true);
+  }, [hasActiveChild]);
   const ParentIcon = ParentIconProp ?? children[0]?.icon;
   const label = t(`nav.${labelKey}`, labelKey);
   const childrenId = `nav-children-${to.replace(/[^a-zA-Z0-9]/g, '-')}`;

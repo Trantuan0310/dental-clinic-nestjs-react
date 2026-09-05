@@ -14,7 +14,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
-import { Button, Card } from '@/components/ui';
+import { Button, Card, Alert } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import {
   LineChart,
@@ -56,6 +56,20 @@ const statusLabels: Record<string, string> = {
   VOIDED: 'Đã hủy',
 };
 
+function ChartErrorNotice({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+      <span>Không thể tải dữ liệu.</span>
+      <button
+        onClick={onRetry}
+        className="rounded-md border border-gray-300 px-3 py-1 font-medium hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
+      >
+        Thử lại
+      </button>
+    </div>
+  );
+}
+
 function exportToCSV<T extends Record<string, unknown>>(data: T[], filename: string) {
   if (!data.length) return;
   const headers = Object.keys(data[0]);
@@ -94,35 +108,56 @@ export default function ReportsPage() {
   const isDateRangeValid = fromDate <= toDate;
 
   // Main revenue report
-  const { data: report, isLoading: reportLoading } = useQuery({
+  const {
+    data: report,
+    isLoading: reportLoading,
+    isError: reportError,
+    refetch: refetchReport,
+  } = useQuery({
     queryKey: ['revenue-report', fromDate, toDate],
     queryFn: () => billingApi.getRevenueReport({ from: fromDate, to: toDate }),
     enabled: isDateRangeValid,
   });
 
   // Daily revenue for line chart
-  const { data: dailyData } = useQuery({
+  const {
+    data: dailyData,
+    isError: dailyError,
+    refetch: refetchDaily,
+  } = useQuery({
     queryKey: ['revenue-by-day', fromDate, toDate],
     queryFn: () => billingApi.getRevenueByDay({ from: fromDate, to: toDate }),
     enabled: !!report,
   });
 
   // Revenue by procedure
-  const { data: byProcedure } = useQuery({
+  const {
+    data: byProcedure,
+    isError: byProcedureError,
+    refetch: refetchByProcedure,
+  } = useQuery({
     queryKey: ['revenue-by-procedure', fromDate, toDate],
     queryFn: () => billingApi.getRevenueByProcedure({ from: fromDate, to: toDate }),
     enabled: !!report,
   });
 
   // Revenue by source
-  const { data: bySource } = useQuery({
+  const {
+    data: bySource,
+    isError: bySourceError,
+    refetch: refetchBySource,
+  } = useQuery({
     queryKey: ['revenue-by-source', fromDate, toDate],
     queryFn: () => billingApi.getRevenueBySource({ from: fromDate, to: toDate }),
     enabled: !!report,
   });
 
   // Outstanding aging
-  const { data: outstandingData } = useQuery({
+  const {
+    data: outstandingData,
+    isError: outstandingError,
+    refetch: refetchOutstanding,
+  } = useQuery({
     queryKey: ['outstanding-report'],
     queryFn: () => billingApi.getOutstandingReport(90),
     enabled: !!report,
@@ -265,6 +300,24 @@ export default function ReportsPage() {
         )}
       </Card>
 
+      {/* Every other query on this page is enabled only once `report`
+          succeeds, so a failure here previously rendered every KPI/chart
+          as a silent zero — indistinguishable from a genuinely empty
+          period — with no way to retry. */}
+      {reportError && (
+        <Alert type="danger" title="Không thể tải báo cáo doanh thu">
+          <div className="flex items-center justify-between gap-4">
+            <span>Đã có lỗi khi tải dữ liệu. Vui lòng thử lại.</span>
+            <button
+              onClick={() => refetchReport()}
+              className="shrink-0 rounded-md border border-red-300 px-3 py-1 text-sm font-medium hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900"
+            >
+              Thử lại
+            </button>
+          </div>
+        </Alert>
+      )}
+
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -344,6 +397,9 @@ export default function ReportsPage() {
         {/* Daily Revenue Chart */}
         <Card title="Doanh thu theo ngày">
           <div className="h-64">
+            {dailyError ? (
+              <ChartErrorNotice onRetry={() => refetchDaily()} />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
@@ -364,6 +420,7 @@ export default function ReportsPage() {
                 />
               </LineChart>
             </ResponsiveContainer>
+            )}
           </div>
         </Card>
 
@@ -404,6 +461,9 @@ export default function ReportsPage() {
         {/* Revenue by Procedure */}
         <Card title="Doanh thu theo dịch vụ (Top 10)">
           <div className="h-64">
+            {byProcedureError ? (
+              <ChartErrorNotice onRetry={() => refetchByProcedure()} />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={procedureChartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
@@ -413,6 +473,7 @@ export default function ReportsPage() {
                 <Bar dataKey="revenue" fill={colors[1]} name="Doanh thu" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </Card>
       </div>
@@ -448,9 +509,15 @@ export default function ReportsPage() {
       </Card>
 
       {/* Revenue by Source */}
-      {sourceChartData.length > 0 && (
+      {/* Also render on error (not just when there's data) — otherwise a
+          failed query and a genuinely-empty period both silently hid the
+          whole card, with no way to tell which happened or to retry. */}
+      {(sourceChartData.length > 0 || bySourceError) && (
         <Card title="Doanh thu theo nguồn đặt lịch">
           <div className="h-64">
+            {bySourceError ? (
+              <ChartErrorNotice onRetry={() => refetchBySource()} />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sourceChartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
@@ -464,6 +531,7 @@ export default function ReportsPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </Card>
       )}
@@ -536,6 +604,16 @@ export default function ReportsPage() {
                 Hiển thị 50/{outstandingList.length} hóa đơn
               </p>
             )}
+          </div>
+        ) : outstandingError ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-gray-400">
+            <span>Không thể tải báo cáo công nợ.</span>
+            <button
+              onClick={() => refetchOutstanding()}
+              className="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
+            >
+              Thử lại
+            </button>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">

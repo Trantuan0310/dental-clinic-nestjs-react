@@ -148,6 +148,7 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
                     variant="ghost"
                     size="sm"
                     onClick={() => setRejectModal(request)}
+                    aria-label="Từ chối"
                   >
                     <XCircle className="h-4 w-4 text-red-600" />
                   </Button>

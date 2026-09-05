@@ -7,7 +7,9 @@ import { z } from 'zod';
 import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
 import { Button, Card, Input, Textarea, Alert } from '@/components/ui';
-import type { CreatePatientPayload, PatientLookupResult } from '@/types/patients';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
+import type { CreatePatientPayload, UpdatePatientPayload, PatientLookupResult } from '@/types/patients';
 
 // VN mobile numbers: 10 digits starting 0, next digit one of 3/5/7/8/9.
 const VN_PHONE_REGEX = /^0(3|5|7|8|9)[0-9]{8}$/;
@@ -17,9 +19,24 @@ const vnPhone = z
   .optional()
   .or(z.literal(''));
 
+// Mirrors backend's isValidDob (patients/domain/patient-rules.ts): must be
+// today or earlier, and no more than 150 years ago. Without this, picking a
+// future birth year rendered a nonsensical negative age and could trigger
+// the emergency-contact panel (age < 12 is true for negative ages too).
+const isValidDob = (value: string) => {
+  const dob = new Date(value);
+  if (Number.isNaN(dob.getTime())) return false;
+  const now = new Date();
+  const minDate = new Date(now.getFullYear() - 150, now.getMonth(), now.getDate());
+  return dob >= minDate && dob <= now;
+};
+
 const patientSchema = z.object({
   fullName: z.string().min(1, 'Họ tên là bắt buộc'),
-  dateOfBirth: z.string().min(1, 'Ngày sinh là bắt buộc'),
+  dateOfBirth: z
+    .string()
+    .min(1, 'Ngày sinh là bắt buộc')
+    .refine(isValidDob, 'Ngày sinh không hợp lệ (phải trong quá khứ, cách đây không quá 150 năm)'),
   gender: z.enum(['male', 'female', 'other']),
   phone: vnPhone,
   email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
@@ -58,12 +75,18 @@ export function PatientForm({ patientId }: PatientFormProps) {
     onSuccess: (data) => {
       navigate(`/patients/${data.id}`);
     },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể tạo bệnh nhân'));
+    },
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: CreatePatientPayload) => patientsApi.update(patientId!, data),
+    mutationFn: (data: UpdatePatientPayload) => patientsApi.update(patientId!, data),
     onSuccess: (data) => {
       navigate(`/patients/${data.id}`);
+    },
+    onError: (err) => {
+      notify.error(getApiErrorMessage(err, 'Không thể lưu thông tin bệnh nhân'));
     },
   });
 
@@ -131,25 +154,44 @@ export function PatientForm({ patientId }: PatientFormProps) {
   };
 
   const onSubmit = (data: PatientFormData) => {
-    const payload: CreatePatientPayload = {
-      ...data,
-      allergies,
-      chronicDiseases,
-      currentMedications,
-    };
     if (patientId) {
+      // Backend treats any dob present in the payload as an attempt to
+      // change it and 409s once the patient has encounters — omit it here
+      // when the user didn't actually touch the date field, instead of
+      // resubmitting the same value on every unrelated edit.
+      const dobUnchanged =
+        !!patient && data.dateOfBirth === patient.dateOfBirth.split('T')[0];
+      const { dateOfBirth, ...rest } = data;
+      const payload: UpdatePatientPayload = {
+        ...rest,
+        ...(dobUnchanged ? {} : { dateOfBirth }),
+        allergies,
+        chronicDiseases,
+        currentMedications,
+      };
       updateMutation.mutate(payload);
     } else {
+      const payload: CreatePatientPayload = {
+        ...data,
+        allergies,
+        chronicDiseases,
+        currentMedications,
+      };
       createMutation.mutate(payload);
     }
   };
 
   const dob = watch('dateOfBirth');
-  const age = dob
+  // Guard against a not-yet-submitted future date (RHF only re-validates
+  // on submit by default) rendering a nonsensical negative age — and, worse,
+  // spuriously showing the under-12 emergency-contact panel, since age < 12
+  // is also true for negative ages.
+  const age = dob && isValidDob(dob)
     ? Math.floor(
         (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000),
       )
     : null;
+  const todayIso = new Date().toISOString().split('T')[0];
 
   if (patientId && isLoading) {
     return <div>Đang tải...</div>;
@@ -207,6 +249,7 @@ export function PatientForm({ patientId }: PatientFormProps) {
                 label="Ngày sinh"
                 type="date"
                 required
+                max={todayIso}
                 error={errors.dateOfBirth?.message}
                 {...register('dateOfBirth')}
               />
