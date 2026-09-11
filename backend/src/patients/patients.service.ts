@@ -430,10 +430,7 @@ export class PatientsService {
   async getDetailWithSummary(id: string, actor: JwtPayload) {
     const detail = await this.getById(id);
 
-    const isDentist =
-      !actor.permissions.includes('patient.delete') &&
-      actor.permissions.includes('patient.read') &&
-      !actor.permissions.includes('invoice.read.any');
+    const isDentist = this.isRowScopedDentist(actor);
 
     // BR-PT-014: dentist row-level access — a dentist may only view patients
     // they have actually treated. Reusing this count as the ownership check
@@ -541,11 +538,7 @@ export class PatientsService {
     };
 
     // BR-PT-014: row-level filter for dentist
-    const isPrivileged =
-      actor.permissions.includes('patient.delete') ||
-      actor.permissions.includes('patient.update') ||
-      !actor.permissions.includes('patient.read');
-    if (!isPrivileged) {
+    if (this.isRowScopedDentist(actor)) {
       const encounters = await this.prisma.encounter.findMany({
         where: { dentistId: actor.sub },
         select: { patientId: true },
@@ -705,11 +698,7 @@ export class PatientsService {
 
     // BR-PT-014: same row-level scoping as getDetailWithSummary — a dentist
     // may only see phone history for patients they have actually treated.
-    const isDentist =
-      !actor.permissions.includes('patient.delete') &&
-      actor.permissions.includes('patient.read') &&
-      !actor.permissions.includes('invoice.read.any');
-    if (isDentist) {
+    if (this.isRowScopedDentist(actor)) {
       const encountersCount = await this.prisma.encounter.count({
         where: { patientId: id, dentistId: actor.sub },
       });
@@ -927,6 +916,27 @@ export class PatientsService {
   // ============================================================================
   // Helpers
   // ============================================================================
+
+  /**
+   * BR-PT-014: true when the actor may only see patients they have
+   * actually treated (row-level scope) — typically a dentist, who holds
+   * patient.read but no roster-management permission. False for roles
+   * with full roster access (patient.update: receptionist; patient.delete:
+   * admin).
+   *
+   * Single source of truth for this check — list(), getDetailWithSummary()
+   * and getPhoneHistory() used to each compute it independently (one
+   * keyed off patient.update/.delete, the other off invoice.read.any).
+   * Both happened to classify the 3 seeded roles the same way, but that
+   * was coincidence, not equivalence — a new role whose permissions the
+   * two formulas disagreed on would pass one gate and fail the other.
+   */
+  private isRowScopedDentist(actor: JwtPayload): boolean {
+    return (
+      !actor.permissions.includes('patient.delete') &&
+      !actor.permissions.includes('patient.update')
+    );
+  }
 
   private toPatientListItem(p: {
     id: string;

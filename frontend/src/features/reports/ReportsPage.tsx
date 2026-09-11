@@ -14,6 +14,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
+import { useAuthStore } from '@/stores/authStore';
 import { Button, Card, Alert } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import {
@@ -107,6 +108,16 @@ export default function ReportsPage() {
   // ISO 'yyyy-MM-dd' strings compare correctly lexicographically.
   const isDateRangeValid = fromDate <= toDate;
 
+  // report.read is only a nav-gating alias — the actual endpoints below
+  // each check a canonical permission. Route guard alone used to let every
+  // query here fire unconditionally, so a role holding report.read without
+  // the canonical grants (not possible with the 3 seeded roles today, but
+  // not guarded against either) would 403 on every widget with no graceful
+  // handling, unlike Dashboard which gates each section this way already.
+  const hasAnyPermission = useAuthStore((s) => s.hasAnyPermission);
+  const canSeeRevenue = hasAnyPermission(['report.revenue.read', 'report.read']);
+  const canSeeOutstanding = hasAnyPermission(['report.outstanding.read', 'report.read']);
+
   // Main revenue report
   const {
     data: report,
@@ -116,7 +127,7 @@ export default function ReportsPage() {
   } = useQuery({
     queryKey: ['revenue-report', fromDate, toDate],
     queryFn: () => billingApi.getRevenueReport({ from: fromDate, to: toDate }),
-    enabled: isDateRangeValid,
+    enabled: isDateRangeValid && canSeeRevenue,
   });
 
   // Daily revenue for line chart
@@ -160,7 +171,7 @@ export default function ReportsPage() {
   } = useQuery({
     queryKey: ['outstanding-report'],
     queryFn: () => billingApi.getOutstandingReport(90),
-    enabled: !!report,
+    enabled: canSeeOutstanding,
   });
 
   // Chart data from daily revenue
@@ -300,6 +311,14 @@ export default function ReportsPage() {
         )}
       </Card>
 
+      {!canSeeRevenue && !canSeeOutstanding && (
+        <Alert type="info" title="Không có quyền xem báo cáo">
+          Tài khoản của bạn chưa được cấp quyền xem báo cáo doanh thu hoặc công nợ.
+        </Alert>
+      )}
+
+      {canSeeRevenue && (
+      <>
       {/* Every other query on this page is enabled only once `report`
           succeeds, so a failure here previously rendered every KPI/chart
           as a silent zero — indistinguishable from a genuinely empty
@@ -535,8 +554,11 @@ export default function ReportsPage() {
           </div>
         </Card>
       )}
+      </>
+      )}
 
       {/* Outstanding Aging Report */}
+      {canSeeOutstanding && (
       <Card
         title="Báo cáo công nợ theo thời gian"
         description={`${outstandingList.length} hóa đơn chưa thanh toán`}
@@ -622,6 +644,7 @@ export default function ReportsPage() {
           </div>
         )}
       </Card>
+      )}
     </div>
   );
 }

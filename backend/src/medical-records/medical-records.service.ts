@@ -891,27 +891,4 @@ export class MedicalRecordsService {
     });
     return lastEncounter?.dentalChart ?? null;
   }
-
-  /**
-   * List encounters for patient (used by PatientsProxyController).
-   * Returns minimal payload — full payload must use /encounters/:id.
-   */
-  async getEncountersForPatient(patientId: string, actor: JwtPayload, limit = 50) {
-    const where: Prisma.EncounterWhereInput = { patientId };
-    if (
-      !actor.permissions.includes('encounter.read.any') &&
-      actor.permissions.includes('encounter.read.own')
-    ) {
-      where.dentistId = actor.sub;
-    }
-    return this.prisma.encounter.findMany({
-      where,
-      orderBy: { startedAt: 'desc' },
-      take: limit,
-      include: {
-        dentist: { select: { fullName: true } },
-        appointment: { select: { id: true, startAt: true, status: true } },
-      },
-    });
-  }
 }
