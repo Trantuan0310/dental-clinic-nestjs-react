@@ -10,6 +10,7 @@ import {
   validClinicalNote,
   validTreatment,
   dentistPayload,
+  userPayloadWithPermissions,
 } from '../../test/helpers';
 import {
   EncounterNotFoundException,
@@ -86,6 +87,41 @@ describe('MedicalRecordsService', () => {
 
       const result = await service.startEncounterForAppointment('appt-1', dentistActor);
       expect(result.encounterId).toBe('enc-existing');
+    });
+  });
+
+  describe('getEncounter (row-level)', () => {
+    it('throws when encounter not found', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+      await expect(service.getEncounter('enc-missing', dentistActor)).rejects.toThrow(
+        EncounterNotFoundException,
+      );
+    });
+
+    it('returns the encounter for its own authoring dentist (encounter.read.own)', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: dentistActor.sub }),
+      );
+      const result = await service.getEncounter('enc-1', dentistActor);
+      expect((result as any).id).toBe('enc-1');
+    });
+
+    it('404s (not 403) for a dentist.read.own caller reading another dentist\'s encounter — anti-enumeration, matches BR-PT-014 elsewhere (regression: this route had no row-level check at all)', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      await expect(service.getEncounter('enc-1', dentistActor)).rejects.toThrow(
+        EncounterNotFoundException,
+      );
+    });
+
+    it('lets a caller with encounter.read.any read any dentist\'s encounter', async () => {
+      const actor = userPayloadWithPermissions(['encounter.read.any']);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      const result = await service.getEncounter('enc-1', actor);
+      expect((result as any).id).toBe('enc-1');
     });
   });
 

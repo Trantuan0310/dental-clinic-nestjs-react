@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
+import { endOfDayInclusive } from '../common/date-range.util';
 
 @ApiTags('admin/audit-logs')
 @ApiBearerAuth()
@@ -44,7 +45,10 @@ export class AuditController {
         (where.occurredAt as Record<string, Date>).gte = new Date(from);
       }
       if (to) {
-        (where.occurredAt as Record<string, Date>).lte = new Date(to);
+        // A bare `to=YYYY-MM-DD` is UTC midnight — `lte` on that excludes
+        // every event during that day. Same bug/fix already applied to
+        // patients/expense list filters; push the bound to end-of-day.
+        (where.occurredAt as Record<string, Date>).lte = endOfDayInclusive(to);
       }
     }
 

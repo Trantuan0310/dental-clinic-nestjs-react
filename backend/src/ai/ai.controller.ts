@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
@@ -20,7 +20,7 @@ export class AiController {
     summary: 'AI tóm tắt hồ sơ bệnh nhân (3 bullet: dị ứng, đang chờ, lần tới)',
   })
   async getPatientSummary(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query() raw: Record<string, unknown>,
   ): Promise<{ data: AiPatientSummary }> {
     const { top, refresh } = SummaryQuerySchema.parse(raw);

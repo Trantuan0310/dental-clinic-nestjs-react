@@ -163,13 +163,20 @@ export class BillingService {
       }),
     };
 
-    if (query.dentistId) {
-      where.encounter = { dentistId: query.dentistId };
-    } else if (
-      !query.actor.permissions.includes('invoice.read.any') &&
-      query.actor.permissions.includes('invoice.read.own')
-    ) {
-      // BR-BILL-003 dentist row-level
+    if (query.actor.permissions.includes('invoice.read.any')) {
+      // Only a caller who can see any invoice may filter by an arbitrary
+      // dentistId. A dentist-scoped caller used to be able to pass their
+      // OWN dentistId query param and have it override the BR-BILL-003
+      // row-level restriction below, exposing other dentists' patients'
+      // invoices/financials to anyone who guessed a dentist id.
+      if (query.dentistId) {
+        where.encounter = { dentistId: query.dentistId };
+      }
+    } else {
+      // BR-BILL-003 dentist row-level — the route requires at least
+      // invoice.read.any or invoice.read.own, so reaching here means the
+      // caller only has invoice.read.own. Ignore any client-supplied
+      // dentistId and force scope to the caller's own encounters.
       where.encounter = { dentistId: query.actor.sub };
     }
 

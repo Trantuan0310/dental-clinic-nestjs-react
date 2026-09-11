@@ -223,10 +223,10 @@ export class RolesService {
 
   async delete(
     roleId: string,
-    _actorUserId: string,
-    _actorEmail: string,
-    _ipAddress: string | null,
-    _userAgent: string | null,
+    actorUserId: string,
+    actorEmail: string,
+    ipAddress: string | null,
+    userAgent: string | null,
   ): Promise<void> {
     const role = await this.prisma.role.findUniqueOrThrow({
       where: { id: roleId },
@@ -246,6 +246,17 @@ export class RolesService {
     await this.prisma.role.update({
       where: { id: roleId },
       data: { deletedAt: new Date() },
+    });
+
+    await this.auditService.log({
+      action: 'ROLE_DELETED',
+      actorUserId,
+      actorEmail,
+      targetType: 'role',
+      targetId: roleId,
+      metadata: { code: role.code, name: role.name },
+      ipAddress,
+      userAgent,
     });
   }
 

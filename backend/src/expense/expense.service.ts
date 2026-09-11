@@ -176,8 +176,11 @@ export class ExpenseService {
       throw new BadRequestException('Only DRAFT expenses can be updated');
     }
 
-    const updated = await this.prisma.expense.update({
-      where: { id },
+    // Same optimistic-lock guard as transition() — a field edit racing a
+    // concurrent approve/reject on the same expense must not silently win
+    // over (or be silently overwritten by) the status change.
+    const claimed = await this.prisma.expense.updateMany({
+      where: { id, version: existing.version },
       data: {
         ...(dto.amount !== undefined && { amount: dto.amount }),
         ...(dto.description !== undefined && { description: dto.description }),
@@ -188,6 +191,16 @@ export class ExpenseService {
         updatedBy: actor.sub,
         version: { increment: 1 },
       },
+    });
+
+    if (claimed.count === 0) {
+      throw new ConflictException(
+        `Expense ${id} was modified concurrently — reload and try again`,
+      );
+    }
+
+    const updated = await this.prisma.expense.findUniqueOrThrow({
+      where: { id },
       include: { category: true, creator: { select: { fullName: true } } },
     });
 
@@ -273,14 +286,31 @@ export class ExpenseService {
       );
     }
 
-    const updated = await this.prisma.expense.update({
-      where: { id },
+    // Optimistic-lock guard on `version`: without it, two concurrent
+    // transitions racing on the same expense (e.g. approve + reject, or a
+    // transition racing a field edit via update()) can both pass the
+    // VALID_EXPENSE_TRANSITIONS check above — read before either write
+    // committed — and the loser's plain `update` would silently clobber the
+    // winner's instead of failing. `updateMany` can't `include` relations,
+    // so the formatted response is re-read once the guarded write lands.
+    const claimed = await this.prisma.expense.updateMany({
+      where: { id, version: existing.version },
       data: {
         status: newStatus,
         notes: notes ?? existing.notes,
         updatedBy: actor.sub,
         version: { increment: 1 },
       },
+    });
+
+    if (claimed.count === 0) {
+      throw new ConflictException(
+        `Expense ${id} was modified concurrently — reload and try again`,
+      );
+    }
+
+    const updated = await this.prisma.expense.findUniqueOrThrow({
+      where: { id },
       include: { category: true, creator: { select: { fullName: true } } },
     });
 

@@ -300,46 +300,55 @@ export class PatientsService {
   // ============================================================================
 
   async softDelete(id: string, dto: SoftDeletePatientDto, actor: JwtPayload) {
-    const patient = await this.prisma.patient.findUnique({ where: { id } });
-    if (!patient) throw new PatientNotFoundException(id);
+    // BR-PT-010: the "no future appointments / no outstanding invoices" check
+    // and the delete itself must be one atomic unit — otherwise a booking
+    // created between the count and the write slips through undetected
+    // (TOCTOU). Serializable makes Postgres abort+retry-safe against a
+    // concurrent appointment/invoice insert for this patient.
+    await this.prisma.$transaction(
+      async tx => {
+        const patient = await tx.patient.findUnique({ where: { id } });
+        if (!patient) throw new PatientNotFoundException(id);
 
-    // BR-PT-010: block when future appointments or outstanding invoices exist
-    const [futureAppointments, outstandingInvoices] = await Promise.all([
-      this.prisma.appointment.count({
-        where: {
-          patientId: id,
-          status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
-          startAt: { gte: new Date() },
-          deletedAt: null,
-        },
-      }),
-      this.prisma.invoice.count({
-        where: {
-          patientId: id,
-          status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
-          deletedAt: null,
-        },
-      }),
-    ]);
+        const [futureAppointments, outstandingInvoices] = await Promise.all([
+          tx.appointment.count({
+            where: {
+              patientId: id,
+              status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
+              startAt: { gte: new Date() },
+              deletedAt: null,
+            },
+          }),
+          tx.invoice.count({
+            where: {
+              patientId: id,
+              status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
+              deletedAt: null,
+            },
+          }),
+        ]);
 
-    if (futureAppointments > 0 || outstandingInvoices > 0) {
-      throw new PatientCannotDeleteException(
-        `Patient has ${futureAppointments} future appointments and ${outstandingInvoices} outstanding invoices`,
-        [
-          ...(futureAppointments > 0
-            ? [{ field: 'appointments', code: 'future_appointment', count: futureAppointments }]
-            : []),
-          ...(outstandingInvoices > 0
-            ? [{ field: 'invoices', code: 'outstanding_invoice', count: outstandingInvoices }]
-            : []),
-        ],
-      );
-    }
+        if (futureAppointments > 0 || outstandingInvoices > 0) {
+          throw new PatientCannotDeleteException(
+            `Patient has ${futureAppointments} future appointments and ${outstandingInvoices} outstanding invoices`,
+            [
+              ...(futureAppointments > 0
+                ? [{ field: 'appointments', code: 'future_appointment', count: futureAppointments }]
+                : []),
+              ...(outstandingInvoices > 0
+                ? [{ field: 'invoices', code: 'outstanding_invoice', count: outstandingInvoices }]
+                : []),
+            ],
+          );
+        }
 
-    await this.prisma.patient.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: actor.sub, updatedBy: actor.sub },
-    });
+        await tx.patient.update({
+          where: { id },
+          data: { deletedAt: new Date(), deletedBy: actor.sub, updatedBy: actor.sub },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     await this.audit.log({
       action: 'PATIENT_DELETED',
@@ -413,8 +422,10 @@ export class PatientsService {
 
   /**
    * Patient detail with summary mask (BR-PT-021).
-   * Receptionists see only non-financial fields; dentists see row-level counts
-   * for encounters they own; admins/receptionists see full billing summary.
+   * Receptionists see only non-financial fields (lastVisitAt/By, totalEncounters);
+   * dentists see row-level totalEncounters for encounters they own, plus
+   * financial totals scoped to their own invoices if they hold invoice.read.own;
+   * admins see everything, unscoped.
    */
   async getDetailWithSummary(id: string, actor: JwtPayload) {
     const detail = await this.getById(id);
@@ -424,17 +435,33 @@ export class PatientsService {
       actor.permissions.includes('patient.read') &&
       !actor.permissions.includes('invoice.read.any');
 
-    // BR-PT-014: dentist row-level count
+    // BR-PT-014: dentist row-level access — a dentist may only view patients
+    // they have actually treated. Reusing this count as the ownership check
+    // (rather than a separate query) and 404'ing on zero avoids leaking PII
+    // for patients outside their scope, and matches the anti-enumeration
+    // pattern used elsewhere (404, not 403, for out-of-scope resources).
     let encountersCount: number;
     if (isDentist) {
       encountersCount = await this.prisma.encounter.count({
         where: { patientId: id, dentistId: actor.sub },
       });
+      if (encountersCount === 0) {
+        throw new PatientNotFoundException(id);
+      }
     } else {
       encountersCount = await this.prisma.encounter.count({ where: { patientId: id } });
     }
 
-    const canSeeFinancials = actor.permissions.includes('invoice.read.any');
+    // BR-PT-021: financial fields are Admin-only on this endpoint, plus a
+    // dentist scoped to invoices from encounters they themselves treated
+    // (invoice.read.own) — NOT everyone holding invoice.read.any. Receptionist
+    // has invoice.read.any (she manages billing/payments) but the patient
+    // profile card must still mask totals for her per spec §8.5; she sees
+    // full invoice detail through the Billing module instead.
+    const isAdmin = actor.permissions.includes('patient.delete');
+    const canSeeOwnInvoicesOnly =
+      !isAdmin && isDentist && actor.permissions.includes('invoice.read.own');
+    const canSeeFinancials = isAdmin || canSeeOwnInvoicesOnly;
     let financials:
       | {
           totalInvoices: number;
@@ -445,7 +472,11 @@ export class PatientsService {
 
     if (canSeeFinancials) {
       const invoices = await this.prisma.invoice.findMany({
-        where: { patientId: id, deletedAt: null },
+        where: {
+          patientId: id,
+          deletedAt: null,
+          ...(canSeeOwnInvoicesOnly ? { encounter: { dentistId: actor.sub } } : {}),
+        },
         select: { status: true, paidAmount: true, outstandingAmount: true },
       });
       financials = {
@@ -665,12 +696,27 @@ export class PatientsService {
   // Phone history + identifier management
   // ============================================================================
 
-  async getPhoneHistory(id: string) {
+  async getPhoneHistory(id: string, actor: JwtPayload) {
     const patient = await this.prisma.patient.findUnique({
       where: { id },
       select: { primaryPhone: true },
     });
     if (!patient) throw new PatientNotFoundException(id);
+
+    // BR-PT-014: same row-level scoping as getDetailWithSummary — a dentist
+    // may only see phone history for patients they have actually treated.
+    const isDentist =
+      !actor.permissions.includes('patient.delete') &&
+      actor.permissions.includes('patient.read') &&
+      !actor.permissions.includes('invoice.read.any');
+    if (isDentist) {
+      const encountersCount = await this.prisma.encounter.count({
+        where: { patientId: id, dentistId: actor.sub },
+      });
+      if (encountersCount === 0) {
+        throw new PatientNotFoundException(id);
+      }
+    }
 
     const rows = await this.prisma.patientPhoneHistory.findMany({
       where: { patientId: id },

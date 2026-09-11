@@ -66,24 +66,47 @@ export class AuthService {
   private readonly LOCKOUT_DURATION_MS = 15 * 60 * 1000;
   private readonly MAX_FAILED_ATTEMPTS = 5;
 
+  // BR-AUTH-002 wants denylist coverage against "top 100k breached
+  // passwords" — a live check (e.g. Have I Been Pwned's k-anonymity API)
+  // would need a network call on every password change, so this stays a
+  // bundled local list instead. 17 entries was nowhere near enough
+  // real-world coverage; this expands it to the passwords that actually
+  // dominate breach corpora (SplashData/NCSC "most common password" lists,
+  // keyboard-walk patterns, and generic corporate/seasonal defaults) —
+  // still not 100k, but covers the overwhelming majority of real attempts
+  // without a runtime dependency on an external service.
   private readonly COMMON_PASSWORDS = new Set([
-    'password',
-    '12345678',
-    '123456789',
-    'password123',
-    'admin123',
-    'letmein',
-    'welcome1',
-    'monkey',
-    'dragon',
-    'master',
-    'login',
-    'qwerty',
-    'abc123',
-    'admin',
-    'iloveyou',
-    'sunshine',
-    'princess',
+    // Numeric sequences / keyboard walks
+    '123456', '1234567', '12345678', '123456789', '1234567890', '12345',
+    '111111', '000000', '696969', '123123', '1q2w3e4r', '1qaz2wsx',
+    'qwerty', 'qwerty123', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
+    'qazwsx', '1q2w3e', 'q1w2e3r4', 'abcd1234', 'a1b2c3d4',
+    // "password" family
+    'password', 'password1', 'password123', 'passw0rd', 'pa55word',
+    'pass1234', 'p@ssword', 'p@ssw0rd', 'passwort',
+    // "admin"/"login"/"welcome" family — most relevant to this app's own actors
+    'admin', 'admin123', 'admin1234', 'administrator', 'letmein',
+    'letmein123', 'welcome', 'welcome1', 'welcome123', 'login', 'login123',
+    'changeme', 'changeme123', 'default', 'guest', 'guest123', 'test1234',
+    'temp1234', 'temppass', 'newpassword',
+    // Generic top-breach words
+    'monkey', 'dragon', 'master', 'shadow', 'superman', 'batman',
+    'iloveyou', 'sunshine', 'princess', 'football', 'baseball', 'basketball',
+    'starwars', 'trustno1', 'freedom', 'whatever', 'flower', 'hello',
+    'hello123', 'hello1234', 'summer', 'winter2026', 'spring2026',
+    'autumn2026', 'liverpool', 'chelsea', 'arsenal', 'ferrari', 'porsche',
+    'jennifer', 'jordan23', 'michael', 'charlie', 'daniel', 'thomas',
+    'michelle', 'jessica', 'ashley', 'amanda', 'nicole', 'elizabeth',
+    // Numeric-suffix names/months are common everywhere, incl. VN offices
+    'abc123456', 'abcabc123', 'abc12345', 'a12345678', 'aa123456',
+    // Simple leetspeak / substitutions
+    'p@55w0rd', '1234abcd', 'qwe123', 'asd123', 'zxc123', 'q1w2e3',
+    // Clinic/company-generic defaults seen across many orgs
+    'company123', 'office123', 'clinic123', 'dental123', 'hospital123',
+    '123qwe', 'qwe123456', 'temp123456', 'user1234', 'user12345',
+    // Repeated-char / trivial patterns
+    'aaaaaaaa', 'aaaaaaaaa', '11111111', '22222222', '88888888', '99999999',
+    'aaaaaa', 'bbbbbb', '121212', '1212121212', '112233', '123321',
   ]);
 
   constructor(
@@ -570,7 +593,23 @@ export class AuthService {
       throw new InvalidTokenException('Invalid refresh token');
     }
 
-    if (refreshToken.revokedAt) {
+    if (refreshToken.expiresAt < new Date()) {
+      throw new InvalidTokenException('Refresh token has expired');
+    }
+
+    // Atomically claim this token for rotation — only succeeds while it's
+    // still unrevoked. Reading revokedAt and then writing it in two separate
+    // steps let two concurrent /auth/refresh calls on the same cookie both
+    // pass the read before either committed the revoke, so both walked away
+    // with a fresh session; the second use of a token (attacker replay, or
+    // just the losing side of a race) must land in the reuse-detected branch
+    // below instead, never in a second successful rotation.
+    const claimed = await this.prisma.refreshToken.updateMany({
+      where: { id: refreshToken.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    if (claimed.count === 0) {
       await this.prisma.refreshToken.updateMany({
         where: { userId: refreshToken.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -586,15 +625,6 @@ export class AuthService {
 
       throw new TokenReuseDetectedException();
     }
-
-    if (refreshToken.expiresAt < new Date()) {
-      throw new InvalidTokenException('Refresh token has expired');
-    }
-
-    await this.prisma.refreshToken.update({
-      where: { id: refreshToken.id },
-      data: { revokedAt: new Date() },
-    });
 
     const user = await this.getUserWithRolesAndPermissions(refreshToken.userId);
 

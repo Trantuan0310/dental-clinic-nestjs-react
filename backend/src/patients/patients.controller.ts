@@ -117,8 +117,8 @@ export class PatientsController {
   @Get(':id/phones')
   @RequirePermissions('patient.read')
   @ApiOperation({ summary: 'Phone history for patient' })
-  async phoneHistory(@Param('id', ParseUUIDPipe) id: string) {
-    return { data: await this.patients.getPhoneHistory(id) };
+  async phoneHistory(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.patients.getPhoneHistory(id, actor) };
   }
 
   @Post(':id/identifiers')

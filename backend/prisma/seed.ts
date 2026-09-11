@@ -201,8 +201,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'patient.read',
     'patient.update',
     'patient.identifier.manage',
-    'patient.merge',
-    'patient.restore',
     'appointment.create',
     'appointment.read',
     'appointment.read.any',

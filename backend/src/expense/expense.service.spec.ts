@@ -57,15 +57,19 @@ describe('ExpenseService', () => {
 
     it('approves a DRAFT expense (DRAFT -> APPROVED)', async () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
-      (prisma.expense.update as jest.Mock).mockResolvedValue(
+      (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.expense.findUniqueOrThrow as jest.Mock).mockResolvedValue(
         baseExpense({ status: ExpenseStatus.APPROVED }),
       );
 
       const result = await service.approve('exp-1', {}, approverActor);
 
       expect(result.status).toBe(ExpenseStatus.APPROVED);
-      expect(prisma.expense.update).toHaveBeenCalledWith(
+      // Guarded on the version read earlier — a concurrent write since then
+      // (by another transition or an update()) makes this match zero rows.
+      expect(prisma.expense.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: { id: 'exp-1', version: 1 },
           data: expect.objectContaining({ status: ExpenseStatus.APPROVED }),
         }),
       );
@@ -75,12 +79,13 @@ describe('ExpenseService', () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
 
       await expect(service.approve('exp-1', {}, actor)).rejects.toThrow(ForbiddenException);
-      expect(prisma.expense.update).not.toHaveBeenCalled();
+      expect(prisma.expense.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects a DRAFT expense (DRAFT -> REJECTED)', async () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
-      (prisma.expense.update as jest.Mock).mockResolvedValue(
+      (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.expense.findUniqueOrThrow as jest.Mock).mockResolvedValue(
         baseExpense({ status: ExpenseStatus.REJECTED }),
       );
 
@@ -93,14 +98,15 @@ describe('ExpenseService', () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(
         baseExpense({ status: ExpenseStatus.APPROVED }),
       );
-      (prisma.expense.update as jest.Mock).mockResolvedValue(
+      (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.expense.findUniqueOrThrow as jest.Mock).mockResolvedValue(
         baseExpense({ status: ExpenseStatus.REIMBURSED }),
       );
 
       const result = await service.markReimbursed('exp-1', {}, actor);
 
       expect(result.status).toBe(ExpenseStatus.REIMBURSED);
-      expect(prisma.expense.update).toHaveBeenCalledWith(
+      expect(prisma.expense.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: ExpenseStatus.REIMBURSED }),
         }),
@@ -111,11 +117,22 @@ describe('ExpenseService', () => {
       );
     });
 
+    it('throws ConflictException when the expense was modified concurrently since it was read (version mismatch)', async () => {
+      (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
+      // Someone else's write landed first — the guarded update matches 0 rows.
+      (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(service.approve('exp-1', {}, approverActor)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.expense.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
     it('rejects DRAFT -> REIMBURSED (must go through APPROVED first)', async () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
 
       await expect(service.markReimbursed('exp-1', {}, actor)).rejects.toThrow(ConflictException);
-      expect(prisma.expense.update).not.toHaveBeenCalled();
+      expect(prisma.expense.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects APPROVED -> APPROVED (already approved)', async () => {
@@ -153,6 +170,45 @@ describe('ExpenseService', () => {
         baseExpense({ deletedAt: new Date() }),
       );
       await expect(service.approve('exp-1', {}, actor)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('update (field edits, DRAFT only)', () => {
+    it('updates a DRAFT expense, guarded on version', async () => {
+      (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
+      (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.expense.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        baseExpense({ amount: 750000 }),
+      );
+
+      const result = await service.update('exp-1', { amount: 750000 } as any, actor);
+
+      expect(result.amount).toBe(750000);
+      expect(prisma.expense.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'exp-1', version: 1 },
+          data: expect.objectContaining({ amount: 750000 }),
+        }),
+      );
+    });
+
+    it('throws ConflictException when a concurrent write (e.g. an approval) already bumped the version', async () => {
+      (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
+      (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.update('exp-1', { amount: 750000 } as any, actor),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.expense.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('rejects editing a non-DRAFT expense before even attempting the guarded write', async () => {
+      (prisma.expense.findUnique as jest.Mock).mockResolvedValue(
+        baseExpense({ status: ExpenseStatus.APPROVED }),
+      );
+
+      await expect(service.update('exp-1', { amount: 1 } as any, actor)).rejects.toThrow();
+      expect(prisma.expense.updateMany).not.toHaveBeenCalled();
     });
   });
 });

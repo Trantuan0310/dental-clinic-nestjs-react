@@ -113,7 +113,7 @@ export class MedicalRecordsService {
     });
   }
 
-  async getEncounter(id: string) {
+  async getEncounter(id: string, actor: JwtPayload) {
     const e = await this.prisma.encounter.findUnique({
       where: { id },
       include: {
@@ -141,6 +141,18 @@ export class MedicalRecordsService {
       },
     });
     if (!e) throw new EncounterNotFoundException(id);
+    // Row-level: a caller without encounter.read.any (i.e. only
+    // encounter.read.own) may only read encounters they authored. 404
+    // rather than 403 so out-of-scope ids can't be enumerated — this
+    // route previously had no row-level check at all, letting any dentist
+    // read any other dentist's clinical records by guessing/observing a
+    // UUID.
+    if (
+      !actor.permissions.includes('encounter.read.any') &&
+      e.dentistId !== actor.sub
+    ) {
+      throw new EncounterNotFoundException(id);
+    }
     return this.formatEncounter(e);
   }
 

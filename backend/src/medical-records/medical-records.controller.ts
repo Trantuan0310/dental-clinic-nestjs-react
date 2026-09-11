@@ -69,8 +69,8 @@ export class MedicalRecordsController {
 
   @Get('encounters/:id')
   @RequirePermissions('encounter.read.any', 'encounter.read.own')
-  async getOne(@Param('id', ParseUUIDPipe) id: string) {
-    return { data: await this.mr.getEncounter(id) };
+  async getOne(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.mr.getEncounter(id, actor) };
   }
 
   @Post('encounters/:id/close')

@@ -5,9 +5,11 @@ import {
   IsUUID,
   IsEnum,
   IsInt,
+  IsArray,
   Min,
   Max,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentStatus, AppointmentSource, ShiftType, TimeOffType } from '@prisma/client';
 
@@ -138,8 +140,22 @@ export class ListAppointmentsQueryDto {
   @IsDateString()
   to?: string;
 
+  // Two boundary quirks fixed here:
+  // 1. A single `?status=checked_in` query value arrives as a bare string,
+  //    not a 1-element array — Express only produces an array for repeated
+  //    keys (`?status=a&status=b`) or bracket notation (`?status[]=a`).
+  //    `{ status: { in: q.status } }` 500s in Prisma if given a string.
+  // 2. The frontend's own AppointmentStatus domain is lower_snake_case
+  //    ('checked_in') while Prisma's generated enum is UPPER_SNAKE_CASE
+  //    ('CHECKED_IN') — passing the former straight through also 500s
+  //    ("Invalid value for argument `in`. Expected AppointmentStatus.").
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
+  @Transform(({ value }) => {
+    const arr = Array.isArray(value) ? value : value !== undefined ? [value] : value;
+    return arr?.map((v: string) => v.toUpperCase());
+  })
+  @IsArray()
   status?: AppointmentStatus[];
 
   @ApiPropertyOptional({ description: 'Page size (1-200). Defaults to 50.' })

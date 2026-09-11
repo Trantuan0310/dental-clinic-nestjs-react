@@ -43,11 +43,14 @@ export class AuthController {
 
     const result = await this.authService.login(loginDto, ipAddress, userAgent);
 
+    // Strict + scoped to /api/v1/auth: this cookie is only ever read by
+    // /auth/refresh, never needed on a cross-site navigation or a request to
+    // any other route, so there's no reason to widen its blast radius.
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
+      sameSite: 'strict',
+      path: '/api/v1/auth',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -67,8 +70,8 @@ export class AuthController {
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
+      sameSite: 'strict',
+      path: '/api/v1/auth',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -84,11 +87,13 @@ export class AuthController {
   @ApiResponse({ status: 204, description: 'Logged out successfully' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(req);
+    // Must match the set-cookie options exactly (path/sameSite) or the
+    // browser treats this as a different cookie and never actually clears it.
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
+      sameSite: 'strict',
+      path: '/api/v1/auth',
     });
   }
 

@@ -21,6 +21,7 @@ import {
   AccountLockedException,
   PasswordTooWeakException,
   InvalidTokenException,
+  TokenReuseDetectedException,
 } from '../common/exceptions/auth.exception';
 
 jest.mock('argon2');
@@ -192,6 +193,101 @@ describe('AuthService', () => {
           data: expect.objectContaining({ failedLoginAttempts: { increment: 1 } }),
         }),
       );
+    });
+  });
+
+  describe('refresh (rotation + reuse detection)', () => {
+    const req = { cookies: { refreshToken: 'raw-cookie-token' }, ip: '127.0.0.1', get: () => 'jest' } as unknown as Request;
+    const futureExpiry = new Date(Date.now() + 60 * 60_000);
+
+    it('rotates the token and returns a new session on a normal, unraced refresh', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(
+        validRefreshToken({ revokedAt: null, expiresAt: futureExpiry }),
+      );
+      (prisma.refreshToken.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(buildUserWithRoles());
+      (prisma.refreshToken.create as jest.Mock).mockResolvedValue({});
+
+      const result = await service.refresh(req);
+
+      expect(result.accessToken).toBe('signed-access-token');
+      // The claim is a single conditional update — only succeeds while the
+      // token is still unrevoked, which is what makes the race safe.
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'rt-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) as unknown as Date },
+      });
+      expect(audit.log).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'REFRESH_REUSE_DETECTED' }),
+      );
+    });
+
+    it('detects reuse (already-revoked token) and revokes the whole session family instead of rotating', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(
+        validRefreshToken({ revokedAt: null, expiresAt: futureExpiry }),
+      );
+      // The conditional claim fails — someone (attacker replay, or the
+      // losing side of a concurrent /auth/refresh race) already revoked it.
+      (prisma.refreshToken.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(service.refresh(req)).rejects.toThrow(TokenReuseDetectedException);
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.refreshToken.updateMany).toHaveBeenNthCalledWith(2, {
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) as unknown as Date },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'REFRESH_REUSE_DETECTED', actorUserId: 'user-1' }),
+      );
+      // Must not have proceeded to issue a fresh session.
+      expect(prisma.user.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('never lets two concurrent refreshes on the same token both win (race simulation)', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(
+        validRefreshToken({ revokedAt: null, expiresAt: futureExpiry }),
+      );
+      // First caller's claim wins (count 1); second caller's claim — reading
+      // the same pre-race snapshot — loses (count 0), simulating Postgres
+      // serializing the two conditional updates.
+      (prisma.refreshToken.updateMany as jest.Mock)
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValue({ count: 1 }); // family-revoke call inside the loser's path
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(buildUserWithRoles());
+      (prisma.refreshToken.create as jest.Mock).mockResolvedValue({});
+
+      const [winner, loser] = await Promise.allSettled([service.refresh(req), service.refresh(req)]);
+
+      expect(winner.status).toBe('fulfilled');
+      expect(loser.status).toBe('rejected');
+      if (loser.status === 'rejected') {
+        expect(loser.reason).toBeInstanceOf(TokenReuseDetectedException);
+      }
+    });
+
+    it('throws InvalidTokenException for an expired token without touching revokedAt', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(
+        validRefreshToken({ revokedAt: null, expiresAt: new Date(Date.now() - 1000) }),
+      );
+
+      await expect(service.refresh(req)).rejects.toThrow(InvalidTokenException);
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('throws InvalidTokenException when the token is not found', async () => {
+      (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.refresh(req)).rejects.toThrow(InvalidTokenException);
+    });
+
+    it('throws InvalidTokenException when the request has no refresh token cookie', async () => {
+      const noCookieReq = { cookies: {}, ip: '127.0.0.1', get: () => 'jest' } as unknown as Request;
+
+      await expect(service.refresh(noCookieReq)).rejects.toThrow(InvalidTokenException);
+      expect(prisma.refreshToken.findUnique).not.toHaveBeenCalled();
     });
   });
 

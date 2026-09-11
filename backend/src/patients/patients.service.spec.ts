@@ -3,7 +3,13 @@ import { PatientsService } from './patients.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-mock';
-import { validPatient, adminPayload } from '../../test/helpers';
+import {
+  validPatient,
+  adminPayload,
+  dentistPayload,
+  receptionistPayload,
+  userPayloadWithPermissions,
+} from '../../test/helpers';
 import { Gender, IdentifierType } from '@prisma/client';
 import {
   PatientContactRequiredException,
@@ -24,6 +30,12 @@ describe('PatientsService', () => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 42n }]);
+    // softDelete runs its check-then-write inside $transaction (BR-PT-010
+    // TOCTOU fix) — the default mock's tx stub only has $executeRaw/$queryRaw,
+    // not full model methods, so route callbacks through the full mock.
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) =>
+      typeof cb === 'function' ? cb(prisma) : cb,
+    );
 
     const module = await Test.createTestingModule({
       providers: [
@@ -348,6 +360,106 @@ describe('PatientsService', () => {
       );
       expect(prisma.patientMergeLog.create).toHaveBeenCalled();
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PATIENT_MERGED' }));
+    });
+  });
+
+  describe('getDetailWithSummary (BR-PT-021 financial masking, BR-PT-014 dentist row-level)', () => {
+    // getById() (called internally) selects `identifiers` and `encounters`
+    // (for lastVisitAt/By) via `include` — the mock needs both present even
+    // though this describe block doesn't exercise them.
+    const patientRow = () => ({
+      ...validPatient(),
+      code: 'PAT-2026-00001',
+      primaryPhone: '0901234567',
+      address: null,
+      occupation: null,
+      chronicDiseases: [],
+      currentMedications: [],
+      contactPersonName: null,
+      contactPersonPhone: null,
+      notes: null,
+      identifiers: [],
+      encounters: [],
+    });
+
+    it('masks all financial fields for receptionist (spec §8.5) even though she holds invoice.read.any', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(3);
+
+      const result = await service.getDetailWithSummary('p1', receptionistPayload());
+
+      expect(result.summary).toEqual(
+        expect.objectContaining({ totalEncounters: 3 }),
+      );
+      expect(result.summary).not.toHaveProperty('totalInvoices');
+      expect(result.summary).not.toHaveProperty('totalPaid');
+      expect(result.summary).not.toHaveProperty('totalOutstanding');
+      // Masking must not even touch Invoice — no query, no accidental leak.
+      expect(prisma.invoice.findMany).not.toHaveBeenCalled();
+    });
+
+    it('shows full unscoped financials for admin', async () => {
+      const admin = userPayloadWithPermissions([
+        'patient.read',
+        'patient.delete',
+        'invoice.read.any',
+      ]);
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(5);
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([
+        { status: 'PAID', paidAmount: 500_000, outstandingAmount: 0 },
+        { status: 'PARTIAL', paidAmount: 200_000, outstandingAmount: 300_000 },
+      ]);
+
+      const result = await service.getDetailWithSummary('p1', admin);
+
+      expect(result.summary).toEqual(
+        expect.objectContaining({
+          totalEncounters: 5,
+          totalInvoices: 2,
+          totalPaid: 700_000,
+          totalOutstanding: 300_000,
+        }),
+      );
+      // Admin sees every invoice for the patient — no dentist row-level filter.
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { patientId: 'p1', deletedAt: null },
+        }),
+      );
+    });
+
+    it('scopes financials to the dentist\'s own encounters when they hold invoice.read.own', async () => {
+      const dentist = dentistPayload('dentist-9');
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([
+        { status: 'ISSUED', paidAmount: 0, outstandingAmount: 150_000 },
+      ]);
+
+      const result = await service.getDetailWithSummary('p1', dentist);
+
+      expect(result.summary).toEqual(
+        expect.objectContaining({ totalInvoices: 1, totalOutstanding: 150_000 }),
+      );
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            patientId: 'p1',
+            deletedAt: null,
+            encounter: { dentistId: 'dentist-9' },
+          },
+        }),
+      );
+    });
+
+    it('404s for a dentist who has never treated this patient (BR-PT-014, anti-enumeration)', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+
+      await expect(
+        service.getDetailWithSummary('p1', dentistPayload()),
+      ).rejects.toThrow(PatientNotFoundException);
     });
   });
 

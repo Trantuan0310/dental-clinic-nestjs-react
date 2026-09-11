@@ -5,7 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ExpenseService } from '../expense/expense.service';
 import { createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-mock';
-import { validInvoice, validEncounter, adminPayload } from '../../test/helpers';
+import {
+  validInvoice,
+  validEncounter,
+  adminPayload,
+  dentistPayload,
+  userPayloadWithPermissions,
+} from '../../test/helpers';
 import {
   InvoiceNotFoundException,
   InvoiceNotEditableException,
@@ -65,6 +71,47 @@ describe('BillingService', () => {
 
       expect(result).toBeDefined();
       expect(prisma.invoiceItem.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('listInvoices (BR-BILL-003 row-level)', () => {
+    it('lets a caller with invoice.read.any filter by an arbitrary dentistId', async () => {
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+      const actor = userPayloadWithPermissions(['invoice.read.any']);
+
+      await service.listInvoices({ dentistId: 'other-dentist', actor });
+
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ encounter: { dentistId: 'other-dentist' } }),
+        }),
+      );
+    });
+
+    it('ignores a client-supplied dentistId for a caller with only invoice.read.own (regression: used to let a dentist pass another dentist\'s id and bypass the row-level scope)', async () => {
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+      const actor = dentistPayload('dentist-self');
+
+      await service.listInvoices({ dentistId: 'other-dentist', actor });
+
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ encounter: { dentistId: 'dentist-self' } }),
+        }),
+      );
+    });
+
+    it('scopes to the caller\'s own dentistId with no dentistId query param at all', async () => {
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+      const actor = dentistPayload('dentist-self');
+
+      await service.listInvoices({ actor });
+
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ encounter: { dentistId: 'dentist-self' } }),
+        }),
+      );
     });
   });
 

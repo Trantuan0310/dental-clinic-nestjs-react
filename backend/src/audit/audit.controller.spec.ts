@@ -74,11 +74,25 @@ describe('AuditController', () => {
           where: expect.objectContaining({
             occurredAt: expect.objectContaining({
               gte: new Date(from),
-              lte: new Date(to),
+              // `to` is a bare date — the inclusive bound is end-of-day, not
+              // midnight, or a same-day (from === to) query matches nothing.
+              lte: new Date(`${to}T23:59:59.999Z`),
             }),
           }),
         }),
       );
+    });
+
+    it('a same-day range (from === to) covers the whole day, not a zero-width instant', async () => {
+      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+        { id: 'log-1', occurredAt: new Date('2026-09-10T18:30:00.000Z') },
+      ]);
+
+      const result = await controller.list({ from: '2026-09-10', to: '2026-09-10' } as any);
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.occurredAt.gte.getTime()).toBeLessThan(call.where.occurredAt.lte.getTime());
+      expect(result.data).toHaveLength(1);
     });
 
     it('applies cursor-based pagination using occurredAt lt', async () => {

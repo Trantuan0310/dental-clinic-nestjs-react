@@ -145,7 +145,10 @@ export class AppointmentsController {
   }
 
   @Post(':id/start-encounter')
-  @RequirePermissions('appointment.check_in')
+  // A dentist calling in their own next patient (encounter.start) needs to
+  // flip this status too, not just front-desk staff (appointment.check_in) —
+  // without the OR, the dentist's own "Bắt đầu khám" action always 403'd.
+  @RequirePermissions('appointment.check_in', 'encounter.start')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Transition to IN_PROGRESS (after check-in)' })
   async startEncounter(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {

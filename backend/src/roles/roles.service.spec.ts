@@ -220,6 +220,15 @@ describe('RolesService', () => {
           data: expect.objectContaining({ deletedAt: expect.any(Date) }),
         }),
       );
+      // Was previously silent — role deletion left no audit trail at all.
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ROLE_DELETED',
+          actorUserId: adminActor.sub,
+          targetType: 'role',
+          targetId: 'role-1',
+        }),
+      );
     });
   });
 
