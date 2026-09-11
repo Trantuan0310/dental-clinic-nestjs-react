@@ -174,16 +174,7 @@ export function KpiRow({ kpis, range, isLoading, isError, onRetry }: KpiRowProps
             </span>
           ) : undefined
         }
-        sparkline={
-          kpis.patients.sparkline
-            ? (kpis.patients.sparkline as number[]).map((v, i) => ({
-                date: new Date(Date.now() - (kpis.patients.sparkline!.length - 1 - i) * 86400000)
-                  .toISOString()
-                  .slice(0, 10),
-                value: v,
-              }))
-            : undefined
-        }
+        sparkline={kpis.patients.sparkline}
         deltaLabel={comparisonLabel}
       />
       <KpiCard

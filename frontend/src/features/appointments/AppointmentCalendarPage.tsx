@@ -31,11 +31,14 @@ export default function AppointmentCalendarPage() {
   // Arriving from a patient's profile with ?patientId= opens the create
   // modal pre-filled with that patient, instead of landing on a plain calendar.
   const prefilledPatientId = searchParams.get('patientId') ?? undefined;
+  // Dashboard's empty-state "Tạo lịch hẹn" links here with ?action=create —
+  // previously ignored, landing on a bare calendar instead of the modal.
+  const wantsCreateModal = searchParams.get('action') === 'create';
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(searchParams.get('view') as 'day' | 'week' | 'month' || 'day');
   const [selectedDentistId] = useState<string>('');
-  const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId);
+  const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId || wantsCreateModal);
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
 

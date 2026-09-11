@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn';
 import type { AppointmentStatus } from '@/types/appointment';
 import type { InvoiceStatus } from '@/types/billing';
+import type { ExpenseStatus } from '@/features/expense/types';
 
 export type StatusType =
   | 'success'
@@ -123,6 +124,22 @@ const INVOICE_STATUS_CONFIG: Record<InvoiceStatus, { type: StatusType; label: st
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const config = INVOICE_STATUS_CONFIG[status];
+  return <StatusBadge status={status} type={config?.type} label={config?.label} />;
+}
+
+// Same collision as Invoice above: DRAFT/APPROVED happen to already have an
+// entry in the shared map (via Payroll periods) so they rendered fine, but
+// REJECTED/REIMBURSED have none and fell through to the raw English status
+// string in the expense list.
+const EXPENSE_STATUS_CONFIG: Record<ExpenseStatus, { type: StatusType; label: string }> = {
+  DRAFT: { type: 'neutral', label: 'Bản nháp' },
+  APPROVED: { type: 'success', label: 'Đã duyệt' },
+  REJECTED: { type: 'danger', label: 'Từ chối' },
+  REIMBURSED: { type: 'info', label: 'Đã hoàn tiền' },
+};
+
+export function ExpenseStatusBadge({ status }: { status: ExpenseStatus }) {
+  const config = EXPENSE_STATUS_CONFIG[status];
   return <StatusBadge status={status} type={config?.type} label={config?.label} />;
 }
 

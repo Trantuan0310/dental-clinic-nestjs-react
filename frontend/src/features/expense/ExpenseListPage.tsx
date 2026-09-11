@@ -13,7 +13,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { expenseApi } from './expenseApi';
-import { Button, Card, Modal, Input, Select, DatePicker, Textarea, StatusBadge } from '@/components/ui';
+import { Button, Card, Modal, Input, Select, DatePicker, Textarea, ExpenseStatusBadge } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -332,7 +332,7 @@ export default function ExpenseListPage() {
                     {formatCurrency(expense.amount)}
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <StatusBadge status={expense.status} />
+                    <ExpenseStatusBadge status={expense.status} />
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-center gap-1">

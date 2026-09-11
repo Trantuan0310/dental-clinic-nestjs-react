@@ -231,8 +231,8 @@ export default function ReportsPage() {
   const handleExportOutstanding = () => {
     const exportData = outstandingList.map(i => ({
       code: i.code,
-      patient_name: i.patientName,
-      patient_code: i.patientCode,
+      patient_name: i.patient.fullName,
+      patient_code: i.patient.code,
       outstanding: i.outstanding,
       issued_at: i.issuedAt,
       days_old: i.daysOld,
@@ -578,8 +578,8 @@ export default function ReportsPage() {
                   <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="py-2 px-3 font-mono text-gray-900 dark:text-white">{item.code}</td>
                     <td className="py-2 px-3 text-gray-700 dark:text-gray-300">
-                      {item.patientName}
-                      <span className="ml-2 text-xs text-gray-400">({item.patientCode})</span>
+                      {item.patient.fullName}
+                      <span className="ml-2 text-xs text-gray-400">({item.patient.code})</span>
                     </td>
                     <td className="py-2 px-3 text-right font-medium text-amber-600 dark:text-amber-400">
                       {formatCurrency(item.outstanding)}

@@ -58,7 +58,9 @@ export interface InvoiceListResponse {
 
 export interface InvoiceFilters {
   q?: string;
-  status?: InvoiceStatus | 'all';
+  // Backend accepts an array (`?status=ISSUED&status=PARTIAL`) so a caller
+  // can ask for e.g. "unpaid" (ISSUED + PARTIAL) in one request.
+  status?: InvoiceStatus[] | 'all';
   patientId?: string;
   from?: string;
   to?: string;
@@ -174,9 +176,13 @@ export interface RevenueReportBySourceEntry {
 export interface OutstandingAgingEntry {
   id: string;
   code: string;
-  patientId: string;
-  patientName: string;
-  patientCode: string;
+  // Backend (`BillingService.outstandingAging`) returns the patient as a
+  // nested object straight from its Prisma `select`, not flattened
+  // `patientName`/`patientCode` fields — those never existed on the wire.
+  patient: {
+    fullName: string;
+    code: string;
+  };
   outstanding: number;
   issuedAt: string;
   daysOld: number;

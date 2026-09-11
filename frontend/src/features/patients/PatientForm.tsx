@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -52,12 +52,11 @@ const patientSchema = z.object({
 
 type PatientFormData = z.infer<typeof patientSchema>;
 
-interface PatientFormProps {
-  patientId?: string;
-}
-
-export function PatientForm({ patientId }: PatientFormProps) {
+export function PatientForm() {
   const navigate = useNavigate();
+  // "patients/new" has no :id param, so this is undefined there — that's how
+  // the form tells "create" apart from "edit" (patients/:id/edit).
+  const { id: patientId } = useParams<{ id: string }>();
   const [allergies, setAllergies] = useState<string[]>([]);
   const [chronicDiseases, setChronicDiseases] = useState<string[]>([]);
   const [currentMedications, setCurrentMedications] = useState<string[]>([]);

@@ -295,43 +295,54 @@ function AppointmentBlock({ appointment, top, height, onClick, compact = false }
 
   const showDetails = height >= 50;
 
+  // The absolutely-positioned block must be positioned relative to the day/
+  // week column (the nearest `relative` ancestor up the tree), not relative
+  // to Tooltip's own `relative` wrapper span — Tooltip needs that span to
+  // anchor its popover, but nesting an absolute+top/height element directly
+  // inside it hijacks the positioning context and collapses the block to
+  // the span's own (zero) size. Keep the positioning on this outer <div>
+  // and let Tooltip wrap only the (now relatively-sized) inner button.
   return (
-    <Tooltip label={tooltipContent} side="right">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick();
-        }}
-        className={cn(
-          'absolute inset-x-1 z-10 overflow-hidden rounded-md border-l-4 px-2 py-1 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
-          STATUS_BG[appointment.status],
-          appointment.status === 'cancelled' && 'opacity-60 line-through',
-          appointment.status === 'no_show' && 'opacity-60',
-        )}
-        style={{ top: `${top}px`, height: `${Math.max(height, 24)}px` }}
-      >
-        <div className="flex items-start gap-1.5">
-          <span
-            className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', TYPE_DOT[type])}
-            aria-hidden
-          />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1 truncate text-[11px] font-semibold">
-              {showDetails && (
-                <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+    <div
+      className="absolute inset-x-1 z-10"
+      style={{ top: `${top}px`, height: `${Math.max(height, 24)}px` }}
+    >
+      <Tooltip label={tooltipContent} side="right" className="h-full w-full">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className={cn(
+            'h-full w-full overflow-hidden rounded-md border-l-4 px-2 py-1 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
+            STATUS_BG[appointment.status],
+            appointment.status === 'cancelled' && 'opacity-60 line-through',
+            appointment.status === 'no_show' && 'opacity-60',
+          )}
+        >
+          <div className="flex items-start gap-1.5">
+            <span
+              className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', TYPE_DOT[type])}
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1 truncate text-[11px] font-semibold">
+                {showDetails && (
+                  <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                )}
+                <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
+              </div>
+              <p className={cn('truncate text-xs font-medium', compact ? 'text-[11px]' : 'text-xs')}>
+                {appointment.patientName}
+              </p>
+              {!compact && showDetails && (
+                <p className="truncate text-[10px] opacity-75">{appointment.dentistName}</p>
               )}
-              <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
             </div>
-            <p className={cn('truncate text-xs font-medium', compact ? 'text-[11px]' : 'text-xs')}>
-              {appointment.patientName}
-            </p>
-            {!compact && showDetails && (
-              <p className="truncate text-[10px] opacity-75">{appointment.dentistName}</p>
-            )}
           </div>
-        </div>
-      </button>
-    </Tooltip>
+        </button>
+      </Tooltip>
+    </div>
   );
 }

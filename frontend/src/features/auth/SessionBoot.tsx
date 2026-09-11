@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/features/auth/authApi';
 import { FullPageLoader } from '@/features/auth/ProtectedRoute';
+import { tokenStore } from '@/lib/api';
 
 export function SessionBoot({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -14,7 +15,15 @@ export function SessionBoot({ children }: { children: ReactNode }) {
     if (!hasHydrated) {
       return;
     }
-    if (isAuthenticated && user) {
+    // `isAuthenticated`/`user` are rehydrated from localStorage, but the
+    // in-memory access token never survives a reload (by design — it's not
+    // persisted). Trusting the rehydrated flag here used to skip the
+    // refresh call on every reload, so every page's initial queries fired
+    // with no Authorization header, each 401'd, and all queued behind the
+    // interceptor's own (deduped) refresh — a burst of console/network
+    // noise on every load. Only skip the refresh when a token already
+    // lives in tokenStore (e.g. setSession() already ran this page load).
+    if (isAuthenticated && user && tokenStore.token) {
       setBooted(true);
       return;
     }

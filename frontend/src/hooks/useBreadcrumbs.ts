@@ -22,7 +22,11 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin/users': 'Người dùng',
   '/admin/roles': 'Vai trò',
   '/admin/settings': 'Cài đặt',
-  '/admin/audit-logs': 'Nhật ký hoạt động',
+  // Real route is `admin/audit` (see AppRoutes.tsx) — this key used to say
+  // `/admin/audit-logs`, which never matched, so both breadcrumb segments
+  // fell back to the parent label and rendered "Quản trị / Quản trị".
+  '/admin/audit': 'Nhật ký kiểm toán',
+  '/admin/shifts/pending': 'Duyệt ca làm việc',
 };
 
 function getLabel(pathname: string): string {

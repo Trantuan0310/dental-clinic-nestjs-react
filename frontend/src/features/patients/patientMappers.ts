@@ -14,6 +14,7 @@ import type {
   PatientMini,
   PatientWithRelations,
   PatientLookupResult,
+  PatientVisitSummary,
   Gender,
 } from '@/types/patients';
 
@@ -77,6 +78,14 @@ export interface BackendPatientDetail {
   allergies?: string[];
   chronicDiseases?: string[];
   currentMedications?: string[];
+  summary?: {
+    totalEncounters: number;
+    totalInvoices: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    lastVisitAt: string | null;
+    lastVisitBy: string | null;
+  };
 }
 
 function normaliseBase(raw: BackendPatientDetail): Patient {
@@ -113,11 +122,22 @@ export function fromBackendListItem(raw: BackendPatientListItem): Patient {
 
 export function fromBackendDetail(raw: BackendPatientDetail): PatientWithRelations {
   const base = normaliseBase(raw);
+  const summary: PatientVisitSummary | undefined = raw.summary
+    ? {
+        totalEncounters: raw.summary.totalEncounters,
+        totalInvoices: raw.summary.totalInvoices,
+        totalPaid: raw.summary.totalPaid,
+        totalOutstanding: raw.summary.totalOutstanding,
+        lastVisitAt: raw.summary.lastVisitAt,
+        lastVisitBy: raw.summary.lastVisitBy,
+      }
+    : undefined;
   return {
     ...base,
     allergies: raw.allergies ?? [],
     chronicDiseases: raw.chronicDiseases ?? [],
     currentMedications: raw.currentMedications ?? [],
+    summary,
   };
 }
 

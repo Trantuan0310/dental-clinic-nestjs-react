@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -9,8 +9,14 @@ import { Card, InvoiceStatusBadge, SearchInput, Select } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import type { InvoiceStatus } from '@/types/billing';
 
-const STATUS_OPTIONS: { value: InvoiceStatus | 'all'; label: string }[] = [
+// 'unpaid' is a synthetic combined filter (ISSUED + PARTIAL) — the one thing
+// dashboard "công nợ" cards actually want to link to; there's no single
+// InvoiceStatus for "has an outstanding balance".
+type StatusFilter = InvoiceStatus | 'all' | 'unpaid';
+
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Tất cả trạng thái' },
+  { value: 'unpaid', label: 'Chưa thanh toán (còn nợ)' },
   { value: 'DRAFT', label: 'Bản nháp' },
   { value: 'ISSUED', label: 'Đã phát hành' },
   { value: 'PARTIAL', label: 'Thanh toán một phần' },
@@ -18,17 +24,34 @@ const STATUS_OPTIONS: { value: InvoiceStatus | 'all'; label: string }[] = [
   { value: 'VOIDED', label: 'Đã hủy' },
 ];
 
+const VALID_STATUSES: InvoiceStatus[] = ['DRAFT', 'ISSUED', 'PARTIAL', 'PAID', 'VOIDED'];
+
+// Reads `?status=` from the URL once on first render — e.g. the Dashboard's
+// "Xem chi tiết" công nợ card links here with `?status=ISSUED,PARTIAL`,
+// which previously landed on this page and was silently ignored (state
+// always initialized to 'all', regardless of the URL).
+function parseInitialStatus(searchParams: URLSearchParams): StatusFilter {
+  const raw = searchParams.get('status');
+  if (!raw) return 'all';
+  const parts = raw.split(',').filter((p): p is InvoiceStatus => VALID_STATUSES.includes(p as InvoiceStatus));
+  if (parts.length === 0) return 'all';
+  if (parts.length === 1) return parts[0];
+  if (parts.includes('ISSUED') && parts.includes('PARTIAL') && parts.length === 2) return 'unpaid';
+  return parts[0]; // Fallback: the dropdown can only represent one custom combo (unpaid).
+}
+
 export default function InvoiceListPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<InvoiceStatus | 'all'>('all');
+  const [status, setStatus] = useState<StatusFilter>(() => parseInitialStatus(searchParams));
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoices', search, status],
     queryFn: () =>
       billingApi.listInvoices({
         q: search || undefined,
-        status: status === 'all' ? undefined : status,
+        status: status === 'all' ? undefined : status === 'unpaid' ? ['ISSUED', 'PARTIAL'] : [status],
         pageSize: 100,
       }),
   });
@@ -102,7 +125,7 @@ export default function InvoiceListPage() {
             <Select
               className="sm:w-56"
               value={status}
-              onChange={(e) => setStatus(e.target.value as InvoiceStatus | 'all')}
+              onChange={(e) => setStatus(e.target.value as StatusFilter)}
               options={STATUS_OPTIONS}
             />
           </div>

@@ -14,10 +14,23 @@ import {
   AlertTriangle,
   Plus,
   FileText,
+  Receipt,
 } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
-import { Button, Card, StatusBadge, Tabs, TabsList, TabsTrigger, TabsContent, Alert } from '@/components/ui';
-import { formatPhone } from '@/lib/format';
+import { appointmentsApi } from '@/features/appointments/imperativeApi';
+import { billingApi } from '@/features/billing/billingApi';
+import {
+  Button,
+  Card,
+  StatusBadge,
+  InvoiceStatusBadge,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  Alert,
+} from '@/components/ui';
+import { formatPhone, formatCurrency, formatTimeOnly } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function PatientDetailPage() {
@@ -39,6 +52,23 @@ export default function PatientDetailPage() {
     queryFn: () => patientsApi.get(id!),
     enabled: !!id,
   });
+
+  // Tabs below only need a handful of the patient's own rows — not a link
+  // pointing at the unfiltered global list (that was the actual bug: these
+  // tabs never fetched anything of their own, they just redirected).
+  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
+    queryKey: ['patient-appointments', id],
+    queryFn: () => appointmentsApi.list({ patientId: id!, pageSize: 5 }),
+    enabled: !!id,
+  });
+  const recentAppointments = appointmentsData?.data ?? [];
+
+  const { data: invoicesData, isLoading: invoicesLoading } = useQuery({
+    queryKey: ['patient-invoices', id],
+    queryFn: () => billingApi.listInvoices({ patientId: id!, pageSize: 5 }),
+    enabled: !!id,
+  });
+  const recentInvoices = invoicesData?.data ?? [];
 
   if (isLoading) {
     return (
@@ -207,20 +237,16 @@ export default function PatientDetailPage() {
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-lg bg-gray-50 p-3">
                     <p className="text-xl font-semibold text-gray-900">
-                      {patient.encounters?.length || 0}
+                      {patient.summary?.totalEncounters ?? 0}
                     </p>
                     <p className="text-sm text-gray-500">Tổng lượt khám</p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-3">
                     <p className="text-xl font-semibold text-gray-900">
-                      {patient.encounters && patient.encounters.length > 0
-                        ? format(
-                            new Date(
-                              patient.encounters[patient.encounters.length - 1].encounterDate,
-                            ),
-                            'dd/MM/yyyy',
-                            { locale: vi },
-                          )
+                      {patient.summary?.lastVisitAt
+                        ? format(new Date(patient.summary.lastVisitAt), 'dd/MM/yyyy', {
+                            locale: vi,
+                          })
                         : 'Chưa có'}
                     </p>
                     <p className="text-sm text-gray-500">Tái khám gần nhất</p>
@@ -261,12 +287,49 @@ export default function PatientDetailPage() {
                   </Button>
                 }
               >
-                <p className="text-sm text-gray-500">
-                  Xem danh sách lịch hẹn tại trang{' '}
-                  <Link to="/appointments" className="text-brand-500 hover:underline">
-                    Lịch hẹn
-                  </Link>
-                </p>
+                {appointmentsLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-100" />
+                    ))}
+                  </div>
+                ) : recentAppointments.length === 0 ? (
+                  <p className="text-sm text-gray-500">Chưa có lịch hẹn nào</p>
+                ) : (
+                  <div className="space-y-2">
+                    {recentAppointments.map((apt) => (
+                      <div
+                        key={apt.id}
+                        className="flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 cursor-pointer hover:bg-gray-50"
+                        onClick={() => navigate(`/appointments/list?open=${apt.id}`)}
+                      >
+                        <Calendar className="h-5 w-5 text-gray-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">
+                              {format(new Date(apt.startsAt), 'dd/MM/yyyy', { locale: vi })} •{' '}
+                              {formatTimeOnly(apt.startsAt)}
+                            </span>
+                            <StatusBadge status={apt.status} />
+                          </div>
+                          <p className="text-sm text-gray-500">{apt.dentistName}</p>
+                          {apt.reason && (
+                            <p className="mt-0.5 text-sm text-gray-600 truncate">{apt.reason}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Plain /appointments/list, not /appointments?patientId=... — the
+                        latter is the CREATE flow (it auto-opens the "new appointment"
+                        modal pre-filled with this patient), wrong for a "view all" link. */}
+                    <Link
+                      to="/appointments/list"
+                      className="block text-center text-sm text-brand-500 hover:underline pt-1"
+                    >
+                      Xem tất cả lịch hẹn →
+                    </Link>
+                  </div>
+                )}
               </Card>
             </TabsContent>
 
@@ -279,41 +342,34 @@ export default function PatientDetailPage() {
                   </Button>
                 }
               >
-                {!patient.encounters || patient.encounters.length === 0 ? (
+                {!patient.summary || patient.summary.totalEncounters === 0 ? (
                   <p className="text-sm text-gray-500">Chưa có lịch sử khám</p>
                 ) : (
-                  <div className="space-y-2">
-                    {patient.encounters.slice(0, 5).map((encounter) => (
-                      <div
-                        key={encounter.id}
-                        className={`flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 ${
-                          canViewEncounterDetail ? 'cursor-pointer hover:bg-gray-50' : ''
-                        }`}
-                        onClick={
-                          canViewEncounterDetail
-                            ? () => navigate(`/encounters/${encounter.id}`)
-                            : undefined
-                        }
-                      >
-                        <FileText className="h-5 w-5 text-gray-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">
-                              {format(new Date(encounter.encounterDate), 'dd/MM/yyyy', { locale: vi })}
-                            </span>
-                            <StatusBadge status={encounter.status} />
-                          </div>
-                          <p className="text-sm text-gray-500">
-                            BS. {encounter.dentistName}
-                          </p>
-                          {encounter.summary && (
-                            <p className="mt-0.5 text-sm text-gray-600 truncate">
-                              {encounter.summary}
-                            </p>
-                          )}
-                        </div>
+                  <div
+                    className={`flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 ${
+                      canViewEncounterDetail ? 'cursor-pointer hover:bg-gray-50' : ''
+                    }`}
+                    onClick={
+                      canViewEncounterDetail
+                        ? () => navigate(`/medical-records/${id}`)
+                        : undefined
+                    }
+                  >
+                    <FileText className="h-5 w-5 text-gray-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">
+                          {patient.summary.totalEncounters} lượt khám
+                        </span>
                       </div>
-                    ))}
+                      {patient.summary.lastVisitAt && (
+                        <p className="text-sm text-gray-500">
+                          Gần nhất: {format(new Date(patient.summary.lastVisitAt), 'dd/MM/yyyy', { locale: vi })}
+                          {patient.summary.lastVisitBy ? ` — ${patient.summary.lastVisitBy}` : ''}
+                        </p>
+                      )}
+                      <p className="mt-0.5 text-sm text-brand-500">Xem chi tiết từng lượt khám →</p>
+                    </div>
                   </div>
                 )}
               </Card>
@@ -328,12 +384,45 @@ export default function PatientDetailPage() {
                   </Button>
                 }
               >
-                <p className="text-sm text-gray-500">
-                  Xem danh sách hóa đơn tại trang{' '}
-                  <Link to="/billing/list" className="text-brand-500 hover:underline">
-                    Hóa đơn
-                  </Link>
-                </p>
+                {invoicesLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-100" />
+                    ))}
+                  </div>
+                ) : recentInvoices.length === 0 ? (
+                  <p className="text-sm text-gray-500">Chưa có hóa đơn nào</p>
+                ) : (
+                  <div className="space-y-2">
+                    {recentInvoices.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 cursor-pointer hover:bg-gray-50"
+                        onClick={() => navigate(`/billing/invoices/${inv.id}`)}
+                      >
+                        <Receipt className="h-5 w-5 text-gray-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900">{inv.code}</span>
+                            <InvoiceStatusBadge status={inv.status} />
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {format(new Date(inv.createdAt), 'dd/MM/yyyy', { locale: vi })} • {formatCurrency(inv.total)}
+                            {inv.outstandingAmount > 0 && (
+                              <span className="text-amber-600"> — còn nợ {formatCurrency(inv.outstandingAmount)}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <Link
+                      to="/billing/list"
+                      className="block text-center text-sm text-brand-500 hover:underline pt-1"
+                    >
+                      Xem tất cả hóa đơn →
+                    </Link>
+                  </div>
+                )}
               </Card>
             </TabsContent>
           </Tabs>

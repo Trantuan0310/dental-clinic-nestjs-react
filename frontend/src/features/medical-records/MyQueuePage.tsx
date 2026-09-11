@@ -3,12 +3,25 @@ import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Play, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
+import { useStartEncounter } from '@/features/appointments/appointmentApi';
 import { Button, Card, EmptyState } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
 
 export default function MyQueuePage() {
   const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const startEncounter = useStartEncounter();
+
+  const handleStart = async (appointmentId: string) => {
+    try {
+      const updated = await startEncounter.mutateAsync(appointmentId);
+      navigate(`/encounters/${updated.encounterId}`);
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể bắt đầu khám'));
+    }
+  };
 
   const { data, refetch } = useQuery({
     queryKey: ['my-queue'],
@@ -128,7 +141,8 @@ export default function MyQueuePage() {
                         </Button>
                       ) : (
                         <Button
-                          onClick={() => navigate(`/encounters/${apt.id}`)}
+                          onClick={() => handleStart(apt.id)}
+                          isLoading={startEncounter.isPending}
                         >
                           <Play className="h-4 w-4" />
                           Bắt đầu khám

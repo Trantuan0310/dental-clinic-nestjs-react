@@ -72,14 +72,32 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
     });
   }
 
-  if (isDentist(roles)) {
+  // Today's schedule and the checked-in queue read from Appointments
+  // (appointment.read.any/.own at the API) — receptionist has full access
+  // to that data and needs it for front-desk check-in tracking, so this
+  // section isn't dentist-only. The deeper clinical drill-downs below
+  // (encounter history, "my patients") stay dentist/admin-only.
+  if (isDentist(roles) || isReceptionist(roles) || isAdmin(roles)) {
     groups.push({
       titleKey: 'Lâm sàng',
       items: [
-        { to: '/today', labelKey: 'Today', icon: Calendar, permission: 'encounter.read' },
-        { to: '/my-queue', labelKey: 'MyQueue', icon: ListChecks, permission: 'encounter.read' },
-        { to: '/medical-records', labelKey: 'MedicalRecords', icon: FileText, permission: 'medical_record.read' },
-        { to: '/my-patients', labelKey: 'MyPatients', icon: UserCircle, permission: 'patient.read' },
+        { to: '/today', labelKey: 'Today', icon: Calendar, permission: 'appointment.read' },
+        { to: '/my-queue', labelKey: 'MyQueue', icon: ListChecks, permission: 'appointment.read' },
+        ...(isDentist(roles) || isAdmin(roles)
+          ? [
+              {
+                to: '/medical-records',
+                labelKey: 'MedicalRecords',
+                icon: FileText,
+                permission: 'medical_record.read',
+              },
+              // Route guard actually requires encounter.read.own (see
+              // AppRoutes.tsx) — patient.read used to be granted here too,
+              // which would show this link to a role that could click it
+              // and land on a 403.
+              { to: '/my-patients', labelKey: 'MyPatients', icon: UserCircle, permission: 'encounter.read.own' },
+            ]
+          : []),
       ],
     });
   }

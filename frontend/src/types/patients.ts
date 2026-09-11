@@ -24,12 +24,22 @@ export interface Patient {
   updatedAt?: string;
 }
 
+export interface PatientVisitSummary {
+  totalEncounters: number;
+  totalInvoices: number;
+  totalPaid: number;
+  totalOutstanding: number;
+  lastVisitAt: string | null;
+  lastVisitBy: string | null;
+}
+
 export interface PatientWithRelations extends Patient {
   allergies: string[];
   chronicDiseases: string[];
   currentMedications: string[];
   documents?: PatientDocument[];
   encounters?: EncounterSummary[];
+  summary?: PatientVisitSummary;
 }
 
 export interface PatientMini {

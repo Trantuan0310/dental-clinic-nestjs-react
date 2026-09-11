@@ -17,7 +17,7 @@ export type { TextareaProps } from './Textarea';
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
 
-export { StatusBadge, AppointmentStatusBadge, InvoiceStatusBadge } from './StatusBadge';
+export { StatusBadge, AppointmentStatusBadge, InvoiceStatusBadge, ExpenseStatusBadge } from './StatusBadge';
 export type { StatusBadgeProps, StatusType } from './StatusBadge';
 
 export { Badge } from './Badge';

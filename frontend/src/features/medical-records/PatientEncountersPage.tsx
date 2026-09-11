@@ -7,9 +7,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { usePatientEncounters } from './medicalRecordsApi';
 
 export default function PatientEncountersPage() {
-  const { id } = useParams<{ id: string }>();
+  const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
-  const { data: encounters, isLoading } = usePatientEncounters(id);
+  const { data: encounters, isLoading } = usePatientEncounters(patientId);
 
   // GET /patients/:id/encounters accepts encounter.read.any/.own/.basic and
   // returns a lighter "basic" shape for .basic-only callers (receptionist).
@@ -28,7 +28,7 @@ export default function PatientEncountersPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Lịch sử khám</h1>
-          <p className="mt-1 text-sm text-gray-500">Mã BN: {id}</p>
+          <p className="mt-1 text-sm text-gray-500">Mã BN: {patientId}</p>
         </div>
       </div>
 
@@ -64,7 +64,7 @@ export default function PatientEncountersPage() {
                       </p>
                       <StatusBadge status={encounter.status} />
                     </div>
-                    <p className="text-sm text-gray-500">BS. {encounter.dentistName}</p>
+                    <p className="text-sm text-gray-500">{encounter.dentistName}</p>
                     {encounter.chiefComplaint && (
                       <p className="mt-1 text-sm text-gray-600 truncate max-w-md">
                         {encounter.chiefComplaint}

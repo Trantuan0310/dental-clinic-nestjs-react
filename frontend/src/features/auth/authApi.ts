@@ -11,6 +11,13 @@ const clearSession = () => {
   tokenStore.clear();
 };
 
+// Refresh tokens rotate on every use (old one revoked, new one issued), so
+// two callers racing to refresh at once — e.g. StrictMode's double effect
+// invocation on SessionBoot's mount — send the same stale cookie twice: the
+// first call rotates it, the second trips reuse detection and fails. Single-
+// flighting refresh() so concurrent callers share one in-flight request.
+let refreshInFlight: Promise<LoginResponse | null> | null = null;
+
 export const authApi = {
   async login(email: string, password: string): Promise<LoginResponse> {
     const payload = unwrap(
@@ -27,16 +34,22 @@ export const authApi = {
     }
   },
   async refresh(): Promise<LoginResponse | null> {
-    try {
-      const payload = unwrap(
-        (await api.post<AuthEnvelope<LoginResponse>>('/auth/refresh')).data,
-      );
-      setSession(payload);
-      return payload;
-    } catch {
-      clearSession();
-      return null;
-    }
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      try {
+        const payload = unwrap(
+          (await api.post<AuthEnvelope<LoginResponse>>('/auth/refresh')).data,
+        );
+        setSession(payload);
+        return payload;
+      } catch {
+        clearSession();
+        return null;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+    return refreshInFlight;
   },
   async me(): Promise<UserInfo> {
     return unwrap((await api.get<AuthEnvelope<UserInfo>>('/auth/me')).data);

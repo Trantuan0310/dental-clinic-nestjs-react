@@ -12,6 +12,15 @@ import {
   useReactivateUser,
 } from './adminApi';
 import type { AdminUser, CreateAdminUserPayload } from '@/types/admin';
+import { NAV_ROLE_HINT } from '@/lib/nav';
+import type { RoleCode } from '@/types/auth';
+
+// `user.roles` is `string[]` (custom roles beyond the 3 built-ins are
+// possible), so this falls back to the raw code for anything NAV_ROLE_HINT
+// doesn't recognize instead of assuming every value is a known RoleCode.
+function roleLabel(code: string): string {
+  return NAV_ROLE_HINT[code as RoleCode] ?? code;
+}
 
 const PAGE_SIZE = 50;
 
@@ -159,7 +168,7 @@ export default function UsersPage() {
                             key={role}
                             className="inline-flex rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
                           >
-                            {role}
+                            {roleLabel(role)}
                           </span>
                         ))}
                       </div>

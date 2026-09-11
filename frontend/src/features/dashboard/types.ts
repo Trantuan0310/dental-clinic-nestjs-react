@@ -17,7 +17,7 @@ export interface DashboardKpis {
     pctChange: number;
     newCount?: number;
     returningCount?: number;
-    sparkline?: Array<{ date: string; value: number }> | number[];
+    sparkline?: Array<{ date: string; value: number }>;
   };
   appointments: { total: number; pctChange: number };
   treatmentRevenue: { total: number; pctChange: number };

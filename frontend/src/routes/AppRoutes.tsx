@@ -162,7 +162,13 @@ export function AppRoutes() {
               <Route
                 path="today"
                 element={
-                  <ProtectedRoute permission="encounter.read">
+                  // Page derives its list from GET /appointments (see
+                  // TodayPage.tsx), which the API gates on
+                  // appointment.read.any/.own — not encounter.read. The old
+                  // guard used encounter.read, a permission receptionist
+                  // doesn't hold, blocking a role that otherwise has full
+                  // access to the underlying data.
+                  <ProtectedRoute permission="appointment.read">
                     <TodayPage />
                   </ProtectedRoute>
                 }
@@ -170,7 +176,10 @@ export function AppRoutes() {
               <Route
                 path="my-queue"
                 element={
-                  <ProtectedRoute permission="encounter.read">
+                  // Same mismatch as /today above — data comes from
+                  // GET /appointments?status=checked_in, gated on
+                  // appointment.read.any/.own, not encounter.read.
+                  <ProtectedRoute permission="appointment.read">
                     <MyQueuePage />
                   </ProtectedRoute>
                 }
@@ -194,7 +203,11 @@ export function AppRoutes() {
               <Route
                 path="my-patients"
                 element={
-                  <ProtectedRoute permission="patient.read">
+                  // Page derives its list from `encounter.read.own` (own
+                  // encounters' distinct patients) — patient.read let every
+                  // role (incl. receptionist, who has no encounters at all)
+                  // reach a page that only makes sense for a dentist/admin.
+                  <ProtectedRoute permission="encounter.read.own">
                     <MyPatientsPage />
                   </ProtectedRoute>
                 }
