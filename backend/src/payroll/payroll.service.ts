@@ -616,13 +616,9 @@ export class PayrollService {
     // 3. Commission
     const commissionVnd = Math.round(totalRevenueVnd * commissionPct);
 
-    // 4. Worked shifts: union of WorkingSchedule + ShiftRegistration.approved
-    const workedShifts = await this.countPaidShifts(tx, dentistId, payPeriod);
-    const { totalHours, overtimeHours, overtimeThresholdHours } = await this.computeWorkedHours(
-      tx,
-      dentistId,
-      payPeriod,
-    );
+    // 4. Worked shifts + hours: union of WorkingSchedule + ShiftRegistration.approved
+    const { workedShifts, totalHours, overtimeHours, overtimeThresholdHours } =
+      await this.resolveWorkedShifts(tx, dentistId, payPeriod);
     const overtimePayVnd = Math.round(
       overtimeHours * overtimeHourlyVnd * Number(config.overtimeMultiplier),
     );
@@ -695,14 +691,32 @@ export class PayrollService {
   }
 
   /**
-   * Count paid shifts: union WorkingSchedule (with is_paid_shift=true) + ShiftRegistration.approved
+   * BR-PAY-011: worked shifts + hours, both resolved from the same duty
+   * schedule data — an approved ShiftRegistration for a given date
+   * overrides the recurring WorkingSchedule for that date (not additive
+   * with it), rather than clinical Encounter duration. Previously
+   * overtimeHours came from Encounter startedAt/closedAt, so a forgotten
+   * "close encounter" or a data-entry mistake there fed straight into
+   * pay with no relation to actually-approved duty time; workedShifts
+   * was computed separately (and could double-count a date matched by
+   * both a recurring schedule AND an ad-hoc registration) but was never
+   * consumed by grossPayVnd, only logged. commissionVnd intentionally
+   * still comes from Encounter revenue — that ties pay to output, not
+   * time, and isn't part of this concern.
+   *
+   * SPEC formula: overtime threshold = `weeks_in_period × 5 workdays/week × 8 hours/day`
+   * Overtime hours = max(0, total_hours_worked - threshold)
    */
-  private async countPaidShifts(
+  private async resolveWorkedShifts(
     tx: Prisma.TransactionClient,
     dentistId: string,
     payPeriod: { start: Date; end: Date },
-  ): Promise<number> {
-    // WorkingSchedule: count unique days in period where dayOfWeek matches + validFrom..validTo
+  ): Promise<{
+    workedShifts: number;
+    totalHours: number;
+    overtimeHours: number;
+    overtimeThresholdHours: number;
+  }> {
     const workingSchedules = await tx.workingSchedule.findMany({
       where: {
         dentistId,
@@ -713,61 +727,47 @@ export class PayrollService {
       },
     });
 
-    const workingDays = new Set<string>();
-    const days = daysBetweenInclusive(payPeriod.start, payPeriod.end);
-    for (let i = 0; i < days; i++) {
-      const d = new Date(payPeriod.start);
-      d.setUTCDate(d.getUTCDate() + i);
-      const dow = d.getUTCDay();
-      if (workingSchedules.some(s => s.dayOfWeek === dow)) {
-        workingDays.add(d.toISOString().slice(0, 10));
-      }
-    }
-
-    // ShiftRegistration: count approved ones in period
-    const shiftRegs = await tx.shiftRegistration.count({
+    const approvedShifts = await tx.shiftRegistration.findMany({
       where: {
         dentistId,
         deletedAt: null,
         status: 'APPROVED',
         date: { gte: payPeriod.start, lte: payPeriod.end },
       },
+      select: { date: true, startTime: true, endTime: true },
     });
+    const approvedByDate = new Map(
+      approvedShifts.map(s => [s.date.toISOString().slice(0, 10), s]),
+    );
 
-    return workingDays.size + shiftRegs;
-  }
-
-  /**
-   * BR-PAY-011: Overtime computation per SPEC.
-   * SPEC formula: overtime threshold = `weeks_in_period Ã— 5 workdays/week Ã— 8 hours/day`
-   * Overtime hours = max(0, total_hours_worked - threshold)
-   */
-  private async computeWorkedHours(
-    tx: Prisma.TransactionClient,
-    dentistId: string,
-    payPeriod: { start: Date; end: Date },
-  ): Promise<{ totalHours: number; overtimeHours: number; overtimeThresholdHours: number }> {
-    const encounters = await tx.encounter.findMany({
-      where: {
-        dentistId,
-        status: 'COMPLETED',
-        closedAt: { gte: payPeriod.start, lte: payPeriod.end },
-      },
-      select: { startedAt: true, closedAt: true },
-    });
-
+    let workedShifts = 0;
     let totalMinutes = 0;
-    for (const e of encounters) {
-      if (e.startedAt && e.closedAt) {
-        totalMinutes += (e.closedAt.getTime() - e.startedAt.getTime()) / 60_000;
+    const days = daysBetweenInclusive(payPeriod.start, payPeriod.end);
+    for (let i = 0; i < days; i++) {
+      const d = new Date(payPeriod.start);
+      d.setUTCDate(d.getUTCDate() + i);
+      const dateKey = d.toISOString().slice(0, 10);
+
+      const approved = approvedByDate.get(dateKey);
+      if (approved) {
+        workedShifts++;
+        const minutes = this.timeToMinutes(approved.endTime) - this.timeToMinutes(approved.startTime);
+        if (minutes > 0) totalMinutes += minutes;
+        continue;
+      }
+
+      const schedule = workingSchedules.find(s => s.dayOfWeek === d.getUTCDay());
+      if (schedule) {
+        workedShifts++;
+        const minutes = this.timeToMinutes(schedule.endTime) - this.timeToMinutes(schedule.startTime);
+        if (minutes > 0) totalMinutes += minutes;
       }
     }
 
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
 
-    // SPEC formula: weeks Ã— 5 workdays Ã— 8 hours
-    const periodDays = daysBetweenInclusive(payPeriod.start, payPeriod.end);
-    const weeksInPeriod = periodDays / 7;
+    // SPEC formula: weeks × 5 workdays × 8 hours
+    const weeksInPeriod = days / 7;
     const overtimeThresholdHours = weeksInPeriod * 5 * 8;
     // R2-6: epsilon prevents sub-cent rounding from showing 0.0 OT when actual
     // is 0.001-0.005h (due to floating-point). Threshold: 1 minute = 0.0167h.
@@ -776,10 +776,20 @@ export class PayrollService {
     const overtimeHours = rawOvertime > OT_EPSILON ? Math.round(rawOvertime * 100) / 100 : 0;
 
     return {
+      workedShifts,
       totalHours,
       overtimeHours,
       overtimeThresholdHours: Math.round(overtimeThresholdHours * 100) / 100,
     };
+  }
+
+  /** Reads a Time column (Date, epoch date irrelevant) or an "HH:mm" string. */
+  private timeToMinutes(time: Date | string): number {
+    if (typeof time === 'string') {
+      const [h, m] = time.split(':').map(Number);
+      return h * 60 + m;
+    }
+    return time.getUTCHours() * 60 + time.getUTCMinutes();
   }
 
   // ============================================================================
