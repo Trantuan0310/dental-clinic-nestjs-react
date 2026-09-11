@@ -53,12 +53,14 @@ Trong đó:
 
 ### 3.1 Patient module
 
+> **⚠ `patient.read.basic` và `patient.read.medical_history` không tồn tại như permission code riêng trong code (2026-09).** Mọi thao tác đọc (list/detail/lookup/phones) đều gác chung bằng permission `patient.read` duy nhất — việc phân biệt "cơ bản" vs "lịch sử khám/tài chính" được thực hiện ở **service layer** (`PatientsService.getDetailWithSummary`), không phải ở tầng RBAC/permission. Điều này đúng như SPEC Patients §7.1 mô tả ý định ("masking ở application service, không qua permission code"), nhưng bảng dưới đây vẫn ghi 2 mã permission như thể chúng có thật — giữ nguyên 2 dòng để mô tả *hành vi*, nhưng đọc `patient.read` là permission code thật duy nhất đứng sau cả 2.
+
 | Action | Admin | Receptionist | Dentist | Permission code |
 | ------ | :---: | :----------: | :-----: | --------------- |
 | Tạo patient | ✅ | ✅ | ❌ | `patient.create` |
 | Xem danh sách | ✅ | ✅ | ✅ | `patient.read` |
-| Xem chi tiết (cơ bản) | ✅ | ✅ | ✅ | `patient.read.basic` |
-| Xem lịch sử khám | ✅ | 🔒 | 🔒 | `patient.read.medical_history` (receptionist: không xem clinical note/treatment) |
+| Xem chi tiết (cơ bản) | ✅ | ✅ | ✅ | `patient.read` (mô tả là `patient.read.basic`, không phải code thật) |
+| Xem lịch sử khám / số liệu tài chính | ✅ | 🔒 | 🔒 | `patient.read` (mô tả là `patient.read.medical_history`, không phải code thật) — receptionist: không xem số liệu tài chính (BR-PT-021); dentist: chỉ encounter/hóa đơn của chính mình |
 | Cập nhật thông tin cơ bản | ✅ | ✅ | ❌ | `patient.update` |
 | Soft-delete | ✅ | ❌ | ❌ | `patient.delete` |
 | Hard-delete | ❌ | ❌ | ❌ | (chỉ qua DB batch, không qua API) |
@@ -142,11 +144,14 @@ Trong đó:
 
 ### 3.7 Clinic Settings
 
+> **⚠ Trạng thái thật (2026-09): module Settings CHƯA được triển khai.** Không có `SettingsModule`/controller nào trong `backend/src` cho `settings.read`/`settings.update` — 2 dòng đầu bảng dưới đây mô tả tính năng dự kiến, không phải đã có. `settings.read` chỉ tồn tại như 1 permission "alias" trong `seed.ts`, không gắn với endpoint thật nào. `settings.update` không tồn tại trong seed.ts ở bất kỳ dạng nào.
+> Riêng dòng "Quản lý Working Schedule" LÀ tính năng có thật, nhưng permission code thật trong code là `schedule.write` (ghi) / `schedule.read` (đọc) — route thuộc `AppointmentsController`, không phải `schedule.update` như ghi ở đây.
+
 | Action | Admin | Receptionist | Dentist | Permission code |
 | ------ | :---: | :----------: | :-----: | --------------- |
-| Đọc settings | ✅ | ✅ | ✅ | `settings.read` |
-| Cập nhật settings | ✅ | ❌ | ❌ | `settings.update` |
-| Quản lý Working Schedule của dentist | ✅ | ❌ | 🔒 (chỉ schedule của mình) | `schedule.update` |
+| Đọc settings *(chưa triển khai)* | ✅ | ✅ | ✅ | `settings.read` |
+| Cập nhật settings *(chưa triển khai)* | ✅ | ❌ | ❌ | `settings.update` |
+| Quản lý Working Schedule của dentist | ✅ | ❌ | 🔒 (chỉ schedule của mình) | `schedule.write` / `schedule.read` |
 
 ### 3.8 Shift Management (Phase 9 — BD-0010)
 

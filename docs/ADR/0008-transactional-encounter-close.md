@@ -4,6 +4,14 @@
 > **Date:** 2026-07-13
 > **Context:** Làm sao đảm bảo BR-MR-018 — stock-out phải atomic với encounter close (fail cả 2 hoặc success cả 2)
 
+> **⚠ Cập nhật triển khai thực tế (2026-09):** Phần **stock-out (Inventory)** được implement ĐÚNG như quyết định dưới đây — chạy trong cùng `$transaction` với việc đóng Encounter, đúng BR-MR-018/BR-INV-005.
+>
+> Tuy nhiên phần **tạo Invoice draft (Billing)** — được ADR này giả định "Insert Invoice draft trong CÙNG tx (Billing tương tự)" (xem ví dụ code §"Chi tiết cho Inventory stock-out") — **KHÔNG được triển khai theo pattern này**. `medical-records.service.ts` (`closeEncounter()`) emit event `encounter.closed` bằng `.then()` **SAU KHI** transaction đóng encounter đã commit, không phải bên trong nó. `billing/encounter-closed.listener.ts` nhận event này ở một transaction/service-call riêng; nếu handler lỗi, catch-block chỉ log lỗi chứ không có cơ chế rollback/retry nào tác động ngược lại Encounter đã đóng.
+>
+> **Hệ quả thực tế:** Encounter có thể ở trạng thái `COMPLETED` mà KHÔNG có Invoice tương ứng (dữ liệu mồ côi), khác với cam kết atomic mà ADR này đặt ra cho toàn bộ chuỗi close-encounter → stock-out → tạo invoice. Xem thêm `docs/03_Specification/Billing/SPEC.md` §2.1 (BR-BILL-019) — tài liệu đó cũng tuyên bố sai điều này và cần soát lại cùng lúc.
+>
+> Việc này cần một trong hai hướng xử lý: (a) đưa Invoice creation vào lại trong cùng transaction như thiết kế gốc, hoặc (b) chính thức hạ cấp Invoice creation xuống "best-effort, eventual consistency" kèm cơ chế outbox/retry/reconciliation job để dọn các Encounter mồ côi — và cập nhật lại BR-BILL-019 cho khớp. Hiện tại code đang ở giữa hai lựa chọn này (không rollback, cũng không có retry), đây là điểm cần chốt trước khi lên production.
+
 ---
 
 ## Context

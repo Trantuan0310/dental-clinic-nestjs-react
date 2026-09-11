@@ -98,6 +98,12 @@ sequenceDiagram
 > **Quan trọng (BR-BILL-019 + ADR-0008):** Invoice draft được INSERT trong **cùng transaction** với Encounter close. Nếu Billing handler fail (validation / DB error) → ROLLBACK toàn bộ (kể cả Encounter close, stock-out).
 > Nếu encounter closed không có treatment → handler return null → publisher chỉ COMMIT state của MedicalRecords (không có Invoice).
 > Cascade cancel (BD-0008): nếu Appointment bị cancel trong khi Encounter `in_progress` → Encounter cancel, KHÔNG trigger `encounter.closed` event, KHÔNG tạo Invoice.
+>
+> **⚠ Lệch so với triển khai thực tế (2026-09), cả 2 điểm trên:**
+> 1. Invoice draft **KHÔNG** được insert trong cùng transaction — `medical-records.service.ts` emit `encounter.closed` sau khi transaction đóng Encounter đã COMMIT (xem ghi chú cập nhật ở đầu `ADR-0008`). Billing handler fail chỉ log lỗi, KHÔNG rollback Encounter/stock-out đã commit trước đó.
+> 2. Encounter đóng **không có treatment vẫn tạo Invoice DRAFT** (`subtotal=total=0`, 0 `InvoiceItem`) — code không có nhánh "return null khi treatments rỗng" như mô tả ở đây.
+>
+> Cần chốt lại: sửa code cho khớp tài liệu (đưa Invoice creation vào transaction + chặn tạo invoice khi 0 treatment), hoặc sửa tài liệu này cho khớp hành vi thật đã chấp nhận.
 
 ### 2.2 Lễ tân Review + Issue Invoice
 
