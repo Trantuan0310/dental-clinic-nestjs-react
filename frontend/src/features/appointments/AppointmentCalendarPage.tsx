@@ -5,7 +5,7 @@ import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } 
 import { vi } from 'date-fns/locale';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
-import { Button, Card, Modal } from '@/components/ui';
+import { Button, Card } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import type { Appointment, AppointmentFilters, AppointmentStatus } from '@/types/appointment';
@@ -15,6 +15,9 @@ import { DayView, WeekView } from './CalendarViews';
 // Heavy modals — only loaded when user opens create/edit dialog.
 const AppointmentFormModal = lazy(() =>
   import('./AppointmentFormModal').then((m) => ({ default: m.AppointmentFormModal })),
+);
+const AppointmentDetailDrawer = lazy(() =>
+  import('./AppointmentDetailDrawer').then((m) => ({ default: m.AppointmentDetailDrawer })),
 );
 
 const VIEW_MODES = ['day', 'week', 'month'] as const;
@@ -47,7 +50,12 @@ export default function AppointmentCalendarPage() {
   const [selectedDentistId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId || wantsCreateModal);
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  // Clicking an appointment block opens the same rich detail drawer
+  // (check-in / cancel / reschedule / no-show / start-encounter) the
+  // List view uses, instead of the plain reason/notes-only form modal —
+  // that used to be the only way to reach those actions from Calendar view.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
   // Calculate date range based on view mode
   const dateRange = useMemo(() => {
@@ -106,7 +114,7 @@ export default function AppointmentCalendarPage() {
   }, []);
 
   const handleAppointmentClick = useCallback((appointment: Appointment) => {
-    setSelectedAppointment(appointment);
+    setDetailId(appointment.id);
   }, []);
 
   // Group appointments by date for display
@@ -245,34 +253,48 @@ export default function AppointmentCalendarPage() {
         ))}
       </div>
 
-      {/* Create/Edit Modal — lazy-loaded AppointmentFormModal */}
-      <Modal
-        isOpen={showCreateModal}
-        onClose={() => {
-          setShowCreateModal(false);
-          setSelectedSlot(null);
-          setSelectedAppointment(null);
-        }}
-        title={selectedAppointment ? 'Chi tiết lịch hẹn' : 'Tạo lịch hẹn'}
-        size="lg"
-      >
-        {showCreateModal && (
-          <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">Đang tải…</div>}>
-            <AppointmentFormModal
-              open={showCreateModal}
-              onClose={() => {
-                setShowCreateModal(false);
-                setSelectedSlot(null);
-                setSelectedAppointment(null);
-              }}
-              appointment={selectedAppointment}
-              defaultDate={selectedSlot?.date}
-              defaultStartTime={selectedSlot?.time}
-              defaultPatientId={prefilledPatientId}
-            />
-          </Suspense>
-        )}
-      </Modal>
+      {/* Create modal — AppointmentFormModal renders its own <Modal> wrapper
+          internally (title/footer/size included), so it's rendered
+          directly here, not re-wrapped in another one. */}
+      {showCreateModal && (
+        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">Đang tải…</div>}>
+          <AppointmentFormModal
+            open={showCreateModal}
+            onClose={() => {
+              setShowCreateModal(false);
+              setSelectedSlot(null);
+            }}
+            defaultDate={selectedSlot?.date}
+            defaultStartTime={selectedSlot?.time}
+            defaultPatientId={prefilledPatientId}
+          />
+        </Suspense>
+      )}
+
+      {/* Edit modal — opened via the detail drawer's "Sửa" action */}
+      {editingAppointment && (
+        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">Đang tải…</div>}>
+          <AppointmentFormModal
+            open={!!editingAppointment}
+            onClose={() => setEditingAppointment(null)}
+            appointment={editingAppointment}
+          />
+        </Suspense>
+      )}
+
+      {/* Detail drawer — check-in / cancel / reschedule / no-show / start-encounter */}
+      {detailId && (
+        <Suspense fallback={null}>
+          <AppointmentDetailDrawer
+            appointmentId={detailId}
+            onClose={() => setDetailId(null)}
+            onEdit={(a) => {
+              setDetailId(null);
+              setEditingAppointment(a);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

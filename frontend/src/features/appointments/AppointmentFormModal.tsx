@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -7,16 +8,19 @@ import { Alert } from '@/components/ui/Alert';
 import { Tabs } from '@/components/ui/Tabs';
 import { Spinner } from '@/components/ui/Loading';
 import {
+  appointmentKeys,
   useAvailability,
   useCreateAppointment,
   useDentistOptions,
   usePatientOptions,
   useUpdateAppointment,
 } from './appointmentApi';
+import { patientsApi } from '@/features/patients/imperativeApi';
 import type { Appointment, AppointmentType, CreateAppointmentPayload } from '@/types/appointment';
+import type { CreatePatientPayload, Gender } from '@/types/patients';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
-import { Search } from 'lucide-react';
+import { Search, UserPlus } from 'lucide-react';
 
 interface AppointmentFormModalProps {
   open: boolean;
@@ -32,6 +36,12 @@ const APPOINTMENT_TYPE_OPTIONS: { value: AppointmentType; label: string }[] = [
   { value: 'consultation', label: 'Khám / Tư vấn' },
   { value: 'treatment', label: 'Điều trị' },
   { value: 'follow_up', label: 'Tái khám' },
+];
+
+const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: 'female', label: 'Nữ' },
+  { value: 'male', label: 'Nam' },
+  { value: 'other', label: 'Khác' },
 ];
 
 const DURATION_OPTIONS = [
@@ -78,8 +88,15 @@ export function AppointmentFormModal({
   const initialDate = appointment ? initialParts!.date : (defaultDate ?? isoDateOnly(today));
   const initialStart = appointment ? initialParts!.time : (defaultStartTime ?? '09:00');
 
-  const [tab, setTab] = useState<'info' | 'lookup'>('info');
+  const [tab, setTab] = useState<'info' | 'lookup' | 'new-patient'>('info');
   const [patientId, setPatientId] = useState(appointment?.patientId ?? defaultPatientId ?? '');
+  // Quick-create — walk-ins with no existing record used to force staff out
+  // of this modal to /patients/new and back, losing the in-progress booking.
+  const [newPatientName, setNewPatientName] = useState('');
+  const [newPatientDob, setNewPatientDob] = useState('');
+  const [newPatientGender, setNewPatientGender] = useState<Gender>('female');
+  const [newPatientPhone, setNewPatientPhone] = useState('');
+  const [newPatientError, setNewPatientError] = useState<string | null>(null);
   const [dentistId, setDentistId] = useState(appointment?.dentistId ?? defaultDentistId ?? '');
   const [date, setDate] = useState(
     appointment ? appointment.startsAt.slice(0, 10) : initialDate,
@@ -100,6 +117,47 @@ export function AppointmentFormModal({
   const { data: patients, isLoading: isLoadingPatients } = usePatientOptions();
   const { data: dentists, isLoading: isLoadingDentists } = useDentistOptions();
   const { data: availability } = useAvailability(dentistId || undefined, date);
+
+  const queryClient = useQueryClient();
+  const createPatient = useMutation({
+    mutationFn: (payload: CreatePatientPayload) => patientsApi.create(payload),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.patients });
+      setPatientId(created.id);
+      setTab('info');
+      setNewPatientName('');
+      setNewPatientDob('');
+      setNewPatientGender('female');
+      setNewPatientPhone('');
+      setNewPatientError(null);
+      notify.success(`Đã tạo hồ sơ ${created.fullName}`);
+    },
+    onError: (err) => {
+      setNewPatientError(getApiErrorMessage(err, 'Không thể tạo bệnh nhân'));
+    },
+  });
+
+  const handleCreatePatient = () => {
+    setNewPatientError(null);
+    if (!newPatientName.trim()) {
+      setNewPatientError('Vui lòng nhập họ tên.');
+      return;
+    }
+    if (!newPatientDob) {
+      setNewPatientError('Vui lòng chọn ngày sinh.');
+      return;
+    }
+    if (!newPatientPhone.trim()) {
+      setNewPatientError('Vui lòng nhập số điện thoại (cần ít nhất 1 cách liên lạc).');
+      return;
+    }
+    createPatient.mutate({
+      fullName: newPatientName.trim(),
+      dateOfBirth: newPatientDob,
+      gender: newPatientGender,
+      phone: newPatientPhone.trim(),
+    });
+  };
 
   const filteredPatients = useMemo(() => {
     const list = patients ?? [];
@@ -138,6 +196,11 @@ export function AppointmentFormModal({
       setChiefComplaint('');
       setNotes('');
     }
+    setNewPatientName('');
+    setNewPatientDob('');
+    setNewPatientGender('female');
+    setNewPatientPhone('');
+    setNewPatientError(null);
     setTab('info');
   }, [open, appointment, defaultDate, defaultDentistId, defaultPatientId, defaultStartTime]);
 
@@ -229,10 +292,11 @@ export function AppointmentFormModal({
         <div className="-mt-2 mb-4">
           <Tabs
             value={tab}
-            onChange={(id) => setTab(id as 'info' | 'lookup')}
+            onChange={(id) => setTab(id as 'info' | 'lookup' | 'new-patient')}
             tabs={[
               { id: 'info', label: 'Chọn bệnh nhân' },
               { id: 'lookup', label: 'Tra cứu nhanh' },
+              { id: 'new-patient', label: 'Bệnh nhân mới' },
             ]}
           />
         </div>
@@ -241,7 +305,50 @@ export function AppointmentFormModal({
       <div className="space-y-4">
         {serverError && <Alert variant="error">{serverError}</Alert>}
 
-        {!isEdit && tab === 'lookup' ? (
+        {!isEdit && tab === 'new-patient' ? (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">
+              Khách vãng lai chưa có hồ sơ — tạo nhanh rồi tiếp tục đặt lịch, không cần thoát khỏi form này.
+            </p>
+            {newPatientError && <Alert variant="error">{newPatientError}</Alert>}
+            <Input
+              label="Họ tên *"
+              value={newPatientName}
+              onChange={(e) => setNewPatientName(e.target.value)}
+              placeholder="Nguyễn Văn A"
+            />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Input
+                type="date"
+                label="Ngày sinh *"
+                value={newPatientDob}
+                onChange={(e) => setNewPatientDob(e.target.value)}
+                max={isoDateOnly(today)}
+              />
+              <div>
+                <label className="label">Giới tính *</label>
+                <Select
+                  value={newPatientGender}
+                  onChange={(e) => setNewPatientGender(e.target.value as Gender)}
+                  options={GENDER_OPTIONS}
+                />
+              </div>
+            </div>
+            <Input
+              label="Số điện thoại *"
+              value={newPatientPhone}
+              onChange={(e) => setNewPatientPhone(e.target.value)}
+              placeholder="09xxxxxxxx"
+            />
+            <Button
+              leftIcon={<UserPlus className="h-4 w-4" />}
+              onClick={handleCreatePatient}
+              isLoading={createPatient.isPending}
+            >
+              Tạo hồ sơ & chọn bệnh nhân này
+            </Button>
+          </div>
+        ) : !isEdit && tab === 'lookup' ? (
           <div className="space-y-3">
             <Input
               label="Tìm bệnh nhân"
