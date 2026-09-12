@@ -71,15 +71,20 @@ Trong đó:
 
 ### 3.2 Appointment module
 
+> **⚠ Cập nhật (2026-09): 2 dòng dưới đây đã được sửa lại đúng với code sau một đợt audit.**
+> - **Cập nhật lịch / Dời lịch**: dentist thực ra CÓ `appointment.update` (seed.ts) — bảng cũ ghi ❌ là sai. Trước đợt sửa này, `update()`/`reschedule()` trong service còn không hề kiểm tra `dentistId === actor.sub`, nên một dentist có quyền `appointment.update` có thể sửa/dời lịch của **bất kỳ bác sĩ nào khác**, không chỉ của mình — đã vá thành 🔒 (chỉ lịch của chính mình) ở tầng service, khớp với ký hiệu 🔒 trong bảng.
+> - **Đánh dấu no-show**: trước đây dentist chỉ giữ alias FE `appointment.mark_no_show`, không giữ `appointment.no_show` (permission endpoint thật sự kiểm tra) — nút bấm hiện ra nhưng luôn lỗi 403. Đã cấp thêm `appointment.no_show` cho dentist và thêm kiểm tra row-level tương tự (🔒, chỉ lịch của mình).
+> - Thiếu dòng "Bắt đầu khám" (`encounter.start`, cả admin/receptionist/dentist đều có, 🔒 dentist chỉ bắt đầu được lịch của mình, receptionist không bị giới hạn vì có thể chuẩn bị hồ sơ hộ bất kỳ bác sĩ nào) — chưa bổ sung đầy đủ vào bảng, chỉ ghi chú lại ở đây.
+
 | Action | Admin | Receptionist | Dentist | Permission code |
 | ------ | :---: | :----------: | :-----: | --------------- |
 | Đặt lịch | ✅ | ✅ | ❌ | `appointment.create` |
 | Xem lịch phòng khám (toàn bộ) | ✅ | ✅ | ❌ | `appointment.read.any` |
 | Xem lịch cá nhân (dentist) | ✅ | ❌ | 🔒 | `appointment.read.own` |
-| Cập nhật lịch | ✅ | ✅ | ❌ | `appointment.update` |
+| Cập nhật lịch / Dời lịch | ✅ | ✅ | 🔒 (chỉ lịch của mình) | `appointment.update` |
 | Check-in | ✅ | ✅ | ❌ | `appointment.check_in` |
 | Hủy lịch (trước giờ hẹn) | ✅ | ✅ | 🔒 (chỉ hủy lịch của mình, trước 24h) | `appointment.cancel` |
-| Đánh dấu no-show | ✅ | ✅ | ❌ | `appointment.mark_no_show` |
+| Đánh dấu no-show | ✅ | ✅ | 🔒 (chỉ lịch của mình) | `appointment.no_show` (+ alias FE `appointment.mark_no_show`) |
 
 ### 3.3 Medical Records module
 
