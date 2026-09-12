@@ -69,6 +69,41 @@ describe('MedicalRecordsService', () => {
       );
     });
 
+    it('404s (not 403) a dentist starting an encounter for another dentist\'s checked-in appointment (regression: actor was previously ignored entirely)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'some-other-dentist',
+        patient: {},
+        dentist: {},
+      });
+
+      await expect(service.startEncounterForAppointment('appt-1', dentistActor)).rejects.toThrow(
+        EncounterNotFoundException,
+      );
+    });
+
+    it('lets a receptionist (no encounter.read.own/.any) start an encounter for any dentist\'s checked-in appointment', async () => {
+      const receptionist = userPayloadWithPermissions(['encounter.read.basic', 'encounter.start']);
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'some-other-dentist',
+        patient: {},
+        dentist: {},
+      });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.create as jest.Mock).mockResolvedValue({ id: 'enc-new' });
+
+      const result = await service.startEncounterForAppointment('appt-1', receptionist);
+      expect(result.encounterId).toBe('enc-new');
+    });
+
     it('returns existing encounter if IN_PROGRESS (idempotent)', async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         id: 'appt-1',

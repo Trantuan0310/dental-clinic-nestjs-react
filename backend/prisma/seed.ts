@@ -253,6 +253,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'medical_record.read',
     'payroll.read_self',
     'shift.read_self',
+    // appointment.no_show is the permission the route actually checks;
+    // .mark_no_show is an FE-only alias for the same nav-gated button —
+    // dentist held only the alias, so the "Đánh dấu vắng mặt" button the
+    // UI already shows a dentist was a dead feature that always 403'd.
+    'appointment.no_show',
     'appointment.mark_no_show',
     'ai.summary.read',
   ],

@@ -3,7 +3,7 @@ import { AppointmentsService } from './appointments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { createPrismaMock, PrismaMockShape, asTransaction } from '../../test/helpers/prisma-mock';
-import { adminPayload } from '../../test/helpers';
+import { adminPayload, dentistPayload, receptionistPayload } from '../../test/helpers';
 import { AppointmentStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
@@ -273,6 +273,128 @@ describe('AppointmentsService', () => {
           actor,
         ),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('row-level scope (BR-APPT-024) — dentist may only act on their own appointments', () => {
+    const dentistActor = dentistPayload('dentist-self');
+    const otherDentistAppt = {
+      id: 'appt-1',
+      dentistId: 'dentist-other',
+      status: AppointmentStatus.SCHEDULED,
+      startAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      endAt: new Date(Date.now() + 49 * 60 * 60 * 1000),
+      rescheduleCount: 0,
+    };
+
+    it('update() 404s on another dentist\'s appointment (regression: used to let any appointment.update holder edit anyone\'s appointment)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
+
+      await expect(
+        service.update('appt-1', { notes: 'hijacked' } as any, dentistActor),
+      ).rejects.toThrow();
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+    });
+
+    it('reschedule() 404s on another dentist\'s appointment', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
+
+      await expect(
+        service.reschedule(
+          'appt-1',
+          { newStartsAt: '2099-01-01T09:00:00Z', newEndsAt: '2099-01-01T09:30:00Z' } as any,
+          dentistActor,
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('cancel() 404s on another dentist\'s appointment (regression: the old fallback branch only checked "before start time", not ownership, so a dentist could cancel a colleague\'s future appointment)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
+
+      await expect(
+        service.cancel('appt-1', { reason: 'not mine' } as any, dentistActor),
+      ).rejects.toThrow();
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+    });
+
+    it('cancel() still works for a dentist\'s own appointment ≥24h out', async () => {
+      const ownAppt = { ...otherDentistAppt, dentistId: 'dentist-self' };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
+      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+        ...ownAppt,
+        status: AppointmentStatus.CANCELLED,
+      });
+
+      const result = await service.cancel('appt-1', { reason: 'ok' } as any, dentistActor);
+      expect(result.status).toBe(AppointmentStatus.CANCELLED);
+    });
+
+    it('startEncounter() 404s on another dentist\'s appointment (regression: no ownership check at all previously)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        ...otherDentistAppt,
+        status: AppointmentStatus.CHECKED_IN,
+      });
+
+      await expect(service.startEncounter('appt-1', dentistActor)).rejects.toThrow();
+    });
+
+    it('startEncounter() still works for a dentist\'s own checked-in appointment', async () => {
+      const ownAppt = {
+        ...otherDentistAppt,
+        dentistId: 'dentist-self',
+        status: AppointmentStatus.CHECKED_IN,
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
+      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+        ...ownAppt,
+        status: AppointmentStatus.IN_PROGRESS,
+      });
+
+      const result = await service.startEncounter('appt-1', dentistActor);
+      expect(result.status).toBe(AppointmentStatus.IN_PROGRESS);
+    });
+
+    it('markNoShow() 404s on another dentist\'s appointment (dentist gained appointment.no_show in this pass; this check ships alongside that grant so it doesn\'t newly expose the same ownership gap)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
+
+      await expect(
+        service.markNoShow('appt-1', {} as any, dentistActor),
+      ).rejects.toThrow();
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+    });
+
+    it('markNoShow() still works for a dentist\'s own appointment', async () => {
+      const ownAppt = { ...otherDentistAppt, dentistId: 'dentist-self' };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
+      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+        ...ownAppt,
+        status: AppointmentStatus.NO_SHOW,
+      });
+
+      const result = await service.markNoShow('appt-1', {} as any, dentistActor);
+      expect(result.status).toBe(AppointmentStatus.NO_SHOW);
+    });
+  });
+
+  describe('getWaitingQueue (row-level)', () => {
+    it('forces a dentist-scoped caller to their own id regardless of a client-supplied dentistId', async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      const dentistActor = dentistPayload('dentist-self');
+
+      await service.getWaitingQueue('some-other-dentist', undefined, dentistActor);
+
+      const whereArg = (prisma.appointment.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(whereArg.dentistId).toBe('dentist-self');
+    });
+
+    it('lets a receptionist (no appointment.read.own) query any dentist\'s queue', async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      const receptionist = receptionistPayload();
+
+      await service.getWaitingQueue('some-dentist', undefined, receptionist);
+
+      const whereArg = (prisma.appointment.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(whereArg.dentistId).toBe('some-dentist');
     });
   });
 

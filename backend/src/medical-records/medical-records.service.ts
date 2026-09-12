@@ -62,13 +62,28 @@ export class MedicalRecordsService {
    */
   async startEncounterForAppointment(
     appointmentId: string,
-    _actor: JwtPayload,
+    actor: JwtPayload,
   ): Promise<{ encounterId: string }> {
     const appt = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: { patient: true, dentist: true },
     });
     if (!appt || appt.deletedAt) {
+      throw new EncounterNotFoundException(appointmentId);
+    }
+
+    // Row-level: a plain dentist (encounter.read.own, no .any) may only
+    // start an encounter for their OWN appointment. Receptionist holds
+    // neither .own nor .any (she has encounter.read.basic instead) but
+    // legitimately preps the encounter record for any dentist's
+    // checked-in patient — front-desk workflow — so she isn't row-scoped
+    // here. This method previously ignored `actor` entirely, letting a
+    // dentist create an Encounter (dentistId: appt.dentistId) for a
+    // colleague's appointment.
+    const isRowScopedDentist =
+      actor.permissions.includes('encounter.read.own') &&
+      !actor.permissions.includes('encounter.read.any');
+    if (isRowScopedDentist && appt.dentistId !== actor.sub) {
       throw new EncounterNotFoundException(appointmentId);
     }
 

@@ -225,6 +225,10 @@ export class AppointmentsService {
    */
   async startEncounter(appointmentId: string, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
+    // Row-level: dentist can only start an encounter from their own appointment.
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
     if (appt.status !== AppointmentStatus.CHECKED_IN) {
       throw new InvalidAppointmentStateException(
         `Cannot start encounter from status ${appt.status}; appointment must be CHECKED_IN`,
@@ -272,9 +276,15 @@ export class AppointmentsService {
 
     // BR-APPT-009 / 010 — authorization windows
     const now = Date.now();
-    const isDentistCancellingSelf =
-      appt.dentistId === actor.sub && !actor.permissions.includes('patient.delete'); // non-admin
-    if (isDentistCancellingSelf) {
+    if (this.isRowScopedDentist(actor)) {
+      // A plain dentist may only cancel their OWN appointments. The old
+      // check here was `dentistId === actor.sub`, and fell through to the
+      // receptionist/admin branch (only a "before start" check, no
+      // ownership check at all) for anything else — including another
+      // dentist's appointment, which a dentist could then cancel freely.
+      if (appt.dentistId !== actor.sub) {
+        throw new AppointmentNotFoundException(appointmentId);
+      }
       const hoursUntil = (appt.startAt.getTime() - now) / (1000 * 60 * 60);
       if (hoursUntil < 24) {
         throw new InvalidAppointmentStateException(
@@ -338,6 +348,16 @@ export class AppointmentsService {
 
   async markNoShow(appointmentId: string, dto: NoShowDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
+
+    // Row-level: dentist can only mark their own appointments no-show. Added
+    // alongside granting dentist the appointment.no_show permission itself
+    // (previously the route always 403'd for dentist, making this a moot
+    // check) — without this, that grant alone would have newly exposed the
+    // same missing-ownership-check bug already fixed for update/reschedule/
+    // cancel/startEncounter above.
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
 
     // BR-APPT-025 — manual no_show only from scheduled/confirmed
     if (
@@ -408,6 +428,11 @@ export class AppointmentsService {
 
   async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
+
+    // Row-level: dentist can only reschedule their own appointments.
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
 
     if (
       appt.status === AppointmentStatus.CANCELLED ||
@@ -563,19 +588,19 @@ export class AppointmentsService {
     };
   }
 
-  async getWaitingQueue(
-    dentistId: string | undefined,
-    date: string | undefined,
-    _actor: JwtPayload,
-  ) {
+  async getWaitingQueue(dentistId: string | undefined, date: string | undefined, actor: JwtPayload) {
     const target = date ?? new Date().toISOString().slice(0, 10);
     const dayStart = new Date(`${target}T00:00:00Z`);
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
+    // Row-level: a dentist omitting dentistId used to see the whole
+    // clinic's checked-in queue (patient names + appointment ids of every
+    // dentist), not just their own — force-scope regardless of the query
+    // param, same pattern as billing.listInvoices' dentistId fix.
     const where: Prisma.AppointmentWhereInput = {
       status: AppointmentStatus.CHECKED_IN,
-      dentistId,
+      dentistId: this.isRowScopedDentist(actor) ? actor.sub : dentistId,
       startAt: { gte: dayStart, lt: dayEnd },
       deletedAt: null,
     };
@@ -624,10 +649,7 @@ export class AppointmentsService {
     if (!appt) throw new AppointmentNotFoundException(id);
 
     // Row-level: dentist can only read their own appointments.
-    const isDentist =
-      actor.permissions.includes('appointment.read.own') &&
-      !actor.permissions.includes('appointment.read.any');
-    if (isDentist && appt.dentistId !== actor.sub) {
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(id);
     }
 
@@ -640,6 +662,11 @@ export class AppointmentsService {
    */
   async update(id: string, dto: UpdateAppointmentDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(id);
+
+    // Row-level: dentist can only update their own appointments.
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(id);
+    }
 
     const updatable: AppointmentStatus[] = [
       AppointmentStatus.SCHEDULED,
@@ -701,10 +728,13 @@ export class AppointmentsService {
   }
 
   async list(q: ListAppointmentsQueryDto, actor: JwtPayload) {
-    const isDentist =
-      actor.permissions.includes('patient.read') &&
-      !actor.permissions.includes('patient.delete') &&
-      !actor.permissions.includes('patient.update');
+    // BR-APPT-024 row-level scope — was inferred from an unrelated
+    // patient.* permission combo instead of checking appointment.read.own/
+    // .any directly (as getById() correctly does). Coincidentally correct
+    // for the 3 seeded roles today, but fragile: a future role with
+    // patient.read alone would be silently scoped here regardless of its
+    // actual appointment permissions.
+    const isDentist = this.isRowScopedDentist(actor);
     const where: Prisma.AppointmentWhereInput = {
       deletedAt: null,
       ...(isDentist ? { dentistId: actor.sub } : q.dentistId ? { dentistId: q.dentistId } : {}),
@@ -767,10 +797,7 @@ export class AppointmentsService {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const isDentist =
-      actor.permissions.includes('patient.read') &&
-      !actor.permissions.includes('patient.delete') &&
-      !actor.permissions.includes('patient.update');
+    const isDentist = this.isRowScopedDentist(actor);
     const items = await this.prisma.appointment.findMany({
       where: {
         startAt: { gte: dayStart, lt: dayEnd },
@@ -1175,6 +1202,25 @@ export class AppointmentsService {
     const appt = await this.prisma.appointment.findUnique({ where: { id } });
     if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(id);
     return appt;
+  }
+
+  /**
+   * True when the actor may only act on appointments they're the assigned
+   * dentist for (holds appointment.read.own but not .read.any) — a plain
+   * dentist. False for receptionist/admin, who legitimately act on any
+   * dentist's appointments (front-desk scheduling/coordination) despite
+   * holding neither or both of those two codes.
+   *
+   * getById() already applied this exact check inline; update(), reschedule(),
+   * cancel(), startEncounter() and getWaitingQueue() did not, letting a
+   * dentist read-only-blocked from someone else's appointment nonetheless
+   * edit, reschedule, cancel or start an encounter for it.
+   */
+  private isRowScopedDentist(actor: JwtPayload): boolean {
+    return (
+      actor.permissions.includes('appointment.read.own') &&
+      !actor.permissions.includes('appointment.read.any')
+    );
   }
 
   private async validateDentist(dentistId: string) {

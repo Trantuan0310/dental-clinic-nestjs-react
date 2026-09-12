@@ -140,7 +140,7 @@ export class ListAppointmentsQueryDto {
   @IsDateString()
   to?: string;
 
-  // Two boundary quirks fixed here:
+  // Three boundary quirks fixed here:
   // 1. A single `?status=checked_in` query value arrives as a bare string,
   //    not a 1-element array — Express only produces an array for repeated
   //    keys (`?status=a&status=b`) or bracket notation (`?status[]=a`).
@@ -149,11 +149,16 @@ export class ListAppointmentsQueryDto {
   //    ('checked_in') while Prisma's generated enum is UPPER_SNAKE_CASE
   //    ('CHECKED_IN') — passing the former straight through also 500s
   //    ("Invalid value for argument `in`. Expected AppointmentStatus.").
+  // 3. `?status=a,b,c` (one comma-joined value, as e.g. OutstandingCard's
+  //    invoice-status links use) used to survive #1's wrapping as a single
+  //    garbage element ['A,B,C'] — not a real enum value, so Prisma 500s.
+  //    Split every element on ',' too so repeated-param and comma-joined
+  //    forms both work.
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @Transform(({ value }) => {
     const arr = Array.isArray(value) ? value : value !== undefined ? [value] : value;
-    return arr?.map((v: string) => v.toUpperCase());
+    return arr?.flatMap((v: string) => v.split(',')).map((v: string) => v.trim().toUpperCase());
   })
   @IsArray()
   status?: AppointmentStatus[];
