@@ -36,6 +36,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { Card, CardSkeleton, EmptyState, KpiCard, Tooltip, Alert } from '@/components/ui';
+import { PermissionGuard } from '@/components/PermissionGuard';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import {
   ACCENT_AMBER,
@@ -826,12 +827,20 @@ export function AppointmentsCard({ rows, isLoading, isError, onRetry }: Appointm
           title="Chưa có lịch hẹn 7 ngày qua"
           description="Đặt lịch mới để bắt đầu sử dụng."
           action={
-            <Link
-              to="/appointments?action=create"
-              className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
-            >
-              <Calendar className="h-4 w-4" /> Tạo lịch hẹn
-            </Link>
+            // 'hide' mode, not the default 'disable': PermissionGuard's
+            // disable mode sets a `disabled` prop, which a router <Link>
+            // (a plain anchor under the hood) doesn't honor — it would
+            // still navigate. A dentist has no appointment.create, so this
+            // used to be a working-looking CTA that landed on a form that
+            // 403s on submit.
+            <PermissionGuard permission="appointment.create" mode="hide">
+              <Link
+                to="/appointments?action=create"
+                className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+              >
+                <Calendar className="h-4 w-4" /> Tạo lịch hẹn
+              </Link>
+            </PermissionGuard>
           }
         />
       </Card>

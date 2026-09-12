@@ -32,6 +32,7 @@ import {
 } from '@/components/ui';
 import { formatPhone, formatCurrency, formatTimeOnly } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
+import { PermissionGuard } from '@/components/PermissionGuard';
 
 export default function PatientDetailPage() {
   const navigate = useNavigate();
@@ -119,10 +120,12 @@ export default function PatientDetailPage() {
             <Edit className="h-4 w-4" />
             Sửa
           </Button>
-          <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>
-            <Calendar className="h-4 w-4" />
-            Đặt lịch hẹn
-          </Button>
+          <PermissionGuard permission="appointment.create">
+            <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>
+              <Calendar className="h-4 w-4" />
+              Đặt lịch hẹn
+            </Button>
+          </PermissionGuard>
         </div>
       </div>
 
@@ -277,14 +280,16 @@ export default function PatientDetailPage() {
               <Card
                 title="Lịch hẹn gần đây"
                 actions={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/appointments?patientId=${id}`)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Đặt lịch hẹn
-                  </Button>
+                  <PermissionGuard permission="appointment.create">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/appointments?patientId=${id}`)}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Đặt lịch hẹn
+                    </Button>
+                  </PermissionGuard>
                 }
               >
                 {appointmentsLoading ? (

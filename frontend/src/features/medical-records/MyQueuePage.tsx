@@ -24,7 +24,13 @@ export default function MyQueuePage() {
   };
 
   const { data, refetch } = useQuery({
-    queryKey: ['my-queue'],
+    // Prefixed with 'appointments' (appointmentKeys.all's own prefix) so
+    // every appointment mutation's `invalidateQueries({queryKey:
+    // appointmentKeys.all})` — check-in, start-encounter, cancel, etc. —
+    // refreshes this queue immediately instead of only on the next 30s
+    // poll. The disjoint key ['my-queue'] this used to be was invisible to
+    // that invalidation net entirely.
+    queryKey: ['appointments', 'my-queue'],
     queryFn: () => appointmentsApi.list({
       status: 'checked_in',
       pageSize: 50,

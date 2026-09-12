@@ -6,6 +6,8 @@ import { vi } from 'date-fns/locale';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { Button, Card, Modal } from '@/components/ui';
+import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import type { Appointment, AppointmentFilters, AppointmentStatus } from '@/types/appointment';
 import { MonthView } from './MonthView';
 import { DayView, WeekView } from './CalendarViews';
@@ -28,6 +30,11 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
 
 export default function AppointmentCalendarPage() {
   const [searchParams] = useSearchParams();
+  // Dentist holds appointment.read/.read.own but not .create — front desk
+  // books appointments, not clinicians. The calendar's create modal + every
+  // per-slot "+" quick-create affordance used to render regardless, so a
+  // dentist saw a working-looking button that 403'd on submit.
+  const canCreate = useAuthStore((s) => s.hasPermission('appointment.create'));
   // Arriving from a patient's profile with ?patientId= opens the create
   // modal pre-filled with that patient, instead of landing on a plain calendar.
   const prefilledPatientId = searchParams.get('patientId') ?? undefined;
@@ -137,10 +144,12 @@ export default function AppointmentCalendarPage() {
           <Link to="/appointments/list">
             <Button variant="outline">Xem dạng bảng</Button>
           </Link>
-          <Button onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4" />
-            Tạo lịch hẹn
-          </Button>
+          <PermissionGuard permission="appointment.create">
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="h-4 w-4" />
+              Tạo lịch hẹn
+            </Button>
+          </PermissionGuard>
         </div>
       </div>
 
@@ -189,7 +198,7 @@ export default function AppointmentCalendarPage() {
             <DayView
               date={currentDate}
               appointments={appointmentsByDate[format(currentDate, 'yyyy-MM-dd')] || []}
-              onSlotClick={handleSlotClick}
+              onSlotClick={canCreate ? handleSlotClick : undefined}
               onAppointmentClick={handleAppointmentClick}
             />
           )}
@@ -197,7 +206,7 @@ export default function AppointmentCalendarPage() {
             <WeekView
               days={daysToShow}
               appointmentsByDate={appointmentsByDate}
-              onSlotClick={handleSlotClick}
+              onSlotClick={canCreate ? handleSlotClick : undefined}
               onAppointmentClick={handleAppointmentClick}
             />
           )}
@@ -211,7 +220,7 @@ export default function AppointmentCalendarPage() {
                 setViewMode('day');
               }}
               onAppointmentClick={handleAppointmentClick}
-              onCreateAtSlot={(d, time) => handleSlotClick(d, time)}
+              onCreateAtSlot={canCreate ? (d, time) => handleSlotClick(d, time) : undefined}
             />
           )}
         </div>

@@ -68,7 +68,8 @@ function appointmentHeightPx(startIso: string, endIso: string): number {
 interface DayViewProps {
   date: Date;
   appointments: Appointment[];
-  onSlotClick: (date: Date, time: string) => void;
+  /** Omit to hide the per-hour "+" quick-create affordance (e.g. actor lacks appointment.create). */
+  onSlotClick?: (date: Date, time: string) => void;
   onAppointmentClick: (apt: Appointment) => void;
 }
 
@@ -106,19 +107,21 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
               className="border-b border-gray-50"
               style={{ height: HOUR_HEIGHT_PX }}
             >
-              <button
-                type="button"
-                onClick={() =>
-                  onSlotClick(
-                    date,
-                    `${String(hour).padStart(2, '0')}:00`,
-                  )
-                }
-                className="ml-1 mt-1 inline-flex h-4 items-center rounded px-1 text-[10px] text-transparent hover:bg-brand-50 hover:text-brand-600"
-                title={`Tạo lịch ${String(hour).padStart(2, '0')}:00`}
-              >
-                +
-              </button>
+              {onSlotClick && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSlotClick(
+                      date,
+                      `${String(hour).padStart(2, '0')}:00`,
+                    )
+                  }
+                  className="ml-1 mt-1 inline-flex h-4 items-center rounded px-1 text-[10px] text-transparent hover:bg-brand-50 hover:text-brand-600"
+                  title={`Tạo lịch ${String(hour).padStart(2, '0')}:00`}
+                >
+                  +
+                </button>
+              )}
             </div>
           ))}
 
@@ -145,7 +148,8 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
 interface WeekViewProps {
   days: Date[];
   appointmentsByDate: Record<string, Appointment[]>;
-  onSlotClick: (date: Date, time: string) => void;
+  /** Omit to hide the per-hour "+" quick-create affordance (e.g. actor lacks appointment.create). */
+  onSlotClick?: (date: Date, time: string) => void;
   onAppointmentClick: (apt: Appointment) => void;
 }
 
@@ -227,7 +231,7 @@ export function WeekView({
               style={{ height: HOURS.length * HOUR_HEIGHT_PX }}
             >
               {/* Hour slot buttons */}
-              {HOURS.map((hour) => (
+              {onSlotClick && HOURS.map((hour) => (
                 <button
                   key={hour}
                   type="button"
