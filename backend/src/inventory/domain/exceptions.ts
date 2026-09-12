@@ -15,10 +15,14 @@ export class SkuAlreadyExistsException extends BusinessRuleException {
 
 export class InsufficientStockException extends BusinessRuleException {
   constructor(itemName: string, required: number, available: number) {
+    // Same fix as MedicalRecords' InsufficientStockException: the specific
+    // item/quantities used to only be in `details`, which
+    // getApiErrorMessage() (frontend) never reads — put them in `message`.
     super(
-      'Insufficient stock',
+      `Insufficient stock for '${itemName}': requires ${required}, only ${available} available`,
       HttpStatus.UNPROCESSABLE_ENTITY,
-      `Item '${itemName}' requires ${required}, available ${available}`,
+      { itemName, required, available },
+      'INSUFFICIENT_STOCK',
     );
   }
 }

@@ -292,6 +292,33 @@ describe('MedicalRecordsService', () => {
         service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
       ).rejects.toThrow(InsufficientStockException);
     });
+
+    it('InsufficientStockException message names the item and quantities (regression: these used to only be in `details`, which the frontend never reads — the user just saw a bare "Insufficient stock")', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+        treatments: [
+          {
+            id: 'tr-1',
+            procedure: 'D1110',
+            description: 'Cleaning',
+            unitPrice: 500_000,
+            inventoryUsages: [{ id: 'u-1', inventoryItemId: 'item-1', quantity: 100, unit: 'box' }],
+          },
+        ],
+      });
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue({
+        id: 'item-1',
+        name: 'Gloves',
+        quantityOnHand: 5,
+        deletedAt: null,
+      });
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
+      ).rejects.toThrow(/Gloves.*requires 100.*only 5 available/);
+    });
   });
 
   describe('upsertPrescription', () => {

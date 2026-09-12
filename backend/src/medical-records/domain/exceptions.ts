@@ -35,10 +35,17 @@ export class TreatmentNotInEncounterException extends BusinessRuleException {
 
 export class InsufficientStockException extends BusinessRuleException {
   constructor(itemName: string, required: number, available: number) {
+    // The specific item/quantities used to be shoved into `details` only —
+    // getApiErrorMessage() (frontend) reads `message`, never `details`, so
+    // a dentist blocked from closing an encounter saw just the generic
+    // title "Insufficient stock" with no idea which item or how much was
+    // short. Put the specifics in `message` itself; `details` still carries
+    // the structured fields for any caller that wants them programmatically.
     super(
-      'Insufficient stock',
+      `Insufficient stock for '${itemName}': requires ${required}, only ${available} available`,
       HttpStatus.UNPROCESSABLE_ENTITY,
-      `Inventory item '${itemName}' requires ${required} ${available < 0 ? '0' : ''}available ${available}`,
+      { itemName, required, available },
+      'INSUFFICIENT_STOCK',
     );
   }
 }

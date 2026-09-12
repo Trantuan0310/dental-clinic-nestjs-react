@@ -138,6 +138,18 @@ describe('InventoryService', () => {
         service.stockOut('item-1', { quantity: 100, reason: 'over-draft' } as any, adminActor),
       ).rejects.toThrow(InsufficientStockException);
     });
+
+    it('InsufficientStockException message names the item and quantities (regression: used to only be in `details`, which the frontend never reads)', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(
+        validInventoryItem({ quantityOnHand: new Prisma.Decimal(5) }),
+      );
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.stockOut('item-1', { quantity: 100, reason: 'over-draft' } as any, adminActor),
+      ).rejects.toThrow(/Gloves.*requires 100.*only 5 available/);
+    });
   });
 
   describe('adjustStock', () => {
