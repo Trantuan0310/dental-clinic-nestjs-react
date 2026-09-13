@@ -5,7 +5,7 @@ import { Card, Button, StatusBadge, EmptyState } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { formatVnd, formatDate } from '@/lib/format';
+import { formatVnd, formatDate, formatNumber } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { usePeriodDetail, useComputePeriod, useLockPeriod, useApprovePeriod } from './payrollApi';
 import { LineItemBreakdownDrawer } from './LineItemBreakdownDrawer';
@@ -155,6 +155,8 @@ export default function PeriodDetailPage() {
                 <tr>
                   <th>Bác sĩ</th>
                   <th className="text-right">Encounters</th>
+                  <th className="text-right">Giờ làm</th>
+                  <th className="text-right">Tăng ca (giờ)</th>
                   <th className="text-right">Gross</th>
                   <th className="text-right">Thuế TNCN</th>
                   <th className="text-right">BHXH</th>
@@ -172,6 +174,10 @@ export default function PeriodDetailPage() {
                       )}
                     </td>
                     <td className="text-right">{li.encountersCount}</td>
+                    <td className="text-right">{formatNumber(li.totalHours)}</td>
+                    <td className={`text-right ${Number(li.overtimeHours) > 0 ? 'font-medium text-amber-600' : ''}`}>
+                      {formatNumber(li.overtimeHours)}
+                    </td>
                     <td className="text-right">{formatVnd(li.grossPayVnd)}</td>
                     <td className="text-right">{formatVnd(li.taxTncnVnd)}</td>
                     <td className="text-right">{formatVnd(li.bhxhVnd)}</td>
