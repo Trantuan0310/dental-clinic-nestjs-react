@@ -10,12 +10,14 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import type { StockMovementType } from '@/types/inventory';
 
 export default function InventoryItemDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
 
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustmentType, setAdjustmentType] = useState<StockMovementType>('STOCK_IN');
@@ -104,11 +106,19 @@ export default function InventoryItemDetailPage() {
   // displaying historical/legacy movement records, not for creating new
   // ones, so offering them here silently collapsed into a generic
   // ADJUSTMENT movement no matter which was picked.
-  const adjustmentTypes: { value: StockMovementType; label: string; icon: typeof Plus }[] = [
-    { value: 'STOCK_IN', label: 'Nhập kho', icon: Plus },
-    { value: 'STOCK_OUT', label: 'Xuất kho', icon: Minus },
-    { value: 'ADJUSTMENT', label: 'Kiểm kê', icon: Settings },
+  // Backend gates each type separately (POST .../stock-in needs
+  // inventory.stock_in, .../stock-out needs inventory.stock_out,
+  // .../adjust needs the stronger inventory.update — an absolute
+  // quantityOnHand set, not an auditable in/out) — filter to what this
+  // actor can actually submit. Receptionist holds stock_in/stock_out but
+  // not update, so "Kiểm kê" never appears for her rather than 403ing on
+  // submit.
+  const allAdjustmentTypes: { value: StockMovementType; label: string; icon: typeof Plus; permission: string }[] = [
+    { value: 'STOCK_IN', label: 'Nhập kho', icon: Plus, permission: 'inventory.stock_in' },
+    { value: 'STOCK_OUT', label: 'Xuất kho', icon: Minus, permission: 'inventory.stock_out' },
+    { value: 'ADJUSTMENT', label: 'Kiểm kê', icon: Settings, permission: 'inventory.update' },
   ];
+  const adjustmentTypes = allAdjustmentTypes.filter((t) => hasPermission(t.permission));
 
   const getMovementIcon = (type: StockMovementType | string) => {
     switch (type) {
@@ -140,7 +150,7 @@ export default function InventoryItemDetailPage() {
           </div>
           <p className="mt-0.5 text-sm text-gray-500 font-mono">{item.code}</p>
         </div>
-        <PermissionGuard permission="inventory.update">
+        <PermissionGuard anyOf={['inventory.stock_in', 'inventory.stock_out', 'inventory.update']}>
           <Button onClick={() => setShowAdjustModal(true)}>
             <Settings className="h-4 w-4" />
             Điều chỉnh
