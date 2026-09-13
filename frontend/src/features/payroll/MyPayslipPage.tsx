@@ -39,7 +39,11 @@ export default function MyPayslipPage() {
     );
   }
 
-  const totalDeductions = payslip.taxTNCN + payslip.bhxh + payslip.bhyt + payslip.bhtn;
+  // PayrollConfig's bhxh/bhyt/bhtn rates are summed into one combined rate
+  // before computation (payroll.service.ts) — there's only ever one
+  // deducted amount, not three; show it as one line rather than inventing
+  // a 3-way split the backend never computed.
+  const totalDeductions = payslip.taxTncnVnd + payslip.bhxhVnd + payslip.penaltyVnd;
   const bonusAdjustments = payslip.adjustments.filter((a) => a.type === 'BONUS');
 
   return (
@@ -52,7 +56,7 @@ export default function MyPayslipPage() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-gray-900">
-            Phiếu lương {format(new Date(payslip.computedAt), 'MM/yyyy', { locale: vi })}
+            Phiếu lương {format(new Date(payslip.periodStart), 'MM/yyyy', { locale: vi })}
           </h1>
         </div>
       </div>
@@ -64,15 +68,15 @@ export default function MyPayslipPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Lương cơ bản</span>
-                <span className="font-medium">{formatCurrency(payslip.baseSalary)}</span>
+                <span className="font-medium">{formatCurrency(payslip.baseSalaryVnd)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Hoa hồng</span>
-                <span className="font-medium">{formatCurrency(payslip.commission)}</span>
+                <span className="font-medium">{formatCurrency(payslip.commissionVnd)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Làm thêm giờ</span>
-                <span className="font-medium">{formatCurrency(payslip.overtime)}</span>
+                <span className="font-medium">{formatCurrency(payslip.overtimePayVnd)}</span>
               </div>
               {bonusAdjustments.map((adj) => (
                 <div key={adj.id} className="flex justify-between text-sm">
@@ -82,7 +86,7 @@ export default function MyPayslipPage() {
               ))}
               <div className="flex justify-between border-t border-gray-200 pt-3 font-semibold">
                 <span>Tổng thu nhập</span>
-                <span>{formatCurrency(payslip.grossSalary)}</span>
+                <span>{formatCurrency(payslip.grossPayVnd)}</span>
               </div>
             </div>
           </Card>
@@ -92,24 +96,16 @@ export default function MyPayslipPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Thuế TNCN</span>
-                <span className="font-medium text-red-600">-{formatCurrency(payslip.taxTNCN)}</span>
+                <span className="font-medium text-red-600">-{formatCurrency(payslip.taxTncnVnd)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">BHXH</span>
-                <span className="font-medium text-red-600">-{formatCurrency(payslip.bhxh)}</span>
+                <span className="text-gray-600">BHXH/BHYT/BHTN</span>
+                <span className="font-medium text-red-600">-{formatCurrency(payslip.bhxhVnd)}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">BHYT</span>
-                <span className="font-medium text-red-600">-{formatCurrency(payslip.bhyt)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">BHTN</span>
-                <span className="font-medium text-red-600">-{formatCurrency(payslip.bhtn)}</span>
-              </div>
-              {payslip.otherDeductions > 0 && (
+              {payslip.penaltyVnd > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Khấu trừ khác</span>
-                  <span className="font-medium text-red-600">-{formatCurrency(payslip.otherDeductions)}</span>
+                  <span className="font-medium text-red-600">-{formatCurrency(payslip.penaltyVnd)}</span>
                 </div>
               )}
               <div className="flex justify-between border-t border-gray-200 pt-3 font-semibold text-red-600">
@@ -130,12 +126,15 @@ export default function MyPayslipPage() {
                     <div>
                       <p className="font-medium text-gray-900">{enc.patientName}</p>
                       <p className="text-sm text-gray-500">
-                        {enc.chiefComplaint || enc.summary || '—'}
+                        {enc.patientCode} · {enc.durationMinutes} phút
                       </p>
                     </div>
-                    <span className="text-sm text-gray-500">
-                      {format(new Date(enc.startedAt), 'dd/MM/yyyy', { locale: vi })}
-                    </span>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-900">{formatCurrency(enc.treatmentRevenueVnd)}</p>
+                      <span className="text-xs text-gray-500">
+                        {format(new Date(enc.startedAt), 'dd/MM/yyyy', { locale: vi })}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -149,10 +148,10 @@ export default function MyPayslipPage() {
             <div className="text-center">
               <p className="text-sm text-gray-500">Lương thực nhận</p>
               <p className="mt-2 text-4xl font-bold text-green-600">
-                {formatCurrency(payslip.netSalary)}
+                {formatCurrency(payslip.netPayVnd)}
               </p>
               <p className="mt-2 text-sm text-gray-500">
-                Kỳ {format(new Date(payslip.computedAt), 'MM/yyyy', { locale: vi })}
+                Kỳ {format(new Date(payslip.periodStart), 'MM/yyyy', { locale: vi })}
               </p>
               <Badge variant="success">Đã tính lương</Badge>
             </div>

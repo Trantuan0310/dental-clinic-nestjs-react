@@ -287,11 +287,51 @@ export function useMyPayrollHistory() {
   });
 }
 
+/**
+ * GET /payroll/me/payslip/:periodId returns the raw PayrollLineItem row
+ * (baseSalaryVnd/grossPayVnd/etc, not the `Payslip` view-model's old
+ * baseSalary/grossSalary names) plus `dentist: {fullName}` and each
+ * encounterDetail's own `encounter: {startedAt, patient: {code, fullName}}`
+ * — this used to be cast straight to `Payslip` with zero mapping, so every
+ * field read wrong, and `payslip.encounters.length` threw on the
+ * (nonexistent) `encounters` field for any dentist who opened the page.
+ */
+function mapMyPayslip(raw: any): Payslip {
+  return {
+    id: raw.id,
+    periodId: raw.payrollPeriodId,
+    periodStart: raw.period?.periodStart ?? raw.computedAt,
+    periodEnd: raw.period?.periodEnd ?? raw.computedAt,
+    dentistId: raw.dentistId,
+    dentistName: raw.dentist?.fullName ?? raw.dentistName ?? '—',
+    baseSalaryVnd: Number(raw.baseSalaryVnd),
+    commissionVnd: Number(raw.commissionVnd),
+    overtimePayVnd: Number(raw.overtimePayVnd),
+    bonusVnd: Number(raw.bonusVnd),
+    penaltyVnd: Number(raw.penaltyVnd),
+    grossPayVnd: Number(raw.grossPayVnd),
+    taxTncnVnd: Number(raw.taxTncnVnd),
+    bhxhVnd: Number(raw.bhxhVnd),
+    netPayVnd: Number(raw.netPayVnd),
+    adjustments: raw.adjustments ?? [],
+    encounters: (raw.encounterDetails ?? []).map((ed: any) => ({
+      id: ed.id,
+      encounterId: ed.encounterId,
+      patientName: ed.encounter?.patient?.fullName ?? '—',
+      patientCode: ed.encounter?.patient?.code ?? '',
+      startedAt: ed.encounter?.startedAt ?? ed.encounterStartAt,
+      durationMinutes: ed.durationMinutes,
+      treatmentRevenueVnd: Number(ed.treatmentRevenueVnd),
+    })),
+    computedAt: raw.computedAt,
+  };
+}
+
 export function useMyPayslip(periodId: string | undefined) {
   return useQuery({
     enabled: !!periodId,
     queryKey: payrollKeys.myPayslip(periodId ?? ''),
-    queryFn: () => get<Payslip>(`/payroll/me/payslip/${periodId}`),
+    queryFn: () => get<any>(`/payroll/me/payslip/${periodId}`).then(mapMyPayslip),
   });
 }
 

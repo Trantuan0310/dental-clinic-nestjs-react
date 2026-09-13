@@ -187,24 +187,41 @@ export interface NoShowDetectionPayload {
   to: string;
 }
 
+// GET /payroll/me/payslip/:periodId returns the raw PayrollLineItem row
+// (field names below mirror it 1:1 — no `baseSalary`/`grossSalary`/etc, and
+// no separate bhyt/bhtn: PayrollConfig's 3 rates are summed into one before
+// computation, so only one combined `bhxhVnd` deduction ever exists) plus
+// the dentist relation and each encounterDetail's own encounter+patient,
+// which `mapMyPayslip()` in payrollApi.ts flattens onto this shape.
 export interface Payslip {
   id: string;
   periodId: string;
+  periodStart: string;
+  periodEnd: string;
   dentistId: string;
   dentistName: string;
-  baseSalary: number;
-  commission: number;
-  overtime: number;
-  grossSalary: number;
-  taxTNCN: number;
-  bhxh: number;
-  bhyt: number;
-  bhtn: number;
-  otherDeductions: number;
-  netSalary: number;
+  baseSalaryVnd: number;
+  commissionVnd: number;
+  overtimePayVnd: number;
+  bonusVnd: number;
+  penaltyVnd: number;
+  grossPayVnd: number;
+  taxTncnVnd: number;
+  bhxhVnd: number;
+  netPayVnd: number;
   adjustments: PayrollAdjustment[];
-  encounters: EncounterSummary[];
+  encounters: PayslipEncounter[];
   computedAt: string;
+}
+
+export interface PayslipEncounter {
+  id: string;
+  encounterId: string;
+  patientName: string;
+  patientCode: string;
+  startedAt: string;
+  durationMinutes: number;
+  treatmentRevenueVnd: number;
 }
 
 // Shift Registration
