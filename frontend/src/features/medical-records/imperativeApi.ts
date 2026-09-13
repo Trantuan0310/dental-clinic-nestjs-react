@@ -42,6 +42,16 @@ function toCreateTreatmentBody(payload: CreateTreatmentPayload) {
       payload.toothNumber !== undefined && payload.toothNumber !== ''
         ? [Number(payload.toothNumber)]
         : undefined,
+    // Backend's CreateTreatmentDto.inventoryUsages wants {inventoryItemId,
+    // quantity, unit} — the view-model's TreatmentInventoryUsage carries
+    // quantityUsed/unit under different names.
+    inventoryUsages: payload.inventoryItemsUsed?.length
+      ? payload.inventoryItemsUsed.map((u) => ({
+          inventoryItemId: u.inventoryItemId,
+          quantity: u.quantityUsed,
+          unit: u.unit ?? '',
+        }))
+      : undefined,
   };
 }
 

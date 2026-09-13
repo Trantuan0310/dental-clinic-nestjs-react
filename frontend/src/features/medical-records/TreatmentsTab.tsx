@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/format';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
-import { Button, Modal, Input, Textarea, ConfirmDialog } from '@/components/ui';
+import { Button, Modal, Input, Textarea, Select, ConfirmDialog } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import type { Encounter, Treatment, CreateTreatmentPayload } from '@/types/medical-records';
+import { useInventoryItems } from '@/features/inventory/inventoryApi';
+import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUsage } from '@/types/medical-records';
 
 interface TreatmentsTabProps {
   encounter: Encounter;
@@ -28,6 +29,31 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const [unitPrice, setUnitPrice] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Materials consumed by this treatment — only meaningful on create; the
+  // backend's UpdateTreatmentDto has no field for it, so editing an existing
+  // treatment's inventory usage isn't supported and the picker is hidden then.
+  const [inventoryUsages, setInventoryUsages] = useState<TreatmentInventoryUsage[]>([]);
+  const [pickedItemId, setPickedItemId] = useState('');
+  const [pickedQty, setPickedQty] = useState('1');
+  const { data: inventoryData } = useInventoryItems();
+  const inventoryItems = inventoryData?.items ?? [];
+
+  const addInventoryUsage = () => {
+    const item = inventoryItems.find((i) => i.id === pickedItemId);
+    const qty = Number(pickedQty);
+    if (!item || !qty || qty <= 0) return;
+    setInventoryUsages((prev) => [
+      ...prev,
+      { inventoryItemId: item.id, inventoryItemName: item.name, unit: item.unit, quantityUsed: qty },
+    ]);
+    setPickedItemId('');
+    setPickedQty('1');
+  };
+
+  const removeInventoryUsage = (index: number) => {
+    setInventoryUsages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   useEffect(() => {
     if (initialToothNumber === undefined || initialToothNumber === null) return;
     setShowAddModal(true);
@@ -38,6 +64,9 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setQuantity('1');
     setUnitPrice('');
     setNotes('');
+    setInventoryUsages([]);
+    setPickedItemId('');
+    setPickedQty('1');
     onClearInitialTooth?.();
   }, [initialToothNumber, onClearInitialTooth]);
 
@@ -84,6 +113,9 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setQuantity('1');
     setUnitPrice('');
     setNotes('');
+    setInventoryUsages([]);
+    setPickedItemId('');
+    setPickedQty('1');
   };
 
   const openEditModal = (treatment: Treatment) => {
@@ -118,6 +150,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         quantity: parseInt(quantity),
         priceCents: parseInt(unitPrice),
         description: notes,
+        inventoryItemsUsed: inventoryUsages,
       });
     }
   };
@@ -259,6 +292,63 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
           />
+
+          {/* Materials used — create-only: the backend has no field to
+              change this on an existing treatment (UpdateTreatmentDto),
+              so the picker is hidden while editing. */}
+          {!editingTreatment && (
+            <div className="space-y-2 border-t border-gray-100 pt-4">
+              <label className="block text-sm font-medium text-gray-700">Vật tư sử dụng</label>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Select
+                    value={pickedItemId}
+                    onChange={(e) => setPickedItemId(e.target.value)}
+                    placeholder="-- Chọn vật tư --"
+                    options={inventoryItems.map((item) => ({
+                      value: item.id,
+                      label: `${item.name} (còn ${item.quantityOnHand} ${item.unit})`,
+                      disabled: item.quantityOnHand <= 0,
+                    }))}
+                  />
+                </div>
+                <div className="w-24">
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={pickedQty}
+                    onChange={(e) => setPickedQty(e.target.value)}
+                  />
+                </div>
+                <Button type="button" variant="outline" onClick={addInventoryUsage} disabled={!pickedItemId}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {inventoryUsages.length > 0 && (
+                <ul className="space-y-1">
+                  {inventoryUsages.map((usage, index) => (
+                    <li
+                      key={`${usage.inventoryItemId}-${index}`}
+                      className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-sm"
+                    >
+                      <span>
+                        {usage.inventoryItemName} — {usage.quantityUsed} {usage.unit}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeInventoryUsage(index)}
+                        className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={resetForm}>
               Hủy

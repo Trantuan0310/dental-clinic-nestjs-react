@@ -61,6 +61,10 @@ export interface TreatmentInventoryUsage {
   inventoryItemId: string;
   inventoryItemName?: string;
   quantityUsed: number;
+  // Only populated when the picker adds a usage client-side (it copies the
+  // selected InventoryItemListItem's unit) — the read-back shape from
+  // formatTreatment() on the backend doesn't include it.
+  unit?: string;
 }
 
 export interface TreatmentLine {
