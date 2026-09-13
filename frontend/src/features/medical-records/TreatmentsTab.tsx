@@ -298,10 +298,13 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
               so the picker is hidden while editing. */}
           {!editingTreatment && (
             <div className="space-y-2 border-t border-gray-100 pt-4">
-              <label className="block text-sm font-medium text-gray-700">Vật tư sử dụng</label>
+              <label htmlFor="treatment-inventory-item" className="block text-sm font-medium text-gray-700">
+                Vật tư sử dụng
+              </label>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <Select
+                    id="treatment-inventory-item"
                     value={pickedItemId}
                     onChange={(e) => setPickedItemId(e.target.value)}
                     placeholder="-- Chọn vật tư --"
@@ -317,11 +320,18 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                     type="number"
                     min="0.01"
                     step="0.01"
+                    aria-label="Số lượng vật tư sử dụng"
                     value={pickedQty}
                     onChange={(e) => setPickedQty(e.target.value)}
                   />
                 </div>
-                <Button type="button" variant="outline" onClick={addInventoryUsage} disabled={!pickedItemId}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label="Thêm vật tư vào danh sách"
+                  onClick={addInventoryUsage}
+                  disabled={!pickedItemId}
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
