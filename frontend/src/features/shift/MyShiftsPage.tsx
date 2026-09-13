@@ -60,7 +60,17 @@ export default function MyShiftsPage() {
     if (!shifts) return [];
     const now = new Date();
     return shifts.filter((s) => {
-      const shiftStart = new Date(`${s.date}T${s.startTime}:00`);
+      // s.date is already a full ISO timestamp ("2026-10-17T00:00:00.000Z"),
+      // not a bare date — `${s.date}T${s.startTime}:00` doubled up the T/Z
+      // into an invalid string ("...000ZT08:00:00"), so shiftStart was
+      // always Invalid Date and every comparison below was always false:
+      // BOTH the "upcoming" and "past" tabs showed empty regardless of any
+      // real registrations (confirmed live: a shift created and confirmed
+      // present via a direct API read still showed "Chưa có ca nào" here).
+      // Same fix as canCancel() above, which already got this right.
+      const shiftStart = new Date(s.date);
+      const [hh, mm] = s.startTime.split(':').map(Number);
+      shiftStart.setUTCHours(hh, mm, 0, 0);
       if (tab === 'upcoming') {
         return (s.status === 'PENDING' || s.status === 'APPROVED') && shiftStart >= now;
       }
