@@ -106,7 +106,13 @@ export default function ExpenseListPage() {
     // search only look within those 20. 200 keeps everything on one
     // page for any clinic-realistic expense count so both are accurate.
     pageSize: 200,
-    status: (searchParams.get('status') as ExpenseFilters['status']) || undefined,
+    // A bookmarked/back-navigated URL could still carry the old '?status=all'
+    // sentinel from before it was excluded from the URL sync below — treat
+    // it the same as unset rather than sending 'all' to the API.
+    status: (() => {
+      const raw = searchParams.get('status');
+      return raw && raw !== 'all' ? (raw as ExpenseFilters['status']) : undefined;
+    })(),
   }));
   const [search, setSearch] = useState('');
 
@@ -268,7 +274,17 @@ export default function ExpenseListPage() {
           <div>
             <Select
               value={filters.status ?? 'all'}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value as ExpenseFilters['status'], page: 1 })}
+              onChange={(e) => {
+                const value = e.target.value;
+                setFilters({
+                  ...filters,
+                  // 'all' is a UI-only sentinel for "no filter" — the backend
+                  // rejects it (not a real ExpenseStatus), so send undefined
+                  // instead, matching how filters.status starts out unset.
+                  status: value === 'all' ? undefined : (value as ExpenseFilters['status']),
+                  page: 1,
+                });
+              }}
               options={[
                 { value: 'all', label: 'Tất cả trạng thái' },
                 { value: 'DRAFT', label: 'Nháp' },

@@ -26,8 +26,8 @@ import {
   ApproveExpenseDto,
   RejectExpenseDto,
   ReimburseExpenseDto,
+  ListExpensesQueryDto,
 } from './dto/expense.dto';
-import { ExpenseStatus } from '@prisma/client';
 
 @ApiTags('Expense')
 @ApiBearerAuth()
@@ -62,15 +62,8 @@ export class ExpenseController {
   @Get()
   @RequirePermissions('expense.read')
   @ApiOperation({ summary: 'List expenses with filters' })
-  async list(
-    @Query('status') status?: ExpenseStatus,
-    @Query('categoryId') categoryId?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('page') page?: number,
-    @Query('pageSize') pageSize?: number,
-  ) {
-    return this.expense.list({ status, categoryId, from, to, page, pageSize });
+  async list(@Query() query: ListExpensesQueryDto) {
+    return this.expense.list(query);
   }
 
   @Get(':id')
