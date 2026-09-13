@@ -87,98 +87,6 @@ export class AppointmentsController {
   }
 
   // ==========================================================================
-  // Nested /:id routes — must be declared AFTER every static sub-route above.
-  // ==========================================================================
-
-  @Get(':id')
-  @RequirePermissions('appointment.read.any', 'appointment.read.own')
-  @ApiOperation({ summary: 'Get appointment detail by ID' })
-  async getById(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    return { data: await this.appointments.getById(id, actor) };
-  }
-
-  @Patch(':id')
-  @RequirePermissions('appointment.update')
-  @ApiOperation({
-    summary:
-      'Update appointment (reason, notes, chiefComplaint only — use /reschedule for date/time/dentist)',
-  })
-  async update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateAppointmentDto,
-    @User() actor: JwtPayload,
-  ) {
-    return { data: await this.appointments.update(id, dto, actor) };
-  }
-
-  @Post()
-  @RequirePermissions('appointment.create')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create appointment (BR-APPT-001 → BR-APPT-005)' })
-  async create(@Body() dto: CreateAppointmentDto, @User() actor: JwtPayload) {
-    return { data: await this.appointments.create(dto, actor) };
-  }
-
-  @Patch(':id/reschedule')
-  @RequirePermissions('appointment.update')
-  @ApiOperation({ summary: 'Reschedule (BR-APPT-013, ≤ 3 times)' })
-  async reschedule(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: RescheduleAppointmentDto,
-    @User() actor: JwtPayload,
-  ) {
-    return { data: await this.appointments.reschedule(id, dto, actor) };
-  }
-
-  @Post(':id/check-in')
-  @RequirePermissions('appointment.check_in')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Check-in (BR-APPT-007)' })
-  async checkIn(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CheckInAppointmentDto,
-    @User() actor: JwtPayload,
-  ) {
-    return {
-      data: await this.appointments.checkIn(id, dto.override ?? false, dto.overrideReason, actor),
-    };
-  }
-
-  @Post(':id/start-encounter')
-  // A dentist calling in their own next patient (encounter.start) needs to
-  // flip this status too, not just front-desk staff (appointment.check_in) —
-  // without the OR, the dentist's own "Bắt đầu khám" action always 403'd.
-  @RequirePermissions('appointment.check_in', 'encounter.start')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Transition to IN_PROGRESS (after check-in)' })
-  async startEncounter(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    return { data: await this.appointments.startEncounter(id, actor) };
-  }
-
-  @Post(':id/cancel')
-  @RequirePermissions('appointment.cancel')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Cancel appointment (BR-APPT-009 → BR-APPT-011)' })
-  async cancel(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CancelAppointmentDto,
-    @User() actor: JwtPayload,
-  ) {
-    return { data: await this.appointments.cancel(id, dto, actor) };
-  }
-
-  @Post(':id/no-show')
-  @RequirePermissions('appointment.no_show')
-  @HttpCode(HttpStatus.OK)
-  async noShow(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: NoShowDto,
-    @User() actor: JwtPayload,
-  ) {
-    return { data: await this.appointments.markNoShow(id, dto, actor) };
-  }
-
-  // ==========================================================================
   // Working schedule
   // ==========================================================================
 
@@ -279,5 +187,97 @@ export class AppointmentsController {
     return {
       data: await this.appointments.cancelShiftRegistration(id, actor),
     };
+  }
+
+  // ==========================================================================
+  // Nested /:id routes — must be declared AFTER every static sub-route above.
+  // ==========================================================================
+
+  @Get(':id')
+  @RequirePermissions('appointment.read.any', 'appointment.read.own')
+  @ApiOperation({ summary: 'Get appointment detail by ID' })
+  async getById(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.getById(id, actor) };
+  }
+
+  @Patch(':id')
+  @RequirePermissions('appointment.update')
+  @ApiOperation({
+    summary:
+      'Update appointment (reason, notes, chiefComplaint only — use /reschedule for date/time/dentist)',
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAppointmentDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.update(id, dto, actor) };
+  }
+
+  @Post()
+  @RequirePermissions('appointment.create')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create appointment (BR-APPT-001 → BR-APPT-005)' })
+  async create(@Body() dto: CreateAppointmentDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.create(dto, actor) };
+  }
+
+  @Patch(':id/reschedule')
+  @RequirePermissions('appointment.update')
+  @ApiOperation({ summary: 'Reschedule (BR-APPT-013, ≤ 3 times)' })
+  async reschedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RescheduleAppointmentDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.reschedule(id, dto, actor) };
+  }
+
+  @Post(':id/check-in')
+  @RequirePermissions('appointment.check_in')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Check-in (BR-APPT-007)' })
+  async checkIn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CheckInAppointmentDto,
+    @User() actor: JwtPayload,
+  ) {
+    return {
+      data: await this.appointments.checkIn(id, dto.override ?? false, dto.overrideReason, actor),
+    };
+  }
+
+  @Post(':id/start-encounter')
+  // A dentist calling in their own next patient (encounter.start) needs to
+  // flip this status too, not just front-desk staff (appointment.check_in) —
+  // without the OR, the dentist's own "Bắt đầu khám" action always 403'd.
+  @RequirePermissions('appointment.check_in', 'encounter.start')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Transition to IN_PROGRESS (after check-in)' })
+  async startEncounter(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.startEncounter(id, actor) };
+  }
+
+  @Post(':id/cancel')
+  @RequirePermissions('appointment.cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel appointment (BR-APPT-009 → BR-APPT-011)' })
+  async cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelAppointmentDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.cancel(id, dto, actor) };
+  }
+
+  @Post(':id/no-show')
+  @RequirePermissions('appointment.no_show')
+  @HttpCode(HttpStatus.OK)
+  async noShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: NoShowDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.markNoShow(id, dto, actor) };
   }
 }
