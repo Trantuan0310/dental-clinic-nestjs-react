@@ -30,6 +30,17 @@ export class CannotDeleteSystemRoleException extends BusinessRuleException {
   }
 }
 
+export class CannotModifySystemRoleException extends BusinessRuleException {
+  constructor() {
+    super(
+      'System roles cannot be modified',
+      HttpStatus.FORBIDDEN,
+      undefined,
+      'CANNOT_MODIFY_SYSTEM_ROLE',
+    );
+  }
+}
+
 export class CannotDeleteRoleWithUsersException extends BusinessRuleException {
   constructor(count = 0) {
     super(

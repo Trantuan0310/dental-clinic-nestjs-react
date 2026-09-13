@@ -172,6 +172,12 @@ function RoleModal({
   const [code, setCode] = useState(role?.code ?? '');
   const [name, setName] = useState(role?.name ?? '');
   const [description, setDescription] = useState(role?.description ?? '');
+  // Keyed by permission CODE (e.g. 'patient.create'), not id — `role.permissions`
+  // (from the list/get API) is already an array of codes, and the backend's
+  // create/update DTOs expect `permissionCodes`. Using `perm.id` here used to
+  // mean an existing role's permissions never showed as checked when editing
+  // (codes never matched ids), and toggling sent ids where the API expects
+  // codes — sent under the wrong field name (`permissionIds`) besides.
   const [selectedPerms, setSelectedPerms] = useState<Set<string>>(
     new Set(role?.permissions ?? []),
   );
@@ -183,11 +189,11 @@ function RoleModal({
     return acc;
   }, {});
 
-  const togglePerm = (permId: string) => {
+  const togglePerm = (permCode: string) => {
     setSelectedPerms((prev) => {
       const next = new Set(prev);
-      if (next.has(permId)) next.delete(permId);
-      else next.add(permId);
+      if (next.has(permCode)) next.delete(permCode);
+      else next.add(permCode);
       return next;
     });
   };
@@ -195,11 +201,11 @@ function RoleModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!code || !name) return;
-    const permIds = Array.from(selectedPerms);
+    const permissionCodes = Array.from(selectedPerms);
     if (role) {
-      onUpdate({ name, description, permissionIds: permIds });
+      onUpdate({ name, description, permissionCodes });
     } else {
-      onCreate({ code, name, description, permissionIds: permIds });
+      onCreate({ code, name, description, permissionCodes });
     }
   };
 
@@ -247,8 +253,8 @@ function RoleModal({
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-gray-300 text-brand-500"
-                        checked={selectedPerms.has(perm.id)}
-                        onChange={() => togglePerm(perm.id)}
+                        checked={selectedPerms.has(perm.code)}
+                        onChange={() => togglePerm(perm.code)}
                       />
                       <span className="text-sm text-gray-700" title={perm.description ?? undefined}>
                         {perm.code}

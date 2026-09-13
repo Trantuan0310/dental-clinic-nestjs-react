@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import {
   CannotDeleteSystemRoleException,
   CannotDeleteRoleWithUsersException,
+  CannotModifySystemRoleException,
 } from '../common/exceptions/business-rule.exception';
 
 export interface RoleResponse {
@@ -159,6 +160,15 @@ export class RolesService {
       where: { id: roleId },
       include: { rolePermissions: true, userRoles: true },
     });
+
+    // The UI hides Edit entirely for system roles (RolesPage.tsx), matching
+    // how delete() below is blocked — but that's a client-side convenience
+    // only. Without this check, any role.upsert holder could rename or
+    // rewrite the permissions of clinic_admin/receptionist/dentist directly
+    // via the API.
+    if (role.isSystem) {
+      throw new CannotModifySystemRoleException();
+    }
 
     // `permissionCodes` omitted (undefined) means "don't touch permissions";
     // `permissionCodes: []` means "revoke all". Collapsing both to the same

@@ -70,13 +70,18 @@ export interface CreateAdminRolePayload {
   code: string;
   name: string;
   description?: string;
-  permissionIds: string[];
+  // Backend DTO field is `permissionCodes` (array of Permission.code, e.g.
+  // 'patient.create') — this used to be misnamed `permissionIds`, which the
+  // global ValidationPipe's `whitelist: true` silently stripped, so every
+  // role created through the UI got zero permissions regardless of what
+  // was checked.
+  permissionCodes: string[];
 }
 
 export interface UpdateAdminRolePayload {
   name?: string;
   description?: string;
-  permissionIds?: string[];
+  permissionCodes?: string[];
 }
 
 export interface AuditLog {

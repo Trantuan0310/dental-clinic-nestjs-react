@@ -7,6 +7,7 @@ import { validRole, adminPayload } from '../../test/helpers';
 import {
   CannotDeleteSystemRoleException,
   CannotDeleteRoleWithUsersException,
+  CannotModifySystemRoleException,
 } from '../common/exceptions/business-rule.exception';
 import { ConflictException } from '@nestjs/common';
 
@@ -116,6 +117,26 @@ describe('RolesService', () => {
         rolePermissions: [{ permission: { code: 'patient.read' } }],
         userRoles: [],
       });
+    });
+
+    it('throws CannotModifySystemRoleException for a system role (regression: update() had no isSystem check at all, unlike delete())', async () => {
+      (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...validRole({ isSystem: true }),
+        rolePermissions: [],
+        userRoles: [],
+      });
+
+      await expect(
+        service.update(
+          'role-sys',
+          { name: 'Renamed' } as any,
+          adminActor.sub,
+          adminActor.email,
+          null,
+          null,
+        ),
+      ).rejects.toThrow(CannotModifySystemRoleException);
+      expect(prisma.role.update).not.toHaveBeenCalled();
     });
 
     it('updates name/description without touching permissions when permissionCodes is omitted', async () => {
