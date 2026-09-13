@@ -104,20 +104,24 @@ export default function InvoiceDetailPage() {
         </div>
         <div className="flex gap-2">
           {canIssue && (
-            <Button
-              variant="outline"
-              onClick={() => issueMutation.mutate()}
-              isLoading={issueMutation.isPending}
-            >
-              <Send className="h-4 w-4" />
-              Phát hành
-            </Button>
+            <PermissionGuard permission="invoice.issue">
+              <Button
+                variant="outline"
+                onClick={() => issueMutation.mutate()}
+                isLoading={issueMutation.isPending}
+              >
+                <Send className="h-4 w-4" />
+                Phát hành
+              </Button>
+            </PermissionGuard>
           )}
           {canPay && (
-            <Button onClick={() => setShowPaymentModal(true)}>
-              <Plus className="h-4 w-4" />
-              Thu tiền
-            </Button>
+            <PermissionGuard permission="invoice.payment.create">
+              <Button onClick={() => setShowPaymentModal(true)}>
+                <Plus className="h-4 w-4" />
+                Thu tiền
+              </Button>
+            </PermissionGuard>
           )}
           {canVoid && (
             <PermissionGuard permission="invoice.void">
