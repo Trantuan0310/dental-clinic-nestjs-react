@@ -179,6 +179,17 @@ describe('MedicalRecordsService', () => {
       );
     });
 
+    it("regression: a dentist cannot write a clinical note on a colleague's encounter (was previously unchecked entirely)", async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS, dentistId: 'some-other-dentist' }),
+      );
+
+      await expect(
+        service.upsertClinicalNote('enc-1', { chiefComplaint: 'x' } as any, dentistActor),
+      ).rejects.toThrow(EncounterNotFoundException);
+      expect(prisma.clinicalNote.upsert).not.toHaveBeenCalled();
+    });
+
     it('rejects modification when clinical note is locked (encounter closed)', async () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ status: EncounterStatus.COMPLETED }),
@@ -374,6 +385,7 @@ describe('MedicalRecordsService', () => {
         id: 'tr-1',
         encounterId: 'enc-1',
         deletedAt: null,
+        encounter: { dentistId: dentistActor.sub },
       });
       (prisma.treatment.update as jest.Mock).mockResolvedValue({});
 
@@ -385,6 +397,20 @@ describe('MedicalRecordsService', () => {
           data: expect.objectContaining({ deletedAt: expect.any(Date) }),
         }),
       );
+    });
+
+    it('regression: throws when a dentist tries to delete a treatment on a colleague\'s encounter', async () => {
+      (prisma.treatment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'tr-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        encounter: { dentistId: 'some-other-dentist' },
+      });
+
+      await expect(service.deleteTreatment('enc-1', 'tr-1', dentistActor)).rejects.toThrow(
+        TreatmentNotInEncounterException,
+      );
+      expect(prisma.treatment.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -51,6 +51,36 @@ export class MedicalRecordsService {
     private readonly events: EventEmitter2,
   ) {}
 
+  /**
+   * True when the actor may only see/modify encounters they personally
+   * treated — a plain dentist (holds encounter.read.own, not the
+   * clinic-wide encounter.read.any). Single source of truth for every
+   * encounter-scoped row-level check in this service: getEncounter() and
+   * listEncounters() used to each inline their own copy of this exact
+   * condition, and closeEncounter/upsertClinicalNote/addAddendum/
+   * createTreatment/updateTreatment/deleteTreatment/upsertPrescription/
+   * updatePrescription/deletePrescription/snapshotDentalChart had NO
+   * ownership check at all — any dentist could close, add notes/
+   * treatments/prescriptions to, or snapshot the dental chart of ANY
+   * other dentist's encounter, not just their own (live-verified gap
+   * flagged by the whole-system audit; per
+   * docs/03_Specification/MedicalRecords/SPEC.md §7.1, every one of
+   * these is documented 🔒 (own) for dentist except dental_chart.read,
+   * which is deliberately ✅ unrestricted — see getLatestDentalChartForPatient).
+   *
+   * Deliberately NOT used by startEncounterForAppointment or
+   * listEncounters, whose row-scope checks need the extra
+   * `encounter.read.own` presence test so a receptionist (who holds
+   * neither .own nor .any, but legitimately preps any dentist's
+   * encounter during check-in and needs to see every encounter when
+   * listing) isn't wrongly scoped there — this simpler check alone would
+   * treat her as row-scoped too (she lacks .any) and wrongly hide
+   * everyone else's encounters from her.
+   */
+  private isRowScopedDentist(actor: JwtPayload): boolean {
+    return !actor.permissions.includes('encounter.read.any');
+  }
+
   // ==========================================================================
   // Encounter state machine
   // ==========================================================================
@@ -162,10 +192,7 @@ export class MedicalRecordsService {
     // route previously had no row-level check at all, letting any dentist
     // read any other dentist's clinical records by guessing/observing a
     // UUID.
-    if (
-      !actor.permissions.includes('encounter.read.any') &&
-      e.dentistId !== actor.sub
-    ) {
+    if (this.isRowScopedDentist(actor) && e.dentistId !== actor.sub) {
       throw new EncounterNotFoundException(id);
     }
     return this.formatEncounter(e);
@@ -363,6 +390,9 @@ export class MedicalRecordsService {
           },
         });
         if (!encounter) throw new EncounterNotFoundException(encounterId);
+        if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+          throw new EncounterNotFoundException(encounterId);
+        }
         if (encounter.status === EncounterStatus.COMPLETED) {
           throw new EncounterNotClosableException('Encounter already completed');
         }
@@ -559,6 +589,9 @@ export class MedicalRecordsService {
       where: { id: encounterId },
     });
     if (!encounter) throw new EncounterNotFoundException(encounterId);
+    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+      throw new EncounterNotFoundException(encounterId);
+    }
 
     const existing = await this.prisma.clinicalNote.findUnique({
       where: { encounterId },
@@ -606,6 +639,9 @@ export class MedicalRecordsService {
       include: { clinicalNote: true },
     });
     if (!encounter) throw new EncounterNotFoundException(encounterId);
+    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+      throw new EncounterNotFoundException(encounterId);
+    }
     if (!encounter.clinicalNote) {
       throw new EncounterNotClosableException('No clinical note exists yet');
     }
@@ -641,6 +677,9 @@ export class MedicalRecordsService {
   async createTreatment(encounterId: string, dto: CreateTreatmentDto, actor: JwtPayload) {
     const encounter = await this.prisma.encounter.findUnique({ where: { id: encounterId } });
     if (!encounter) throw new EncounterNotFoundException(encounterId);
+    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+      throw new EncounterNotFoundException(encounterId);
+    }
     if (encounter.status !== EncounterStatus.IN_PROGRESS) {
       throw new EncounterNotClosableException('Cannot add treatments to non-IN_PROGRESS encounter');
     }
@@ -693,11 +732,17 @@ export class MedicalRecordsService {
     encounterId: string,
     treatmentId: string,
     dto: UpdateTreatmentDto,
-    _actor: JwtPayload,
+    actor: JwtPayload,
   ) {
-    const t = await this.prisma.treatment.findUnique({ where: { id: treatmentId } });
+    const t = await this.prisma.treatment.findUnique({
+      where: { id: treatmentId },
+      include: { encounter: { select: { dentistId: true } } },
+    });
     if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
     if (t.deletedAt) throw new TreatmentNotInEncounterException();
+    if (this.isRowScopedDentist(actor) && t.encounter.dentistId !== actor.sub) {
+      throw new TreatmentNotInEncounterException();
+    }
 
     return this.prisma.treatment.update({
       where: { id: treatmentId },
@@ -711,8 +756,14 @@ export class MedicalRecordsService {
   }
 
   async deleteTreatment(encounterId: string, treatmentId: string, actor: JwtPayload) {
-    const t = await this.prisma.treatment.findUnique({ where: { id: treatmentId } });
+    const t = await this.prisma.treatment.findUnique({
+      where: { id: treatmentId },
+      include: { encounter: { select: { dentistId: true } } },
+    });
     if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
+    if (this.isRowScopedDentist(actor) && t.encounter.dentistId !== actor.sub) {
+      throw new TreatmentNotInEncounterException();
+    }
     if (t.deletedAt) return; // idempotent
 
     await this.prisma.treatment.update({
@@ -735,6 +786,9 @@ export class MedicalRecordsService {
   async upsertPrescription(encounterId: string, dto: CreatePrescriptionDto, actor: JwtPayload) {
     const encounter = await this.prisma.encounter.findUnique({ where: { id: encounterId } });
     if (!encounter) throw new EncounterNotFoundException(encounterId);
+    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+      throw new EncounterNotFoundException(encounterId);
+    }
 
     const existing = await this.prisma.prescription.findUnique({ where: { encounterId } });
     if (existing) {
@@ -797,8 +851,12 @@ export class MedicalRecordsService {
   async updatePrescription(prescriptionId: string, dto: UpdatePrescriptionDto, actor: JwtPayload) {
     const existing = await this.prisma.prescription.findUnique({
       where: { id: prescriptionId },
+      include: { encounter: { select: { dentistId: true } } },
     });
     if (!existing || existing.deletedAt) {
+      throw new EncounterNotFoundException(prescriptionId);
+    }
+    if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
       throw new EncounterNotFoundException(prescriptionId);
     }
 
@@ -831,8 +889,15 @@ export class MedicalRecordsService {
   async deletePrescription(prescriptionId: string, actor: JwtPayload) {
     const existing = await this.prisma.prescription.findUnique({
       where: { id: prescriptionId },
+      include: { encounter: { select: { dentistId: true } } },
     });
     if (!existing || existing.deletedAt) return; // idempotent
+    if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
+      // Row-scoped-out prescriptions are invisible to this actor, so
+      // "delete" one is indistinguishable from it never existing —
+      // matches the idempotent no-op above rather than leaking existence.
+      return;
+    }
 
     await this.prisma.prescription.update({
       where: { id: prescriptionId },
@@ -857,6 +922,13 @@ export class MedicalRecordsService {
       include: { patient: { select: { dob: true, deletedAt: true } } },
     });
     if (!encounter) throw new EncounterNotFoundException(encounterId);
+    // dental_chart.update is 🔒 (own, khi in_progress) per SPEC §7.1 —
+    // unlike dental_chart.read (deliberately unrestricted, see
+    // getLatestDentalChartForPatient), only the treating dentist may write
+    // a snapshot for their own encounter.
+    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+      throw new EncounterNotFoundException(encounterId);
+    }
     if (encounter.patient.deletedAt) {
       throw new EncounterNotClosableException('Patient is deleted');
     }
