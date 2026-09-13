@@ -475,5 +475,33 @@ describe('PatientsService', () => {
         }),
       );
     });
+
+    it('receptionist (unrestricted, holds patient.update) sees a match regardless of who treated the patient', async () => {
+      (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient({ id: 'p-1' })]);
+      // Only used here for batchLastVisit's "last visit" display info, not
+      // for a row-scope check — receptionist isn't row-scoped, so lookup()
+      // never queries encounters to decide visibility for her.
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      const result = await service.lookup({ phone: '0901234567' } as any, receptionistPayload());
+      expect(result.candidates).toHaveLength(1);
+    });
+
+    it('dentist sees the match when they have an encounter with that patient (BR-PT-014)', async () => {
+      (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient({ id: 'p-1' })]);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([{ patientId: 'p-1' }]);
+      const result = await service.lookup({ phone: '0901234567' } as any, dentistPayload());
+      expect(result.candidates).toHaveLength(1);
+      expect(prisma.encounter.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ dentistId: 'dentist-1' }) }),
+      );
+    });
+
+    it("regression: dentist does NOT see a patient they have never treated (lookup() used to take an unused _actor param and skip BR-PT-014 entirely, unlike list()/getDetailWithSummary())", async () => {
+      (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient({ id: 'p-1', fullName: 'Someone Else’s Patient' })]);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      const result = await service.lookup({ phone: '0901234567' } as any, dentistPayload());
+      expect(result.candidates).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
   });
 });

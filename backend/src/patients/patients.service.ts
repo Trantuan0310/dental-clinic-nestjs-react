@@ -599,7 +599,7 @@ export class PatientsService {
     return map;
   }
 
-  async lookup(query: LookupPatientDto, _actor: JwtPayload) {
+  async lookup(query: LookupPatientDto, actor: JwtPayload) {
     const limit = Math.min(query.limit ?? 5, 10);
 
     type Candidate = {
@@ -661,6 +661,30 @@ export class PatientsService {
         },
         take: limit,
       });
+    }
+
+    if (patientRows.length === 0) {
+      return { candidates, total: 0, matchType };
+    }
+
+    // BR-PT-014: same row-level scoping as list()/getDetailWithSummary() —
+    // a dentist may only see patients they have actually treated. Unlike
+    // list(), which bakes this into the initial query's WHERE, lookup()'s
+    // 4 separate match-type branches above are cheaper to post-filter once
+    // here (patientRows is already capped at `limit`, max 10) than to
+    // thread the same encounter-membership condition into each of them.
+    // This was previously missing entirely (actor took an unused `_actor`
+    // param) — a dentist could look up ANY patient's name/DOB/gender/phone/
+    // last-visit info by phone, CCCD, or name, bypassing the exact
+    // row-level restriction list() enforces for the same PII.
+    if (this.isRowScopedDentist(actor)) {
+      const encounters = await this.prisma.encounter.findMany({
+        where: { dentistId: actor.sub, patientId: { in: patientRows.map(p => p.id) } },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      });
+      const allowedIds = new Set(encounters.map(e => e.patientId));
+      patientRows = patientRows.filter(p => allowedIds.has(p.id));
     }
 
     if (patientRows.length === 0) {
