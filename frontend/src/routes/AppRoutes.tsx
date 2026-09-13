@@ -55,6 +55,7 @@ const MyPayrollHistoryPage = lazy(
 
 const ShiftApprovalInbox = lazy(() => import('@/features/shift/ShiftApprovalInbox'));
 const MyShiftsSelfPage = lazy(() => import('@/features/shift/MyShiftsPage'));
+const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'));
 
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'));
 const UsersPage = lazy(() => import('@/features/admin/UsersPage'));
@@ -351,6 +352,14 @@ export function AppRoutes() {
                 element={
                   <ProtectedRoute permission="shift.read_self">
                     <MyShiftsSelfPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="schedule"
+                element={
+                  <ProtectedRoute permission="schedule.read">
+                    <SchedulePage />
                   </ProtectedRoute>
                 }
               />

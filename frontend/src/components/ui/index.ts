@@ -43,6 +43,8 @@ export type { DatePickerProps } from './DatePicker';
 
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
 
+export { Checkbox } from './Checkbox';
+
 export { Pagination } from './Pagination';
 export type { PaginationProps } from './Pagination';
 

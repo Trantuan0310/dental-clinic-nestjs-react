@@ -16,6 +16,7 @@ import {
   Calendar,
   WalletCards,
   Briefcase,
+  CalendarClock,
 } from 'lucide-react';
 import type { RoleCode } from '@/types/auth';
 
@@ -136,6 +137,12 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         labelKey: 'MyShifts',
         icon: Briefcase,
         permission: 'shift.read_self',
+      },
+      {
+        to: '/schedule',
+        labelKey: 'Schedule',
+        icon: CalendarClock,
+        permission: 'schedule.read',
       },
     ],
   });
