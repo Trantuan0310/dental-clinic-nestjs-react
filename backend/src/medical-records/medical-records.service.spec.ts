@@ -165,8 +165,11 @@ describe('MedicalRecordsService', () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ status: EncounterStatus.IN_PROGRESS }),
       );
+      // No note row yet: the guarded update matches nothing, so the service
+      // falls through to create.
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.clinicalNote.upsert as jest.Mock).mockResolvedValue(validClinicalNote());
+      (prisma.clinicalNote.create as jest.Mock).mockResolvedValue(validClinicalNote());
 
       const result = await service.upsertClinicalNote(
         'enc-1',
@@ -177,6 +180,63 @@ describe('MedicalRecordsService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'CLINICAL_NOTE_UPSERTED' }),
       );
+    });
+
+    it('updates an existing unlocked note through the isLocked-guarded write', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.clinicalNote.findUniqueOrThrow as jest.Mock).mockResolvedValue(validClinicalNote());
+
+      await service.upsertClinicalNote('enc-1', { notes: 'updated' } as any, dentistActor);
+
+      // isLocked: false must be part of the WHERE, not a separate read —
+      // that is what stops an in-flight edit landing after closeEncounter()
+      // locks the note.
+      expect(prisma.clinicalNote.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ encounterId: 'enc-1', isLocked: false }),
+        }),
+      );
+      expect(prisma.clinicalNote.create).not.toHaveBeenCalled();
+    });
+
+    it('regression: refuses to edit a closed encounter even when isLocked is stale', async () => {
+      // isLocked is only a cache of "encounter is closed" — closeEncounter()
+      // locks via updateMany, which matches nothing if no note existed yet,
+      // and seeded rows never went through it. Seen on real data: an
+      // encounter closed days earlier whose note still read isLocked: false,
+      // so the sealed record could be overwritten.
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.COMPLETED }),
+      );
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.upsertClinicalNote('enc-1', { notes: 'post-close edit' } as any, dentistActor),
+      ).rejects.toThrow(EncounterNotClosableException);
+      expect(prisma.clinicalNote.updateMany).not.toHaveBeenCalled();
+      expect(prisma.clinicalNote.create).not.toHaveBeenCalled();
+    });
+
+    it('regression: rejects the edit when the encounter was closed mid-flight', async () => {
+      // The read said unlocked, but closeEncounter() committed before this
+      // write landed, so the guarded update matches 0 rows and the now-locked
+      // row is found on re-read. Previously the upsert had no lock in its
+      // WHERE and would have overwritten the sealed note.
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(
+        validClinicalNote({ isLocked: true }),
+      );
+
+      await expect(
+        service.upsertClinicalNote('enc-1', { notes: 'late edit' } as any, dentistActor),
+      ).rejects.toThrow(EncounterNotClosableException);
+      expect(prisma.clinicalNote.create).not.toHaveBeenCalled();
     });
 
     it("regression: a dentist cannot write a clinical note on a colleague's encounter (was previously unchecked entirely)", async () => {

@@ -593,26 +593,32 @@ export class MedicalRecordsService {
       throw new EncounterNotFoundException(encounterId);
     }
 
-    const existing = await this.prisma.clinicalNote.findUnique({
-      where: { encounterId },
-    });
-    if (existing?.isLocked) {
-      throw new EncounterNotClosableException(
-        'Clinical note is locked because encounter is closed; only addendums allowed (BR-MR-007)',
-      );
+    const lockedMessage =
+      'Clinical note is locked because encounter is closed; only addendums allowed (BR-MR-007)';
+
+    // BR-MR-007 was enforced only through the note's isLocked flag, but that
+    // flag is a cache of "the encounter is closed" and can be false on a
+    // closed encounter: closeEncounter() sets it with an updateMany that
+    // matches nothing when no note row exists yet, and seeded/legacy rows
+    // never went through that path at all. Observed on real data — an
+    // encounter closed five days earlier whose note still read
+    // isLocked: false, leaving the sealed record freely rewritable. The
+    // encounter's own status is the source of truth, so check it too.
+    if (encounter.status !== EncounterStatus.IN_PROGRESS) {
+      throw new EncounterNotClosableException(lockedMessage);
     }
 
-    const note = await this.prisma.clinicalNote.upsert({
-      where: { encounterId },
-      create: {
-        encounterId,
-        chiefComplaint: dto.chiefComplaint ?? null,
-        diagnosis: dto.diagnosis ?? null,
-        treatmentPlan: dto.treatmentPlan ?? null,
-        notes: dto.notes ?? null,
-        lastEditedBy: actor.sub,
-      },
-      update: {
+    // The lock check has to live in the WHERE clause of the write, not in a
+    // separate read: closeEncounter() locks the note (isLocked: true) from
+    // its own transaction, so a plain read-then-upsert lets an edit that was
+    // in flight when the encounter closed land *after* the lock — silently
+    // rewriting a clinical record that is supposed to be sealed, with no
+    // addendum trail. The two actors need not be different people (a dentist
+    // closing on one device while saving on another), but an admin closing
+    // an encounter the dentist is still writing up is the common case.
+    const guarded = await this.prisma.clinicalNote.updateMany({
+      where: { encounterId, isLocked: false },
+      data: {
         ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
         ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
         ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
@@ -620,6 +626,28 @@ export class MedicalRecordsService {
         lastEditedBy: actor.sub,
       },
     });
+
+    let note;
+    if (guarded.count === 0) {
+      // No unlocked row matched: either the note is locked, or it doesn't
+      // exist yet and this is the first save for the encounter.
+      const current = await this.prisma.clinicalNote.findUnique({ where: { encounterId } });
+      if (current?.isLocked) {
+        throw new EncounterNotClosableException(lockedMessage);
+      }
+      note = await this.prisma.clinicalNote.create({
+        data: {
+          encounterId,
+          chiefComplaint: dto.chiefComplaint ?? null,
+          diagnosis: dto.diagnosis ?? null,
+          treatmentPlan: dto.treatmentPlan ?? null,
+          notes: dto.notes ?? null,
+          lastEditedBy: actor.sub,
+        },
+      });
+    } else {
+      note = await this.prisma.clinicalNote.findUniqueOrThrow({ where: { encounterId } });
+    }
 
     await this.audit.log({
       action: 'CLINICAL_NOTE_UPSERTED',
