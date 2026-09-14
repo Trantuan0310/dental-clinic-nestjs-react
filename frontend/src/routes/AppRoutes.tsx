@@ -188,8 +188,20 @@ export function AppRoutes() {
               <Route
                 path="medical-records"
                 element={
+                  // PatientEncountersPage always renders around a
+                  // :patientId param (usePatientEncounters(patientId),
+                  // the "Mã BN: {patientId}" header) - it has no
+                  // "no patient selected" state of its own. The sidebar's
+                  // "Bệnh án" nav item linked straight to this bare path
+                  // (nav.ts), so every dentist/admin who clicked it landed
+                  // on a confusing empty page reading "Mã BN: " with
+                  // nothing after the colon. Same redirect pattern as
+                  // /billing -> /billing/list below: send them to the
+                  // patient list, where the real entry points into medical
+                  // records (a patient's own "Lịch sử khám" tab, or
+                  // /my-patients for a dentist) already work correctly.
                   <ProtectedRoute permission="medical_record.read">
-                    <PatientEncountersPage />
+                    <Navigate to="/patients" replace />
                   </ProtectedRoute>
                 }
               />
