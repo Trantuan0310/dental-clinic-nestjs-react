@@ -135,12 +135,24 @@ export default function DashboardPage() {
   });
 
   const { data: todayAppointments } = useTodayAppointments();
+  // One entry per appointment, not per patient — a patient with two
+  // appointments today (common: two separate procedures, or a follow-up
+  // later the same day) produced two <option>s sharing the same
+  // patientId key, which React warned about ("two children with the
+  // same key") and let the dropdown show the same patient name twice.
+  // Dedupe by patientId, keeping the first (earliest, since today's
+  // appointments come back time-ordered) occurrence.
+  const seenPatientIds = new Set<string>();
   const aiPatientOptions = (todayAppointments?.data ?? [])
     .map((a) => ({
       id: a.patientId,
       label: a.patientName ? `${a.patientName} (${a.startsAt ? new Date(a.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''})` : 'Bệnh nhân',
     }))
-    .filter((opt) => !!opt.id);
+    .filter((opt) => {
+      if (!opt.id || seenPatientIds.has(opt.id)) return false;
+      seenPatientIds.add(opt.id);
+      return true;
+    });
 
   return (
     <div className="space-y-4">
