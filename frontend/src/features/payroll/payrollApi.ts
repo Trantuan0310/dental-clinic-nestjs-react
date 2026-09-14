@@ -280,10 +280,34 @@ export function useOpenAdjustment() {
 }
 
 // Self-service
+// GET /payroll/me/history returns the raw PayrollLineItem[] rows (same
+// shape mapMyPayslip() below already has to unwrap) with the period
+// relation NESTED under `period: {id, periodStart, periodEnd, status,
+// paidAt}` - not the flat {periodId, periodStart, periodEnd, status,
+// netSalary, paidAt} shape PayrollHistoryItem/this page expect. Previously
+// cast straight to PayrollHistoryItem[] with no mapping, so
+// payslip.periodStart/periodEnd were undefined - new Date(undefined) is
+// Invalid Date, and format()'ing it throws RangeError: Invalid time value,
+// crashing MyPayrollHistoryPage for every dentist who opened it.
+// payslip.status and payslip.periodId (used for the "Chi tiết" link) were
+// undefined too, netSalary read the nonexistent field instead of netPayVnd.
+function mapPayrollHistoryItem(raw: any): PayrollHistoryItem {
+  return {
+    id: raw.id,
+    periodId: raw.payrollPeriodId,
+    periodStart: raw.period?.periodStart,
+    periodEnd: raw.period?.periodEnd,
+    status: raw.period?.status,
+    netSalary: Number(raw.netPayVnd),
+    paidAt: raw.period?.paidAt ?? null,
+  };
+}
+
 export function useMyPayrollHistory() {
   return useQuery({
     queryKey: payrollKeys.myHistory,
-    queryFn: () => get<PayrollHistoryItem[]>('/payroll/me/history'),
+    queryFn: () =>
+      get<any[]>('/payroll/me/history').then((rows) => rows.map(mapPayrollHistoryItem)),
   });
 }
 
@@ -338,7 +362,13 @@ export function useMyPayslip(periodId: string | undefined) {
 export function useMyCompensation() {
   return useQuery({
     queryKey: payrollKeys.myCompensation,
-    queryFn: () => get<DentistCompensation>('/payroll/me/compensation'),
+    // Same raw baseSalaryVnd/commissionPct/overtimeHourlyVnd shape as
+    // /payroll/compensations (see mapCompensation above) - this used to
+    // skip the mapping entirely, so a dentist's OWN compensation page
+    // showed "—" for a real 15,000,000₫ base salary (read the nonexistent
+    // `baseSalary` field instead) and a blank "%" for a real 30% commission
+    // (commissionPct 0.3, read via the nonexistent `commissionPercentage`).
+    queryFn: () => get<PrismaCompensationRow>('/payroll/me/compensation').then(mapCompensation),
   });
 }
 
