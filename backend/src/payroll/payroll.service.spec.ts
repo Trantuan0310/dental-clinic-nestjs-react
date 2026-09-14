@@ -58,6 +58,7 @@ describe('PayrollService — period lifecycle (integration)', () => {
             payrollPeriod: {
               findFirst: jest.fn(),
               findUnique: jest.fn(),
+              findUniqueOrThrow: jest.fn(),
               create: jest.fn(),
               update: jest.fn(),
               updateMany: jest.fn(),
@@ -189,13 +190,29 @@ describe('PayrollService — period lifecycle (integration)', () => {
   describe('lockPeriod', () => {
     it('transitions DRAFT → REVIEWING', async () => {
       (prisma.payrollPeriod.findUnique as jest.Mock).mockResolvedValue(mockPeriod);
-      (prisma.payrollPeriod.update as jest.Mock).mockResolvedValue({
+      (prisma.payrollPeriod.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.payrollPeriod.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...mockPeriod,
         status: PayrollPeriodStatus.REVIEWING,
       });
 
       const result = await service.lockPeriod('period-1', 'user-1');
       expect(result.status).toBe(PayrollPeriodStatus.REVIEWING);
+    });
+
+    it('throws instead of silently overwriting a concurrent transition', async () => {
+      // Two admins on the payroll dashboard acting on the same period:
+      // both reads pass assertTransition(), but the row already moved on by
+      // the time this write lands. The guarded updateMany matches 0 rows —
+      // must surface as a conflict rather than overwriting the other
+      // admin's transition and its actor/timestamp attribution.
+      (prisma.payrollPeriod.findUnique as jest.Mock).mockResolvedValue(mockPeriod);
+      (prisma.payrollPeriod.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(service.lockPeriod('period-1', 'user-1')).rejects.toThrow(
+        /changed by someone else/,
+      );
+      expect(prisma.payrollPeriod.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
     it('throws when trying to lock PAID period', async () => {
@@ -214,7 +231,8 @@ describe('PayrollService — period lifecycle (integration)', () => {
         ...mockPeriod,
         status: PayrollPeriodStatus.APPROVED,
       });
-      (prisma.payrollPeriod.update as jest.Mock).mockResolvedValue({
+      (prisma.payrollPeriod.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.payrollPeriod.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...mockPeriod,
         status: PayrollPeriodStatus.PAID,
         paymentReference: 'VCB-001',
@@ -226,7 +244,7 @@ describe('PayrollService — period lifecycle (integration)', () => {
         'user-1',
       );
 
-      expect(prisma.payrollPeriod.update).toHaveBeenCalledWith(
+      expect(prisma.payrollPeriod.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             status: PayrollPeriodStatus.PAID,

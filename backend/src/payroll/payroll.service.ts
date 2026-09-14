@@ -950,13 +950,30 @@ export class PayrollService {
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.REVIEWING);
 
-    const updated = await this.prisma.payrollPeriod.update({
-      where: { id: periodId },
+    // Guarded write: only succeed if status is still what we just read.
+    // Payroll transitions are money, and several admins can hold the
+    // payroll dashboard open at once — with a plain .update() two of them
+    // acting on the same period both pass the assertTransition() check
+    // above (read before either write committed) and the later write wins
+    // silently, overwriting the other's actor/timestamp attribution while
+    // the audit log still records both actions as if each took effect.
+    // Same guarded-updateMany pattern as inventory stock writes, shift
+    // registrations and appointment status transitions.
+    const locked = await this.prisma.payrollPeriod.updateMany({
+      where: { id: periodId, status: period.status },
       data: {
         status: PayrollPeriodStatus.REVIEWING,
         lockedByUserId: actorUserId,
         lockedAt: new Date(),
       },
+    });
+    if (locked.count === 0) {
+      throw new PayrollStateException(
+        `Payroll period ${periodId} was changed by someone else — reload and try again`,
+      );
+    }
+    const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
+      where: { id: periodId },
     });
 
     await this.audit.log({
@@ -974,13 +991,22 @@ export class PayrollService {
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.APPROVED);
 
-    const updated = await this.prisma.payrollPeriod.update({
-      where: { id: periodId },
+    // See lockPeriod() above — same guarded-write race protection.
+    const approved = await this.prisma.payrollPeriod.updateMany({
+      where: { id: periodId, status: period.status },
       data: {
         status: PayrollPeriodStatus.APPROVED,
         approvedByUserId: actorUserId,
         approvedAt: new Date(),
       },
+    });
+    if (approved.count === 0) {
+      throw new PayrollStateException(
+        `Payroll period ${periodId} was changed by someone else — reload and try again`,
+      );
+    }
+    const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
+      where: { id: periodId },
     });
 
     await this.audit.log({
@@ -998,14 +1024,26 @@ export class PayrollService {
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.PAID);
 
-    const updated = await this.prisma.payrollPeriod.update({
-      where: { id: periodId },
+    // See lockPeriod() above — same guarded-write race protection. This one
+    // is the costliest to get wrong: two admins marking the same period paid
+    // with different payment references would leave only the later
+    // reference on the record while both are audited as having paid it.
+    const paid = await this.prisma.payrollPeriod.updateMany({
+      where: { id: periodId, status: period.status },
       data: {
         status: PayrollPeriodStatus.PAID,
         markedPaidByUserId: actorUserId,
         paidAt: new Date(dto.paymentDate),
         paymentReference: dto.paymentReference,
       },
+    });
+    if (paid.count === 0) {
+      throw new PayrollStateException(
+        `Payroll period ${periodId} was changed by someone else — reload and try again`,
+      );
+    }
+    const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
+      where: { id: periodId },
     });
 
     await this.audit.log({
@@ -1029,12 +1067,19 @@ export class PayrollService {
 
     if (period.paidAt > sevenDaysAgo) return null;
 
-    const updated = await this.prisma.payrollPeriod.update({
-      where: { id: periodId },
+    // See lockPeriod() above. Here the racing actor is the cron itself
+    // against an admin (or a second cron instance): return null rather than
+    // throwing, matching this method's existing "nothing to do" contract.
+    const autoLocked = await this.prisma.payrollPeriod.updateMany({
+      where: { id: periodId, status: period.status },
       data: {
         status: PayrollPeriodStatus.LOCKED,
         lockedImmutableAt: new Date(),
       },
+    });
+    if (autoLocked.count === 0) return null;
+    const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
+      where: { id: periodId },
     });
 
     await this.audit.log({
