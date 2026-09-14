@@ -451,20 +451,31 @@ export class BillingService {
   }
 
   async updateNotes(invoiceId: string, dto: UpdateInvoiceNotesDto) {
-    return this.prisma.$transaction(async tx => {
-      const inv = await tx.invoice.findUnique({ where: { id: invoiceId } });
-      if (!inv) throw new InvoiceNotFoundException(invoiceId);
-      if (inv.status !== InvoiceStatus.DRAFT) {
-        throw new InvoiceNotEditableException(inv.status);
-      }
-      if (inv.version !== dto.version) {
-        throw new InvoiceVersionMismatchException(dto.version, inv.version);
-      }
-      return tx.invoice.update({
-        where: { id: invoiceId },
-        data: { notes: dto.notes ?? null, version: { increment: 1 } },
-      });
-    });
+    return this.prisma.$transaction(
+      async tx => {
+        const inv = await tx.invoice.findUnique({ where: { id: invoiceId } });
+        if (!inv) throw new InvoiceNotFoundException(invoiceId);
+        if (inv.status !== InvoiceStatus.DRAFT) {
+          throw new InvoiceNotEditableException(inv.status);
+        }
+        if (inv.version !== dto.version) {
+          throw new InvoiceVersionMismatchException(dto.version, inv.version);
+        }
+        return tx.invoice.update({
+          where: { id: invoiceId },
+          data: { notes: dto.notes ?? null, version: { increment: 1 } },
+        });
+      },
+      // The version check above is a read-then-compare in application code,
+      // not a WHERE clause, so under the default READ COMMITTED two people
+      // editing the same draft invoice both read version N, both pass, and
+      // both write — one edit is lost and version jumps by 2, which then
+      // rejects the next legitimate edit with a confusing mismatch. Every
+      // other mutating method on this invoice (issue, voidInvoice,
+      // updateDiscount, recordPayment) already runs Serializable for exactly
+      // this reason; this one was the gap.
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async issue(invoiceId: string, dto: IssueInvoiceDto, actor: JwtPayload) {
