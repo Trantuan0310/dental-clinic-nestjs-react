@@ -13,6 +13,7 @@ import {
   canTransitionShift,
   validateAdjustmentReason,
 } from './payroll-state';
+import { PayrollStateException, PayrollValidationException } from './exceptions';
 
 describe('payroll state machine', () => {
   describe('canTransition', () => {
@@ -59,6 +60,15 @@ describe('payroll state machine', () => {
     it('throws on invalid transition', () => {
       expect(() => assertTransition(PayrollPeriodStatus.LOCKED, PayrollPeriodStatus.DRAFT)).toThrow(
         /Invalid payroll period transition/,
+      );
+    });
+
+    it('throws a 409 PayrollStateException, not a bare Error', () => {
+      // A bare Error falls through the global exception filter as a 500,
+      // so an ordinary double-click on "mark paid" surfaced as a system
+      // failure instead of a readable conflict.
+      expect(() => assertTransition(PayrollPeriodStatus.LOCKED, PayrollPeriodStatus.DRAFT)).toThrow(
+        PayrollStateException,
       );
     });
   });
@@ -189,7 +199,7 @@ describe('shift state transitions', () => {
 describe('validateAdjustmentReason', () => {
   it('requires 5+ chars for BONUS/PENALTY/DEDUCTION', () => {
     expect(() => validateAdjustmentReason(PayrollAdjustmentType.BONUS, 'abcd')).toThrow(
-      /at least 5 characters/,
+      /ít nhất 5 ký tự/,
     );
     expect(() => validateAdjustmentReason(PayrollAdjustmentType.BONUS, 'Thưởng KPI')).not.toThrow();
   });
@@ -197,11 +207,23 @@ describe('validateAdjustmentReason', () => {
   it('requires 50+ chars for MANUAL_OVERRIDE (BR-PAY-018)', () => {
     expect(() =>
       validateAdjustmentReason(PayrollAdjustmentType.MANUAL_OVERRIDE, 'Too short'),
-    ).toThrow(/at least 50 characters/);
+    ).toThrow(/ít nhất 50 ký tự/);
     const longReason =
       'Manual override because calculation incorrect, needs adjustment by admin per BR-PAY-018';
     expect(() =>
       validateAdjustmentReason(PayrollAdjustmentType.MANUAL_OVERRIDE, longReason),
     ).not.toThrow();
+  });
+
+  it('throws a 400 PayrollValidationException, not a bare Error', () => {
+    // AddAdjustmentDto has no @MinLength on `reason`, so this is the only
+    // thing enforcing it — as a bare Error the admin saw a 500 "Internal
+    // server error" for an ordinary typo-length reason.
+    expect(() => validateAdjustmentReason(PayrollAdjustmentType.BONUS, 'abcd')).toThrow(
+      PayrollValidationException,
+    );
+    expect(() =>
+      validateAdjustmentReason(PayrollAdjustmentType.MANUAL_OVERRIDE, 'Too short'),
+    ).toThrow(PayrollValidationException);
   });
 });

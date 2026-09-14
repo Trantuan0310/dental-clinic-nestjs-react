@@ -4,6 +4,7 @@ import {
   PayrollAdjustmentType,
   ShiftRegistrationStatus,
 } from '@prisma/client';
+import { PayrollStateException, PayrollValidationException } from './exceptions';
 
 export const isComputable = (status: PayrollPeriodStatus): boolean => {
   return status === PayrollPeriodStatus.DRAFT || status === PayrollPeriodStatus.REVIEWING;
@@ -59,19 +60,32 @@ export const assertTransition = (
   expectedStatus: PayrollPeriodStatus,
 ): void => {
   if (!canTransition(currentStatus, expectedStatus)) {
-    throw new Error(
+    // PayrollStateException (409), not a bare Error: this fires on ordinary
+    // user actions — double-clicking "Đánh dấu đã trả", or two admins acting
+    // on the same period at once — and a bare Error falls through the global
+    // filter as a 500 "Internal server error", so the UI shows a system
+    // failure instead of "this period was already paid". Mirrors how
+    // ShiftRegistrationService reports the same situation.
+    throw new PayrollStateException(
       `Invalid payroll period transition: cannot transition from ${currentStatus} to ${expectedStatus}`,
     );
   }
 };
 
+// AddAdjustmentDto only declares @IsString() on `reason`, so these two length
+// rules are the only thing enforcing them — and as bare Errors they fell
+// through the global filter as a 500. An admin typing a too-short reason on
+// the adjustment form got "Internal server error" instead of being told what
+// was wrong with their input, which is a 400.
 export const validateAdjustmentReason = (type: PayrollAdjustmentType, reason: string): void => {
   if (!reason || reason.trim().length < 5) {
-    throw new Error('Adjustment reason must be at least 5 characters');
+    throw new PayrollValidationException('Lý do điều chỉnh phải có ít nhất 5 ký tự');
   }
 
   if (type === 'MANUAL_OVERRIDE' && reason.trim().length < 50) {
-    throw new Error('Manual override requires a detailed reason (at least 50 characters)');
+    throw new PayrollValidationException(
+      'Ghi đè thủ công cần lý do chi tiết (ít nhất 50 ký tự)',
+    );
   }
 };
 

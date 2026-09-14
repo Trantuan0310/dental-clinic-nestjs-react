@@ -30,6 +30,21 @@ export class PayrollStateException extends HttpException {
   }
 }
 
+export class PayrollValidationException extends HttpException {
+  constructor(message: string) {
+    super(
+      {
+        statusCode: HttpStatus.BAD_REQUEST,
+        error: 'Bad Request',
+        code: 'PAYROLL_VALIDATION_FAILED',
+        message,
+      },
+      HttpStatus.BAD_REQUEST,
+    );
+    this.name = 'PayrollValidationException';
+  }
+}
+
 export class PeriodOverlapException extends HttpException {
   constructor(message: string) {
     super(
