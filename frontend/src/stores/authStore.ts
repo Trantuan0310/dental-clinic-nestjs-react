@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { UserInfo } from '@/types/auth';
 import { tokenStore } from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
 
 interface AuthState {
   user: UserInfo | null;
@@ -29,11 +30,28 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       _hasHydrated: false,
       setSession: (user, accessToken) => {
+        // React Query's cache is keyed by query params, not by who's
+        // logged in — several row-scoped queries (appointments/today,
+        // payroll/me/*) use the same key regardless of actor. Neither
+        // logout nor login does a full page reload (both just
+        // navigate()), so the QueryClient singleton — and its cache —
+        // survives a user switch in the same tab. Without this, a
+        // second person signing in within staleTime (30s) of the first
+        // person's session (a shared front-desk machine, or a stale
+        // silent refresh in a second tab picking up a different account)
+        // could briefly be served the previous user's cached data,
+        // including another dentist's salary or another dentist's
+        // appointment list.
+        const priorUserId = get().user?.id;
+        if (priorUserId && priorUserId !== user.id) {
+          queryClient.clear();
+        }
         tokenStore.set(accessToken);
         set({ user, accessToken, isAuthenticated: true });
       },
       clear: () => {
         tokenStore.clear();
+        queryClient.clear();
         set({ user: null, accessToken: null, isAuthenticated: false });
       },
       hydrate: () => set({ _hasHydrated: true }),
