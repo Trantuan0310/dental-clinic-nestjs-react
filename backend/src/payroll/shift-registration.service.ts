@@ -173,14 +173,28 @@ export class ShiftRegistrationService {
       throw new ShiftPastDateException('Cannot approve shift for past date');
     }
 
-    const updated = await this.prisma.shiftRegistration.update({
-      where: { id },
+    // Guarded write: only succeed if status is still what we just read.
+    // Without this, two admins racing to approve/reject the same PENDING
+    // shift (both had the approval inbox open) each pass the check above,
+    // then each plain-.update() unconditionally — last write wins, so one
+    // admin's decision silently overwrites the other's, while the audit
+    // log still records both actions even though only one is true in the
+    // final state. Mirrors the same guarded-updateMany pattern already
+    // used for inventory stock writes.
+    const result = await this.prisma.shiftRegistration.updateMany({
+      where: { id, status: shift.status },
       data: {
         status: ShiftRegistrationStatus.APPROVED,
         approvedByUserId: actorUserId,
         approvedAt: new Date(),
       },
     });
+    if (result.count === 0) {
+      throw new ShiftConflictException(
+        'Shift registration was changed by someone else — reload and try again',
+      );
+    }
+    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
 
     await this.audit.log({
       actorUserId,
@@ -200,14 +214,21 @@ export class ShiftRegistrationService {
       throw new ShiftConflictException(`Cannot reject shift in status ${shift.status}`);
     }
 
-    const updated = await this.prisma.shiftRegistration.update({
-      where: { id },
+    // See approve() above — same guarded-write race protection.
+    const result = await this.prisma.shiftRegistration.updateMany({
+      where: { id, status: shift.status },
       data: {
         status: ShiftRegistrationStatus.REJECTED,
         rejectionReason: dto.reason,
         approvedByUserId: actorUserId,
       },
     });
+    if (result.count === 0) {
+      throw new ShiftConflictException(
+        'Shift registration was changed by someone else — reload and try again',
+      );
+    }
+    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
 
     await this.audit.log({
       actorUserId,
@@ -269,13 +290,21 @@ export class ShiftRegistrationService {
       }
     }
 
-    const updated = await this.prisma.shiftRegistration.update({
-      where: { id },
+    // See approve() above — same guarded-write race protection (e.g. an
+    // admin cancelling right as another admin approves the same shift).
+    const cancelResult = await this.prisma.shiftRegistration.updateMany({
+      where: { id, status: shift.status },
       data: {
         status: ShiftRegistrationStatus.CANCELLED,
         cancelledAt: new Date(),
       },
     });
+    if (cancelResult.count === 0) {
+      throw new ShiftConflictException(
+        'Shift registration was changed by someone else — reload and try again',
+      );
+    }
+    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
 
     const auditMetadata: Record<string, unknown> = {
       byAdmin: isAdmin,

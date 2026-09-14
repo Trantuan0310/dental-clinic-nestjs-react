@@ -46,6 +46,7 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
             shiftRegistration: {
               findFirst: jest.fn(),
               findUnique: jest.fn(),
+              findUniqueOrThrow: jest.fn(),
               findMany: jest.fn().mockResolvedValue([]),
               create: jest.fn(),
               update: jest.fn(),
@@ -209,7 +210,8 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
         startTime: `${hh}:${mm}`,
         status: ShiftRegistrationStatus.APPROVED,
       });
-      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         id: 'shift-1',
         status: ShiftRegistrationStatus.CANCELLED,
       });
@@ -235,7 +237,8 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
         startTime: '09:00',
         status: ShiftRegistrationStatus.APPROVED,
       });
-      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         id: 'shift-2',
         status: ShiftRegistrationStatus.CANCELLED,
       });

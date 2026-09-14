@@ -80,6 +80,7 @@ describe('ShiftRegistrationService', () => {
             shiftRegistration: {
               findFirst: jest.fn(),
               findUnique: jest.fn(),
+              findUniqueOrThrow: jest.fn(),
               findMany: jest.fn().mockResolvedValue([]),
               create: jest.fn(),
               update: jest.fn(),
@@ -195,7 +196,8 @@ describe('ShiftRegistrationService', () => {
   describe('approve', () => {
     it('transitions PENDING → APPROVED', async () => {
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue(mockShiftPending);
-      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
         status: ShiftRegistrationStatus.APPROVED,
       });
@@ -221,13 +223,28 @@ describe('ShiftRegistrationService', () => {
 
       await expect(service.approve('shift-1', 'admin-1')).rejects.toThrow();
     });
+
+    it('throws ShiftConflictException instead of silently overwriting a concurrent decision', async () => {
+      // Two admins both had the approval inbox open on the same PENDING
+      // shift; both reads pass the status check, but a second admin's
+      // reject() already flipped the row by the time this write runs.
+      // The guarded updateMany matches 0 rows — this must surface as a
+      // conflict, not silently report success while approvedByUserId /
+      // approvedAt get lost to whichever write actually landed.
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue(mockShiftPending);
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(service.approve('shift-1', 'admin-1')).rejects.toThrow(ShiftConflictException);
+      expect(prisma.shiftRegistration.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
   });
 
   describe('cancel', () => {
     it('BS cancels shift ≥ 24h before', async () => {
       // mockShiftPending.date is FUTURE_DATE (30 days out) — well past the 24h cutoff
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue(mockShiftPending);
-      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
         status: ShiftRegistrationStatus.CANCELLED,
       });
@@ -280,7 +297,8 @@ describe('ShiftRegistrationService', () => {
         startTime: `${hh}:${mm}`,
         status: ShiftRegistrationStatus.APPROVED,
       });
-      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
         status: ShiftRegistrationStatus.CANCELLED,
       });
