@@ -285,70 +285,82 @@ export class InventoryService {
   }
 
   async adjustStock(itemId: string, dto: StockAdjustmentDto, actor: JwtPayload) {
-    return this.prisma.$transaction(async tx => {
-      const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
-      if (!item || item.deletedAt) throw new InventoryItemNotFoundException(itemId);
+    return this.prisma.$transaction(
+      async tx => {
+        const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
+        if (!item || item.deletedAt) throw new InventoryItemNotFoundException(itemId);
 
-      // BR-INV-004: Adjustment is an ABSOLUTE set of quantityOnHand.
-      // Clients may send either:
-      //   - `newQuantity` (target absolute value, recommended)
-      //   - `quantity`    (delta; the service resolves to current + delta)
-      // If both are provided, `newQuantity` wins. At least one must be set.
-      const before = Number(item.quantityOnHand);
-      let after: number;
-      if (dto.newQuantity !== undefined && dto.newQuantity !== null) {
-        after = Number(dto.newQuantity);
-      } else if (dto.quantity !== undefined && dto.quantity !== null) {
-        after = before + Number(dto.quantity);
-      } else {
-        throw new StockMovementInvalidException(
-          'StockAdjustmentDto requires either `newQuantity` (absolute) or `quantity` (delta)',
-        );
-      }
-      if (after < 0) {
-        throw new StockMovementInvalidException('Adjusted quantity cannot be negative');
-      }
-      const diff = after - before;
+        // BR-INV-004: Adjustment is an ABSOLUTE set of quantityOnHand.
+        // Clients may send either:
+        //   - `newQuantity` (target absolute value, recommended)
+        //   - `quantity`    (delta; the service resolves to current + delta)
+        // If both are provided, `newQuantity` wins. At least one must be set.
+        const before = Number(item.quantityOnHand);
+        let after: number;
+        if (dto.newQuantity !== undefined && dto.newQuantity !== null) {
+          after = Number(dto.newQuantity);
+        } else if (dto.quantity !== undefined && dto.quantity !== null) {
+          after = before + Number(dto.quantity);
+        } else {
+          throw new StockMovementInvalidException(
+            'StockAdjustmentDto requires either `newQuantity` (absolute) or `quantity` (delta)',
+          );
+        }
+        if (after < 0) {
+          throw new StockMovementInvalidException('Adjusted quantity cannot be negative');
+        }
+        const diff = after - before;
 
-      // Atomic absolute-set: use guarded updateMany in case item was just
-      // soft-deleted in a concurrent tx.
-      const setResult = await tx.inventoryItem.updateMany({
-        where: { id: itemId, deletedAt: null },
-        data: { quantityOnHand: after },
-      });
-      if (setResult.count === 0) {
-        throw new InventoryItemNotFoundException(itemId);
-      }
+        // Atomic absolute-set: use guarded updateMany in case item was just
+        // soft-deleted in a concurrent tx.
+        const setResult = await tx.inventoryItem.updateMany({
+          where: { id: itemId, deletedAt: null },
+          data: { quantityOnHand: after },
+        });
+        if (setResult.count === 0) {
+          throw new InventoryItemNotFoundException(itemId);
+        }
 
-      await tx.stockMovement.create({
-        data: {
-          inventoryItemId: itemId,
-          type: MovementType.ADJUSTMENT,
-          quantityBefore: before,
-          quantityAfter: after,
-          diff,
-          reason: dto.reason,
-          performedBy: actor.sub,
-        },
-      });
+        await tx.stockMovement.create({
+          data: {
+            inventoryItemId: itemId,
+            type: MovementType.ADJUSTMENT,
+            quantityBefore: before,
+            quantityAfter: after,
+            diff,
+            reason: dto.reason,
+            performedBy: actor.sub,
+          },
+        });
 
-      await this.audit.log({
-        action: 'INVENTORY_ADJUSTMENT',
-        actorUserId: actor.sub,
-        targetType: 'inventory_item',
-        targetId: itemId,
-        metadata: { before, after, diff, reason: dto.reason },
-      });
+        await this.audit.log({
+          action: 'INVENTORY_ADJUSTMENT',
+          actorUserId: actor.sub,
+          targetType: 'inventory_item',
+          targetId: itemId,
+          metadata: { before, after, diff, reason: dto.reason },
+        });
 
-      // BR-INV-005: low-stock notification
-      if (after <= Number(item.minStockLevel) && before > Number(item.minStockLevel)) {
-        this.logger.warn(
-          `Low-stock triggered for ${item.sku}: ${after} ${item.unit} ≤ min ${item.minStockLevel}`,
-        );
-      }
+        // BR-INV-005: low-stock notification
+        if (after <= Number(item.minStockLevel) && before > Number(item.minStockLevel)) {
+          this.logger.warn(
+            `Low-stock triggered for ${item.sku}: ${after} ${item.unit} ≤ min ${item.minStockLevel}`,
+          );
+        }
 
-      return { ...item, quantityOnHand: after };
-    });
+        return { ...item, quantityOnHand: after };
+      },
+      // Serializable: `before`/`after` are computed from a plain read, then
+      // written as an absolute value — unlike stockIn/stockOut (atomic
+      // increment/decrement), this can't be made race-safe by the write
+      // alone. Without this, two actors adjusting the same item around the
+      // same time (front desk correcting a count while admin does a bulk
+      // audit) both read the same `before`, and the second write silently
+      // overwrites the first — one adjustment is lost with no error.
+      // Matches the same fix already applied to this exact
+      // read-compute-write shape in billing/users/patients/payroll.
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async listMovements(query: ListMovementsQueryDto) {

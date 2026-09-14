@@ -178,6 +178,28 @@ describe('InventoryService', () => {
         }),
       );
     });
+
+    it('runs inside a Serializable transaction', async () => {
+      // before/after are computed from a plain read then written as an
+      // absolute value — unlike stockIn/stockOut (atomic increment/
+      // decrement), that's only race-safe under Serializable isolation.
+      // Two concurrent adjustments of the same item (front desk correcting
+      // a count while admin runs a bulk audit) would otherwise both read
+      // the same `before` and the second write would silently overwrite
+      // the first, losing one adjustment with no error.
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(
+        validInventoryItem({ quantityOnHand: new Prisma.Decimal(50) }),
+      );
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.adjustStock('item-1', { newQuantity: 70, reason: 'count correction' } as any, adminActor);
+
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ isolationLevel: 'Serializable' }),
+      );
+    });
   });
 
   describe('getById', () => {
