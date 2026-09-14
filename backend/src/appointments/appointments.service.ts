@@ -190,14 +190,30 @@ export class AppointmentsService {
       throw new InvalidAppointmentStateException('Patient is deleted');
     }
 
-    const updated = await this.prisma.appointment.update({
-      where: { id: appointmentId },
+    // Guarded write: only succeed if status is still what we just read.
+    // Front-desk check-in/cancel/no-show are the most concurrent-actor-prone
+    // flows in the app — two receptionists (or a shift handoff) acting on
+    // the same appointment at once both pass the status check above, then
+    // a plain .update() would let whichever write lands last silently win
+    // (e.g. cancel overwriting a check-in that already happened, patient
+    // physically in the waiting room). Same guarded-updateMany pattern as
+    // inventory stock writes and shift-registration approve/reject/cancel.
+    const checkInResult = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, status: appt.status },
       data: {
         status: AppointmentStatus.CHECKED_IN,
         checkedInAt: new Date(now),
         checkedInBy: actor.sub,
         updatedBy: actor.sub,
       },
+    });
+    if (checkInResult.count === 0) {
+      throw new InvalidAppointmentStateException(
+        'Appointment was changed by someone else — reload and try again',
+      );
+    }
+    const updated = await this.prisma.appointment.findUniqueOrThrow({
+      where: { id: appointmentId },
     });
 
     await this.audit.log({
@@ -235,10 +251,17 @@ export class AppointmentsService {
       );
     }
 
-    return this.prisma.appointment.update({
-      where: { id: appointmentId },
+    // See checkIn() above — same guarded-write race protection.
+    const result = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, status: appt.status },
       data: { status: AppointmentStatus.IN_PROGRESS, updatedBy: actor.sub },
     });
+    if (result.count === 0) {
+      throw new InvalidAppointmentStateException(
+        'Appointment was changed by someone else — reload and try again',
+      );
+    }
+    return this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
   }
 
   /**
@@ -298,8 +321,9 @@ export class AppointmentsService {
     }
 
     const updated = await this.prisma.$transaction(async tx => {
-      const u = await tx.appointment.update({
-        where: { id: appointmentId },
+      // See checkIn() above — same guarded-write race protection.
+      const cancelResult = await tx.appointment.updateMany({
+        where: { id: appointmentId, status: appt.status },
         data: {
           status: AppointmentStatus.CANCELLED,
           cancelledAt: new Date(),
@@ -308,6 +332,12 @@ export class AppointmentsService {
           updatedBy: actor.sub,
         },
       });
+      if (cancelResult.count === 0) {
+        throw new InvalidAppointmentStateException(
+          'Appointment was changed by someone else — reload and try again',
+        );
+      }
+      const u = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
 
       // Cascade: BD-0008 — if Encounter is in_progress, mark CANCELLED.
       // Handled here in same tx so ROLLBACK rolls back both. Sync emit below.
@@ -367,14 +397,23 @@ export class AppointmentsService {
       throw new InvalidAppointmentStateException(`Cannot mark no-show from status ${appt.status}`);
     }
 
-    const updated = await this.prisma.appointment.update({
-      where: { id: appointmentId },
+    // See checkIn() above — same guarded-write race protection.
+    const noShowResult = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, status: appt.status },
       data: {
         status: AppointmentStatus.NO_SHOW,
         noShowAt: new Date(),
         cancelledReason: dto.reason,
         updatedBy: actor.sub,
       },
+    });
+    if (noShowResult.count === 0) {
+      throw new InvalidAppointmentStateException(
+        'Appointment was changed by someone else — reload and try again',
+      );
+    }
+    const updated = await this.prisma.appointment.findUniqueOrThrow({
+      where: { id: appointmentId },
     });
 
     await this.audit.log({

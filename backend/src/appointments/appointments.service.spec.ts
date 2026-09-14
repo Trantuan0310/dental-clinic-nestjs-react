@@ -128,7 +128,8 @@ describe('AppointmentsService', () => {
         id: 'patient-1',
         deletedAt: null,
       });
-      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...existing,
         status: AppointmentStatus.CHECKED_IN,
       });
@@ -151,6 +152,34 @@ describe('AppointmentsService', () => {
 
       await expect(service.checkIn('appt-1', false, undefined, actor)).rejects.toThrow();
     });
+
+    it('throws instead of silently overwriting a concurrent status change', async () => {
+      // Two receptionists (or a shift handoff) acting on the same
+      // appointment at once: both reads pass the status check, but by the
+      // time this write runs someone else's action (cancel, no-show...)
+      // already changed the row. The guarded updateMany matches 0 rows —
+      // this must surface as a conflict, not silently check the patient in
+      // over a cancellation that already happened.
+      const existing = {
+        id: 'appt-1',
+        status: AppointmentStatus.SCHEDULED,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        startAt: new Date(Date.now() + 5 * 60 * 1000),
+        endAt: new Date(Date.now() + 35 * 60 * 1000),
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(service.checkIn('appt-1', false, undefined, actor)).rejects.toThrow(
+        /changed by someone else/,
+      );
+      expect(prisma.appointment.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
   });
 
   describe('cancel', () => {
@@ -163,7 +192,8 @@ describe('AppointmentsService', () => {
       };
 
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(existing);
-      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...existing,
         status: AppointmentStatus.CANCELLED,
       });
@@ -320,7 +350,8 @@ describe('AppointmentsService', () => {
     it('cancel() still works for a dentist\'s own appointment ≥24h out', async () => {
       const ownAppt = { ...otherDentistAppt, dentistId: 'dentist-self' };
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
-      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...ownAppt,
         status: AppointmentStatus.CANCELLED,
       });
@@ -345,7 +376,8 @@ describe('AppointmentsService', () => {
         status: AppointmentStatus.CHECKED_IN,
       };
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
-      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...ownAppt,
         status: AppointmentStatus.IN_PROGRESS,
       });
@@ -366,7 +398,8 @@ describe('AppointmentsService', () => {
     it('markNoShow() still works for a dentist\'s own appointment', async () => {
       const ownAppt = { ...otherDentistAppt, dentistId: 'dentist-self' };
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
-      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...ownAppt,
         status: AppointmentStatus.NO_SHOW,
       });
@@ -408,7 +441,8 @@ describe('AppointmentsService', () => {
       };
 
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(existing);
-      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         ...existing,
         status: AppointmentStatus.NO_SHOW,
       });
