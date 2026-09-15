@@ -627,7 +627,11 @@ export class AppointmentsService {
     };
   }
 
-  async getWaitingQueue(dentistId: string | undefined, date: string | undefined, actor: JwtPayload) {
+  async getWaitingQueue(
+    dentistId: string | undefined,
+    date: string | undefined,
+    actor: JwtPayload,
+  ) {
     const target = date ?? new Date().toISOString().slice(0, 10);
     const dayStart = new Date(`${target}T00:00:00Z`);
     const dayEnd = new Date(dayStart);
@@ -1001,6 +1005,9 @@ export class AppointmentsService {
     },
     actor: JwtPayload,
   ) {
+    if (dto.dentistId !== actor.sub && !actor.permissions.includes('shift.approve')) {
+      throw new AppointmentNotFoundException(dto.dentistId);
+    }
     if (this.toMinutes(dto.endTime) <= this.toMinutes(dto.startTime)) {
       throw new InvalidAppointmentStateException('endTime must be after startTime');
     }

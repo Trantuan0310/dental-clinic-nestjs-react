@@ -275,9 +275,15 @@ export class BillingService {
     return this.formatInvoice(inv);
   }
 
-  async getInvoiceByEncounterId(encounterId: string) {
-    return this.prisma.invoice.findUnique({
-      where: { encounterId },
+  async getInvoiceByEncounterId(encounterId: string, actor: JwtPayload) {
+    return this.prisma.invoice.findFirst({
+      where: {
+        encounterId,
+        deletedAt: null,
+        ...(!actor.permissions.includes('invoice.read.any') && {
+          encounter: { dentistId: actor.sub },
+        }),
+      },
       include: { items: { orderBy: { sequence: 'asc' } } },
     });
   }

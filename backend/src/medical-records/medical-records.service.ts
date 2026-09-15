@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,7 +29,7 @@ import { isMinor } from '../patients/domain/patient-rules';
 /**
  * MedicalRecordsService — owns:
  *   - Encounter state machine (start via Appointment IN_PROGRESS, close)
- *   - Clinical note (CRUD + lock) and addendums (only while encounter open)
+ *   - Clinical note (CRUD + lock) and addendums (within 30 days after close)
  *   - Treatment with inventory usages (auto stock-out on encounter close)
  *   - Prescription (one per encounter)
  *   - Dental chart snapshot
@@ -79,6 +79,29 @@ export class MedicalRecordsService {
    */
   private isRowScopedDentist(actor: JwtPayload): boolean {
     return !actor.permissions.includes('encounter.read.any');
+  }
+
+  private async lockEncounter(tx: Prisma.TransactionClient, encounterId: string): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM encounters WHERE id = ${encounterId}::uuid FOR UPDATE`;
+  }
+
+  private async withEditableEncounter<T>(
+    encounterId: string,
+    actor: JwtPayload,
+    write: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.prisma.$transaction(async tx => {
+      // All clinical writes and close share this lock, including first-note creation.
+      await this.lockEncounter(tx, encounterId);
+      const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
+      if (!encounter || (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub)) {
+        throw new EncounterNotFoundException(encounterId);
+      }
+      if (encounter.status !== EncounterStatus.IN_PROGRESS) {
+        throw new EncounterNotClosableException('Only IN_PROGRESS encounters can be edited');
+      }
+      return write(tx);
+    });
   }
 
   // ==========================================================================
@@ -380,6 +403,7 @@ export class MedicalRecordsService {
   }> {
     return this.prisma
       .$transaction(async tx => {
+        await this.lockEncounter(tx, encounterId);
         const encounter = await tx.encounter.findUnique({
           where: { id: encounterId },
           include: {
@@ -553,6 +577,7 @@ export class MedicalRecordsService {
    */
   async cancelEncounter(encounterId: string, reason: string, actor: JwtPayload) {
     return this.prisma.$transaction(async tx => {
+      await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
       if (!encounter) throw new EncounterNotFoundException(encounterId);
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
@@ -585,80 +610,82 @@ export class MedicalRecordsService {
   // ==========================================================================
 
   async upsertClinicalNote(encounterId: string, dto: UpsertClinicalNoteDto, actor: JwtPayload) {
-    const encounter = await this.prisma.encounter.findUnique({
-      where: { id: encounterId },
-    });
-    if (!encounter) throw new EncounterNotFoundException(encounterId);
-    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
-      throw new EncounterNotFoundException(encounterId);
-    }
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      const encounter = await tx.encounter.findUnique({
+        where: { id: encounterId },
+      });
+      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+        throw new EncounterNotFoundException(encounterId);
+      }
 
-    const lockedMessage =
-      'Clinical note is locked because encounter is closed; only addendums allowed (BR-MR-007)';
+      const lockedMessage =
+        'Clinical note is locked because encounter is closed; only addendums allowed (BR-MR-007)';
 
-    // BR-MR-007 was enforced only through the note's isLocked flag, but that
-    // flag is a cache of "the encounter is closed" and can be false on a
-    // closed encounter: closeEncounter() sets it with an updateMany that
-    // matches nothing when no note row exists yet, and seeded/legacy rows
-    // never went through that path at all. Observed on real data — an
-    // encounter closed five days earlier whose note still read
-    // isLocked: false, leaving the sealed record freely rewritable. The
-    // encounter's own status is the source of truth, so check it too.
-    if (encounter.status !== EncounterStatus.IN_PROGRESS) {
-      throw new EncounterNotClosableException(lockedMessage);
-    }
-
-    // The lock check has to live in the WHERE clause of the write, not in a
-    // separate read: closeEncounter() locks the note (isLocked: true) from
-    // its own transaction, so a plain read-then-upsert lets an edit that was
-    // in flight when the encounter closed land *after* the lock — silently
-    // rewriting a clinical record that is supposed to be sealed, with no
-    // addendum trail. The two actors need not be different people (a dentist
-    // closing on one device while saving on another), but an admin closing
-    // an encounter the dentist is still writing up is the common case.
-    const guarded = await this.prisma.clinicalNote.updateMany({
-      where: { encounterId, isLocked: false },
-      data: {
-        ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
-        ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
-        ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
-        ...(dto.notes !== undefined && { notes: dto.notes }),
-        lastEditedBy: actor.sub,
-      },
-    });
-
-    let note;
-    if (guarded.count === 0) {
-      // No unlocked row matched: either the note is locked, or it doesn't
-      // exist yet and this is the first save for the encounter.
-      const current = await this.prisma.clinicalNote.findUnique({ where: { encounterId } });
-      if (current?.isLocked) {
+      // BR-MR-007 was enforced only through the note's isLocked flag, but that
+      // flag is a cache of "the encounter is closed" and can be false on a
+      // closed encounter: closeEncounter() sets it with an updateMany that
+      // matches nothing when no note row exists yet, and seeded/legacy rows
+      // never went through that path at all. Observed on real data — an
+      // encounter closed five days earlier whose note still read
+      // isLocked: false, leaving the sealed record freely rewritable. The
+      // encounter's own status is the source of truth, so check it too.
+      if (encounter.status !== EncounterStatus.IN_PROGRESS) {
         throw new EncounterNotClosableException(lockedMessage);
       }
-      note = await this.prisma.clinicalNote.create({
+
+      // The lock check has to live in the WHERE clause of the write, not in a
+      // separate read: closeEncounter() locks the note (isLocked: true) from
+      // its own transaction, so a plain read-then-upsert lets an edit that was
+      // in flight when the encounter closed land *after* the lock — silently
+      // rewriting a clinical record that is supposed to be sealed, with no
+      // addendum trail. The two actors need not be different people (a dentist
+      // closing on one device while saving on another), but an admin closing
+      // an encounter the dentist is still writing up is the common case.
+      const guarded = await tx.clinicalNote.updateMany({
+        where: { encounterId, isLocked: false },
         data: {
-          encounterId,
-          chiefComplaint: dto.chiefComplaint ?? null,
-          diagnosis: dto.diagnosis ?? null,
-          treatmentPlan: dto.treatmentPlan ?? null,
-          notes: dto.notes ?? null,
+          ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
+          ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
+          ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
           lastEditedBy: actor.sub,
         },
       });
-    } else {
-      note = await this.prisma.clinicalNote.findUniqueOrThrow({ where: { encounterId } });
-    }
 
-    await this.audit.log({
-      action: 'CLINICAL_NOTE_UPSERTED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'encounter',
-      targetId: encounterId,
-      metadata: { noteId: note.id },
+      let note;
+      if (guarded.count === 0) {
+        // No unlocked row matched: either the note is locked, or it doesn't
+        // exist yet and this is the first save for the encounter.
+        const current = await tx.clinicalNote.findUnique({ where: { encounterId } });
+        if (current?.isLocked) {
+          throw new EncounterNotClosableException(lockedMessage);
+        }
+        note = await tx.clinicalNote.create({
+          data: {
+            encounterId,
+            chiefComplaint: dto.chiefComplaint ?? null,
+            diagnosis: dto.diagnosis ?? null,
+            treatmentPlan: dto.treatmentPlan ?? null,
+            notes: dto.notes ?? null,
+            lastEditedBy: actor.sub,
+          },
+        });
+      } else {
+        note = await tx.clinicalNote.findUniqueOrThrow({ where: { encounterId } });
+      }
+
+      await this.audit.log({
+        action: 'CLINICAL_NOTE_UPSERTED',
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'encounter',
+        targetId: encounterId,
+        metadata: { noteId: note.id },
+      });
+
+      return note;
     });
-
-    return note;
   }
 
   async addAddendum(encounterId: string, dto: AddAddendumDto, actor: JwtPayload) {
@@ -673,10 +700,14 @@ export class MedicalRecordsService {
     if (!encounter.clinicalNote) {
       throw new EncounterNotClosableException('No clinical note exists yet');
     }
-    if (encounter.clinicalNote.isLocked && encounter.status === EncounterStatus.IN_PROGRESS) {
-      // While IN_PROGRESS, addendums allowed even if locked
-    } else if (encounter.clinicalNote.isLocked) {
-      throw new EncounterNotClosableException('Encounter is closed');
+    if (encounter.status !== EncounterStatus.IN_PROGRESS) {
+      if (encounter.status !== EncounterStatus.COMPLETED || !encounter.closedAt) {
+        throw new ForbiddenException('Addendums require an active or completed encounter');
+      }
+      // BR-MR-005: append corrections without modifying the sealed original note.
+      if (Date.now() >= encounter.closedAt.getTime() + 30 * 24 * 60 * 60 * 1000) {
+        throw new ForbiddenException('Addendum window expired');
+      }
     }
 
     const addendum = await this.prisma.clinicalNoteAddendum.create({
@@ -703,57 +734,61 @@ export class MedicalRecordsService {
   // ==========================================================================
 
   async createTreatment(encounterId: string, dto: CreateTreatmentDto, actor: JwtPayload) {
-    const encounter = await this.prisma.encounter.findUnique({ where: { id: encounterId } });
-    if (!encounter) throw new EncounterNotFoundException(encounterId);
-    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
-      throw new EncounterNotFoundException(encounterId);
-    }
-    if (encounter.status !== EncounterStatus.IN_PROGRESS) {
-      throw new EncounterNotClosableException('Cannot add treatments to non-IN_PROGRESS encounter');
-    }
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
+      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+        throw new EncounterNotFoundException(encounterId);
+      }
+      if (encounter.status !== EncounterStatus.IN_PROGRESS) {
+        throw new EncounterNotClosableException(
+          'Cannot add treatments to non-IN_PROGRESS encounter',
+        );
+      }
 
-    // Determine next sequence
-    const maxSeq = await this.prisma.treatment.aggregate({
-      where: { encounterId, deletedAt: null },
-      _max: { sequence: true },
-    });
-    const sequence = (maxSeq._max.sequence ?? -1) + 1;
-
-    const treatment = await this.prisma.$transaction(async tx => {
-      const t = await tx.treatment.create({
-        data: {
-          encounterId,
-          procedure: dto.procedure,
-          description: dto.description ?? null,
-          unitPrice: dto.unitPrice,
-          durationMinutes: dto.durationMinutes ?? null,
-          toothNumbers: (dto.toothNumbers ?? []) as unknown as Prisma.InputJsonValue,
-          sequence,
-          createdBy: actor.sub,
-        },
+      // Determine next sequence
+      const maxSeq = await tx.treatment.aggregate({
+        where: { encounterId, deletedAt: null },
+        _max: { sequence: true },
       });
-      for (const usage of dto.inventoryUsages ?? []) {
-        await tx.treatmentInventoryUsage.create({
+      const sequence = (maxSeq._max.sequence ?? -1) + 1;
+
+      const treatment = await (async () => {
+        const t = await tx.treatment.create({
           data: {
-            treatmentId: t.id,
-            inventoryItemId: usage.inventoryItemId,
-            quantity: usage.quantity,
-            unit: usage.unit,
+            encounterId,
+            procedure: dto.procedure,
+            description: dto.description ?? null,
+            unitPrice: dto.unitPrice,
+            durationMinutes: dto.durationMinutes ?? null,
+            toothNumbers: (dto.toothNumbers ?? []) as unknown as Prisma.InputJsonValue,
+            sequence,
+            createdBy: actor.sub,
           },
         });
-      }
-      return t;
-    });
+        for (const usage of dto.inventoryUsages ?? []) {
+          await tx.treatmentInventoryUsage.create({
+            data: {
+              treatmentId: t.id,
+              inventoryItemId: usage.inventoryItemId,
+              quantity: usage.quantity,
+              unit: usage.unit,
+            },
+          });
+        }
+        return t;
+      })();
 
-    await this.audit.log({
-      action: 'TREATMENT_CREATED',
-      actorUserId: actor.sub,
-      targetType: 'encounter',
-      targetId: encounterId,
-      metadata: { treatmentId: treatment.id, procedure: dto.procedure },
-    });
+      await this.audit.log({
+        action: 'TREATMENT_CREATED',
+        actorUserId: actor.sub,
+        targetType: 'encounter',
+        targetId: encounterId,
+        metadata: { treatmentId: treatment.id, procedure: dto.procedure },
+      });
 
-    return treatment;
+      return treatment;
+    });
   }
 
   async updateTreatment(
@@ -762,48 +797,52 @@ export class MedicalRecordsService {
     dto: UpdateTreatmentDto,
     actor: JwtPayload,
   ) {
-    const t = await this.prisma.treatment.findUnique({
-      where: { id: treatmentId },
-      include: { encounter: { select: { dentistId: true } } },
-    });
-    if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
-    if (t.deletedAt) throw new TreatmentNotInEncounterException();
-    if (this.isRowScopedDentist(actor) && t.encounter.dentistId !== actor.sub) {
-      throw new TreatmentNotInEncounterException();
-    }
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      const t = await tx.treatment.findUnique({
+        where: { id: treatmentId },
+        include: { encounter: { select: { dentistId: true } } },
+      });
+      if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
+      if (t.deletedAt) throw new TreatmentNotInEncounterException();
+      if (this.isRowScopedDentist(actor) && t.encounter.dentistId !== actor.sub) {
+        throw new TreatmentNotInEncounterException();
+      }
 
-    return this.prisma.treatment.update({
-      where: { id: treatmentId },
-      data: {
-        ...(dto.procedure !== undefined && { procedure: dto.procedure }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
-        ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
-      },
+      return tx.treatment.update({
+        where: { id: treatmentId },
+        data: {
+          ...(dto.procedure !== undefined && { procedure: dto.procedure }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
+          ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
+        },
+      });
     });
   }
 
   async deleteTreatment(encounterId: string, treatmentId: string, actor: JwtPayload) {
-    const t = await this.prisma.treatment.findUnique({
-      where: { id: treatmentId },
-      include: { encounter: { select: { dentistId: true } } },
-    });
-    if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
-    if (this.isRowScopedDentist(actor) && t.encounter.dentistId !== actor.sub) {
-      throw new TreatmentNotInEncounterException();
-    }
-    if (t.deletedAt) return; // idempotent
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      const t = await tx.treatment.findUnique({
+        where: { id: treatmentId },
+        include: { encounter: { select: { dentistId: true } } },
+      });
+      if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
+      if (this.isRowScopedDentist(actor) && t.encounter.dentistId !== actor.sub) {
+        throw new TreatmentNotInEncounterException();
+      }
+      if (t.deletedAt) return; // idempotent
 
-    await this.prisma.treatment.update({
-      where: { id: treatmentId },
-      data: { deletedAt: new Date() },
-    });
-    await this.audit.log({
-      action: 'TREATMENT_DELETED',
-      actorUserId: actor.sub,
-      targetType: 'encounter',
-      targetId: encounterId,
-      metadata: { treatmentId },
+      await tx.treatment.update({
+        where: { id: treatmentId },
+        data: { deletedAt: new Date() },
+      });
+      await this.audit.log({
+        action: 'TREATMENT_DELETED',
+        actorUserId: actor.sub,
+        targetType: 'encounter',
+        targetId: encounterId,
+        metadata: { treatmentId },
+      });
     });
   }
 
@@ -812,60 +851,62 @@ export class MedicalRecordsService {
   // ==========================================================================
 
   async upsertPrescription(encounterId: string, dto: CreatePrescriptionDto, actor: JwtPayload) {
-    const encounter = await this.prisma.encounter.findUnique({ where: { id: encounterId } });
-    if (!encounter) throw new EncounterNotFoundException(encounterId);
-    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
-      throw new EncounterNotFoundException(encounterId);
-    }
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
+      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+        throw new EncounterNotFoundException(encounterId);
+      }
 
-    const existing = await this.prisma.prescription.findUnique({ where: { encounterId } });
-    if (existing) {
-      throw new PrescriptionAlreadyExistsException();
-    }
+      const existing = await tx.prescription.findUnique({ where: { encounterId } });
+      if (existing) {
+        throw new PrescriptionAlreadyExistsException();
+      }
 
-    const prescription = await this.prisma.$transaction(async tx => {
-      const p = await tx.prescription.create({
-        data: {
-          encounterId,
-          diagnosis: dto.diagnosis ?? null,
-          instructions: dto.instructions ?? null,
-          followUpNote: dto.followUpNote ?? null,
-          notes: dto.notes ?? null,
-          createdBy: actor.sub,
-        },
-      });
-      for (let i = 0; i < dto.lines.length; i++) {
-        const line = dto.lines[i];
-        await tx.prescriptionLine.create({
+      const prescription = await (async () => {
+        const p = await tx.prescription.create({
           data: {
-            prescriptionId: p.id,
-            sequence: i,
-            drugName: line.drugName,
-            dosage: line.dosage ?? '',
-            frequency: line.frequency ?? '',
-            duration: line.durationDays ? String(line.durationDays) : '',
-            instructions: line.instructions ?? null,
+            encounterId,
+            diagnosis: dto.diagnosis ?? null,
+            instructions: dto.instructions ?? null,
+            followUpNote: dto.followUpNote ?? null,
+            notes: dto.notes ?? null,
+            createdBy: actor.sub,
           },
         });
-      }
-      return p;
-    });
+        for (let i = 0; i < dto.lines.length; i++) {
+          const line = dto.lines[i];
+          await tx.prescriptionLine.create({
+            data: {
+              prescriptionId: p.id,
+              sequence: i,
+              drugName: line.drugName,
+              dosage: line.dosage ?? '',
+              frequency: line.frequency ?? '',
+              duration: line.durationDays ? String(line.durationDays) : '',
+              instructions: line.instructions ?? null,
+            },
+          });
+        }
+        return p;
+      })();
 
-    await this.audit.log({
-      action: 'PRESCRIPTION_CREATED',
-      actorUserId: actor.sub,
-      targetType: 'encounter',
-      targetId: encounterId,
-      metadata: {
-        prescriptionId: prescription.id,
-        lineCount: dto.lines.length,
-        hasDiagnosis: !!dto.diagnosis,
-        hasInstructions: !!dto.instructions,
-        hasFollowUpNote: !!dto.followUpNote,
-      },
-    });
+      await this.audit.log({
+        action: 'PRESCRIPTION_CREATED',
+        actorUserId: actor.sub,
+        targetType: 'encounter',
+        targetId: encounterId,
+        metadata: {
+          prescriptionId: prescription.id,
+          lineCount: dto.lines.length,
+          hasDiagnosis: !!dto.diagnosis,
+          hasInstructions: !!dto.instructions,
+          hasFollowUpNote: !!dto.followUpNote,
+        },
+      });
 
-    return prescription;
+      return prescription;
+    });
   }
 
   /**
@@ -877,37 +918,41 @@ export class MedicalRecordsService {
    * and bumps `version` for optimistic concurrency.
    */
   async updatePrescription(prescriptionId: string, dto: UpdatePrescriptionDto, actor: JwtPayload) {
-    const existing = await this.prisma.prescription.findUnique({
-      where: { id: prescriptionId },
-      include: { encounter: { select: { dentistId: true } } },
-    });
-    if (!existing || existing.deletedAt) {
-      throw new EncounterNotFoundException(prescriptionId);
-    }
-    if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
-      throw new EncounterNotFoundException(prescriptionId);
-    }
+    const parent = await this.prisma.prescription.findUnique({ where: { id: prescriptionId } });
+    if (!parent || parent.deletedAt) throw new EncounterNotFoundException(prescriptionId);
+    return this.withEditableEncounter(parent.encounterId, actor, async tx => {
+      const existing = await tx.prescription.findUnique({
+        where: { id: prescriptionId },
+        include: { encounter: { select: { dentistId: true } } },
+      });
+      if (!existing || existing.deletedAt) {
+        throw new EncounterNotFoundException(prescriptionId);
+      }
+      if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
+        throw new EncounterNotFoundException(prescriptionId);
+      }
 
-    const updated = await this.prisma.prescription.update({
-      where: { id: prescriptionId },
-      data: {
-        ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
-        ...(dto.instructions !== undefined && { instructions: dto.instructions }),
-        ...(dto.followUpNote !== undefined && { followUpNote: dto.followUpNote }),
-        ...(dto.notes !== undefined && { notes: dto.notes }),
-        version: { increment: 1 },
-      },
-    });
+      const updated = await tx.prescription.update({
+        where: { id: prescriptionId },
+        data: {
+          ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
+          ...(dto.instructions !== undefined && { instructions: dto.instructions }),
+          ...(dto.followUpNote !== undefined && { followUpNote: dto.followUpNote }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+          version: { increment: 1 },
+        },
+      });
 
-    await this.audit.log({
-      action: 'PRESCRIPTION_UPDATED',
-      actorUserId: actor.sub,
-      targetType: 'prescription',
-      targetId: prescriptionId,
-      metadata: { encounterId: existing.encounterId, fields: Object.keys(dto) },
-    });
+      await this.audit.log({
+        action: 'PRESCRIPTION_UPDATED',
+        actorUserId: actor.sub,
+        targetType: 'prescription',
+        targetId: prescriptionId,
+        metadata: { encounterId: existing.encounterId, fields: Object.keys(dto) },
+      });
 
-    return updated;
+      return updated;
+    });
   }
 
   /**
@@ -915,28 +960,32 @@ export class MedicalRecordsService {
    * audit trail and historical printing remain intact.
    */
   async deletePrescription(prescriptionId: string, actor: JwtPayload) {
-    const existing = await this.prisma.prescription.findUnique({
-      where: { id: prescriptionId },
-      include: { encounter: { select: { dentistId: true } } },
-    });
-    if (!existing || existing.deletedAt) return; // idempotent
-    if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
-      // Row-scoped-out prescriptions are invisible to this actor, so
-      // "delete" one is indistinguishable from it never existing —
-      // matches the idempotent no-op above rather than leaking existence.
-      return;
-    }
+    const parent = await this.prisma.prescription.findUnique({ where: { id: prescriptionId } });
+    if (!parent || parent.deletedAt) return;
+    return this.withEditableEncounter(parent.encounterId, actor, async tx => {
+      const existing = await tx.prescription.findUnique({
+        where: { id: prescriptionId },
+        include: { encounter: { select: { dentistId: true } } },
+      });
+      if (!existing || existing.deletedAt) return; // idempotent
+      if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
+        // Row-scoped-out prescriptions are invisible to this actor, so
+        // "delete" one is indistinguishable from it never existing —
+        // matches the idempotent no-op above rather than leaking existence.
+        return;
+      }
 
-    await this.prisma.prescription.update({
-      where: { id: prescriptionId },
-      data: { deletedAt: new Date() },
-    });
-    await this.audit.log({
-      action: 'PRESCRIPTION_DELETED',
-      actorUserId: actor.sub,
-      targetType: 'prescription',
-      targetId: prescriptionId,
-      metadata: { encounterId: existing.encounterId },
+      await tx.prescription.update({
+        where: { id: prescriptionId },
+        data: { deletedAt: new Date() },
+      });
+      await this.audit.log({
+        action: 'PRESCRIPTION_DELETED',
+        actorUserId: actor.sub,
+        targetType: 'prescription',
+        targetId: prescriptionId,
+        metadata: { encounterId: existing.encounterId },
+      });
     });
   }
 
@@ -945,52 +994,54 @@ export class MedicalRecordsService {
   // ==========================================================================
 
   async snapshotDentalChart(encounterId: string, dto: SnapshotDentalChartDto, actor: JwtPayload) {
-    const encounter = await this.prisma.encounter.findUnique({
-      where: { id: encounterId },
-      include: { patient: { select: { dob: true, deletedAt: true } } },
-    });
-    if (!encounter) throw new EncounterNotFoundException(encounterId);
-    // dental_chart.update is 🔒 (own, khi in_progress) per SPEC §7.1 —
-    // unlike dental_chart.read (deliberately unrestricted, see
-    // getLatestDentalChartForPatient), only the treating dentist may write
-    // a snapshot for their own encounter.
-    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
-      throw new EncounterNotFoundException(encounterId);
-    }
-    if (encounter.patient.deletedAt) {
-      throw new EncounterNotClosableException('Patient is deleted');
-    }
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      const encounter = await tx.encounter.findUnique({
+        where: { id: encounterId },
+        include: { patient: { select: { dob: true, deletedAt: true } } },
+      });
+      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      // dental_chart.update is 🔒 (own, khi in_progress) per SPEC §7.1 —
+      // unlike dental_chart.read (deliberately unrestricted, see
+      // getLatestDentalChartForPatient), only the treating dentist may write
+      // a snapshot for their own encounter.
+      if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
+        throw new EncounterNotFoundException(encounterId);
+      }
+      if (encounter.patient.deletedAt) {
+        throw new EncounterNotClosableException('Patient is deleted');
+      }
 
-    // BR-MR-012: patientType must match age band
-    const minor = isMinor(new Date(encounter.patient.dob));
-    const expected = minor ? 'CHILD' : 'ADULT';
-    if (dto.patientType !== expected) {
-      throw new DentalChartPatientMismatchException();
-    }
+      // BR-MR-012: patientType must match age band
+      const minor = isMinor(new Date(encounter.patient.dob));
+      const expected = minor ? 'CHILD' : 'ADULT';
+      if (dto.patientType !== expected) {
+        throw new DentalChartPatientMismatchException();
+      }
 
-    const existing = await this.prisma.dentalChartSnapshot.findUnique({
-      where: { encounterId },
-    });
-    if (existing) {
-      // Overwrite but keep audit trail
-      const updated = await this.prisma.dentalChartSnapshot.update({
+      const existing = await tx.dentalChartSnapshot.findUnique({
         where: { encounterId },
+      });
+      if (existing) {
+        // Overwrite but keep audit trail
+        const updated = await tx.dentalChartSnapshot.update({
+          where: { encounterId },
+          data: {
+            patientType: dto.patientType,
+            teeth: dto.teeth as unknown as Prisma.InputJsonValue,
+            snapshotAt: new Date(),
+            snapshotBy: actor.sub,
+          },
+        });
+        return updated;
+      }
+      return tx.dentalChartSnapshot.create({
         data: {
+          encounterId,
           patientType: dto.patientType,
           teeth: dto.teeth as unknown as Prisma.InputJsonValue,
-          snapshotAt: new Date(),
           snapshotBy: actor.sub,
         },
       });
-      return updated;
-    }
-    return this.prisma.dentalChartSnapshot.create({
-      data: {
-        encounterId,
-        patientType: dto.patientType,
-        teeth: dto.teeth as unknown as Prisma.InputJsonValue,
-        snapshotBy: actor.sub,
-      },
     });
   }
 

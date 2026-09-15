@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisCacheService } from '../common/redis-cache.service';
 import { SYSTEM_PROMPT, buildUserPrompt, type SummaryInput } from './prompts/summary-prompt';
 import { AiPatientSummary, SummaryBullet, SummarySource } from './ai.types';
+import { JwtPayload } from '../common/guards/permissions.guard';
 
 const CACHE_TTL_SECONDS = 3600;
 const MAX_TOKENS = 350;
@@ -32,12 +33,24 @@ export class AiService {
     patientId: string,
     top: number,
     refresh: boolean,
+    actor: JwtPayload,
   ): Promise<AiPatientSummary> {
     const patient = await this.prisma.patient.findFirst({
       where: { id: patientId, deletedAt: null },
       select: { id: true, allergies: true, chronicDiseases: true, currentMedications: true },
     });
     if (!patient) throw new NotFoundException('Patient not found');
+
+    // Match PatientsService's roster scope, including when a cached summary exists.
+    if (
+      !actor.permissions.includes('patient.update') &&
+      !actor.permissions.includes('patient.delete')
+    ) {
+      const treated = await this.prisma.encounter.count({
+        where: { patientId, dentistId: actor.sub },
+      });
+      if (treated === 0) throw new NotFoundException('Patient not found');
+    }
 
     const cacheKey = this.cacheKey(patientId, top);
     if (!refresh) {

@@ -6,6 +6,8 @@ import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { AiService } from './ai.service';
 import { SummaryQuerySchema } from './dto/summary-query.dto';
 import type { AiPatientSummary } from './ai.types';
+import { User } from '../common/decorators/user.decorator';
+import { JwtPayload } from '../common/guards/permissions.guard';
 
 @ApiTags('AI')
 @ApiBearerAuth()
@@ -22,9 +24,10 @@ export class AiController {
   async getPatientSummary(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() raw: Record<string, unknown>,
+    @User() actor: JwtPayload,
   ): Promise<{ data: AiPatientSummary }> {
     const { top, refresh } = SummaryQuerySchema.parse(raw);
-    const data = await this.ai.getPatientSummary(id, top, refresh);
+    const data = await this.ai.getPatientSummary(id, top, refresh, actor);
     return { data };
   }
 }

@@ -7,6 +7,7 @@ import {
   IsUUID,
   IsDateString,
   IsArray,
+  IsObject,
   IsNumber,
   Min,
   Max,
@@ -266,6 +267,7 @@ export class SnapshotDentalChartDto {
 
   /** Free-form JSON: e.g., { "16": "Filling", "26": "Crown" } */
   @ApiProperty({ type: Object, additionalProperties: true })
+  @IsObject()
   teeth!: Record<string, unknown>;
 }
 

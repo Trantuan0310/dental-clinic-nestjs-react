@@ -175,6 +175,16 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
         </div>
       )}
 
+      {encounter.clinicalNote?.addendums?.map((addendum) => (
+        <div key={addendum.id} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+          <h4 className="mb-2 text-sm font-medium text-gray-700">Ghi chú bổ sung</h4>
+          <p className="whitespace-pre-wrap text-sm text-gray-900">{addendum.content}</p>
+          <p className="mt-2 text-xs text-gray-500">
+            {format(new Date(addendum.addedAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
+          </p>
+        </div>
+      ))}
+
       {/* Add Note Button */}
       {!isCompleted && (
         <div className="flex gap-2">

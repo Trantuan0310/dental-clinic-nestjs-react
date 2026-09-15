@@ -133,11 +133,15 @@ export function useCreateAddendum(encounterId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: { text: string; reason?: string; idempotencyKey: string }) =>
-      post<ClinicalNoteAddendum>(`${MR_BASE}/encounters/${encounterId}/clinical-note/addendums`, payload, {
-        headers: { 'Idempotency-Key': payload.idempotencyKey },
-      }),
+      post<ClinicalNoteAddendum>(
+        `${MR_BASE}/encounters/${encounterId}/clinical-note/addendums`,
+        { content: payload.reason ? `${payload.text}\n\nLý do: ${payload.reason}` : payload.text },
+        { headers: { 'Idempotency-Key': payload.idempotencyKey } },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: mrKeys.addendums(encounterId) });
+      qc.invalidateQueries({ queryKey: mrKeys.detail(encounterId) });
+      qc.invalidateQueries({ queryKey: ['encounter', encounterId] });
     },
   });
 }

@@ -215,7 +215,7 @@ export const medicalRecordsApi = {
   async snapshotDentalChart(payload: UpdateDentalChartPayload): Promise<DentalChart> {
     const { data } = await api.post<{ data: DentalChart }>(
       `${BASE}/encounters/${payload.encounterId}/dental-chart/snapshot`,
-      { teeth: payload.teeth },
+      { patientType: payload.patientType, teeth: payload.teeth },
     );
     return unwrap(data);
   },

@@ -127,8 +127,12 @@ export class BillingController {
 
   @Get('invoices/by-encounter/:encounterId')
   @RequirePermissions('invoice.read.any', 'invoice.read.own')
-  async byEncounter(@Param('encounterId', ParseUUIDPipe) encounterId: string) {
-    return wrapAsPaginated([await this.billing.getInvoiceByEncounterId(encounterId)]);
+  async byEncounter(
+    @Param('encounterId', ParseUUIDPipe) encounterId: string,
+    @User() actor: JwtPayload,
+  ) {
+    const invoice = await this.billing.getInvoiceByEncounterId(encounterId, actor);
+    return wrapAsPaginated(invoice ? [invoice] : []);
   }
 
   // ==========================================================================

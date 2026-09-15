@@ -29,6 +29,10 @@ describe('MedicalRecordsService', () => {
 
   beforeEach(async () => {
     prisma = createPrismaMock();
+    prisma.$transaction.mockImplementation(async cb => cb(prisma));
+    prisma.encounter.findUnique.mockResolvedValue(
+      validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+    );
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     events = { emit: jest.fn() };
 
@@ -69,7 +73,7 @@ describe('MedicalRecordsService', () => {
       );
     });
 
-    it('404s (not 403) a dentist starting an encounter for another dentist\'s checked-in appointment (regression: actor was previously ignored entirely)', async () => {
+    it("404s (not 403) a dentist starting an encounter for another dentist's checked-in appointment (regression: actor was previously ignored entirely)", async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         id: 'appt-1',
         status: 'CHECKED_IN',
@@ -85,7 +89,7 @@ describe('MedicalRecordsService', () => {
       );
     });
 
-    it('lets a receptionist (no encounter.read.own/.any) start an encounter for any dentist\'s checked-in appointment', async () => {
+    it("lets a receptionist (no encounter.read.own/.any) start an encounter for any dentist's checked-in appointment", async () => {
       const receptionist = userPayloadWithPermissions(['encounter.read.basic', 'encounter.start']);
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         id: 'appt-1',
@@ -141,7 +145,7 @@ describe('MedicalRecordsService', () => {
       expect((result as any).id).toBe('enc-1');
     });
 
-    it('404s (not 403) for a dentist.read.own caller reading another dentist\'s encounter — anti-enumeration, matches BR-PT-014 elsewhere (regression: this route had no row-level check at all)', async () => {
+    it("404s (not 403) for a dentist.read.own caller reading another dentist's encounter — anti-enumeration, matches BR-PT-014 elsewhere (regression: this route had no row-level check at all)", async () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ dentistId: 'some-other-dentist' }),
       );
@@ -150,7 +154,7 @@ describe('MedicalRecordsService', () => {
       );
     });
 
-    it('lets a caller with encounter.read.any read any dentist\'s encounter', async () => {
+    it("lets a caller with encounter.read.any read any dentist's encounter", async () => {
       const actor = userPayloadWithPermissions(['encounter.read.any']);
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ dentistId: 'some-other-dentist' }),
@@ -459,7 +463,7 @@ describe('MedicalRecordsService', () => {
       );
     });
 
-    it('regression: throws when a dentist tries to delete a treatment on a colleague\'s encounter', async () => {
+    it("regression: throws when a dentist tries to delete a treatment on a colleague's encounter", async () => {
       (prisma.treatment.findUnique as jest.Mock).mockResolvedValue({
         id: 'tr-1',
         encounterId: 'enc-1',

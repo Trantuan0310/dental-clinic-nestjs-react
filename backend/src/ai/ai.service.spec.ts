@@ -8,6 +8,7 @@ import { validPatient, validEncounter } from '../../test/helpers/fixtures';
 import { NotFoundException } from '@nestjs/common';
 
 describe('AiService', () => {
+  const actor = { sub: 'admin', email: 'admin@example.invalid', permissions: ['patient.delete'] };
   let service: AiService;
   let prisma: PrismaMockShape;
   let cache: jest.Mocked<RedisCacheService>;
@@ -47,7 +48,7 @@ describe('AiService', () => {
     it('throws NotFoundException when patient not found', async () => {
       (prisma.patient.findFirst as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.getPatientSummary('missing', 3, false)).rejects.toThrow(
+      await expect(service.getPatientSummary('missing', 3, false, actor)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -64,7 +65,7 @@ describe('AiService', () => {
       };
       (cache.getJSON as jest.Mock).mockResolvedValue(cachedSummary);
 
-      const result = await service.getPatientSummary('pat-1', 3, false);
+      const result = await service.getPatientSummary('pat-1', 3, false, actor);
 
       expect(result.cached).toBe(true);
       expect(prisma.encounter.findMany).not.toHaveBeenCalled();
@@ -77,7 +78,7 @@ describe('AiService', () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
       (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
 
-      const result = await service.getPatientSummary('pat-1', 3, true);
+      const result = await service.getPatientSummary('pat-1', 3, true, actor);
 
       expect(cache.getJSON).not.toHaveBeenCalled();
       expect(result.cached).toBe(false);
@@ -91,7 +92,7 @@ describe('AiService', () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
       (prisma.invoice.count as jest.Mock).mockResolvedValue(2);
 
-      const result = await service.getPatientSummary('pat-1', 3, false);
+      const result = await service.getPatientSummary('pat-1', 3, false, actor);
 
       expect(result.source).toBe('fallback');
       expect(result.model).toBeUndefined();
@@ -119,7 +120,7 @@ describe('AiService', () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
       (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
 
-      const result = await service.getPatientSummary('pat-1', 3, false);
+      const result = await service.getPatientSummary('pat-1', 3, false, actor);
 
       const nextBullet = result.bullets.find(b => b.id === 'next');
       expect(nextBullet).toBeDefined();
@@ -142,7 +143,7 @@ describe('AiService', () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
       (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
 
-      const result = await service.getPatientSummary('pat-1', 3, false);
+      const result = await service.getPatientSummary('pat-1', 3, false, actor);
 
       const nextBullet = result.bullets.find(b => b.id === 'next');
       expect(nextBullet?.text).toContain('Caries grade 2');

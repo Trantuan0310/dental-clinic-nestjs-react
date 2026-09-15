@@ -43,6 +43,7 @@ export interface ClinicalNote {
   diagnosis?: string | null;
   treatmentPlan?: string | null;
   notes?: string | null;
+  addendums?: Array<{ id: string; content: string; addedAt: string; addedBy: string }>;
   // Legacy aliases kept for backward-compat with older UI code.
   subjective?: string | null;
   objective?: string | null;
@@ -244,11 +245,10 @@ export interface ToothEntry {
   notes?: string;
 }
 
-// Wire payload expected by PUT /encounters/:id/dental-chart (matches backend DTO).
-// Keep field order stable; backend ignores extra keys.
+// Wire payload for POST /encounters/:id/dental-chart/snapshot.
 export interface DentalChartPutPayload {
   patientType: 'ADULT' | 'CHILD';
-  teeth: Array<{ number: number; surface: string; notes?: string | null }>;
+  teeth: Record<string, ToothEntry>;
 }
 
 export const TOOTH_STATUS_LABEL: Record<ToothStatus, string> = {
@@ -350,24 +350,12 @@ export interface DentalChartSnapshot {
   snapshotAt?: string;
 }
 
-// Adapter: snapshot ↔ wire payload (ToothRecord[]).
-// Backend expects at most 32 records, one per FDI tooth.
+// Preserve the FDI-keyed map expected by SnapshotDentalChartDto.
 export function snapshotToWire(
   teeth: Record<string, ToothEntry>,
   patientType: 'ADULT' | 'CHILD',
 ): DentalChartPutPayload {
-  const wire: DentalChartPutPayload['teeth'] = [];
-  for (const t of ADULT_TEETH) {
-    const fdi = String(t.number);
-    const entry = teeth[fdi];
-    if (!entry) continue;
-    wire.push({
-      number: t.number,
-      surface: entry.status,
-      notes: entry.notes?.trim() ? entry.notes : null,
-    });
-  }
-  return { patientType, teeth: wire };
+  return { patientType, teeth };
 }
 
 export function wireToSnapshotMap(
@@ -489,7 +477,8 @@ export interface EncounterCloseResult {
 
 export interface UpdateDentalChartPayload {
   encounterId: string;
-  teeth: ToothRecord[];
+  patientType: 'ADULT' | 'CHILD';
+  teeth: DentalChartSnapshot['teeth'];
 }
 
 // Re-export commonly used names for ergonomics
