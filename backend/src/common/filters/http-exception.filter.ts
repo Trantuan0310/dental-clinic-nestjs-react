@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response, Request } from 'express';
+import { Prisma } from '@prisma/client';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -22,7 +23,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let code = 'INTERNAL_ERROR';
     let details: unknown = undefined;
 
-    if (exception instanceof HttpException) {
+    if (exception instanceof Prisma.PrismaClientKnownRequestError && exception.code === 'P2034') {
+      status = HttpStatus.CONFLICT;
+      code = 'TRANSACTION_CONFLICT';
+      message = 'Data was changed by another request. Reload and try again.';
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
 

@@ -36,11 +36,16 @@ test.describe('A11y — keyboard & landmarks', () => {
     // At least one navigation region (desktop sidebar or mobile drawer).
     const navs = page.getByRole('navigation');
     expect(await navs.count()).toBeGreaterThan(0);
+    for (const nav of await navs.all()) {
+      expect(await nav.getAttribute('aria-label') || await nav.getAttribute('aria-labelledby')).toBeTruthy();
+    }
   });
 
   test('all icon-only buttons have an accessible name', async ({ page }) => {
+    await page.goto('/patients/new');
+    await page.waitForLoadState('networkidle');
     // Collect every <button> in the header / shell, ensure none have no name.
-    const buttons = page.locator('header button, aside button');
+    const buttons = page.locator('header button, aside button, main button');
     const count = await buttons.count();
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
@@ -69,6 +74,10 @@ test.describe('A11y — keyboard & landmarks', () => {
       return dialog ? dialog.contains(document.activeElement) : false;
     });
     expect(focusedInsidePalette).toBe(true);
+    await page.keyboard.press('Shift+Tab');
+    expect(await palette.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(await palette.evaluate((el) => el.contains(document.activeElement))).toBe(true);
 
     // Escape closes.
     await page.keyboard.press('Escape');
@@ -76,7 +85,7 @@ test.describe('A11y — keyboard & landmarks', () => {
   });
 
   test('all form inputs have an accessible label', async ({ page }) => {
-    await page.goto('/patients');
+    await page.goto('/patients/new');
     await page.waitForLoadState('networkidle');
     // Search inputs typically have placeholder but may lack label.
     // We assert every visible <input>/<select>/<textarea> in main has a name or aria-label.
@@ -91,17 +100,8 @@ test.describe('A11y — keyboard & landmarks', () => {
       if (type === 'hidden' || type === 'submit') continue;
       // Find a label: <label for>, parent <label>, aria-label, or aria-labelledby.
       const id = await input.getAttribute('id');
-      const hasLabel = await page.evaluate(
-        ({ id }) => {
-          if (!id) return false;
-          const explicit = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-          if (explicit) return true;
-          // Wrapped <label> case.
-          const wrap = document.getElementById(id)?.closest('label');
-          if (wrap) return true;
-          return false;
-        },
-        { id },
+      const hasLabel = await input.evaluate((el) =>
+        Array.from((el as HTMLInputElement).labels ?? []).some((label) => label.textContent?.trim()),
       );
       const ariaLabel = await input.getAttribute('aria-label');
       const ariaLabelledBy = await input.getAttribute('aria-labelledby');

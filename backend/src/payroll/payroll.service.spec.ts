@@ -3,7 +3,7 @@ import { PayrollService } from './payroll.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PayrollCycle, PayrollPeriodStatus, Prisma } from '@prisma/client';
-import { PeriodOverlapException, PayrollStateException } from './domain/exceptions';
+import { PeriodOverlapException, PayrollValidationException } from './domain/exceptions';
 import { DEFAULT_TAX_BRACKETS } from './domain/tax-calculator';
 
 describe('PayrollService — period lifecycle (integration)', () => {
@@ -160,7 +160,7 @@ describe('PayrollService — period lifecycle (integration)', () => {
           },
           'user-1',
         ),
-      ).rejects.toThrow(PayrollStateException);
+      ).rejects.toThrow(PayrollValidationException);
     });
 
     it('allows LOCKED historical periods to coexist with new ones', async () => {

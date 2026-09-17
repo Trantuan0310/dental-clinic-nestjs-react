@@ -1,4 +1,4 @@
-import { test, expect, getSharedContext } from './fixtures';
+import { test, expect, getSharedContext, saveDemoVideo, persistAuthState } from './fixtures';
 import { loginAs, ACCOUNTS, randomVnPhone } from './flow-helpers';
 
 /**
@@ -37,7 +37,12 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
   // login form that's never going to appear. See the comment on
   // freshContext() in appointment-booking-roles.spec.ts, where this was
   // actually diagnosed.
-  const reception = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const reception = await browser.newContext({
+    storageState: { cookies: [], origins: [] }, timezoneId: 'Asia/Ho_Chi_Minh',
+    ...(process.env.E2E_RECORD_VIDEO ? { recordVideo: {
+      dir: process.env.E2E_VIDEO_DIR!, size: { width: 1280, height: 720 },
+    } } : {}),
+  });
   const dentistCtx = await getSharedContext(browser, 'e2e/.auth/dentist.json');
   const adminCtx = await getSharedContext(browser, 'e2e/.auth/admin.json');
 
@@ -90,7 +95,7 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     // ---- Step 2: receptionist books an appointment for this patient with Dr. An Nguyen ----
     await receptionPage.goto('/appointments/list');
     await receptionPage.waitForLoadState('networkidle');
-    await receptionPage.getByRole('button', { name: /tạo lịch hẹn/i }).click();
+    await receptionPage.getByRole('button', { name: /^tạo lịch hẹn$/i }).first().click();
 
     const bookingDialog = receptionPage.getByRole('dialog');
     await expect(bookingDialog).toBeVisible();
@@ -119,6 +124,7 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
       }, ACCOUNTS.dentist.fullName);
     expect(dentistValue, `Dentist option containing "${ACCOUNTS.dentist.fullName}" not found`).toBeTruthy();
     await dentistSelect.selectOption(dentistValue!);
+    await bookingDialog.getByLabel(/thời lượng/i).selectOption('15');
 
     // The appointment must land on today AND close to right now: step 3
     // checks the patient in immediately after, and the backend only allows
@@ -132,21 +138,28 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     // SlotConflictException), so retry with small offsets from "now" — all
     // safely inside the check-in window — until one isn't already taken.
     const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
-    const offsetsFromNow = [3, 8, -6, 13, -11];
+    const offsetsFromNow = [3, 8, 13, 15];
     const timeInput = bookingDialog.locator('input[type="time"]');
     const createBtn = bookingDialog.getByRole('button', { name: /^tạo lịch hẹn$/i });
     let created = false;
     for (let attempt = 0; attempt < offsetsFromNow.length && !created; attempt++) {
-      const minutesFromMidnight = (nowMinutes + offsetsFromNow[attempt] + 1440) % 1440;
+      const minutesFromMidnight = nowMinutes + offsetsFromNow[attempt];
+      if (minutesFromMidnight + 15 > 1440) continue;
       const hh = String(Math.floor(minutesFromMidnight / 60)).padStart(2, '0');
       const mm = String(minutesFromMidnight % 60).padStart(2, '0');
       await timeInput.fill(`${hh}:${mm}`);
+      const responsePromise = receptionPage.waitForResponse(response =>
+        response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/api/v1/appointments'),
+      );
       await createBtn.click();
-      const result = await Promise.race([
-        bookingDialog.waitFor({ state: 'hidden', timeout: 8_000 }).then(() => 'closed' as const),
-        bookingDialog.getByRole('alert').waitFor({ state: 'visible', timeout: 8_000 }).then(() => 'error' as const),
-      ]).catch(() => 'timeout' as const);
-      created = result === 'closed';
+      const response = await responsePromise;
+      created = response.ok();
+      if (created) await expect(bookingDialog).toBeHidden();
+      else {
+        expect(response.status(), 'Retry only actual slot conflicts').toBe(409);
+        checkpoint(`slot ${hh}:${mm} unavailable: ${JSON.stringify(await response.json())}`);
+        await expect(bookingDialog.getByRole('alert')).toBeVisible();
+      }
     }
     expect(created, 'Could not create the appointment after retrying several times-of-day (see last server error in the dialog)').toBe(true);
     checkpoint('step 2 done: appointment booked');
@@ -185,7 +198,7 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await dentistPage.getByLabel(/tên thủ thuật/i).fill('Hàn răng Composite (E2E)');
     await dentistPage.getByLabel(/đơn giá/i).fill('350000');
     await dentistPage.getByRole('button', { name: /^thêm$/i }).click();
-    await expect(dentistPage.getByText('Hàn răng Composite (E2E)')).toBeVisible({ timeout: 10_000 });
+    await expect(dentistPage.getByText('Hàn răng Composite (E2E)', { exact: true })).toBeVisible({ timeout: 10_000 });
     checkpoint('step 5 done: treatment added');
 
     // ---- Step 6: dentist writes a clinical note ----
@@ -199,7 +212,29 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await expect(dentistPage.getByText(noteText)).toBeVisible({ timeout: 10_000 });
     checkpoint('step 6 done: clinical note added');
 
-    // ---- Step 7: dentist closes the encounter ----
+    // ---- Step 7: dentist creates and reloads a complete prescription ----
+    await dentistPage.getByRole('tab', { name: /đơn thuốc/i }).click();
+    await dentistPage.getByRole('button', { name: /^tạo đơn thuốc$/i }).click();
+    const prescriptionDialog = dentistPage.getByRole('dialog');
+    await prescriptionDialog.getByRole('button', { name: /thêm thuốc/i }).click();
+    await prescriptionDialog.getByLabel(/tên thuốc/i).fill('Amoxicillin 500mg (E2E)');
+    await prescriptionDialog.getByLabel(/^liều$/i).fill('500mg');
+    await prescriptionDialog.getByLabel(/tần suất/i).fill('3 lần/ngày');
+    await prescriptionDialog.getByLabel(/số lượng/i).fill('12');
+    await prescriptionDialog.getByLabel(/đơn vị/i).fill('viên');
+    await prescriptionDialog.getByLabel(/số ngày/i).fill('4');
+    await prescriptionDialog.getByRole('button', { name: /^tạo đơn thuốc$/i }).click();
+    await expect(prescriptionDialog).toBeHidden({ timeout: 10_000 });
+
+    await dentistPage.reload();
+    await dentistPage.waitForLoadState('networkidle');
+    await dentistPage.getByRole('tab', { name: /đơn thuốc/i }).click();
+    await expect(dentistPage.getByText('Amoxicillin 500mg (E2E)', { exact: true })).toBeVisible();
+    await expect(dentistPage.getByText('12 viên', { exact: true })).toBeVisible();
+    await expect(dentistPage.getByText('4 ngày', { exact: true })).toBeVisible();
+    checkpoint('step 7 done: prescription persisted after reload');
+
+    // ---- Step 8: dentist closes the encounter ----
     await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
     await dentistPage.getByLabel(/tóm tắt cuối cùng/i).fill('E2E: hoàn tất hàn răng 16, hẹn tái khám nếu cần.');
     const checkboxes = dentistPage.locator('input[type="checkbox"]');
@@ -216,9 +251,15 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     // its disappearance is the structural proof the close actually landed,
     // independent of any toast copy.
     await expect(dentistPage.getByRole('button', { name: /đóng encounter/i })).toBeHidden({ timeout: 15_000 });
-    checkpoint('step 7 done: encounter closed');
+    await dentistPage.getByRole('tab', { name: /đơn thuốc/i }).click();
+    await dentistPage.evaluate(() => {
+      window.print = () => document.body.setAttribute('data-print-called', 'true');
+    });
+    await dentistPage.getByRole('button', { name: /in đơn thuốc/i }).click();
+    await expect(dentistPage.locator('body')).toHaveAttribute('data-print-called', 'true');
+    checkpoint('step 8 done: encounter closed and prescription remains printable');
 
-    // ---- Step 8: confirm an invoice was auto-created (admin, billing list) ----
+    // ---- Step 9: confirm an invoice was auto-created (admin, billing list) ----
     await adminPage.goto('/billing/list');
     await adminPage.waitForLoadState('networkidle');
     await adminPage.getByPlaceholder(/tìm theo mã hóa đơn/i).fill(testName);
@@ -229,14 +270,13 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     });
     await invoiceRow.click();
     await adminPage.waitForLoadState('networkidle');
-    checkpoint('step 8 done: invoice found and opened');
+    checkpoint('step 9 done: invoice found and opened');
 
-    // ---- Step 9: issue the invoice, then record full payment ----
+    // ---- Step 10: issue the invoice, then record full payment ----
     const issueBtn = adminPage.getByRole('button', { name: /phát hành/i });
-    if (await issueBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await issueBtn.click();
-      await adminPage.waitForLoadState('networkidle');
-    }
+    await expect(issueBtn).toBeVisible({ timeout: 10_000 });
+    await issueBtn.click();
+    await expect(issueBtn).toBeHidden({ timeout: 10_000 });
 
     const payBtn = adminPage.getByRole('button', { name: /thu tiền/i });
     await expect(payBtn).toBeVisible({ timeout: 10_000 });
@@ -246,12 +286,15 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await paymentDialog.getByText(/^thu hết/i).click();
     await paymentDialog.getByRole('button', { name: /xác nhận/i }).click();
     await expect(paymentDialog).toBeHidden({ timeout: 10_000 });
-    checkpoint('step 9 done: invoice issued + payment recorded');
+    checkpoint('step 10 done: invoice issued + payment recorded');
 
-    // ---- Step 10: confirm invoice status reflects the payment ----
+    // ---- Step 11: confirm invoice status reflects the payment ----
     await expect(adminPage.getByRole('button', { name: /thu tiền/i })).toBeHidden({ timeout: 10_000 });
-    await expect(adminPage.getByText(/còn nợ/i)).toBeHidden({ timeout: 10_000 });
-    checkpoint('step 10 done: invoice confirmed paid');
+    await expect(adminPage.getByText('Đã thanh toán', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await adminPage.reload();
+    await expect(adminPage.getByText('Đã thanh toán', { exact: true })).toBeVisible();
+    await expect(adminPage.getByText('Hàn răng Composite (E2E)', { exact: true })).toBeVisible();
+    checkpoint('step 11 done: invoice confirmed paid');
   } finally {
     // Swallow close() errors individually — if the overall test.setTimeout
     // already tore contexts down, a second close() here would otherwise
@@ -265,8 +308,10 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     // getSharedContext() above) — close only their pages, never the
     // context itself, or the next test/file reusing that same cached
     // context would fail against an already-closed one.
+    for (const [page, role] of [[receptionPage, 'receptionist'], [dentistPage, 'dentist'], [adminPage, 'admin']] as const) {
+      await saveDemoVideo(page, `patient-to-payment-${role}`).catch(() => {});
+    }
     await reception.close().catch(() => {});
-    await dentistPage.close().catch(() => {});
-    await adminPage.close().catch(() => {});
+    await persistAuthState();
   }
 });

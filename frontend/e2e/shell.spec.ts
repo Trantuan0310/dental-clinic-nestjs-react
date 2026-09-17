@@ -7,13 +7,13 @@ test.describe('Shell — post-login', () => {
 
   test('dashboard loads with KPI cards', async ({ page }) => {
     await expect(page).toHaveURL(/.*\/$/);
-    // Wait for at least one KPI heading or card to render (data may load async).
     await page.waitForLoadState('networkidle');
-    // The dashboard exposes several card titles. We don't lock down the exact copy
-    // because the i18n surface is evolving — assert the page body has content.
-    const main = page.getByRole('main');
-    await expect(main).toBeVisible();
-    await expect(main).not.toBeEmpty();
+    const cards = page.getByTestId('kpi-card');
+    await expect(cards).toHaveCount(4);
+    for (const label of ['Bệnh nhân', 'Tổng lịch hẹn', 'Doanh số điều trị', 'Tiền đã thu']) {
+      await expect(cards.filter({ hasText: label })).toBeVisible();
+    }
+    await expect(page.getByText('Không thể tải số liệu KPI', { exact: true })).toHaveCount(0);
   });
 
   test('command palette opens with ⌘K shortcut and navigates', async ({ page }) => {
@@ -56,14 +56,17 @@ test.describe('Shell — post-login', () => {
     await page.waitForLoadState('networkidle');
 
     const openButton = page.getByRole('button', { name: /mở menu/i });
-    if (await openButton.isVisible()) {
-      await openButton.click();
-      await expect(page.getByRole('dialog', { name: /menu điều hướng/i })).toBeVisible();
-      // Click backdrop.
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('dialog', { name: /menu điều hướng/i })).toBeHidden();
-    }
-    // If the hamburger isn't visible (because we're not actually on a mobile
-    // breakpoint despite setViewportSize), we silently skip — still pass.
+    await expect(openButton).toBeVisible();
+    await openButton.click();
+    const drawer = page.getByRole('dialog', { name: /menu điều hướng/i });
+    await expect(drawer).toBeVisible();
+    await page.keyboard.press('Shift+Tab');
+    expect(await drawer.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(await drawer.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(drawer).toBeHidden();
+    await expect(openButton).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });

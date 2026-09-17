@@ -1,11 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronLeft, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/authStore';
 import { buildNavGroups } from '@/lib/nav';
 import { BrandBadge } from '@/components/brand';
+import { useFocusTrap } from '@/lib/useFocusTrap';
 
 interface SidebarContentProps {
   collapsed?: boolean;
@@ -178,41 +179,36 @@ interface MobileSidebarProps {
 
 function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const { t } = useTranslation();
+  const panelRef = useRef<HTMLElement>(null);
 
-  // role="dialog" aria-modal="true" implies Escape closes it (same as the
-  // command palette) — without this, keyboard users can only close via the
-  // backdrop click or the explicit X button.
+  useFocusTrap({ active: open, containerRef: panelRef, onEscape: onClose });
+
   useEffect(() => {
-    if (!open) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    if (open) document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [open]);
+
+  if (!open) return null;
 
   return (
-    <div
-      className={cn(
-        'fixed inset-0 z-50 md:hidden',
-        open ? 'pointer-events-auto' : 'pointer-events-none',
-      )}
-      aria-hidden={!open}
-    >
+    <div className="fixed inset-0 z-50 md:hidden">
       {/* Backdrop */}
       <div
         className={cn(
           'absolute inset-0 bg-black/50 transition-opacity duration-200',
-          open ? 'opacity-100' : 'opacity-0',
+          'opacity-100',
         )}
         onClick={onClose}
         aria-hidden="true"
       />
       {/* Panel */}
       <aside
+        ref={panelRef}
         className={cn(
           'absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col bg-white shadow-xl transition-transform duration-200 dark:bg-surface-900 dark:shadow-black/40',
-          open ? 'translate-x-0' : '-translate-x-full',
+          'translate-x-0',
         )}
         role="dialog"
         aria-modal="true"

@@ -100,6 +100,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   };
 
   const isCompleted = encounter.status === 'completed';
+  const isEditable = encounter.status === 'in_progress';
 
   return (
     <div className="space-y-4">
@@ -131,7 +132,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
                 {format(new Date(note.createdAt), 'HH:mm', { locale: vi })} •{' '}
                 {note.createdByUserName}
               </p>
-              {!isCompleted && (
+              {isEditable && (
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => openEditModal(note)}
@@ -160,7 +161,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
                 {format(new Date(note.createdAt), 'HH:mm', { locale: vi })} •{' '}
                 {note.createdByUserName}
               </p>
-              {!isCompleted && (
+              {isEditable && (
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => openEditModal(note)}
@@ -186,7 +187,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
       ))}
 
       {/* Add Note Button */}
-      {!isCompleted && (
+      {isEditable && (
         <div className="flex gap-2">
           <Select
             options={[

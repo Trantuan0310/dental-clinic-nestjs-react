@@ -399,6 +399,15 @@ Trường hợp đặc biệt: nếu đã có data và cần thay đổi schema:
 
 ---
 
+## Kiểm chứng backend ngày 2026-09-17
+
+Migration chạy thực tế nằm trong `backend/prisma/migrations/`. Khởi tạo PostgreSQL mới cần hàm UUID v7 từ `backend/02-uuid-v7.sql` và sequence nghiệp vụ từ `backend/03-sequences.sql`, tương ứng các script init của Docker. `npm run test:isolated` tự chuẩn bị các thành phần này trong database riêng trước khi chạy `migrate deploy`.
+
+- `016_align_expense_enums`: chuyển `expenses.status` và `expense_categories.type` từ text sang enum đúng schema Prisma, giữ dữ liệu hiện có; không sửa checksum migration 012 đã triển khai.
+- `017_active_appointment_slot`: thay unique toàn bộ `(dentist_id, start_at)` bằng unique partial cho lịch chưa hủy/vắng/xóa, cho phép đặt lại giờ đã giải phóng. Index này được quản lý bằng SQL; schema Prisma không khai báo `@@unique` toàn bộ cặp khóa.
+- Hai migration mới bọc `BEGIN/COMMIT` để thay đổi schema được hoàn tác cùng nhau nếu thất bại.
+- Runner kiểm tra database mới, deploy lặp, rollback giao dịch nghiệp vụ và đồng bộ sequence hóa đơn khi có mã cũ lớn hơn sequence.
+
 ## Related
 
 - [Schema per module](./schema-per-module/)

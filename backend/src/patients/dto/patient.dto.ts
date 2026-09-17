@@ -48,12 +48,12 @@ export class CreatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  primaryPhone?: string;
+  primaryPhone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -83,12 +83,12 @@ export class CreatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  contactPersonName?: string;
+  contactPersonName?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  contactPersonPhone?: string;
+  contactPersonPhone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -122,12 +122,12 @@ export class UpdatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  primaryPhone?: string;
+  primaryPhone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -157,12 +157,12 @@ export class UpdatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  contactPersonName?: string;
+  contactPersonName?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  contactPersonPhone?: string;
+  contactPersonPhone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -1,4 +1,14 @@
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ExpenseStatus } from '@prisma/client';
@@ -61,12 +71,12 @@ export class CreateExpenseDto {
   description!: string;
 
   @ApiProperty({ description: 'Expense date (YYYY-MM-DD)' })
-  @IsString()
+  @IsDateString()
   expenseDate!: string;
 
   @ApiPropertyOptional({ description: 'Category ID' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   categoryId?: string;
 
   @ApiPropertyOptional({ description: 'Notes' })
@@ -95,12 +105,12 @@ export class UpdateExpenseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsDateString()
   expenseDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUUID()
   categoryId?: string;
 
   @ApiPropertyOptional()

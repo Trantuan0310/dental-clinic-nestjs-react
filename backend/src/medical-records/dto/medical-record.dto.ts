@@ -249,6 +249,18 @@ export class PrescriptionLineInputDto {
   @Max(365)
   durationDays?: number;
 
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantity?: number;
+
+  @ApiPropertyOptional({ example: 'viên' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  unit?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

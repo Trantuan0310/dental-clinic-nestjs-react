@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Outlet, Route, Navigate } from 'react-router-dom';
 import { AppShell } from '@/layouts/AppShell';
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
 import { SessionBoot } from '@/features/auth/SessionBoot';
@@ -69,17 +69,8 @@ function SuspenseBoundary({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
-export function AppRoutes() {
-  return (
-    <BrowserRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
-      <SessionBoot>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
+const router = createBrowserRouter(createRoutesFromElements(
+  <Route element={<SessionBoot><Suspense fallback={<PageLoader />}><Outlet /></Suspense></SessionBoot>}>
             <Route path="/login" element={<LoginPage />} />
 
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
@@ -439,9 +430,9 @@ export function AppRoutes() {
               <Route path="403" element={<ForbiddenPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
-          </Routes>
-        </Suspense>
-      </SessionBoot>
-    </BrowserRouter>
-  );
+  </Route>,
+), { future: { v7_relativeSplatPath: true } });
+
+export function AppRoutes() {
+  return <RouterProvider router={router} future={{ v7_startTransition: true }} />;
 }

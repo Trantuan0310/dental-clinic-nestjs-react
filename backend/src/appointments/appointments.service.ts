@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Appointment, AppointmentStatus, Prisma, User } from '@prisma/client';
+import { Appointment, AppointmentStatus, EncounterStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { endOfDayInclusive } from '../common/date-range.util';
+import {
+  endOfDayInclusive,
+  clinicDateOnly,
+  startOfClinicDay,
+  endOfClinicDay,
+  CLINIC_UTC_OFFSET_MS,
+} from '../common/date-range.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppointmentCancelledEvent,
@@ -228,40 +234,56 @@ export class AppointmentsService {
     return updated;
   }
 
-  /**
-   * Start encounter: transitions appointment SCHEDULED/CONFIRMED/CHECKED_IN
-   * → IN_PROGRESS and creates Encounter in same DB transaction (BR-MR-001).
-   * Encounter creation delegated to caller via lazy import to avoid cycle
-   * (MedicalRecords → Appointments ← Patients ← MedicalRecords would be
-   * messy; here the controller injects the EncounterService).
-   *
-   * This method only does the appointment state transition + encounter
-   * upsert via raw createMany (caller may also call this directly if they
-   * import MedicalRecords module — see notes).
-   */
+  /** Transition the appointment and create its encounter atomically (BR-MR-001). */
   async startEncounter(appointmentId: string, actor: JwtPayload) {
-    const appt = await this.requireAppointment(appointmentId);
-    // Row-level: dentist can only start an encounter from their own appointment.
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
-      throw new AppointmentNotFoundException(appointmentId);
-    }
-    if (appt.status !== AppointmentStatus.CHECKED_IN) {
-      throw new InvalidAppointmentStateException(
-        `Cannot start encounter from status ${appt.status}; appointment must be CHECKED_IN`,
-      );
-    }
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
+      const appt = await tx.appointment.findUnique({ where: { id: appointmentId } });
+      if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(appointmentId);
+      if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+        throw new AppointmentNotFoundException(appointmentId);
+      }
+      if (
+        appt.status !== AppointmentStatus.CHECKED_IN &&
+        appt.status !== AppointmentStatus.IN_PROGRESS
+      ) {
+        throw new InvalidAppointmentStateException(
+          `Cannot start encounter from status ${appt.status}; appointment must be CHECKED_IN`,
+        );
+      }
 
-    // See checkIn() above — same guarded-write race protection.
-    const result = await this.prisma.appointment.updateMany({
-      where: { id: appointmentId, status: appt.status },
-      data: { status: AppointmentStatus.IN_PROGRESS, updatedBy: actor.sub },
+      const existing = await tx.encounter.findUnique({
+        where: { appointmentId },
+        select: { id: true, status: true },
+      });
+      if (existing?.status === EncounterStatus.COMPLETED) {
+        throw new InvalidAppointmentStateException('Encounter already completed');
+      }
+      if (existing?.status === EncounterStatus.CANCELLED) {
+        throw new InvalidAppointmentStateException('Encounter is cancelled');
+      }
+
+      const updated =
+        appt.status === AppointmentStatus.CHECKED_IN
+          ? await tx.appointment.update({
+              where: { id: appointmentId },
+              data: { status: AppointmentStatus.IN_PROGRESS, updatedBy: actor.sub },
+            })
+          : appt;
+      const encounter =
+        existing ??
+        (await tx.encounter.create({
+          data: {
+            appointmentId,
+            patientId: appt.patientId,
+            dentistId: appt.dentistId,
+            status: EncounterStatus.IN_PROGRESS,
+            startedAt: new Date(),
+          },
+        }));
+
+      return { ...updated, encounter: { id: encounter.id } };
     });
-    if (result.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Appointment was changed by someone else — reload and try again',
-      );
-    }
-    return this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
   }
 
   /**
@@ -552,16 +574,17 @@ export class AppointmentsService {
   // ==========================================================================
 
   async getAvailability(q: AvailabilityQueryDto) {
-    const dayStart = new Date(`${q.date}T00:00:00Z`);
+    const scheduleDate = new Date(q.date);
+    const dayStart = startOfClinicDay(q.date);
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
     const schedules = await this.prisma.workingSchedule.findMany({
       where: {
         dentistId: q.dentistId,
-        dayOfWeek: dayStart.getUTCDay(),
-        validFrom: { lte: dayStart },
-        OR: [{ validTo: null }, { validTo: { gte: dayStart } }],
+        dayOfWeek: scheduleDate.getUTCDay(),
+        validFrom: { lte: scheduleDate },
+        OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
         deletedAt: null,
       },
       orderBy: { startTime: 'asc' },
@@ -609,14 +632,14 @@ export class AppointmentsService {
         const overlapsTimeOff = timeOffs.some(o => slotStart < o.endAt && o.startAt < slotEnd);
         if (overlapsTimeOff) continue;
 
-        slots.push(`${this.pad(slotStart.getUTCHours())}:${this.pad(slotStart.getUTCMinutes())}`);
+        slots.push(this.toTimeString(new Date(slotStart.getTime() + CLINIC_UTC_OFFSET_MS)));
       }
     }
 
     return {
       dentistId: q.dentistId,
       date: q.date,
-      dayOfWeek: dayStart.getUTCDay(),
+      dayOfWeek: scheduleDate.getUTCDay(),
       workingHours: {
         startTime: this.toTimeString(schedules[0].startTime),
         endTime: this.toTimeString(schedules[schedules.length - 1].endTime),
@@ -632,8 +655,8 @@ export class AppointmentsService {
     date: string | undefined,
     actor: JwtPayload,
   ) {
-    const target = date ?? new Date().toISOString().slice(0, 10);
-    const dayStart = new Date(`${target}T00:00:00Z`);
+    const target = date ?? clinicDateOnly();
+    const dayStart = startOfClinicDay(target);
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
@@ -782,16 +805,13 @@ export class AppointmentsService {
       deletedAt: null,
       ...(isDentist ? { dentistId: actor.sub } : q.dentistId ? { dentistId: q.dentistId } : {}),
       ...(q.patientId ? { patientId: q.patientId } : {}),
-      // `q.to` is a bare YYYY-MM-DD date. `new Date(q.to)` parses that as
-      // UTC midnight, so a naive `lte` on it makes the upper bound a
-      // zero-width instant instead of "through the end of that day" — every
-      // same-day query (from === to, e.g. "today") matched nothing. Push
-      // the bound to the end of that UTC day instead.
+      // Calendar filters cover the clinic's complete Vietnam day. Explicit
+      // timestamps already supplied by calendar views retain their boundaries.
       ...(q.from || q.to
         ? {
             startAt: {
-              ...(q.from ? { gte: new Date(q.from) } : {}),
-              ...(q.to ? { lte: endOfDayInclusive(q.to) } : {}),
+              ...(q.from ? { gte: startOfClinicDay(q.from) } : {}),
+              ...(q.to ? { lte: endOfClinicDay(q.to) } : {}),
             },
           }
         : {}),
@@ -835,8 +855,7 @@ export class AppointmentsService {
   }
 
   async listToday(actor: JwtPayload) {
-    const dayStart = new Date();
-    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayStart = startOfClinicDay(clinicDateOnly());
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
@@ -1324,26 +1343,28 @@ export class AppointmentsService {
     if (conflict) throw new SlotConflictException();
 
     // BR-APPT-003: working schedule required
+    const localDate = clinicDateOnly(startAt);
+    const scheduleDate = new Date(localDate);
     const sched = await client.workingSchedule.findFirst({
       where: {
         dentistId,
-        dayOfWeek: startAt.getUTCDay(),
-        validFrom: { lte: startAt },
-        OR: [{ validTo: null }, { validTo: { gte: startAt } }],
+        dayOfWeek: scheduleDate.getUTCDay(),
+        startTime: {
+          lte: this.toPgTime(this.toTimeString(new Date(startAt.getTime() + CLINIC_UTC_OFFSET_MS))),
+        },
+        endTime: {
+          gte: this.toPgTime(this.toTimeString(new Date(endAt.getTime() + CLINIC_UTC_OFFSET_MS))),
+        },
+        validFrom: { lte: scheduleDate },
+        OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
         deletedAt: null,
       },
     });
     if (!sched) {
       throw new OutsideWorkingHoursException('Dentist has no working schedule for this day');
     }
-    const schedStart = this.combineDateAndTime(
-      startAt.toISOString().slice(0, 10),
-      this.toTimeString(sched.startTime),
-    );
-    const schedEnd = this.combineDateAndTime(
-      startAt.toISOString().slice(0, 10),
-      this.toTimeString(sched.endTime),
-    );
+    const schedStart = this.combineDateAndTime(localDate, this.toTimeString(sched.startTime));
+    const schedEnd = this.combineDateAndTime(localDate, this.toTimeString(sched.endTime));
     if (startAt < schedStart || endAt > schedEnd) {
       throw new OutsideWorkingHoursException(
         `Appointment ${startAt.toISOString()} → ${endAt.toISOString()} falls outside working hours ${this.toTimeString(sched.startTime)}-${this.toTimeString(sched.endTime)}`,
@@ -1393,7 +1414,7 @@ export class AppointmentsService {
 
   private combineDateAndTime(dateIso: string, hhmm: string): Date {
     const [h, m] = hhmm.split(':').map(v => Number(v));
-    return new Date(`${dateIso}T${this.pad(h)}:${this.pad(m)}:00Z`);
+    return new Date(`${dateIso}T${this.pad(h)}:${this.pad(m)}:00+07:00`);
   }
 
   private pad(n: number): string {

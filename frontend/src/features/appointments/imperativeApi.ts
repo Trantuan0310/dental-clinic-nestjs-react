@@ -27,7 +27,7 @@ import type {
 // same transform appointmentApi.ts's hooks use, rather than passing the raw
 // row through under an `Appointment`-typed lie.
 export const appointmentsApi = {
-  async list(params?: AppointmentFilters): Promise<AppointmentListResponse> {
+  async list(params?: Omit<AppointmentFilters, 'status'> & { status?: AppointmentFilters['status'] | Appointment['status'][] }): Promise<AppointmentListResponse> {
     const { data } = await api.get<{ data: PrismaAppointmentRow[]; pagination?: AppointmentListResponse['pagination'] }>(
       '/appointments',
       { params },

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Play, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Play, ArrowRight, AlertCircle } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { useStartEncounter } from '@/features/appointments/appointmentApi';
-import { Button, Card, StatusBadge } from '@/components/ui';
+import { Button, Card, StatusBadge, EmptyState, FormSkeleton } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +16,7 @@ export default function TodayPage() {
   const today = format(currentDate, 'yyyy-MM-dd');
   const startEncounter = useStartEncounter();
 
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['appointments', { from: today, to: today }],
     queryFn: () => appointmentsApi.list({
       from: today,
@@ -64,13 +64,13 @@ export default function TodayPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setCurrentDate(d => new Date(d.getTime() - 86400000))}>
+          <Button variant="ghost" size="sm" aria-label="Ngày trước" onClick={() => setCurrentDate(d => addDays(d, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
             Hôm nay
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setCurrentDate(d => new Date(d.getTime() + 86400000))}>
+          <Button variant="ghost" size="sm" aria-label="Ngày sau" onClick={() => setCurrentDate(d => addDays(d, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -80,19 +80,25 @@ export default function TodayPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <div className="text-center">
-            <p className="text-3xl font-bold text-gray-900">{appointments.length}</p>
+            <p className="text-3xl font-bold text-gray-900">
+              {isLoading || isError ? '—' : appointments.length}
+            </p>
             <p className="text-sm text-gray-500">Tổng lịch hẹn</p>
           </div>
         </Card>
         <Card>
           <div className="text-center">
-            <p className="text-3xl font-bold text-amber-600">{checkedIn.length}</p>
-            <p className="text-sm text-gray-500">Đang chờ khám</p>
+            <p className="text-3xl font-bold text-amber-600">
+              {isLoading || isError ? '—' : checkedIn.length}
+            </p>
+            <p className="text-sm text-gray-500">Chờ / đang khám</p>
           </div>
         </Card>
         <Card>
           <div className="text-center">
-            <p className="text-3xl font-bold text-green-600">{completed.length}</p>
+            <p className="text-3xl font-bold text-green-600">
+              {isLoading || isError ? '—' : completed.length}
+            </p>
             <p className="text-sm text-gray-500">Đã hoàn thành</p>
           </div>
         </Card>
@@ -100,11 +106,20 @@ export default function TodayPage() {
 
       {/* Appointments List */}
       <Card title="Lịch hẹn hôm nay">
-        {appointments.length === 0 ? (
+        {isLoading ? (
+          <FormSkeleton rows={4} columns={3} />
+        ) : isError ? (
+          <EmptyState
+            icon={<AlertCircle className="h-10 w-10 text-red-400" />}
+            title="Không thể tải lịch hẹn"
+            description="Vui lòng kiểm tra quyền truy cập hoặc kết nối rồi thử lại."
+            action={{ label: 'Thử lại', onClick: () => refetch() }}
+          />
+        ) : appointments.length === 0 ? (
           <p className="text-center py-8 text-gray-500">Không có lịch hẹn nào hôm nay</p>
         ) : (
           <div className="space-y-3">
-            {appointments
+            {[...appointments]
               .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
               .map((apt) => {
                 const isCurrent = apt.status === 'in_progress';

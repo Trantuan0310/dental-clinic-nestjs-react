@@ -8,6 +8,7 @@ import {
   PayrollStateException,
   PayrollNotFoundException,
   PayrollForbiddenException,
+  PayrollValidationException,
 } from './domain/exceptions';
 import {
   assertTransition,
@@ -302,7 +303,7 @@ export class PayrollService {
     const end = new Date(dto.periodEnd);
 
     if (end <= start) {
-      throw new PayrollStateException('periodEnd must be after periodStart');
+      throw new PayrollValidationException('periodEnd must be after periodStart');
     }
 
     // BR-PAY-003: prevent overlap
@@ -736,9 +737,7 @@ export class PayrollService {
       },
       select: { date: true, startTime: true, endTime: true },
     });
-    const approvedByDate = new Map(
-      approvedShifts.map(s => [s.date.toISOString().slice(0, 10), s]),
-    );
+    const approvedByDate = new Map(approvedShifts.map(s => [s.date.toISOString().slice(0, 10), s]));
 
     let workedShifts = 0;
     let totalMinutes = 0;
@@ -751,7 +750,8 @@ export class PayrollService {
       const approved = approvedByDate.get(dateKey);
       if (approved) {
         workedShifts++;
-        const minutes = this.timeToMinutes(approved.endTime) - this.timeToMinutes(approved.startTime);
+        const minutes =
+          this.timeToMinutes(approved.endTime) - this.timeToMinutes(approved.startTime);
         if (minutes > 0) totalMinutes += minutes;
         continue;
       }
@@ -759,7 +759,8 @@ export class PayrollService {
       const schedule = workingSchedules.find(s => s.dayOfWeek === d.getUTCDay());
       if (schedule) {
         workedShifts++;
-        const minutes = this.timeToMinutes(schedule.endTime) - this.timeToMinutes(schedule.startTime);
+        const minutes =
+          this.timeToMinutes(schedule.endTime) - this.timeToMinutes(schedule.startTime);
         if (minutes > 0) totalMinutes += minutes;
       }
     }

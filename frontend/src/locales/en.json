@@ -2,7 +2,7 @@
   "shell": {
     "brand": "GENSMILE",
     "version": "v2.993",
-    "clinicName": "An Viet Dental Clinic",
+    "clinicName": "GENSMILE Dental Clinic",
     "search": {
       "placeholder": "Search patients (name, code, phone)...",
       "label": "Search patient",
@@ -47,7 +47,7 @@
     "trigger": "Quick search…",
     "triggerLabel": "Open Command Palette",
     "placeholder": "Search pages, patients, appointments, invoices… (↑ ↓ to navigate, Enter to select)",
-    "tooltip": "Press ⌘K to open",
+    "tooltip": "Press {{shortcut}} to open",
     "empty": "No results for \"{{query}}\"",
     "footer": {
       "navigate": "navigate",

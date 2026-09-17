@@ -22,7 +22,7 @@ npm run test:e2e:ui
 
 | File | Purpose |
 |------|---------|
-| `global-setup.ts` | Logs in once as admin and once as dentist, saves each session to `e2e/.auth/*.json`. |
+| `global-setup.ts` | Logs in once per role; each run saves its own session files under `e2e/.auth/<run-id>/`. |
 | `fixtures.ts` | Exports `login(page)`/`logout(page)` (used by `login.spec.ts`, which deliberately starts unauthenticated), `getSharedContext(browser, storageState)`, Playwright `test`/`expect` (with `context`/`page` overridden — see Auth below), and `type Page`. |
 | `flow-helpers.ts` | Shared helpers for the `flow-*.spec.ts` detailed-journey specs: `loginAs()`, seeded `ACCOUNTS`, `isoDateOnly()`, `randomVnPhone()`. |
 | `login.spec.ts` | Login page rendering, unauth redirect, invalid-credentials path. |
@@ -42,7 +42,7 @@ E2E_DENTIST_USERNAME=an.nguyen@clinic.local E2E_DENTIST_PASSWORD=Password123! \
 npm run test:e2e
 ```
 
-**The saved session's refresh-token cookie is single-use.** The app calls `POST /auth/refresh` on every fresh page load (no in-memory access token survives across a brand-new browser context), and the backend rotates-and-invalidates that cookie on every refresh — reusing it from a second independent context trips `TokenReuseDetectedException` and revokes every session for that user (see `backend/src/auth/auth.service.ts`). This used to fail the majority of the suite, since every test's default `page` opened its own fresh context off the same frozen snapshot. `fixtures.ts` now overrides the default `context`/`page` fixtures to cache one long-lived, continuously-rotating context per distinct `storageState` value **within a worker process** — so tests that just read the pre-authenticated `page` fixture share one valid session instead of each reading a one-shot snapshot. This fully covers CI (`workers: 1`, one process). Locally, two different parallel worker processes can still race each other on the very first read of a given snapshot — a narrow, first-use-only window, not the guaranteed every-test failure this used to be.
+**Refresh cookies rotate after use.** Replaying the same saved cookie from separate contexts triggers `TokenReuseDetectedException`. `fixtures.ts` reuses one evolving context per role and persists its latest cookies after page teardown, including before a failed worker restarts. Both local and CI runs use one worker. Auth files and test outputs are isolated by run id. Tests that log in/out need their own empty context as shown below.
 
 **Consequence for anyone writing a new test:** never call `login()`/`logout()`/`loginAs()`, or otherwise mutate cookies (`context.clearCookies()`, manual `document.cookie` writes), on the default `page`/`context` fixture — that shared, cached context is reused by every other test in the worker that expects to still find its own role's session there afterward. A test that needs to log in for real (to test the login flow itself, or to drive a second/third role inside one multi-actor test) must open its own disposable session instead:
 
@@ -81,7 +81,7 @@ See `appointment-booking-roles.spec.ts` (dedicated fresh contexts, real logins) 
 `playwright.config.ts` is wired to:
 
 - Start `npm run dev` automatically on first run (skip with `PLAYWRIGHT_NO_SERVER=1`).
-- Retry once on CI, no retries locally.
+- Retry twice on CI, no retries locally.
 - Save trace/screenshot/video on the first failure.
 - Use the system Chromium by default. Add Firefox/WebKit under `projects` when needed.
 
@@ -98,6 +98,22 @@ npx playwright test login.spec.ts
 ```
 
 ## Adding new tests
+
+## Demo UI and recordings (Windows)
+
+From `frontend`, with the backend running on port 3000:
+
+```powershell
+./e2e/run-visual-tests.ps1 -FullJourney
+# Headless recording:
+./e2e/run-visual-tests.ps1 -Headless -FullJourney -SlowMo 75
+```
+
+Videos have test/role names and stay in `artifacts/demo-videos/<run-id>/`; later runs do not clean them. Print screenshots/PDFs stay in `artifacts/print-checks/<run-id>/`. The runner returns a nonzero exit code on failure.
+
+`-FullJourney` enables `E2E_DEMO_SCHEDULE=1`: `backend/prisma/seed-demo-window.ts` creates a short, unpaid, nonoverlapping schedule for the seeded dentist **only on today's date in a localhost development database**, if the normal shift does not cover the test. Global teardown removes the exact temporary row. Booking, conflict and check-in rules still apply. Test patients, encounters and paid invoices remain as demo evidence. If the runner is force-killed, the log records the schedule id; remove that fixture using `node -r ts-node/register prisma/seed-demo-window.ts cleanup <id>` from `backend`.
+
+`ui-demo-regressions.spec.ts` uses realistic mocked API responses for midnight grouping, API-error recovery, completed/cancelled encounters and print layout. The patient-to-payment journey uses the actual API and database for persistence and role transitions.
 
 Keep these rules:
 

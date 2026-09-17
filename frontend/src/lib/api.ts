@@ -15,6 +15,7 @@ export const unwrap = <T>(env: AuthEnvelope<T>): T => env.data;
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
+  paramsSerializer: { indexes: null },
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -114,6 +115,8 @@ api.interceptors.response.use(
       } catch (refreshError) {
         flushQueue(null);
         tokenStore.clear();
+        const { useAuthStore } = await import('@/stores/authStore');
+        useAuthStore.getState().clear();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

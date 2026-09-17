@@ -14,3 +14,18 @@
 export function endOfDayInclusive(value: string): Date {
   return new Date(value.includes('T') ? value : `${value}T23:59:59.999Z`);
 }
+
+// The MVP clinic uses Asia/Ho_Chi_Minh; calendar DATE columns still use UTC.
+export const CLINIC_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+export function clinicDateOnly(value = new Date()): string {
+  return new Date(value.getTime() + CLINIC_UTC_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function startOfClinicDay(value: string): Date {
+  return new Date(value.includes('T') ? value : `${value}T00:00:00+07:00`);
+}
+
+export function endOfClinicDay(value: string): Date {
+  return new Date(value.includes('T') ? value : `${value}T23:59:59.999+07:00`);
+}

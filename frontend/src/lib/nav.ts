@@ -4,7 +4,6 @@ import {
   Users,
   CalendarDays,
   UserCircle,
-  FileText,
   Package,
   Calculator,
   Wallet,
@@ -86,12 +85,6 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         { to: '/my-queue', labelKey: 'MyQueue', icon: ListChecks, permission: 'appointment.read' },
         ...(isDentist(roles) || isAdmin(roles)
           ? [
-              {
-                to: '/medical-records',
-                labelKey: 'MedicalRecords',
-                icon: FileText,
-                permission: 'medical_record.read',
-              },
               // Route guard actually requires encounter.read.own (see
               // AppRoutes.tsx) — patient.read used to be granted here too,
               // which would show this link to a role that could click it
@@ -126,18 +119,22 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         // both hold, surfacing the admin dashboard to them too.
         permission: 'payroll.read.any',
       },
-      {
-        to: '/my-payroll',
-        labelKey: 'MyPayroll',
-        icon: WalletCards,
-        permission: 'payroll.read_self',
-      },
-      {
-        to: '/my-shifts',
-        labelKey: 'MyShifts',
-        icon: Briefcase,
-        permission: 'shift.read_self',
-      },
+      ...(!isAdmin(roles)
+        ? [
+            {
+              to: '/my-payroll',
+              labelKey: 'MyPayroll',
+              icon: WalletCards,
+              permission: 'payroll.read_self',
+            },
+            {
+              to: '/my-shifts',
+              labelKey: 'MyShifts',
+              icon: Briefcase,
+              permission: 'shift.read_self',
+            },
+          ]
+        : []),
       {
         to: '/schedule',
         labelKey: 'Schedule',

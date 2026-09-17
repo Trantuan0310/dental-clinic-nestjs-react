@@ -29,6 +29,10 @@ describe('BillingService', () => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 1n }]);
+    (prisma.invoice.aggregate as jest.Mock).mockResolvedValue({
+      _sum: { total: 0, paidAmount: 0, outstandingAmount: 0 },
+      _count: { _all: 0 },
+    });
 
     const mockExpenseService = {
       aggregateApproved: jest.fn().mockResolvedValue(0),
@@ -47,6 +51,21 @@ describe('BillingService', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  it('filters invoices over the complete Vietnam calendar day', async () => {
+    (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+    await service.listInvoices({ from: '2026-09-16', to: '2026-09-16', actor: adminActor });
+    expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: {
+            gte: new Date('2026-09-15T17:00:00Z'),
+            lte: new Date('2026-09-16T16:59:59.999Z'),
+          },
+        }),
+      }),
+    );
+  });
 
   describe('createDraftFromEncounter', () => {
     it('returns existing invoice if already created (idempotent)', async () => {
@@ -88,7 +107,7 @@ describe('BillingService', () => {
       );
     });
 
-    it('ignores a client-supplied dentistId for a caller with only invoice.read.own (regression: used to let a dentist pass another dentist\'s id and bypass the row-level scope)', async () => {
+    it("ignores a client-supplied dentistId for a caller with only invoice.read.own (regression: used to let a dentist pass another dentist's id and bypass the row-level scope)", async () => {
       (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
       const actor = dentistPayload('dentist-self');
 
@@ -101,7 +120,7 @@ describe('BillingService', () => {
       );
     });
 
-    it('scopes to the caller\'s own dentistId with no dentistId query param at all', async () => {
+    it("scopes to the caller's own dentistId with no dentistId query param at all", async () => {
       (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
       const actor = dentistPayload('dentist-self');
 
@@ -112,6 +131,30 @@ describe('BillingService', () => {
           where: expect.objectContaining({ encounter: { dentistId: 'dentist-self' } }),
         }),
       );
+    });
+
+    it('returns a cursor and aggregates for the entire filtered result', async () => {
+      const first = validInvoice({ id: 'inv-1', total: 300_000 });
+      const second = validInvoice({ id: 'inv-2', total: 200_000 });
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([first, second]);
+      (prisma.invoice.aggregate as jest.Mock).mockResolvedValue({
+        _sum: { total: 500_000, paidAmount: 200_000, outstandingAmount: 300_000 },
+        _count: { _all: 2 },
+      });
+
+      const result = await service.listInvoices({
+        pageSize: 1,
+        actor: userPayloadWithPermissions(['invoice.read.any']),
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination).toEqual({ pageSize: 1, hasMore: true, nextCursor: 'inv-1' });
+      expect(result.summary).toEqual({
+        invoiceCount: 2,
+        totalInvoiced: 500_000,
+        totalCollected: 200_000,
+        totalOutstanding: 300_000,
+      });
     });
   });
 

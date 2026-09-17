@@ -1,5 +1,5 @@
 import { cn } from '@/lib/cn';
-import { forwardRef, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useId, type TextareaHTMLAttributes } from 'react';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
@@ -9,7 +9,11 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, label, error, hint, id, ...props }, ref) => {
-    const textareaId = id || props.name;
+    const autoId = useId();
+    const textareaId = id ?? props.name ?? autoId;
+    const hintId = hint ? `${textareaId}-hint` : undefined;
+    const errorId = error ? `${textareaId}-error` : undefined;
+    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
 
     return (
       <div className="space-y-1.5">
@@ -25,6 +29,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         <textarea
           ref={ref}
           id={textareaId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
           className={cn(
             'w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors',
             'placeholder:text-gray-400 dark:placeholder:text-surface-500',
@@ -38,8 +44,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           )}
           {...props}
         />
-        {error && <p className="text-xs text-red-500">{error}</p>}
-        {hint && !error && <p className="text-xs text-gray-500 dark:text-surface-400">{hint}</p>}
+        {error && <p id={errorId} role="alert" className="text-xs text-red-500">{error}</p>}
+        {hint && !error && <p id={hintId} className="text-xs text-gray-500 dark:text-surface-400">{hint}</p>}
       </div>
     );
   },

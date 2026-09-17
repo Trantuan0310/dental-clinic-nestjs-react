@@ -103,6 +103,7 @@ export interface PrescriptionLine {
   frequency: string;
   durationDays?: number;
   quantity?: number;
+  unit?: string;
   instructions?: string | null;
   isAllergyWarning?: boolean;
   // ---- Legacy aliases (kept for backward-compat with older UI code) ----

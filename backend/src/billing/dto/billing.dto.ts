@@ -115,6 +115,11 @@ export class ListInvoicesQueryDto {
   @Min(1)
   @Max(100)
   pageSize?: number;
+
+  @ApiPropertyOptional({ description: 'Invoice id cursor for the next page' })
+  @IsOptional()
+  @IsUUID()
+  cursor?: string;
 }
 
 export class RevenueReportQueryDto {

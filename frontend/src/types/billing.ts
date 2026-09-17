@@ -53,7 +53,17 @@ export interface Invoice {
 
 export interface InvoiceListResponse {
   data: Invoice[];
-  total: number;
+  pagination: {
+    pageSize: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+  };
+  summary: {
+    invoiceCount: number;
+    totalInvoiced: number;
+    totalCollected: number;
+    totalOutstanding: number;
+  };
 }
 
 export interface InvoiceFilters {
@@ -66,6 +76,7 @@ export interface InvoiceFilters {
   to?: string;
   page?: number;
   pageSize?: number;
+  cursor?: string;
 }
 
 export interface CreateInvoicePayload {

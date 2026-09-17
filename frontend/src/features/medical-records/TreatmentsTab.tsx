@@ -157,7 +157,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
 
   const treatments = encounter.treatments || [];
   const totalTreatment = treatments.reduce((sum, t) => sum + (t.total ?? 0), 0);
-  const isCompleted = encounter.status === 'completed';
+  const isEditable = encounter.status === 'in_progress';
 
   // Group treatments by tooth
   const treatmentsByTooth = treatments.reduce((acc, treatment) => {
@@ -202,7 +202,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                       <p className="mt-1 text-xs text-gray-500">{treatment.notes}</p>
                     )}
                   </div>
-                  {!isCompleted && (
+                  {isEditable && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => openEditModal(treatment)}
@@ -238,7 +238,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       )}
 
       {/* Add Button */}
-      {!isCompleted && (
+      {isEditable && (
         <Button onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4" />
           Thêm điều trị

@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { createPrismaMock, PrismaMockShape, asTransaction } from '../../test/helpers/prisma-mock';
 import { adminPayload, dentistPayload, receptionistPayload } from '../../test/helpers';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus, EncounterStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('AppointmentsService', () => {
@@ -33,6 +33,35 @@ describe('AppointmentsService', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  it('returns clinic-time slots and excludes a booking at 08:00 Vietnam time', async () => {
+    (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+      {
+        startTime: new Date('1970-01-01T08:00:00Z'),
+        endTime: new Date('1970-01-01T09:00:00Z'),
+        slotDurationMin: 30,
+      },
+    ]);
+    (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+      {
+        startAt: new Date('2026-09-16T01:00:00Z'),
+        endAt: new Date('2026-09-16T01:30:00Z'),
+      },
+    ]);
+    (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([]);
+    const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2026-09-16' });
+    expect(result.availableSlots).toEqual(['08:30']);
+    expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          startAt: {
+            gte: new Date('2026-09-15T17:00:00Z'),
+            lt: new Date('2026-09-16T17:00:00Z'),
+          },
+        }),
+      }),
+    );
+  });
 
   describe('list', () => {
     it('returns paginated appointments', async () => {
@@ -241,6 +270,13 @@ describe('AppointmentsService', () => {
       const whereArg = (prisma.appointment.findFirst as jest.Mock).mock.calls[0][0].where;
       expect(whereArg.startAt).toEqual({ lt: new Date('2027-03-15T09:45:00Z') });
       expect(whereArg.endAt).toEqual({ gt: new Date('2027-03-15T09:15:00Z') });
+      expect(prisma.workingSchedule.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          dayOfWeek: 1,
+          startTime: { lte: new Date('1970-01-01T16:15:00Z') },
+          endTime: { gte: new Date('1970-01-01T16:45:00Z') },
+        }),
+      });
     });
 
     it('rejects a booking that overlaps an existing appointment with a different startAt', async () => {
@@ -317,7 +353,7 @@ describe('AppointmentsService', () => {
       rescheduleCount: 0,
     };
 
-    it('update() 404s on another dentist\'s appointment (regression: used to let any appointment.update holder edit anyone\'s appointment)', async () => {
+    it("update() 404s on another dentist's appointment (regression: used to let any appointment.update holder edit anyone's appointment)", async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
 
       await expect(
@@ -326,7 +362,7 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.update).not.toHaveBeenCalled();
     });
 
-    it('reschedule() 404s on another dentist\'s appointment', async () => {
+    it("reschedule() 404s on another dentist's appointment", async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
 
       await expect(
@@ -347,7 +383,7 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.update).not.toHaveBeenCalled();
     });
 
-    it('cancel() still works for a dentist\'s own appointment ≥24h out', async () => {
+    it("cancel() still works for a dentist's own appointment ≥24h out", async () => {
       const ownAppt = { ...otherDentistAppt, dentistId: 'dentist-self' };
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
@@ -360,7 +396,7 @@ describe('AppointmentsService', () => {
       expect(result.status).toBe(AppointmentStatus.CANCELLED);
     });
 
-    it('startEncounter() 404s on another dentist\'s appointment (regression: no ownership check at all previously)', async () => {
+    it("startEncounter() 404s on another dentist's appointment (regression: no ownership check at all previously)", async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         ...otherDentistAppt,
         status: AppointmentStatus.CHECKED_IN,
@@ -369,33 +405,54 @@ describe('AppointmentsService', () => {
       await expect(service.startEncounter('appt-1', dentistActor)).rejects.toThrow();
     });
 
-    it('startEncounter() still works for a dentist\'s own checked-in appointment', async () => {
+    it("startEncounter() still works for a dentist's own checked-in appointment", async () => {
       const ownAppt = {
         ...otherDentistAppt,
         dentistId: 'dentist-self',
         status: AppointmentStatus.CHECKED_IN,
       };
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
-      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.update as jest.Mock).mockResolvedValue({
         ...ownAppt,
         status: AppointmentStatus.IN_PROGRESS,
+      });
+      (prisma.encounter.create as jest.Mock).mockResolvedValue({
+        id: 'encounter-1',
+        status: EncounterStatus.IN_PROGRESS,
       });
 
       const result = await service.startEncounter('appt-1', dentistActor);
       expect(result.status).toBe(AppointmentStatus.IN_PROGRESS);
+      expect(result.encounter.id).toBe('encounter-1');
+      expect(prisma.appointment.update).toHaveBeenCalledTimes(1);
+      expect(prisma.encounter.create).toHaveBeenCalledTimes(1);
     });
 
-    it('markNoShow() 404s on another dentist\'s appointment (dentist gained appointment.no_show in this pass; this check ships alongside that grant so it doesn\'t newly expose the same ownership gap)', async () => {
-      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
+    it('startEncounter() recovers an IN_PROGRESS appointment missing its encounter', async () => {
+      const ownAppt = {
+        ...otherDentistAppt,
+        dentistId: 'dentist-self',
+        status: AppointmentStatus.IN_PROGRESS,
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.create as jest.Mock).mockResolvedValue({ id: 'encounter-recovered' });
 
-      await expect(
-        service.markNoShow('appt-1', {} as any, dentistActor),
-      ).rejects.toThrow();
+      const result = await service.startEncounter('appt-1', dentistActor);
+
+      expect(result.encounter.id).toBe('encounter-recovered');
       expect(prisma.appointment.update).not.toHaveBeenCalled();
     });
 
-    it('markNoShow() still works for a dentist\'s own appointment', async () => {
+    it("markNoShow() 404s on another dentist's appointment (dentist gained appointment.no_show in this pass; this check ships alongside that grant so it doesn't newly expose the same ownership gap)", async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
+
+      await expect(service.markNoShow('appt-1', {} as any, dentistActor)).rejects.toThrow();
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+    });
+
+    it("markNoShow() still works for a dentist's own appointment", async () => {
       const ownAppt = { ...otherDentistAppt, dentistId: 'dentist-self' };
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
@@ -420,7 +477,7 @@ describe('AppointmentsService', () => {
       expect(whereArg.dentistId).toBe('dentist-self');
     });
 
-    it('lets a receptionist (no appointment.read.own) query any dentist\'s queue', async () => {
+    it("lets a receptionist (no appointment.read.own) query any dentist's queue", async () => {
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
       const receptionist = receptionistPayload();
 

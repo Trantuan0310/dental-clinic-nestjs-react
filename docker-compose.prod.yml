@@ -1,72 +1,66 @@
-version: '3.8'
-
 services:
-  # This bundled Postgres has no TLS configured (no cert/key, ssl=off) — it's
-  # a same-host convenience container reachable only over the internal
-  # `dental-network` bridge, not exposed publicly. The backend's startup
-  # check below now REFUSES to start in production without an encrypted
-  # DATABASE_URL, so pointing `backend` at this container as-is will fail to
-  # boot. For a real deployment, either point DATABASE_URL at a managed
-  # Postgres that terminates TLS for you (see docs/08_Deployment/DEPLOY_RAILWAY.md
-  # or DEPLOY_RENDER.md — both do this automatically), or configure this
-  # container with SSL certs and add `ssl = on` before using it in production.
-  postgres:
-    image: postgres:16-alpine
-    container_name: dental-clinic-db
+  bootstrap:
+    profiles: [bootstrap]
+    build:
+      context: ./backend
+      target: migrate
+    command: ["node", "node_modules/ts-node/dist/bin.js", "--transpile-only", "prisma/seed.ts"]
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: dental_clinic
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Init scripts run once on first volume init, in alphabetical order:
-      #   01-extensions.sql — enable uuid-ossp, pgcrypto
-      #   02-uuid-v7.sql   — create public.uuid_generate_v7() used by Prisma defaults
-      - ./backend/01-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
-      - ./backend/02-uuid-v7.sql:/docker-entrypoint-initdb.d/02-uuid-v7.sql:ro
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - dental-network
-
+      NODE_ENV: production
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set TLS migration database URL}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    restart: "no"
+  migrate:
+    build:
+      context: ./backend
+      target: migrate
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set TLS migration database URL}
+    restart: "no"
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
       target: runner
-    container_name: dental-clinic-backend
     environment:
       NODE_ENV: production
       PORT: 3000
-      # Must point at a TLS-enabled Postgres — the bundled `postgres` service
-      # above does not have one configured. Override DATABASE_URL via your
-      # env file/secrets manager to a real host with sslmode=require (or
-      # verify-ca/verify-full); the backend refuses to start otherwise.
-      DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGIN: ${CORS_ORIGIN}
-      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
-      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      DATABASE_URL: ${DATABASE_URL:?Set TLS application database URL}
+      JWT_SECRET: ${JWT_SECRET:?Set random JWT secret}
+      CORS_ORIGIN: https://${DOMAIN:?Set public domain}
+      FRONTEND_URL: https://${DOMAIN}
+      TRUST_PROXY: '1'
+      EMAIL_MOCK: 'false'
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP host}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:?Set SMTP user}
+      SMTP_PASS: ${SMTP_PASS:?Set SMTP password}
+      EMAIL_FROM: ${EMAIL_FROM:?Set sender email}
+      REDIS_URL: ${REDIS_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3000/health\").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"']
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 40s
     restart: unless-stopped
-    networks:
-      - dental-network
-
-volumes:
-  postgres_data:
-
-networks:
-  dental-network:
-    driver: bridge
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ${TLS_CERT_DIR:?Set certificate directory}:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

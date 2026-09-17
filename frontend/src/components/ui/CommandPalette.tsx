@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { buildNavGroups } from '@/lib/nav';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useFocusTrap } from '@/lib/useFocusTrap';
 import type { LucideIcon } from 'lucide-react';
 
 /**
@@ -102,9 +103,13 @@ export function CommandPalette() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [recentIds, setRecentIds] = useState<string[]>(() => loadRecent());
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closePalette = useCallback(() => setOpen(false), []);
+  useFocusTrap({ active: open, containerRef: dialogRef, onEscape: closePalette, autoFocus: false });
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K';
 
   // Global ⌘K / Ctrl+K shortcut.
   useEffect(() => {
@@ -328,7 +333,16 @@ export function CommandPalette() {
       return b.score - a.score;
     });
     const seen = new Set<string>();
-    return matched.flatMap(({ item }) => (seen.has(item.id) ? [] : (seen.add(item.id), [item])));
+    const groups = new Map<string, PaletteItem[]>();
+    for (const { item } of matched) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      const group = getGroupLabel(item, t);
+      const rows = groups.get(group) ?? [];
+      rows.push(item);
+      groups.set(group, rows);
+    }
+    return [...groups.values()].flat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, allItems, recentItems, entityItems, t]);
 
@@ -373,7 +387,7 @@ export function CommandPalette() {
       <Tooltip
         label={
           <span>
-            {t('command.tooltip')}
+            {t('command.tooltip', { shortcut: shortcutLabel })}
           </span>
         }
       >
@@ -382,19 +396,20 @@ export function CommandPalette() {
           aria-label={t('command.triggerLabel')}
           onClick={() => setOpen(true)}
           className={cn(
-            'inline-flex h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-400 dark:hover:bg-surface-700',
+            'inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-gray-200 bg-white px-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-400 dark:hover:bg-surface-700',
           )}
         >
           <SearchIcon className="h-3.5 w-3.5" aria-hidden="true" />
           <span className="hidden md:inline">{t('command.trigger')}</span>
           <kbd className="hidden rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 md:inline dark:bg-surface-700 dark:text-surface-300">
-            ⌘K
+            {shortcutLabel}
           </kbd>
         </button>
       </Tooltip>
 
       {open && (
         <div
+          ref={dialogRef}
           className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 px-4 pt-[12vh] backdrop-blur-sm dark:bg-black/60"
           role="dialog"
           aria-modal="true"

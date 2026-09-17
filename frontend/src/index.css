@@ -131,14 +131,14 @@
 }
 
 @media print {
-  body * {
+  body:has(.print-document) * {
     visibility: hidden;
   }
-  .print-rx,
-  .print-rx * {
-    visibility: visible;
+  .print-document,
+  .print-document * {
+    visibility: visible !important;
   }
-  .print-rx {
+  .print-document {
     position: absolute;
     left: 0;
     top: 0;
@@ -146,7 +146,21 @@
     padding: 16px;
     background: #fff;
   }
+  .print-document * {
+    color: #111 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+  }
+  header,
+  aside,
+  nav,
+  button,
   .no-print {
     display: none !important;
+  }
+  body,
+  main {
+    background: #fff !important;
+    color: #111 !important;
   }
 }

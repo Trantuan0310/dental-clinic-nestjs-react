@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useBlocker, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { differenceInYears, format, parseISO } from 'date-fns';
 import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
 import { Button, Card, Input, Textarea, Alert } from '@/components/ui';
@@ -24,31 +25,65 @@ const vnPhone = z
 // future birth year rendered a nonsensical negative age and could trigger
 // the emergency-contact panel (age < 12 is true for negative ages too).
 const isValidDob = (value: string) => {
-  const dob = new Date(value);
+  const dob = parseISO(value);
   if (Number.isNaN(dob.getTime())) return false;
   const now = new Date();
   const minDate = new Date(now.getFullYear() - 150, now.getMonth(), now.getDate());
   return dob >= minDate && dob <= now;
 };
 
-const patientSchema = z.object({
-  fullName: z.string().min(1, 'Họ tên là bắt buộc'),
-  dateOfBirth: z
-    .string()
-    .min(1, 'Ngày sinh là bắt buộc')
-    .refine(isValidDob, 'Ngày sinh không hợp lệ (phải trong quá khứ, cách đây không quá 150 năm)'),
-  gender: z.enum(['male', 'female', 'other']),
-  phone: vnPhone,
-  email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
-  address: z.string().optional(),
-  occupation: z.string().optional(),
-  emergencyContactName: z.string().optional(),
-  emergencyContactPhone: vnPhone,
-  notes: z.string().optional(),
-  allergies: z.array(z.string()).optional(),
-  chronicDiseases: z.array(z.string()).optional(),
-  currentMedications: z.array(z.string()).optional(),
-});
+const patientSchema = z
+  .object({
+    fullName: z.string().min(1, 'Họ tên là bắt buộc'),
+    dateOfBirth: z
+      .string()
+      .min(1, 'Ngày sinh là bắt buộc')
+      .refine(isValidDob, 'Ngày sinh không hợp lệ (phải trong quá khứ, cách đây không quá 150 năm)'),
+    gender: z.enum(['male', 'female', 'other']),
+    phone: vnPhone,
+    email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
+    address: z.string().optional(),
+    occupation: z.string().optional(),
+    emergencyContactName: z.string().optional(),
+    emergencyContactPhone: vnPhone,
+    notes: z.string().optional(),
+    allergies: z.array(z.string()).optional(),
+    chronicDiseases: z.array(z.string()).optional(),
+    currentMedications: z.array(z.string()).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.phone && !data.emergencyContactPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['phone'],
+        message: 'Cần ít nhất một số liên lạc',
+      });
+    }
+    if (!data.phone && data.emergencyContactPhone && !data.emergencyContactName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['emergencyContactName'],
+        message: 'Cần tên người liên hệ',
+      });
+    }
+
+    if (!isValidDob(data.dateOfBirth)) return;
+    const age = differenceInYears(new Date(), parseISO(data.dateOfBirth));
+    if (age < 12 && !data.emergencyContactName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['emergencyContactName'],
+        message: 'Bệnh nhân dưới 12 tuổi cần tên người liên hệ',
+      });
+    }
+    if (age < 12 && !data.emergencyContactPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['emergencyContactPhone'],
+        message: 'Bệnh nhân dưới 12 tuổi cần SĐT người liên hệ',
+      });
+    }
+  });
 
 type PatientFormData = z.infer<typeof patientSchema>;
 
@@ -62,6 +97,8 @@ export function PatientForm() {
   const [currentMedications, setCurrentMedications] = useState<string[]>([]);
   const [duplicateWarning, setDuplicateWarning] = useState<PatientLookupResult[]>([]);
   const [newTag, setNewTag] = useState({ allergies: '', chronicDiseases: '', currentMedications: '' });
+  const [tagsDirty, setTagsDirty] = useState(false);
+  const saved = useRef(false);
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', patientId],
@@ -72,6 +109,7 @@ export function PatientForm() {
   const createMutation = useMutation({
     mutationFn: (data: CreatePatientPayload) => patientsApi.create(data),
     onSuccess: (data) => {
+      saved.current = true;
       navigate(`/patients/${data.id}`);
     },
     onError: (err) => {
@@ -82,6 +120,7 @@ export function PatientForm() {
   const updateMutation = useMutation({
     mutationFn: (data: UpdatePatientPayload) => patientsApi.update(patientId!, data),
     onSuccess: (data) => {
+      saved.current = true;
       navigate(`/patients/${data.id}`);
     },
     onError: (err) => {
@@ -92,7 +131,7 @@ export function PatientForm() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
     watch,
     reset,
   } = useForm<PatientFormData>({
@@ -119,6 +158,7 @@ export function PatientForm() {
       setAllergies(patient.allergies || []);
       setChronicDiseases(patient.chronicDiseases || []);
       setCurrentMedications(patient.currentMedications || []);
+      setTagsDirty(false);
     }
   }, [patient, reset]);
 
@@ -140,6 +180,7 @@ export function PatientForm() {
     if (!trimmed) return;
     setter((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
     setNewTag((prev) => ({ ...prev, [field]: '' }));
+    setTagsDirty(true);
   };
 
   // Removes by index, not by value — two entries with the same text (e.g.
@@ -150,6 +191,7 @@ export function PatientForm() {
     index: number,
   ) => {
     setter((prev) => prev.filter((_, i) => i !== index));
+    setTagsDirty(true);
   };
 
   const onSubmit = (data: PatientFormData) => {
@@ -186,11 +228,35 @@ export function PatientForm() {
   // spuriously showing the under-12 emergency-contact panel, since age < 12
   // is also true for negative ages.
   const age = dob && isValidDob(dob)
-    ? Math.floor(
-        (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000),
-      )
+    ? differenceInYears(new Date(), parseISO(dob))
     : null;
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = format(new Date(), 'yyyy-MM-dd');
+  const hasUnsavedChanges =
+    isDirty || tagsDirty || Object.values(newTag).some((value) => value.trim());
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    hasUnsavedChanges && !saved.current && nextLocation.pathname !== '/login' &&
+    currentLocation.pathname !== nextLocation.pathname,
+  );
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    if (window.confirm('Bạn có thay đổi chưa lưu. Vẫn rời trang?')) blocker.proceed();
+    else blocker.reset();
+  }, [blocker]);
+
+  useEffect(() => {
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const cancelForm = () => {
+    navigate(-1);
+  };
 
   if (patientId && isLoading) {
     return <div>Đang tải...</div>;
@@ -199,7 +265,7 @@ export function PatientForm() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate(-1)}>
+        <Button variant="ghost" onClick={cancelForm} aria-label="Quay lại">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-semibold text-gray-900">
@@ -288,6 +354,9 @@ export function PatientForm() {
               error={errors.email?.message}
               {...register('email')}
             />
+            <p className="-mt-2 text-xs text-gray-500 sm:col-span-2">
+              Cần ít nhất SĐT chính hoặc SĐT người liên hệ.
+            </p>
             <Input
               label="Địa chỉ"
               className="sm:col-span-2"
@@ -305,22 +374,29 @@ export function PatientForm() {
           )}
         </Card>
 
-        {age !== null && age < 12 && (
-          <Card title="Người liên hệ khẩn cấp (bệnh nhân dưới 12 tuổi)">
+        <Card
+          title={
+            age !== null && age < 12
+              ? 'Người liên hệ (bắt buộc với bệnh nhân dưới 12 tuổi)'
+              : 'Người liên hệ'
+          }
+        >
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Tên người liên hệ"
+                required={age !== null && age < 12}
+                error={errors.emergencyContactName?.message}
                 {...register('emergencyContactName')}
               />
               <Input
                 label="SĐT người liên hệ"
                 type="tel"
+                required={age !== null && age < 12}
                 error={errors.emergencyContactPhone?.message}
                 {...register('emergencyContactPhone')}
               />
             </div>
-          </Card>
-        )}
+        </Card>
 
         <Card title="Thông tin y tế">
           {/* Allergies */}
@@ -337,6 +413,7 @@ export function PatientForm() {
                   {tag}
                   <button
                     type="button"
+                    aria-label={`Xóa dị ứng ${tag}`}
                     onClick={() => removeTag(setAllergies, index)}
                     className="text-red-400 hover:text-red-600"
                   >
@@ -347,6 +424,7 @@ export function PatientForm() {
             </div>
             <div className="mt-2 flex gap-2">
               <Input
+                label="Thêm dị ứng"
                 placeholder="VD: Penicillin"
                 value={newTag.allergies}
                 onChange={(e) =>
@@ -362,6 +440,7 @@ export function PatientForm() {
               />
               <Button
                 type="button"
+                aria-label="Thêm dị ứng"
                 variant="outline"
                 size="sm"
                 onClick={() => addTag(setAllergies, newTag.allergies, 'allergies')}
@@ -385,6 +464,7 @@ export function PatientForm() {
                   {tag}
                   <button
                     type="button"
+                    aria-label={`Xóa bệnh mãn tính ${tag}`}
                     onClick={() => removeTag(setChronicDiseases, index)}
                     className="text-amber-400 hover:text-amber-600"
                   >
@@ -395,6 +475,7 @@ export function PatientForm() {
             </div>
             <div className="mt-2 flex gap-2">
               <Input
+                label="Thêm bệnh mãn tính"
                 placeholder="VD: Tăng huyết áp"
                 value={newTag.chronicDiseases}
                 onChange={(e) =>
@@ -413,6 +494,7 @@ export function PatientForm() {
               />
               <Button
                 type="button"
+                aria-label="Thêm bệnh mãn tính"
                 variant="outline"
                 size="sm"
                 onClick={() =>
@@ -438,6 +520,7 @@ export function PatientForm() {
                   {tag}
                   <button
                     type="button"
+                    aria-label={`Xóa thuốc đang dùng ${tag}`}
                     onClick={() => removeTag(setCurrentMedications, index)}
                     className="text-blue-400 hover:text-blue-600"
                   >
@@ -448,6 +531,7 @@ export function PatientForm() {
             </div>
             <div className="mt-2 flex gap-2">
               <Input
+                label="Thêm thuốc đang dùng"
                 placeholder="VD: Amlodipine 5mg"
                 value={newTag.currentMedications}
                 onChange={(e) =>
@@ -470,6 +554,7 @@ export function PatientForm() {
               />
               <Button
                 type="button"
+                aria-label="Thêm thuốc đang dùng"
                 variant="outline"
                 size="sm"
                 onClick={() =>
@@ -488,14 +573,15 @@ export function PatientForm() {
 
         <Card title="Ghi chú">
           <Textarea
+            label="Ghi chú bệnh nhân"
             placeholder="Ghi chú thêm về bệnh nhân..."
             rows={3}
             {...register('notes')}
           />
         </Card>
 
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" type="button" onClick={() => navigate(-1)}>
+        <div className="sticky bottom-4 z-10 flex justify-end gap-3 rounded-lg border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+          <Button variant="outline" type="button" onClick={cancelForm}>
             Hủy
           </Button>
           <Button

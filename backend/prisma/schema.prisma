@@ -445,7 +445,7 @@ model Appointment {
   encounter        Encounter?
   rescheduleLogs   AppointmentRescheduleLog[]
 
-  @@unique([dentistId, startAt], name: "unique_active_slot")
+    // Active slot uniqueness is a partial index managed by migration 017.
   @@index([dentistId, startAt])
   @@index([patientId, startAt(sort: Desc)])
   @@index([startAt])
@@ -665,6 +665,8 @@ model PrescriptionLine {
   dosage         String    @db.VarChar(100)
   frequency      String    @db.VarChar(100)
   duration       String    @db.VarChar(100)
+  quantity       Int?
+  unit           String?   @db.VarChar(50)
   instructions   String?
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
 

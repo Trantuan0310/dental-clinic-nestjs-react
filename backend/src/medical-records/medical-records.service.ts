@@ -147,14 +147,19 @@ export class MedicalRecordsService {
     }
 
     return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
+      const current = await tx.appointment.findUnique({ where: { id: appointmentId } });
+      if (!current || current.deletedAt) throw new EncounterNotFoundException(appointmentId);
+      if (current.status !== 'CHECKED_IN' && current.status !== 'IN_PROGRESS') {
+        throw new EncounterNotClosableException(
+          `Cannot start encounter from appointment status ${current.status}`,
+        );
+      }
       const existing = await tx.encounter.findUnique({
         where: { appointmentId },
         select: { id: true, status: true },
       });
       if (existing) {
-        if (existing.status === EncounterStatus.IN_PROGRESS) {
-          return { encounterId: existing.id };
-        }
         if (existing.status === EncounterStatus.COMPLETED) {
           throw new EncounterNotClosableException('Encounter already completed');
         }
@@ -164,6 +169,12 @@ export class MedicalRecordsService {
             'Encounter is cancelled; create a new appointment instead',
           );
         }
+      }
+      if (current.status === 'CHECKED_IN') {
+        await tx.appointment.update({
+          where: { id: appointmentId },
+          data: { status: 'IN_PROGRESS', updatedBy: actor.sub },
+        });
       }
       if (!existing) {
         const created = await tx.encounter.create({
@@ -275,6 +286,8 @@ export class MedicalRecordsService {
       frequency: l.frequency,
       duration: l.duration,
       durationDays: Number(l.duration) || undefined,
+      quantity: l.quantity ?? undefined,
+      unit: l.unit ?? undefined,
       instructions: l.instructions,
     }));
     return {
@@ -884,6 +897,8 @@ export class MedicalRecordsService {
               dosage: line.dosage ?? '',
               frequency: line.frequency ?? '',
               duration: line.durationDays ? String(line.durationDays) : '',
+              quantity: line.quantity ?? null,
+              unit: line.unit ?? null,
               instructions: line.instructions ?? null,
             },
           });

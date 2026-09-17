@@ -3,7 +3,7 @@ import { Prisma, InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { endOfDayInclusive } from '../common/date-range.util';
+import { clinicDateOnly, startOfClinicDay, endOfClinicDay } from '../common/date-range.util';
 import { ExpenseService } from '../expense/expense.service';
 import {
   InvoiceDiscountInvalidException,
@@ -55,9 +55,27 @@ export class BillingService {
 
   async generateInvoiceCode(): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const rows = await this.prisma.$queryRaw<Array<{ nextval: bigint }>>`
-      SELECT nextval('invoice_code_seq')
-    `;
+    const rows = await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(hashtext('invoice_code_seq'))::text AS lock_result
+      `;
+      await tx.$queryRaw`
+        WITH current_codes AS (
+          SELECT COALESCE(MAX(split_part(code, '-', 3)::bigint), 0) AS max_value
+          FROM invoices
+          WHERE code ~ '^INV-[0-9]{4}-[0-9]+$'
+        )
+        SELECT setval(
+          'invoice_code_seq',
+          GREATEST((SELECT last_value FROM invoice_code_seq), current_codes.max_value, 1),
+          (SELECT is_called FROM invoice_code_seq) OR current_codes.max_value > 0
+        )
+        FROM current_codes
+      `;
+      return tx.$queryRaw<Array<{ nextval: bigint }>>`
+        SELECT nextval('invoice_code_seq')
+      `;
+    });
     const next = rows[0].nextval;
     const padded = String(Number(next)).padStart(6, '0');
     return `INV-${year}-${padded}`;
@@ -140,19 +158,18 @@ export class BillingService {
     to?: string;
     status?: InvoiceStatus[];
     pageSize?: number;
+    cursor?: string;
     actor: JwtPayload;
   }) {
     const where: Prisma.InvoiceWhereInput = {
       deletedAt: null,
       ...(query.patientId && { patientId: query.patientId }),
       ...(query.status && { status: { in: query.status } }),
-      // `lte: new Date(query.to)` on a bare YYYY-MM-DD date is UTC midnight
-      // — a zero-width instant, not "through end of that day". A same-day
-      // from/to filter (e.g. "today") would always match nothing.
+      // Bare dates cover the full Vietnam day; explicit timestamps stay intact.
       ...((query.from || query.to) && {
         createdAt: {
-          ...(query.from && { gte: new Date(query.from) }),
-          ...(query.to && { lte: endOfDayInclusive(query.to) }),
+          ...(query.from && { gte: startOfClinicDay(query.from) }),
+          ...(query.to && { lte: endOfClinicDay(query.to) }),
         },
       }),
       ...(query.q && {
@@ -180,24 +197,49 @@ export class BillingService {
       where.encounter = { dentistId: query.actor.sub };
     }
 
-    const invoices = await this.prisma.invoice.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: query.pageSize ?? 100,
-      include: {
-        patient: { select: { id: true, code: true, fullName: true } },
-        encounter: {
-          select: {
-            id: true,
-            dentistId: true,
-            dentist: { select: { fullName: true } },
-            closedAt: true,
+    const pageSize = query.pageSize ?? 20;
+    const [invoiceRows, aggregate] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: pageSize + 1,
+        ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
+        include: {
+          patient: { select: { id: true, code: true, fullName: true } },
+          encounter: {
+            select: {
+              id: true,
+              dentistId: true,
+              dentist: { select: { fullName: true } },
+              closedAt: true,
+            },
           },
+          items: { orderBy: { sequence: 'asc' } },
         },
-        items: { orderBy: { sequence: 'asc' } },
+      }),
+      this.prisma.invoice.aggregate({
+        where,
+        _sum: { total: true, paidAmount: true, outstandingAmount: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const hasMore = invoiceRows.length > pageSize;
+    const page = hasMore ? invoiceRows.slice(0, pageSize) : invoiceRows;
+    return {
+      data: page.map(inv => this.formatInvoice(inv)),
+      pagination: {
+        pageSize,
+        hasMore,
+        nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
       },
-    });
-    return invoices.map(inv => this.formatInvoice(inv));
+      summary: {
+        invoiceCount: aggregate._count._all,
+        totalInvoiced: Number(aggregate._sum.total ?? 0),
+        totalCollected: Number(aggregate._sum.paidAmount ?? 0),
+        totalOutstanding: Number(aggregate._sum.outstandingAmount ?? 0),
+      },
+    };
   }
 
   // Flattens the `patient` relation into patientCode/patientName — the
@@ -579,8 +621,8 @@ export class BillingService {
    *   - perDentist breakdown
    */
   async revenueReport(query: { from: string; to: string; dentistId?: string }) {
-    const fromDate = new Date(query.from);
-    const toDate = new Date(query.to);
+    const fromDate = startOfClinicDay(query.from);
+    const toDate = endOfClinicDay(query.to);
     const baseWhere: Prisma.InvoiceWhereInput = {
       deletedAt: null,
       createdAt: { gte: fromDate, lte: toDate },
@@ -610,7 +652,7 @@ export class BillingService {
       // Monthly aggregates by createdAt
       this.prisma.$queryRaw<Array<{ month: string; total: number; paid: number; count: bigint }>>`
         SELECT
-          to_char(date_trunc('month', "created_at"), 'YYYY-MM') AS month,
+          to_char(date_trunc('month', "created_at" AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'YYYY-MM') AS month,
           COALESCE(SUM("total"), 0)::float AS total,
           COALESCE(SUM("paid_amount"), 0)::float AS paid,
           COUNT(*) AS count
@@ -782,27 +824,20 @@ export class BillingService {
   // ==========================================================================
 
   private resolveRange(from?: string, to?: string): { fromDate: Date; toDate: Date } {
-    // `to` (when provided) is a bare YYYY-MM-DD string, which Date parses as
-    // UTC midnight. The previous check for "is this UTC midnight" read
-    // toDate.getHours()/getMinutes() — LOCAL time — so on any server whose
-    // local timezone isn't UTC (e.g. UTC+7), a same-day "today" range like
-    // from=to=2026-09-03 resolved to just [00:00, 07:00) local instead of
-    // the whole day, silently dropping everything from mid-morning on.
+    // Clinic calendar boundaries are independent of the server's timezone.
     let toDate: Date;
     if (to) {
-      toDate = endOfDayInclusive(to);
+      toDate = endOfClinicDay(to);
     } else {
-      toDate = new Date();
-      toDate.setHours(23, 59, 59, 999);
+      toDate = endOfClinicDay(clinicDateOnly());
     }
     let fromDate: Date;
     if (from) {
-      fromDate = new Date(from);
+      fromDate = startOfClinicDay(from);
     } else {
-      fromDate = new Date(toDate);
-      fromDate.setDate(fromDate.getDate() - 6);
+      fromDate = startOfClinicDay(clinicDateOnly(toDate));
+      fromDate.setUTCDate(fromDate.getUTCDate() - 6);
     }
-    fromDate.setHours(0, 0, 0, 0);
     return { fromDate, toDate };
   }
 
@@ -904,7 +939,7 @@ export class BillingService {
 
     // Sparkline: count distinct patients per day in current range.
     const sparklineRows = await this.prisma.$queryRaw<Array<{ d: Date; cnt: bigint }>>`
-      SELECT date_trunc('day', a."start_at") AS d, COUNT(DISTINCT a."patient_id") AS cnt
+      SELECT date_trunc('day', a."start_at" AT TIME ZONE 'Asia/Ho_Chi_Minh') AS d, COUNT(DISTINCT a."patient_id") AS cnt
       FROM "appointments" a
       WHERE a."deleted_at" IS NULL
         AND a."start_at" >= ${fromDate}
@@ -950,7 +985,7 @@ export class BillingService {
     const { fromDate, toDate } = this.resolveRange(query.from, query.to);
     const rows = await this.prisma.$queryRaw<Array<{ d: Date; total: number; count: bigint }>>`
       SELECT
-        date_trunc('day', i."issued_at") AS d,
+        date_trunc('day', i."issued_at" AT TIME ZONE 'Asia/Ho_Chi_Minh') AS d,
         COALESCE(SUM(i."total"), 0)::float AS total,
         COUNT(*) AS count
       FROM "invoices" i
@@ -971,14 +1006,13 @@ export class BillingService {
 
   /** Monthly revenue for the last 6 months (ignores range). */
   async revenueByMonth() {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    const start = new Date(today);
-    start.setMonth(start.getMonth() - 5);
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
+    const todayIso = clinicDateOnly();
+    const today = endOfClinicDay(todayIso);
+    const monthStart = new Date(`${todayIso.slice(0, 7)}-01T00:00:00Z`);
+    monthStart.setUTCMonth(monthStart.getUTCMonth() - 5);
+    const start = startOfClinicDay(monthStart.toISOString().slice(0, 10));
     const rows = await this.prisma.$queryRaw<Array<{ m: string; total: number }>>`
-      SELECT to_char(date_trunc('month', i."issued_at"), 'YYYY-MM') AS m,
+      SELECT to_char(date_trunc('month', i."issued_at" AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'YYYY-MM') AS m,
              COALESCE(SUM(i."total"), 0)::float AS total
       FROM "invoices" i
       WHERE i."deleted_at" IS NULL
@@ -996,7 +1030,7 @@ export class BillingService {
   async appointmentsByDay(query: { from?: string; to?: string }) {
     const { fromDate, toDate } = this.resolveRange(query.from ?? this.daysAgoIso(6), query.to);
     const rows = await this.prisma.$queryRaw<Array<{ d: Date; cnt: bigint }>>`
-      SELECT date_trunc('day', a."start_at") AS d, COUNT(*) AS cnt
+      SELECT date_trunc('day', a."start_at" AT TIME ZONE 'Asia/Ho_Chi_Minh') AS d, COUNT(*) AS cnt
       FROM "appointments" a
       WHERE a."deleted_at" IS NULL
         AND a."start_at" >= ${fromDate}
@@ -1147,7 +1181,7 @@ export class BillingService {
 
   private daysAgoIso(days: number): string {
     const d = new Date();
-    d.setDate(d.getDate() - days);
-    return d.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() - days);
+    return clinicDateOnly(d);
   }
 }

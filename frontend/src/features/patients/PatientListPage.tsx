@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, MoreHorizontal, Loader2, Trash2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -25,13 +25,14 @@ const PAGE_SIZE = 20;
 
 export default function PatientListPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState<PatientFilters>({
     pageSize: PAGE_SIZE,
     status: 'active',
   });
-  const [search, setSearch] = useState('');
+  const search = searchParams.get('q') ?? '';
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [rows, setRows] = useState<Patient[]>([]);
@@ -39,9 +40,14 @@ export default function PatientListPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, isError, refetch } = useQuery({
-    queryKey: ['patients', filters, cursor],
-    queryFn: () => patientsApi.list({ ...filters, cursor }),
+    queryKey: ['patients', filters, search, cursor],
+    queryFn: () => patientsApi.list({ ...filters, q: search || undefined, cursor }),
   });
+
+  useEffect(() => {
+    setCursor(undefined);
+    setRows([]);
+  }, [search]);
 
   // Reset accumulated list when filters/search change (cursor is cleared).
   // Merge the latest page into the accumulator when paginating forward.
@@ -76,11 +82,12 @@ export default function PatientListPage() {
   });
 
   const handleSearch = useCallback((value: string) => {
-    setSearch(value);
-    setCursor(undefined);
-    setRows([]);
-    setFilters((f) => ({ ...f, q: value || undefined }));
-  }, []);
+    const next = new URLSearchParams(searchParams);
+    const query = value.trim();
+    if (query) next.set('q', query);
+    else next.delete('q');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleLoadMore = useCallback(() => {
     if (nextCursor && !isFetching) setCursor(nextCursor);

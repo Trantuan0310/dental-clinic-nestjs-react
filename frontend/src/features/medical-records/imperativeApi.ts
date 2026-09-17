@@ -177,7 +177,15 @@ export const medicalRecordsApi = {
       instructions: payload.instructions,
       followUpNote: payload.followUpNote,
       notes: payload.note ?? payload.notes,
-      lines: payload.items,
+      lines: payload.items.map((item) => ({
+        drugName: item.drugName || item.medicationName || '',
+        dosage: item.dosage,
+        frequency: item.frequency,
+        durationDays: item.durationDays,
+        quantity: item.quantity,
+        unit: item.unit,
+        instructions: item.instructions,
+      })),
     };
     const { data } = await api.post<{ data: Prescription }>(
       `${BASE}/encounters/${payload.encounterId}/prescription`,

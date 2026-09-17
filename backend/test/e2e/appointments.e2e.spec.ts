@@ -25,11 +25,9 @@ function authHeaders(t: string) {
 
 describe('Appointments E2E', () => {
   beforeAll(async () => {
-    try {
-      token = await getAdminToken();
-    } catch {
-      /* skip if server not running */
-    }
+    token = await getAdminToken();
+    expect(token).toEqual(expect.any(String));
+    expect(token.length).toBeGreaterThan(0);
   });
 
   describe('GET /appointments', () => {
@@ -39,9 +37,8 @@ describe('Appointments E2E', () => {
     });
 
     it('lists appointments with auth', async () => {
-      if (!token) return;
       const res = await request(BASE).get('/appointments').set(authHeaders(token));
-      expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
+      expect(res.status).toBe(HttpStatus.OK);
     });
   });
 
@@ -50,13 +47,12 @@ describe('Appointments E2E', () => {
   // frontend/src/features/appointments/appointmentApi.ts useCalendar()).
   describe('GET /appointments with a date range', () => {
     it('returns appointments for a same-day range', async () => {
-      if (!token) return;
       const today = new Date().toISOString().slice(0, 10);
       const res = await request(BASE)
         .get('/appointments')
         .query({ from: today, to: today })
         .set(authHeaders(token));
-      expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
+      expect(res.status).toBe(HttpStatus.OK);
     });
   });
 });

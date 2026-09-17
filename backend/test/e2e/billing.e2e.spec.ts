@@ -29,11 +29,9 @@ describe('Billing E2E', () => {
   let token: string;
 
   beforeAll(async () => {
-    try {
-      token = await getAdminToken();
-    } catch {
-      // Token will be empty if server not running - tests will fail gracefully
-    }
+    token = await getAdminToken();
+    expect(token).toEqual(expect.any(String));
+    expect(token.length).toBeGreaterThan(0);
   });
 
   describe('GET /billing/invoices', () => {
@@ -43,15 +41,13 @@ describe('Billing E2E', () => {
     });
 
     it('lists invoices with auth', async () => {
-      if (!token) return; // Skip if server not running
       const res = await request(BASE).get('/billing/invoices').set(authHeaders(token));
-      expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
+      expect(res.status).toBe(HttpStatus.OK);
     });
   });
 
   describe('GET /billing/reports/revenue', () => {
     it('returns revenue report with correct shape', async () => {
-      if (!token) return;
       const res = await request(BASE)
         .get('/billing/reports/revenue')
         .query({ from: '2026-01-01', to: '2026-12-31' })
@@ -67,7 +63,6 @@ describe('Billing E2E', () => {
 
   describe('GET /billing/reports/finance-summary', () => {
     it('returns finance summary with expense data', async () => {
-      if (!token) return;
       const res = await request(BASE)
         .get('/billing/reports/finance-summary')
         .query({ from: '2026-01-01', to: '2026-12-31' })
@@ -83,7 +78,6 @@ describe('Billing E2E', () => {
 
   describe('GET /billing/reports/outstanding', () => {
     it('returns outstanding aging report', async () => {
-      if (!token) return;
       const res = await request(BASE)
         .get('/billing/reports/outstanding')
         .query({ daysOutstanding: 30 })

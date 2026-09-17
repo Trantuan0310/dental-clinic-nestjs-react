@@ -2,7 +2,7 @@
   "shell": {
     "brand": "GENSMILE",
     "version": "v2.993",
-    "clinicName": "Nha Khoa An Việt",
+    "clinicName": "Nha khoa GENSMILE",
     "search": {
       "placeholder": "Tìm bệnh nhân (tên, mã, SĐT)...",
       "label": "Tìm bệnh nhân",
@@ -47,7 +47,7 @@
     "trigger": "Tìm nhanh…",
     "triggerLabel": "Mở Command Palette",
     "placeholder": "Tìm trang, bệnh nhân, lịch hẹn, hóa đơn… (↑ ↓ để di chuyển, Enter để chọn)",
-    "tooltip": "Nhấn ⌘K để mở",
+    "tooltip": "Nhấn {{shortcut}} để mở",
     "empty": "Không tìm thấy kết quả cho \"{{query}}\"",
     "footer": {
       "navigate": "di chuyển",

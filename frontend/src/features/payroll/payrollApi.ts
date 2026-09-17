@@ -291,15 +291,27 @@ export function useOpenAdjustment() {
 // crashing MyPayrollHistoryPage for every dentist who opened it.
 // payslip.status and payslip.periodId (used for the "Chi tiết" link) were
 // undefined too, netSalary read the nonexistent field instead of netPayVnd.
-function mapPayrollHistoryItem(raw: any): PayrollHistoryItem {
+interface PayrollHistoryRow {
+  id: string;
+  payrollPeriodId: string;
+  netPayVnd: number | string;
+  period: {
+    periodStart: string;
+    periodEnd: string;
+    status: PayrollHistoryItem['status'];
+    paidAt?: string | null;
+  };
+}
+
+function mapPayrollHistoryItem(raw: PayrollHistoryRow): PayrollHistoryItem {
   return {
     id: raw.id,
     periodId: raw.payrollPeriodId,
-    periodStart: raw.period?.periodStart,
-    periodEnd: raw.period?.periodEnd,
-    status: raw.period?.status,
+    periodStart: raw.period.periodStart,
+    periodEnd: raw.period.periodEnd,
+    status: raw.period.status,
     netSalary: Number(raw.netPayVnd),
-    paidAt: raw.period?.paidAt ?? null,
+    paidAt: raw.period.paidAt ?? null,
   };
 }
 
@@ -307,7 +319,7 @@ export function useMyPayrollHistory() {
   return useQuery({
     queryKey: payrollKeys.myHistory,
     queryFn: () =>
-      get<any[]>('/payroll/me/history').then((rows) => rows.map(mapPayrollHistoryItem)),
+      get<PayrollHistoryRow[]>('/payroll/me/history').then((rows) => rows.map(mapPayrollHistoryItem)),
   });
 }
 
@@ -320,7 +332,40 @@ export function useMyPayrollHistory() {
  * field read wrong, and `payslip.encounters.length` threw on the
  * (nonexistent) `encounters` field for any dentist who opened the page.
  */
-function mapMyPayslip(raw: any): Payslip {
+interface MyPayslipEncounterRow {
+  id: string;
+  encounterId: string;
+  encounterStartAt: string;
+  durationMinutes: number;
+  treatmentRevenueVnd: number | string;
+  encounter?: {
+    startedAt?: string;
+    patient?: { fullName?: string; code?: string } | null;
+  } | null;
+}
+
+interface MyPayslipRow {
+  id: string;
+  payrollPeriodId: string;
+  dentistId: string;
+  dentistName?: string;
+  dentist?: { fullName?: string } | null;
+  period?: { periodStart?: string; periodEnd?: string } | null;
+  baseSalaryVnd: number | string;
+  commissionVnd: number | string;
+  overtimePayVnd: number | string;
+  bonusVnd: number | string;
+  penaltyVnd: number | string;
+  grossPayVnd: number | string;
+  taxTncnVnd: number | string;
+  bhxhVnd: number | string;
+  netPayVnd: number | string;
+  adjustments?: Payslip['adjustments'];
+  encounterDetails?: MyPayslipEncounterRow[];
+  computedAt: string;
+}
+
+function mapMyPayslip(raw: MyPayslipRow): Payslip {
   return {
     id: raw.id,
     periodId: raw.payrollPeriodId,
@@ -338,7 +383,7 @@ function mapMyPayslip(raw: any): Payslip {
     bhxhVnd: Number(raw.bhxhVnd),
     netPayVnd: Number(raw.netPayVnd),
     adjustments: raw.adjustments ?? [],
-    encounters: (raw.encounterDetails ?? []).map((ed: any) => ({
+    encounters: (raw.encounterDetails ?? []).map((ed) => ({
       id: ed.id,
       encounterId: ed.encounterId,
       patientName: ed.encounter?.patient?.fullName ?? '—',
@@ -355,7 +400,7 @@ export function useMyPayslip(periodId: string | undefined) {
   return useQuery({
     enabled: !!periodId,
     queryKey: payrollKeys.myPayslip(periodId ?? ''),
-    queryFn: () => get<any>(`/payroll/me/payslip/${periodId}`).then(mapMyPayslip),
+    queryFn: () => get<MyPayslipRow>(`/payroll/me/payslip/${periodId}`).then(mapMyPayslip),
   });
 }
 

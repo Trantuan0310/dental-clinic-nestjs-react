@@ -25,11 +25,9 @@ function authHeaders(t: string) {
 
 describe('Expense E2E', () => {
   beforeAll(async () => {
-    try {
-      token = await getAdminToken();
-    } catch {
-      /* skip */
-    }
+    token = await getAdminToken();
+    expect(token).toEqual(expect.any(String));
+    expect(token.length).toBeGreaterThan(0);
   });
 
   describe('GET /expenses/categories', () => {
@@ -39,7 +37,6 @@ describe('Expense E2E', () => {
     });
 
     it('lists categories with auth', async () => {
-      if (!token) return;
       const res = await request(BASE).get('/expenses/categories').set(authHeaders(token));
       expect(res.status).toBe(HttpStatus.OK);
       expect(Array.isArray(res.body.data)).toBe(true);
@@ -48,7 +45,6 @@ describe('Expense E2E', () => {
 
   describe('GET /expenses', () => {
     it('lists expenses with pagination', async () => {
-      if (!token) return;
       const res = await request(BASE)
         .get('/expenses')
         .query({ page: 1, pageSize: 10 })
@@ -61,7 +57,6 @@ describe('Expense E2E', () => {
 
   describe('POST /expenses', () => {
     it('creates a draft expense', async () => {
-      if (!token) return;
       const payload = {
         amount: 500000,
         description: 'E2E test expense',
@@ -71,7 +66,7 @@ describe('Expense E2E', () => {
 
       const res = await request(BASE).post('/expenses').set(authHeaders(token)).send(payload);
 
-      expect([HttpStatus.CREATED, HttpStatus.FORBIDDEN]).toContain(res.status);
+      expect(res.status).toBe(HttpStatus.CREATED);
       if (res.status === HttpStatus.CREATED) {
         expect(res.body.data).toHaveProperty('code');
         expect(res.body.data.status).toBe('DRAFT');

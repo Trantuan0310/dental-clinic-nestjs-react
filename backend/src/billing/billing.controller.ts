@@ -46,18 +46,17 @@ export class BillingController {
   @RequirePermissions('invoice.read.any', 'invoice.read.own')
   @ApiOperation({ summary: 'List invoices (BR-BILL-003 row-level for dentist)' })
   async list(@Query() q: ListInvoicesQueryDto, @User() actor: JwtPayload) {
-    return wrapAsPaginated(
-      await this.billing.listInvoices({
-        q: q.q,
-        patientId: q.patientId,
-        dentistId: q.dentistId,
-        from: q.from,
-        to: q.to,
-        status: q.status as InvoiceStatus[] | undefined,
-        pageSize: q.pageSize,
-        actor,
-      }),
-    );
+    return this.billing.listInvoices({
+      q: q.q,
+      patientId: q.patientId,
+      dentistId: q.dentistId,
+      from: q.from,
+      to: q.to,
+      status: q.status as InvoiceStatus[] | undefined,
+      pageSize: q.pageSize,
+      cursor: q.cursor,
+      actor,
+    });
   }
 
   @Get('invoices/:id')

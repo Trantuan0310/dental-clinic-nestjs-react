@@ -44,12 +44,11 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
       ...items,
       {
         drugName: '',
-        medicationName: '',
         dosage: '',
         frequency: '',
         quantity: undefined,
+        unit: 'viên',
         durationDays: undefined,
-        duration: undefined,
         instructions: undefined,
       },
     ]);
@@ -80,13 +79,20 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
   };
 
   const prescriptions = encounter.prescriptions || [];
-  const isCompleted = encounter.status === 'completed';
+  const isEditable = encounter.status === 'in_progress';
 
   return (
     <div className="space-y-4">
       {prescriptions.length > 0 ? (
         prescriptions.map((prescription) => (
-          <div key={prescription.id} className="rounded-lg border border-gray-200 p-4">
+          <div key={prescription.id} className="print-document rounded-lg border border-gray-200 p-4">
+            <div className="mb-4 hidden border-b border-gray-300 pb-3 text-center print:block">
+              <p className="text-lg font-bold">NHA KHOA GENSMILE</p>
+              <p className="text-sm">ĐƠN THUỐC</p>
+              <p className="mt-2 text-left text-sm">
+                Bệnh nhân: <strong>{encounter.patientName}</strong> ({encounter.patientCode})
+              </p>
+            </div>
             <div className="flex items-start justify-between">
               <div>
                 {prescription.diagnosis && (
@@ -94,13 +100,14 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                 )}
                 <p className="text-sm text-gray-500">Kê bởi: {prescription.prescribedByUserName}</p>
               </div>
-              {!isCompleted && (
-                <div className="flex gap-2">
-                  <button className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                    <Printer className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => window.print()}
+                aria-label="In đơn thuốc"
+                className="no-print rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <Printer className="h-4 w-4" />
+              </button>
             </div>
 
             {prescription.items && prescription.items.length > 0 && (
@@ -111,16 +118,20 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                     <th className="pb-2 font-medium text-gray-600">Liều</th>
                     <th className="pb-2 font-medium text-gray-600">Tần suất</th>
                     <th className="pb-2 font-medium text-gray-600">Số lượng</th>
+                    <th className="pb-2 font-medium text-gray-600">Thời gian</th>
                   </tr>
                 </thead>
                 <tbody>
                   {prescription.items.map((item) => (
                     <tr key={item.id} className="border-b border-gray-50">
-                      <td className="py-2 font-medium">{item.medicationName}</td>
+                      <td className="py-2 font-medium">{item.medicationName ?? item.drugName}</td>
                       <td className="py-2">{item.dosage}</td>
                       <td className="py-2">{item.frequency}</td>
                       <td className="py-2">
-                        {item.quantity ? `${item.quantity} ${item.duration || 'viên'}` : '-'}
+                        {item.quantity ? `${item.quantity} ${item.unit || 'viên'}` : '-'}
+                      </td>
+                      <td className="py-2">
+                        {item.durationDays ? `${item.durationDays} ngày` : '-'}
                       </td>
                     </tr>
                   ))}
@@ -146,7 +157,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
       )}
 
       {/* Add Button */}
-      {!isCompleted && (
+      {isEditable && prescriptions.length === 0 && (
         <Button onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4" />
           Tạo đơn thuốc
@@ -177,8 +188,8 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                 <div className="grid grid-cols-2 gap-3">
                   <Input
                     label="Tên thuốc"
-                    value={item.medicationName}
-                    onChange={(e) => updateItem(index, 'medicationName', e.target.value)}
+                    value={item.drugName}
+                    onChange={(e) => updateItem(index, 'drugName', e.target.value)}
                     placeholder="VD: Amoxicillin 500mg"
                   />
                   <Input
@@ -193,19 +204,29 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                     onChange={(e) => updateItem(index, 'frequency', e.target.value)}
                     placeholder="VD: 3 lần/ngày"
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Input
                       label="Số lượng"
                       type="number"
+                      min="1"
                       value={item.quantity?.toString() || ''}
                       onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || undefined)}
                       placeholder="15"
                     />
                     <Input
-                      label="Thời gian"
-                      value={item.duration || ''}
-                      onChange={(e) => updateItem(index, 'duration', e.target.value)}
-                      placeholder="5 ngày"
+                      label="Đơn vị"
+                      value={item.unit || ''}
+                      onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                      placeholder="viên"
+                    />
+                    <Input
+                      label="Số ngày"
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={item.durationDays?.toString() || ''}
+                      onChange={(e) => updateItem(index, 'durationDays', parseInt(e.target.value) || undefined)}
+                      placeholder="5"
                     />
                   </div>
                 </div>
@@ -248,7 +269,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             <Button
               onClick={handleSubmit}
               isLoading={createMutation.isPending}
-              disabled={items.length === 0 || !items[0]?.medicationName}
+              disabled={items.length === 0 || items.some((item) => !item.drugName.trim())}
             >
               Tạo đơn thuốc
             </Button>

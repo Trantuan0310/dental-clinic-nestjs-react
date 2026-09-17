@@ -20,20 +20,24 @@ WORKDIR /app
 FROM base AS deps
 
 COPY package.json package-lock.json ./
-# Skip lifecycle scripts (postinstall runs `prisma generate`, which requires
-# `prisma/schema.prisma` to already be present). We generate the client later
-# in the `builder` stage once both schema and source are copied in.
-RUN npm ci --ignore-scripts
+# Copy schema before postinstall; native Argon2 also needs its install script.
+COPY prisma ./prisma
+RUN npm ci
 
 FROM base AS builder
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json tsconfig.json tsconfig.build.json nest-cli.json ./
+COPY package.json package-lock.json tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY prisma ./prisma
 COPY src ./src
 
 RUN npx prisma generate
 RUN npm run build
+
+FROM builder AS migrate
+COPY 01-extensions.sql 02-uuid-v7.sql 03-sequences.sql ./
+COPY scripts/release.cjs ./scripts/release.cjs
+CMD ["node", "scripts/release.cjs"]
 
 FROM builder AS production-deps
 
@@ -57,6 +61,8 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=production-deps --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+
+RUN node -e "require('argon2'); require('nodemailer'); require('@prisma/client')"
 
 USER nestjs
 

@@ -161,6 +161,7 @@ export class ListAppointmentsQueryDto {
     return arr?.flatMap((v: string) => v.split(',')).map((v: string) => v.trim().toUpperCase());
   })
   @IsArray()
+  @IsEnum(AppointmentStatus, { each: true })
   status?: AppointmentStatus[];
 
   @ApiPropertyOptional({ description: 'Page size (1-200). Defaults to 50.' })

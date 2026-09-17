@@ -11,6 +11,8 @@
 
 ## Tổng quan nhanh
 
+**Quy ước thời gian MVP (chốt 2026-09-16):** phòng khám dùng `Asia/Ho_Chi_Minh` (UTC+7). Giờ trong working schedule là giờ địa phương; `YYYY-MM-DD` trong bộ lọc lịch/hàng đợi là ngày Việt Nam. `startAt/endAt` vẫn là timestamp có múi giờ. `validFrom/validTo` là cột DATE và giữ cách lưu UTC cho ngày lịch. Không phụ thuộc múi giờ của máy chạy backend.
+
 | Phần | Tóm tắt |
 | ---- | ------- |
 | Purpose | Quản lý lịch hẹn, working schedule, waiting queue |

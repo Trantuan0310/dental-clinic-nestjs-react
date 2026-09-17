@@ -423,10 +423,29 @@ describe('MedicalRecordsService', () => {
 
       const result = await service.upsertPrescription(
         'enc-1',
-        { lines: [{ medicationName: 'Amoxicillin', dosage: '500mg' }] } as any,
+        {
+          lines: [
+            {
+              drugName: 'Amoxicillin',
+              dosage: '500mg',
+              frequency: '3 lần/ngày',
+              durationDays: 5,
+              quantity: 15,
+              unit: 'viên',
+            },
+          ],
+        },
         dentistActor,
       );
       expect(result).toBeDefined();
+      expect(prisma.prescriptionLine.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          drugName: 'Amoxicillin',
+          duration: '5',
+          quantity: 15,
+          unit: 'viên',
+        }),
+      });
     });
   });
 

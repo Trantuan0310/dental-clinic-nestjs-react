@@ -1,4 +1,5 @@
 import { test as base, expect, type Page, type Browser, type BrowserContext } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 
 export type { Page };
 
@@ -27,6 +28,17 @@ export async function logout(page: Page): Promise<void> {
   await page.waitForURL('**/login');
 }
 
+export async function saveDemoVideo(page: Page, title: string): Promise<string | undefined> {
+  const video = page.video();
+  await page.close();
+  if (!process.env.E2E_RECORD_VIDEO || !video) return;
+  const dir = `artifacts/demo-videos/${process.env.E2E_RUN_ID}`;
+  mkdirSync(dir, { recursive: true });
+  const path = `${dir}/${title.replace(/[^a-zA-Z0-9-]+/g, '-').slice(0, 120)}.webm`;
+  await video.saveAs(path);
+  return path;
+}
+
 // ---------------------------------------------------------------------------
 // Shared-context cache — fixes 41/58 suite-wide failures traced to
 // TokenReuseDetectedException (backend/src/auth/auth.service.ts).
@@ -53,13 +65,8 @@ export async function logout(page: Page): Promise<void> {
 // self-consistent rotation chain instead of N independent one-shot reads
 // of a frozen snapshot.
 //
-// This fully covers CI (playwright.config.ts pins workers: 1, i.e. one
-// process for the whole run). Locally, workers defaults to Playwright's
-// own multi-process parallelism, so two DIFFERENT worker processes can
-// still each load the static file fresh and race each other on the very
-// first refresh — a much narrower window than today (only first-use per
-// worker, not every test), and not something fixable from inside a single
-// worker's module state. Accepted trade-off; see e2e/README.md.
+// Both local and CI runs use one worker. Auth files are isolated by run id;
+// Context teardown persists rotated cookies before any failed-worker restart.
 //
 // IMPORTANT: only route a `page`/`context` through this cache when the
 // test will not itself mutate that session (no login()/loginAs()/logout()/
@@ -68,7 +75,8 @@ export async function logout(page: Page): Promise<void> {
 // for every other test in the worker still expecting to reuse it. See
 // appointment-booking-roles.spec.ts and the flow-*.spec.ts files for the
 // "own dedicated context" pattern.
-type StorageStateOption = Parameters<Browser['newContext']>[0] extends { storageState?: infer S } ? S : never;
+type BrowserNewContextOptions = NonNullable<Parameters<Browser['newContext']>[0]>;
+type StorageStateOption = BrowserNewContextOptions['storageState'];
 
 const contextCache = new Map<string, Promise<BrowserContext>>();
 
@@ -81,16 +89,25 @@ export async function getSharedContext(
   browser: Browser,
   storageState: StorageStateOption,
 ): Promise<BrowserContext> {
-  const key = typeof storageState === 'string' ? storageState : JSON.stringify(storageState ?? null);
+  const resolvedState = typeof storageState === 'string' && /^e2e\/\.auth\/(admin|dentist)\.json$/.test(storageState)
+    ? `${process.env.E2E_AUTH_DIR ?? 'e2e/.auth'}/${storageState.split('/').pop()}`
+    : storageState;
+  const key = typeof resolvedState === 'string' ? resolvedState : JSON.stringify(resolvedState ?? null);
   let cached = contextCache.get(key);
   if (!cached) {
-    cached = browser.newContext({ storageState });
+    cached = browser.newContext({
+      storageState: resolvedState,
+      timezoneId: 'Asia/Ho_Chi_Minh',
+      ...(process.env.E2E_RECORD_VIDEO
+        ? { recordVideo: { dir: process.env.E2E_VIDEO_DIR ?? 'artifacts/playwright-videos', size: { width: 1280, height: 720 } } }
+        : {}),
+    });
     contextCache.set(key, cached);
   }
   return cached;
 }
 
-export const test = base.extend<{}>({
+export const test = base.extend({
   context: async ({ browser, storageState }, use) => {
     const context = await getSharedContext(browser, storageState);
     // Deliberately not closed here: cached and reused by later tests in
@@ -98,6 +115,22 @@ export const test = base.extend<{}>({
     // tears down the worker process (and everything in it) at the end of
     // the run.
     await use(context);
+    await persistAuthState();
+  },
+  page: async ({ context }, use, testInfo) => {
+    const page = await context.newPage();
+    await use(page);
+    const path = await saveDemoVideo(page, testInfo.title);
+    if (path) {
+      await testInfo.attach('demo-video', { path, contentType: 'video/webm' });
+    }
   },
 });
+// Save after page teardown, when pending refresh requests can no longer
+// rotate cookies after the snapshot. afterEach runs too early for fast failures.
+export async function persistAuthState() {
+  for (const [key, context] of contextCache) {
+    if (key.endsWith('.json')) await (await context).storageState({ path: key });
+  }
+}
 export { expect };

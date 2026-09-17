@@ -40,7 +40,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
 
-    if (!user || user.deactivatedAt !== null) {
+    if (
+      !user ||
+      user.deactivatedAt !== null ||
+      user.deletedAt !== null ||
+      user.status === 'DEACTIVATED'
+    ) {
       throw new UnauthorizedException('User is deactivated or not found');
     }
 

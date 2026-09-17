@@ -2,6 +2,7 @@
 // Dashboard shared types + helpers
 // =============================================================================
 import type { ReactNode } from 'react';
+import { format, startOfMonth, subDays, subMonths } from 'date-fns';
 
 export type TimeRange = 'today' | '7d' | '15d' | '30d' | '6m';
 export type CustomerType = 'NEW' | 'RETURNING';
@@ -107,9 +108,9 @@ export const RANGE_DESCRIPTIONS: Record<TimeRange, string> = {
 };
 
 export function resolveRange(range: TimeRange, today = new Date()): DateRange {
-  const to = today.toISOString().slice(0, 10);
+  const to = format(today, 'yyyy-MM-dd');
   const startOf = (daysAgo: number) =>
-    new Date(today.getTime() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+    format(subDays(today, daysAgo), 'yyyy-MM-dd');
   let from: string;
   switch (range) {
     case 'today':
@@ -125,10 +126,7 @@ export function resolveRange(range: TimeRange, today = new Date()): DateRange {
       from = startOf(29);
       break;
     case '6m': {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() - 5);
-      d.setDate(1);
-      from = d.toISOString().slice(0, 10);
+      from = format(startOfMonth(subMonths(today, 5)), 'yyyy-MM-dd');
       break;
     }
     default: {

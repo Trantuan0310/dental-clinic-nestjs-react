@@ -25,11 +25,9 @@ function authHeaders(t: string) {
 
 describe('Medical Records E2E', () => {
   beforeAll(async () => {
-    try {
-      token = await getAdminToken();
-    } catch {
-      /* skip */
-    }
+    token = await getAdminToken();
+    expect(token).toEqual(expect.any(String));
+    expect(token.length).toBeGreaterThan(0);
   });
 
   // The "today" clinical view and waiting queue are served by the
@@ -37,17 +35,15 @@ describe('Medical Records E2E', () => {
   // route on this controller.
   describe('GET /appointments/today', () => {
     it("returns today's appointments", async () => {
-      if (!token) return;
       const res = await request(BASE).get('/appointments/today').set(authHeaders(token));
-      expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
+      expect(res.status).toBe(HttpStatus.OK);
     });
   });
 
   describe('GET /appointments/waiting-queue', () => {
     it('returns the waiting queue', async () => {
-      if (!token) return;
       const res = await request(BASE).get('/appointments/waiting-queue').set(authHeaders(token));
-      expect([HttpStatus.OK, HttpStatus.FORBIDDEN]).toContain(res.status);
+      expect(res.status).toBe(HttpStatus.OK);
     });
   });
 });

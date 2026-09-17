@@ -87,10 +87,14 @@ export default function InvoiceDetailPage() {
   const discountAmount = invoice.subtotal - invoice.total;
 
   return (
-    <div className="space-y-3">
+    <div className="print-document space-y-3">
+      <div className="hidden text-center print:block">
+        <p className="text-lg font-bold">NHA KHOA GENSMILE</p>
+        <p>HÓA ĐƠN DỊCH VỤ</p>
+      </div>
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/billing/list')}>
+        <Button variant="ghost" aria-label="Quay lại danh sách hóa đơn" onClick={() => navigate('/billing/list')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">

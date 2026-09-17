@@ -12,6 +12,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { formatDate } from '@/lib/format';
+import { NAV_ROLE_HINT } from '@/lib/nav';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -45,6 +46,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const roleLabel = user.roles.map((role) => NAV_ROLE_HINT[role] ?? role).join(', ');
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,14 +77,14 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
           <span className="hidden text-lg font-bold tracking-wide text-brand-700 sm:inline dark:text-brand-400">
             {t('shell.brand')}
           </span>
-          <span className="hidden rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand-700 md:inline dark:bg-brand-900/40 dark:text-brand-300">
+          <span className="hidden rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-brand-700 2xl:inline dark:bg-brand-900/40 dark:text-brand-300">
             {t('shell.version')}
           </span>
         </Link>
 
         <form
           onSubmit={handleSearchSubmit}
-          className="hidden flex-1 lg:block"
+          className="hidden min-w-[260px] max-w-lg flex-1 lg:block"
           role="search"
         >
           <div className="relative mx-auto w-full max-w-md">
@@ -125,12 +127,12 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           <CommandPalette />
 
-          <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm md:flex dark:border-surface-700 dark:bg-surface-800">
+          <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm 2xl:flex dark:border-surface-700 dark:bg-surface-800">
             <Building2 className="h-4 w-4 text-brand-600 dark:text-brand-400" />
             <span className="font-medium text-gray-800 dark:text-surface-100">{t('shell.clinicName')}</span>
           </div>
 
-          <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm md:flex dark:border-surface-700 dark:bg-surface-800">
+          <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm xl:flex dark:border-surface-700 dark:bg-surface-800">
             <CalendarDays className="h-4 w-4 text-brand-600 dark:text-brand-400" />
             <span className="font-medium text-gray-800 dark:text-surface-100">{formatDate(now, 'dd/MM/yyyy')}</span>
           </div>
@@ -168,8 +170,8 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
                 {initials || <UserIcon className="h-4 w-4" />}
               </span>
               <div className="hidden text-left md:block">
-                <p className="text-sm font-medium leading-tight text-gray-900 dark:text-surface-100">{user.fullName}</p>
-                <p className="text-xs leading-tight text-gray-500 dark:text-surface-400">{user.roles.join(', ')}</p>
+                <p className="max-w-36 truncate text-sm font-medium leading-tight text-gray-900 dark:text-surface-100">{user.fullName}</p>
+                <p className="max-w-36 truncate text-xs leading-tight text-gray-500 dark:text-surface-400">{roleLabel}</p>
               </div>
               <ChevronDown className="h-4 w-4 text-gray-400 dark:text-surface-500" />
             </button>

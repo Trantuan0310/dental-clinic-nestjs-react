@@ -13,6 +13,10 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Trust only the single Compose edge proxy; backend has no published port.
+  if (process.env.TRUST_PROXY === '1') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
 
   // Security headers first — must run before any response is written.
   app.use(helmet());
@@ -30,7 +34,7 @@ async function bootstrap() {
   // /api/v1/* (the versioning layer still appends the `/v1` segment).
   // Exclude health, docs and the brand preview from the API prefix.
   app.setGlobalPrefix('api', {
-    exclude: ['health', 'docs/(.*)', '__brand-preview'],
+    exclude: ['health', 'health/ready', 'docs/(.*)', '__brand-preview'],
   });
 
   app.use(cookieParser());

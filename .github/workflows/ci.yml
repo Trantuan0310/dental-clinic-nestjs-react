@@ -10,6 +10,52 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  postgres-api:
+    name: Release migrations and PostgreSQL API tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated_ci_only
+          POSTGRES_DB: dental_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:isolated_ci_only@127.0.0.1:5432/dental_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: node scripts/release.cjs
+      - run: npm run test:isolated
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postgres-api-evidence
+          path: backend/test-results
+
+  production-images:
+    name: Production container builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target runner -t dental-backend-check ./backend
+      - run: docker run --rm --entrypoint node dental-backend-check -e "require('argon2'); require('nodemailer'); require('@prisma/client')"
+      - run: docker build --target migrate -t dental-migration-check ./backend
+      - run: docker build -t dental-web-check ./frontend
+
   backend-lint:
     name: Backend Lint
     runs-on: ubuntu-latest

@@ -32,33 +32,37 @@ const GENDER_TO_BACKEND: Record<Gender, BackendGender> = {
 };
 
 interface BackendPatientPayload {
-  fullName: string;
-  dob: string;
-  gender: BackendGender;
-  primaryPhone?: string;
-  email?: string;
+  fullName?: string;
+  dob?: string;
+  gender?: BackendGender;
+  primaryPhone?: string | null;
+  email?: string | null;
   address?: string;
   occupation?: string;
   allergies?: string[];
   chronicDiseases?: string[];
   currentMedications?: string[];
-  contactPersonName?: string;
-  contactPersonPhone?: string;
+  contactPersonName?: string | null;
+  contactPersonPhone?: string | null;
   notes?: string;
 }
 
 function toBackendPayload(p: CreatePatientPayload | UpdatePatientPayload): BackendPatientPayload {
-  const out: BackendPatientPayload = { fullName: '', dob: '', gender: 'MALE' };
+  const out: BackendPatientPayload = {};
   if (p.fullName !== undefined) out.fullName = p.fullName;
   if (p.gender !== undefined) out.gender = GENDER_TO_BACKEND[p.gender];
-  if (p.phone !== undefined) out.primaryPhone = p.phone;
-  if (p.emergencyContactName !== undefined) out.contactPersonName = p.emergencyContactName;
-  if (p.emergencyContactPhone !== undefined) out.contactPersonPhone = p.emergencyContactPhone;
+  if (p.phone !== undefined) out.primaryPhone = p.phone.trim() || null;
+  if (p.emergencyContactName !== undefined) {
+    out.contactPersonName = p.emergencyContactName.trim() || null;
+  }
+  if (p.emergencyContactPhone !== undefined) {
+    out.contactPersonPhone = p.emergencyContactPhone.trim() || null;
+  }
   if (p.allergies !== undefined) out.allergies = p.allergies;
   if (p.chronicDiseases !== undefined) out.chronicDiseases = p.chronicDiseases;
   if (p.currentMedications !== undefined) out.currentMedications = p.currentMedications;
   if (p.dateOfBirth !== undefined) out.dob = p.dateOfBirth;
-  if (p.email !== undefined) out.email = p.email;
+  if (p.email !== undefined) out.email = p.email.trim() || null;
   if (p.address !== undefined) out.address = p.address;
   if (p.occupation !== undefined) out.occupation = p.occupation;
   if (p.notes !== undefined) out.notes = p.notes;

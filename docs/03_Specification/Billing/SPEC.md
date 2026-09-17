@@ -11,6 +11,8 @@
 
 ## Tổng quan nhanh
 
+**Quy ước thời gian MVP (chốt 2026-09-16):** bộ lọc hóa đơn/báo cáo theo `YYYY-MM-DD` bao trọn ngày `Asia/Ho_Chi_Minh` (UTC+7). Timestamp ISO đầy đủ giữ nguyên thời điểm đã gửi. Nhóm biểu đồ ngày/tháng theo giờ Việt Nam, khớp phạm vi lọc và giao dịch của phòng khám.
+
 | Phần | Tóm tắt |
 | ---- | ------- |
 | Purpose | Hóa đơn, thanh toán, công nợ, báo cáo doanh thu |

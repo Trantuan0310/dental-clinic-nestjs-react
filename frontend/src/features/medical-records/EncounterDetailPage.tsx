@@ -93,7 +93,7 @@ export default function EncounterDetailPage() {
     );
   }
 
-  const isCompleted = encounter.status === 'completed';
+  const isEditable = encounter.status === 'in_progress';
   const elapsedMinutes = Math.floor(
     (Date.now() - new Date(encounter.startedAt).getTime()) / 60000,
   );
@@ -106,7 +106,7 @@ export default function EncounterDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate(-1)}>
+        <Button variant="ghost" aria-label="Quay lại" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -127,7 +127,7 @@ export default function EncounterDetailPage() {
             )}
           </p>
         </div>
-        {!isCompleted && activeTab !== 'summary' && (
+        {isEditable && activeTab !== 'summary' && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setActiveTab('summary')}>
               <CheckCircle className="h-4 w-4" />
@@ -168,7 +168,7 @@ export default function EncounterDetailPage() {
               { id: 'treatments', label: 'Điều trị', icon: ListChecks },
               { id: 'prescriptions', label: 'Đơn thuốc', icon: Pill },
               { id: 'chart', label: 'Dental Chart', icon: BarChart3 },
-              ...(!isCompleted ? [{ id: 'summary', label: 'Tóm tắt', icon: ListChecks }] : []),
+              ...(isEditable ? [{ id: 'summary', label: 'Tóm tắt', icon: ListChecks }] : []),
             ].map(({ id: tabId, label, icon: Icon }) => {
               const active = activeTab === tabId;
               return (
@@ -223,7 +223,7 @@ export default function EncounterDetailPage() {
             <Suspense fallback={TabFallback}>
               <DentalChartPanel
                 encounter={encounter}
-                isLocked={isCompleted}
+                isLocked={!isEditable}
                 highlightToothNumbers={treatmentToothNumbers}
                 focusToothNumber={focusTooth}
                 onSwitchToTreatmentTab={(tooth) => setInitialTreatmentTooth(tooth)}
@@ -232,7 +232,7 @@ export default function EncounterDetailPage() {
             </Suspense>
           </div>
 
-          {!isCompleted && (
+          {isEditable && (
             <div hidden={activeTab !== 'summary'}>
               <Suspense fallback={TabFallback}>
                 <SummaryTab

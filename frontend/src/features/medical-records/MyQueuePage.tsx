@@ -4,7 +4,7 @@ import { RefreshCw, Play, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { useStartEncounter } from '@/features/appointments/appointmentApi';
-import { Button, Card, EmptyState } from '@/components/ui';
+import { Button, Card, EmptyState, FormSkeleton } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ export default function MyQueuePage() {
   const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const startEncounter = useStartEncounter();
+  const today = format(new Date(), 'yyyy-MM-dd');
 
   const handleStart = async (appointmentId: string) => {
     try {
@@ -23,16 +24,18 @@ export default function MyQueuePage() {
     }
   };
 
-  const { data, refetch } = useQuery({
+  const { data, refetch, isLoading, isError } = useQuery({
     // Prefixed with 'appointments' (appointmentKeys.all's own prefix) so
     // every appointment mutation's `invalidateQueries({queryKey:
     // appointmentKeys.all})` — check-in, start-encounter, cancel, etc. —
     // refreshes this queue immediately instead of only on the next 30s
     // poll. The disjoint key ['my-queue'] this used to be was invisible to
     // that invalidation net entirely.
-    queryKey: ['appointments', 'my-queue'],
+    queryKey: ['appointments', 'my-queue', today],
     queryFn: () => appointmentsApi.list({
-      status: 'checked_in',
+      status: ['checked_in', 'in_progress'],
+      from: today,
+      to: today,
       pageSize: 50,
     }),
     refetchInterval: 30000, // Auto-refresh every 30 seconds
@@ -41,9 +44,8 @@ export default function MyQueuePage() {
   const appointments = data?.data ?? [];
 
   // Filter to only today's appointments and sort by check-in time
-  const today = new Date().toISOString().split('T')[0];
   const queue = appointments
-    .filter(apt => apt.startsAt?.startsWith(today))
+    .filter(apt => format(new Date(apt.startsAt), 'yyyy-MM-dd') === today)
     .sort((a, b) => {
       const aTime = a.checkInAt ? new Date(a.checkInAt).getTime() : Infinity;
       const bTime = b.checkInAt ? new Date(b.checkInAt).getTime() : Infinity;
@@ -79,7 +81,15 @@ export default function MyQueuePage() {
       </div>
 
       <Card>
-        {queue.length === 0 ? (
+        {isLoading ? (
+          <FormSkeleton rows={3} />
+        ) : isError ? (
+          <EmptyState
+            title="Không thể tải hàng đợi"
+            description="Vui lòng kiểm tra kết nối hoặc quyền truy cập rồi thử lại."
+            action={{ label: 'Thử lại', onClick: () => refetch() }}
+          />
+        ) : queue.length === 0 ? (
           <EmptyState
             icon={<div className="text-4xl">📋</div>}
             title="Không có bệnh nhân nào đang chờ"

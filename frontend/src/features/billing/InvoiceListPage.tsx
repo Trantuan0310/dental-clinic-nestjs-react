@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { DollarSign, Check, Receipt, AlertTriangle, AlertCircle } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
-import { Card, InvoiceStatusBadge, SearchInput, Select } from '@/components/ui';
+import { Button, Card, InvoiceStatusBadge, SearchInput, Select } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
-import type { InvoiceStatus } from '@/types/billing';
+import type { Invoice, InvoiceStatus } from '@/types/billing';
 
 // 'unpaid' is a synthetic combined filter (ISSUED + PARTIAL) — the one thing
 // dashboard "công nợ" cards actually want to link to; there's no single
@@ -25,6 +25,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 ];
 
 const VALID_STATUSES: InvoiceStatus[] = ['DRAFT', 'ISSUED', 'PARTIAL', 'PAID', 'VOIDED'];
+const PAGE_SIZE = 25;
 
 // Reads `?status=` from the URL once on first render — e.g. the Dashboard's
 // "Xem chi tiết" công nợ card links here with `?status=ISSUED,PARTIAL`,
@@ -45,25 +46,33 @@ export default function InvoiceListPage() {
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>(() => parseInitialStatus(searchParams));
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['invoices', search, status],
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+    queryKey: ['invoices', search, status, cursor],
     queryFn: () =>
       billingApi.listInvoices({
         q: search || undefined,
         status: status === 'all' ? undefined : status === 'unpaid' ? ['ISSUED', 'PARTIAL'] : [status],
-        pageSize: 100,
+        pageSize: PAGE_SIZE,
+        cursor,
       }),
   });
 
-  const invoices = data?.data ?? [];
-  // `total`/`paidAmount`/`outstandingAmount` are Prisma Decimal columns —
-  // they serialize as strings over the wire despite the `number` type, so
-  // summing them without Number() does string concatenation instead of
-  // addition (silently wrong, or NaN once any value has a decimal point).
-  const totalInvoiced = invoices.reduce((sum, inv) => sum + Number(inv.total), 0);
-  const totalCollected = invoices.reduce((sum, inv) => sum + Number(inv.paidAmount), 0);
-  const totalOutstanding = invoices.reduce((sum, inv) => sum + Number(inv.outstandingAmount), 0);
+  useEffect(() => {
+    setCursor(undefined);
+    setInvoices([]);
+  }, [search, status]);
+
+  useEffect(() => {
+    if (!data) return;
+    setInvoices((previous) => cursor
+      ? [...previous, ...data.data.filter((invoice) => !previous.some((row) => row.id === invoice.id))]
+      : data.data);
+  }, [data, cursor]);
+
+  const summary = data?.summary;
 
   return (
     <div className="space-y-6">
@@ -82,8 +91,10 @@ export default function InvoiceListPage() {
               <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Tổng hóa đơn</p>
-              <p className="text-xl font-semibold text-gray-900 dark:text-white">{formatCurrency(totalInvoiced)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Tổng theo bộ lọc</p>
+              <p className="text-xl font-semibold text-gray-900 dark:text-white">
+                {summary ? formatCurrency(summary.totalInvoiced) : '—'}
+              </p>
             </div>
           </div>
         </Card>
@@ -94,7 +105,9 @@ export default function InvoiceListPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Đã thu</p>
-              <p className="text-xl font-semibold text-green-600 dark:text-green-400">{formatCurrency(totalCollected)}</p>
+              <p className="text-xl font-semibold text-green-600 dark:text-green-400">
+                {summary ? formatCurrency(summary.totalCollected) : '—'}
+              </p>
             </div>
           </div>
         </Card>
@@ -105,7 +118,9 @@ export default function InvoiceListPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Còn nợ</p>
-              <p className="text-xl font-semibold text-amber-600 dark:text-amber-400">{formatCurrency(totalOutstanding)}</p>
+              <p className="text-xl font-semibold text-amber-600 dark:text-amber-400">
+                {summary ? formatCurrency(summary.totalOutstanding) : '—'}
+              </p>
             </div>
           </div>
         </Card>
@@ -163,8 +178,9 @@ export default function InvoiceListPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 dark:border-surface-700 dark:bg-surface-800">
                   <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">Mã</th>
@@ -199,8 +215,21 @@ export default function InvoiceListPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+            {data?.pagination.hasMore && (
+              <div className="flex items-center justify-center border-t border-gray-100 px-4 py-3 dark:border-surface-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  isLoading={isFetching}
+                  onClick={() => data.pagination.nextCursor && setCursor(data.pagination.nextCursor)}
+                >
+                  Tải thêm ({invoices.length}/{data.summary.invoiceCount})
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </Card>
     </div>

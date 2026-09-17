@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CalendarPlus, UserPlus, Receipt, UserCheck, FilePlus, Download } from 'lucide-react';
+import { CalendarPlus, UserPlus, Receipt, UserCheck, Download } from 'lucide-react';
 import { Button } from './Button';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -27,11 +27,11 @@ const ACTIONS: QuickAction[] = [
     permissions: ['patient.create'],
   },
   {
-    label: 'Tạo hóa đơn',
-    to: '/billing/invoices/new',
-    icon: <FilePlus className="h-4 w-4" />,
+    label: 'Hóa đơn',
+    to: '/billing/list',
+    icon: <Receipt className="h-4 w-4" />,
     variant: 'secondary',
-    permissions: ['invoice.issue'],
+    permissions: ['invoice.read.any', 'invoice.read.own'],
   },
   {
     label: 'Thu tiền',
