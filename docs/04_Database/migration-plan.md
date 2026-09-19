@@ -403,6 +403,8 @@ Trường hợp đặc biệt: nếu đã có data và cần thay đổi schema:
 
 Migration chạy thực tế nằm trong `backend/prisma/migrations/`. Khởi tạo PostgreSQL mới cần hàm UUID v7 từ `backend/02-uuid-v7.sql` và sequence nghiệp vụ từ `backend/03-sequences.sql`, tương ứng các script init của Docker. `npm run test:isolated` tự chuẩn bị các thành phần này trong database riêng trước khi chạy `migrate deploy`.
 
+- `014_prescription_line_quantity`: thêm `quantity` (nullable, CHECK > 0) và `unit` vào `prescription_lines` cho MR-06.
+- `015_sync_invoice_code_sequence`: tạo `invoice_code_seq` nếu chưa có và đồng bộ giá trị hiện tại về mã `INV-yyyy-n` lớn nhất đang có trong `invoices`, tránh sequence sinh lại mã trùng sau khi restore hoặc seed dữ liệu cũ.
 - `016_align_expense_enums`: chuyển `expenses.status` và `expense_categories.type` từ text sang enum đúng schema Prisma, giữ dữ liệu hiện có; không sửa checksum migration 012 đã triển khai.
 - `017_active_appointment_slot`: thay unique toàn bộ `(dentist_id, start_at)` bằng unique partial cho lịch chưa hủy/vắng/xóa, cho phép đặt lại giờ đã giải phóng. Index này được quản lý bằng SQL; schema Prisma không khai báo `@@unique` toàn bộ cặp khóa.
 - Hai migration mới bọc `BEGIN/COMMIT` để thay đổi schema được hoàn tác cùng nhau nếu thất bại.

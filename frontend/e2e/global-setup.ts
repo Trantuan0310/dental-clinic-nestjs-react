@@ -47,7 +47,14 @@ async function globalSetup(config: FullConfig) {
   ];
 
   try {
-  scheduleId = process.env.E2E_DEMO_SCHEDULE === '1' ? fixtureCommand([]) : 'none';
+  // On by default: the base seed never creates a WorkingSchedule row (see
+  // backend/prisma/seed.ts), so flow-patient-to-payment.spec.ts's booking
+  // step always 400s with "Dentist has no working schedule for this day"
+  // unless something provides one. The fixture is a no-op when a real
+  // schedule already covers today, so leaving it on for ordinary runs is
+  // safe — set E2E_DEMO_SCHEDULE=0 to opt out (e.g. against a DB that's
+  // already seeded with a real recurring schedule).
+  scheduleId = process.env.E2E_DEMO_SCHEDULE === '0' ? 'none' : fixtureCommand([]);
   if (scheduleId !== 'none') console.log(`[e2e] Temporary local demo schedule: ${scheduleId}`);
   for (const role of roles) {
     const page = await browser.newPage({ baseURL });

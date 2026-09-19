@@ -50,9 +50,14 @@ test.describe('Shell — post-login', () => {
   });
 
   test('mobile sidebar drawer opens and closes', async ({ page }) => {
-    // Resize to mobile breakpoint.
+    // Resize to mobile breakpoint. beforeEach already navigated to '/' —
+    // don't goto() again here: a second navigation races the first one's
+    // still in-flight silent token refresh (SessionBoot fires it on every
+    // mount), and two refresh calls presenting the same not-yet-rotated
+    // cookie trip the backend's reuse-detection, revoking the whole
+    // session and bouncing this test to the login page. The mobile layout
+    // is pure CSS (`md:hidden`), so resizing the existing page is enough.
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/');
     await page.waitForLoadState('networkidle');
 
     const openButton = page.getByRole('button', { name: /mở menu/i });

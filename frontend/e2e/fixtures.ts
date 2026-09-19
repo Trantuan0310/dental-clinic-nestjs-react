@@ -78,6 +78,41 @@ export async function saveDemoVideo(page: Page, title: string): Promise<string |
 type BrowserNewContextOptions = NonNullable<Parameters<Browser['newContext']>[0]>;
 type StorageStateOption = BrowserNewContextOptions['storageState'];
 
+// A shared context's cookie jar evolves through one rotation chain, but only
+// if navigations against it never overlap. `page.goto()`/`page.reload()`
+// both trigger a fresh SessionBoot mount (no in-memory access token survives
+// a real navigation, by design), which fires its own POST /auth/refresh. Two
+// of those landing close enough together — a test's next goto() firing
+// before the previous one's refresh finished rotating the cookie — makes
+// both requests present the same not-yet-rotated cookie. The backend's
+// atomic single-winner rotation (auth.service.ts) is correct to treat the
+// loser as reuse and revoke every session for the account; the bug is on
+// this side, letting two navigations overlap in the first place. Once that
+// fires for a role's shared context, EVERY later test reusing it is
+// permanently locked out for the rest of the worker — there's no per-test
+// recovery. Instrumenting `goto`/`reload` here, once, for every page pulled
+// from a shared/cached context (not just the ones this file's own `page`
+// fixture hands out — flow-*.spec.ts pages obtained directly via
+// getSharedContext().newPage() go through the same override) closes the gap
+// at its single choke point instead of auditing every spec for a stray
+// double-navigation.
+function instrumentPage(page: Page): Page {
+  const settle = () => page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
+  const originalGoto = page.goto.bind(page);
+  page.goto = (async (...args: Parameters<Page['goto']>) => {
+    const response = await originalGoto(...args);
+    await settle();
+    return response;
+  }) as Page['goto'];
+  const originalReload = page.reload.bind(page);
+  page.reload = (async (...args: Parameters<Page['reload']>) => {
+    const response = await originalReload(...args);
+    await settle();
+    return response;
+  }) as Page['reload'];
+  return page;
+}
+
 const contextCache = new Map<string, Promise<BrowserContext>>();
 
 // `storageState` accepts a file path (string) or an actual state object —
@@ -95,13 +130,20 @@ export async function getSharedContext(
   const key = typeof resolvedState === 'string' ? resolvedState : JSON.stringify(resolvedState ?? null);
   let cached = contextCache.get(key);
   if (!cached) {
-    cached = browser.newContext({
-      storageState: resolvedState,
-      timezoneId: 'Asia/Ho_Chi_Minh',
-      ...(process.env.E2E_RECORD_VIDEO
-        ? { recordVideo: { dir: process.env.E2E_VIDEO_DIR ?? 'artifacts/playwright-videos', size: { width: 1280, height: 720 } } }
-        : {}),
-    });
+    cached = browser
+      .newContext({
+        storageState: resolvedState,
+        timezoneId: 'Asia/Ho_Chi_Minh',
+        ...(process.env.E2E_RECORD_VIDEO
+          ? { recordVideo: { dir: process.env.E2E_VIDEO_DIR ?? 'artifacts/playwright-videos', size: { width: 1280, height: 720 } } }
+          : {}),
+      })
+      .then((context) => {
+        const originalNewPage = context.newPage.bind(context);
+        context.newPage = (async (...args: Parameters<BrowserContext['newPage']>) =>
+          instrumentPage(await originalNewPage(...args))) as BrowserContext['newPage'];
+        return context;
+      });
     contextCache.set(key, cached);
   }
   return cached;
@@ -118,6 +160,9 @@ export const test = base.extend({
     await persistAuthState();
   },
   page: async ({ context }, use, testInfo) => {
+    // `context` came through getSharedContext() above, so newPage() here is
+    // already the instrumented version (see instrumentPage()) — goto/reload
+    // settle before this fixture (or the test) ever proceeds.
     const page = await context.newPage();
     await use(page);
     const path = await saveDemoVideo(page, testInfo.title);
