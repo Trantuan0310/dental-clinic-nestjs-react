@@ -1,24 +1,60 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set local PostgreSQL database name}
+      POSTGRES_USER: ${POSTGRES_USER:?Set local PostgreSQL user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set local PostgreSQL password}
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/certs/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/certs/server.key
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ${POSTGRES_CERT_DIR:?Set PostgreSQL certificate directory}:/var/lib/postgresql/certs:ro
+      - ./backend/01-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+      - ./backend/02-uuid-v7.sql:/docker-entrypoint-initdb.d/02-uuid-v7.sql:ro
+      - ./backend/03-sequences.sql:/docker-entrypoint-initdb.d/03-sequences.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   bootstrap:
     profiles: [bootstrap]
     build:
       context: ./backend
       target: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
     command: ["node", "node_modules/ts-node/dist/bin.js", "--transpile-only", "prisma/seed.ts"]
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set TLS migration database URL}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=require
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     restart: "no"
+
   migrate:
     build:
       context: ./backend
       target: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set TLS migration database URL}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=require
     restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -26,17 +62,17 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:?Set TLS application database URL}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=require
       JWT_SECRET: ${JWT_SECRET:?Set random JWT secret}
       CORS_ORIGIN: https://${DOMAIN:?Set public domain}
       FRONTEND_URL: https://${DOMAIN}
       TRUST_PROXY: '1'
-      EMAIL_MOCK: 'false'
-      SMTP_HOST: ${SMTP_HOST:?Set SMTP host}
+      EMAIL_MOCK: ${EMAIL_MOCK:-true}
+      SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:?Set SMTP user}
-      SMTP_PASS: ${SMTP_PASS:?Set SMTP password}
-      EMAIL_FROM: ${EMAIL_FROM:?Set sender email}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@gensmile.online}
       REDIS_URL: ${REDIS_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
@@ -50,6 +86,7 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
+
   web:
     build:
       context: ./frontend
@@ -64,3 +101,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  postgres_data:
