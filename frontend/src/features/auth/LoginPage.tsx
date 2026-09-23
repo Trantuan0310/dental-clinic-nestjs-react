@@ -1,19 +1,19 @@
-import { useState } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { useTranslation } from 'react-i18next';
-import { Check } from 'lucide-react';
-import { authApi } from '@/features/auth/authApi';
-import { useAuthStore } from '@/stores/authStore';
-import { getApiErrorMessage } from '@/lib/errors';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Alert } from '@/components/ui/Alert';
-import { notify } from '@/components/ui/Toast';
-import { Logo } from '@/components/brand';
-import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { useState } from "react";
+import { useNavigate, useLocation, Navigate, Link } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import { Check } from "lucide-react";
+import { authApi } from "@/features/auth/authApi";
+import { useAuthStore } from "@/stores/authStore";
+import { getApiErrorMessage } from "@/lib/errors";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Alert } from "@/components/ui/Alert";
+import { notify } from "@/components/ui/Toast";
+import { Logo } from "@/components/brand";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -25,9 +25,9 @@ export default function LoginPage() {
   const schema = z.object({
     email: z
       .string()
-      .min(1, t('auth.login.errors.required'))
-      .email(t('auth.login.errors.required')),
-    password: z.string().min(1, t('auth.login.errors.required')),
+      .min(1, t("auth.login.errors.required"))
+      .email(t("auth.login.errors.required")),
+    password: z.string().min(1, t("auth.login.errors.required")),
   });
 
   type FormValues = z.infer<typeof schema>;
@@ -36,10 +36,13 @@ export default function LoginPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { email: '', password: '' } });
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "", password: "" },
+  });
 
   if (isAuthenticated) {
-    const to = (location.state as { from?: string } | null)?.from ?? '/';
+    const to = (location.state as { from?: string } | null)?.from ?? "/";
     return <Navigate to={to} replace />;
   }
 
@@ -47,23 +50,31 @@ export default function LoginPage() {
     setSubmitError(null);
     try {
       await authApi.login(values.email, values.password);
-      notify.success(t('auth.login.submit'));
-      const to = (location.state as { from?: string } | null)?.from ?? '/';
+      notify.success(t("auth.login.submit"));
+      const to = (location.state as { from?: string } | null)?.from ?? "/";
       navigate(to, { replace: true });
     } catch (err) {
-      setSubmitError(getApiErrorMessage(err, t('auth.login.errors.invalid')));
+      setSubmitError(getApiErrorMessage(err, t("auth.login.errors.invalid")));
     }
   });
 
-  const bullets = t('auth.login.hero.bullets', { returnObjects: true }) as string[];
+  const bullets = t("auth.login.hero.bullets", {
+    returnObjects: true,
+  }) as string[];
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row dark:bg-surface-950">
       {/* Left — brand panel */}
       <div className="relative hidden overflow-hidden bg-gradient-to-br from-brand-600 via-brand-600 to-brand-800 px-10 py-12 md:flex md:w-1/2 md:flex-col md:justify-center lg:px-16">
         {/* Decorative blobs, matching the soft-circle motif on the logo */}
-        <div className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-white/10" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-white/10" aria-hidden="true" />
+        <div
+          className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-white/10"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-white/10"
+          aria-hidden="true"
+        />
 
         <div className="relative">
           <div className="mb-10 inline-flex items-center gap-2.5 rounded-2xl bg-white px-5 py-3 shadow-lg">
@@ -71,16 +82,26 @@ export default function LoginPage() {
           </div>
 
           <h1 className="max-w-md text-3xl font-bold leading-tight text-white lg:text-4xl">
-            {t('auth.login.hero.headlinePrefix')}
-            <span className="text-brand-100">{t('auth.login.hero.headlineHighlight')}</span>
-            {t('auth.login.hero.headlineSuffix')}
+            {t("auth.login.hero.headlinePrefix")}
+            <span className="text-brand-100">
+              {t("auth.login.hero.headlineHighlight")}
+            </span>
+            {t("auth.login.hero.headlineSuffix")}
           </h1>
-          <p className="mt-4 max-w-sm text-sm text-brand-50/90">{t('auth.login.hero.subtitle')}</p>
+          <p className="mt-4 max-w-sm text-sm text-brand-50/90">
+            {t("auth.login.hero.subtitle")}
+          </p>
 
           <ul className="mt-8 space-y-3">
             {bullets.map((bullet) => (
-              <li key={bullet} className="flex items-start gap-2.5 text-sm text-white/95">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-100" aria-hidden="true" />
+              <li
+                key={bullet}
+                className="flex items-start gap-2.5 text-sm text-white/95"
+              >
+                <Check
+                  className="mt-0.5 h-4 w-4 shrink-0 text-brand-100"
+                  aria-hidden="true"
+                />
                 <span>{bullet}</span>
               </li>
             ))}
@@ -100,25 +121,34 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-surface-50">{t('auth.login.title')}</h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{t('auth.login.subtitle')}</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-surface-50">
+            {t("auth.login.title")}
+          </h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
+            {t("auth.login.subtitle")}
+          </p>
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate aria-label={t('auth.login.title')}>
+          <form
+            onSubmit={onSubmit}
+            className="mt-6 space-y-4"
+            noValidate
+            aria-label={t("auth.login.title")}
+          >
             <Input
-              label={t('auth.login.email')}
+              label={t("auth.login.email")}
               type="email"
               autoComplete="email"
               placeholder="you@clinic.local"
-              {...register('email')}
+              {...register("email")}
               error={errors.email?.message}
               required
             />
             <Input
-              label={t('auth.login.password')}
+              label={t("auth.login.password")}
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
-              {...register('password')}
+              {...register("password")}
               error={errors.password?.message}
               required
             />
@@ -128,16 +158,32 @@ export default function LoginPage() {
               </Alert>
             )}
             <Button type="submit" isLoading={isSubmitting} fullWidth size="lg">
-              {t('auth.login.submit')}
+              {t("auth.login.submit")}
             </Button>
-            <p className="text-center text-xs text-gray-500 dark:text-surface-500">
-              {t('auth.login.title')}: <span className="font-mono">admin@clinic.local</span> /{' '}
-              <span className="font-mono">Admin123!</span>
-            </p>
+            {import.meta.env.DEV && (
+              <p className="text-center text-xs text-gray-500 dark:text-surface-500">
+                Tài khoản mẫu:{" "}
+                <span className="font-mono">admin@clinic.local</span> /{" "}
+                <span className="font-mono">Admin123!</span>
+              </p>
+            )}
           </form>
+          <div className="mt-5 rounded-lg border border-teal-100 bg-teal-50 p-4 text-center text-sm text-gray-700">
+            <p>Bạn là bệnh nhân?</p>
+            <div className="mt-1 flex justify-center gap-4 font-medium text-teal-800">
+              <Link to="/booking" className="hover:underline">
+                Đặt lịch khám
+              </Link>
+              <Link to="/booking/status" className="hover:underline">
+                Tra cứu yêu cầu
+              </Link>
+            </div>
+          </div>
         </div>
 
-        <p className="mt-10 text-xs text-gray-400 dark:text-surface-500">© GENSMILE 2026 — Dental Clinic Management System</p>
+        <p className="mt-10 text-xs text-gray-400 dark:text-surface-500">
+          © GENSMILE 2026 — Dental Clinic Management System
+        </p>
       </div>
     </div>
   );

@@ -122,8 +122,11 @@
   },
   "nav": {
     "Dashboard": "Dashboard",
+    "Doctors": "Bác sĩ",
+    "Services": "Dịch vụ",
     "Patients": "Bệnh nhân",
     "Appointments": "Lịch hẹn",
+    "BookingRequests": "Yêu cầu đặt lịch",
     "Today": "Hôm nay",
     "MyQueue": "Hàng chờ của tôi",
     "MedicalRecords": "Bệnh án",
@@ -137,6 +140,9 @@
     "Schedule": "Lịch làm việc",
     "Reports": "Báo cáo doanh thu",
     "Users": "Người dùng",
+    "StaffAccounts": "Tài khoản nhân viên",
+    "DoctorShiftApprovals": "Duyệt ca bác sĩ",
+    "ReceptionQueue": "Hàng chờ tiếp đón",
     "Roles": "Vai trò & quyền",
     "AuditLogs": "Nhật ký kiểm toán",
     "Settings": "Cài đặt",
@@ -147,7 +153,10 @@
       "Tài chính": "Tài chính",
       "Nhân sự & Lương": "Nhân sự & Lương",
       "Báo cáo": "Báo cáo",
-      "Quản trị": "Quản trị"
+      "Quản trị": "Quản trị",
+      "Điều hành phòng khám": "Điều hành phòng khám",
+      "Tiếp đón": "Tiếp đón",
+      "Khám bệnh": "Khám bệnh"
     }
   }
 }

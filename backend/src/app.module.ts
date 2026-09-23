@@ -10,7 +10,10 @@ import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { PatientsModule } from './patients/patients.module';
+import { DoctorsModule } from './doctors/doctors.module';
+import { ServicesModule } from './services/services.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { BookingModule } from './booking/booking.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
 import { BillingModule } from './billing/billing.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -46,7 +49,10 @@ import { HealthController } from './common/health.controller';
     RolesModule,
     PayrollModule,
     PatientsModule,
+    DoctorsModule,
+    ServicesModule,
     AppointmentsModule,
+    BookingModule,
     MedicalRecordsModule,
     BillingModule,
     InventoryModule,

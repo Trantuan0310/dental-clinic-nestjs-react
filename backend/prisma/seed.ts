@@ -6,8 +6,8 @@ const prisma = new PrismaClient();
 const SYSTEM_ROLES = [
   {
     code: 'clinic_admin',
-    name: 'Quản trị viên',
-    description: 'Toàn quyền quản trị hệ thống',
+    name: 'Quản lý phòng khám',
+    description: 'Quản lý vận hành, nhân sự và cấu hình nghiệp vụ phòng khám',
     isSystem: true,
   },
   {
@@ -162,6 +162,15 @@ const PERMISSIONS = [
     action: 'schedule.manage',
     description: 'Quản lý lịch làm việc',
   },
+
+  { code: 'booking_request.read', resource: 'booking_request', action: 'read', description: 'Xem yêu cầu đặt lịch trực tuyến' },
+  { code: 'booking_request.manage', resource: 'booking_request', action: 'manage', description: 'Xử lý yêu cầu đặt lịch trực tuyến' },
+
+  // Clinic setup: doctor profiles and the service catalogue
+  { code: 'doctor.read', resource: 'doctor', action: 'read', description: 'Xem hồ sơ bác sĩ' },
+  { code: 'doctor.manage', resource: 'doctor', action: 'manage', description: 'Quản lý hồ sơ và dịch vụ bác sĩ' },
+  { code: 'service.read', resource: 'service', action: 'read', description: 'Xem danh mục dịch vụ' },
+  { code: 'service.manage', resource: 'service', action: 'manage', description: 'Quản lý danh mục dịch vụ' },
 
   // Schedule permissions (controllers use dotted/underscored aliases)
   {
@@ -604,7 +613,11 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'patient.read',
     'patient.update',
     'patient.identifier.manage',
+    'doctor.read',
+    'service.read',
     'appointment.create',
+    'booking_request.read',
+    'booking_request.manage',
     'appointment.read',
     'appointment.read.any',
     'appointment.read.own',
@@ -614,7 +627,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'appointment.no_show',
     'appointment.mark_no_show',
     'appointment.schedule.manage',
-    'schedule.write',
     'schedule.read',
     'encounter.read.basic',
     'encounter.start',
@@ -644,12 +656,13 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   dentist: [
     'patient.read',
+    'doctor.read',
+    'service.read',
     'appointment.read',
     'appointment.read.own',
     'appointment.update',
     'appointment.cancel',
     'appointment.schedule.manage',
-    'schedule.write',
     'schedule.read',
     'shift_registration.write',
     'shift_registration.read',

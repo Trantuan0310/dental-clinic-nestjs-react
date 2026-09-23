@@ -122,8 +122,11 @@
   },
   "nav": {
     "Dashboard": "Dashboard",
+    "Doctors": "Doctors",
+    "Services": "Services",
     "Patients": "Patients",
     "Appointments": "Appointments",
+    "BookingRequests": "Booking requests",
     "Today": "Today",
     "MyQueue": "My queue",
     "MedicalRecords": "Medical records",
@@ -137,6 +140,9 @@
     "Schedule": "Work schedule",
     "Reports": "Revenue reports",
     "Users": "Users",
+    "StaffAccounts": "Staff accounts",
+    "DoctorShiftApprovals": "Approve dentist shifts",
+    "ReceptionQueue": "Reception queue",
     "Roles": "Roles & permissions",
     "AuditLogs": "Audit logs",
     "Settings": "Settings",
@@ -147,7 +153,10 @@
       "Tài chính": "Finance",
       "Nhân sự & Lương": "HR & Payroll",
       "Báo cáo": "Reports",
-      "Quản trị": "Administration"
+      "Quản trị": "Administration",
+      "Điều hành phòng khám": "Clinic operations",
+      "Tiếp đón": "Reception",
+      "Khám bệnh": "Clinical work"
     }
   }
 }

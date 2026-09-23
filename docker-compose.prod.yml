@@ -66,8 +66,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set random JWT secret}
       CORS_ORIGIN: https://${DOMAIN:?Set public domain}
       FRONTEND_URL: https://${DOMAIN}
+      PUBLIC_APP_URL: https://${DOMAIN}
       TRUST_PROXY: '1'
-      EMAIL_MOCK: ${EMAIL_MOCK:-true}
+      EMAIL_MOCK: ${EMAIL_MOCK:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

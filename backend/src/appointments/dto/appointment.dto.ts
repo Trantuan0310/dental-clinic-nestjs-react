@@ -22,6 +22,11 @@ export class CreateAppointmentDto {
   @IsUUID()
   dentistId!: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
+
   @ApiProperty()
   @IsDateString()
   startAt!: string;

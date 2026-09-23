@@ -1,5 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Appointment, AppointmentStatus, EncounterStatus, Prisma, User } from '@prisma/client';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  Appointment,
+  AppointmentStatus,
+  BookingRequestStatus,
+  EncounterStatus,
+  Prisma,
+  User,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
@@ -41,7 +48,7 @@ import {
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
-const NO_SHOW_GRACE_MIN = 15;
+const NO_SHOW_GRACE_MIN = 30;
 
 /**
  * AppointmentsService — owns:
@@ -70,40 +77,62 @@ export class AppointmentsService {
   // ==========================================================================
 
   async create(dto: CreateAppointmentDto, actor: JwtPayload) {
-    const startAt = new Date(dto.startAt);
-    if (startAt.getTime() <= Date.now() + 60_000) {
-      throw new BackDatedAppointmentException();
-    }
+    return this.createWithStatus(dto, actor, AppointmentStatus.SCHEDULED);
+  }
 
+  async createConfirmedFromBookingRequest(
+    dto: CreateAppointmentDto,
+    bookingRequestId: string,
+    actor: JwtPayload,
+  ) {
+    return this.createWithStatus(dto, actor, AppointmentStatus.CONFIRMED, bookingRequestId);
+  }
+
+  private async createWithStatus(
+    dto: CreateAppointmentDto,
+    actor: JwtPayload,
+    status: AppointmentStatus,
+    bookingRequestId?: string,
+  ) {
+    const startAt = new Date(dto.startAt);
+    if (startAt.getTime() <= Date.now() + 60_000) throw new BackDatedAppointmentException();
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
-
-    // Honor a client-provided endAt (e.g. a chosen duration) instead of
-    // always defaulting — this DTO field has always been accepted and
-    // validated but was silently discarded here, so every appointment was
-    // persisted at defaultSlotMinutes regardless of what was requested.
+    const service = dto.serviceId
+      ? await this.prisma.clinicService.findFirst({
+          where: {
+            id: dto.serviceId,
+            isActive: true,
+            dentists: { some: { doctorId: dto.dentistId } },
+          },
+          select: { id: true, durationMinutes: true },
+        })
+      : null;
+    if (dto.serviceId && !service)
+      throw new BadRequestException('Dịch vụ không hoạt động hoặc chưa được gán cho bác sĩ');
+    const durationMinutes = service?.durationMinutes ?? this.defaultSlotMinutes(dentist);
     const endAt = dto.endAt
       ? new Date(dto.endAt)
-      : new Date(startAt.getTime() + this.defaultSlotMinutes(dentist) * 60_000);
-    if (endAt.getTime() <= startAt.getTime()) {
-      throw new BackDatedAppointmentException();
+      : new Date(startAt.getTime() + durationMinutes * 60_000);
+    if (endAt.getTime() <= startAt.getTime()) throw new BackDatedAppointmentException();
+    if (service && endAt.getTime() - startAt.getTime() !== service.durationMinutes * 60_000) {
+      throw new BadRequestException('Thời lượng lịch hẹn phải khớp với thời lượng dịch vụ');
     }
 
-    // Wrap the overlap check + insert in a single $transaction under an
-    // advisory lock keyed by dentistId. This prevents two concurrent
-    // bookings on the same dentist from both passing the gap check
-    // (BR-APPT-002 / 003 / 004 — see Phase 9.2 R2-7 lesson).
     return this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, dto.dentistId);
       await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx);
-
+      const confirmedAt = status === AppointmentStatus.CONFIRMED ? new Date() : null;
       const created = await tx.appointment.create({
         data: {
           patientId: dto.patientId,
           dentistId: dto.dentistId,
+          serviceId: dto.serviceId ?? null,
           startAt,
           endAt,
-          status: AppointmentStatus.SCHEDULED,
+          status,
+          confirmedAt,
+          confirmedBy: confirmedAt ? actor.sub : null,
           reason: dto.reason ?? dto.chiefComplaint ?? null,
           notes: dto.notes,
           source: dto.source ?? 'PHONE',
@@ -111,7 +140,27 @@ export class AppointmentsService {
           updatedBy: actor.sub,
         },
       });
-
+      if (bookingRequestId) {
+        const attached = await tx.bookingRequest.updateMany({
+          where: {
+            id: bookingRequestId,
+            status: {
+              in: [BookingRequestStatus.PENDING_REVIEW, BookingRequestStatus.PATIENT_ACCEPTED],
+            },
+            appointmentId: null,
+          },
+          data: {
+            appointmentId: created.id,
+            patientId: dto.patientId,
+            status: BookingRequestStatus.CONFIRMED,
+            handledBy: actor.sub,
+          },
+        });
+        if (attached.count !== 1)
+          throw new InvalidAppointmentStateException(
+            'Yêu cầu đặt lịch đã được xử lý bởi người khác',
+          );
+      }
       await this.audit.log({
         action: 'APPOINTMENT_CREATED',
         actorUserId: actor.sub,
@@ -122,9 +171,10 @@ export class AppointmentsService {
           dentistId: dto.dentistId,
           patientId: dto.patientId,
           startAt: dto.startAt,
+          serviceId: dto.serviceId,
+          source: dto.source,
         },
       });
-
       return created;
     });
   }
@@ -147,6 +197,37 @@ export class AppointmentsService {
   // ==========================================================================
   // State machine: check-in / cancel / no-show / reschedule
   // ==========================================================================
+
+  async confirm(appointmentId: string, actor: JwtPayload) {
+    const appt = await this.requireAppointment(appointmentId);
+    if (appt.status !== AppointmentStatus.SCHEDULED) {
+      throw new InvalidAppointmentStateException(
+        'Cannot confirm appointment in status ' + appt.status,
+      );
+    }
+    const now = new Date();
+    const result = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, status: AppointmentStatus.SCHEDULED },
+      data: {
+        status: AppointmentStatus.CONFIRMED,
+        confirmedAt: now,
+        confirmedBy: actor.sub,
+        updatedBy: actor.sub,
+      },
+    });
+    if (!result.count)
+      throw new InvalidAppointmentStateException(
+        'Appointment was changed by someone else — reload and try again',
+      );
+    await this.audit.log({
+      action: 'APPOINTMENT_CONFIRMED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'appointment',
+      targetId: appointmentId,
+    });
+    return this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+  }
 
   async checkIn(
     appointmentId: string,
@@ -419,6 +500,10 @@ export class AppointmentsService {
       throw new InvalidAppointmentStateException(`Cannot mark no-show from status ${appt.status}`);
     }
 
+    if (Date.now() <= appt.startAt.getTime() + NO_SHOW_GRACE_MIN * 60_000) {
+      throw new InvalidAppointmentStateException('Chỉ đánh dấu vắng mặt sau 30 phút kể từ giờ hẹn');
+    }
+
     // See checkIn() above — same guarded-write race protection.
     const noShowResult = await this.prisma.appointment.updateMany({
       where: { id: appointmentId, status: appt.status },
@@ -456,35 +541,23 @@ export class AppointmentsService {
   async autoMarkNoShow() {
     const now = new Date();
     const cutoff = new Date(now.getTime() - NO_SHOW_GRACE_MIN * 60_000);
-
-    const candidates = await this.prisma.appointment.findMany({
+    const result = await this.prisma.appointment.updateMany({
       where: {
         status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
         startAt: { lt: cutoff },
         deletedAt: null,
       },
-      select: { id: true },
+      data: { status: AppointmentStatus.NO_SHOW, noShowAt: now, updatedBy: null },
     });
-
-    if (candidates.length === 0) return { updated: 0 };
-
-    const updated = await this.prisma.appointment.updateMany({
-      where: { id: { in: candidates.map(c => c.id) } },
-      data: {
-        status: AppointmentStatus.NO_SHOW,
-        noShowAt: now,
-        updatedBy: null,
-      },
-    });
-
-    await this.audit.log({
-      action: 'APPOINTMENT_AUTO_NO_SHOW',
-      actorUserId: null,
-      targetType: 'appointment',
-      metadata: { count: updated.count, cutoff },
-    });
-
-    return { updated: updated.count };
+    if (result.count > 0) {
+      await this.audit.log({
+        action: 'APPOINTMENT_AUTO_NO_SHOW',
+        actorUserId: null,
+        targetType: 'appointment',
+        metadata: { count: result.count, cutoff },
+      });
+    }
+    return { updated: result.count };
   }
 
   async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload) {
@@ -963,17 +1036,27 @@ export class AppointmentsService {
       throw new InvalidAppointmentStateException('endAt must be after startAt');
     }
 
-    const checkedIn = await this.prisma.appointment.count({
+    const conflicts = await this.prisma.appointment.count({
       where: {
         dentistId: dto.dentistId,
-        status: AppointmentStatus.CHECKED_IN,
-        startAt: { gte: startAt, lte: endAt },
+        status: {
+          in: [
+            AppointmentStatus.SCHEDULED,
+            AppointmentStatus.CONFIRMED,
+            AppointmentStatus.CHECKED_IN,
+            AppointmentStatus.IN_PROGRESS,
+          ],
+        },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
         deletedAt: null,
       },
     });
-    if (checkedIn > 0) {
+    if (conflicts > 0) {
       throw new InvalidAppointmentStateException(
-        `Dentist has ${checkedIn} checked-in appointments during requested time-off window`,
+        'Có ' +
+          conflicts +
+          ' lịch hẹn trùng khung nghỉ. Hãy đổi lịch hoặc thông báo bệnh nhân trước.',
       );
     }
 
