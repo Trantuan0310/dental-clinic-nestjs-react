@@ -8,6 +8,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ForbiddenPage, NotFoundPage } from '@/features/auth/ErrorPages';
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
 const DashboardPage = lazy(() => import('@/features/DashboardPage'));
 
 const PatientListPage = lazy(() => import('@/features/patients/PatientListPage'));
@@ -72,6 +74,8 @@ function SuspenseBoundary({ children }: { children: React.ReactNode }) {
 const router = createBrowserRouter(createRoutesFromElements(
   <Route element={<SessionBoot><Suspense fallback={<PageLoader />}><Outlet /></Suspense></SessionBoot>}>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
 
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route

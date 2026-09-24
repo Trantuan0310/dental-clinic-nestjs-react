@@ -112,6 +112,32 @@
         "required": "Vui lòng nhập email và mật khẩu"
       }
     },
+    "forgotPassword": {
+      "title": "Quên mật khẩu",
+      "subtitle": "Nhập email tài khoản, chúng tôi sẽ gửi link đặt lại mật khẩu",
+      "email": "Email",
+      "submit": "Gửi link đặt lại mật khẩu",
+      "backToLogin": "Quay lại đăng nhập",
+      "success": "Nếu email tồn tại trong hệ thống, một link đặt lại mật khẩu đã được gửi tới hộp thư của bạn.",
+      "errors": {
+        "required": "Vui lòng nhập email hợp lệ"
+      }
+    },
+    "resetPassword": {
+      "title": "Đặt lại mật khẩu",
+      "subtitle": "Nhập mật khẩu mới cho tài khoản của bạn",
+      "newPassword": "Mật khẩu mới",
+      "confirmPassword": "Xác nhận mật khẩu mới",
+      "submit": "Đặt lại mật khẩu",
+      "success": "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.",
+      "backToLogin": "Quay lại đăng nhập",
+      "missingToken": "Liên kết không hợp lệ. Vui lòng dùng lại email được gửi tới bạn.",
+      "errors": {
+        "required": "Vui lòng nhập mật khẩu",
+        "minLength": "Mật khẩu phải có ít nhất 8 ký tự",
+        "mismatch": "Mật khẩu xác nhận không khớp"
+      }
+    },
     "logout": "Đăng xuất",
     "session": {
       "expired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."

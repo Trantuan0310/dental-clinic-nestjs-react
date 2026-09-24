@@ -54,4 +54,12 @@ export const authApi = {
   async me(): Promise<UserInfo> {
     return unwrap((await api.get<AuthEnvelope<UserInfo>>('/auth/me')).data);
   },
+  // Always resolves — the backend returns 204 whether or not the email
+  // exists, so the UI can't (and shouldn't) distinguish the two cases.
+  async forgotPassword(email: string): Promise<void> {
+    await api.post('/auth/forgot-password', { email });
+  },
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await api.post('/auth/reset-password', { token, newPassword });
+  },
 };

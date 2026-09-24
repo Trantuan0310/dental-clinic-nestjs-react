@@ -4,6 +4,7 @@ import { UserStatus } from '@prisma/client';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { EmailService } from '../common/services/email.service';
 import { createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-mock';
 import { validUser, validRole, validUserRole, ACTION_AUDIT } from '../../test/helpers/fixtures';
 import {
@@ -17,10 +18,12 @@ describe('UsersService', () => {
   let service: UsersService;
   let prisma: PrismaMockShape;
   let audit: { log: jest.Mock };
+  let email: { sendAccountSetupEmail: jest.Mock };
 
   beforeEach(async () => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    email = { sendAccountSetupEmail: jest.fn().mockResolvedValue(true) };
 
     (argon2.hash as jest.Mock).mockResolvedValue('hashed-temp');
 
@@ -29,6 +32,7 @@ describe('UsersService', () => {
         UsersService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
+        { provide: EmailService, useValue: email },
       ],
     }).compile();
 
@@ -215,6 +219,52 @@ describe('UsersService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: ACTION_AUDIT.USER_CREATED }),
       );
+    });
+
+    it('sends an account setup email by default so the account can leave PENDING_SETUP', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.user.create as jest.Mock).mockResolvedValue(
+        validUser({ id: 'new-user', email: 'new@x.com', status: UserStatus.PENDING_SETUP }),
+      );
+
+      await service.create(
+        { email: 'new@x.com', fullName: 'New' },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ userId: 'new-user' }),
+        }),
+      );
+      expect(email.sendAccountSetupEmail).toHaveBeenCalledWith(
+        'new@x.com',
+        expect.stringContaining('/auth/reset-password?token='),
+        expect.any(Number),
+      );
+    });
+
+    it('skips the setup email when sendInvite is explicitly false', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.user.create as jest.Mock).mockResolvedValue(
+        validUser({ id: 'new-user', email: 'new@x.com', status: UserStatus.PENDING_SETUP }),
+      );
+
+      await service.create(
+        { email: 'new@x.com', fullName: 'New', sendInvite: false },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(email.sendAccountSetupEmail).not.toHaveBeenCalled();
     });
   });
 

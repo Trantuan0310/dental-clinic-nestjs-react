@@ -12,6 +12,7 @@ import {
 } from '../common/exceptions/business-rule.exception';
 import { UserResponse, UserListItem } from './dto/user-response.dto';
 import { PaginatedResult } from '../common/dto/pagination.dto';
+import { EmailService } from '../common/services/email.service';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 
@@ -28,9 +29,15 @@ export class UsersService {
     saltLength: 16,
   };
 
+  // Mirrors AuthService.PASSWORD_RESET_TTL_MS — the setup link created here
+  // is consumed by the same POST /auth/reset-password endpoint, so it needs
+  // the same lifetime.
+  private readonly ACCOUNT_SETUP_TTL_MS = 60 * 60 * 1000;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly emailService: EmailService,
   ) {}
 
   async list(query: ListUsersQueryDto): Promise<PaginatedResult<UserListItem>> {
@@ -168,10 +175,31 @@ export class UsersService {
       },
     });
 
-    if (createUserDto.sendInvite) {
-      this.logger.log(
-        `[MOCK EMAIL] Invite sent to ${user.email} with temp password: ${tempPassword}`,
-      );
+    // Not sending an invite would leave the account stuck: the temp password
+    // above is random and never surfaced anywhere, so the setup link is the
+    // only way in. Default to sending unless the caller opts out explicitly.
+    if (createUserDto.sendInvite !== false) {
+      const setupToken = crypto.randomUUID();
+      const tokenHash = crypto.createHash('sha256').update(setupToken).digest('hex');
+      const expiresAt = new Date(Date.now() + this.ACCOUNT_SETUP_TTL_MS);
+
+      await this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const setupUrl = `${baseUrl}/auth/reset-password?token=${setupToken}`;
+      const expiresInMinutes = Math.round(this.ACCOUNT_SETUP_TTL_MS / 60000);
+
+      if (process.env.EMAIL_MOCK === 'true' || process.env.NODE_ENV !== 'production') {
+        this.logger.warn(`[EMAIL] Account setup URL for ${user.email}: ${setupUrl}`);
+      }
+
+      await this.emailService.sendAccountSetupEmail(user.email, setupUrl, expiresInMinutes);
     }
 
     return {
