@@ -137,6 +137,35 @@ function addMinutes(d: Date, minutes: number): Date {
   return new Date(d.getTime() + minutes * 60_000);
 }
 
+/**
+ * Create a staff user with one role, or refresh an existing one. Replaces
+ * `user.upsert({ where: { email } })`, which Prisma rejects: email is only
+ * unique among non-deleted users (partial index, migration 013), not @unique.
+ */
+async function upsertStaffUser(
+  email: string,
+  fullName: string,
+  passwordHash: string,
+  roleId: string,
+) {
+  const existing = await prisma.user.findFirst({ where: { email, deletedAt: null } });
+  if (existing) {
+    return prisma.user.update({
+      where: { id: existing.id },
+      data: { fullName, status: 'ACTIVE' },
+    });
+  }
+  return prisma.user.create({
+    data: {
+      email,
+      fullName,
+      passwordHash,
+      status: 'ACTIVE',
+      userRoles: { create: { roleId } },
+    },
+  });
+}
+
 // ----------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------
@@ -438,7 +467,11 @@ async function main() {
   // --------------------------------------------------------------------
   // 1. Ensure admin status is ACTIVE so we can also use it as creator
   // --------------------------------------------------------------------
-  const admin = await prisma.user.findUnique({ where: { email: 'admin@clinic.local' } });
+  // users.email is unique only among non-deleted rows (partial index from
+  // migration 013), so it isn't a Prisma @unique field — look up with findFirst.
+  const admin = await prisma.user.findFirst({
+    where: { email: 'admin@clinic.local', deletedAt: null },
+  });
   if (!admin) {
     throw new Error('Admin user missing — run `npm run prisma:seed` first.');
   }
@@ -463,17 +496,7 @@ async function main() {
   const passwordHash = await argon2.hash(DEFAULT_PASSWORD, { type: argon2.argon2id });
   const dentists = [];
   for (const d of DENTISTS) {
-    const user = await prisma.user.upsert({
-      where: { email: d.email },
-      update: { fullName: d.fullName, status: 'ACTIVE' },
-      create: {
-        email: d.email,
-        fullName: d.fullName,
-        passwordHash,
-        status: 'ACTIVE',
-        userRoles: { create: { roleId: dentistRole.id } },
-      },
-    });
+    const user = await upsertStaffUser(d.email, d.fullName, passwordHash, dentistRole.id);
     dentists.push(user);
     console.log(`  ✓ ${user.fullName} (${user.email})`);
   }
@@ -484,17 +507,7 @@ async function main() {
   console.log('\nCreating receptionists…');
   const receptionists = [];
   for (const r of RECEPTIONISTS) {
-    const user = await prisma.user.upsert({
-      where: { email: r.email },
-      update: { fullName: r.fullName, status: 'ACTIVE' },
-      create: {
-        email: r.email,
-        fullName: r.fullName,
-        passwordHash,
-        status: 'ACTIVE',
-        userRoles: { create: { roleId: receptionistRole.id } },
-      },
-    });
+    const user = await upsertStaffUser(r.email, r.fullName, passwordHash, receptionistRole.id);
     receptionists.push(user);
     console.log(`  ✓ ${user.fullName} (${user.email})`);
   }
@@ -1112,13 +1125,12 @@ async function seedExpenses(
     if (exists) {
       cats.push({ id: exists.id, name: exists.name });
     } else {
-      // `type` (ExpenseType enum) is set via raw SQL because the migration
-      // declared the column as `text` but Prisma still casts against the
-      // absent PG ENUM type. $executeRaw avoids the cast entirely.
+      // Raw SQL kept from when the column was `text`; migration 016 made it
+      // the "ExpenseType" enum, so the bound text parameter needs a cast.
       const id = crypto.randomUUID();
       await prisma.$executeRawUnsafe(
         `INSERT INTO expense_categories (id, name, description, type, is_active, created_at, updated_at)
-         VALUES ($1::uuid, $2, $3, $4, true, now(), now())`,
+         VALUES ($1::uuid, $2, $3, $4::"ExpenseType", true, now(), now())`,
         id, c.name, c.description ?? null, 'OPERATING',
       );
       cats.push({ id, name: c.name });
@@ -1144,7 +1156,8 @@ async function seedExpenses(
     const expDate = new Date(DATA_START_DATE.getTime() + dayOffset * 86400 * 1000);
     const amount = randInt(500_000, 30_000_000);
     const status = statuses[i];
-    // Insert via raw SQL to bypass the missing PG ENUM type for ExpenseStatus.
+    // Raw SQL kept from when `status` was `text`; it is the "ExpenseStatus"
+    // enum since migration 016, so the bound parameter needs a cast.
     const id = crypto.randomUUID();
     const code = `EXP-${pad(i + 1, 5)}`;
     const description = pick(descOptions);
@@ -1153,7 +1166,7 @@ async function seedExpenses(
     const receiptVal = rand() < 0.4 ? `https://storage.example.com/receipts/${code}.pdf` : null;
     await prisma.$executeRawUnsafe(
       `INSERT INTO expenses (id, code, amount, description, expense_date, status, category_id, notes, receipt_url, created_by, updated_by, created_at, updated_at, version)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4::date, $5, $6::uuid, $7, $8, $9::uuid, $10::uuid, now(), now(), 1)`,
+       VALUES (gen_random_uuid(), $1, $2, $3, $4::date, $5::"ExpenseStatus", $6::uuid, $7, $8, $9::uuid, $10::uuid, now(), now(), 1)`,
       code, amount, description, dateStr, status, cat.id, notesVal, receiptVal, admin.id, admin.id,
     );
     created++;
