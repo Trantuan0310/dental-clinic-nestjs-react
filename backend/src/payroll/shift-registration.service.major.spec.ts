@@ -7,6 +7,7 @@ import {
   ShiftConflictException,
   ShiftRegistrationNotCancellableException,
 } from './domain/exceptions';
+import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 
 // Dates below must always resolve in the future relative to whenever the
 // suite runs — compute them relative to `Date.now()` instead of hard-coding
@@ -16,6 +17,25 @@ function daysFromNow(days: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * shift.date/startTime are stored as clinic wall-clock (UTC+7, see
+ * shiftStartInstant() in the service). Given a real instant, returns the
+ * {date, startTime} fields that would round-trip back to that same instant.
+ */
+function toClinicShiftFields(instant: Date): { date: Date; startTime: string } {
+  const clinicShifted = new Date(instant.getTime() + CLINIC_UTC_OFFSET_MS);
+  const hh = String(clinicShifted.getUTCHours()).padStart(2, '0');
+  const mm = String(clinicShifted.getUTCMinutes()).padStart(2, '0');
+  const date = new Date(
+    Date.UTC(
+      clinicShifted.getUTCFullYear(),
+      clinicShifted.getUTCMonth(),
+      clinicShifted.getUTCDate(),
+    ),
+  );
+  return { date, startTime: `${hh}:${mm}` };
 }
 
 /** Next date, at least `minDaysFromNow` out, that falls on `targetDayOfWeek` (0=Sun..6=Sat). */
@@ -195,19 +215,15 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
 
   describe('M#8 — admin late cancel triggers BR-PAY-014 audit recommendation', () => {
     it('flags late cancel < 24h with recommendation', async () => {
-      // Shift in 2 hours
-      const now = new Date();
-      const shiftStart = new Date(now.getTime() + 2 * 3_600_000);
-      const hh = String(shiftStart.getUTCHours()).padStart(2, '0');
-      const mm = String(shiftStart.getUTCMinutes()).padStart(2, '0');
+      // Shift in 2 hours (clinic wall-clock, UTC+7)
+      const shiftStart = new Date(Date.now() + 2 * 3_600_000);
+      const { date, startTime } = toClinicShiftFields(shiftStart);
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         id: 'shift-1',
         dentistId: 'dentist-1',
-        date: new Date(
-          Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate()),
-        ),
-        startTime: `${hh}:${mm}`,
+        date,
+        startTime,
         status: ShiftRegistrationStatus.APPROVED,
       });
       (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
@@ -255,18 +271,15 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
     });
 
     it('BS cancel still blocks < 24h', async () => {
-      const now = new Date();
-      const shiftStart = new Date(now.getTime() + 2 * 3_600_000);
-      const hh = String(shiftStart.getUTCHours()).padStart(2, '0');
-      const mm = String(shiftStart.getUTCMinutes()).padStart(2, '0');
+      // Shift in 2 hours (clinic wall-clock, UTC+7)
+      const shiftStart = new Date(Date.now() + 2 * 3_600_000);
+      const { date, startTime } = toClinicShiftFields(shiftStart);
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         id: 'shift-3',
         dentistId: 'dentist-1',
-        date: new Date(
-          Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate()),
-        ),
-        startTime: `${hh}:${mm}`,
+        date,
+        startTime,
         status: ShiftRegistrationStatus.APPROVED,
       });
 

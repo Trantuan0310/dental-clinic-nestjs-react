@@ -9,6 +9,7 @@ import {
   ShiftRegistrationNotCancellableException,
   PayrollNotFoundException,
 } from './domain/exceptions';
+import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 
 // Dates below must always resolve in the future relative to whenever the
 // suite runs (not just when it was written) — compute them relative to
@@ -18,6 +19,25 @@ function daysFromNow(days: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * shift.date/startTime are stored as clinic wall-clock (UTC+7, see
+ * shiftStartInstant() in the service). Given a real instant, returns the
+ * {date, startTime} fields that would round-trip back to that same instant.
+ */
+function toClinicShiftFields(instant: Date): { date: Date; startTime: string } {
+  const clinicShifted = new Date(instant.getTime() + CLINIC_UTC_OFFSET_MS);
+  const hh = String(clinicShifted.getUTCHours()).padStart(2, '0');
+  const mm = String(clinicShifted.getUTCMinutes()).padStart(2, '0');
+  const date = new Date(
+    Date.UTC(
+      clinicShifted.getUTCFullYear(),
+      clinicShifted.getUTCMonth(),
+      clinicShifted.getUTCDate(),
+    ),
+  );
+  return { date, startTime: `${hh}:${mm}` };
 }
 
 /** Next date, at least `minDaysFromNow` out, that falls on `targetDayOfWeek` (0=Sun..6=Sat). */
@@ -254,22 +274,14 @@ describe('ShiftRegistrationService', () => {
     });
 
     it('BS cannot cancel shift < 24h before (BR-APPT-028)', async () => {
-      // Shift date = today, time = 1 hour from now
-      const now = new Date();
-      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-      const hh = String(oneHourLater.getUTCHours()).padStart(2, '0');
-      const mm = String(oneHourLater.getUTCMinutes()).padStart(2, '0');
+      // Shift date = today, time = 1 hour from now (clinic wall-clock, UTC+7)
+      const oneHourLater = new Date(Date.now() + 60 * 60 * 1000);
+      const { date, startTime } = toClinicShiftFields(oneHourLater);
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
-        date: new Date(
-          Date.UTC(
-            oneHourLater.getUTCFullYear(),
-            oneHourLater.getUTCMonth(),
-            oneHourLater.getUTCDate(),
-          ),
-        ),
-        startTime: `${hh}:${mm}`,
+        date,
+        startTime,
         endTime: '23:00',
       });
 
@@ -279,22 +291,14 @@ describe('ShiftRegistrationService', () => {
     });
 
     it('admin can cancel any time', async () => {
-      // 1 hour from now
-      const now = new Date();
-      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-      const hh = String(oneHourLater.getUTCHours()).padStart(2, '0');
-      const mm = String(oneHourLater.getUTCMinutes()).padStart(2, '0');
+      // 1 hour from now (clinic wall-clock, UTC+7)
+      const oneHourLater = new Date(Date.now() + 60 * 60 * 1000);
+      const { date, startTime } = toClinicShiftFields(oneHourLater);
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         ...mockShiftPending,
-        date: new Date(
-          Date.UTC(
-            oneHourLater.getUTCFullYear(),
-            oneHourLater.getUTCMonth(),
-            oneHourLater.getUTCDate(),
-          ),
-        ),
-        startTime: `${hh}:${mm}`,
+        date,
+        startTime,
         status: ShiftRegistrationStatus.APPROVED,
       });
       (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
