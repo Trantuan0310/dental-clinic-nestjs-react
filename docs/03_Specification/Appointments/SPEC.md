@@ -452,12 +452,12 @@ Appointment.source ∈ {
 | BR-APPT-007 | Override check-in có reason | Khi lễ tân check-in ngoài window: bắt buộc nhập lý do, audit log. |
 | BR-APPT-008 | Patient not deleted | BN phải active để check-in và tạo encounter. |
 | BR-APPT-009 | Dentist cancel own ≥ 24h | BS chỉ cancel được lịch của mình nếu `now < startAt - 24h`. |
-| BR-APPT-010 | Receptionist/Admin cancel | Lễ tân/Admin cancel được nếu `now < startAt` (trước khi encounter). |
+| BR-APPT-010 | Receptionist/Admin cancel | Lễ tân/Admin cancel được nếu `now < startAt` (trước khi encounter). Ngoại lệ: appointment `checked_in` sau giờ hẹn được cancel với lý do ≥ 5 ký tự (BR-APPT-025), audit ghi `lateCheckedInCancel`. |
 | BR-APPT-011 | Không cancel khi encounter đang chạy | Status `in_progress` → không cancel được. |
-| BR-APPT-012 | Auto no-show | Status `scheduled`/`confirmed` mà `now > startAt + 15min` → cron tự `no_show`. **`checked_in` KHÔNG auto no_show** — BN đã đến, BS có thể vẫn gặp; nếu bỏ về sau khi check-in → manual `no_show` (xem BR-APPT-025). |
+| BR-APPT-012 | Auto no-show | Status `scheduled`/`confirmed` mà `now > startAt + 30min` (bằng mép cuối cửa sổ check-in BR-APPT-006, để BN đến trễ trong cửa sổ vẫn check-in được) → cron tự `no_show`. Câu lệnh update lặp lại điều kiện status để không ghi đè check-in xảy ra đồng thời. **`checked_in` KHÔNG auto no_show** — BN đã đến, BS có thể vẫn gặp; nếu bỏ về sau khi check-in → manual `no_show` (xem BR-APPT-025). |
 | BR-APPT-013 | State machine | BR §2.8. Validate mỗi transition. |
 | BR-APPT-014 | Schedule có valid range | `WorkingSchedule` có `validFrom`/`validTo`. Cho phép lịch thay đổi theo thời gian. |
-| BR-APPT-015 | Reschedule giữ id | Chỉ update `dentistId`/`startAt`. Lưu log vào `AppointmentRescheduleLog`. |
+| BR-APPT-015 | Reschedule giữ id | Chỉ update `dentistId`/`startAt`. Lưu log vào `AppointmentRescheduleLog`. Chỉ reschedule được khi status `scheduled`/`confirmed`; BS mới phải active và có role dentist. |
 | BR-APPT-016 | Reschedule max 3 | `reschedule_count < 3` để chống lạm dụng. |
 | BR-APPT-017 | Day-of-week recurring | `WorkingSchedule` không yêu cầu mỗi ngày trong tuần — có thể BS chỉ làm 4 ngày. |
 | BR-APPT-018 | Working schedule không trùng giờ | Cùng dentist + dayOfWeek không được overlap giờ giữa 2 schedule. |
@@ -467,7 +467,7 @@ Appointment.source ∈ {
 | BR-APPT-022 | Completed = immutable | Sau khi `completed`, không update. Trừ admin override. |
 | BR-APPT-023 | Cascade cancel (BD-0008) | Khi Appointment chuyển sang `cancelled`: nếu Encounter `in_progress` → Encounter tự động `cancelled`, không trigger stock-out, không tạo Invoice. Nếu Encounter `completed` → 409, không cho cancel (admin override). |
 | BR-APPT-024 | Cancel before start for non-Dentist | Admin/Receptionist: `now < startAt` mới được cancel (trừ admin force với lý do). |
-| BR-APPT-025 | `checked_in` → no_show rule | Manual `no_show` chỉ áp dụng cho `scheduled`/`confirmed`. Sau khi `checked_in` mà BN không gặp BS, **KHÔNG** chuyển `no_show` (BN đã đến). Thay vào đó → cancel nếu cần, hoặc để encounter ở `in_progress` cho BS xử lý. Auto cron chỉ select `(status = 'scheduled' OR status = 'confirmed')` (đã đúng). |
+| BR-APPT-025 | `checked_in` → no_show rule | Manual `no_show` chỉ áp dụng cho `scheduled`/`confirmed`. Sau khi `checked_in` mà BN không gặp BS, **KHÔNG** chuyển `no_show` (BN đã đến). Thay vào đó → cancel nếu cần (cho phép cả sau `startAt`, bắt buộc lý do — BR-APPT-010), hoặc để encounter ở `in_progress` cho BS xử lý. Auto cron chỉ select `(status = 'scheduled' OR status = 'confirmed')` (đã đúng). |
 | BR-APPT-024 | Cancel before start for non-Dentist | Receptionist/Admin cancel được nếu `now < startAt` (BR-APPT-010). Hành vi khác BS: BR-APPT-009. |
 | BR-APPT-026 | ShiftRegistration conflict check | BS tạo ShiftRegistration phải KHÔNG overlap giờ với WorkingSchedule cùng ngày (BD-0010, BR-PAY-020). Validate ở API + application layer (không enforce ở DB vì overlap 2 giờ không phải range overlap đơn giản). |
 | BR-APPT-027 | ShiftRegistration admin approval | Status PENDING → APPROVED cần admin/receptionist duyệt (`shift.approve` permission). Chỉ APPROVED mới tính lương (BR-PAY-021) và mở slot appointment. |

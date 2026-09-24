@@ -41,7 +41,11 @@ import {
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
-const NO_SHOW_GRACE_MIN = 15;
+// Auto no-show must not fire before the check-in window closes — otherwise a
+// patient arriving inside the window (e.g. +20 min) is already NO_SHOW and
+// can't be checked in, not even with an override (BR-APPT-006 / 012).
+const NO_SHOW_GRACE_MIN = CHECKIN_WINDOW_AFTER_MIN;
+const LATE_CANCEL_REASON_MIN_LENGTH = 5;
 
 /**
  * AppointmentsService — owns:
@@ -321,6 +325,7 @@ export class AppointmentsService {
 
     // BR-APPT-009 / 010 — authorization windows
     const now = Date.now();
+    let lateCheckedInCancel = false;
     if (this.isRowScopedDentist(actor)) {
       // A plain dentist may only cancel their OWN appointments. The old
       // check here was `dentistId === actor.sub`, and fell through to the
@@ -337,9 +342,20 @@ export class AppointmentsService {
         );
       }
     } else if (now >= appt.startAt.getTime()) {
-      throw new InvalidAppointmentStateException(
-        'Receptionist/admin may only cancel before appointment start (BR-APPT-010)',
-      );
+      // BR-APPT-025: a CHECKED_IN patient who leaves before being seen can't
+      // be marked no-show (they did arrive), so cancel is the only way out —
+      // without this the appointment stayed CHECKED_IN in the queue forever.
+      if (appt.status !== AppointmentStatus.CHECKED_IN) {
+        throw new InvalidAppointmentStateException(
+          'Receptionist/admin may only cancel before appointment start (BR-APPT-010)',
+        );
+      }
+      if ((dto.reason?.trim().length ?? 0) < LATE_CANCEL_REASON_MIN_LENGTH) {
+        throw new InvalidAppointmentStateException(
+          `Cancelling a checked-in appointment after its start requires a reason (≥ ${LATE_CANCEL_REASON_MIN_LENGTH} chars)`,
+        );
+      }
+      lateCheckedInCancel = true;
     }
 
     const updated = await this.prisma.$transaction(async tx => {
@@ -382,7 +398,9 @@ export class AppointmentsService {
       actorEmail: actor.email,
       targetType: 'appointment',
       targetId: appointmentId,
-      metadata: { reason: dto.reason },
+      metadata: lateCheckedInCancel
+        ? { reason: dto.reason, lateCheckedInCancel: true }
+        : { reason: dto.reason },
     });
 
     // Sync emit — ADR-0007
@@ -457,25 +475,22 @@ export class AppointmentsService {
     const now = new Date();
     const cutoff = new Date(now.getTime() - NO_SHOW_GRACE_MIN * 60_000);
 
-    const candidates = await this.prisma.appointment.findMany({
+    // Single guarded write: selecting ids first and then updating by id alone
+    // let a check-in that landed between the two queries be overwritten with
+    // NO_SHOW. Re-stating the status filter in the write itself closes that.
+    const updated = await this.prisma.appointment.updateMany({
       where: {
         status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
         startAt: { lt: cutoff },
         deletedAt: null,
       },
-      select: { id: true },
-    });
-
-    if (candidates.length === 0) return { updated: 0 };
-
-    const updated = await this.prisma.appointment.updateMany({
-      where: { id: { in: candidates.map(c => c.id) } },
       data: {
         status: AppointmentStatus.NO_SHOW,
         noShowAt: now,
         updatedBy: null,
       },
     });
+    if (updated.count === 0) return { updated: 0 };
 
     await this.audit.log({
       action: 'APPOINTMENT_AUTO_NO_SHOW',
@@ -495,10 +510,11 @@ export class AppointmentsService {
       throw new AppointmentNotFoundException(appointmentId);
     }
 
+    // Only a not-yet-arrived appointment can move. CHECKED_IN / IN_PROGRESS
+    // mean the patient is already at the clinic (or in the chair).
     if (
-      appt.status === AppointmentStatus.CANCELLED ||
-      appt.status === AppointmentStatus.NO_SHOW ||
-      appt.status === AppointmentStatus.COMPLETED
+      appt.status !== AppointmentStatus.SCHEDULED &&
+      appt.status !== AppointmentStatus.CONFIRMED
     ) {
       throw new InvalidAppointmentStateException(
         `Cannot reschedule appointment in status ${appt.status}`,
@@ -517,6 +533,9 @@ export class AppointmentsService {
       throw new BackDatedAppointmentException();
     }
     const newDentistId = dto.newDentistId ?? appt.dentistId;
+    if (newDentistId !== appt.dentistId) {
+      await this.validateDentist(newDentistId);
+    }
 
     // Single tx under advisory lock to serialize overlap checks (R2-7).
     const result = await this.prisma.$transaction(async tx => {
@@ -524,8 +543,14 @@ export class AppointmentsService {
       await this.ensureSlotAvailable(newDentistId, newStart, newEnd, actor, appt.id, tx);
       await this.ensureNoTimeOff(newDentistId, newStart, newEnd, tx);
 
-      const updated = await tx.appointment.update({
-        where: { id: appointmentId },
+      // See checkIn() — guarded write, so a concurrent check-in/cancel or a
+      // second reschedule (which would bypass the limit) can't be overwritten.
+      const rescheduleResult = await tx.appointment.updateMany({
+        where: {
+          id: appointmentId,
+          status: appt.status,
+          rescheduleCount: appt.rescheduleCount,
+        },
         data: {
           dentistId: newDentistId,
           startAt: newStart,
@@ -535,6 +560,12 @@ export class AppointmentsService {
           updatedBy: actor.sub,
         },
       });
+      if (rescheduleResult.count === 0) {
+        throw new InvalidAppointmentStateException(
+          'Appointment was changed by someone else — reload and try again',
+        );
+      }
+      const updated = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
 
       await tx.appointmentRescheduleLog.create({
         data: {
