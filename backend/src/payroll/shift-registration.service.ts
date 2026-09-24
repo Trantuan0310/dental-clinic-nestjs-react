@@ -9,6 +9,12 @@ import {
   PayrollNotFoundException,
 } from './domain/exceptions';
 import { canTransitionShift } from './domain/payroll-state';
+import {
+  countActiveBookingsInShift,
+  shiftHasBookingsMessage,
+  shiftInstants,
+} from '../appointments/domain/shift-bookings';
+import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
 @Injectable()
@@ -266,10 +272,9 @@ export class ShiftRegistrationService {
     let hoursUntilShift: number | null = null;
 
     if (!isAdmin) {
-      // BR-APPT-028: BS chỉ cancel được >= 24h trước
-      const shiftStart = new Date(shift.date);
-      const [hh, mm] = shift.startTime.split(':').map(Number);
-      shiftStart.setUTCHours(hh, mm, 0, 0);
+      // BR-APPT-028: BS chỉ cancel được >= 24h trước. startTime is clinic
+      // wall-clock (UTC+7) — reading it as UTC put the cutoff 7h late.
+      const shiftStart = shiftInstants(shift).start;
 
       const now = new Date();
       hoursUntilShift = (shiftStart.getTime() - now.getTime()) / 3_600_000;
@@ -281,30 +286,39 @@ export class ShiftRegistrationService {
     } else if (shift.status === ShiftRegistrationStatus.APPROVED) {
       // M#8 (BR-PAY-014): Admin cancelling an APPROVED shift < 24h before is
       // considered a late cancel. We audit it; admin can then create a PayrollAdjustment.
-      const shiftStart = new Date(shift.date);
-      const [hh, mm] = shift.startTime.split(':').map(Number);
-      shiftStart.setUTCHours(hh, mm, 0, 0);
+      const shiftStart = shiftInstants(shift).start;
       hoursUntilShift = (shiftStart.getTime() - Date.now()) / 3_600_000;
       if (hoursUntilShift >= 0 && hoursUntilShift < 24) {
         lateCancelByAdmin = true;
       }
     }
 
-    // See approve() above — same guarded-write race protection (e.g. an
-    // admin cancelling right as another admin approves the same shift).
-    const cancelResult = await this.prisma.shiftRegistration.updateMany({
-      where: { id, status: shift.status },
-      data: {
-        status: ShiftRegistrationStatus.CANCELLED,
-        cancelledAt: new Date(),
-      },
+    const updated = await this.prisma.$transaction(async tx => {
+      // An APPROVED shift opens bookable slots (BR-APPT-027): count + cancel
+      // under the dentist's calendar lock, which bookings also take, so an
+      // appointment can't be created in the shift between the two.
+      if (shift.status === ShiftRegistrationStatus.APPROVED) {
+        await lockDentistCalendar(tx, shift.dentistId);
+        const booked = await countActiveBookingsInShift(tx, shift);
+        if (booked > 0) throw new ShiftConflictException(shiftHasBookingsMessage(booked));
+      }
+
+      // See approve() above — same guarded-write race protection (e.g. an
+      // admin cancelling right as another admin approves the same shift).
+      const cancelResult = await tx.shiftRegistration.updateMany({
+        where: { id, status: shift.status },
+        data: {
+          status: ShiftRegistrationStatus.CANCELLED,
+          cancelledAt: new Date(),
+        },
+      });
+      if (cancelResult.count === 0) {
+        throw new ShiftConflictException(
+          'Shift registration was changed by someone else — reload and try again',
+        );
+      }
+      return tx.shiftRegistration.findUniqueOrThrow({ where: { id } });
     });
-    if (cancelResult.count === 0) {
-      throw new ShiftConflictException(
-        'Shift registration was changed by someone else — reload and try again',
-      );
-    }
-    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
 
     const auditMetadata: Record<string, unknown> = {
       byAdmin: isAdmin,

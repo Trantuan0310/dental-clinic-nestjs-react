@@ -8,6 +8,7 @@ import type {
   CalendarFetchParams,
   CancelAppointmentPayload,
   CheckInPayload,
+  ClockInterval,
   CreateAppointmentPayload,
   DentistAvailability,
   DentistMini,
@@ -122,7 +123,7 @@ export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
     chiefComplaint: raw.chiefComplaint ?? null,
     source: (raw.source?.toLowerCase() as Appointment['source']) ?? 'phone',
     appointmentType:
-      (raw.appointmentType as Appointment['appointmentType']) ?? 'consultation',
+      (raw.appointmentType?.toLowerCase() as Appointment['appointmentType']) ?? 'consultation',
     checkInAt: toIso(raw.checkedInAt),
     checkedInByUserId: raw.checkedInBy ?? null,
     cancelledAt: toIso(raw.cancelledAt),
@@ -155,6 +156,7 @@ export const appointmentKeys = {
     ['appointments', 'waiting-queue', params ?? {}] as const,
   today: ['appointments', 'today'] as const,
   patients: ['patients', 'mini'] as const,
+  patientSearch: (q: string) => ['patients', 'search', q] as const,
   dentists: ['dentists', 'mini'] as const,
   patientLookup: (q: PatientLookupQuery) =>
     ['patients', 'lookup', q] as const,
@@ -191,7 +193,11 @@ function buildCreateBody(payload: CreateAppointmentPayload): Record<string, unkn
     startAt: payload.startsAt,
     endAt: payload.endsAt,
     reason: payload.reason ?? undefined,
+    chiefComplaint: payload.chiefComplaint ?? undefined,
     notes: payload.notes ?? undefined,
+    // Backend enums are upper-case (AppointmentType / AppointmentSource).
+    appointmentType: payload.appointmentType?.toUpperCase(),
+    source: payload.source?.toUpperCase(),
   };
 }
 
@@ -338,6 +344,8 @@ export function useAvailability(dentistId: string | undefined, date: string | un
         workingHours: { startTime: string; endTime: string } | null;
         slotDuration: number;
         availableSlots: string[];
+        windows?: ClockInterval[];
+        busy?: ClockInterval[];
         blockedReason?: string | null;
       }>('/appointments/availability', {
         params: { dentistId, date },
@@ -375,6 +383,8 @@ export function useAvailability(dentistId: string | undefined, date: string | un
         workingHours: raw.workingHours,
         slotDuration: raw.slotDuration,
         availableSlots: slots,
+        windows: raw.windows ?? [],
+        busy: raw.busy ?? [],
         blockedReason: raw.blockedReason ?? null,
       };
     },
@@ -382,28 +392,52 @@ export function useAvailability(dentistId: string | undefined, date: string | un
   });
 }
 
-export function usePatientOptions() {
+type PatientMiniRow = {
+  id: string;
+  code: string;
+  fullName: string;
+  primaryPhone?: string | null;
+};
+
+const toPatientMini = (p: PatientMiniRow): PatientMini => ({
+  id: p.id,
+  code: p.code,
+  fullName: p.fullName,
+  primaryPhone: p.primaryPhone ?? null,
+});
+
+/**
+ * Server-side patient search for the booking form (name / phone / exact
+ * code, same `q` as the patient list). Replaces loading the first 200
+ * patients and filtering in the browser, which could never find anyone past
+ * the 200th record.
+ */
+export function usePatientSearch(q: string) {
+  const term = q.trim();
   return useQuery({
-    queryKey: appointmentKeys.patients,
+    enabled: term.length >= 2,
+    queryKey: appointmentKeys.patientSearch(term),
     queryFn: async (): Promise<PatientMini[]> => {
-      // Patient lists are paginated at the top level: `{ data: [], pagination }`.
-      // `get()` already unwraps that top-level `data`, so the result is the array
-      // itself (not another object containing a `data` property).
-      const data = await get<
-        Array<{
-          id: string;
-          code: string;
-          fullName: string;
-          primaryPhone?: string | null;
-        }>
-      >('/patients', { params: { pageSize: 200 } });
-      return data.map((p) => ({
-        id: p.id,
-        code: p.code,
-        fullName: p.fullName,
-        primaryPhone: p.primaryPhone ?? null,
-      }));
+      // Patient lists are paginated at the top level: `{ data: [], pagination }`;
+      // `get()` already unwraps that top-level `data`.
+      const data = await get<PatientMiniRow[]>('/patients', {
+        params: { q: term, pageSize: 20 },
+      });
+      return data.map(toPatientMini);
     },
+    staleTime: 30_000,
+  });
+}
+
+/** One patient's mini card (for a pre-selected patient in the booking form). */
+export function usePatientMini(id: string | undefined) {
+  return useQuery({
+    enabled: !!id,
+    queryKey: [...appointmentKeys.patients, id ?? ''] as const,
+    queryFn: async (): Promise<PatientMini> => toPatientMini(await get<PatientMiniRow>(`/patients/${id}`)),
+    // Display-only (the id is already usable) — fail fast instead of the
+    // global retry policy leaving "Đang tải…" up for several seconds.
+    retry: 1,
     staleTime: 5 * 60_000,
   });
 }
@@ -432,52 +466,55 @@ export function useDentistOptions() {
  * BE returns `{ candidates, total, matchType }` wrapped in the auth envelope.
  * After `unwrap()` we get `{ candidates, total, matchType }` directly.
  */
+export async function fetchPatientLookup(query: PatientLookupQuery): Promise<PatientLookupResult> {
+  const result = await get<{
+    candidates: Array<{
+      id: string;
+      code: string;
+      fullName: string;
+      dob: Date | string;
+      gender: string;
+      primaryPhone: string | null;
+      lastVisitAt: Date | string | null;
+      lastVisitBy: string | null;
+      matchType: PatientLookupCandidate['matchType'];
+    }>;
+    total: number;
+    matchType: PatientLookupCandidate['matchType'];
+  }>('/patients/lookup', {
+    params: {
+      phone: query.phone ?? undefined,
+      cccd: query.cccd ?? undefined,
+      name: query.name ?? undefined,
+      dob: query.dob ?? undefined,
+      limit: query.limit ?? 5,
+    },
+  });
+  return {
+    candidates: result.candidates.map((row) => ({
+      id: row.id,
+      code: row.code,
+      fullName: row.fullName,
+      dob: toIso(row.dob) ?? '',
+      gender: row.gender,
+      primaryPhone: row.primaryPhone,
+      lastVisitAt: toIso(row.lastVisitAt),
+      lastVisitBy: row.lastVisitBy,
+      matchType: row.matchType,
+    })),
+    total: result.total,
+    matchType: result.matchType,
+  };
+}
+
+/** Query-hook form of fetchPatientLookup. */
 export function usePatientLookup(query: PatientLookupQuery, enabled = true) {
   return useQuery({
     enabled:
       enabled &&
       Boolean(query.phone || query.cccd || (query.name && query.dob)),
     queryKey: appointmentKeys.patientLookup(query),
-    queryFn: async (): Promise<PatientLookupResult> => {
-      const result = await get<{
-        candidates: Array<{
-          id: string;
-          code: string;
-          fullName: string;
-          dob: Date | string;
-          gender: string;
-          primaryPhone: string | null;
-          lastVisitAt: Date | string | null;
-          lastVisitBy: string | null;
-          matchType: PatientLookupCandidate['matchType'];
-        }>;
-        total: number;
-        matchType: PatientLookupCandidate['matchType'];
-      }>('/patients/lookup', {
-        params: {
-          phone: query.phone ?? undefined,
-          cccd: query.cccd ?? undefined,
-          name: query.name ?? undefined,
-          dob: query.dob ?? undefined,
-          limit: query.limit ?? 5,
-        },
-      });
-      return {
-        candidates: result.candidates.map((row) => ({
-          id: row.id,
-          code: row.code,
-          fullName: row.fullName,
-          dob: toIso(row.dob) ?? '',
-          gender: row.gender,
-          primaryPhone: row.primaryPhone,
-          lastVisitAt: toIso(row.lastVisitAt),
-          lastVisitBy: row.lastVisitBy,
-          matchType: row.matchType,
-        })),
-        total: result.total,
-        matchType: result.matchType,
-      };
-    },
+    queryFn: () => fetchPatientLookup(query),
     staleTime: 30_000,
   });
 }
@@ -506,7 +543,10 @@ export function useUpdateAppointment(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: UpdateAppointmentPayload): Promise<Appointment> => {
-      const row = await patch<PrismaAppointmentRow>(`/appointments/${id}`, payload);
+      const row = await patch<PrismaAppointmentRow>(`/appointments/${id}`, {
+        ...payload,
+        appointmentType: payload.appointmentType?.toUpperCase(),
+      });
       return transformAppointment(row);
     },
     onSuccess: (data) => {
@@ -530,6 +570,20 @@ export function useCancelAppointment() {
         `/appointments/${id}/cancel`,
         payload,
       );
+      return transformAppointment(row);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
+/** POST /appointments/:id/confirm — scheduled → confirmed (patient confirmed they'll come). */
+export function useConfirmAppointment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<Appointment> => {
+      const row = await post<PrismaAppointmentRow>(`/appointments/${id}/confirm`, {});
       return transformAppointment(row);
     },
     onSuccess: () => {

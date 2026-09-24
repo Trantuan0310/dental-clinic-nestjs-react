@@ -110,11 +110,14 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
 
     // Back on the info tab: the "Bác sĩ" <select> has no htmlFor/label
     // wiring (see AppointmentFormModal.tsx — the <label> is a plain
-    // sibling, not connected via id), so getByLabel can't find it. Resolve
-    // Dr. An Nguyen's <option> value directly instead of guessing index
-    // order, so the appointment is deterministically assigned to the
-    // dentist account this test logs into next.
-    const dentistSelect = bookingDialog.locator('select').nth(1);
+    // sibling, not connected via id), so getByLabel can't find it. Pick the
+    // <select> that actually offers Dr. An Nguyen rather than guessing its
+    // index among the dialog's selects, then resolve that <option>'s value,
+    // so the appointment is deterministically assigned to the dentist
+    // account this test logs into next.
+    const dentistSelect = bookingDialog
+      .locator('select')
+      .filter({ has: receptionPage.locator('option', { hasText: ACCOUNTS.dentist.fullName }) });
     await expect(dentistSelect).toBeVisible();
     const dentistValue = await dentistSelect
       .locator('option')

@@ -55,7 +55,9 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
             },
             workingSchedule: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
             encounter: { count: jest.fn().mockResolvedValue(0) },
+            appointment: { count: jest.fn().mockResolvedValue(0) },
             $transaction: jest.fn(),
+            $executeRawUnsafe: jest.fn().mockResolvedValue(0),
           },
         },
         { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
@@ -64,6 +66,8 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
 
     service = module.get(ShiftRegistrationService);
     prisma = module.get(PrismaService);
+    // cancel() runs its booking check + write in prisma.$transaction(cb).
+    (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(prisma));
     audit = module.get(AuditService);
   });
 
@@ -195,17 +199,22 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
 
   describe('M#8 — admin late cancel triggers BR-PAY-014 audit recommendation', () => {
     it('flags late cancel < 24h with recommendation', async () => {
-      // Shift in 2 hours
+      // Shift in 2 hours. Shift date/startTime are clinic wall-clock (UTC+7),
+      // so build them from the Vietnam-local view of that instant.
       const now = new Date();
-      const shiftStart = new Date(now.getTime() + 2 * 3_600_000);
-      const hh = String(shiftStart.getUTCHours()).padStart(2, '0');
-      const mm = String(shiftStart.getUTCMinutes()).padStart(2, '0');
+      const shiftStartLocal = new Date(now.getTime() + 2 * 3_600_000 + 7 * 3_600_000);
+      const hh = String(shiftStartLocal.getUTCHours()).padStart(2, '0');
+      const mm = String(shiftStartLocal.getUTCMinutes()).padStart(2, '0');
 
       (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
         id: 'shift-1',
         dentistId: 'dentist-1',
         date: new Date(
-          Date.UTC(shiftStart.getUTCFullYear(), shiftStart.getUTCMonth(), shiftStart.getUTCDate()),
+          Date.UTC(
+            shiftStartLocal.getUTCFullYear(),
+            shiftStartLocal.getUTCMonth(),
+            shiftStartLocal.getUTCDate(),
+          ),
         ),
         startTime: `${hh}:${mm}`,
         status: ShiftRegistrationStatus.APPROVED,

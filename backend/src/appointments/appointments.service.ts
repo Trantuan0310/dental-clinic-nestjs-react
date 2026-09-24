@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { Appointment, AppointmentStatus, EncounterStatus, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -23,10 +23,12 @@ import {
   DentistUnavailableException,
   InvalidAppointmentStateException,
   OutsideWorkingHoursException,
+  PatientDoubleBookedException,
   RescheduleLimitReachedException,
   ScheduleOverlapException,
   SlotConflictException,
 } from './domain/exceptions';
+import { lockDentistCalendar, lockPatientCalendar } from './domain/advisory-lock';
 import {
   AvailabilityQueryDto,
   CancelAppointmentDto,
@@ -41,7 +43,21 @@ import {
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
-const NO_SHOW_GRACE_MIN = 15;
+// Auto no-show (BR-APPT-012) fires only once BOTH the check-in window has
+// closed AND the booked slot has ended: a patient arriving inside the window
+// (e.g. +20 min) checks in normally, and one arriving later but while their
+// slot is still running can be force-checked-in with a reason (BR-APPT-007)
+// instead of already being NO_SHOW.
+const NO_SHOW_GRACE_MIN = CHECKIN_WINDOW_AFTER_MIN;
+const LATE_CANCEL_REASON_MIN_LENGTH = 5;
+
+const blankToNull = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
+
+/** Statuses that still hold a slot on the calendar. */
+const ACTIVE_APPOINTMENT_EXCLUDED_STATUSES: AppointmentStatus[] = [
+  AppointmentStatus.CANCELLED,
+  AppointmentStatus.NO_SHOW,
+];
 
 /**
  * AppointmentsService — owns:
@@ -95,7 +111,9 @@ export class AppointmentsService {
     // (BR-APPT-002 / 003 / 004 — see Phase 9.2 R2-7 lesson).
     return this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, dto.dentistId);
+      await this.lockPatient(tx, dto.patientId);
       await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx);
+      await this.ensurePatientFree(dto.patientId, startAt, endAt, undefined, tx);
 
       const created = await tx.appointment.create({
         data: {
@@ -104,7 +122,9 @@ export class AppointmentsService {
           startAt,
           endAt,
           status: AppointmentStatus.SCHEDULED,
-          reason: dto.reason ?? dto.chiefComplaint ?? null,
+          reason: blankToNull(dto.reason),
+          chiefComplaint: blankToNull(dto.chiefComplaint),
+          appointmentType: dto.appointmentType,
           notes: dto.notes,
           source: dto.source ?? 'PHONE',
           createdBy: actor.sub,
@@ -129,24 +149,70 @@ export class AppointmentsService {
     });
   }
 
-  /**
-   * Serialize bookings for a dentist using a Postgres advisory lock.
-   * The lock is bound to the transaction and released on commit/rollback.
-   */
-  private async lockDentist(tx: Prisma.TransactionClient, dentistId: string): Promise<void> {
-    // FNV-1a 32-bit hash, then take abs(); fits Postgres bigint.
-    let h = 0x811c9dc5;
-    for (let i = 0; i < dentistId.length; i++) {
-      h ^= dentistId.charCodeAt(i);
-      h = (h * 0x01000193) >>> 0;
-    }
-    const key = BigInt(h);
-    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${key.toString()}::bigint)`);
+  // See domain/advisory-lock.ts.
+  private lockDentist(tx: Prisma.TransactionClient, dentistId: string): Promise<void> {
+    return lockDentistCalendar(tx, dentistId);
+  }
+
+  private lockPatient(tx: Prisma.TransactionClient, patientId: string): Promise<void> {
+    return lockPatientCalendar(tx, patientId);
   }
 
   // ==========================================================================
-  // State machine: check-in / cancel / no-show / reschedule
+  // State machine: confirm / check-in / cancel / no-show / reschedule
   // ==========================================================================
+
+  /**
+   * SCHEDULED → CONFIRMED (spec §2.8): front desk has reached the patient
+   * (reminder call/message) and they confirmed they will come.
+   */
+  async confirm(appointmentId: string, actor: JwtPayload) {
+    const appt = await this.requireAppointment(appointmentId);
+
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
+    if (appt.status === AppointmentStatus.CONFIRMED) return appt;
+    if (appt.status !== AppointmentStatus.SCHEDULED) {
+      throw new InvalidAppointmentStateException(
+        `Cannot confirm appointment in status ${appt.status}`,
+      );
+    }
+    if (Date.now() >= appt.startAt.getTime()) {
+      throw new InvalidAppointmentStateException(
+        'Appointment has already started — check the patient in instead of confirming',
+      );
+    }
+
+    // See checkIn() — guarded write against a concurrent cancel/reschedule.
+    const result = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, status: AppointmentStatus.SCHEDULED },
+      data: {
+        status: AppointmentStatus.CONFIRMED,
+        confirmedAt: new Date(),
+        confirmedBy: actor.sub,
+        updatedBy: actor.sub,
+      },
+    });
+    if (result.count === 0) {
+      throw new InvalidAppointmentStateException(
+        'Appointment was changed by someone else — reload and try again',
+      );
+    }
+    const updated = await this.prisma.appointment.findUniqueOrThrow({
+      where: { id: appointmentId },
+    });
+
+    await this.audit.log({
+      action: 'APPOINTMENT_CONFIRMED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'appointment',
+      targetId: appointmentId,
+    });
+
+    return updated;
+  }
 
   async checkIn(
     appointmentId: string,
@@ -321,6 +387,7 @@ export class AppointmentsService {
 
     // BR-APPT-009 / 010 — authorization windows
     const now = Date.now();
+    let lateCheckedInCancel = false;
     if (this.isRowScopedDentist(actor)) {
       // A plain dentist may only cancel their OWN appointments. The old
       // check here was `dentistId === actor.sub`, and fell through to the
@@ -337,9 +404,20 @@ export class AppointmentsService {
         );
       }
     } else if (now >= appt.startAt.getTime()) {
-      throw new InvalidAppointmentStateException(
-        'Receptionist/admin may only cancel before appointment start (BR-APPT-010)',
-      );
+      // BR-APPT-025: a CHECKED_IN patient who leaves before being seen can't
+      // be marked no-show (they did arrive), so cancel is the only way out —
+      // without this the appointment stayed CHECKED_IN in the queue forever.
+      if (appt.status !== AppointmentStatus.CHECKED_IN) {
+        throw new InvalidAppointmentStateException(
+          'Receptionist/admin may only cancel before appointment start (BR-APPT-010)',
+        );
+      }
+      if ((dto.reason?.trim().length ?? 0) < LATE_CANCEL_REASON_MIN_LENGTH) {
+        throw new InvalidAppointmentStateException(
+          `Cancelling a checked-in appointment after its start requires a reason (≥ ${LATE_CANCEL_REASON_MIN_LENGTH} chars)`,
+        );
+      }
+      lateCheckedInCancel = true;
     }
 
     const updated = await this.prisma.$transaction(async tx => {
@@ -382,7 +460,9 @@ export class AppointmentsService {
       actorEmail: actor.email,
       targetType: 'appointment',
       targetId: appointmentId,
-      metadata: { reason: dto.reason },
+      metadata: lateCheckedInCancel
+        ? { reason: dto.reason, lateCheckedInCancel: true }
+        : { reason: dto.reason },
     });
 
     // Sync emit — ADR-0007
@@ -457,25 +537,24 @@ export class AppointmentsService {
     const now = new Date();
     const cutoff = new Date(now.getTime() - NO_SHOW_GRACE_MIN * 60_000);
 
-    const candidates = await this.prisma.appointment.findMany({
+    // Single guarded write: selecting ids first and then updating by id alone
+    // let a check-in that landed between the two queries be overwritten with
+    // NO_SHOW. Re-stating the status filter in the write itself closes that.
+    const updated = await this.prisma.appointment.updateMany({
       where: {
         status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+        // now > max(startAt + grace, endAt)
         startAt: { lt: cutoff },
+        endAt: { lt: now },
         deletedAt: null,
       },
-      select: { id: true },
-    });
-
-    if (candidates.length === 0) return { updated: 0 };
-
-    const updated = await this.prisma.appointment.updateMany({
-      where: { id: { in: candidates.map(c => c.id) } },
       data: {
         status: AppointmentStatus.NO_SHOW,
         noShowAt: now,
         updatedBy: null,
       },
     });
+    if (updated.count === 0) return { updated: 0 };
 
     await this.audit.log({
       action: 'APPOINTMENT_AUTO_NO_SHOW',
@@ -495,10 +574,11 @@ export class AppointmentsService {
       throw new AppointmentNotFoundException(appointmentId);
     }
 
+    // Only a not-yet-arrived appointment can move. CHECKED_IN / IN_PROGRESS
+    // mean the patient is already at the clinic (or in the chair).
     if (
-      appt.status === AppointmentStatus.CANCELLED ||
-      appt.status === AppointmentStatus.NO_SHOW ||
-      appt.status === AppointmentStatus.COMPLETED
+      appt.status !== AppointmentStatus.SCHEDULED &&
+      appt.status !== AppointmentStatus.CONFIRMED
     ) {
       throw new InvalidAppointmentStateException(
         `Cannot reschedule appointment in status ${appt.status}`,
@@ -517,24 +597,44 @@ export class AppointmentsService {
       throw new BackDatedAppointmentException();
     }
     const newDentistId = dto.newDentistId ?? appt.dentistId;
+    if (newDentistId !== appt.dentistId) {
+      await this.validateDentist(newDentistId);
+    }
 
     // Single tx under advisory lock to serialize overlap checks (R2-7).
     const result = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, newDentistId);
+      await this.lockPatient(tx, appt.patientId);
       await this.ensureSlotAvailable(newDentistId, newStart, newEnd, actor, appt.id, tx);
-      await this.ensureNoTimeOff(newDentistId, newStart, newEnd, tx);
+      await this.ensurePatientFree(appt.patientId, newStart, newEnd, appt.id, tx);
 
-      const updated = await tx.appointment.update({
-        where: { id: appointmentId },
+      // See checkIn() — guarded write, so a concurrent check-in/cancel or a
+      // second reschedule (which would bypass the limit) can't be overwritten.
+      const rescheduleResult = await tx.appointment.updateMany({
+        where: {
+          id: appointmentId,
+          status: appt.status,
+          rescheduleCount: appt.rescheduleCount,
+        },
         data: {
           dentistId: newDentistId,
           startAt: newStart,
           endAt: newEnd,
           rescheduleCount: { increment: 1 },
           lastRescheduleAt: new Date(),
+          // A confirmation was for the old time — the new one needs its own.
+          status: AppointmentStatus.SCHEDULED,
+          confirmedAt: null,
+          confirmedBy: null,
           updatedBy: actor.sub,
         },
       });
+      if (rescheduleResult.count === 0) {
+        throw new InvalidAppointmentStateException(
+          'Appointment was changed by someone else — reload and try again',
+        );
+      }
+      const updated = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
 
       await tx.appointmentRescheduleLog.create({
         data: {
@@ -579,60 +679,97 @@ export class AppointmentsService {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const schedules = await this.prisma.workingSchedule.findMany({
-      where: {
-        dentistId: q.dentistId,
-        dayOfWeek: scheduleDate.getUTCDay(),
-        validFrom: { lte: scheduleDate },
-        OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
-        deletedAt: null,
-      },
-      orderBy: { startTime: 'asc' },
-    });
+    // Independent reads run in parallel: this endpoint refetches on every
+    // date/dentist change in the booking form.
+    const [schedules, approvedShifts] = await Promise.all([
+      this.prisma.workingSchedule.findMany({
+        where: {
+          dentistId: q.dentistId,
+          dayOfWeek: scheduleDate.getUTCDay(),
+          validFrom: { lte: scheduleDate },
+          OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
+          deletedAt: null,
+        },
+        orderBy: { startTime: 'asc' },
+      }),
+      // BR-APPT-027: an APPROVED shift registration opens bookable hours on
+      // that date just like a recurring working schedule does.
+      this.prisma.shiftRegistration.findMany({
+        where: {
+          dentistId: q.dentistId,
+          date: scheduleDate,
+          status: 'APPROVED',
+          deletedAt: null,
+        },
+        orderBy: { startTime: 'asc' },
+      }),
+    ]);
 
-    if (schedules.length === 0) {
-      throw new AppointmentNotFoundException(
-        `Working schedule for dentist ${q.dentistId} on ${q.date}`,
-      );
+    const windows = [
+      ...schedules.map(sched => ({
+        start: this.combineDateAndTime(q.date, this.toTimeString(sched.startTime)),
+        end: this.combineDateAndTime(q.date, this.toTimeString(sched.endTime)),
+      })),
+      ...approvedShifts.map(shift => ({
+        start: this.combineDateAndTime(q.date, shift.startTime),
+        end: this.combineDateAndTime(q.date, shift.endTime),
+      })),
+    ].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    if (windows.length === 0) {
+      // A day off is a normal answer for a slot picker, not a 404.
+      return {
+        dentistId: q.dentistId,
+        date: q.date,
+        dayOfWeek: scheduleDate.getUTCDay(),
+        workingHours: null,
+        windows: [],
+        busy: [],
+        slotDuration: q.slotDuration ?? 30,
+        availableSlots: [],
+        blockedReason: 'NO_SCHEDULE',
+      };
     }
 
-    const slotMin = q.slotDuration ?? schedules[0].slotDurationMin ?? 30;
+    const slotMin = q.slotDuration ?? schedules[0]?.slotDurationMin ?? 30;
 
-    // Working hours union
-    const allBooked = await this.prisma.appointment.findMany({
-      where: {
-        dentistId: q.dentistId,
-        status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
-        startAt: { gte: dayStart, lt: dayEnd },
-        deletedAt: null,
-      },
-      select: { startAt: true, endAt: true },
-    });
+    const [allBooked, timeOffs] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          dentistId: q.dentistId,
+          status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
+          startAt: { gte: dayStart, lt: dayEnd },
+          deletedAt: null,
+        },
+        select: { startAt: true, endAt: true },
+      }),
+      this.prisma.timeOff.findMany({
+        where: {
+          dentistId: q.dentistId,
+          startAt: { lt: dayEnd },
+          endAt: { gt: dayStart },
+          deletedAt: null,
+        },
+        select: { startAt: true, endAt: true },
+      }),
+    ]);
 
-    const timeOffs = await this.prisma.timeOff.findMany({
-      where: {
-        dentistId: q.dentistId,
-        startAt: { lt: dayEnd },
-        endAt: { gt: dayStart },
-        deletedAt: null,
-      },
-      select: { startAt: true, endAt: true },
-    });
-
-    const slots: string[] = [];
-    for (const sched of schedules) {
-      const start = this.combineDateAndTime(q.date, this.toTimeString(sched.startTime));
-      const end = this.combineDateAndTime(q.date, this.toTimeString(sched.endTime));
+    // Same lead time create() enforces — past slots today can't be booked.
+    const earliestStart = Date.now() + 60_000;
+    // A Set: overlapping windows (schedule + shift) must not list a slot twice.
+    const slots = new Set<string>();
+    for (const { start, end } of windows) {
       for (let t = start.getTime(); t + slotMin * 60_000 <= end.getTime(); t += slotMin * 60_000) {
         const slotStart = new Date(t);
         const slotEnd = new Date(t + slotMin * 60_000);
+        if (t <= earliestStart) continue;
 
         const overlapsBooked = allBooked.some(b => slotStart < b.endAt && b.startAt < slotEnd);
         if (overlapsBooked) continue;
         const overlapsTimeOff = timeOffs.some(o => slotStart < o.endAt && o.startAt < slotEnd);
         if (overlapsTimeOff) continue;
 
-        slots.push(this.toTimeString(new Date(slotStart.getTime() + CLINIC_UTC_OFFSET_MS)));
+        slots.add(this.toClinicTimeString(slotStart));
       }
     }
 
@@ -641,11 +778,23 @@ export class AppointmentsService {
       date: q.date,
       dayOfWeek: scheduleDate.getUTCDay(),
       workingHours: {
-        startTime: this.toTimeString(schedules[0].startTime),
-        endTime: this.toTimeString(schedules[schedules.length - 1].endTime),
+        startTime: this.toClinicTimeString(windows[0].start),
+        endTime: this.toClinicTimeString(new Date(Math.max(...windows.map(w => w.end.getTime())))),
       },
+      // Raw intervals (clinic "HH:mm") so the booking form can check an
+      // arbitrary start + duration, not only the fixed slot grid.
+      windows: windows.map(w => ({
+        startTime: this.toClinicTimeString(w.start),
+        endTime: this.toClinicTimeString(w.end),
+      })),
+      busy: [...allBooked, ...timeOffs]
+        .map(b => ({
+          startTime: b.startAt <= dayStart ? '00:00' : this.toClinicTimeString(b.startAt),
+          endTime: b.endAt >= dayEnd ? '24:00' : this.toClinicTimeString(b.endAt),
+        }))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
       slotDuration: slotMin,
-      availableSlots: slots,
+      availableSlots: [...slots].sort(),
       blockedReason: null,
     };
   }
@@ -745,13 +894,16 @@ export class AppointmentsService {
       );
     }
 
-    const reason = dto.chiefComplaint ?? dto.reason ?? appt.reason;
-
+    // Each field is stored on its own (chiefComplaint used to overwrite
+    // reason); undefined leaves the column unchanged.
     const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
-        reason: dto.reason !== undefined ? reason : appt.reason,
-        notes: dto.notes !== undefined ? dto.notes : appt.notes,
+        reason: dto.reason !== undefined ? blankToNull(dto.reason) : undefined,
+        chiefComplaint:
+          dto.chiefComplaint !== undefined ? blankToNull(dto.chiefComplaint) : undefined,
+        appointmentType: dto.appointmentType,
+        notes: dto.notes,
         updatedBy: actor.sub,
       },
     });
@@ -762,7 +914,12 @@ export class AppointmentsService {
       targetId: id,
       actorUserId: actor.sub,
       actorEmail: actor.email,
-      metadata: { reason, notes: dto.notes },
+      metadata: {
+        reason: dto.reason,
+        chiefComplaint: dto.chiefComplaint,
+        appointmentType: dto.appointmentType,
+        notes: dto.notes,
+      },
     });
 
     return updated;
@@ -885,9 +1042,11 @@ export class AppointmentsService {
   // ==========================================================================
 
   async createWorkingSchedule(dto: CreateWorkingScheduleDto, actor: JwtPayload) {
+    this.assertOwnScheduleOrStaff(actor, dto.dentistId);
     if (this.toMinutes(dto.endTime) <= this.toMinutes(dto.startTime)) {
       throw new InvalidAppointmentStateException('endTime must be after startTime');
     }
+    await this.validateDentist(dto.dentistId);
     // BR-APPT-018: validate no time-range overlap on same dentist + dayOfWeek.
     // We approximate by checking other schedules within ±1 day range of validFrom.
     const validFrom = new Date(dto.validFrom);
@@ -908,6 +1067,27 @@ export class AppointmentsService {
       const oEnd = this.toMinutes(dto.endTime);
       if (oStart < cEnd && cStart < oEnd) {
         throw new ScheduleOverlapException();
+      }
+    }
+    // Mirror of createShiftRegistration's check: a recurring schedule must
+    // not overlap a pending/approved one-off shift on a matching date, or
+    // availability would offer the same hours twice (BR-APPT-026).
+    const shifts = await this.prisma.shiftRegistration.findMany({
+      where: {
+        dentistId: dto.dentistId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        date: { gte: validFrom, ...(validTo ? { lte: validTo } : {}) },
+        deletedAt: null,
+      },
+    });
+    for (const shift of shifts) {
+      if (shift.date.getUTCDay() !== dto.dayOfWeek) continue;
+      const sStart = this.toMinutes(shift.startTime);
+      const sEnd = this.toMinutes(shift.endTime);
+      if (this.toMinutes(dto.startTime) < sEnd && sStart < this.toMinutes(dto.endTime)) {
+        throw new InvalidAppointmentStateException(
+          `Lịch làm việc trùng ca đăng ký ngày ${shift.date.toISOString().slice(0, 10)} ${shift.startTime}-${shift.endTime}`,
+        );
       }
     }
 
@@ -957,35 +1137,70 @@ export class AppointmentsService {
   }
 
   async createTimeOff(dto: CreateTimeOffDto, actor: JwtPayload) {
+    this.assertOwnScheduleOrStaff(actor, dto.dentistId);
     const startAt = new Date(dto.startAt);
     const endAt = new Date(dto.endAt);
     if (endAt.getTime() <= startAt.getTime()) {
       throw new InvalidAppointmentStateException('endAt must be after startAt');
     }
-
-    const checkedIn = await this.prisma.appointment.count({
-      where: {
-        dentistId: dto.dentistId,
-        status: AppointmentStatus.CHECKED_IN,
-        startAt: { gte: startAt, lte: endAt },
-        deletedAt: null,
-      },
-    });
-    if (checkedIn > 0) {
-      throw new InvalidAppointmentStateException(
-        `Dentist has ${checkedIn} checked-in appointments during requested time-off window`,
-      );
+    // BR-APPT-019: no time-off entirely in the past. One that has already
+    // started (e.g. sick since this morning) is still allowed.
+    if (endAt.getTime() <= Date.now()) {
+      throw new InvalidAppointmentStateException('Không thể ghi nhận nghỉ phép đã kết thúc');
     }
+    await this.validateDentist(dto.dentistId);
 
-    const created = await this.prisma.timeOff.create({
-      data: {
-        dentistId: dto.dentistId,
-        startAt,
-        endAt,
-        type: dto.type,
-        reason: dto.reason,
-        createdBy: actor.sub,
-      },
+    const overlapsWindow = {
+      dentistId: dto.dentistId,
+      startAt: { lt: endAt },
+      endAt: { gt: startAt },
+      deletedAt: null,
+    };
+    // Under the dentist's calendar lock (same as create()/reschedule()), so a
+    // booking can't land in the window unnoticed between these checks and
+    // the insert — it would be missing from affectedAppointments.
+    const { created, affectedAppointments } = await this.prisma.$transaction(async tx => {
+      await this.lockDentist(tx, dto.dentistId);
+      const patientsInClinic = await tx.appointment.count({
+        where: {
+          ...overlapsWindow,
+          status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+        },
+      });
+      if (patientsInClinic > 0) {
+        throw new InvalidAppointmentStateException(
+          `Dentist has ${patientsInClinic} checked-in/in-progress appointments during requested time-off window`,
+        );
+      }
+
+      // Still-booked appointments are not blocked (sick leave has to be
+      // recordable) but returned so front desk can reschedule/cancel them.
+      const affectedAppointments = await tx.appointment.findMany({
+        where: {
+          ...overlapsWindow,
+          status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+        },
+        orderBy: { startAt: 'asc' },
+        select: {
+          id: true,
+          startAt: true,
+          endAt: true,
+          status: true,
+          patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
+        },
+      });
+
+      const created = await tx.timeOff.create({
+        data: {
+          dentistId: dto.dentistId,
+          startAt,
+          endAt,
+          type: dto.type,
+          reason: dto.reason,
+          createdBy: actor.sub,
+        },
+      });
+      return { created, affectedAppointments };
     });
 
     await this.audit.log({
@@ -994,10 +1209,14 @@ export class AppointmentsService {
       actorEmail: actor.email,
       targetType: 'time_off',
       targetId: created.id,
-      metadata: { dentistId: dto.dentistId, type: dto.type },
+      metadata: {
+        dentistId: dto.dentistId,
+        type: dto.type,
+        affectedAppointmentIds: affectedAppointments.map(a => a.id),
+      },
     });
 
-    return created;
+    return { ...created, affectedAppointments };
   }
 
   async listTimeOffs(dentistId: string | undefined) {
@@ -1161,50 +1380,6 @@ export class AppointmentsService {
     return updated;
   }
 
-  async cancelShiftRegistration(id: string, actor: JwtPayload) {
-    const shift = await this.prisma.shiftRegistration.findUnique({ where: { id } });
-    if (!shift) throw new AppointmentNotFoundException(id);
-
-    const isAdmin =
-      actor.permissions.includes('shift.cancel') && actor.permissions.includes('shift.approve');
-    if (!isAdmin && shift.dentistId !== actor.sub) {
-      throw new AppointmentNotFoundException(id);
-    }
-    if (shift.status !== 'APPROVED' && shift.status !== 'PENDING') {
-      throw new InvalidAppointmentStateException(`Cannot cancel shift in status ${shift.status}`);
-    }
-
-    // BR-APPT-028 / BR-PAY-014: BS cancel only if ≥ 24h before
-    if (!isAdmin && shift.status === 'APPROVED') {
-      const shiftStart = this.combineDateAndTime(
-        shift.date.toISOString().slice(0, 10),
-        shift.startTime,
-      );
-      const hoursUntil = (shiftStart.getTime() - Date.now()) / (1000 * 60 * 60);
-      if (hoursUntil < 24) {
-        throw new InvalidAppointmentStateException(
-          'BS may only cancel APPROVED shift ≥ 24h before start; admin override required',
-        );
-      }
-    }
-
-    const updated = await this.prisma.shiftRegistration.update({
-      where: { id },
-      data: { status: 'CANCELLED', cancelledAt: new Date() },
-    });
-
-    await this.audit.log({
-      action: 'SHIFT_REGISTRATION_CANCELLED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'shift_registration',
-      targetId: id,
-      metadata: { lateCancel: !isAdmin && shift.status === 'APPROVED' },
-    });
-
-    return updated;
-  }
-
   async listShiftRegistrations(
     actor: JwtPayload,
     query: { dentistId?: string; status?: string; from?: string; to?: string },
@@ -1334,7 +1509,7 @@ export class AppointmentsService {
         dentistId,
         startAt: { lt: endAt },
         endAt: { gt: startAt },
-        status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
+        status: { notIn: ACTIVE_APPOINTMENT_EXCLUDED_STATUSES },
         deletedAt: null,
         ...(excludeAppointmentId ? { NOT: { id: excludeAppointmentId } } : {}),
       },
@@ -1342,32 +1517,47 @@ export class AppointmentsService {
     });
     if (conflict) throw new SlotConflictException();
 
-    // BR-APPT-003: working schedule required
+    // BR-APPT-003: working schedule (or an APPROVED shift, BR-APPT-027) required
     const localDate = clinicDateOnly(startAt);
     const scheduleDate = new Date(localDate);
+    const localStart = this.toClinicTimeString(startAt);
+    const localEnd = this.toClinicTimeString(endAt);
     const sched = await client.workingSchedule.findFirst({
       where: {
         dentistId,
         dayOfWeek: scheduleDate.getUTCDay(),
-        startTime: {
-          lte: this.toPgTime(this.toTimeString(new Date(startAt.getTime() + CLINIC_UTC_OFFSET_MS))),
-        },
-        endTime: {
-          gte: this.toPgTime(this.toTimeString(new Date(endAt.getTime() + CLINIC_UTC_OFFSET_MS))),
-        },
+        startTime: { lte: this.toPgTime(localStart) },
+        endTime: { gte: this.toPgTime(localEnd) },
         validFrom: { lte: scheduleDate },
         OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
         deletedAt: null,
       },
     });
-    if (!sched) {
+    let window: { startTime: string; endTime: string } | null = sched
+      ? { startTime: this.toTimeString(sched.startTime), endTime: this.toTimeString(sched.endTime) }
+      : null;
+    if (!window) {
+      // "HH:mm" strings compare correctly as text (zero-padded).
+      const shift = await client.shiftRegistration.findFirst({
+        where: {
+          dentistId,
+          date: scheduleDate,
+          status: 'APPROVED',
+          startTime: { lte: localStart },
+          endTime: { gte: localEnd },
+          deletedAt: null,
+        },
+      });
+      if (shift) window = { startTime: shift.startTime, endTime: shift.endTime };
+    }
+    if (!window) {
       throw new OutsideWorkingHoursException('Dentist has no working schedule for this day');
     }
-    const schedStart = this.combineDateAndTime(localDate, this.toTimeString(sched.startTime));
-    const schedEnd = this.combineDateAndTime(localDate, this.toTimeString(sched.endTime));
+    const schedStart = this.combineDateAndTime(localDate, window.startTime);
+    const schedEnd = this.combineDateAndTime(localDate, window.endTime);
     if (startAt < schedStart || endAt > schedEnd) {
       throw new OutsideWorkingHoursException(
-        `Appointment ${startAt.toISOString()} → ${endAt.toISOString()} falls outside working hours ${this.toTimeString(sched.startTime)}-${this.toTimeString(sched.endTime)}`,
+        `Appointment ${startAt.toISOString()} → ${endAt.toISOString()} falls outside working hours ${window.startTime}-${window.endTime}`,
       );
     }
 
@@ -1397,7 +1587,43 @@ export class AppointmentsService {
     }
   }
 
+  /** A patient can't be in two chairs at once, whichever dentists are involved. */
+  private async ensurePatientFree(
+    patientId: string,
+    startAt: Date,
+    endAt: Date,
+    excludeAppointmentId: string | undefined,
+    txClient: Prisma.TransactionClient,
+  ) {
+    const clash = await txClient.appointment.findFirst({
+      where: {
+        patientId,
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+        status: { notIn: ACTIVE_APPOINTMENT_EXCLUDED_STATUSES },
+        deletedAt: null,
+        ...(excludeAppointmentId ? { NOT: { id: excludeAppointmentId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (clash) throw new PatientDoubleBookedException();
+  }
+
+  /**
+   * Plain dentists hold schedule.write so they can manage their OWN
+   * schedule/time-off; without this they could also edit a colleague's.
+   */
+  private assertOwnScheduleOrStaff(actor: JwtPayload, dentistId: string) {
+    if (this.isRowScopedDentist(actor) && dentistId !== actor.sub) {
+      throw new ForbiddenException('Bác sĩ chỉ được quản lý lịch làm việc/nghỉ của chính mình');
+    }
+  }
+
   // Time helpers
+  private toClinicTimeString(d: Date): string {
+    return this.toTimeString(new Date(d.getTime() + CLINIC_UTC_OFFSET_MS));
+  }
+
   private toMinutes(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(v => Number(v));
     return h * 60 + m;

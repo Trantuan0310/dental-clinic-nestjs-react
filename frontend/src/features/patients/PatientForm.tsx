@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { differenceInYears, format, parseISO } from 'date-fns';
+import { isValidDob } from './dobRules';
 import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
 import { Button, Card, Input, Textarea, Alert } from '@/components/ui';
@@ -19,18 +20,6 @@ const vnPhone = z
   .regex(VN_PHONE_REGEX, 'Số điện thoại không hợp lệ (VD: 0912345678)')
   .optional()
   .or(z.literal(''));
-
-// Mirrors backend's isValidDob (patients/domain/patient-rules.ts): must be
-// today or earlier, and no more than 150 years ago. Without this, picking a
-// future birth year rendered a nonsensical negative age and could trigger
-// the emergency-contact panel (age < 12 is true for negative ages too).
-const isValidDob = (value: string) => {
-  const dob = parseISO(value);
-  if (Number.isNaN(dob.getTime())) return false;
-  const now = new Date();
-  const minDate = new Date(now.getFullYear() - 150, now.getMonth(), now.getDate());
-  return dob >= minDate && dob <= now;
-};
 
 const patientSchema = z
   .object({

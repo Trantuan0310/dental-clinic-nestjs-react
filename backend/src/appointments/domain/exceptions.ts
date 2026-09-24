@@ -153,3 +153,18 @@ export class SlotConflictException extends HttpException {
     this.name = 'SlotConflictException';
   }
 }
+
+export class PatientDoubleBookedException extends HttpException {
+  constructor() {
+    super(
+      {
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'PATIENT_DOUBLE_BOOKED',
+        message: 'Bệnh nhân đã có lịch hẹn khác trùng khung giờ này',
+      },
+      HttpStatus.CONFLICT,
+    );
+    this.name = 'PatientDoubleBookedException';
+  }
+}

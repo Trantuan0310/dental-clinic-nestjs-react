@@ -5,6 +5,7 @@ import type {
   CreateWorkingSchedulePayload,
   TimeOff,
   CreateTimeOffPayload,
+  CreateTimeOffResult,
 } from '@/types/schedule';
 
 const get = async <T>(url: string, config?: Parameters<typeof api.get>[1]) => {
@@ -56,7 +57,11 @@ export function useCreateWorkingSchedule() {
   return useMutation({
     mutationFn: (payload: CreateWorkingSchedulePayload) =>
       post<RawWorkingSchedule>('/appointments/schedules', payload).then(mapWorkingSchedule),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['schedule', 'working'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['schedule', 'working'] });
+      // New working hours change which slots are bookable.
+      qc.invalidateQueries({ queryKey: ['appointments', 'availability'] });
+    },
   });
 }
 
@@ -73,7 +78,10 @@ export function useTimeOffs(dentistId?: string) {
 export function useCreateTimeOff() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: CreateTimeOffPayload) => post<TimeOff>('/appointments/time-offs', payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['schedule', 'time-off'] }),
+    mutationFn: (payload: CreateTimeOffPayload) => post<CreateTimeOffResult>('/appointments/time-offs', payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['schedule', 'time-off'] });
+      qc.invalidateQueries({ queryKey: ['appointments', 'availability'] });
+    },
   });
 }

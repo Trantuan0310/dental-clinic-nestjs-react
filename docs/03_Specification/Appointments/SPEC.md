@@ -448,33 +448,36 @@ Appointment.source ∈ {
 | BR-APPT-003 | Slot phải trong working schedule | `startAt` phải nằm trong `[schedule.startTime, schedule.endTime]` của BS trong `dayOfWeek = startAt.dayOfWeek`. |
 | BR-APPT-004 | Không trùng time-off | `startAt`/`endAt` không được overlap với `TimeOff` của BS. |
 | BR-APPT-005 | Future only | `startAt > now()` (cho phép sai số 1 phút). Không cho back-dated. |
-| BR-APPT-006 | Check-in window strict | `[startAt - 15min, startAt + 30min]`. Ngoài window → phải chọn override/no_show/cancel. |
+| BR-APPT-006 | Check-in window strict | `[startAt - 15min, startAt + 30min]`. Ngoài window → phải chọn override/no_show/cancel. Override dùng được cho tới khi hết giờ hẹn (sau đó cron đã `no_show`, BR-APPT-012). |
 | BR-APPT-007 | Override check-in có reason | Khi lễ tân check-in ngoài window: bắt buộc nhập lý do, audit log. |
 | BR-APPT-008 | Patient not deleted | BN phải active để check-in và tạo encounter. |
 | BR-APPT-009 | Dentist cancel own ≥ 24h | BS chỉ cancel được lịch của mình nếu `now < startAt - 24h`. |
-| BR-APPT-010 | Receptionist/Admin cancel | Lễ tân/Admin cancel được nếu `now < startAt` (trước khi encounter). |
+| BR-APPT-010 | Receptionist/Admin cancel | Lễ tân/Admin cancel được nếu `now < startAt` (trước khi encounter). Ngoại lệ: appointment `checked_in` sau giờ hẹn được cancel với lý do ≥ 5 ký tự (BR-APPT-025), audit ghi `lateCheckedInCancel`. |
 | BR-APPT-011 | Không cancel khi encounter đang chạy | Status `in_progress` → không cancel được. |
-| BR-APPT-012 | Auto no-show | Status `scheduled`/`confirmed` mà `now > startAt + 15min` → cron tự `no_show`. **`checked_in` KHÔNG auto no_show** — BN đã đến, BS có thể vẫn gặp; nếu bỏ về sau khi check-in → manual `no_show` (xem BR-APPT-025). |
+| BR-APPT-012 | Auto no-show | Status `scheduled`/`confirmed` mà `now > max(startAt + 30min, endAt)` — tức đã hết cửa sổ check-in BR-APPT-006 **và** đã hết giờ hẹn — → cron tự `no_show`. BN đến trễ trong cửa sổ check-in bình thường; đến sau cửa sổ nhưng khi slot còn chạy thì lễ tân check-in override kèm lý do (BR-APPT-007, UI "Check-in muộn"). Câu lệnh update lặp lại điều kiện status để không ghi đè check-in xảy ra đồng thời. **`checked_in` KHÔNG auto no_show** — BN đã đến, BS có thể vẫn gặp; nếu bỏ về sau khi check-in → manual `no_show` (xem BR-APPT-025). |
 | BR-APPT-013 | State machine | BR §2.8. Validate mỗi transition. |
 | BR-APPT-014 | Schedule có valid range | `WorkingSchedule` có `validFrom`/`validTo`. Cho phép lịch thay đổi theo thời gian. |
-| BR-APPT-015 | Reschedule giữ id | Chỉ update `dentistId`/`startAt`. Lưu log vào `AppointmentRescheduleLog`. |
+| BR-APPT-015 | Reschedule giữ id | Chỉ update `dentistId`/`startAt`. Lưu log vào `AppointmentRescheduleLog`. Chỉ reschedule được khi status `scheduled`/`confirmed`; BS mới phải active và có role dentist. |
 | BR-APPT-016 | Reschedule max 3 | `reschedule_count < 3` để chống lạm dụng. |
 | BR-APPT-017 | Day-of-week recurring | `WorkingSchedule` không yêu cầu mỗi ngày trong tuần — có thể BS chỉ làm 4 ngày. |
 | BR-APPT-018 | Working schedule không trùng giờ | Cùng dentist + dayOfWeek không được overlap giờ giữa 2 schedule. |
-| BR-APPT-019 | Time-off validate | `TimeOff.startAt < TimeOff.endAt`. Không cho tạo time-off trong quá khứ (trừ admin với lý do). |
+| BR-APPT-019 | Time-off validate | `TimeOff.startAt < TimeOff.endAt`. Không cho tạo time-off đã kết thúc (`endAt ≤ now`); time-off đã bắt đầu (vd nghỉ ốm từ sáng) vẫn tạo được. Chặn nếu có lịch `checked_in`/`in_progress` overlap. Lịch `scheduled`/`confirmed` overlap KHÔNG bị chặn mà được trả về trong `affectedAppointments` để lễ tân liên hệ đổi lịch/hủy. |
 | BR-APPT-020 | Time-off block appointment | Không cho check-in appointment nếu `TimeOff` của BS overlap. |
 | BR-APPT-021 | 1 Appointment ↔ 1 Encounter | (xem BD-0002). Khi `start encounter` chỉ tạo nếu chưa có encounter. |
 | BR-APPT-022 | Completed = immutable | Sau khi `completed`, không update. Trừ admin override. |
 | BR-APPT-023 | Cascade cancel (BD-0008) | Khi Appointment chuyển sang `cancelled`: nếu Encounter `in_progress` → Encounter tự động `cancelled`, không trigger stock-out, không tạo Invoice. Nếu Encounter `completed` → 409, không cho cancel (admin override). |
 | BR-APPT-024 | Cancel before start for non-Dentist | Admin/Receptionist: `now < startAt` mới được cancel (trừ admin force với lý do). |
-| BR-APPT-025 | `checked_in` → no_show rule | Manual `no_show` chỉ áp dụng cho `scheduled`/`confirmed`. Sau khi `checked_in` mà BN không gặp BS, **KHÔNG** chuyển `no_show` (BN đã đến). Thay vào đó → cancel nếu cần, hoặc để encounter ở `in_progress` cho BS xử lý. Auto cron chỉ select `(status = 'scheduled' OR status = 'confirmed')` (đã đúng). |
+| BR-APPT-025 | `checked_in` → no_show rule | Manual `no_show` chỉ áp dụng cho `scheduled`/`confirmed`. Sau khi `checked_in` mà BN không gặp BS, **KHÔNG** chuyển `no_show` (BN đã đến). Thay vào đó → cancel nếu cần (cho phép cả sau `startAt`, bắt buộc lý do — BR-APPT-010), hoặc để encounter ở `in_progress` cho BS xử lý. Auto cron chỉ select `(status = 'scheduled' OR status = 'confirmed')` (đã đúng). |
 | BR-APPT-024 | Cancel before start for non-Dentist | Receptionist/Admin cancel được nếu `now < startAt` (BR-APPT-010). Hành vi khác BS: BR-APPT-009. |
 | BR-APPT-026 | ShiftRegistration conflict check | BS tạo ShiftRegistration phải KHÔNG overlap giờ với WorkingSchedule cùng ngày (BD-0010, BR-PAY-020). Validate ở API + application layer (không enforce ở DB vì overlap 2 giờ không phải range overlap đơn giản). |
-| BR-APPT-027 | ShiftRegistration admin approval | Status PENDING → APPROVED cần admin/receptionist duyệt (`shift.approve` permission). Chỉ APPROVED mới tính lương (BR-PAY-021) và mở slot appointment. |
+| BR-APPT-027 | ShiftRegistration admin approval | Status PENDING → APPROVED cần admin/receptionist duyệt (`shift.approve` permission). Chỉ APPROVED mới tính lương (BR-PAY-021) và mở slot appointment (availability + validate đặt lịch đều tính ca APPROVED như WorkingSchedule). Hủy ca APPROVED bị chặn (409) khi còn lịch hẹn chưa kết thúc trong ca. |
 | BR-APPT-028 | BS cancel ShiftRegistration ≥ 24h | BS chỉ cancel được ShiftRegistration APPROVED của mình nếu `now < startAt - 24h`. Admin cancel được mọi lúc. Cancel < 24h có thể trigger PayrollAdjustment PENALTY (BR-PAY-014). |
 | BR-APPT-029 | Auto-cancel pending ShiftRegistration | Cron job daily 00:30: ShiftRegistration PENDING với `date < today` → auto CANCELLED với `cancelled_reason = 'auto: past date unapproved'`. Admin không duyệt được nữa (422). |
 | BR-APPT-030 | WorkingSchedule isPaidShift | Ca working schedule có `isPaidShift = false` → không tính lương (BR-PAY-021). Mặc định `true`. Admin chỉnh để tạm ngưng lương ca đó (vd: BS nghỉ phép dài hạn). |
 | BR-APPT-031 | WorkingSchedule shiftType | `shiftType ∈ {MORNING, AFTERNOON, FULL_DAY, NIGHT}` để payroll phân loại. Mặc định FULL_DAY. Validate slot time theo shiftType (sáng ≤ 12h, chiều > 12h, etc.) — BR mới, sẽ chi tiết ở Phase 9.1. |
+| BR-APPT-032 | BN không trùng giờ | Một BN không được có 2 appointment còn hiệu lực (khác `cancelled`/`no_show`) overlap thời gian, kể cả với BS khác. Áp dụng khi tạo và reschedule; serialize bằng advisory lock theo BS rồi theo BN. Vi phạm → 409 `PATIENT_DOUBLE_BOOKED`. |
+| BR-APPT-033 | BS chỉ quản lý lịch của mình | BS (chỉ có `appointment.read.own`) chỉ được tạo WorkingSchedule/TimeOff cho chính mình (403 nếu khác). `dentistId` phải là user active có role dentist. |
+| BR-APPT-034 | Xác nhận lịch | `POST /appointments/:id/confirm`: `scheduled → confirmed` trước giờ hẹn, lưu `confirmedAt/confirmedBy`. Reschedule đưa appointment về `scheduled` và xoá thông tin xác nhận. |
 
 ### 5.5 ShiftRegistration entity (Phase 9 — BD-0010)
 
@@ -518,6 +521,7 @@ ShiftRegistration.status ∈ {
 | `/appointments/:id` | GET | `appointment.read.*` | |
 | `/appointments/:id` | PATCH | `appointment.update` | |
 | `/appointments/:id/cancel` | POST | `appointment.cancel` | BR-APPT-009/010 |
+| `/appointments/:id/confirm` | POST | `appointment.update` | BR-APPT-034 |
 | `/appointments/:id/check-in` | POST | `appointment.check_in` | |
 | `/appointments/:id/no-show` | POST | `appointment.mark_no_show` | |
 | `/appointments/:id/reschedule` | POST | `appointment.update` | BR-APPT-016 |
@@ -560,11 +564,15 @@ ShiftRegistration.status ∈ {
     "08:00", "08:30", "09:00", "10:30", "11:00",
     "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30"
   ],
+  "windows": [{ "startTime": "08:00", "endTime": "12:00" }, { "startTime": "13:30", "endTime": "17:00" }],
+  "busy": [{ "startTime": "09:30", "endTime": "10:30" }],
   "blockedReason": null
 }
 ```
 
-Nếu BS không có working schedule: `404 Not Found`.
+- `availableSlots` bỏ các slot đã bắt đầu (hôm nay) — cùng lead time 1 phút như BR-APPT-005.
+- `windows`: các khung WorkingSchedule + ShiftRegistration APPROVED trong ngày; `busy`: appointment còn hiệu lực + time-off overlap ngày đó (giờ phòng khám, `"24:00"` = hết ngày). FE dùng để kiểm tra giờ bắt đầu + thời lượng bất kỳ, không chỉ lưới slot.
+- Nếu BS không có working schedule/ca APPROVED ngày đó: `200` với `availableSlots: []`, `windows: []`, `workingHours: null`, `blockedReason: "NO_SCHEDULE"` (trước đây `404`).
 
 ### 8.2 POST `/api/v1/appointments`
 

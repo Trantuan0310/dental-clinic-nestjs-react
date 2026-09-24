@@ -55,6 +55,20 @@ export interface TimeOff {
   createdAt: string;
 }
 
+// Appointments still SCHEDULED/CONFIRMED inside a newly created time-off —
+// returned by POST /appointments/time-offs so front desk can move them.
+export interface TimeOffAffectedAppointment {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: string;
+  patient: { id: string; code: string; fullName: string; primaryPhone: string | null };
+}
+
+export interface CreateTimeOffResult extends TimeOff {
+  affectedAppointments: TimeOffAffectedAppointment[];
+}
+
 export interface CreateTimeOffPayload {
   dentistId: string;
   startAt: string; // ISO datetime

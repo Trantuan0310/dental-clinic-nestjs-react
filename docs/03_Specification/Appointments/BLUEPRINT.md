@@ -180,7 +180,7 @@ sequenceDiagram
 | BR-APPT-009 | BS chỉ cancel appointment của mình ≥ 24h trước startAt |
 | BR-APPT-010 | Lễ tân/Admin cancel được bất kỳ lúc nào (trước khi encounter bắt đầu) |
 | BR-APPT-011 | Cancel sau khi encounter bắt đầu → không cancel được, phải đóng encounter |
-| BR-APPT-012 | Auto no-show: status `scheduled` mà quá 15 phút sau startAt → tự động no_show |
+| BR-APPT-012 | Auto no-show: status `scheduled`/`confirmed` khi `now > max(startAt + 30 phút, endAt)` (hết cửa sổ check-in và hết giờ hẹn) → tự động no_show |
 | BR-APPT-013 | Status state machine: `scheduled → confirmed → checked_in → in_progress → completed` hoặc → `cancelled` / `no_show` |
 | BR-APPT-014 | Working schedule có validFrom/validTo cho phép lịch thay đổi theo thời gian |
 | BR-APPT-015 | Reschedule giữ appointmentId, chỉ đổi dentist/startAt; lưu log |
@@ -216,7 +216,7 @@ sequenceDiagram
 | Rủi ro | Giảm thiểu |
 | ------ | ---------- |
 | Race condition 2 người đặt cùng slot | Unique index `(dentist_id, start_at)` cho slot; validate tại application service với transaction |
-| BN quên check-in | Cron job auto no-show sau 15 phút |
+| BN quên check-in | Cron job auto no-show khi đã hết cửa sổ check-in (+30 phút) và hết giờ hẹn; trước đó lễ tân vẫn check-in muộn được kèm lý do |
 | BS nghỉ giữa ca (không cập nhật time-off) | Cảnh báo cho BS; vẫn cho BN khám BS khác (reschedule) |
 | Lịch lặp lại (recurring) | Validation validFrom/validTo của schedule |
 | Holiday/tet | Có thể tạo "global time-off" (sau MVP). MVP: tạo time-off cho từng BS thủ công |

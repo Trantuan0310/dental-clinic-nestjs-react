@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileEdit,
   Phone,
+  PhoneCall,
   Stethoscope,
   Trash2,
   User,
@@ -29,11 +30,13 @@ import {
   useAvailability,
   useCancelAppointment,
   useCheckInAppointment,
+  useConfirmAppointment,
   useDentistOptions,
   useMarkNoShow,
   useRescheduleAppointment,
   useStartEncounter,
 } from './appointmentApi';
+import type { AxiosError } from 'axios';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
 import { formatDate, formatDateTime, formatPhone, formatTimeOnly, getWeekdayLabel } from '@/lib/format';
@@ -46,7 +49,7 @@ interface AppointmentDetailDrawerProps {
   onEdit?: (appointment: Appointment) => void;
 }
 
-type ActionKey = 'cancel' | 'no_show' | 'reschedule';
+type ActionKey = 'cancel' | 'no_show' | 'reschedule' | 'force_check_in';
 
 const CANCEL_REASONS = [
   'Bệnh nhân yêu cầu',
@@ -56,6 +59,26 @@ const CANCEL_REASONS = [
 ];
 
 const NO_SHOW_REASONS = ['Không liên lạc được', 'Bệnh nhân báo đến muộn quá giờ', 'Không rõ lý do'];
+
+const LATE_CHECK_IN_REASONS = [
+  'Bệnh nhân đến muộn, đã báo trước',
+  'Kẹt xe / thời tiết',
+  'Bác sĩ đồng ý khám bù trong giờ hẹn',
+];
+
+// Backend requires ≥ 5 chars for a forced check-in (BR-APPT-007).
+const OVERRIDE_REASON_MIN_LENGTH = 5;
+
+/**
+ * The check-in window has closed but the backend offers a forced check-in
+ * (CHECK_IN_EXPIRED with a `still_check_in` action) — the slot is still
+ * running, so front desk may check the patient in with a reason.
+ */
+function offersForcedCheckIn(err: unknown): boolean {
+  const actions = (err as AxiosError<{ details?: { actions?: Array<{ code: string }> } }>)
+    ?.response?.data?.details?.actions;
+  return Array.isArray(actions) && actions.some((a) => a.code === 'still_check_in');
+}
 
 const STATUS_ORDER: AppointmentStatus[] = [
   'scheduled',
@@ -82,6 +105,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const [error, setError] = useState<string | null>(null);
 
   const checkIn = useCheckInAppointment();
+  const confirm = useConfirmAppointment();
   const cancel = useCancelAppointment();
   const noShow = useMarkNoShow();
   const reschedule = useRescheduleAppointment();
@@ -158,7 +182,42 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       notify.success(`Đã check-in cho ${appointment.patientName}`);
       onClose();
     } catch (err) {
+      if (offersForcedCheckIn(err)) {
+        setActionModal('force_check_in');
+        return;
+      }
       notify.error(getApiErrorMessage(err, 'Không thể check-in'));
+    }
+  };
+
+  const handleForceCheckIn = async () => {
+    if (!appointment) return;
+    const trimmed = reason.trim();
+    if (trimmed.length < OVERRIDE_REASON_MIN_LENGTH) {
+      setError(`Vui lòng nhập lý do (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
+      return;
+    }
+    setError(null);
+    try {
+      await checkIn.mutateAsync({
+        id: appointment.id,
+        payload: { override: true, overrideReason: trimmed },
+      });
+      notify.success(`Đã check-in muộn cho ${appointment.patientName}`);
+      closeAction();
+      onClose();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Không thể check-in'));
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!appointment) return;
+    try {
+      await confirm.mutateAsync(appointment.id);
+      notify.success(`${appointment.patientName} đã xác nhận lịch hẹn`);
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể xác nhận lịch hẹn'));
     }
   };
 
@@ -415,6 +474,20 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   </PermissionGuard>
                 ) : null}
 
+                {appointment.status === 'scheduled' ? (
+                  <PermissionGuard permission="appointment.update">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<PhoneCall className="h-4 w-4" />}
+                      onClick={handleConfirm}
+                      isLoading={confirm.isPending}
+                    >
+                      Xác nhận lịch
+                    </Button>
+                  </PermissionGuard>
+                ) : null}
+
                 {appointment.status === 'checked_in' ? (
                   <PermissionGuard permission="encounter.start">
                     <Button
@@ -501,6 +574,21 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         isLoading={cancel.isPending}
         confirmLabel="Xác nhận hủy"
         confirmVariant="danger"
+      />
+
+      <ActionDialog
+        open={actionModal === 'force_check_in'}
+        onClose={closeAction}
+        title="Check-in muộn"
+        description="Đã quá 30 phút sau giờ hẹn nên hết khung check-in thường, nhưng giờ hẹn của bệnh nhân vẫn chưa kết thúc. Nhập lý do để vẫn check-in (được ghi vào nhật ký)."
+        reason={reason}
+        setReason={setReason}
+        quickReasons={LATE_CHECK_IN_REASONS}
+        error={error}
+        onConfirm={handleForceCheckIn}
+        isLoading={checkIn.isPending}
+        confirmLabel="Vẫn check-in"
+        confirmVariant="primary"
       />
 
       <ActionDialog
