@@ -2,7 +2,7 @@
 
 Tổng hợp tất cả các ticket đang mở. Mỗi ticket được track trong `pending/` (chưa bắt đầu) hoặc `in-progress/` / `done/` (cập nhật khi có owner nhận).
 
-Last updated: 2026-07-18
+Last updated: 2026-09-24
 
 ---
 
@@ -10,6 +10,7 @@ Last updated: 2026-07-18
 
 | ID | Priority | Title | Owner | Estimate | Status |
 |----|----------|-------|-------|----------|--------|
+| [DEMO-001](./pending/DEMO-001-verify-seed-scripts-on-docker.md) | 🔴 P0 | Verify seed scripts end-to-end trên máy có Docker/Postgres (sửa lỗi `User.email` không `@unique` trong `seed-clinical.ts`) | Backend | 10–15 min | Open |
 | [PAY-006](./pending/PAY-006-config-default-tax-tncn-pct.md) | 🔴 P0 | PayrollConfigPage thiếu field `defaultTaxTncnPct` (verify backend DTO contract) | Backend | 15 min | Open |
 | [PAY-007](./pending/PAY-007-admin-line-item-breakdown-endpoint.md) | 🔴 P0 | Admin PeriodDetail dùng sai endpoint `payslip/me/...` — tạo admin-side line-item breakdown | Backend | 45–60 min | Open |
 | [PAY-011](./pending/PAY-011-me-working-schedules-endpoint.md) | 🟡 P2 | RegisterShiftPage thiếu working schedule preview — endpoint cho user hiện tại | Backend | 10–30 min | Open |
@@ -19,7 +20,7 @@ Last updated: 2026-07-18
 
 ## Conventions
 
-- **ID prefix:** `PAY-*` cho nhóm Payroll/Shift; mở rộng prefix khác (BIL-* billing, APT-* appointment, ...) khi có ticket mới.
+- **ID prefix:** `PAY-*` cho nhóm Payroll/Shift; `DEMO-*` cho seed data/demo readiness; mở rộng prefix khác (BIL-* billing, APT-* appointment, ...) khi có ticket mới.
 - **Priority:** 🔴 P0 blocking → 🟠 P1 important → 🟡 P2 nice-to-have → 🟢 P3 backlog.
 - **Owner:** Backend / Frontend / Fullstack / DevOps / QA.
 - **File naming:** `<ID>-kebab-case-title.md`, đặt trong `pending/` (hoặc folder tương ứng trạng thái).
