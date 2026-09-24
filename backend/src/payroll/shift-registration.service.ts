@@ -10,6 +10,7 @@ import {
 } from './domain/exceptions';
 import { canTransitionShift } from './domain/payroll-state';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
+import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 
 @Injectable()
 export class ShiftRegistrationService {
@@ -266,10 +267,8 @@ export class ShiftRegistrationService {
     let hoursUntilShift: number | null = null;
 
     if (!isAdmin) {
-      // BR-APPT-028: BS chỉ cancel được >= 24h trước
-      const shiftStart = new Date(shift.date);
-      const [hh, mm] = shift.startTime.split(':').map(Number);
-      shiftStart.setUTCHours(hh, mm, 0, 0);
+      // BR-APPT-028: BS chỉ cancel được >= 24h trước (clinic wall-clock time, UTC+7)
+      const shiftStart = this.shiftStartInstant(shift);
 
       const now = new Date();
       hoursUntilShift = (shiftStart.getTime() - now.getTime()) / 3_600_000;
@@ -281,9 +280,7 @@ export class ShiftRegistrationService {
     } else if (shift.status === ShiftRegistrationStatus.APPROVED) {
       // M#8 (BR-PAY-014): Admin cancelling an APPROVED shift < 24h before is
       // considered a late cancel. We audit it; admin can then create a PayrollAdjustment.
-      const shiftStart = new Date(shift.date);
-      const [hh, mm] = shift.startTime.split(':').map(Number);
-      shiftStart.setUTCHours(hh, mm, 0, 0);
+      const shiftStart = this.shiftStartInstant(shift);
       hoursUntilShift = (shiftStart.getTime() - Date.now()) / 3_600_000;
       if (hoursUntilShift >= 0 && hoursUntilShift < 24) {
         lateCancelByAdmin = true;
@@ -337,11 +334,12 @@ export class ShiftRegistrationService {
    * so we compare (date + startTime) vs now.
    */
   async autoCancelPastPending() {
-    const now = new Date();
+    // shift.date/startTime are clinic wall-clock (UTC+7); shift "now" into
+    // clinic time before deriving today's boundary and HH:mm, same as cancel().
+    const nowClinic = new Date(Date.now() + CLINIC_UTC_OFFSET_MS);
 
     // Find PENDING candidates: date < today OR (date = today AND startTime < now's HH:mm)
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const today = new Date(`${nowClinic.toISOString().slice(0, 10)}T00:00:00.000Z`);
 
     const candidates = await this.prisma.shiftRegistration.findMany({
       where: {
@@ -353,7 +351,7 @@ export class ShiftRegistrationService {
           { date: { lt: today } },
           {
             date: today,
-            startTime: { lt: this.hhmmOnly(now) },
+            startTime: { lt: this.hhmmOnly(nowClinic) },
           },
         ],
       },
@@ -387,6 +385,16 @@ export class ShiftRegistrationService {
 
   private hhmmOnly(d: Date): string {
     return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  }
+
+  /**
+   * Resolves a shift's start as an absolute instant. shift.date + startTime
+   * are clinic wall-clock (UTC+7), matching combineDateAndTime() in
+   * appointments.service.ts — NOT UTC.
+   */
+  private shiftStartInstant(shift: { date: Date; startTime: string }): Date {
+    const dateStr = shift.date.toISOString().slice(0, 10);
+    return new Date(`${dateStr}T${shift.startTime}:00+07:00`);
   }
 
   /**
