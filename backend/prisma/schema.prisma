@@ -401,6 +401,12 @@ enum AppointmentSource {
   RETURNING
 }
 
+enum AppointmentType {
+  CONSULTATION
+  TREATMENT
+  FOLLOW_UP
+}
+
 enum TimeOffType {
   VACATION
   SICK
@@ -416,8 +422,10 @@ model Appointment {
   endAt             DateTime            @map("end_at") @db.Timestamptz()
   status            AppointmentStatus   @default(SCHEDULED)
   reason            String?
+  chiefComplaint    String?             @map("chief_complaint")
   notes             String?
   source            AppointmentSource   @default(PHONE)
+  appointmentType   AppointmentType     @default(CONSULTATION) @map("appointment_type")
   confirmedAt       DateTime?           @map("confirmed_at") @db.Timestamptz()
   confirmedBy       String?             @map("confirmed_by") @db.Uuid
   checkedInAt       DateTime?           @map("checked_in_at") @db.Timestamptz()

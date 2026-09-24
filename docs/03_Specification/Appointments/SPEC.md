@@ -564,11 +564,15 @@ ShiftRegistration.status ∈ {
     "08:00", "08:30", "09:00", "10:30", "11:00",
     "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30"
   ],
+  "windows": [{ "startTime": "08:00", "endTime": "12:00" }, { "startTime": "13:30", "endTime": "17:00" }],
+  "busy": [{ "startTime": "09:30", "endTime": "10:30" }],
   "blockedReason": null
 }
 ```
 
-Nếu BS không có working schedule: `404 Not Found`.
+- `availableSlots` bỏ các slot đã bắt đầu (hôm nay) — cùng lead time 1 phút như BR-APPT-005.
+- `windows`: các khung WorkingSchedule + ShiftRegistration APPROVED trong ngày; `busy`: appointment còn hiệu lực + time-off overlap ngày đó (giờ phòng khám, `"24:00"` = hết ngày). FE dùng để kiểm tra giờ bắt đầu + thời lượng bất kỳ, không chỉ lưới slot.
+- Nếu BS không có working schedule/ca APPROVED ngày đó: `200` với `availableSlots: []`, `windows: []`, `workingHours: null`, `blockedReason: "NO_SCHEDULE"` (trước đây `404`).
 
 ### 8.2 POST `/api/v1/appointments`
 

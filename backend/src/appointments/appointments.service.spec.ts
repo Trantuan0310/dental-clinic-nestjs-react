@@ -44,20 +44,20 @@ describe('AppointmentsService', () => {
     ]);
     (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
       {
-        startAt: new Date('2026-09-16T01:00:00Z'),
-        endAt: new Date('2026-09-16T01:30:00Z'),
+        startAt: new Date('2099-09-16T01:00:00Z'),
+        endAt: new Date('2099-09-16T01:30:00Z'),
       },
     ]);
     (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([]);
-    const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2026-09-16' });
+    const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
     expect(result.availableSlots).toEqual(['08:30']);
     expect(prisma.appointment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
           startAt: {
-            gte: new Date('2026-09-15T17:00:00Z'),
-            lt: new Date('2026-09-16T17:00:00Z'),
+            gte: new Date('2099-09-15T17:00:00Z'),
+            lt: new Date('2099-09-16T17:00:00Z'),
           },
         }),
       }),
@@ -782,28 +782,93 @@ describe('AppointmentsService', () => {
       ]);
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
         // 18:30–19:00 Vietnam time
-        { startAt: new Date('2026-09-16T11:30:00Z'), endAt: new Date('2026-09-16T12:00:00Z') },
+        { startAt: new Date('2099-09-16T11:30:00Z'), endAt: new Date('2099-09-16T12:00:00Z') },
       ]);
       (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([]);
 
-      const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2026-09-16' });
+      const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
 
       expect(result.availableSlots).toEqual(['18:00']);
       expect(result.workingHours).toEqual({ startTime: '18:00', endTime: '19:00' });
       expect(prisma.shiftRegistration.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ status: 'APPROVED', date: new Date('2026-09-16') }),
+          where: expect.objectContaining({ status: 'APPROVED', date: new Date('2099-09-16') }),
         }),
       );
     });
 
-    it('still 404s when there is neither a schedule nor an approved shift', async () => {
+    it('returns an empty, NO_SCHEDULE answer (not a 404) when there is neither a schedule nor an approved shift', async () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([]);
 
-      await expect(
-        service.getAvailability({ dentistId: 'dentist-1', date: '2026-09-16' }),
-      ).rejects.toThrow(/Working schedule/);
+      const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          availableSlots: [],
+          windows: [],
+          busy: [],
+          workingHours: null,
+          blockedReason: 'NO_SCHEDULE',
+        }),
+      );
+    });
+
+    it('returns working windows and busy intervals (appointments + time-off) in clinic time', async () => {
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+        {
+          startTime: new Date('1970-01-01T08:00:00Z'),
+          endTime: new Date('1970-01-01T12:00:00Z'),
+          slotDurationMin: 30,
+        },
+      ]);
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+        // 09:10–09:55 Vietnam time — off the 30-min grid
+        { startAt: new Date('2099-09-16T02:10:00Z'), endAt: new Date('2099-09-16T02:55:00Z') },
+      ]);
+      (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([
+        // multi-day leave starting 11:00 Vietnam time
+        { startAt: new Date('2099-09-16T04:00:00Z'), endAt: new Date('2099-09-18T00:00:00Z') },
+      ]);
+
+      const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
+
+      expect(result.windows).toEqual([{ startTime: '08:00', endTime: '12:00' }]);
+      expect(result.busy).toEqual([
+        { startTime: '09:10', endTime: '09:55' },
+        { startTime: '11:00', endTime: '24:00' },
+      ]);
+      expect(result.availableSlots).toEqual(['08:00', '08:30', '10:00', '10:30']);
+    });
+
+    it("drops today's slots that have already started", async () => {
+      jest.useFakeTimers({
+        now: new Date('2099-09-16T02:45:00Z'),
+        doNotFake: ['nextTick', 'setImmediate'],
+      });
+      try {
+        (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+          {
+            startTime: new Date('1970-01-01T08:00:00Z'),
+            endTime: new Date('1970-01-01T11:00:00Z'),
+            slotDurationMin: 30,
+          },
+        ]);
+        (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([]);
+
+        // now = 09:45 Vietnam time
+        const result = await service.getAvailability({
+          dentistId: 'dentist-1',
+          date: '2099-09-16',
+        });
+
+        expect(result.availableSlots).toEqual(['10:00', '10:30']);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 
@@ -1098,6 +1163,95 @@ describe('AppointmentsService', () => {
         }),
       });
       expect(prisma.shiftRegistration.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('appointment type and chief complaint are stored separately', () => {
+    beforeEach(() => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+      });
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue({
+        startTime: new Date('1970-01-01T00:00:00Z'),
+        endTime: new Date('1970-01-01T23:00:00Z'),
+      });
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.create as jest.Mock).mockResolvedValue({ id: 'appt-new' });
+    });
+
+    it('create() persists reason, chief complaint, type and source as given', async () => {
+      await service.create(
+        {
+          dentistId: 'dentist-1',
+          patientId: 'patient-1',
+          startAt: '2099-03-15T02:00:00Z',
+          reason: 'Tái khám',
+          chiefComplaint: 'Đau răng 26',
+          appointmentType: 'FOLLOW_UP',
+          source: 'WALK_IN',
+        } as any,
+        actor,
+      );
+
+      expect((prisma.appointment.create as jest.Mock).mock.calls[0][0].data).toEqual(
+        expect.objectContaining({
+          reason: 'Tái khám',
+          chiefComplaint: 'Đau răng 26',
+          appointmentType: 'FOLLOW_UP',
+          source: 'WALK_IN',
+        }),
+      );
+    });
+
+    it('create() stores blank text fields as null (previously an empty reason hid the chief complaint)', async () => {
+      await service.create(
+        {
+          dentistId: 'dentist-1',
+          patientId: 'patient-1',
+          startAt: '2099-03-15T02:00:00Z',
+          reason: '',
+          chiefComplaint: '  ',
+        } as any,
+        actor,
+      );
+
+      const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+      expect(data.reason).toBeNull();
+      expect(data.chiefComplaint).toBeNull();
+    });
+
+    it('update() no longer overwrites reason with the chief complaint', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        dentistId: 'dentist-1',
+        status: AppointmentStatus.SCHEDULED,
+        reason: 'Cạo vôi',
+      });
+      (prisma.appointment.update as jest.Mock).mockResolvedValue({ id: 'appt-1' });
+
+      await service.update(
+        'appt-1',
+        { chiefComplaint: 'Ê buốt', appointmentType: 'TREATMENT' } as any,
+        actor,
+      );
+
+      expect(prisma.appointment.update).toHaveBeenCalledWith({
+        where: { id: 'appt-1' },
+        data: {
+          reason: undefined,
+          chiefComplaint: 'Ê buốt',
+          appointmentType: 'TREATMENT',
+          notes: undefined,
+          updatedBy: actor.sub,
+        },
+      });
     });
   });
 });

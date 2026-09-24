@@ -102,8 +102,10 @@ erDiagram
 | `end_at` | TIMESTAMPTZ | NO | — | start_at + slot_duration |
 | `status` | VARCHAR(20) | NO | `'scheduled'` | enum: `scheduled`, `confirmed`, `checked_in`, `in_progress`, `completed`, `cancelled`, `no_show` |
 | `reason` | TEXT | YES | NULL | Lý do khám |
+| `chief_complaint` | TEXT | YES | NULL | Triệu chứng / lý do chính (migration 018) |
 | `notes` | TEXT | YES | NULL | Ghi chú nội bộ |
 | `source` | VARCHAR(20) | NO | `'phone'` | enum: `walk_in`, `phone`, `online`, `returning` |
+| `appointment_type` | `"AppointmentType"` | NO | `'CONSULTATION'` | enum: `CONSULTATION`, `TREATMENT`, `FOLLOW_UP` (migration 018) |
 | `confirmed_at` | TIMESTAMPTZ | YES | NULL | Khi status → confirmed |
 | `confirmed_by` | UUID | YES | NULL | FK → `users.id` |
 | `checked_in_at` | TIMESTAMPTZ | YES | NULL | |

@@ -11,7 +11,13 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AppointmentStatus, AppointmentSource, ShiftType, TimeOffType } from '@prisma/client';
+import {
+  AppointmentStatus,
+  AppointmentSource,
+  AppointmentType,
+  ShiftType,
+  TimeOffType,
+} from '@prisma/client';
 
 export class CreateAppointmentDto {
   @ApiProperty()
@@ -50,6 +56,11 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsEnum(AppointmentSource)
   source?: AppointmentSource;
+
+  @ApiPropertyOptional({ enum: AppointmentType })
+  @IsOptional()
+  @IsEnum(AppointmentType)
+  appointmentType?: AppointmentType;
 }
 
 export class UpdateAppointmentDto {
@@ -67,6 +78,11 @@ export class UpdateAppointmentDto {
   @IsOptional()
   @IsString()
   chiefComplaint?: string;
+
+  @ApiPropertyOptional({ enum: AppointmentType })
+  @IsOptional()
+  @IsEnum(AppointmentType)
+  appointmentType?: AppointmentType;
 }
 
 export class CancelAppointmentDto {

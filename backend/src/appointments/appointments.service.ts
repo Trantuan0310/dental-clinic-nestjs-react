@@ -49,6 +49,8 @@ const CHECKIN_WINDOW_AFTER_MIN = 30;
 const NO_SHOW_GRACE_MIN = CHECKIN_WINDOW_AFTER_MIN;
 const LATE_CANCEL_REASON_MIN_LENGTH = 5;
 
+const blankToNull = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
+
 /** Statuses that still hold a slot on the calendar. */
 const ACTIVE_APPOINTMENT_EXCLUDED_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.CANCELLED,
@@ -123,7 +125,9 @@ export class AppointmentsService {
           startAt,
           endAt,
           status: AppointmentStatus.SCHEDULED,
-          reason: dto.reason ?? dto.chiefComplaint ?? null,
+          reason: blankToNull(dto.reason),
+          chiefComplaint: blankToNull(dto.chiefComplaint),
+          appointmentType: dto.appointmentType,
           notes: dto.notes,
           source: dto.source ?? 'PHONE',
           createdBy: actor.sub,
@@ -735,9 +739,18 @@ export class AppointmentsService {
     ].sort((a, b) => a.start.getTime() - b.start.getTime());
 
     if (windows.length === 0) {
-      throw new AppointmentNotFoundException(
-        `Working schedule for dentist ${q.dentistId} on ${q.date}`,
-      );
+      // A day off is a normal answer for a slot picker, not a 404.
+      return {
+        dentistId: q.dentistId,
+        date: q.date,
+        dayOfWeek: scheduleDate.getUTCDay(),
+        workingHours: null,
+        windows: [],
+        busy: [],
+        slotDuration: q.slotDuration ?? 30,
+        availableSlots: [],
+        blockedReason: 'NO_SCHEDULE',
+      };
     }
 
     const slotMin = q.slotDuration ?? schedules[0]?.slotDurationMin ?? 30;
@@ -763,11 +776,14 @@ export class AppointmentsService {
       select: { startAt: true, endAt: true },
     });
 
+    // Same lead time create() enforces — past slots today can't be booked.
+    const earliestStart = Date.now() + 60_000;
     const slots: string[] = [];
     for (const { start, end } of windows) {
       for (let t = start.getTime(); t + slotMin * 60_000 <= end.getTime(); t += slotMin * 60_000) {
         const slotStart = new Date(t);
         const slotEnd = new Date(t + slotMin * 60_000);
+        if (t <= earliestStart) continue;
 
         const overlapsBooked = allBooked.some(b => slotStart < b.endAt && b.startAt < slotEnd);
         if (overlapsBooked) continue;
@@ -786,6 +802,18 @@ export class AppointmentsService {
         startTime: this.toClinicTimeString(windows[0].start),
         endTime: this.toClinicTimeString(new Date(Math.max(...windows.map(w => w.end.getTime())))),
       },
+      // Raw intervals (clinic "HH:mm") so the booking form can check an
+      // arbitrary start + duration, not only the fixed slot grid.
+      windows: windows.map(w => ({
+        startTime: this.toClinicTimeString(w.start),
+        endTime: this.toClinicTimeString(w.end),
+      })),
+      busy: [...allBooked, ...timeOffs]
+        .map(b => ({
+          startTime: b.startAt <= dayStart ? '00:00' : this.toClinicTimeString(b.startAt),
+          endTime: b.endAt >= dayEnd ? '24:00' : this.toClinicTimeString(b.endAt),
+        }))
+        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
       slotDuration: slotMin,
       availableSlots: slots,
       blockedReason: null,
@@ -887,13 +915,16 @@ export class AppointmentsService {
       );
     }
 
-    const reason = dto.chiefComplaint ?? dto.reason ?? appt.reason;
-
+    // Each field is stored on its own (chiefComplaint used to overwrite
+    // reason); undefined leaves the column unchanged.
     const updated = await this.prisma.appointment.update({
       where: { id },
       data: {
-        reason: dto.reason !== undefined ? reason : appt.reason,
-        notes: dto.notes !== undefined ? dto.notes : appt.notes,
+        reason: dto.reason !== undefined ? blankToNull(dto.reason) : undefined,
+        chiefComplaint:
+          dto.chiefComplaint !== undefined ? blankToNull(dto.chiefComplaint) : undefined,
+        appointmentType: dto.appointmentType,
+        notes: dto.notes,
         updatedBy: actor.sub,
       },
     });
@@ -904,7 +935,12 @@ export class AppointmentsService {
       targetId: id,
       actorUserId: actor.sub,
       actorEmail: actor.email,
-      metadata: { reason, notes: dto.notes },
+      metadata: {
+        reason: dto.reason,
+        chiefComplaint: dto.chiefComplaint,
+        appointmentType: dto.appointmentType,
+        notes: dto.notes,
+      },
     });
 
     return updated;

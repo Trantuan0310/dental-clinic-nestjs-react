@@ -114,6 +114,7 @@ export interface UpdateAppointmentPayload {
   reason?: string;
   notes?: string;
   chiefComplaint?: string;
+  appointmentType?: AppointmentType;
 }
 
 export interface CancelAppointmentPayload {
@@ -143,6 +144,12 @@ export interface AvailabilitySlot {
   available: boolean;
 }
 
+/** A clinic wall-clock interval, "HH:mm" – "HH:mm" ("24:00" = end of day). */
+export interface ClockInterval {
+  startTime: string;
+  endTime: string;
+}
+
 export interface DentistAvailability {
   dentistId: string;
   date: string;
@@ -150,6 +157,11 @@ export interface DentistAvailability {
   workingHours: { startTime: string; endTime: string } | null;
   slotDuration: number;
   availableSlots: AvailabilitySlot[];
+  /** Working-schedule / approved-shift windows for the day. */
+  windows: ClockInterval[];
+  /** Booked appointments and time-off overlapping the day. */
+  busy: ClockInterval[];
+  /** 'NO_SCHEDULE' when the dentist doesn't work that day. */
   blockedReason?: string | null;
 }
 
