@@ -12,6 +12,7 @@ import { canTransitionShift } from './domain/payroll-state';
 import {
   countActiveBookingsInShift,
   shiftHasBookingsMessage,
+  shiftInstants,
 } from '../appointments/domain/shift-bookings';
 import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
@@ -271,10 +272,9 @@ export class ShiftRegistrationService {
     let hoursUntilShift: number | null = null;
 
     if (!isAdmin) {
-      // BR-APPT-028: BS chỉ cancel được >= 24h trước
-      const shiftStart = new Date(shift.date);
-      const [hh, mm] = shift.startTime.split(':').map(Number);
-      shiftStart.setUTCHours(hh, mm, 0, 0);
+      // BR-APPT-028: BS chỉ cancel được >= 24h trước. startTime is clinic
+      // wall-clock (UTC+7) — reading it as UTC put the cutoff 7h late.
+      const shiftStart = shiftInstants(shift).start;
 
       const now = new Date();
       hoursUntilShift = (shiftStart.getTime() - now.getTime()) / 3_600_000;
@@ -286,9 +286,7 @@ export class ShiftRegistrationService {
     } else if (shift.status === ShiftRegistrationStatus.APPROVED) {
       // M#8 (BR-PAY-014): Admin cancelling an APPROVED shift < 24h before is
       // considered a late cancel. We audit it; admin can then create a PayrollAdjustment.
-      const shiftStart = new Date(shift.date);
-      const [hh, mm] = shift.startTime.split(':').map(Number);
-      shiftStart.setUTCHours(hh, mm, 0, 0);
+      const shiftStart = shiftInstants(shift).start;
       hoursUntilShift = (shiftStart.getTime() - Date.now()) / 3_600_000;
       if (hoursUntilShift >= 0 && hoursUntilShift < 24) {
         lateCancelByAdmin = true;

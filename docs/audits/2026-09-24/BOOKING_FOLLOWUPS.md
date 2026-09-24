@@ -18,13 +18,13 @@ Review thay đổi của PR #6 (`origin/main...claude/trusting-gauss-8544yk`), �
 | --- | --- | --- |
 | APPT-FU-06 | Cron no-show chạy mỗi phút và ân hạn = cuối khung check-in (+30 phút), nên lựa chọn "vẫn check-in kèm lý do" (BR-APPT-007) sau khi khung đóng chỉ dùng được khoảng 1 phút. Code cũ (+15 phút) còn tệ hơn, không phải lỗi mới; nhưng comment ở `NO_SHOW_GRACE_MIN` nói quá so với thực tế. | Chỉ tự đánh no-show khi `now > max(startAt + 30 phút, endAt)`, để BN đến trễ khi slot còn chạy vẫn check-in được. Nếu giữ cách hiện tại thì chỉ sửa comment. Cập nhật BR-APPT-012 theo lựa chọn. ✅ Đã làm theo đề xuất: cron dùng `startAt < now - 30 phút` **và** `endAt < now`; drawer có hộp "Check-in muộn" (lý do ≥ 5 ký tự) khi API trả `CHECK_IN_EXPIRED`. BR-APPT-006/012 cập nhật. |
 
-## Nhỏ / cải tiến
+## Nhỏ / cải tiến — ✅ đã sửa trong PR #6
 
-| Mã | Vấn đề | Hướng sửa |
+| Mã | Vấn đề | Đã sửa |
 | --- | --- | --- |
-| APPT-FU-07 | Hủy ca có 2 cài đặt riêng (`AppointmentsService.cancelShiftRegistration` và `ShiftRegistrationService.cancel`), đang lệch nhau về múi giờ khi áp luật 24 giờ (+07:00 so với `setUTCHours`). | Gộp về một service; sửa múi giờ bên payroll theo giờ phòng khám. |
-| APPT-FU-08 | `isUnder12` trong form đặt lịch tính tuổi lặp lại với `PatientForm` và coi ngày sinh tương lai là trẻ em. | Dùng `differenceInYears` (date-fns) như `PatientForm`, bỏ qua ngày sinh tương lai. |
-| APPT-FU-09 | `getAvailability` chạy 4 truy vấn nối tiếp. | Gộp thành 2 nhóm `Promise.all` (schedules + shifts, rồi bookings + time-offs). |
+| APPT-FU-07 | Hủy ca có 2 cài đặt riêng (`AppointmentsService.cancelShiftRegistration` và `ShiftRegistrationService.cancel`), đang lệch nhau về múi giờ khi áp luật 24 giờ (+07:00 so với `setUTCHours`). | ✅ Route cũ `POST /appointments/shift-registrations/:id/cancel` gọi thẳng `ShiftRegistrationService.cancel`; bỏ bản trùng trong `AppointmentsService`. Luật 24 giờ và cờ late-cancel dùng `shiftInstants()` (giờ phòng khám +07:00). |
+| APPT-FU-08 | `isUnder12` trong form đặt lịch tính tuổi lặp lại với `PatientForm` và coi ngày sinh tương lai là trẻ em. | ✅ `isValidDob` / `isUnder12` chung ở `frontend/src/features/patients/dobRules.ts` (date-fns), dùng cho cả `PatientForm` và form đặt lịch; ngày sinh tương lai bị báo lỗi, không bật ô người liên hệ. |
+| APPT-FU-09 | `getAvailability` chạy 4 truy vấn nối tiếp. | ✅ 2 nhóm `Promise.all`: schedules + shifts, rồi bookings + time-offs. |
 
 ## Đã biết từ trước, ngoài phạm vi PR #6
 

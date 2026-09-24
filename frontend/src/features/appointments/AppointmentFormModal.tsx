@@ -17,6 +17,7 @@ import {
   useUpdateAppointment,
 } from './appointmentApi';
 import { patientsApi } from '@/features/patients/imperativeApi';
+import { isUnder12, isValidDob } from '@/features/patients/dobRules';
 import type {
   Appointment,
   AppointmentSource,
@@ -71,18 +72,6 @@ const DURATION_OPTIONS = [
 
 function isoDateOnly(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// Same rule as the backend (BR-PT-013): under 12 needs a contact person.
-function isUnder12(dob: string): boolean {
-  if (!dob) return false;
-  const [y, m, d] = dob.split('-').map(Number);
-  const now = new Date();
-  let age = now.getFullYear() - (y ?? 0);
-  if (now.getMonth() + 1 < (m ?? 1) || (now.getMonth() + 1 === m && now.getDate() < (d ?? 1))) {
-    age -= 1;
-  }
-  return age < 12;
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -233,6 +222,10 @@ export function AppointmentFormModal({
     }
     if (!newPatientDob) {
       setNewPatientError('Vui lòng chọn ngày sinh.');
+      return;
+    }
+    if (!isValidDob(newPatientDob)) {
+      setNewPatientError('Ngày sinh không hợp lệ (phải trong quá khứ, cách đây không quá 150 năm).');
       return;
     }
     if (!newPatientPhone.trim()) {

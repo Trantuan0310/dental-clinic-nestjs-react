@@ -260,7 +260,9 @@ describe('ShiftRegistrationService', () => {
     it('BS cannot cancel shift < 24h before (BR-APPT-028)', async () => {
       // Shift date = today, time = 1 hour from now
       const now = new Date();
-      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+      // Shift date/startTime are clinic wall-clock (UTC+7): take the
+      // Vietnam-local view of "one hour from now".
+      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000 + 7 * 60 * 60 * 1000);
       const hh = String(oneHourLater.getUTCHours()).padStart(2, '0');
       const mm = String(oneHourLater.getUTCMinutes()).padStart(2, '0');
 
@@ -285,7 +287,9 @@ describe('ShiftRegistrationService', () => {
     it('admin can cancel any time', async () => {
       // 1 hour from now
       const now = new Date();
-      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+      // Shift date/startTime are clinic wall-clock (UTC+7): take the
+      // Vietnam-local view of "one hour from now".
+      const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000 + 7 * 60 * 60 * 1000);
       const hh = String(oneHourLater.getUTCHours()).padStart(2, '0');
       const mm = String(oneHourLater.getUTCMinutes()).padStart(2, '0');
 
@@ -342,6 +346,69 @@ describe('ShiftRegistrationService', () => {
       expect(raw.mock.invocationCallOrder[0]).toBeLessThan(
         ((prisma as any).appointment.count as jest.Mock).mock.invocationCallOrder[0],
       );
+    });
+
+    describe('APPT-FU-07: 24h rule uses clinic time (UTC+7) for startTime', () => {
+      // now = 2099-01-05 07:00 Vietnam time
+      beforeEach(() =>
+        jest.useFakeTimers({
+          now: new Date('2099-01-05T00:00:00Z'),
+          doNotFake: ['nextTick', 'setImmediate'],
+        }),
+      );
+      afterEach(() => jest.useRealTimers());
+
+      it('dentist: a 05:00 shift tomorrow is 22h away (not 29h) → too late to cancel', async () => {
+        (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+          ...mockShiftPending,
+          date: new Date('2099-01-06'),
+          startTime: '05:00',
+          endTime: '09:00',
+          status: ShiftRegistrationStatus.APPROVED,
+        });
+
+        await expect(service.cancel('shift-1', 'dentist-1', false)).rejects.toThrow(
+          /Còn 22\.0 giờ/,
+        );
+      });
+
+      it('admin: a 03:00 shift tomorrow is 20h away → flagged as late cancel', async () => {
+        (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+          ...mockShiftPending,
+          date: new Date('2099-01-06'),
+          startTime: '03:00',
+          endTime: '06:00',
+          status: ShiftRegistrationStatus.APPROVED,
+        });
+        (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+        (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+          ...mockShiftPending,
+          status: ShiftRegistrationStatus.CANCELLED,
+        });
+
+        await service.cancel('shift-1', 'admin-1', true);
+
+        const audit = (service as any).audit.log as jest.Mock;
+        expect(audit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            metadata: expect.objectContaining({ lateCancelByAdmin: true, hoursUntilShift: 20 }),
+          }),
+        );
+      });
+    });
+
+    it('cancels a PENDING shift (opens no slots) without the calendar lock or a booking count', async () => {
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue(mockShiftPending);
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...mockShiftPending,
+        status: ShiftRegistrationStatus.CANCELLED,
+      });
+
+      await service.cancel('shift-1', 'dentist-1', false);
+
+      expect((prisma as any).$executeRawUnsafe).not.toHaveBeenCalled();
+      expect((prisma as any).appointment.count).not.toHaveBeenCalled();
     });
 
     it('throws when BS tries to cancel another dentist shift', async () => {

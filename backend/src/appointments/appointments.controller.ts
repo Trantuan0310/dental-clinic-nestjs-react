@@ -17,6 +17,7 @@ import { PermissionsGuard, JwtPayload } from '../common/guards/permissions.guard
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { AppointmentsService } from './appointments.service';
+import { ShiftRegistrationService } from '../payroll/shift-registration.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   ApproveShiftRegistrationDto,
@@ -40,7 +41,10 @@ import {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('appointments')
 export class AppointmentsController {
-  constructor(private readonly appointments: AppointmentsService) {}
+  constructor(
+    private readonly appointments: AppointmentsService,
+    private readonly shiftRegistrations: ShiftRegistrationService,
+  ) {}
 
   // ==========================================================================
   // Appointment CRUD
@@ -184,8 +188,13 @@ export class AppointmentsController {
   @RequirePermissions('shift_registration.write')
   @HttpCode(HttpStatus.OK)
   async cancelShift(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    // One cancel implementation for both routes (POST /shifts/registrations/
+    // :id/cancel is the other): same 24h rule in clinic time, late-cancel
+    // audit, booked-appointment guard and calendar lock.
+    const isAdmin =
+      actor.permissions.includes('shift.cancel') && actor.permissions.includes('shift.approve');
     return {
-      data: await this.appointments.cancelShiftRegistration(id, actor),
+      data: await this.shiftRegistrations.cancel(id, actor.sub, isAdmin),
     };
   }
 

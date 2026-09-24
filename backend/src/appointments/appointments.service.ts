@@ -28,7 +28,6 @@ import {
   ScheduleOverlapException,
   SlotConflictException,
 } from './domain/exceptions';
-import { countActiveBookingsInShift, shiftHasBookingsMessage } from './domain/shift-bookings';
 import { lockDentistCalendar, lockPatientCalendar } from './domain/advisory-lock';
 import {
   AvailabilityQueryDto,
@@ -680,28 +679,31 @@ export class AppointmentsService {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const schedules = await this.prisma.workingSchedule.findMany({
-      where: {
-        dentistId: q.dentistId,
-        dayOfWeek: scheduleDate.getUTCDay(),
-        validFrom: { lte: scheduleDate },
-        OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
-        deletedAt: null,
-      },
-      orderBy: { startTime: 'asc' },
-    });
-
-    // BR-APPT-027: an APPROVED shift registration opens bookable hours on
-    // that date just like a recurring working schedule does.
-    const approvedShifts = await this.prisma.shiftRegistration.findMany({
-      where: {
-        dentistId: q.dentistId,
-        date: scheduleDate,
-        status: 'APPROVED',
-        deletedAt: null,
-      },
-      orderBy: { startTime: 'asc' },
-    });
+    // Independent reads run in parallel: this endpoint refetches on every
+    // date/dentist change in the booking form.
+    const [schedules, approvedShifts] = await Promise.all([
+      this.prisma.workingSchedule.findMany({
+        where: {
+          dentistId: q.dentistId,
+          dayOfWeek: scheduleDate.getUTCDay(),
+          validFrom: { lte: scheduleDate },
+          OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
+          deletedAt: null,
+        },
+        orderBy: { startTime: 'asc' },
+      }),
+      // BR-APPT-027: an APPROVED shift registration opens bookable hours on
+      // that date just like a recurring working schedule does.
+      this.prisma.shiftRegistration.findMany({
+        where: {
+          dentistId: q.dentistId,
+          date: scheduleDate,
+          status: 'APPROVED',
+          deletedAt: null,
+        },
+        orderBy: { startTime: 'asc' },
+      }),
+    ]);
 
     const windows = [
       ...schedules.map(sched => ({
@@ -731,26 +733,26 @@ export class AppointmentsService {
 
     const slotMin = q.slotDuration ?? schedules[0]?.slotDurationMin ?? 30;
 
-    // Working hours union
-    const allBooked = await this.prisma.appointment.findMany({
-      where: {
-        dentistId: q.dentistId,
-        status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
-        startAt: { gte: dayStart, lt: dayEnd },
-        deletedAt: null,
-      },
-      select: { startAt: true, endAt: true },
-    });
-
-    const timeOffs = await this.prisma.timeOff.findMany({
-      where: {
-        dentistId: q.dentistId,
-        startAt: { lt: dayEnd },
-        endAt: { gt: dayStart },
-        deletedAt: null,
-      },
-      select: { startAt: true, endAt: true },
-    });
+    const [allBooked, timeOffs] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          dentistId: q.dentistId,
+          status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
+          startAt: { gte: dayStart, lt: dayEnd },
+          deletedAt: null,
+        },
+        select: { startAt: true, endAt: true },
+      }),
+      this.prisma.timeOff.findMany({
+        where: {
+          dentistId: q.dentistId,
+          startAt: { lt: dayEnd },
+          endAt: { gt: dayStart },
+          deletedAt: null,
+        },
+        select: { startAt: true, endAt: true },
+      }),
+    ]);
 
     // Same lead time create() enforces — past slots today can't be booked.
     const earliestStart = Date.now() + 60_000;
@@ -1373,62 +1375,6 @@ export class AppointmentsService {
       targetType: 'shift_registration',
       targetId: id,
       metadata: { reason },
-    });
-
-    return updated;
-  }
-
-  async cancelShiftRegistration(id: string, actor: JwtPayload) {
-    const shift = await this.prisma.shiftRegistration.findUnique({ where: { id } });
-    if (!shift) throw new AppointmentNotFoundException(id);
-
-    const isAdmin =
-      actor.permissions.includes('shift.cancel') && actor.permissions.includes('shift.approve');
-    if (!isAdmin && shift.dentistId !== actor.sub) {
-      throw new AppointmentNotFoundException(id);
-    }
-    if (shift.status !== 'APPROVED' && shift.status !== 'PENDING') {
-      throw new InvalidAppointmentStateException(`Cannot cancel shift in status ${shift.status}`);
-    }
-
-    // BR-APPT-028 / BR-PAY-014: BS cancel only if ≥ 24h before
-    if (!isAdmin && shift.status === 'APPROVED') {
-      const shiftStart = this.combineDateAndTime(
-        shift.date.toISOString().slice(0, 10),
-        shift.startTime,
-      );
-      const hoursUntil = (shiftStart.getTime() - Date.now()) / (1000 * 60 * 60);
-      if (hoursUntil < 24) {
-        throw new InvalidAppointmentStateException(
-          'BS may only cancel APPROVED shift ≥ 24h before start; admin override required',
-        );
-      }
-    }
-
-    // Count + cancel under the dentist's calendar lock: create()/reschedule()
-    // read the APPROVED shift while holding the same lock, so a booking can't
-    // slip in between the count and the cancel (BR-APPT-027).
-    const updated = await this.prisma.$transaction(async tx => {
-      if (shift.status === 'APPROVED') {
-        await this.lockDentist(tx, shift.dentistId);
-        const booked = await countActiveBookingsInShift(tx, shift);
-        if (booked > 0) {
-          throw new InvalidAppointmentStateException(shiftHasBookingsMessage(booked));
-        }
-      }
-      return tx.shiftRegistration.update({
-        where: { id },
-        data: { status: 'CANCELLED', cancelledAt: new Date() },
-      });
-    });
-
-    await this.audit.log({
-      action: 'SHIFT_REGISTRATION_CANCELLED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'shift_registration',
-      targetId: id,
-      metadata: { lateCancel: !isAdmin && shift.status === 'APPROVED' },
     });
 
     return updated;
