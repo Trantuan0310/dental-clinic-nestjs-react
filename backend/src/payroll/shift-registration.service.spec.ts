@@ -95,6 +95,7 @@ describe('ShiftRegistrationService', () => {
             },
             appointment: { count: jest.fn().mockResolvedValue(0) },
             $transaction: jest.fn(),
+            $executeRawUnsafe: jest.fn().mockResolvedValue(0),
           },
         },
         {
@@ -106,6 +107,8 @@ describe('ShiftRegistrationService', () => {
 
     service = module.get(ShiftRegistrationService);
     prisma = module.get(PrismaService);
+    // cancel() runs its booking check + write in prisma.$transaction(cb).
+    (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(prisma));
   });
 
   describe('create', () => {
@@ -319,6 +322,26 @@ describe('ShiftRegistrationService', () => {
         ShiftConflictException,
       );
       expect(prisma.shiftRegistration.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('counts bookings under the dentist calendar lock inside the cancel transaction', async () => {
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+        ...mockShiftPending,
+        status: ShiftRegistrationStatus.APPROVED,
+      });
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...mockShiftPending,
+        status: ShiftRegistrationStatus.CANCELLED,
+      });
+
+      await service.cancel('shift-1', 'dentist-1', false);
+
+      const raw = (prisma as any).$executeRawUnsafe as jest.Mock;
+      expect(raw).toHaveBeenCalledWith(expect.stringMatching(/^SELECT pg_advisory_xact_lock\(1, /));
+      expect(raw.mock.invocationCallOrder[0]).toBeLessThan(
+        ((prisma as any).appointment.count as jest.Mock).mock.invocationCallOrder[0],
+      );
     });
 
     it('throws when BS tries to cancel another dentist shift', async () => {

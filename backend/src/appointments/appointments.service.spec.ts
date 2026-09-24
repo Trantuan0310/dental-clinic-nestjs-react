@@ -1254,4 +1254,148 @@ describe('AppointmentsService', () => {
       });
     });
   });
+
+  describe('review follow-ups APPT-FU-01..03 (calendar lock + overlap)', () => {
+    const lockCalls = () =>
+      (prisma.$executeRawUnsafe as jest.Mock).mock.calls.map(c => c[0] as string);
+
+    it('APPT-FU-01: cancelShiftRegistration takes the dentist calendar lock before counting bookings', async () => {
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+        id: 'shift-1',
+        dentistId: 'dentist-1',
+        date: new Date('2099-01-05'),
+        startTime: '18:00',
+        endTime: '21:00',
+        status: 'APPROVED',
+      });
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({
+        id: 'shift-1',
+        status: 'CANCELLED',
+      });
+
+      const result = await service.cancelShiftRegistration('shift-1', dentistPayload('dentist-1'));
+
+      expect(result.status).toBe('CANCELLED');
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(lockCalls()).toEqual([expect.stringMatching(/^SELECT pg_advisory_xact_lock\(1, /)]);
+      const lockOrder = (prisma.$executeRawUnsafe as jest.Mock).mock.invocationCallOrder[0];
+      const countOrder = (prisma.appointment.count as jest.Mock).mock.invocationCallOrder[0];
+      expect(lockOrder).toBeLessThan(countOrder);
+    });
+
+    it('APPT-FU-01: a PENDING shift (opens no slots) is cancelled without the lock or a booking count', async () => {
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+        id: 'shift-1',
+        dentistId: 'dentist-1',
+        date: new Date('2099-01-05'),
+        startTime: '18:00',
+        endTime: '21:00',
+        status: 'PENDING',
+      });
+      (prisma.shiftRegistration.update as jest.Mock).mockResolvedValue({ id: 'shift-1' });
+
+      await service.cancelShiftRegistration('shift-1', dentistPayload('dentist-1'));
+
+      expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
+      expect(prisma.appointment.count).not.toHaveBeenCalled();
+    });
+
+    it('APPT-FU-03: createTimeOff checks and inserts under the dentist calendar lock', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+      });
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.timeOff.create as jest.Mock).mockResolvedValue({ id: 'to-1' });
+
+      await service.createTimeOff(
+        {
+          dentistId: 'dentist-1',
+          startAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          endAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+          type: 'SICK',
+        } as any,
+        actor,
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(lockCalls()).toEqual([expect.stringMatching(/^SELECT pg_advisory_xact_lock\(1, /)]);
+      const lockOrder = (prisma.$executeRawUnsafe as jest.Mock).mock.invocationCallOrder[0];
+      expect(lockOrder).toBeLessThan(
+        (prisma.appointment.count as jest.Mock).mock.invocationCallOrder[0],
+      );
+      expect(lockOrder).toBeLessThan(
+        (prisma.timeOff.create as jest.Mock).mock.invocationCallOrder[0],
+      );
+    });
+
+    describe('APPT-FU-02: working schedule vs shift registrations', () => {
+      const dto = {
+        dentistId: 'dentist-1',
+        dayOfWeek: 2, // Tuesday
+        startTime: '08:00',
+        endTime: '17:00',
+        validFrom: '2099-01-01',
+      } as any;
+
+      beforeEach(() => {
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+          id: 'dentist-1',
+          status: 'ACTIVE',
+          userRoles: [{ role: { code: 'dentist' } }],
+        });
+        (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.workingSchedule.create as jest.Mock).mockResolvedValue({ id: 'ws-1' });
+      });
+
+      it('rejects a schedule overlapping a pending/approved shift on a matching weekday', async () => {
+        (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([
+          { date: new Date('2099-01-06'), startTime: '13:00', endTime: '18:00' }, // Tuesday
+        ]);
+
+        await expect(service.createWorkingSchedule(dto, actor)).rejects.toThrow(
+          /trùng ca đăng ký ngày 2099-01-06 13:00-18:00/,
+        );
+        expect(prisma.shiftRegistration.findMany).toHaveBeenCalledWith({
+          where: expect.objectContaining({
+            dentistId: 'dentist-1',
+            status: { in: ['PENDING', 'APPROVED'] },
+            date: { gte: new Date('2099-01-01') },
+          }),
+        });
+        expect(prisma.workingSchedule.create).not.toHaveBeenCalled();
+      });
+
+      it('ignores shifts on other weekdays or at non-overlapping hours', async () => {
+        (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([
+          { date: new Date('2099-01-07'), startTime: '09:00', endTime: '12:00' }, // Wednesday
+          { date: new Date('2099-01-06'), startTime: '17:00', endTime: '20:00' }, // Tue, after
+        ]);
+
+        await expect(service.createWorkingSchedule(dto, actor)).resolves.toEqual({ id: 'ws-1' });
+      });
+    });
+
+    it('APPT-FU-02: availability lists each slot once when a schedule and a shift overlap', async () => {
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+        {
+          startTime: new Date('1970-01-01T08:00:00Z'),
+          endTime: new Date('1970-01-01T10:00:00Z'),
+          slotDurationMin: 30,
+        },
+      ]);
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([
+        { startTime: '09:00', endTime: '11:00' },
+      ]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
+
+      expect(result.availableSlots).toEqual(['08:00', '08:30', '09:00', '09:30', '10:00', '10:30']);
+    });
+  });
 });

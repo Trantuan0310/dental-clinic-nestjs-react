@@ -127,7 +127,10 @@ export function AppointmentFormModal({
 
   const [tab, setTab] = useState<'info' | 'lookup' | 'new-patient'>('info');
   const [selectedPatient, setSelectedPatient] = useState<PatientMini | null>(null);
-  const patientId = appointment?.patientId ?? selectedPatient?.id ?? '';
+  // A pre-selected patient (?patientId=) counts as chosen right away — the
+  // GET below only fetches their name for display, so a slow or failed
+  // fetch can't drop the patient or block submit.
+  const patientId = appointment?.patientId ?? selectedPatient?.id ?? defaultPatientId ?? '';
   // Quick-create — walk-ins with no existing record used to force staff out
   // of this modal to /patients/new and back, losing the in-progress booking.
   const [newPatientName, setNewPatientName] = useState('');
@@ -165,15 +168,24 @@ export function AppointmentFormModal({
 
   const { data: searchResults = [], isFetching: isSearchingPatients } =
     usePatientSearch(debouncedSearch);
-  const { data: defaultPatient } = usePatientMini(
-    !appointment && open ? defaultPatientId : undefined,
+  const {
+    data: defaultPatient,
+    isLoading: isLoadingDefaultPatient,
+    isError: defaultPatientFailed,
+  } = usePatientMini(
+    !appointment && open && !selectedPatient ? defaultPatientId : undefined,
   );
   const { data: dentists, isLoading: isLoadingDentists } = useDentistOptions();
   const { data: availability } = useAvailability(dentistId || undefined, date);
 
-  useEffect(() => {
-    if (defaultPatient && !selectedPatient) setSelectedPatient(defaultPatient);
-  }, [defaultPatient, selectedPatient]);
+  const shownPatient = selectedPatient ?? (defaultPatientId ? defaultPatient : null) ?? null;
+  const patientLabel = shownPatient
+    ? `${shownPatient.fullName} — ${shownPatient.code}`
+    : patientId && isLoadingDefaultPatient
+      ? 'Đang tải thông tin bệnh nhân…'
+      : patientId && defaultPatientFailed
+        ? 'Không tải được tên bệnh nhân đã chọn sẵn'
+        : 'Chưa chọn bệnh nhân';
 
   const queryClient = useQueryClient();
   const createPatient = useMutation({
@@ -422,7 +434,10 @@ export function AppointmentFormModal({
             <Input
               label="Họ tên *"
               value={newPatientName}
-              onChange={(e) => setNewPatientName(e.target.value)}
+              onChange={(e) => {
+                setNewPatientName(e.target.value);
+                setDuplicateCandidates(null);
+              }}
               placeholder="Nguyễn Văn A"
             />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -430,14 +445,20 @@ export function AppointmentFormModal({
                 type="date"
                 label="Ngày sinh *"
                 value={newPatientDob}
-                onChange={(e) => setNewPatientDob(e.target.value)}
+                onChange={(e) => {
+                  setNewPatientDob(e.target.value);
+                  setDuplicateCandidates(null);
+                }}
                 max={isoDateOnly(today)}
               />
               <div>
                 <label className="label">Giới tính *</label>
                 <Select
                   value={newPatientGender}
-                  onChange={(e) => setNewPatientGender(e.target.value as Gender)}
+                  onChange={(e) => {
+                    setNewPatientGender(e.target.value as Gender);
+                    setDuplicateCandidates(null);
+                  }}
                   options={GENDER_OPTIONS}
                 />
               </div>
@@ -571,17 +592,15 @@ export function AppointmentFormModal({
                   <div>
                     <label className="label">Bệnh nhân *</label>
                     <div className="input-base flex items-center justify-between gap-2">
-                      <span className={selectedPatient ? 'truncate text-gray-900' : 'text-gray-400'}>
-                        {selectedPatient
-                          ? `${selectedPatient.fullName} — ${selectedPatient.code}`
-                          : 'Chưa chọn bệnh nhân'}
+                      <span className={shownPatient ? 'truncate text-gray-900' : 'text-gray-400'}>
+                        {patientLabel}
                       </span>
                       <button
                         type="button"
                         onClick={() => setTab('lookup')}
                         className="shrink-0 text-xs font-medium text-primary-600 hover:underline"
                       >
-                        {selectedPatient ? 'Đổi' : 'Tìm bệnh nhân'}
+                        {patientId ? 'Đổi' : 'Tìm bệnh nhân'}
                       </button>
                     </div>
                   </div>

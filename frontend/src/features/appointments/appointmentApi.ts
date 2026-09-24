@@ -435,6 +435,9 @@ export function usePatientMini(id: string | undefined) {
     enabled: !!id,
     queryKey: [...appointmentKeys.patients, id ?? ''] as const,
     queryFn: async (): Promise<PatientMini> => toPatientMini(await get<PatientMiniRow>(`/patients/${id}`)),
+    // Display-only (the id is already usable) — fail fast instead of the
+    // global retry policy leaving "Đang tải…" up for several seconds.
+    retry: 1,
     staleTime: 5 * 60_000,
   });
 }

@@ -57,6 +57,7 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
             encounter: { count: jest.fn().mockResolvedValue(0) },
             appointment: { count: jest.fn().mockResolvedValue(0) },
             $transaction: jest.fn(),
+            $executeRawUnsafe: jest.fn().mockResolvedValue(0),
           },
         },
         { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue(undefined) } },
@@ -65,6 +66,8 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
 
     service = module.get(ShiftRegistrationService);
     prisma = module.get(PrismaService);
+    // cancel() runs its booking check + write in prisma.$transaction(cb).
+    (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(prisma));
     audit = module.get(AuditService);
   });
 

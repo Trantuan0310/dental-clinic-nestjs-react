@@ -13,6 +13,7 @@ import {
   countActiveBookingsInShift,
   shiftHasBookingsMessage,
 } from '../appointments/domain/shift-bookings';
+import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
 @Injectable()
@@ -294,26 +295,32 @@ export class ShiftRegistrationService {
       }
     }
 
-    if (shift.status === ShiftRegistrationStatus.APPROVED) {
-      const booked = await countActiveBookingsInShift(this.prisma, shift);
-      if (booked > 0) throw new ShiftConflictException(shiftHasBookingsMessage(booked));
-    }
+    const updated = await this.prisma.$transaction(async tx => {
+      // An APPROVED shift opens bookable slots (BR-APPT-027): count + cancel
+      // under the dentist's calendar lock, which bookings also take, so an
+      // appointment can't be created in the shift between the two.
+      if (shift.status === ShiftRegistrationStatus.APPROVED) {
+        await lockDentistCalendar(tx, shift.dentistId);
+        const booked = await countActiveBookingsInShift(tx, shift);
+        if (booked > 0) throw new ShiftConflictException(shiftHasBookingsMessage(booked));
+      }
 
-    // See approve() above — same guarded-write race protection (e.g. an
-    // admin cancelling right as another admin approves the same shift).
-    const cancelResult = await this.prisma.shiftRegistration.updateMany({
-      where: { id, status: shift.status },
-      data: {
-        status: ShiftRegistrationStatus.CANCELLED,
-        cancelledAt: new Date(),
-      },
+      // See approve() above — same guarded-write race protection (e.g. an
+      // admin cancelling right as another admin approves the same shift).
+      const cancelResult = await tx.shiftRegistration.updateMany({
+        where: { id, status: shift.status },
+        data: {
+          status: ShiftRegistrationStatus.CANCELLED,
+          cancelledAt: new Date(),
+        },
+      });
+      if (cancelResult.count === 0) {
+        throw new ShiftConflictException(
+          'Shift registration was changed by someone else — reload and try again',
+        );
+      }
+      return tx.shiftRegistration.findUniqueOrThrow({ where: { id } });
     });
-    if (cancelResult.count === 0) {
-      throw new ShiftConflictException(
-        'Shift registration was changed by someone else — reload and try again',
-      );
-    }
-    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
 
     const auditMetadata: Record<string, unknown> = {
       byAdmin: isAdmin,
