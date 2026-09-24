@@ -524,6 +524,10 @@ describe('AppointmentsService', () => {
       const cutoffMs = where.startAt.lt.getTime();
       expect(cutoffMs).toBeGreaterThanOrEqual(before - 30 * 60_000);
       expect(cutoffMs).toBeLessThanOrEqual(after - 30 * 60_000);
+      // APPT-FU-06: …and only once the booked slot itself has ended.
+      const endCutoffMs = where.endAt.lt.getTime();
+      expect(endCutoffMs).toBeGreaterThanOrEqual(before);
+      expect(endCutoffMs).toBeLessThanOrEqual(after);
     });
 
     it('re-states the status filter in the write so a concurrent check-in is not overwritten', async () => {
@@ -1396,6 +1400,54 @@ describe('AppointmentsService', () => {
       const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
 
       expect(result.availableSlots).toEqual(['08:00', '08:30', '09:00', '09:30', '10:00', '10:30']);
+    });
+  });
+
+  describe('APPT-FU-06: late arrival while the slot is still running', () => {
+    // Started 45 min ago (check-in window closed at +30), 60-min slot still running.
+    const late = () => ({
+      id: 'appt-1',
+      status: AppointmentStatus.SCHEDULED,
+      patientId: 'patient-1',
+      dentistId: 'dentist-1',
+      startAt: new Date(Date.now() - 45 * 60_000),
+      endAt: new Date(Date.now() + 15 * 60_000),
+    });
+
+    it('without override: rejects with CHECK_IN_EXPIRED offering a force check-in action', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(late());
+
+      const err = await service.checkIn('appt-1', false, undefined, actor).catch(e => e);
+
+      expect(err.getResponse()).toEqual(
+        expect.objectContaining({
+          code: 'CHECK_IN_EXPIRED',
+          details: {
+            actions: expect.arrayContaining([expect.objectContaining({ code: 'still_check_in' })]),
+          },
+        }),
+      );
+      expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('with override + reason: checks the patient in and audits the override', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(late());
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...late(),
+        status: AppointmentStatus.CHECKED_IN,
+      });
+
+      const result = await service.checkIn('appt-1', true, 'Kẹt xe, báo trước', actor);
+
+      expect(result.status).toBe(AppointmentStatus.CHECKED_IN);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'APPOINTMENT_CHECKIN_OVERRIDDEN' }),
+      );
     });
   });
 });

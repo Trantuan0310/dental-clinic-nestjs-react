@@ -44,9 +44,11 @@ import {
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
-// Auto no-show must not fire before the check-in window closes — otherwise a
-// patient arriving inside the window (e.g. +20 min) is already NO_SHOW and
-// can't be checked in, not even with an override (BR-APPT-006 / 012).
+// Auto no-show (BR-APPT-012) fires only once BOTH the check-in window has
+// closed AND the booked slot has ended: a patient arriving inside the window
+// (e.g. +20 min) checks in normally, and one arriving later but while their
+// slot is still running can be force-checked-in with a reason (BR-APPT-007)
+// instead of already being NO_SHOW.
 const NO_SHOW_GRACE_MIN = CHECKIN_WINDOW_AFTER_MIN;
 const LATE_CANCEL_REASON_MIN_LENGTH = 5;
 
@@ -542,7 +544,9 @@ export class AppointmentsService {
     const updated = await this.prisma.appointment.updateMany({
       where: {
         status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+        // now > max(startAt + grace, endAt)
         startAt: { lt: cutoff },
+        endAt: { lt: now },
         deletedAt: null,
       },
       data: {

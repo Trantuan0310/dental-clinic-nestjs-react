@@ -208,7 +208,7 @@
 | **Cửa sổ check-in** | Check-in Window | Khoảng thời gian `[startAt - 15min, startAt + 30min]` cho phép check-in. |
 | **Force check-in** | Force Check-in | Check-in ngoài window với override + reason (audit). |
 | **Reschedule** | Reschedule | Đổi dentistId và/hoặc startAt của appointment. Giữ id, lưu log. Max 3 lần. |
-| **Auto no-show** | Auto No-Show | Cron job tự chuyển `scheduled`/`confirmed` quá 30 phút sau startAt (hết cửa sổ check-in) thành `no_show`. |
+| **Auto no-show** | Auto No-Show | Cron job tự chuyển `scheduled`/`confirmed` thành `no_show` khi đã hết cửa sổ check-in (startAt + 30 phút) và hết giờ hẹn (endAt). |
 | **State machine** | Status State Machine | Các trạng thái + transition hợp lệ của Appointment. Xem SPEC §2.8. |
 | **Nguồn đặt lịch** | Appointment Source | Nơi appointment được tạo: `walk_in`, `phone`, `online`, `returning`. |
 | **Lịch tuần** | Week View | UI calendar hiển thị lịch theo tuần (thường dùng cho lễ tân/BS). |

@@ -12,11 +12,11 @@ Review thay đổi của PR #6 (`origin/main...claude/trusting-gauss-8544yk`), �
 | APPT-FU-04 | Form tạo nhanh bệnh nhân: sau khi hiện danh sách hồ sơ trùng, sửa họ tên / ngày sinh / giới tính không xóa danh sách. Bấm "vẫn tạo hồ sơ mới" lúc đó bỏ qua kiểm tra với thông tin mới, gây hồ sơ trùng. | `frontend/src/features/appointments/AppointmentFormModal.tsx` (tab "Bệnh nhân mới") | ✅ Sửa họ tên, ngày sinh, giới tính hoặc SĐT đều xóa danh sách trùng cũ, nên phải kiểm tra lại. |
 | APPT-FU-05 | Mở form với `?patientId=` (từ trang bệnh nhân): bệnh nhân chọn sẵn chỉ được áp sau khi `GET /patients/:id` xong. Bấm lưu sớm báo "chưa chọn bệnh nhân"; API lỗi thì mất bệnh nhân mà không báo. Lỗi mới do PR #6. | `AppointmentFormModal.tsx` (`usePatientMini`, `patientId`); `AppointmentCalendarPage.tsx` truyền `defaultPatientId` | ✅ `defaultPatientId` được dùng làm `patientId` ngay; GET chỉ để hiện tên, có trạng thái "Đang tải…" / "Không tải được tên…" (retry 1 lần). |
 
-## Cần quyết định nghiệp vụ
+## Cần quyết định nghiệp vụ — ✅ đã sửa theo đề xuất
 
 | Mã | Vấn đề | Đề xuất |
 | --- | --- | --- |
-| APPT-FU-06 | Cron no-show chạy mỗi phút và ân hạn = cuối khung check-in (+30 phút), nên lựa chọn "vẫn check-in kèm lý do" (BR-APPT-007) sau khi khung đóng chỉ dùng được khoảng 1 phút. Code cũ (+15 phút) còn tệ hơn, không phải lỗi mới; nhưng comment ở `NO_SHOW_GRACE_MIN` nói quá so với thực tế. | Chỉ tự đánh no-show khi `now > max(startAt + 30 phút, endAt)`, để BN đến trễ khi slot còn chạy vẫn check-in được. Nếu giữ cách hiện tại thì chỉ sửa comment. Cập nhật BR-APPT-012 theo lựa chọn. |
+| APPT-FU-06 | Cron no-show chạy mỗi phút và ân hạn = cuối khung check-in (+30 phút), nên lựa chọn "vẫn check-in kèm lý do" (BR-APPT-007) sau khi khung đóng chỉ dùng được khoảng 1 phút. Code cũ (+15 phút) còn tệ hơn, không phải lỗi mới; nhưng comment ở `NO_SHOW_GRACE_MIN` nói quá so với thực tế. | Chỉ tự đánh no-show khi `now > max(startAt + 30 phút, endAt)`, để BN đến trễ khi slot còn chạy vẫn check-in được. Nếu giữ cách hiện tại thì chỉ sửa comment. Cập nhật BR-APPT-012 theo lựa chọn. ✅ Đã làm theo đề xuất: cron dùng `startAt < now - 30 phút` **và** `endAt < now`; drawer có hộp "Check-in muộn" (lý do ≥ 5 ký tự) khi API trả `CHECK_IN_EXPIRED`. BR-APPT-006/012 cập nhật. |
 
 ## Nhỏ / cải tiến
 

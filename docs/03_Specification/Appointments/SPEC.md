@@ -448,13 +448,13 @@ Appointment.source ∈ {
 | BR-APPT-003 | Slot phải trong working schedule | `startAt` phải nằm trong `[schedule.startTime, schedule.endTime]` của BS trong `dayOfWeek = startAt.dayOfWeek`. |
 | BR-APPT-004 | Không trùng time-off | `startAt`/`endAt` không được overlap với `TimeOff` của BS. |
 | BR-APPT-005 | Future only | `startAt > now()` (cho phép sai số 1 phút). Không cho back-dated. |
-| BR-APPT-006 | Check-in window strict | `[startAt - 15min, startAt + 30min]`. Ngoài window → phải chọn override/no_show/cancel. |
+| BR-APPT-006 | Check-in window strict | `[startAt - 15min, startAt + 30min]`. Ngoài window → phải chọn override/no_show/cancel. Override dùng được cho tới khi hết giờ hẹn (sau đó cron đã `no_show`, BR-APPT-012). |
 | BR-APPT-007 | Override check-in có reason | Khi lễ tân check-in ngoài window: bắt buộc nhập lý do, audit log. |
 | BR-APPT-008 | Patient not deleted | BN phải active để check-in và tạo encounter. |
 | BR-APPT-009 | Dentist cancel own ≥ 24h | BS chỉ cancel được lịch của mình nếu `now < startAt - 24h`. |
 | BR-APPT-010 | Receptionist/Admin cancel | Lễ tân/Admin cancel được nếu `now < startAt` (trước khi encounter). Ngoại lệ: appointment `checked_in` sau giờ hẹn được cancel với lý do ≥ 5 ký tự (BR-APPT-025), audit ghi `lateCheckedInCancel`. |
 | BR-APPT-011 | Không cancel khi encounter đang chạy | Status `in_progress` → không cancel được. |
-| BR-APPT-012 | Auto no-show | Status `scheduled`/`confirmed` mà `now > startAt + 30min` (bằng mép cuối cửa sổ check-in BR-APPT-006, để BN đến trễ trong cửa sổ vẫn check-in được) → cron tự `no_show`. Câu lệnh update lặp lại điều kiện status để không ghi đè check-in xảy ra đồng thời. **`checked_in` KHÔNG auto no_show** — BN đã đến, BS có thể vẫn gặp; nếu bỏ về sau khi check-in → manual `no_show` (xem BR-APPT-025). |
+| BR-APPT-012 | Auto no-show | Status `scheduled`/`confirmed` mà `now > max(startAt + 30min, endAt)` — tức đã hết cửa sổ check-in BR-APPT-006 **và** đã hết giờ hẹn — → cron tự `no_show`. BN đến trễ trong cửa sổ check-in bình thường; đến sau cửa sổ nhưng khi slot còn chạy thì lễ tân check-in override kèm lý do (BR-APPT-007, UI "Check-in muộn"). Câu lệnh update lặp lại điều kiện status để không ghi đè check-in xảy ra đồng thời. **`checked_in` KHÔNG auto no_show** — BN đã đến, BS có thể vẫn gặp; nếu bỏ về sau khi check-in → manual `no_show` (xem BR-APPT-025). |
 | BR-APPT-013 | State machine | BR §2.8. Validate mỗi transition. |
 | BR-APPT-014 | Schedule có valid range | `WorkingSchedule` có `validFrom`/`validTo`. Cho phép lịch thay đổi theo thời gian. |
 | BR-APPT-015 | Reschedule giữ id | Chỉ update `dentistId`/`startAt`. Lưu log vào `AppointmentRescheduleLog`. Chỉ reschedule được khi status `scheduled`/`confirmed`; BS mới phải active và có role dentist. |

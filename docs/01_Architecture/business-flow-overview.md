@@ -133,7 +133,7 @@ sequenceDiagram
 
 ### 3.1 Trigger
 
-Đã qua giờ hẹn + 30 phút (hết cửa sổ check-in, BR-APPT-006), bệnh nhân chưa check-in.
+Đã hết cửa sổ check-in (giờ hẹn + 30 phút, BR-APPT-006) và hết giờ hẹn, bệnh nhân chưa check-in.
 
 ### 3.2 Pre-condition
 
