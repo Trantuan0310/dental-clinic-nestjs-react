@@ -438,7 +438,7 @@ async function main() {
   // --------------------------------------------------------------------
   // 1. Ensure admin status is ACTIVE so we can also use it as creator
   // --------------------------------------------------------------------
-  const admin = await prisma.user.findUnique({ where: { email: 'admin@clinic.local' } });
+  const admin = await prisma.user.findFirst({ where: { email: 'admin@clinic.local', deletedAt: null } });
   if (!admin) {
     throw new Error('Admin user missing — run `npm run prisma:seed` first.');
   }
@@ -463,17 +463,21 @@ async function main() {
   const passwordHash = await argon2.hash(DEFAULT_PASSWORD, { type: argon2.argon2id });
   const dentists = [];
   for (const d of DENTISTS) {
-    const user = await prisma.user.upsert({
-      where: { email: d.email },
-      update: { fullName: d.fullName, status: 'ACTIVE' },
-      create: {
-        email: d.email,
-        fullName: d.fullName,
-        passwordHash,
-        status: 'ACTIVE',
-        userRoles: { create: { roleId: dentistRole.id } },
-      },
-    });
+    const existing = await prisma.user.findFirst({ where: { email: d.email, deletedAt: null } });
+    const user = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: { fullName: d.fullName, status: 'ACTIVE' },
+        })
+      : await prisma.user.create({
+          data: {
+            email: d.email,
+            fullName: d.fullName,
+            passwordHash,
+            status: 'ACTIVE',
+            userRoles: { create: { roleId: dentistRole.id } },
+          },
+        });
     dentists.push(user);
     console.log(`  ✓ ${user.fullName} (${user.email})`);
   }
@@ -484,17 +488,21 @@ async function main() {
   console.log('\nCreating receptionists…');
   const receptionists = [];
   for (const r of RECEPTIONISTS) {
-    const user = await prisma.user.upsert({
-      where: { email: r.email },
-      update: { fullName: r.fullName, status: 'ACTIVE' },
-      create: {
-        email: r.email,
-        fullName: r.fullName,
-        passwordHash,
-        status: 'ACTIVE',
-        userRoles: { create: { roleId: receptionistRole.id } },
-      },
-    });
+    const existing = await prisma.user.findFirst({ where: { email: r.email, deletedAt: null } });
+    const user = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: { fullName: r.fullName, status: 'ACTIVE' },
+        })
+      : await prisma.user.create({
+          data: {
+            email: r.email,
+            fullName: r.fullName,
+            passwordHash,
+            status: 'ACTIVE',
+            userRoles: { create: { roleId: receptionistRole.id } },
+          },
+        });
     receptionists.push(user);
     console.log(`  ✓ ${user.fullName} (${user.email})`);
   }
