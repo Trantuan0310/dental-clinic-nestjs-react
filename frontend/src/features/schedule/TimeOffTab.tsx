@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Plus, CalendarOff } from 'lucide-react';
-import { Button, Card, Select, Input, Textarea, Modal, EmptyState } from '@/components/ui';
+import { Alert, Button, Card, Select, Input, Textarea, Modal, EmptyState } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import { useTimeOffs, useCreateTimeOff } from './scheduleApi';
-import type { TimeOffType } from '@/types/schedule';
+import { useSchedulableDentists } from './useSchedulableDentists';
+import type { TimeOffAffectedAppointment, TimeOffType } from '@/types/schedule';
 
 const TIME_OFF_TYPE_LABELS: Record<TimeOffType, string> = {
   VACATION: 'Nghỉ phép',
@@ -105,10 +106,13 @@ export function TimeOffTab() {
 }
 
 function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { data: dentists = [] } = useDentistOptions();
+  const { dentists, defaultDentistId } = useSchedulableDentists();
   const createTimeOff = useCreateTimeOff();
 
-  const [dentistId, setDentistId] = useState('');
+  const [dentistId, setDentistId] = useState(defaultDentistId);
+  // Appointments still booked inside the time-off just recorded — shown
+  // instead of closing, so front desk knows who to call and move.
+  const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [type, setType] = useState<TimeOffType>('VACATION');
@@ -117,7 +121,8 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
   const isRangeValid = !startAt || !endAt || startAt < endAt;
 
   const resetForm = () => {
-    setDentistId('');
+    setDentistId(defaultDentistId);
+    setAffected(null);
     setStartAt('');
     setEndAt('');
     setType('VACATION');
@@ -126,14 +131,20 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const handleSubmit = async () => {
     try {
-      await createTimeOff.mutateAsync({
+      // datetime-local values carry no timezone; send real instants so the
+      // server doesn't interpret them in its own zone.
+      const created = await createTimeOff.mutateAsync({
         dentistId,
-        startAt,
-        endAt,
+        startAt: new Date(startAt).toISOString(),
+        endAt: new Date(endAt).toISOString(),
         type,
         reason: reason || undefined,
       });
       notify.success('Đã ghi nhận nghỉ phép');
+      if (created.affectedAppointments.length > 0) {
+        setAffected(created.affectedAppointments);
+        return;
+      }
       resetForm();
       onClose();
     } catch (err) {
@@ -141,16 +152,42 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
     }
   };
 
+  const close = () => {
+    resetForm();
+    onClose();
+  };
+
+  if (affected) {
+    return (
+      <Modal open={open} onClose={close} title="Lịch hẹn cần xử lý" size="sm">
+        <div className="space-y-4">
+          <Alert variant="warning">
+            Còn {affected.length} lịch hẹn trong thời gian nghỉ. Vui lòng liên hệ bệnh nhân để đổi
+            lịch hoặc hủy — hệ thống không tự dời các lịch này.
+          </Alert>
+          <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
+            {affected.map((a) => (
+              <li key={a.id} className="px-3 py-2 text-sm">
+                <p className="font-medium text-gray-900">
+                  {a.patient.fullName} <span className="text-gray-500">— {a.patient.code}</span>
+                </p>
+                <p className="text-gray-600">
+                  {formatDateTime(a.startAt)}
+                  {a.patient.primaryPhone ? ` • ${a.patient.primaryPhone}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-end border-t border-gray-100 pt-4">
+            <Button onClick={close}>Đã hiểu</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal
-      open={open}
-      onClose={() => {
-        resetForm();
-        onClose();
-      }}
-      title="Thêm nghỉ phép"
-      size="sm"
-    >
+    <Modal open={open} onClose={close} title="Thêm nghỉ phép" size="sm">
       <div className="space-y-4">
         <Select
           label="Bác sĩ"
@@ -196,7 +233,7 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
         />
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={close}>
             Hủy
           </Button>
           <Button

@@ -6,6 +6,7 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
+import { useSchedulableDentists } from './useSchedulableDentists';
 import { useWorkingSchedules, useCreateWorkingSchedule } from './scheduleApi';
 import type { ShiftType, WorkingSchedule } from '@/types/schedule';
 
@@ -119,10 +120,10 @@ export function WorkingScheduleTab() {
 }
 
 function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { data: dentists = [] } = useDentistOptions();
+  const { dentists, defaultDentistId } = useSchedulableDentists();
   const createSchedule = useCreateWorkingSchedule();
 
-  const [dentistId, setDentistId] = useState('');
+  const [dentistId, setDentistId] = useState(defaultDentistId);
   const [dayOfWeek, setDayOfWeek] = useState('1');
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
@@ -134,7 +135,7 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
   const isTimeRangeValid = !startTime || !endTime || startTime < endTime;
 
   const resetForm = () => {
-    setDentistId('');
+    setDentistId(defaultDentistId);
     setDayOfWeek('1');
     setStartTime('08:00');
     setEndTime('17:00');

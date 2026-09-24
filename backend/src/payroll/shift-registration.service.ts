@@ -9,6 +9,10 @@ import {
   PayrollNotFoundException,
 } from './domain/exceptions';
 import { canTransitionShift } from './domain/payroll-state';
+import {
+  countActiveBookingsInShift,
+  shiftHasBookingsMessage,
+} from '../appointments/domain/shift-bookings';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
 @Injectable()
@@ -288,6 +292,11 @@ export class ShiftRegistrationService {
       if (hoursUntilShift >= 0 && hoursUntilShift < 24) {
         lateCancelByAdmin = true;
       }
+    }
+
+    if (shift.status === ShiftRegistrationStatus.APPROVED) {
+      const booked = await countActiveBookingsInShift(this.prisma, shift);
+      if (booked > 0) throw new ShiftConflictException(shiftHasBookingsMessage(booked));
     }
 
     // See approve() above — same guarded-write race protection (e.g. an

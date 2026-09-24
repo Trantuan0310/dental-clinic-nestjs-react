@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileEdit,
   Phone,
+  PhoneCall,
   Stethoscope,
   Trash2,
   User,
@@ -29,6 +30,7 @@ import {
   useAvailability,
   useCancelAppointment,
   useCheckInAppointment,
+  useConfirmAppointment,
   useDentistOptions,
   useMarkNoShow,
   useRescheduleAppointment,
@@ -82,6 +84,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const [error, setError] = useState<string | null>(null);
 
   const checkIn = useCheckInAppointment();
+  const confirm = useConfirmAppointment();
   const cancel = useCancelAppointment();
   const noShow = useMarkNoShow();
   const reschedule = useRescheduleAppointment();
@@ -159,6 +162,16 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       onClose();
     } catch (err) {
       notify.error(getApiErrorMessage(err, 'Không thể check-in'));
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!appointment) return;
+    try {
+      await confirm.mutateAsync(appointment.id);
+      notify.success(`${appointment.patientName} đã xác nhận lịch hẹn`);
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không thể xác nhận lịch hẹn'));
     }
   };
 
@@ -411,6 +424,20 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       isLoading={checkIn.isPending}
                     >
                       Check-in
+                    </Button>
+                  </PermissionGuard>
+                ) : null}
+
+                {appointment.status === 'scheduled' ? (
+                  <PermissionGuard permission="appointment.update">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<PhoneCall className="h-4 w-4" />}
+                      onClick={handleConfirm}
+                      isLoading={confirm.isPending}
+                    >
+                      Xác nhận lịch
                     </Button>
                   </PermissionGuard>
                 ) : null}

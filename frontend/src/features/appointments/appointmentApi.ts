@@ -538,6 +538,20 @@ export function useCancelAppointment() {
   });
 }
 
+/** POST /appointments/:id/confirm — scheduled → confirmed (patient confirmed they'll come). */
+export function useConfirmAppointment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<Appointment> => {
+      const row = await post<PrismaAppointmentRow>(`/appointments/${id}/confirm`, {});
+      return transformAppointment(row);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
 export function useCheckInAppointment() {
   const qc = useQueryClient();
   return useMutation({

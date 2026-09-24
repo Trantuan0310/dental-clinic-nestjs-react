@@ -93,6 +93,7 @@ describe('ShiftRegistrationService', () => {
               // schedules, not just first.
               findMany: jest.fn().mockResolvedValue([]),
             },
+            appointment: { count: jest.fn().mockResolvedValue(0) },
             $transaction: jest.fn(),
           },
         },
@@ -305,6 +306,19 @@ describe('ShiftRegistrationService', () => {
 
       const result = await service.cancel('shift-1', 'admin-1', true);
       expect(result.status).toBe(ShiftRegistrationStatus.CANCELLED);
+    });
+
+    it('refuses to cancel an APPROVED shift that still has booked appointments (BR-APPT-027)', async () => {
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+        ...mockShiftPending,
+        status: ShiftRegistrationStatus.APPROVED,
+      });
+      ((prisma as any).appointment.count as jest.Mock).mockResolvedValueOnce(2);
+
+      await expect(service.cancel('shift-1', 'dentist-1', false)).rejects.toThrow(
+        ShiftConflictException,
+      );
+      expect(prisma.shiftRegistration.updateMany).not.toHaveBeenCalled();
     });
 
     it('throws when BS tries to cancel another dentist shift', async () => {

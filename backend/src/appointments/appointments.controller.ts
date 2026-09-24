@@ -233,6 +233,14 @@ export class AppointmentsController {
     return { data: await this.appointments.reschedule(id, dto, actor) };
   }
 
+  @Post(':id/confirm')
+  @RequirePermissions('appointment.update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm appointment (scheduled → confirmed, spec §2.8)' })
+  async confirm(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.confirm(id, actor) };
+  }
+
   @Post(':id/check-in')
   @RequirePermissions('appointment.check_in')
   @HttpCode(HttpStatus.OK)
