@@ -1,6 +1,6 @@
 # ADR-0009 — Mô hình nhân sự, bác sĩ, dịch vụ, lịch làm việc và điều phối
 
-> **Status:** Accepted
+> **Status:** Accepted — đã triển khai đủ 7 giai đoạn (PR #11–#17 và PR-7)
 > **Date:** 2026-09-25
 > **Context:** Hoàn thiện nghiệp vụ bác sĩ – dịch vụ – lịch làm việc – lịch hẹn – điều phối (kế hoạch 7 giai đoạn). Hệ thống hiện chỉ có bác sĩ = `User` có role `dentist`, chưa có danh mục dịch vụ, và "hàng đợi" chỉ là danh sách lịch hẹn `CHECKED_IN`.
 
@@ -108,7 +108,7 @@ Mỗi giai đoạn là một PR riêng, merge xong mới làm giai đoạn sau. 
 4. **PR-4 AvailabilityService:** gộp logic slot trống, test bảng quyết định.
 5. **PR-5 Lịch hẹn nhiều dịch vụ:** snapshot, buffer, walk-in, `LEFT`, lịch sử thay đổi.
 6. **PR-6 Điều phối:** hàng đợi, ưu tiên, gọi/bỏ qua/chuyển bác sĩ.
-7. **PR-7 E2E và nghiệm thu:** luồng từ tạo nhân viên tới hoàn thành khám, rà soát phân quyền, audit, hiệu năng.
+7. **PR-7 E2E và nghiệm thu:** luồng từ tạo nhân viên tới hoàn thành khám, rà soát phân quyền, audit, hiệu năng. Kết quả: [`08_Testing/adr-0009-acceptance.md`](../08_Testing/adr-0009-acceptance.md).
 
 ## Consequences
 

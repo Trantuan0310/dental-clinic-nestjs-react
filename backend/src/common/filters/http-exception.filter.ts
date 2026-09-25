@@ -36,7 +36,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else if (typeof exceptionResponse === 'object') {
         const resp = exceptionResponse as Record<string, unknown>;
         message = (resp.message as string) || exception.message;
-        code = (resp.error as string) || this.getErrorCode(status);
+        code = this.businessCode(resp) ?? this.getErrorCode(status);
         details = resp.details;
       }
     } else if (exception instanceof Error) {
@@ -56,6 +56,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
     });
+  }
+
+  /**
+   * The machine-readable code the client branches on. Domain exceptions put
+   * it in `code` (e.g. CHECK_IN_EXPIRED, SLOT_CONFLICT) next to the HTTP
+   * reason phrase in `error`; BusinessRuleException puts it in `error`.
+   * Reason phrases ("Bad Request", "Conflict") are not codes, so they fall
+   * through to the status mapping.
+   */
+  private businessCode(resp: Record<string, unknown>): string | undefined {
+    for (const candidate of [resp.code, resp.error]) {
+      if (typeof candidate === 'string' && /^[A-Z][A-Z0-9_]*$/.test(candidate)) return candidate;
+    }
+    return undefined;
   }
 
   private getErrorCode(status: number): string {

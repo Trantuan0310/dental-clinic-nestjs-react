@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
+import { clinicToday } from '@/lib/clinicTime';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/format';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
@@ -32,7 +32,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const [notes, setNotes] = useState('');
   // ADR-0009 D6: optional catalogue pick; it pre-fills code, name and price.
   const [serviceId, setServiceId] = useState('');
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = clinicToday();
   const { data: catalogServices = [] } = useBookableServices(encounter.dentistId, today);
 
   // Materials consumed by this treatment — only meaningful on create; the

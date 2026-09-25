@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { format } from 'date-fns';
 import { ListOrdered, RefreshCw, Users } from 'lucide-react';
 import { Button, Card, DatePicker, EmptyState, Modal, Select, Textarea } from '@/components/ui';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -7,7 +6,7 @@ import { PageLoader } from '@/components/ui/Loading';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { formatTimeOnly } from '@/lib/format';
+import { clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import { QueueList } from './QueueList';
 import { type QueueEntry, type ReassignDayResult, useQueue, useReassignDay } from './dispatchApi';
@@ -112,7 +111,7 @@ export default function DispatchPage() {
  * not take (and why) — those stay with the original dentist.
  */
 function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = clinicToday();
   const { data: dentists = [] } = useDentistOptions();
   const reassign = useReassignDay();
   const [form, setForm] = useState({ from: '', to: '', date: today, reason: '' });
@@ -180,7 +179,7 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
             <ul className="space-y-1" aria-label="Lịch hẹn không chuyển được">
               {result.failed.map((f) => (
                 <li key={f.appointmentId} className="rounded border border-amber-200 bg-amber-50 px-2 py-1">
-                  {formatTimeOnly(f.startAt)} · {f.patientName} — <span className="text-amber-800">{f.reason}</span>
+                  {clinicParts(f.startAt).time} · {f.patientName} — <span className="text-amber-800">{f.reason}</span>
                 </li>
               ))}
             </ul>

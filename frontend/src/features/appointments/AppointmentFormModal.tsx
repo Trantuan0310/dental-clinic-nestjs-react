@@ -33,6 +33,7 @@ import type { CreatePatientPayload, Gender } from '@/types/patients';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
 import { Search, UserPlus } from 'lucide-react';
+import { clinicIso, clinicMinutes, clinicParts, clinicToday } from '@/lib/clinicTime';
 
 interface AppointmentFormModalProps {
   open: boolean;
@@ -72,10 +73,6 @@ const DURATION_OPTIONS = [
   { value: '120', label: '120 phút' },
 ];
 
-function isoDateOnly(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -83,21 +80,6 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
     return () => clearTimeout(t);
   }, [value, delayMs]);
   return debounced;
-}
-
-function isoFullLocal(date: string, time: string): string {
-  // Combine YYYY-MM-DD + HH:mm into a local-tz ISO string (not UTC).
-  const [y, mo, d] = date.split('-').map(Number);
-  const [h, mi] = time.split(':').map(Number);
-  const dt = new Date(y, (mo ?? 1) - 1, d ?? 1, h ?? 0, mi ?? 0, 0, 0);
-  return dt.toISOString();
-}
-
-// Extract local YYYY-MM-DD and HH:mm from an ISO timestamp.
-// Slicing the ISO string directly would use UTC, which is wrong for display.
-function localDateTimeParts(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  return { date: isoDateOnly(d), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` };
 }
 
 export function AppointmentFormModal({
@@ -111,9 +93,8 @@ export function AppointmentFormModal({
 }: AppointmentFormModalProps) {
   const isEdit = !!appointment;
 
-  const today = useMemo(() => new Date(), []);
-  const initialParts = appointment ? localDateTimeParts(appointment.startsAt) : null;
-  const initialDate = appointment ? initialParts!.date : (defaultDate ?? isoDateOnly(today));
+  const initialParts = appointment ? clinicParts(appointment.startsAt) : null;
+  const initialDate = appointment ? initialParts!.date : (defaultDate ?? clinicToday());
   const initialStart = appointment ? initialParts!.time : (defaultStartTime ?? '09:00');
 
   const [tab, setTab] = useState<'info' | 'lookup' | 'new-patient'>('info');
@@ -139,9 +120,7 @@ export function AppointmentFormModal({
   );
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [dentistId, setDentistId] = useState(appointment?.dentistId ?? defaultDentistId ?? '');
-  const [date, setDate] = useState(
-    appointment ? appointment.startsAt.slice(0, 10) : initialDate,
-  );
+  const [date, setDate] = useState(initialDate);
   const [startTime, setStartTime] = useState(initialStart);
   const [duration, setDuration] = useState(
     String(appointment?.durationMinutes ?? 30),
@@ -319,7 +298,7 @@ export function AppointmentFormModal({
     if (!open) return;
     setServerError(null);
     if (appointment) {
-      const parts = localDateTimeParts(appointment.startsAt);
+      const parts = clinicParts(appointment.startsAt);
       setDentistId(appointment.dentistId);
       setDate(parts.date);
       setStartTime(parts.time);
@@ -332,7 +311,7 @@ export function AppointmentFormModal({
       setSelectedPatient(null);
       setSource('phone');
       setDentistId(defaultDentistId ?? '');
-      setDate(defaultDate ?? isoDateOnly(new Date()));
+      setDate(defaultDate ?? clinicToday());
       setStartTime(defaultStartTime ?? '09:00');
       setDuration('30');
       setAppointmentType('consultation');
@@ -370,10 +349,7 @@ export function AppointmentFormModal({
   const suggestedStarts = useMemo(() => {
     if (!availability) return [];
     return availability.availableSlots
-      .map((s) => {
-        const d = new Date(s.startTime);
-        return d.getHours() * 60 + d.getMinutes();
-      })
+      .map((s) => clinicMinutes(s.startTime))
       .filter(
         (m) =>
           describeSlotIssue(availability, date, m, durationMin, {
@@ -411,8 +387,8 @@ export function AppointmentFormModal({
       );
       return;
     }
-    const startsAt = isoFullLocal(date, startTime);
-    const endsAt = isoFullLocal(date, endTime);
+    const startsAt = clinicIso(date, startTime);
+    const endsAt = clinicIso(date, endTime);
     try {
       if (isEdit && appointment) {
         await update.mutateAsync({
@@ -510,7 +486,7 @@ export function AppointmentFormModal({
                   setNewPatientDob(e.target.value);
                   setDuplicateCandidates(null);
                 }}
-                max={isoDateOnly(today)}
+                max={clinicToday()}
               />
               <div>
                 <label className="label">Giới tính *</label>
@@ -842,8 +818,8 @@ function describeSlotIssue(
 ): string | null {
   const endMin = startMin + durationMin;
   const now = new Date();
-  const today = isoDateOnly(now);
-  if (date < today || (date === today && startMin <= now.getHours() * 60 + now.getMinutes())) {
+  const today = clinicToday(now);
+  if (date < today || (date === today && startMin <= clinicMinutes(now))) {
     return 'Giờ bắt đầu đã qua — vui lòng chọn giờ khác.';
   }
   if (availability.blockedReason === 'NO_SCHEDULE' || availability.windows.length === 0) {
