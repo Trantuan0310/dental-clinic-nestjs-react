@@ -83,9 +83,7 @@ export const validateAdjustmentReason = (type: PayrollAdjustmentType, reason: st
   }
 
   if (type === 'MANUAL_OVERRIDE' && reason.trim().length < 50) {
-    throw new PayrollValidationException(
-      'Ghi đè thủ công cần lý do chi tiết (ít nhất 50 ký tự)',
-    );
+    throw new PayrollValidationException('Ghi đè thủ công cần lý do chi tiết (ít nhất 50 ký tự)');
   }
 };
 

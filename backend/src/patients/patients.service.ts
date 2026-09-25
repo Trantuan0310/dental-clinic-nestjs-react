@@ -957,8 +957,7 @@ export class PatientsService {
    */
   private isRowScopedDentist(actor: JwtPayload): boolean {
     return (
-      !actor.permissions.includes('patient.delete') &&
-      !actor.permissions.includes('patient.update')
+      !actor.permissions.includes('patient.delete') && !actor.permissions.includes('patient.update')
     );
   }
 

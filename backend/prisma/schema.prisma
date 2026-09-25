@@ -146,6 +146,7 @@ model User {
   // Staff (ADR-0009 phase 1)
   employees                  Employee[]      @relation("EmployeeUser")
   dentistProfile             DentistProfile? @relation("DentistProfileUser")
+  dentistServices            DentistService[] @relation("DentistServiceDentist")
 
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
@@ -1318,4 +1319,70 @@ model DentistProfile {
   user     User     @relation("DentistProfileUser", fields: [userId], references: [id])
 
   @@map("dentist_profiles")
+}
+
+// ============================================================================
+// Service catalogue (ADR-0009 phase 2, migration 020)
+// Design: docs/04_Database/schema-per-module/services.md
+// ============================================================================
+
+model ServiceCategory {
+  id        String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code      String   @unique @db.VarChar(30)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order") @db.SmallInt
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  services Service[]
+
+  @@map("service_categories")
+}
+
+model Service {
+  id                 String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code               String   @unique @db.VarChar(30)
+  categoryId         String   @map("category_id") @db.Uuid
+  name               String   @db.VarChar(200)
+  description        String?
+  defaultDurationMin Int      @map("default_duration_min") @db.SmallInt
+  bufferBeforeMin    Int      @default(0) @map("buffer_before_min") @db.SmallInt
+  bufferAfterMin     Int      @default(0) @map("buffer_after_min") @db.SmallInt
+  basePrice          Decimal  @default(0) @map("base_price") @db.Decimal(15, 0)
+  requiredSpecialty  String?  @map("required_specialty") @db.VarChar(30)
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy          String?  @map("created_by") @db.Uuid
+  updatedBy          String?  @map("updated_by") @db.Uuid
+
+  category        ServiceCategory  @relation(fields: [categoryId], references: [id])
+  dentistServices DentistService[]
+
+  @@map("services")
+}
+
+model DentistService {
+  id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  // users.id of the dentist (ADR-0009 D1)
+  dentistId     String    @map("dentist_id") @db.Uuid
+  serviceId     String    @map("service_id") @db.Uuid
+  // null = use the service default
+  durationMin   Int?      @map("duration_min") @db.SmallInt
+  price         Decimal?  @db.Decimal(15, 0)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+
+  dentist User    @relation("DentistServiceDentist", fields: [dentistId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+
+  // Partial unique (dentist_id, service_id) WHERE effective_to IS NULL is in
+  // migration 020 (dentist_services_open_key).
+  @@index([dentistId])
+  @@map("dentist_services")
 }

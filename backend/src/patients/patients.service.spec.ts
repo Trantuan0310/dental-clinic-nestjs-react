@@ -388,9 +388,7 @@ describe('PatientsService', () => {
 
       const result = await service.getDetailWithSummary('p1', receptionistPayload());
 
-      expect(result.summary).toEqual(
-        expect.objectContaining({ totalEncounters: 3 }),
-      );
+      expect(result.summary).toEqual(expect.objectContaining({ totalEncounters: 3 }));
       expect(result.summary).not.toHaveProperty('totalInvoices');
       expect(result.summary).not.toHaveProperty('totalPaid');
       expect(result.summary).not.toHaveProperty('totalOutstanding');
@@ -429,7 +427,7 @@ describe('PatientsService', () => {
       );
     });
 
-    it('scopes financials to the dentist\'s own encounters when they hold invoice.read.own', async () => {
+    it("scopes financials to the dentist's own encounters when they hold invoice.read.own", async () => {
       const dentist = dentistPayload('dentist-9');
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
       (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
@@ -457,9 +455,9 @@ describe('PatientsService', () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
 
-      await expect(
-        service.getDetailWithSummary('p1', dentistPayload()),
-      ).rejects.toThrow(PatientNotFoundException);
+      await expect(service.getDetailWithSummary('p1', dentistPayload())).rejects.toThrow(
+        PatientNotFoundException,
+      );
     });
   });
 
@@ -496,8 +494,10 @@ describe('PatientsService', () => {
       );
     });
 
-    it("regression: dentist does NOT see a patient they have never treated (lookup() used to take an unused _actor param and skip BR-PT-014 entirely, unlike list()/getDetailWithSummary())", async () => {
-      (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient({ id: 'p-1', fullName: 'Someone Else’s Patient' })]);
+    it('regression: dentist does NOT see a patient they have never treated (lookup() used to take an unused _actor param and skip BR-PT-014 entirely, unlike list()/getDetailWithSummary())', async () => {
+      (prisma.patient.findMany as jest.Mock).mockResolvedValue([
+        validPatient({ id: 'p-1', fullName: 'Someone Else’s Patient' }),
+      ]);
       (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
       const result = await service.lookup({ phone: '0901234567' } as any, dentistPayload());
       expect(result.candidates).toHaveLength(0);

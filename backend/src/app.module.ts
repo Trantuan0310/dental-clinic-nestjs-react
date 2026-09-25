@@ -21,6 +21,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { HealthController } from './common/health.controller';
 import { StaffModule } from './staff/staff.module';
+import { CatalogModule } from './catalog/catalog.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { StaffModule } from './staff/staff.module';
     ExpenseModule,
     AiModule,
     StaffModule,
+    CatalogModule,
   ],
   controllers: [HealthController],
   providers: [

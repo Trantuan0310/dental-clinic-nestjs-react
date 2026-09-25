@@ -14,9 +14,11 @@ describe('PayrollService — resolveWorkedShifts (BR-PAY-011)', () => {
     const prismaMock: any = {
       workingSchedule: { findMany: jest.fn().mockResolvedValue([]) },
       shiftRegistration: {
-        findMany: jest.fn().mockResolvedValue([
-          { date: new Date('2026-08-01'), startTime: '08:00', endTime: '20:00' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { date: new Date('2026-08-01'), startTime: '08:00', endTime: '20:00' },
+          ]),
       },
     };
 
@@ -66,9 +68,11 @@ describe('PayrollService — resolveWorkedShifts (BR-PAY-011)', () => {
     const prismaMock: any = {
       workingSchedule: { findMany: jest.fn().mockResolvedValue([]) },
       shiftRegistration: {
-        findMany: jest.fn().mockResolvedValue([
-          { date: new Date('2026-08-01'), startTime: '08:00', endTime: '17:00' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { date: new Date('2026-08-01'), startTime: '08:00', endTime: '17:00' },
+          ]),
       },
     };
 
@@ -100,9 +104,11 @@ describe('PayrollService — resolveWorkedShifts (BR-PAY-011)', () => {
       // ...but 2026-08-01 (a Saturday) also has its own approved 4h shift —
       // the day should count once, using the approved hours, not 8h+4h=12h.
       shiftRegistration: {
-        findMany: jest.fn().mockResolvedValue([
-          { date: new Date('2026-08-01'), startTime: '09:00', endTime: '13:00' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { date: new Date('2026-08-01'), startTime: '09:00', endTime: '13:00' },
+          ]),
       },
     };
 

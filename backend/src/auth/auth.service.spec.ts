@@ -197,7 +197,11 @@ describe('AuthService', () => {
   });
 
   describe('refresh (rotation + reuse detection)', () => {
-    const req = { cookies: { refreshToken: 'raw-cookie-token' }, ip: '127.0.0.1', get: () => 'jest' } as unknown as Request;
+    const req = {
+      cookies: { refreshToken: 'raw-cookie-token' },
+      ip: '127.0.0.1',
+      get: () => 'jest',
+    } as unknown as Request;
     const futureExpiry = new Date(Date.now() + 60 * 60_000);
 
     it('rotates the token and returns a new session on a normal, unraced refresh', async () => {
@@ -259,7 +263,10 @@ describe('AuthService', () => {
       (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(buildUserWithRoles());
       (prisma.refreshToken.create as jest.Mock).mockResolvedValue({});
 
-      const [winner, loser] = await Promise.allSettled([service.refresh(req), service.refresh(req)]);
+      const [winner, loser] = await Promise.allSettled([
+        service.refresh(req),
+        service.refresh(req),
+      ]);
 
       expect(winner.status).toBe('fulfilled');
       expect(loser.status).toBe('rejected');

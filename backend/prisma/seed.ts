@@ -232,6 +232,20 @@ const PERMISSIONS = [
     description: 'Quản lý lịch làm việc bác sĩ',
   },
 
+  // Service catalogue permissions (ADR-0009 phase 2; migration 020 inserts the same rows)
+  {
+    code: 'service.read',
+    resource: 'service',
+    action: 'read',
+    description: 'Xem danh mục dịch vụ',
+  },
+  {
+    code: 'service.manage',
+    resource: 'service',
+    action: 'manage',
+    description: 'Tạo/sửa/ngừng dịch vụ và nhóm dịch vụ',
+  },
+
   // Schedule permissions (controllers use dotted/underscored aliases)
   {
     code: 'schedule.write',
@@ -688,6 +702,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'employee.read',
     'dentist.read',
     'dentist.manage_schedule',
+    'service.read',
     'encounter.read.basic',
     'encounter.start',
     'invoice.create',
@@ -726,6 +741,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'dentist.read',
     'dentist.update.own',
     'dentist.manage_schedule',
+    'service.read',
     'shift_registration.write',
     'shift_registration.read',
     'encounter.start',

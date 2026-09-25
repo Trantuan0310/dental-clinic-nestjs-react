@@ -193,7 +193,11 @@ describe('InventoryService', () => {
       );
       (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
 
-      await service.adjustStock('item-1', { newQuantity: 70, reason: 'count correction' } as any, adminActor);
+      await service.adjustStock(
+        'item-1',
+        { newQuantity: 70, reason: 'count correction' } as any,
+        adminActor,
+      );
 
       expect(prisma.$transaction).toHaveBeenCalledWith(
         expect.any(Function),
