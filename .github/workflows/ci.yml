@@ -46,6 +46,90 @@ jobs:
           name: postgres-api-evidence
           path: backend/test-results
 
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: e2e_ci_only
+          POSTGRES_DB: dental_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      # seed-demo-window.ts only runs against a localhost database.
+      DATABASE_URL: postgresql://postgres:e2e_ci_only@127.0.0.1:5432/dental_e2e
+      NODE_ENV: development
+      JWT_SECRET: e2e-ci-only-secret-2026
+      # The suite makes more than the default 100 requests a minute (login
+      # keeps its own 5/min limit).
+      THROTTLE_LIMIT: '10000'
+      CORS_ORIGIN: http://localhost:5173
+      EMAIL_MOCK: 'true'
+      REDIS_URL: ''
+      GEMINI_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      # The demo fixture opens a short working window around "now" (clinic
+      # time, UTC+7) and the flows book within it, so a run must not cross
+      # clinic midnight: from 23:00 wait until 00:02.
+      - name: Avoid clinic midnight
+        run: |
+          minute=$(( ( $(date -u +%s) / 60 + 7 * 60 ) % 1440 ))
+          if [ "$minute" -ge 1380 ]; then
+            wait=$(( (1442 - minute) * 60 ))
+            echo "Clinic time is past 23:00; waiting ${wait}s for the next clinic day"
+            sleep "$wait"
+          fi
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+      - name: Migrate, seed and build backend
+        working-directory: backend
+        run: |
+          node scripts/release.cjs
+          npx ts-node prisma/seed.ts
+          npx ts-node prisma/seed-clinical.ts
+          npm run build
+      - name: Start backend
+        working-directory: backend
+        run: |
+          nohup node dist/main > ../backend-e2e.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/health > /dev/null && exit 0
+            sleep 2
+          done
+          cat ../backend-e2e.log
+          exit 1
+      - name: Install frontend and Chromium
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run Playwright
+        working-directory: frontend
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-evidence
+          path: |
+            frontend/test-results
+            backend-e2e.log
+          retention-days: 7
+
   production-images:
     name: Production container builds
     runs-on: ubuntu-latest

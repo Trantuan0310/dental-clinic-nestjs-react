@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Stethoscope } from 'lucide-react';
-import { format } from 'date-fns';
+import { clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useNavigate } from 'react-router-dom';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { useStartEncounter } from '@/features/appointments/appointmentApi';
@@ -19,7 +19,7 @@ import { useQueue } from '@/features/dispatch/dispatchApi';
 export default function MyQueuePage() {
   const navigate = useNavigate();
   const startEncounter = useStartEncounter();
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = clinicToday();
   // The API scopes a dentist to their own queue; front desk sees every dentist.
   const { data: queue = [], isLoading, isError, refetch, isFetching } = useQueue();
 
@@ -31,7 +31,7 @@ export default function MyQueuePage() {
   });
   // Clinic day, not the API's UTC range edge: drop anything from another day.
   const inProgress = (running?.data ?? []).filter(
-    (apt) => format(new Date(apt.startsAt), 'yyyy-MM-dd') === today,
+    (apt) => clinicParts(apt.startsAt).date === today,
   );
 
   const handleStart = async (appointmentId: string) => {

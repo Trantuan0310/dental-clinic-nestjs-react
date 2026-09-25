@@ -52,6 +52,7 @@ import {
   getWeekdayLabel,
 } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { clinicIso, clinicParts } from '@/lib/clinicTime';
 import type { Appointment, AppointmentStatus } from '@/types/appointment';
 
 interface AppointmentDetailDrawerProps {
@@ -127,15 +128,6 @@ const STATUS_ORDER: AppointmentStatus[] = [
   'completed',
 ];
 
-function localDateTimeParts(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  };
-}
-
 export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: AppointmentDetailDrawerProps) {
   const navigate = useNavigate();
   const { data: appointment, isLoading } = useAppointment(appointmentId ?? undefined);
@@ -202,7 +194,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
   useEffect(() => {
     if (actionModal !== 'reschedule' || !appointment) return;
-    const parts = localDateTimeParts(appointment.startsAt);
+    const parts = clinicParts(appointment.startsAt);
     setRescheduleDate(parts.date);
     setRescheduleTime(parts.time);
     setRescheduleDentist(appointment.dentistId);
@@ -326,9 +318,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     }
     setError(null);
     try {
-      const [y, mo, d] = rescheduleDate.split('-').map(Number);
-      const [h, mi] = rescheduleTime.split(':').map(Number);
-      const start = new Date(y ?? 0, (mo ?? 1) - 1, d ?? 1, h ?? 0, mi ?? 0);
+      const start = new Date(clinicIso(rescheduleDate, rescheduleTime));
       const end = new Date(start.getTime() + appointment.durationMinutes * 60_000);
       await reschedule.mutateAsync({
         id: appointment.id,
@@ -832,7 +822,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   .filter((s) => s.available)
                   .slice(0, 24)
                   .map((s) => {
-                    const t = formatTimeOnly(s.startTime);
+                    const t = clinicParts(s.startTime).time;
                     const active = rescheduleTime === t;
                     return (
                       <button

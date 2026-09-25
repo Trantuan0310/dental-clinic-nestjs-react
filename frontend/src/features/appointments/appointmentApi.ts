@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
+import { clinicIso } from '@/lib/clinicTime';
 import type {
   Appointment,
   AppointmentFilters,
@@ -417,27 +418,13 @@ export function useAvailability(
         },
       });
 
+      // The backend's "HH:mm" grid is clinic wall-clock time, so the slot
+      // instants are built in clinic time (+07:00), not the browser's zone.
       const slots: AvailabilitySlot[] = (raw.availableSlots ?? []).map((hhmm) => {
-        const [hStr, mStr] = hhmm.split(':');
-        const h = Number(hStr);
-        const m = Number(mStr);
-        // Build slot timestamps as real local-to-UTC instants (matching
-        // isoFullLocal in AppointmentFormModal, the app's other place that
-        // turns a date + "HH:mm" into an appointment timestamp) — NOT UTC.
-        // The backend's "HH:mm" grid is the clinic's own wall-clock hour
-        // (its combineDateAndTime helper treats it that way too); building
-        // these slots in UTC instead of local made every consumer that
-        // reads them with local accessors (formatTimeOnly's date-fns
-        // format() in AppointmentDetailDrawer, and the .getHours() slot-
-        // conflict check in AppointmentFormModal) display/compare the
-        // browser-timezone-shifted hour — wrong in any non-UTC-0 browser,
-        // which a Vietnam clinic (UTC+7) always is.
-        const [y, mo, d] = raw.date.split('-').map(Number);
-        const start = new Date(y, (mo ?? 1) - 1, d ?? 1, h, m, 0, 0);
-        const end = new Date(start.getTime() + raw.slotDuration * 60_000);
+        const startTime = clinicIso(raw.date, hhmm);
         return {
-          startTime: start.toISOString(),
-          endTime: end.toISOString(),
+          startTime,
+          endTime: new Date(new Date(startTime).getTime() + raw.slotDuration * 60_000).toISOString(),
           available: true,
         };
       });

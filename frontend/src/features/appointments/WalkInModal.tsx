@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -14,6 +14,7 @@ import {
   usePatientSearch,
 } from './appointmentApi';
 import type { PatientMini } from '@/types/appointment';
+import { clinicToday } from '@/lib/clinicTime';
 
 interface WalkInModalProps {
   open: boolean;
@@ -23,11 +24,6 @@ interface WalkInModalProps {
 }
 
 const DURATION_OPTIONS = ['15', '30', '45', '60', '90'].map((v) => ({ value: v, label: `${v} phút` }));
-
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 /**
  * BR-APPT-032: a patient walks in without a booking. The visit starts now
@@ -61,7 +57,7 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
     setError(null);
   }, [open]);
 
-  const today = useMemo(todayLocal, [open]);
+  const today = clinicToday();
   const { data: results = [], isFetching } = usePatientSearch(patient ? '' : debounced);
   const { data: dentists = [] } = useDentistOptions();
   const { data: services = [], isLoading: isLoadingServices } = useBookableServices(

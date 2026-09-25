@@ -1622,4 +1622,276 @@ describe('Real HTTP and PostgreSQL regression', () => {
       ).toBe(active.id);
     });
   });
+
+  describe('ADR-0009 acceptance (phase 7)', () => {
+    const acc: Record<string, string> = {};
+    const as = (who: string, method: 'get' | 'post' | 'put' | 'patch', path: string) =>
+      request(app.getHttpServer())[method](`/api/v1${path}`).auth(acc[`${who}Token`], {
+        type: 'bearer',
+      });
+
+    /** A fresh user with one role and a signed token (permissions come from the DB). */
+    async function member(key: string, roleCode: string) {
+      const role = await db.role.findFirstOrThrow({ where: { code: roleCode } });
+      const u = await db.user.create({
+        data: {
+          email: `acc-${key}@test.local`,
+          fullName: `Acceptance ${key}`,
+          passwordHash: 'fixture',
+          status: 'ACTIVE',
+          userRoles: { create: { roleId: role.id } },
+        },
+      });
+      acc[key] = u.id;
+      acc[`${key}Token`] = app.get(JwtService).sign({ sub: u.id, email: u.email });
+    }
+
+    beforeAll(async () => {
+      await member('desk', 'receptionist');
+      await member('doc', 'dentist');
+      acc.adminToken = tokens.admin;
+    });
+
+    it('runs from a new employee to a paid invoice, with audit and business codes', async () => {
+      // 1. HR: the employee gets an account and a dentist profile (phase 1).
+      const employee = await as('admin', 'post', '/employees')
+        .send({ fullName: 'Acceptance doc', employeeType: 'ASSISTANT' })
+        .expect(201);
+      await as('admin', 'post', `/employees/${employee.body.data.id}/account`)
+        .send({ userId: acc.doc })
+        .expect(200);
+      await as('admin', 'post', `/employees/${employee.body.data.id}/dentist-profile`)
+        .send({ licenseNumber: 'CCHN-ACC-001' })
+        .expect(201);
+
+      // 2. Catalogue: a service with clean-up time, assigned to the dentist (phase 2).
+      const category = await as('admin', 'post', '/service-categories')
+        .send({ code: 'ACC', name: 'Acceptance' })
+        .expect(201);
+      const service = await as('admin', 'post', '/services')
+        .send({
+          code: 'ACC_FILL',
+          categoryId: category.body.data.id,
+          name: 'Trám răng (nghiệm thu)',
+          defaultDurationMin: 15,
+          bufferBeforeMin: 0,
+          bufferAfterMin: 5,
+          basePrice: 400000,
+          requiredSpecialty: null,
+        })
+        .expect(201);
+      const serviceId = service.body.data.id as string;
+      await as('admin', 'post', `/dentists/${acc.doc}/services`).send({ serviceId }).expect(201);
+
+      // 3. Schedule: the whole day, every day (phase 3).
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        await as('admin', 'post', '/appointments/schedules')
+          .send({
+            dentistId: acc.doc,
+            dayOfWeek,
+            startTime: '00:00',
+            endTime: '23:59',
+            validFrom: '2020-01-01',
+          })
+          .expect(201);
+      }
+
+      // 4. Front desk books by service, a few minutes from now (phases 4–5).
+      const p = await patient();
+      const startAt = new Date(Math.ceil(Date.now() / 60000) * 60000 + 2 * 60000);
+      const booked = await as('desk', 'post', '/appointments')
+        .send({
+          patientId: p,
+          dentistId: acc.doc,
+          startAt: startAt.toISOString(),
+          serviceIds: [serviceId],
+          source: 'PHONE',
+        })
+        .expect(201);
+      const appointmentId = booked.body.data.id as string;
+      // The same slot again is refused with its business code (issue #8).
+      const clash = await as('desk', 'post', '/appointments')
+        .send({
+          patientId: await patient(),
+          dentistId: acc.doc,
+          startAt: new Date(startAt.getTime() + 15 * 60000).toISOString(),
+          endAt: new Date(startAt.getTime() + 30 * 60000).toISOString(),
+          source: 'PHONE',
+        })
+        .expect(409);
+      expect(clash.body.code).toBe('SLOT_CONFLICT');
+
+      // 5. Check-in puts the patient in the queue; the dentist calls and starts (phase 6).
+      await as('desk', 'post', `/appointments/${appointmentId}/check-in`).send({}).expect(200);
+      const queue = await as('doc', 'get', '/queue').expect(200);
+      expect(queue.body.data).toEqual([
+        expect.objectContaining({
+          appointmentId,
+          status: 'WAITING',
+          priority: 'ON_TIME',
+          position: 1,
+        }),
+      ]);
+      await as('doc', 'post', `/queue/${queue.body.data[0].id}/call`).expect(200);
+      const started = await as(
+        'doc',
+        'post',
+        `/appointments/${appointmentId}/start-encounter`,
+      ).expect(200);
+      const encounterId = started.body.data.encounter.id as string;
+      expect((await as('doc', 'get', '/queue').expect(200)).body.data).toEqual([]);
+
+      // 6. Exam: a catalogue treatment, the note, close → draft invoice.
+      await as('doc', 'post', `/medical-records/encounters/${encounterId}/treatments`)
+        .send({
+          serviceId,
+          procedure: 'Trám răng (nghiệm thu)',
+          unitPrice: 400000,
+          toothNumbers: [26],
+        })
+        .expect(201);
+      await as('doc', 'put', `/medical-records/encounters/${encounterId}/clinical-note`)
+        .send({ diagnosis: 'Sâu răng 26' })
+        .expect(200);
+      await as('doc', 'post', `/medical-records/encounters/${encounterId}/close`)
+        .send({ summary: 'Đã trám' })
+        .expect(200);
+      const invoice = await invoiceFor(encounterId);
+      expect(Number(invoice.total)).toBe(400000);
+
+      // 7. Billing: issue and pay in full.
+      await as('admin', 'post', `/billing/invoices/${invoice.id}/issue`)
+        .send({ version: invoice.version })
+        .expect(200);
+      await as('admin', 'post', `/billing/invoices/${invoice.id}/payments`)
+        .send({ amount: 400000, method: 'CASH' })
+        .expect(201);
+      expect((await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe(
+        'PAID',
+      );
+      expect(
+        (await db.appointment.findUniqueOrThrow({ where: { id: appointmentId } })).status,
+      ).toBe('COMPLETED');
+
+      // 8. Audit trail: every step left its record.
+      const actions = async (targetId: string) =>
+        (await db.auditLog.findMany({ where: { targetId }, select: { action: true } })).map(
+          a => a.action,
+        );
+      expect(await actions(employee.body.data.id)).toEqual(
+        expect.arrayContaining(['EMPLOYEE_CREATED', 'EMPLOYEE_ACCOUNT_LINKED']),
+      );
+      expect(await actions(serviceId)).toContain('SERVICE_CREATED');
+      const history = await as('desk', 'get', `/appointments/${appointmentId}/history`).expect(200);
+      expect(history.body.data.events.map((e: { action: string }) => e.action)).toEqual(
+        expect.arrayContaining(['APPOINTMENT_CREATED', 'APPOINTMENT_CHECKED_IN', 'QUEUE_CALLED']),
+      );
+    });
+
+    // Guards run before validation, so an invalid body tells "allowed" (400)
+    // from "forbidden" (403) without changing any data.
+    it.each<[string, 'desk' | 'doc', 'get' | 'post', string, number]>([
+      ['front desk reads the queue', 'desk', 'get', '/queue', 200],
+      ['front desk reassigns a day', 'desk', 'post', '/queue/reassign-day', 400],
+      ['front desk takes a walk-in', 'desk', 'post', '/appointments/walk-in', 400],
+      ['front desk cannot manage the catalogue', 'desk', 'post', '/services', 403],
+      [
+        'front desk cannot approve time-off',
+        'desk',
+        'post',
+        `/appointments/time-offs/${randomUUID()}/approve`,
+        403,
+      ],
+      ['front desk cannot read payroll', 'desk', 'get', '/payroll/config', 403],
+      ['dentist reads their queue', 'doc', 'get', '/queue', 200],
+      ['dentist cannot reassign a day', 'doc', 'post', '/queue/reassign-day', 403],
+      ['dentist cannot flag an emergency', 'doc', 'post', `/queue/${randomUUID()}/emergency`, 403],
+      ['dentist cannot move a patient', 'doc', 'post', `/queue/${randomUUID()}/transfer`, 403],
+      ['dentist cannot take a walk-in', 'doc', 'post', '/appointments/walk-in', 403],
+      ['dentist cannot manage employees', 'doc', 'post', '/employees', 403],
+      ['dentist cannot manage the catalogue', 'doc', 'post', '/services', 403],
+    ])('permission matrix: %s', async (_name, who, method, path, status) => {
+      await as(who, method, path).send({}).expect(status);
+    });
+  });
+
+  describe('performance smoke (phase 7)', () => {
+    // Generous budgets: they catch an N+1 or a missing index turning a
+    // screen into seconds, not CI-machine jitter. Measured locally:
+    // docs/08_Testing/adr-0009-acceptance.md.
+    it('searches 20 busy dentists and lists a 60-patient queue quickly', async () => {
+      const role = await db.role.findFirstOrThrow({ where: { code: 'dentist' } });
+      const day = new Date(Date.now() + 9 * 86400000 + 7 * 3600000).toISOString().slice(0, 10);
+      const today = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+      for (let d = 0; d < 20; d++) {
+        const u = await db.user.create({
+          data: {
+            email: `perf-${d}@test.local`,
+            fullName: `Perf ${d}`,
+            passwordHash: 'fixture',
+            status: 'ACTIVE',
+            userRoles: { create: { roleId: role.id } },
+          },
+        });
+        await db.workingSchedule.createMany({
+          data: [0, 1, 2, 3, 4, 5, 6].map(dayOfWeek => ({
+            dentistId: u.id,
+            dayOfWeek,
+            startTime: new Date('1970-01-01T01:00:00Z'),
+            endTime: new Date('1970-01-01T20:00:00Z'),
+            validFrom: new Date('2020-01-01'),
+            isPaidShift: false,
+          })),
+        });
+        const p = await patient();
+        // 20 bookings on the searched day, and 3 queued patients today.
+        await db.appointment.createMany({
+          data: Array.from({ length: 20 }, (_, i) => {
+            const start = new Date(`${day}T08:00:00+07:00`).getTime() + i * 30 * 60000;
+            return {
+              patientId: p,
+              dentistId: u.id,
+              startAt: new Date(start),
+              endAt: new Date(start + 15 * 60000),
+              status: 'SCHEDULED' as const,
+            };
+          }),
+        });
+        for (let q = 0; q < 3; q++) {
+          const start = new Date(Date.now() - (q + 1) * 60000);
+          const a = await db.appointment.create({
+            data: {
+              patientId: p,
+              dentistId: u.id,
+              startAt: start,
+              endAt: new Date(start.getTime() + 30000),
+              status: 'CHECKED_IN',
+              checkedInAt: start,
+            },
+          });
+          await db.queueEntry.create({
+            data: {
+              appointmentId: a.id,
+              dentistId: u.id,
+              queueDate: new Date(today),
+              priority: 'ON_TIME',
+              checkedInAt: start,
+            },
+          });
+        }
+      }
+      const timed = async (path: string) => {
+        const t0 = Date.now();
+        const res = await api('get', path).expect(200);
+        return { ms: Date.now() - t0, body: res.body };
+      };
+      const search = await timed(`/appointments/availability/search?date=${day}`);
+      expect(search.body.data.length).toBeGreaterThanOrEqual(20);
+      expect(search.ms).toBeLessThan(3000);
+      const queue = await timed('/queue');
+      expect(queue.body.data.length).toBeGreaterThanOrEqual(60);
+      expect(queue.ms).toBeLessThan(1500);
+      process.stdout.write(`[perf] availability search ${search.ms} ms, queue ${queue.ms} ms\n`);
+    }, 60000);
+  });
 });
