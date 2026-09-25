@@ -34,3 +34,16 @@ export function clinicMinutes(value: string | Date = new Date()): number {
 export function clinicIso(date: string, hhmm: string): string {
   return new Date(`${date}T${hhmm}:00${CLINIC_OFFSET}`).toISOString();
 }
+
+/**
+ * A local Date whose calendar fields (year … minute) are the clinic's wall
+ * clock at that instant. For date-fns / getHours()-style code that works on
+ * local fields — calendar grids, "HH:mm" labels — so it shows clinic time
+ * in any browser time zone. Not an instant: never send it back to the API.
+ */
+export function clinicWallClock(value: string | Date = new Date()): Date {
+  const { date, time } = clinicParts(value);
+  const [y, mo, d] = date.split('-').map(Number);
+  const [h, mi] = time.split(':').map(Number);
+  return new Date(y, mo - 1, d, h, mi);
+}

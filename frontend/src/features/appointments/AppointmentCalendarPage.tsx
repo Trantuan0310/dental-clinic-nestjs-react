@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from 'date-fns';
+import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { clinicParts, clinicWallClock } from '@/lib/clinicTime';
 import { vi } from 'date-fns/locale';
 import { Plus, ChevronLeft, ChevronRight, UserRoundPlus } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
@@ -49,7 +50,8 @@ export default function AppointmentCalendarPage() {
   // previously ignored, landing on a bare calendar instead of the modal.
   const wantsCreateModal = searchParams.get('action') === 'create';
 
-  const [currentDate, setCurrentDate] = useState(new Date());
+  // Clinic dates, whatever the browser's time zone (see clinicWallClock).
+  const [currentDate, setCurrentDate] = useState(() => clinicWallClock());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(searchParams.get('view') as 'day' | 'week' | 'month' || 'day');
   const [selectedDentistId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId || wantsCreateModal);
@@ -93,7 +95,7 @@ export default function AppointmentCalendarPage() {
 
   const handleDateChange = useCallback((direction: 'prev' | 'next' | 'today') => {
     if (direction === 'today') {
-      setCurrentDate(new Date());
+      setCurrentDate(clinicWallClock());
     } else {
       const delta = direction === 'next' ? 1 : -1;
       if (viewMode === 'day') {
@@ -126,7 +128,7 @@ export default function AppointmentCalendarPage() {
   const appointmentsByDate = useMemo(() => {
     const grouped: Record<string, Appointment[]> = {};
     appointments.forEach(apt => {
-      const dateKey = format(parseISO(apt.startsAt), 'yyyy-MM-dd');
+      const dateKey = clinicParts(apt.startsAt).date;
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
       }
@@ -176,13 +178,13 @@ export default function AppointmentCalendarPage() {
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-3">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => handleDateChange('prev')}>
+            <Button variant="ghost" size="sm" aria-label="Kỳ trước" onClick={() => handleDateChange('prev')}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" onClick={() => handleDateChange('today')}>
               Hôm nay
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleDateChange('next')}>
+            <Button variant="ghost" size="sm" aria-label="Kỳ sau" onClick={() => handleDateChange('next')}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             <span className="ml-2 text-lg font-medium text-gray-900">

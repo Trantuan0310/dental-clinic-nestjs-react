@@ -67,4 +67,4 @@ Ngưỡng cố ý rộng để bắt lỗi N+1 hoặc thiếu index chứ không
 | Bộ lọc lỗi làm mất mã nghiệp vụ | `http-exception.filter.ts` lấy `code` (hoặc `error` dạng `UPPER_SNAKE`), còn lại mới suy từ HTTP status. Test `http-exception.filter.spec.ts`. |
 | Phiên admin dùng chung mất hiệu lực, test lệch giao diện | Đã sửa ở PR #11 (cả bộ pass). |
 | Khung giờ demo bị bỏ lại khi lượt chạy bị ngắt | `seed-demo-window.ts` xóa fixture cũ (nhận diện: không trả lương, slot 15′, không có người tạo, có ngày kết thúc) trước khi tạo mới, và cho phép khung giờ chồng lên ca sắp hết thay vì báo lỗi. |
-| Playwright chưa chạy trong CI | Job `Playwright E2E` trong `.github/workflows/ci.yml`: Postgres, migrate + seed, backend, Vite, Chromium. Nếu giờ phòng khám đã qua 23:00, job chờ sang ngày mới (fixture giờ làm cần 30 phút trước nửa đêm). |
+| Playwright chưa chạy trong CI | Job `Playwright E2E` trong `.github/workflows/ci.yml`: Postgres, migrate + seed, backend, Vite, Chromium. Nếu giờ phòng khám đã qua 22:50, job chờ sang ngày mới (khung giờ demo cần phủ 60 phút sau lúc setup: cả bộ test chạy ~6 phút, rồi các luồng đặt lịch 30 phút, bắt đầu muộn nhất 15 phút sau giờ hiện tại). |

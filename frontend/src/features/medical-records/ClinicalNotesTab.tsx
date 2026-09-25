@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { formatDateTime } from '@/lib/format';
 import { vi } from 'date-fns/locale';
 import { Plus } from 'lucide-react';
 import { medicalRecordsApi } from './imperativeApi';
@@ -181,7 +182,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
           <h4 className="mb-2 text-sm font-medium text-gray-700">Ghi chú bổ sung</h4>
           <p className="whitespace-pre-wrap text-sm text-gray-900">{addendum.content}</p>
           <p className="mt-2 text-xs text-gray-500">
-            {format(new Date(addendum.addedAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
+            {formatDateTime(addendum.addedAt)}
           </p>
         </div>
       ))}

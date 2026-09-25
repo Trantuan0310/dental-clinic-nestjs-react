@@ -30,7 +30,7 @@ import {
   TabsContent,
   Alert,
 } from '@/components/ui';
-import { formatPhone, formatCurrency, formatTimeOnly } from '@/lib/format';
+import { formatPhone, formatCurrency, formatDate, formatTimeOnly } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionGuard } from '@/components/PermissionGuard';
 
@@ -312,7 +312,7 @@ export default function PatientDetailPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-gray-900">
-                              {format(new Date(apt.startsAt), 'dd/MM/yyyy', { locale: vi })} •{' '}
+                              {formatDate(apt.startsAt)} •{' '}
                               {formatTimeOnly(apt.startsAt)}
                             </span>
                             <StatusBadge status={apt.status} />

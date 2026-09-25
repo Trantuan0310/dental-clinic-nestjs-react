@@ -82,15 +82,16 @@ jobs:
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
-      # The demo fixture opens a short working window around "now" (clinic
-      # time, UTC+7) and the flows book within it, so a run must not cross
-      # clinic midnight: from 23:00 wait until 00:02.
+      # The demo fixture opens a working window from "now" to ~75 min later
+      # (clinic time, UTC+7; seed-demo-window.ts needs 60 min before
+      # midnight) and the flows book within it, so a run must not cross
+      # clinic midnight: from 22:50 wait until 00:02.
       - name: Avoid clinic midnight
         run: |
           minute=$(( ( $(date -u +%s) / 60 + 7 * 60 ) % 1440 ))
-          if [ "$minute" -ge 1380 ]; then
+          if [ "$minute" -ge 1370 ]; then
             wait=$(( (1442 - minute) * 60 ))
-            echo "Clinic time is past 23:00; waiting ${wait}s for the next clinic day"
+            echo "Clinic time is past 22:50; waiting ${wait}s for the next clinic day"
             sleep "$wait"
           fi
       - name: Install backend

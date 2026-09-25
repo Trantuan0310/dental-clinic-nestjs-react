@@ -8,6 +8,7 @@ import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
 import { formatTimeOnly, getWeekdayLabel } from '@/lib/format';
+import { clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
 
 interface MonthViewProps {
@@ -76,7 +77,7 @@ export function MonthView({
     return cells;
   }, [date, days]);
 
-  const today = new Date();
+  const today = clinicWallClock();
   const selectedDayKey = selectedDay ? format(selectedDay, 'yyyy-MM-dd') : null;
   const selectedDayAppointments = useMemo(() => {
     if (!selectedDayKey) return [];
