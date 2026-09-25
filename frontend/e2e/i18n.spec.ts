@@ -7,9 +7,10 @@ test.describe('i18n', () => {
 
   test('default locale renders Vietnamese UI', async ({ page }) => {
     await page.waitForLoadState('networkidle');
-    // The shell shows the brand "GENSMILE" as a literal, but the clinic name and tabs
-    // are translated. We assert the clinic name appears in Vietnamese by default.
-    await expect(page.getByText('Nha Khoa An Việt')).toBeVisible();
+    // The brand "GENSMILE" is a literal and the translated clinic name is only
+    // shown from the 2xl breakpoint, so assert on the header search box, which
+    // is translated and visible at the default desktop viewport.
+    await expect(page.getByRole('searchbox', { name: 'Tìm bệnh nhân' })).toBeVisible();
   });
 
   test('language switcher toggles between VI and EN', async ({ page }) => {
@@ -24,8 +25,8 @@ test.describe('i18n', () => {
     const enOption = page.getByRole('menuitemradio', { name: /english/i });
     await enOption.click();
 
-    // After switch, the clinic name should now show in English.
-    await expect(page.getByText('An Viet Dental Clinic')).toBeVisible();
+    // After switch, the header search box is labelled in English.
+    await expect(page.getByRole('searchbox', { name: 'Search patient' })).toBeVisible();
   });
 
   test('locale persists across reload', async ({ page }) => {
@@ -40,7 +41,7 @@ test.describe('i18n', () => {
     await page.waitForLoadState('networkidle');
 
     // Still English.
-    await expect(page.getByText('An Viet Dental Clinic')).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: 'Search patient' })).toBeVisible();
   });
 
   test('html[lang] attribute matches the active locale', async ({ page }) => {

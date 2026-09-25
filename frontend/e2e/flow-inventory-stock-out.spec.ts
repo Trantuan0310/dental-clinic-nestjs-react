@@ -1,5 +1,5 @@
 import { test, expect, getSharedContext } from './fixtures';
-import { loginAs, ACCOUNTS, randomVnPhone } from './flow-helpers';
+import { loginAs, ACCOUNTS, randomVnPhone, clinicNowMinutes } from './flow-helpers';
 
 /**
  * Detailed flow: inventory stock-out via encounter close.
@@ -22,11 +22,13 @@ test.describe.configure({ mode: 'serial' });
 test('inventory stock decrements when an encounter using it is closed', async ({ browser }) => {
   test.setTimeout(120_000);
 
-  // admin/dentist contexts are shared+cached (see getSharedContext() in
-  // fixtures.ts) — the static e2e/.auth/*.json snapshot's refresh cookie is
-  // single-use, and this suite has several files touching the same two
-  // role snapshots. `reception` stays a throwaway context: it does its own
-  // fresh loginAs() and is never reused by anyone else. Its storageState is
+  // The admin context is shared+cached (see getSharedContext() in
+  // fixtures.ts) — the static e2e/.auth/admin.json snapshot's refresh cookie
+  // is single-use, and this suite has several files touching it.
+  // `reception` and `dentistCtx` are throwaway contexts: each does its own
+  // fresh loginAs() and is never reused by anyone else. The dentist is the
+  // second seeded dentist, not the dentist.json one, whose calendar
+  // flow-patient-to-payment needs free around "now". Their storageState is
   // an explicit empty object, not a bare browser.newContext() — the
   // `browser` fixture inherits use.storageState (admin.json) as a default
   // for ANY context it creates, fixture or manual, so an unqualified
@@ -35,8 +37,11 @@ test('inventory stock decrements when an encounter using it is closed', async ({
   // freshContext() in appointment-booking-roles.spec.ts, where this was
   // actually diagnosed).
   const admin = await getSharedContext(browser, 'e2e/.auth/admin.json');
-  const reception = await browser.newContext({ storageState: { cookies: [], origins: [] } });
-  const dentistCtx = await getSharedContext(browser, 'e2e/.auth/dentist.json');
+  const freshContext = () => browser.newContext({
+    storageState: { cookies: [], origins: [] }, timezoneId: 'Asia/Ho_Chi_Minh',
+  });
+  const reception = await freshContext();
+  const dentistCtx = await freshContext();
 
   const adminPage = await admin.newPage();
   const receptionPage = await reception.newPage();
@@ -90,30 +95,39 @@ test('inventory stock decrements when an encounter using it is closed', async ({
 
     await receptionPage.goto('/appointments/list');
     await receptionPage.waitForLoadState('networkidle');
-    await receptionPage.getByRole('button', { name: /tạo lịch hẹn/i }).click();
+    await receptionPage.getByRole('button', { name: /^tạo lịch hẹn$/i }).first().click();
     const dialog = receptionPage.getByRole('dialog');
     await dialog.getByRole('tab', { name: /tra cứu nhanh/i }).click();
     await dialog.getByLabel(/tìm bệnh nhân/i).fill(testPhone);
     await dialog.getByText(testName).click();
 
-    const dentistSelect = dialog.locator('select').nth(1);
+    // Pick the <select> that offers the dentist instead of guessing its index
+    // among the dialog's selects (see flow-patient-to-payment.spec.ts).
+    const dentistSelect = dialog
+      .locator('select')
+      .filter({ has: receptionPage.locator('option', { hasText: ACCOUNTS.secondDentist.fullName }) });
+    await expect(dentistSelect).toBeVisible();
     const dentistValue = await dentistSelect.locator('option').evaluateAll((opts, name) => {
       const match = opts.find((o) => (o.textContent ?? '').includes(name));
       return match ? (match as HTMLOptionElement).value : null;
-    }, ACCOUNTS.dentist.fullName);
+    }, ACCOUNTS.secondDentist.fullName);
+    expect(dentistValue, `Dentist option containing "${ACCOUNTS.secondDentist.fullName}" not found`).toBeTruthy();
     await dentistSelect.selectOption(dentistValue!);
 
     // Time must be close to "now" — check-in right after only succeeds
     // inside the backend's -15min/+30min check-in window (see the same
     // note in flow-patient-to-payment.spec.ts), and it must stay on today
-    // for /my-queue to list it at all.
-    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
-    const offsetsFromNow = [3, 8, -6, 13, -11];
+    // for /my-queue to list it at all. Clinic wall-clock time, not the
+    // runner's (see clinicNowMinutes()), and never in the past: the backend
+    // rejects a start time that is not after now.
+    const nowMinutes = clinicNowMinutes();
+    const offsetsFromNow = [3, 8, 13, 15];
     const timeInput = dialog.locator('input[type="time"]');
     const createBtn = dialog.getByRole('button', { name: /^tạo lịch hẹn$/i });
     let created = false;
     for (let attempt = 0; attempt < offsetsFromNow.length && !created; attempt++) {
-      const minutesFromMidnight = (nowMinutes + offsetsFromNow[attempt] + 1440) % 1440;
+      const minutesFromMidnight = nowMinutes + offsetsFromNow[attempt];
+      if (minutesFromMidnight + 15 > 1440) continue;
       const hh = String(Math.floor(minutesFromMidnight / 60)).padStart(2, '0');
       const mm = String(minutesFromMidnight % 60).padStart(2, '0');
       await timeInput.fill(`${hh}:${mm}`);
@@ -135,6 +149,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     // Scoped the same way as flow-patient-to-payment.spec.ts: our
     // just-checked-in patient sorts last in the queue if anyone else is
     // already waiting, so a page-wide "first button" click would be wrong.
+    await loginAs(dentistPage, ACCOUNTS.secondDentist.email, ACCOUNTS.secondDentist.password);
     await dentistPage.goto('/my-queue');
     await dentistPage.waitForLoadState('networkidle');
     const queueCard = dentistPage.locator('.space-y-3 > div').filter({ hasText: testName });
@@ -152,7 +167,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     // ---- Attach 1 unit of the same item checked above via the "Vật tư sử
     // dụng" picker (TreatmentsTab.tsx), then add it to the treatment's usage
     // list BEFORE submitting the treatment itself. ----
-    const materialSelect = dentistPage.getByLabel(/vật tư sử dụng/i);
+    const materialSelect = dentistPage.getByLabel('Vật tư sử dụng', { exact: true });
     await expect(materialSelect).toBeVisible({ timeout: 5_000 });
     const materialOptionValue = await materialSelect.locator('option').evaluateAll((opts, name) => {
       const match = opts.find((o) => (o.textContent ?? '').includes(name));
@@ -169,7 +184,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     await expect(dentistPage.getByText(new RegExp(`${escapedItemName}.*—.*1`))).toBeVisible({ timeout: 5_000 });
 
     await dentistPage.getByRole('button', { name: /^thêm$/i }).click();
-    await expect(dentistPage.getByText('E2E stock-out probe treatment')).toBeVisible({ timeout: 10_000 });
+    await expect(dentistPage.getByText('E2E stock-out probe treatment', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
     await dentistPage.getByLabel(/tóm tắt cuối cùng/i).fill('E2E inventory probe — 1 unit attached via the materials picker.');
@@ -204,11 +219,11 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     // otherwise race this and report a misleading "already closed" error
     // in place of whatever actually failed).
     //
-    // admin/dentistCtx are shared+cached (getSharedContext()) — close only
-    // their pages, never the context, or the next reuser in this worker
-    // fails against an already-closed one. reception is this test's own.
+    // admin is shared+cached (getSharedContext()) — close only its page,
+    // never the context, or the next reuser in this worker fails against an
+    // already-closed one. reception and dentistCtx are this test's own.
     await adminPage.close().catch(() => {});
     await reception.close().catch(() => {});
-    await dentistPage.close().catch(() => {});
+    await dentistCtx.close().catch(() => {});
   }
 });

@@ -115,6 +115,55 @@ function instrumentPage(page: Page): Page {
 
 const contextCache = new Map<string, Promise<BrowserContext>>();
 
+// Per auth file, the chain of pending snapshot writes (serialised so an older
+// snapshot can never land after a newer one).
+const pendingSaves = new Map<string, Promise<void>>();
+
+// Persist a file-backed shared context's cookies right after every successful
+// login/refresh, i.e. every refresh-token rotation. Saving only at fixture
+// teardown (persistAuthState) missed specs that take the shared context
+// straight from getSharedContext() without the `context` fixture
+// (flow-inventory-stock-out, flow-shift-registration): when such a spec
+// failed, Playwright replaced the worker, the new worker loaded the auth file
+// still holding the pre-rotation cookie, the backend flagged that as refresh
+// token reuse and revoked every session for the account, and every later
+// test using that role landed on /login.
+function persistOnRotation(context: BrowserContext, path: string): void {
+  context.on('requestfinished', (request) => {
+    if (request.method() !== 'POST' || !/\/auth\/(login|refresh)$/.test(new URL(request.url()).pathname)) {
+      return;
+    }
+    const previous = pendingSaves.get(path) ?? Promise.resolve();
+    pendingSaves.set(
+      path,
+      previous
+        .then(async () => {
+          const response = await request.response();
+          if (response?.ok()) await context.storageState({ path });
+        })
+        // The context may already be closing at the end of the worker.
+        .catch(() => {}),
+    );
+  });
+}
+
+// A shared context also shares localStorage, so a test that switches the
+// language (i18n.spec) or theme (shell.spec) would leak that choice into every
+// later test on the same role — e.g. the shell tests then looked for "Mở menu"
+// on an English UI. Give each new page the default preferences once; the
+// sessionStorage flag survives reloads, so a test can still check that its own
+// choice persists across page.reload().
+function resetUiPreferences(): void {
+  try {
+    if (sessionStorage.getItem('e2e.uiPrefsReset')) return;
+    sessionStorage.setItem('e2e.uiPrefsReset', '1');
+    localStorage.removeItem('gensmile.i18n');
+    localStorage.removeItem('gensmile.theme');
+  } catch {
+    // about:blank and opaque origins have no storage.
+  }
+}
+
 // `storageState` accepts a file path (string) or an actual state object —
 // the cache key has to be a string either way, but the value handed to
 // newContext() must stay in whatever form the caller gave it (stringifying
@@ -138,7 +187,11 @@ export async function getSharedContext(
           ? { recordVideo: { dir: process.env.E2E_VIDEO_DIR ?? 'artifacts/playwright-videos', size: { width: 1280, height: 720 } } }
           : {}),
       })
-      .then((context) => {
+      .then(async (context) => {
+        if (typeof resolvedState === 'string' && resolvedState.endsWith('.json')) {
+          persistOnRotation(context, resolvedState);
+        }
+        await context.addInitScript(resetUiPreferences);
         const originalNewPage = context.newPage.bind(context);
         context.newPage = (async (...args: Parameters<BrowserContext['newPage']>) =>
           instrumentPage(await originalNewPage(...args))) as BrowserContext['newPage'];
@@ -174,6 +227,7 @@ export const test = base.extend({
 // Save after page teardown, when pending refresh requests can no longer
 // rotate cookies after the snapshot. afterEach runs too early for fast failures.
 export async function persistAuthState() {
+  await Promise.all(pendingSaves.values());
   for (const [key, context] of contextCache) {
     if (key.endsWith('.json')) await (await context).storageState({ path: key });
   }

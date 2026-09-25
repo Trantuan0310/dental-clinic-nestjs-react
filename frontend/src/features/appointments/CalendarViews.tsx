@@ -3,6 +3,7 @@ import { format, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { Clock } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useDentistOptions } from './appointmentApi';
 import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
 import { formatTimeOnly } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -282,6 +283,9 @@ interface AppointmentBlockProps {
 
 function AppointmentBlock({ appointment, top, height, onClick, compact = false }: AppointmentBlockProps) {
   const type = appointment.appointmentType ?? 'consultation';
+  // Status keeps the block colour; the dentist's profile colour marks whose it is.
+  const { data: dentists } = useDentistOptions();
+  const dentistColor = dentists?.find((d) => d.id === appointment.dentistId)?.calendarColor;
   const tooltipContent = (
     <div className="space-y-0.5 text-left">
       <p className="font-semibold">{appointment.patientName}</p>
@@ -341,7 +345,16 @@ function AppointmentBlock({ appointment, top, height, onClick, compact = false }
                 {appointment.patientName}
               </p>
               {!compact && showDetails && (
-                <p className="truncate text-[10px] opacity-75">{appointment.dentistName}</p>
+                <p className="flex items-center gap-1 truncate text-[10px] opacity-75">
+                  {dentistColor && (
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: dentistColor }}
+                      aria-hidden
+                    />
+                  )}
+                  <span className="truncate">{appointment.dentistName}</span>
+                </p>
               )}
             </div>
           </div>

@@ -28,7 +28,8 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   await page.goto('/payroll');
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button', { name: /tạo kỳ lương/i }).click();
+  // With no periods yet the empty state repeats the header's "Tạo kỳ lương".
+  await page.getByRole('button', { name: /tạo kỳ lương/i }).first().click();
   const createDialog = page.getByRole('dialog');
   await createDialog.getByLabel(/ngày bắt đầu/i).fill(periodStart);
   await createDialog.getByLabel(/ngày kết thúc/i).fill(periodEnd);
@@ -65,8 +66,11 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   const lineItems: Array<Record<string, unknown>> = computeBody?.data?.lineItems ?? computeBody?.lineItems ?? [];
   expect(lineItems.length, 'Compute should produce at least one dentist line item').toBeGreaterThan(0);
 
-  const anLine = lineItems.find((li) => String(li.dentistName ?? '').includes(ACCOUNTS.dentist.fullName));
-  expect(anLine, `No line item for ${ACCOUNTS.dentist.fullName} — dentist may have no WorkingSchedule seeded`).toBeTruthy();
+  const anItem = lineItems.find((li) => String(li.dentistName ?? '').includes(ACCOUNTS.dentist.fullName));
+  expect(anItem, `No line item for ${ACCOUNTS.dentist.fullName} — dentist may have no WorkingSchedule seeded`).toBeTruthy();
+  // Each item is `{ dentistId, dentistName, lineItemId, computed }`; the
+  // figures live under `computed` (PayrollService.computePeriod).
+  const anLine = anItem?.computed as Record<string, unknown> | undefined;
   console.log(
     `[flow-payroll] ${ACCOUNTS.dentist.fullName}: totalHours=${anLine?.totalHours}, workedShifts=${anLine?.workedShifts}, grossPayVnd=${anLine?.grossPayVnd}`,
   );

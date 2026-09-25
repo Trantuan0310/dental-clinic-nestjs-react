@@ -29,8 +29,8 @@ export function Card({
     >
       {(title || description || actions) && (
         <div className="border-b border-gray-100 px-6 py-4">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0">
               {title && (
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-surface-100">
                   {title}
@@ -40,7 +40,7 @@ export function Card({
                 <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{description}</p>
               )}
             </div>
-            {actions && <div className="flex items-center gap-2">{actions}</div>}
+            {actions && <div className="flex min-w-0 max-w-full items-center gap-2">{actions}</div>}
           </div>
         </div>
       )}

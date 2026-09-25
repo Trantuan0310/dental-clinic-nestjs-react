@@ -1,5 +1,11 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import { Appointment, AppointmentStatus, EncounterStatus, Prisma, User } from '@prisma/client';
+import {
+  Appointment,
+  AppointmentStatus,
+  DentistProfile,
+  EncounterStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
@@ -925,8 +931,13 @@ export class AppointmentsService {
     return updated;
   }
 
+  /**
+   * `{ id, fullName }` as before, plus the profile's calendar colour and
+   * practice status. Dentists whose profile is not ACTIVE are left out
+   * (BR-STAFF-006); dentists without a profile yet stay listed.
+   */
   async listDentistOptions() {
-    return this.prisma.user.findMany({
+    const rows = await this.prisma.user.findMany({
       where: {
         status: 'ACTIVE',
         deactivatedAt: null,
@@ -939,15 +950,25 @@ export class AppointmentsService {
             },
           },
         },
+        OR: [
+          { dentistProfile: null },
+          { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
+        ],
       },
       select: {
         id: true,
         fullName: true,
+        dentistProfile: { select: { calendarColor: true, practiceStatus: true } },
       },
       orderBy: {
         fullName: 'asc',
       },
     });
+    return rows.map(({ dentistProfile, ...u }) => ({
+      ...u,
+      calendarColor: dentistProfile?.calendarColor ?? null,
+      practiceStatus: dentistProfile?.practiceStatus ?? null,
+    }));
   }
 
   async list(q: ListAppointmentsQueryDto, actor: JwtPayload) {
@@ -1046,7 +1067,7 @@ export class AppointmentsService {
     if (this.toMinutes(dto.endTime) <= this.toMinutes(dto.startTime)) {
       throw new InvalidAppointmentStateException('endTime must be after startTime');
     }
-    await this.validateDentist(dto.dentistId);
+    await this.validateDentist(dto.dentistId, { forBooking: false });
     // BR-APPT-018: validate no time-range overlap on same dentist + dayOfWeek.
     // We approximate by checking other schedules within ±1 day range of validFrom.
     const validFrom = new Date(dto.validFrom);
@@ -1148,7 +1169,7 @@ export class AppointmentsService {
     if (endAt.getTime() <= Date.now()) {
       throw new InvalidAppointmentStateException('Không thể ghi nhận nghỉ phép đã kết thúc');
     }
-    await this.validateDentist(dto.dentistId);
+    await this.validateDentist(dto.dentistId, { forBooking: false });
 
     const overlapsWindow = {
       dentistId: dto.dentistId,
@@ -1463,14 +1484,32 @@ export class AppointmentsService {
     );
   }
 
-  private async validateDentist(dentistId: string) {
+  /**
+   * BR-STAFF-006: a dentist is an active account with the dentist role and,
+   * once profiles exist, an ACTIVE dentist profile. Bookings require an
+   * ACTIVE practice; schedules and time-off may still be managed while a
+   * dentist is suspended (`forBooking: false`). Accounts without a profile
+   * (created before migration 019 or by an old seed) are accepted by role
+   * alone until PR-7 removes that fallback.
+   */
+  private async validateDentist(dentistId: string, { forBooking = true } = {}) {
     const u = await this.prisma.user.findUnique({
       where: { id: dentistId },
-      include: { userRoles: { include: { role: true } } },
+      include: { userRoles: { include: { role: true } }, dentistProfile: true },
     });
     if (!u || u.status !== 'ACTIVE' || !u.userRoles.some(ur => ur.role.code === 'dentist')) {
       throw new AppointmentNotFoundException(
         `Dentist ${dentistId} is not active or lacks dentist role`,
+      );
+    }
+    const profile = u.dentistProfile && !u.dentistProfile.deletedAt ? u.dentistProfile : null;
+    if (!profile) {
+      this.logger.warn(
+        `Dentist ${dentistId} has no dentist profile; accepted by role (BR-STAFF-006)`,
+      );
+    } else if (forBooking && profile.practiceStatus !== 'ACTIVE') {
+      throw new AppointmentNotFoundException(
+        `Dentist ${dentistId} is ${profile.practiceStatus.toLowerCase()} and cannot take bookings`,
       );
     }
     return u;
@@ -1484,9 +1523,8 @@ export class AppointmentsService {
     return p;
   }
 
-  private defaultSlotMinutes(_dentist: User): number {
-    // Could later pull from dentist's default schedule; for MVP hard-code 30.
-    return 30;
+  private defaultSlotMinutes(dentist: { dentistProfile?: DentistProfile | null }): number {
+    return dentist.dentistProfile?.defaultSlotMinutes ?? 30;
   }
 
   /**

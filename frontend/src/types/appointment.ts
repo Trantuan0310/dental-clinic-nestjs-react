@@ -33,6 +33,8 @@ export interface DentistMini {
   id: string;
   fullName: string;
   specialization?: string | null;
+  /** From the dentist profile (#RRGGBB); null while a dentist has no profile. */
+  calendarColor?: string | null;
 }
 
 export interface Appointment {

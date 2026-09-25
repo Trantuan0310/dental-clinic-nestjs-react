@@ -151,6 +151,8 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     expense: buildModel(),
     expenseCategory: buildModel(),
     expenseAudit: buildModel(),
+    employee: buildModel(),
+    dentistProfile: buildModel(),
 
     ...overrides,
   };

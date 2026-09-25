@@ -158,6 +158,24 @@ Trong đó:
 | Cập nhật settings *(chưa triển khai)* | ✅ | ❌ | ❌ | `settings.update` |
 | Quản lý Working Schedule của dentist | ✅ | ❌ | 🔒 (chỉ schedule của mình) | `schedule.write` / `schedule.read` |
 
+### 3.7b Nhân sự & hồ sơ bác sĩ (ADR-0009 giai đoạn 1)
+
+Chi tiết: [`schema-per-module/staff.md`](../04_Database/schema-per-module/staff.md). Migration 019 thêm các mã này vào database có sẵn.
+
+| Action | Admin | Receptionist | Dentist | Permission code |
+| ------ | :---: | :----------: | :-----: | --------------- |
+| Xem danh sách / hồ sơ nhân viên | ✅ | ✅ | ❌ | `employee.read` |
+| Tạo nhân viên | ✅ | ❌ | ❌ | `employee.create` |
+| Sửa nhân viên, tạo/gắn tài khoản đăng nhập | ✅ | ❌ | ❌ | `employee.update` |
+| Cho nghỉ việc (khóa tài khoản) | ✅ | ❌ | ❌ | `employee.deactivate` |
+| Xem hồ sơ bác sĩ | ✅ | ✅ | ✅ | `dentist.read` |
+| Tạo hồ sơ bác sĩ cho nhân viên | ✅ | ❌ | ❌ | `dentist.create` |
+| Sửa mọi trường hồ sơ bác sĩ | ✅ | ❌ | ❌ | `dentist.update` |
+| Sửa giới thiệu, chuyên môn, màu lịch của chính mình | — | ❌ | 🔒 | `dentist.update.own` |
+| Tạm đình chỉ / ngừng / cho hành nghề lại | ✅ | ❌ | ❌ | `dentist.deactivate` |
+| Phân công dịch vụ *(giai đoạn 2)* | ✅ | ❌ | ❌ | `dentist.assign_service` |
+| Quản lý lịch làm việc *(thay dần `schedule.write`, giai đoạn 3)* | ✅ | ✅ | 🔒 | `dentist.manage_schedule` |
+
 ### 3.8 Shift Management (Phase 9 — BD-0010)
 
 || Action | Admin | Receptionist | Dentist | Permission code |

@@ -51,7 +51,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             aria-describedby={describedBy}
             aria-required={required || undefined}
             className={cn(
-              'flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors',
+              'min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors',
               'placeholder:text-gray-400 dark:placeholder:text-surface-500',
               'focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500',
               'disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500',
