@@ -164,6 +164,78 @@ describe('MedicalRecordsService', () => {
     });
   });
 
+  describe('cancelEncounter (row-level)', () => {
+    const cancelActor = userPayloadWithPermissions(
+      ['encounter.read.own', 'encounter.cancel'],
+      'dentist-1',
+    );
+
+    it("404s for a dentist cancelling another dentist's encounter and changes nothing", async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      await expect(service.cancelEncounter('enc-1', 'Nhầm bệnh nhân', cancelActor)).rejects.toThrow(
+        EncounterNotFoundException,
+      );
+      expect(prisma.encounter.update).not.toHaveBeenCalled();
+      expect(prisma.encounterAudit.create).not.toHaveBeenCalled();
+    });
+
+    it('lets a dentist cancel their own encounter', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'dentist-1' }),
+      );
+      await service.cancelEncounter('enc-1', 'Bệnh nhân về', cancelActor);
+      expect(prisma.encounter.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: EncounterStatus.CANCELLED }),
+        }),
+      );
+    });
+
+    it("lets encounter.read.any cancel any dentist's encounter", async () => {
+      const admin = userPayloadWithPermissions(['encounter.read.any', 'encounter.cancel']);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      await service.cancelEncounter('enc-1', 'Hủy theo yêu cầu', admin);
+      expect(prisma.encounter.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('front-desk exemption (start / list)', () => {
+    // A role with neither encounter.read.own nor .any (receptionist) must keep
+    // starting and listing encounters for every dentist — the reason the
+    // start/list check differs from the clinical-write one.
+    const frontDesk = userPayloadWithPermissions(['encounter.start', 'encounter.read.basic']);
+
+    it("starts an encounter for another dentist's appointment", async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        dentistId: 'some-other-dentist',
+        patientId: 'patient-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      await expect(
+        service.startEncounterForAppointment('appt-1', frontDesk),
+      ).resolves.toBeDefined();
+    });
+
+    it('is still barred from clinical writes on any encounter', async () => {
+      const writer = userPayloadWithPermissions(['treatment.write'], 'user-1');
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      await expect(service.cancelEncounter('enc-1', 'x', writer)).rejects.toThrow(
+        EncounterNotFoundException,
+      );
+    });
+  });
+
   describe('upsertClinicalNote', () => {
     it('upserts clinical note for open encounter', async () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(

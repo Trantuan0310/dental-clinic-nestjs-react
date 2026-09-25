@@ -1117,4 +1117,46 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect(listed.body.data.map((s: { id: string }) => s.id)).not.toContain(serviceId);
     });
   });
+
+  it("a custom role holding encounter.cancel cannot cancel another dentist's encounter", async () => {
+    // encounter.cancel is admin-only in the seeded roles; a custom role may be
+    // given it, and must then be limited to its own encounters like every
+    // other clinical write (404, not 403, so ids can't be probed).
+    const encounterId = await fixtureEncounter();
+    // Permissions are reloaded from the database on every request
+    // (JwtStrategy), so the custom role has to exist for real.
+    const perms = await db.permission.findMany({
+      where: { code: { in: ['encounter.read.own', 'encounter.cancel'] } },
+    });
+    const role = await db.role.create({
+      data: {
+        code: 'senior_dentist_test',
+        name: 'Bác sĩ trưởng (test)',
+        rolePermissions: { create: perms.map(p => ({ permissionId: p.id })) },
+      },
+    });
+    const senior = await db.user.create({
+      data: {
+        email: 'senior-dentist@test.local',
+        fullName: 'Senior dentist',
+        passwordHash: 'fixture',
+        status: 'ACTIVE',
+        userRoles: { create: { roleId: role.id } },
+      },
+    });
+    const token = app
+      .get(JwtService)
+      .sign({ sub: senior.id, email: senior.email, permissions: [] });
+    await request(app.getHttpServer())
+      .post(`/api/v1/medical-records/encounters/${encounterId}/cancel`)
+      .auth(token, { type: 'bearer' })
+      .send({ reason: 'Không phải lượt khám của tôi' })
+      .expect(404);
+    expect((await db.encounter.findUniqueOrThrow({ where: { id: encounterId } })).status).toBe(
+      'IN_PROGRESS',
+    );
+    await api('post', `/medical-records/encounters/${encounterId}/cancel`)
+      .send({ reason: 'Quản trị hủy' })
+      .expect(200);
+  });
 });
