@@ -43,7 +43,9 @@ day-calendar.ts  (thuần, không I/O)
 
    Khoảng nghỉ trưa giữa hai khung thì không đặt được. Vi phạm → `OUTSIDE_WORKING_HOURS`.
 3. Chồng lên khoảng giờ bị đóng → `CLOSED`; chồng lên nghỉ phép **đã duyệt** → `TIME_OFF` (BR-SCH-001).
-4. Chồng lên lịch hẹn đang giữ chỗ (trừ `CANCELLED`/`NO_SHOW` và chính lịch đang dời) → `SLOT_CONFLICT`.
+4. Chồng lên lịch hẹn đang giữ chỗ (trừ `CANCELLED`/`NO_SHOW`/`LEFT` và chính lịch đang dời) → `SLOT_CONFLICT`.
+
+Từ giai đoạn 5, bước 3–4 so sánh **khoảng bận** `[start − before, end + after]` thay vì chỉ lượt khám (buffer, D4) — xem [`appointment-services.md`](appointment-services.md).
 
 Mọi khoảng đều nửa mở `[start, end)`, nên hai lượt nối tiếp nhau không bị coi là chồng lấn.
 

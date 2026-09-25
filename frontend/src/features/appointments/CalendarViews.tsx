@@ -27,6 +27,7 @@ const STATUS_BG: Record<AppointmentStatus, string> = {
   completed: 'bg-emerald-50 border-emerald-300 text-emerald-800',
   cancelled: 'bg-red-50 border-red-300 text-red-700',
   no_show: 'bg-red-100 border-red-300 text-red-800',
+  left: 'bg-orange-50 border-orange-300 text-orange-800',
 };
 
 const TYPE_DOT: Record<AppointmentType, string> = {
@@ -326,7 +327,7 @@ function AppointmentBlock({ appointment, top, height, onClick, compact = false }
             'h-full w-full overflow-hidden rounded-md border-l-4 px-2 py-1 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
             STATUS_BG[appointment.status],
             appointment.status === 'cancelled' && 'opacity-60 line-through',
-            appointment.status === 'no_show' && 'opacity-60',
+            (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
           )}
         >
           <div className="flex items-start gap-1.5">

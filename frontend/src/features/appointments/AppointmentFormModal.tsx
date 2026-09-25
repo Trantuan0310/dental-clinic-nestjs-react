@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/Loading';
 import {
   fetchPatientLookup,
   useAvailability,
+  useBookableServices,
   useCreateAppointment,
   useDentistOptions,
   usePatientMini,
@@ -21,6 +22,7 @@ import { isUnder12, isValidDob } from '@/features/patients/dobRules';
 import type {
   Appointment,
   AppointmentSource,
+  BookableService,
   AppointmentType,
   CreateAppointmentPayload,
   DentistAvailability,
@@ -151,6 +153,9 @@ export function AppointmentFormModal({
   const [chiefComplaint, setChiefComplaint] = useState(appointment?.chiefComplaint ?? '');
   const [notes, setNotes] = useState(appointment?.notes ?? '');
   const [source, setSource] = useState<AppointmentSource>('phone');
+  // ADR-0009 phase 5: services chosen for the visit, in click order.
+  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [durationOverrideReason, setDurationOverrideReason] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
   const debouncedSearch = useDebouncedValue(patientSearch, 300);
@@ -165,7 +170,43 @@ export function AppointmentFormModal({
     !appointment && open && !selectedPatient ? defaultPatientId : undefined,
   );
   const { data: dentists, isLoading: isLoadingDentists } = useDentistOptions();
-  const { data: availability } = useAvailability(dentistId || undefined, date);
+  const { data: bookableServices = [], isLoading: isLoadingServices } = useBookableServices(
+    !isEdit && open ? dentistId || undefined : undefined,
+    date,
+  );
+  // Only services the dentist still performs on the chosen date count —
+  // changing the date or dentist silently drops the rest.
+  const chosenServices = useMemo(
+    () =>
+      serviceIds
+        .map((id) => bookableServices.find((sv) => sv.serviceId === id))
+        .filter((sv): sv is NonNullable<typeof sv> => !!sv),
+    [serviceIds, bookableServices],
+  );
+  const servicesTotal = chosenServices.reduce((sum, sv) => sum + sv.durationMin, 0);
+  const bufferBeforeMin = Math.max(0, ...chosenServices.map((sv) => sv.bufferBeforeMin));
+  const bufferAfterMin = Math.max(0, ...chosenServices.map((sv) => sv.bufferAfterMin));
+  const durationMin = Number(duration) || 30;
+  // BR-APPT-031: a length other than the services' total needs a reason.
+  const durationOverridden = chosenServices.length > 0 && durationMin !== servicesTotal;
+  // The slot grid keeps the dentist's step; the length check (with this
+  // visit's buffers) happens client-side in describeSlotIssue.
+  const { data: availability } = useAvailability(dentistId || undefined, date, {
+    bufferBeforeMin,
+    bufferAfterMin,
+  });
+
+  const toggleService = (id: string) => {
+    const next = serviceIds.includes(id)
+      ? serviceIds.filter((x) => x !== id)
+      : [...serviceIds, id];
+    setServiceIds(next);
+    const total = next
+      .map((x) => bookableServices.find((sv) => sv.serviceId === x)?.durationMin ?? 0)
+      .reduce((a, b) => a + b, 0);
+    if (total > 0) setDuration(String(total));
+    setDurationOverrideReason('');
+  };
 
   const shownPatient = selectedPatient ?? (defaultPatientId ? defaultPatient : null) ?? null;
   const patientLabel = shownPatient
@@ -299,6 +340,8 @@ export function AppointmentFormModal({
       setChiefComplaint('');
       setNotes('');
     }
+    setServiceIds([]);
+    setDurationOverrideReason('');
     resetNewPatient();
     setPatientSearch('');
     setTab('info');
@@ -309,8 +352,6 @@ export function AppointmentFormModal({
 
   const endTime = useMemo(() => addMinutes(startTime, Number(duration) || 30), [startTime, duration]);
 
-  const durationMin = Number(duration) || 30;
-
   // Checks the whole [start, start + duration) range against working hours,
   // bookings and time-off — the old check only compared the start time to
   // the slot grid, so a 60-min booking could run into the next appointment
@@ -318,9 +359,12 @@ export function AppointmentFormModal({
   const slotIssue = useMemo(
     () =>
       availability
-        ? describeSlotIssue(availability, date, timeStringToMinutes(startTime), durationMin)
+        ? describeSlotIssue(availability, date, timeStringToMinutes(startTime), durationMin, {
+            before: bufferBeforeMin,
+            after: bufferAfterMin,
+          })
         : null,
-    [availability, date, startTime, durationMin],
+    [availability, date, startTime, durationMin, bufferBeforeMin, bufferAfterMin],
   );
 
   const suggestedStarts = useMemo(() => {
@@ -330,10 +374,26 @@ export function AppointmentFormModal({
         const d = new Date(s.startTime);
         return d.getHours() * 60 + d.getMinutes();
       })
-      .filter((m) => describeSlotIssue(availability, date, m, durationMin) === null)
+      .filter(
+        (m) =>
+          describeSlotIssue(availability, date, m, durationMin, {
+            before: bufferBeforeMin,
+            after: bufferAfterMin,
+          }) === null,
+      )
       .slice(0, 12)
       .map(minutesToTime);
-  }, [availability, date, durationMin]);
+  }, [availability, date, durationMin, bufferBeforeMin, bufferAfterMin]);
+
+  const durationOptions = useMemo(
+    () =>
+      DURATION_OPTIONS.some((o) => o.value === duration)
+        ? DURATION_OPTIONS
+        : [...DURATION_OPTIONS, { value: duration, label: `${duration} phút` }].sort(
+            (a, b) => Number(a.value) - Number(b.value),
+          ),
+    [duration],
+  );
 
   const handleSubmit = async () => {
     setServerError(null);
@@ -343,6 +403,12 @@ export function AppointmentFormModal({
     }
     if (!dentistId) {
       setServerError('Vui lòng chọn bác sĩ.');
+      return;
+    }
+    if (!isEdit && durationOverridden && durationOverrideReason.trim().length < 5) {
+      setServerError(
+        `Các dịch vụ đã chọn cần ${servicesTotal} phút — nhập lý do (ít nhất 5 ký tự) nếu muốn đặt ${durationMin} phút.`,
+      );
       return;
     }
     const startsAt = isoFullLocal(date, startTime);
@@ -367,6 +433,8 @@ export function AppointmentFormModal({
           chiefComplaint,
           notes,
           source,
+          serviceIds: chosenServices.map((sv) => sv.serviceId),
+          durationOverrideReason: durationOverridden ? durationOverrideReason : undefined,
         };
         await create.mutateAsync(payload);
         notify.success('Đã tạo lịch hẹn mới');
@@ -600,8 +668,12 @@ export function AppointmentFormModal({
                   <div>
                     <label className="label">Bác sĩ *</label>
                     <Select
+                      aria-label="Bác sĩ"
                       value={dentistId}
-                      onChange={(e) => setDentistId(e.target.value)}
+                      onChange={(e) => {
+                        setDentistId(e.target.value);
+                        setServiceIds([]);
+                      }}
                       options={(dentists ?? []).map((d) => ({
                         value: d.id,
                         label: d.fullName + (d.specialization ? ` (${d.specialization})` : ''),
@@ -628,7 +700,7 @@ export function AppointmentFormModal({
                     label="Thời lượng"
                     value={duration}
                     onChange={(e) => setDuration(e.target.value)}
-                    options={DURATION_OPTIONS}
+                    options={durationOptions}
                   />
                   <div>
                     <label className="label">Kết thúc</label>
@@ -637,6 +709,27 @@ export function AppointmentFormModal({
                     </div>
                   </div>
                 </div>
+
+                {dentistId && (
+                  <ServicePicker
+                    services={bookableServices}
+                    isLoading={isLoadingServices}
+                    selected={serviceIds}
+                    onToggle={toggleService}
+                    totalMin={servicesTotal}
+                    bufferBeforeMin={bufferBeforeMin}
+                    bufferAfterMin={bufferAfterMin}
+                  />
+                )}
+
+                {durationOverridden && (
+                  <Input
+                    label={`Lý do đổi thời lượng (dịch vụ cần ${servicesTotal} phút) *`}
+                    value={durationOverrideReason}
+                    onChange={(e) => setDurationOverrideReason(e.target.value)}
+                    placeholder="VD: Bệnh nhân nhạy cảm, cần thêm thời gian gây tê"
+                  />
+                )}
 
                 <Select
                   label="Nguồn đặt lịch"
@@ -745,6 +838,7 @@ function describeSlotIssue(
   date: string,
   startMin: number,
   durationMin: number,
+  buffers: { before: number; after: number } = { before: 0, after: 0 },
 ): string | null {
   const endMin = startMin + durationMin;
   const now = new Date();
@@ -762,11 +856,83 @@ function describeSlotIssue(
     const hours = availability.windows.map((w) => `${w.startTime}–${w.endTime}`).join(', ');
     return `Khung ${minutesToTime(startMin)}–${minutesToTime(endMin)} nằm ngoài giờ làm việc của bác sĩ (${hours}).`;
   }
+  // `busy` already includes other bookings' buffers; add this visit's own
+  // prep/clean-up time (ADR-0009 D4).
+  const busyFrom = startMin - buffers.before;
+  const busyTo = endMin + buffers.after;
   const clash = availability.busy.some(
-    (b) => startMin < timeStringToMinutes(b.endTime) && timeStringToMinutes(b.startTime) < endMin,
+    (b) => busyFrom < timeStringToMinutes(b.endTime) && timeStringToMinutes(b.startTime) < busyTo,
   );
   if (clash) {
-    return `Khung ${minutesToTime(startMin)}–${minutesToTime(endMin)} trùng lịch hẹn khác hoặc lịch nghỉ của bác sĩ.`;
+    const withBuffers = buffers.before || buffers.after ? ' (tính cả thời gian chuẩn bị/dọn dẹp)' : '';
+    return `Khung ${minutesToTime(startMin)}–${minutesToTime(endMin)}${withBuffers} trùng lịch hẹn khác hoặc lịch nghỉ của bác sĩ.`;
   }
   return null;
+}
+/** Services the dentist performs that day; click order is the visit order. */
+function ServicePicker({
+  services,
+  isLoading,
+  selected,
+  onToggle,
+  totalMin,
+  bufferBeforeMin,
+  bufferAfterMin,
+}: {
+  services: BookableService[];
+  isLoading: boolean;
+  selected: string[];
+  onToggle: (id: string) => void;
+  totalMin: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
+}) {
+  return (
+    <fieldset>
+      <legend className="label">Dịch vụ</legend>
+      {isLoading ? (
+        <p className="text-xs text-gray-500">Đang tải dịch vụ của bác sĩ…</p>
+      ) : services.length === 0 ? (
+        <p className="text-xs text-gray-500">
+          Bác sĩ chưa được gán dịch vụ nào cho ngày này — thời lượng chọn tay.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1.5">
+            {services.map((sv) => {
+              const checked = selected.includes(sv.serviceId);
+              return (
+                <label
+                  key={sv.serviceId}
+                  className={
+                    checked
+                      ? 'flex cursor-pointer items-center gap-1.5 rounded-md border border-primary-500 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
+                      : 'flex cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-primary-300'
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5"
+                    checked={checked}
+                    disabled={!checked && selected.length >= 5}
+                    onChange={() => onToggle(sv.serviceId)}
+                  />
+                  {sv.name}
+                  <span className="text-gray-400">{sv.durationMin}′</span>
+                </label>
+              );
+            })}
+          </div>
+          {selected.length > 0 && (
+            <p className="mt-1 text-xs text-gray-500">
+              Tổng {totalMin} phút
+              {bufferBeforeMin || bufferAfterMin
+                ? ` · chuẩn bị ${bufferBeforeMin}′ trước, dọn dẹp ${bufferAfterMin}′ sau`
+                : ''}
+            </p>
+          )}
+        </>
+      )}
+    </fieldset>
+  );
 }

@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   Search,
+  UserRoundPlus,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -26,6 +27,7 @@ import {
 } from './appointmentApi';
 import { AppointmentFormModal } from './AppointmentFormModal';
 import { AppointmentDetailDrawer } from './AppointmentDetailDrawer';
+import { WalkInModal } from './WalkInModal';
 import type {
   Appointment,
   AppointmentSource,
@@ -82,6 +84,7 @@ const STATUS_LABEL: Record<AppointmentStatus, string> = {
   completed: 'Hoàn thành',
   cancelled: 'Đã hủy',
   no_show: 'Vắng mặt',
+  left: 'Đã về (chưa khám)',
 };
 
 const CSV_COLUMNS: CsvColumn<Appointment>[] = [
@@ -137,7 +140,7 @@ function statusToTabBucket(status: AppointmentStatus): StatusTab {
   }
   if (status === 'checked_in') return 'checked_in';
   if (status === 'completed') return 'completed';
-  return 'cancelled'; // cancelled | no_show
+  return 'cancelled'; // cancelled | no_show | left
 }
 
 const VIEW_OPTIONS: { id: AppointmentViewMode; label: string }[] = [
@@ -157,6 +160,7 @@ export default function AppointmentsListPage() {
   const [sourceFilter, setSourceFilter] = useState<AppointmentSource | 'all'>('all');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const [editing, setEditing] = useState<Appointment | null>(null);
   // Arriving with ?open=<id> (e.g. from the command palette's search results)
   // opens that appointment's detail drawer directly.
@@ -306,6 +310,15 @@ export default function AppointmentsListPage() {
             >
               Xuất CSV
             </Button>
+            <PermissionGuard permission="appointment.create">
+              <Button
+                variant="outline"
+                leftIcon={<UserRoundPlus className="h-4 w-4" />}
+                onClick={() => setWalkInOpen(true)}
+              >
+                Khách vãng lai
+              </Button>
+            </PermissionGuard>
             <PermissionGuard permission="appointment.create">
               <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
                 Tạo lịch hẹn
@@ -568,6 +581,12 @@ export default function AppointmentsListPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         defaultDate={isoDateOnly(date)}
+      />
+
+      <WalkInModal
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        onCreated={(id) => setDetailId(id)}
       />
 
       <AppointmentFormModal

@@ -5,7 +5,9 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  DoorOpen,
   Edit3,
+  History,
   ExternalLink,
   FileEdit,
   Phone,
@@ -27,11 +29,13 @@ import { Spinner } from '@/components/ui/Loading';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import {
   useAppointment,
+  useAppointmentHistory,
   useAvailability,
   useCancelAppointment,
   useCheckInAppointment,
   useConfirmAppointment,
   useDentistOptions,
+  useMarkLeft,
   useMarkNoShow,
   useRescheduleAppointment,
   useStartEncounter,
@@ -39,7 +43,14 @@ import {
 import type { AxiosError } from 'axios';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
-import { formatDate, formatDateTime, formatPhone, formatTimeOnly, getWeekdayLabel } from '@/lib/format';
+import {
+  formatDate,
+  formatDateTime,
+  formatPhone,
+  formatTimeOnly,
+  formatVnd,
+  getWeekdayLabel,
+} from '@/lib/format';
 import { cn } from '@/lib/cn';
 import type { Appointment, AppointmentStatus } from '@/types/appointment';
 
@@ -49,7 +60,7 @@ interface AppointmentDetailDrawerProps {
   onEdit?: (appointment: Appointment) => void;
 }
 
-type ActionKey = 'cancel' | 'no_show' | 'reschedule' | 'force_check_in';
+type ActionKey = 'cancel' | 'no_show' | 'reschedule' | 'force_check_in' | 'left';
 
 const CANCEL_REASONS = [
   'Bệnh nhân yêu cầu',
@@ -59,6 +70,28 @@ const CANCEL_REASONS = [
 ];
 
 const NO_SHOW_REASONS = ['Không liên lạc được', 'Bệnh nhân báo đến muộn quá giờ', 'Không rõ lý do'];
+
+// BR-APPT-033: checked in, then left before the exam.
+const LEFT_REASONS = [
+  'Bệnh nhân chờ lâu, xin về',
+  'Bệnh nhân có việc gấp',
+  'Bệnh nhân đổi ý, sẽ đặt lịch lại',
+];
+
+// Labels for the audit trail (BR-APPT-034); unknown actions show their code.
+const HISTORY_LABEL: Record<string, string> = {
+  APPOINTMENT_CREATED: 'Đặt lịch',
+  APPOINTMENT_WALK_IN: 'Tiếp nhận khách vãng lai (check-in ngay)',
+  APPOINTMENT_UPDATED: 'Sửa thông tin',
+  APPOINTMENT_CONFIRMED: 'Xác nhận lịch',
+  APPOINTMENT_RESCHEDULED: 'Đổi lịch',
+  APPOINTMENT_CHECKIN_OVERRIDDEN: 'Check-in muộn (có lý do)',
+  APPOINTMENT_CANCELLED: 'Hủy lịch',
+  APPOINTMENT_NO_SHOW: 'Đánh no-show',
+  APPOINTMENT_AUTO_NO_SHOW: 'Tự động no-show',
+  APPOINTMENT_LEFT: 'Bệnh nhân đã về (chưa khám)',
+  ENCOUNTER_CANCELLED_VIA_APPOINTMENT: 'Hủy lượt khám theo lịch hẹn',
+};
 
 const LATE_CHECK_IN_REASONS = [
   'Bệnh nhân đến muộn, đã báo trước',
@@ -108,6 +141,8 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const confirm = useConfirmAppointment();
   const cancel = useCancelAppointment();
   const noShow = useMarkNoShow();
+  const markLeft = useMarkLeft();
+  const { data: history } = useAppointmentHistory(appointmentId ?? undefined);
   const reschedule = useRescheduleAppointment();
   const start = useStartEncounter();
   const { data: dentists } = useDentistOptions();
@@ -123,6 +158,11 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const { data: availability, isLoading: isAvailabilityLoading } = useAvailability(
     rescheduleTargetDentist,
     actionModal === 'reschedule' ? rescheduleDate : undefined,
+    {
+      slotDuration: appointment?.durationMinutes,
+      bufferBeforeMin: appointment?.bufferBeforeMin,
+      bufferAfterMin: appointment?.bufferAfterMin,
+    },
   );
 
   // Quick-action handlers
@@ -252,6 +292,23 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Không thể đánh dấu no-show'));
+    }
+  };
+
+  const handleLeft = async () => {
+    if (!appointment) return;
+    if (reason.trim().length < 5) {
+      setError('Vui lòng nhập lý do (ít nhất 5 ký tự).');
+      return;
+    }
+    setError(null);
+    try {
+      await markLeft.mutateAsync({ id: appointment.id, reason });
+      notify.success(`${appointment.patientName} đã về, chưa khám — giờ hẹn được giải phóng`);
+      closeAction();
+      onClose();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Không thể ghi nhận bệnh nhân đã về'));
     }
   };
 
@@ -394,6 +451,46 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
               />
             </div>
 
+            {/* Services (ADR-0009 phase 5) */}
+            {(appointment.services?.length || appointment.visitKind === 'walk_in') && (
+              <div className="rounded-md border border-gray-200 bg-white p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Dịch vụ</p>
+                  {appointment.visitKind === 'walk_in' && (
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                      Khách vãng lai
+                    </span>
+                  )}
+                </div>
+                {appointment.services?.length ? (
+                  <ul className="space-y-1 text-sm" aria-label="Dịch vụ của lịch hẹn">
+                    {appointment.services.map((sv) => (
+                      <li key={sv.id} className="flex items-center justify-between gap-2">
+                        <span className="text-gray-900">{sv.serviceName}</span>
+                        <span className="text-xs text-gray-500">
+                          {sv.durationMin} phút · {formatVnd(sv.price)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500">Chưa chọn dịch vụ.</p>
+                )}
+                {(appointment.bufferBeforeMin || appointment.bufferAfterMin) ? (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Chuẩn bị {appointment.bufferBeforeMin ?? 0}′ trước, dọn dẹp{' '}
+                    {appointment.bufferAfterMin ?? 0}′ sau
+                  </p>
+                ) : null}
+                {appointment.durationOverrideReason && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Thời lượng khác tổng dịch vụ ({appointment.calculatedDurationMin} phút):{' '}
+                    {appointment.durationOverrideReason}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Reason / notes */}
             {(appointment.reason || appointment.chiefComplaint || appointment.notes) && (
               <div className="space-y-2 rounded-md border border-gray-200 bg-white p-4">
@@ -447,6 +544,13 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                     danger
                   />
                 )}
+                {appointment.status === 'left' && appointment.leftAt && (
+                  <TimelineRow
+                    label={`Đã về, chưa khám: ${appointment.leftReason ?? ''}`}
+                    time={formatDateTime(appointment.leftAt)}
+                    danger
+                  />
+                )}
                 {appointment.status === 'no_show' && appointment.noShowAt && (
                   <TimelineRow
                     label={`No-show: ${appointment.cancellationReason ?? ''}`}
@@ -456,6 +560,29 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                 )}
               </ul>
             </div>
+
+            {/* Audit trail (BR-APPT-034) */}
+            {history && history.events.length > 0 && (
+              <div>
+                <p className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wide text-gray-500">
+                  <History className="h-3.5 w-3.5" /> Nhật ký thao tác
+                </p>
+                <ul className="space-y-1.5 text-xs" aria-label="Nhật ký thao tác">
+                  {history.events.map((e, i) => (
+                    <li key={`${e.action}-${i}`} className="flex items-start justify-between gap-3">
+                      <span className="text-gray-700">
+                        {HISTORY_LABEL[e.action] ?? e.action}
+                        {historyDetail(e.metadata) && (
+                          <span className="text-gray-500"> — {historyDetail(e.metadata)}</span>
+                        )}
+                        {e.actorEmail && <span className="block text-gray-400">{e.actorEmail}</span>}
+                      </span>
+                      <span className="shrink-0 text-gray-500">{formatDateTime(e.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="border-t border-gray-200 pt-4">
@@ -498,6 +625,19 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       isLoading={start.isPending}
                     >
                       Mời vào khám
+                    </Button>
+                  </PermissionGuard>
+                ) : null}
+
+                {appointment.status === 'checked_in' ? (
+                  <PermissionGuard permission="appointment.mark_left">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<DoorOpen className="h-4 w-4" />}
+                      onClick={() => setActionModal('left')}
+                    >
+                      Bệnh nhân đã về
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -603,6 +743,21 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         onConfirm={handleNoShow}
         isLoading={noShow.isPending}
         confirmLabel="Xác nhận no-show"
+        confirmVariant="danger"
+      />
+
+      <ActionDialog
+        open={actionModal === 'left'}
+        onClose={closeAction}
+        title="Bệnh nhân đã về (chưa khám)"
+        description="Bệnh nhân đã check-in nhưng rời phòng khám trước khi vào khám. Giờ hẹn sẽ được giải phóng; đây không phải hủy lịch hay no-show."
+        reason={reason}
+        setReason={setReason}
+        quickReasons={LEFT_REASONS}
+        error={error}
+        onConfirm={handleLeft}
+        isLoading={markLeft.isPending}
+        confirmLabel="Xác nhận đã về"
         confirmVariant="danger"
       />
 
@@ -838,3 +993,12 @@ function canNoShow(status: AppointmentStatus): boolean {
 
 // Hint to silence unused import warning for STATUS_ORDER (kept for future timeline enhancements)
 void STATUS_ORDER;
+/** The one metadata field worth showing next to an audit entry. */
+function historyDetail(metadata: Record<string, unknown> | null): string | null {
+  if (!metadata) return null;
+  const reason = metadata.reason ?? metadata.overrideReason;
+  if (typeof reason === 'string' && reason) return reason;
+  const codes = metadata.serviceCodes;
+  if (Array.isArray(codes) && codes.length) return codes.join(', ');
+  return null;
+}

@@ -12,7 +12,9 @@ export type AppointmentStatus =
   | 'in_progress'
   | 'completed'
   | 'cancelled'
-  | 'no_show';
+  | 'no_show'
+  /** Checked in, then left before the exam (ADR-0009 D2). */
+  | 'left';
 
 export type AppointmentSource = 'walk_in' | 'phone' | 'online' | 'returning';
 
@@ -62,8 +64,29 @@ export interface Appointment {
   noShowAt?: string | null;
   rescheduleCount?: number;
   encounterId?: string | null;
+  /** ADR-0009 phase 5 */
+  visitKind?: 'booked' | 'walk_in';
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  calculatedDurationMin?: number | null;
+  durationOverrideReason?: string | null;
+  leftAt?: string | null;
+  leftReason?: string | null;
+  services?: AppointmentServiceSnapshot[];
   createdAt: string;
   updatedAt?: string;
+}
+
+/** A booked service as frozen at booking time (ADR-0009 D6). */
+export interface AppointmentServiceSnapshot {
+  id: string;
+  serviceId: string;
+  serviceCode: string;
+  serviceName: string;
+  price: number;
+  durationMin: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
 }
 
 export interface PaginationInfo {
@@ -110,6 +133,53 @@ export interface CreateAppointmentPayload {
   reason?: string;
   notes?: string;
   source?: AppointmentSource;
+  /** Chosen services, in order (ADR-0009 phase 5, BR-APPT-030). */
+  serviceIds?: string[];
+  /** Required when the length differs from the services' total (BR-APPT-031). */
+  durationOverrideReason?: string;
+}
+
+/** POST /appointments/walk-in — booked from now and checked in at once (BR-APPT-032). */
+export interface CreateWalkInPayload {
+  patientId: string;
+  dentistId: string;
+  serviceIds?: string[];
+  /** Visit length when no service is chosen. */
+  durationMin?: number;
+  reason?: string;
+  chiefComplaint?: string;
+  appointmentType?: AppointmentType;
+}
+
+/** A service the dentist performs on a date, as offered by the booking form. */
+export interface BookableService {
+  serviceId: string;
+  code: string;
+  name: string;
+  categoryName: string;
+  durationMin: number;
+  price: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
+}
+
+/** GET /appointments/:id/history (BR-APPT-034). */
+export interface AppointmentHistory {
+  events: Array<{
+    action: string;
+    at: string;
+    actorEmail: string | null;
+    metadata: Record<string, unknown> | null;
+  }>;
+  reschedules: Array<{
+    id: string;
+    oldStartAt: string;
+    newStartAt: string;
+    oldDentistId?: string | null;
+    newDentistId?: string | null;
+    reason?: string | null;
+    changedAt: string;
+  }>;
 }
 
 export interface UpdateAppointmentPayload {

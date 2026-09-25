@@ -47,6 +47,7 @@ export default function TodayPage() {
       completed: 'border-green-300 bg-green-50',
       cancelled: 'border-red-300 bg-red-50 opacity-50',
       no_show: 'border-red-300 bg-red-50 opacity-50',
+      left: 'border-orange-300 bg-orange-50 opacity-50',
     };
     return colors[status] || 'border-gray-300 bg-white';
   };
