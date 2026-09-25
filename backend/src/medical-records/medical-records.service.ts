@@ -81,6 +81,21 @@ export class MedicalRecordsService {
     return !actor.permissions.includes('encounter.read.any');
   }
 
+  /**
+   * The front-desk variant used by startEncounterForAppointment and
+   * listEncounters (see above): only a caller who holds encounter.read.own
+   * and not .any is limited to their own encounters, so a role with neither
+   * (receptionist) is not. Keep the two checks separate on purpose — making
+   * the one above "consistent" with this would open every clinical write to
+   * such roles, and the reverse would block front-desk check-in.
+   */
+  private isRowScopedDentistExceptFrontDesk(actor: JwtPayload): boolean {
+    return (
+      actor.permissions.includes('encounter.read.own') &&
+      !actor.permissions.includes('encounter.read.any')
+    );
+  }
+
   private async lockEncounter(tx: Prisma.TransactionClient, encounterId: string): Promise<void> {
     await tx.$queryRaw`SELECT id FROM encounters WHERE id = ${encounterId}::uuid FOR UPDATE`;
   }
@@ -133,10 +148,7 @@ export class MedicalRecordsService {
     // here. This method previously ignored `actor` entirely, letting a
     // dentist create an Encounter (dentistId: appt.dentistId) for a
     // colleague's appointment.
-    const isRowScopedDentist =
-      actor.permissions.includes('encounter.read.own') &&
-      !actor.permissions.includes('encounter.read.any');
-    if (isRowScopedDentist && appt.dentistId !== actor.sub) {
+    if (this.isRowScopedDentistExceptFrontDesk(actor) && appt.dentistId !== actor.sub) {
       throw new EncounterNotFoundException(appointmentId);
     }
 
@@ -350,10 +362,7 @@ export class MedicalRecordsService {
     };
 
     // BR-MR-019: dentist row-level
-    if (
-      !query.actor.permissions.includes('encounter.read.any') &&
-      query.actor.permissions.includes('encounter.read.own')
-    ) {
+    if (this.isRowScopedDentistExceptFrontDesk(query.actor)) {
       where.dentistId = query.actor.sub;
     }
 
@@ -587,12 +596,18 @@ export class MedicalRecordsService {
 
   /**
    * Cancel an in-progress encounter (admin/dentist override; BR-MR-005).
+   * Row-level like every other clinical write: a caller without
+   * encounter.read.any may only cancel their own encounter (404 otherwise,
+   * so other dentists' encounter ids can't be probed). encounter.cancel is
+   * admin-only in the seeded roles, but a custom role may be granted it.
    */
   async cancelEncounter(encounterId: string, reason: string, actor: JwtPayload) {
     return this.prisma.$transaction(async tx => {
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
-      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      if (!encounter || (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub)) {
+        throw new EncounterNotFoundException(encounterId);
+      }
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
         throw new EncounterNotClosableException(
           `Cannot cancel encounter in status ${encounter.status}`,
