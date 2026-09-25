@@ -36,6 +36,7 @@ import {
 } from './domain/exceptions';
 import { lockDentistCalendar, lockPatientCalendar } from './domain/advisory-lock';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
+import { AvailabilityService } from './availability.service';
 import {
   AvailabilityQueryDto,
   CancelAppointmentDto,
@@ -91,6 +92,7 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly events: EventEmitter2,
+    private readonly availability: AvailabilityService,
   ) {}
 
   // ==========================================================================
@@ -686,155 +688,7 @@ export class AppointmentsService {
   // ==========================================================================
 
   async getAvailability(q: AvailabilityQueryDto) {
-    const scheduleDate = new Date(q.date);
-    const dayStart = startOfClinicDay(q.date);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-
-    // Independent reads run in parallel: this endpoint refetches on every
-    // date/dentist change in the booking form.
-    const [schedules, approvedShifts, overrides] = await Promise.all([
-      this.prisma.workingSchedule.findMany({
-        where: {
-          dentistId: q.dentistId,
-          dayOfWeek: scheduleDate.getUTCDay(),
-          validFrom: { lte: scheduleDate },
-          OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
-          deletedAt: null,
-        },
-        orderBy: { startTime: 'asc' },
-      }),
-      // BR-APPT-027: an APPROVED shift registration opens bookable hours on
-      // that date just like a recurring working schedule does.
-      this.prisma.shiftRegistration.findMany({
-        where: {
-          dentistId: q.dentistId,
-          date: scheduleDate,
-          status: 'APPROVED',
-          deletedAt: null,
-        },
-        orderBy: { startTime: 'asc' },
-      }),
-      this.prisma.scheduleOverride.findMany({
-        where: { dentistId: q.dentistId, date: scheduleDate, deletedAt: null },
-      }),
-    ]);
-    const dayOverrides = overrides ?? [];
-    const closedAllDay = dayOverrides.some(o => o.kind === 'CLOSED' && !o.startTime);
-    const changedHours = dayOverrides.find(o => o.kind === 'CHANGED_HOURS');
-    // BR-SCH-004: changed hours replace the weekly schedule for this day.
-    const weekly =
-      changedHours?.startTime && changedHours.endTime
-        ? [{ startTime: changedHours.startTime, endTime: changedHours.endTime }]
-        : schedules;
-
-    const windows = closedAllDay
-      ? []
-      : [
-          ...weekly.map(sched => ({
-            start: this.combineDateAndTime(q.date, this.toTimeString(sched.startTime)),
-            end: this.combineDateAndTime(q.date, this.toTimeString(sched.endTime)),
-          })),
-          ...approvedShifts.map(shift => ({
-            start: this.combineDateAndTime(q.date, shift.startTime),
-            end: this.combineDateAndTime(q.date, shift.endTime),
-          })),
-        ].sort((a, b) => a.start.getTime() - b.start.getTime());
-
-    if (windows.length === 0) {
-      // A day off is a normal answer for a slot picker, not a 404.
-      return {
-        ...(closedAllDay
-          ? { closedReason: dayOverrides.find(o => o.kind === 'CLOSED')?.reason }
-          : {}),
-        dentistId: q.dentistId,
-        date: q.date,
-        dayOfWeek: scheduleDate.getUTCDay(),
-        workingHours: null,
-        windows: [],
-        busy: [],
-        slotDuration: q.slotDuration ?? 30,
-        availableSlots: [],
-        blockedReason: closedAllDay ? 'CLOSED' : 'NO_SCHEDULE',
-      };
-    }
-
-    const slotMin = q.slotDuration ?? schedules[0]?.slotDurationMin ?? 30;
-
-    const [allBooked, timeOffs] = await Promise.all([
-      this.prisma.appointment.findMany({
-        where: {
-          dentistId: q.dentistId,
-          status: { notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
-          startAt: { gte: dayStart, lt: dayEnd },
-          deletedAt: null,
-        },
-        select: { startAt: true, endAt: true },
-      }),
-      // BR-SCH-001: pending time-off does not block slots yet.
-      this.prisma.timeOff.findMany({
-        where: {
-          dentistId: q.dentistId,
-          status: 'APPROVED',
-          startAt: { lt: dayEnd },
-          endAt: { gt: dayStart },
-          deletedAt: null,
-        },
-        select: { startAt: true, endAt: true },
-      }),
-    ]);
-    // BR-SCH-003: closed ranges block like time-off.
-    const closedRanges = dayOverrides
-      .filter(o => o.kind === 'CLOSED' && o.startTime && o.endTime)
-      .map(o => ({
-        startAt: this.combineDateAndTime(q.date, this.toTimeString(o.startTime!)),
-        endAt: this.combineDateAndTime(q.date, this.toTimeString(o.endTime!)),
-      }));
-    const blocked = [...(timeOffs ?? []), ...closedRanges];
-
-    // Same lead time create() enforces — past slots today can't be booked.
-    const earliestStart = Date.now() + 60_000;
-    // A Set: overlapping windows (schedule + shift) must not list a slot twice.
-    const slots = new Set<string>();
-    for (const { start, end } of windows) {
-      for (let t = start.getTime(); t + slotMin * 60_000 <= end.getTime(); t += slotMin * 60_000) {
-        const slotStart = new Date(t);
-        const slotEnd = new Date(t + slotMin * 60_000);
-        if (t <= earliestStart) continue;
-
-        const overlapsBooked = allBooked.some(b => slotStart < b.endAt && b.startAt < slotEnd);
-        if (overlapsBooked) continue;
-        const overlapsTimeOff = blocked.some(o => slotStart < o.endAt && o.startAt < slotEnd);
-        if (overlapsTimeOff) continue;
-
-        slots.add(this.toClinicTimeString(slotStart));
-      }
-    }
-
-    return {
-      dentistId: q.dentistId,
-      date: q.date,
-      dayOfWeek: scheduleDate.getUTCDay(),
-      workingHours: {
-        startTime: this.toClinicTimeString(windows[0].start),
-        endTime: this.toClinicTimeString(new Date(Math.max(...windows.map(w => w.end.getTime())))),
-      },
-      // Raw intervals (clinic "HH:mm") so the booking form can check an
-      // arbitrary start + duration, not only the fixed slot grid.
-      windows: windows.map(w => ({
-        startTime: this.toClinicTimeString(w.start),
-        endTime: this.toClinicTimeString(w.end),
-      })),
-      busy: [...allBooked, ...blocked]
-        .map(b => ({
-          startTime: b.startAt <= dayStart ? '00:00' : this.toClinicTimeString(b.startAt),
-          endTime: b.endAt >= dayEnd ? '24:00' : this.toClinicTimeString(b.endAt),
-        }))
-        .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-      slotDuration: slotMin,
-      availableSlots: [...slots].sort(),
-      blockedReason: null,
-    };
+    return this.availability.dayAvailability(q.dentistId, q.date, q.slotDuration);
   }
 
   async getWaitingQueue(
@@ -1941,6 +1795,10 @@ export class AppointmentsService {
    * BR-APPT-002/003/004: ensure slot is available — no active appointment
    * collision, inside working schedule, no time-off overlap.
    */
+  /**
+   * BR-APPT-002/003/004/027, BR-SCH-001/003/004: throws when [startAt, endAt)
+   * can't be booked. All rules live in AvailabilityService/day-calendar.
+   */
   private async ensureSlotAvailable(
     dentistId: string,
     startAt: Date,
@@ -1949,146 +1807,28 @@ export class AppointmentsService {
     excludeAppointmentId?: string,
     txClient?: Prisma.TransactionClient,
   ) {
-    const client = (txClient ?? this.prisma) as PrismaService;
-    // Overlap check (not exact startAt match): two appointments conflict when
-    // newStart < existing.endAt AND existing.startAt < newEnd.
-    const conflict = await client.appointment.findFirst({
-      where: {
-        dentistId,
-        startAt: { lt: endAt },
-        endAt: { gt: startAt },
-        status: { notIn: ACTIVE_APPOINTMENT_EXCLUDED_STATUSES },
-        deletedAt: null,
-        ...(excludeAppointmentId ? { NOT: { id: excludeAppointmentId } } : {}),
-      },
-      select: { id: true },
+    const problem = await this.availability.checkSlot(dentistId, startAt, endAt, {
+      db: txClient ?? this.prisma,
+      excludeAppointmentId,
     });
-    if (conflict) throw new SlotConflictException();
-
-    const problem = await this.calendarProblem(dentistId, startAt, endAt, client);
-    if (problem?.kind === 'OUTSIDE_WORKING_HOURS')
+    if (!problem) return;
+    if (problem.kind === 'SLOT_CONFLICT') throw new SlotConflictException();
+    if (problem.kind === 'OUTSIDE_WORKING_HOURS')
       throw new OutsideWorkingHoursException(problem.message);
-    if (problem) throw new DentistUnavailableException(problem.message);
+    throw new DentistUnavailableException(problem.message);
   }
 
-  /**
-   * Why [startAt, endAt) can't be booked for the dentist, ignoring other
-   * bookings — or null. Shared by booking (ensureSlotAvailable) and the
-   * schedule-impact report, so both apply the same rules:
-   * - BR-APPT-003/027: inside the weekly schedule or an APPROVED shift. A
-   *   CHANGED_HOURS override replaces the weekly schedule for that day
-   *   (BR-SCH-004); shifts still add hours (ADR-0009 D3).
-   * - BR-SCH-003: not inside a CLOSED override (whole day or a range).
-   * - BR-APPT-004 / BR-SCH-001: not inside APPROVED time-off.
-   */
-  private async calendarProblem(
+  /** Like ensureSlotAvailable but ignoring bookings, for impact checks. */
+  private calendarProblem(
     dentistId: string,
     startAt: Date,
     endAt: Date,
     client: PrismaService | Prisma.TransactionClient,
-  ): Promise<{ kind: 'OUTSIDE_WORKING_HOURS' | 'CLOSED' | 'TIME_OFF'; message: string } | null> {
-    const localDate = clinicDateOnly(startAt);
-    const scheduleDate = new Date(localDate);
-    const localStart = this.toClinicTimeString(startAt);
-    const localEnd = this.toClinicTimeString(endAt);
-
-    const overrides =
-      (await client.scheduleOverride.findMany({
-        where: { dentistId, date: scheduleDate, deletedAt: null },
-      })) ?? [];
-    if (overrides.some(o => o.kind === 'CLOSED' && !o.startTime)) {
-      return { kind: 'CLOSED', message: `Dentist's calendar is closed on ${localDate}` };
-    }
-    const changed = overrides.find(o => o.kind === 'CHANGED_HOURS');
-
-    let window: { startTime: string; endTime: string } | null = null;
-    if (changed?.startTime && changed.endTime) {
-      const hours = {
-        startTime: this.toTimeString(changed.startTime),
-        endTime: this.toTimeString(changed.endTime),
-      };
-      if (hours.startTime <= localStart && localEnd <= hours.endTime) window = hours;
-    } else {
-      const sched = await client.workingSchedule.findFirst({
-        where: {
-          dentistId,
-          dayOfWeek: scheduleDate.getUTCDay(),
-          startTime: { lte: this.toPgTime(localStart) },
-          endTime: { gte: this.toPgTime(localEnd) },
-          validFrom: { lte: scheduleDate },
-          OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
-          deletedAt: null,
-        },
-      });
-      if (sched) {
-        window = {
-          startTime: this.toTimeString(sched.startTime),
-          endTime: this.toTimeString(sched.endTime),
-        };
-      }
-    }
-    if (!window) {
-      // "HH:mm" strings compare correctly as text (zero-padded).
-      const shift = await client.shiftRegistration.findFirst({
-        where: {
-          dentistId,
-          date: scheduleDate,
-          status: 'APPROVED',
-          startTime: { lte: localStart },
-          endTime: { gte: localEnd },
-          deletedAt: null,
-        },
-      });
-      if (shift) window = { startTime: shift.startTime, endTime: shift.endTime };
-    }
-    if (!window) {
-      return {
-        kind: 'OUTSIDE_WORKING_HOURS',
-        message: changed
-          ? `Dentist works ${this.toTimeString(changed.startTime!)}-${this.toTimeString(changed.endTime!)} on ${localDate} (changed hours)`
-          : 'Dentist has no working schedule for this day',
-      };
-    }
-    const schedStart = this.combineDateAndTime(localDate, window.startTime);
-    const schedEnd = this.combineDateAndTime(localDate, window.endTime);
-    if (startAt < schedStart || endAt > schedEnd) {
-      return {
-        kind: 'OUTSIDE_WORKING_HOURS',
-        message: `Appointment ${startAt.toISOString()} → ${endAt.toISOString()} falls outside working hours ${window.startTime}-${window.endTime}`,
-      };
-    }
-
-    const closedRange = overrides.find(
-      o =>
-        o.kind === 'CLOSED' &&
-        o.startTime &&
-        o.endTime &&
-        this.toTimeString(o.startTime) < localEnd &&
-        localStart < this.toTimeString(o.endTime),
-    );
-    if (closedRange) {
-      return {
-        kind: 'CLOSED',
-        message: `Dentist's calendar is closed ${this.toTimeString(closedRange.startTime!)}-${this.toTimeString(closedRange.endTime!)} on ${localDate}`,
-      };
-    }
-
-    const timeOff = await client.timeOff.findFirst({
-      where: {
-        dentistId,
-        status: 'APPROVED',
-        startAt: { lt: endAt },
-        endAt: { gt: startAt },
-        deletedAt: null,
-      },
+  ) {
+    return this.availability.checkSlot(dentistId, startAt, endAt, {
+      db: client,
+      ignoreBookings: true,
     });
-    if (timeOff) {
-      return {
-        kind: 'TIME_OFF',
-        message: `Dentist is on time-off from ${timeOff.startAt.toISOString()} to ${timeOff.endAt.toISOString()}`,
-      };
-    }
-    return null;
   }
 
   /** A patient can't be in two chairs at once, whichever dentists are involved. */

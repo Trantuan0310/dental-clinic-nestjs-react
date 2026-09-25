@@ -1265,4 +1265,35 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect(after.body.data.map((a: { id: string }) => a.id)).not.toContain(bookedId);
     });
   });
+
+  it('availability search lists active dentists with free starts and skips suspended ones', async () => {
+    const day = new Date(Date.now() + 25 * 86400000 + 7 * 3600000).toISOString().slice(0, 10);
+    const res = await api(
+      'get',
+      `/appointments/availability/search?date=${day}&durationMin=45`,
+    ).expect(200);
+    const rows = res.body.data as Array<{
+      dentistId: string;
+      durationMin: number;
+      availableSlots: string[];
+    }>;
+    const mine = rows.find(r => r.dentistId === users.dentist);
+    expect(mine).toBeDefined();
+    expect(mine!.durationMin).toBe(45);
+    expect(mine!.availableSlots.length).toBeGreaterThan(0);
+    // Suspended by the staff tests above (BR-STAFF-006).
+    expect(rows.map(r => r.dentistId)).not.toContain(users.staffDentist);
+    // Every listed start really is bookable for that length.
+    const first = mine!.availableSlots[0];
+    const startAt = new Date(`${day}T${first}:00+07:00`);
+    await api('post', '/appointments')
+      .send({
+        patientId,
+        dentistId: users.dentist,
+        startAt: startAt.toISOString(),
+        endAt: new Date(startAt.getTime() + 45 * 60000).toISOString(),
+        source: 'PHONE',
+      })
+      .expect(201);
+  });
 });

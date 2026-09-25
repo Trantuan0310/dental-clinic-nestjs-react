@@ -9,6 +9,7 @@ import { BillingController } from '../billing/billing.controller';
 import { AiService } from '../ai/ai.service';
 import { AiController } from '../ai/ai.controller';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { AvailabilityService } from '../appointments/availability.service';
 import { MedicalRecordsService } from '../medical-records/medical-records.service';
 import {
   EncounterNotClosableException,
@@ -139,6 +140,7 @@ describe('Phase one audit regressions', () => {
       db as unknown as PrismaService,
       audit as unknown as AuditService,
       events as unknown as EventEmitter2,
+      new AvailabilityService(db as unknown as PrismaService),
     );
     await expect(
       service.createShiftRegistration(
@@ -161,6 +163,7 @@ describe('Phase one audit regressions', () => {
         db as unknown as PrismaService,
         audit as unknown as AuditService,
         events as unknown as EventEmitter2,
+        new AvailabilityService(db as unknown as PrismaService),
       );
       await service.createShiftRegistration(
         { dentistId, date: '2099-01-01', startTime: '08:00', endTime: '12:00' },
