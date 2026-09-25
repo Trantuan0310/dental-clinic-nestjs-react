@@ -12,6 +12,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { formatDate } from '@/lib/format';
+import { clinicWallClock } from '@/lib/clinicTime';
 import { NAV_ROLE_HINT } from '@/lib/nav';
 
 interface HeaderProps {
@@ -134,7 +135,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
 
           <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm xl:flex dark:border-surface-700 dark:bg-surface-800">
             <CalendarDays className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-            <span className="font-medium text-gray-800 dark:text-surface-100">{formatDate(now, 'dd/MM/yyyy')}</span>
+            <span className="font-medium text-gray-800 dark:text-surface-100">{formatDate(clinicWallClock(now), 'dd/MM/yyyy')}</span>
           </div>
 
           <LanguageSwitcher />

@@ -43,6 +43,7 @@ import {
   getWeekdayLabel,
 } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { clinicToday, clinicWallClock } from '@/lib/clinicTime';
 import { exportCsv, type CsvColumn } from '@/lib/csv';
 import { notify } from '@/components/ui/Toast';
 
@@ -151,7 +152,8 @@ const VIEW_OPTIONS: { id: AppointmentViewMode; label: string }[] = [
 
 export default function AppointmentsListPage() {
   const [view, setView] = useState<AppointmentViewMode>('day');
-  const [date, setDate] = useState<Date>(new Date());
+  // A clinic date, whatever the browser's time zone.
+  const [date, setDate] = useState<Date>(() => clinicWallClock());
   const [tab, setTab] = useState<StatusTab>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -258,7 +260,7 @@ export default function AppointmentsListPage() {
       notify.warning('Không có lịch hẹn nào để xuất.');
       return;
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = clinicToday();
     const filename = `lich-hen_${today}_${visibleRows.length}dong`;
     exportCsv(filename, visibleRows, CSV_COLUMNS);
     notify.success(`Đã xuất ${visibleRows.length} lịch hẹn ra CSV.`);
@@ -273,10 +275,10 @@ export default function AppointmentsListPage() {
   };
 
   const handleToday = () => {
-    setDate(new Date());
+    setDate(clinicWallClock());
   };
 
-  const isToday = isSameDay(date, new Date());
+  const isToday = isSameDay(date, clinicWallClock());
 
   const renderHeaderLabel = () => {
     if (view === 'day') {
@@ -360,9 +362,13 @@ export default function AppointmentsListPage() {
               <span className="text-sm font-medium text-gray-900">{renderHeaderLabel()}</span>
               <input
                 type="date"
+                aria-label="Chọn ngày"
                 value={isoDateOnly(date)}
                 onChange={(e) => {
-                  if (e.target.value) setDate(new Date(e.target.value));
+                  // "yyyy-MM-dd" as a local calendar date: new Date("2026-09-25")
+                  // is UTC midnight, the day before west of UTC.
+                  const [y, m, d] = e.target.value.split('-').map(Number);
+                  if (y && m && d) setDate(new Date(y, m - 1, d));
                 }}
                 className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />

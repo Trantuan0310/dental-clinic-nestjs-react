@@ -6,6 +6,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { useDentistOptions } from './appointmentApi';
 import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
 import { formatTimeOnly } from '@/lib/format';
+import { clinicMinutes, clinicParts, clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
 
 // -----------------------------------------------------------------------------
@@ -42,10 +43,8 @@ const TYPE_LABEL: Record<AppointmentType, string> = {
   follow_up: 'Tái khám',
 };
 
-function minutesFromMidnight(iso: string): number {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
+/** Clinic wall-clock minutes, so blocks sit at clinic time in any browser. */
+const minutesFromMidnight = (iso: string): number => clinicMinutes(iso);
 
 function appointmentTopPx(iso: string): number {
   const min = minutesFromMidnight(iso);
@@ -79,7 +78,7 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
   const dayAppointments = useMemo(
     () =>
       appointments
-        .filter((a) => isSameDay(new Date(a.startsAt), date))
+        .filter((a) => clinicParts(a.startsAt).date === format(date, 'yyyy-MM-dd'))
         .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
     [appointments, date],
   );
@@ -161,7 +160,7 @@ export function WeekView({
   onSlotClick,
   onAppointmentClick,
 }: WeekViewProps) {
-  const today = new Date();
+  const today = clinicWallClock();
 
   return (
     <div className="min-h-[600px]">

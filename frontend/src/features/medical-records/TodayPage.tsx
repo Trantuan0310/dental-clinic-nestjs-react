@@ -9,10 +9,12 @@ import { Button, Card, StatusBadge, EmptyState, FormSkeleton } from '@/component
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
+import { clinicWallClock } from '@/lib/clinicTime';
+import { formatTimeOnly } from '@/lib/format';
 
 export default function TodayPage() {
   const navigate = useNavigate();
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => clinicWallClock());
   const today = format(currentDate, 'yyyy-MM-dd');
   const startEncounter = useStartEncounter();
 
@@ -68,7 +70,7 @@ export default function TodayPage() {
           <Button variant="ghost" size="sm" aria-label="Ngày trước" onClick={() => setCurrentDate(d => addDays(d, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
+          <Button variant="outline" size="sm" onClick={() => setCurrentDate(clinicWallClock())}>
             Hôm nay
           </Button>
           <Button variant="ghost" size="sm" aria-label="Ngày sau" onClick={() => setCurrentDate(d => addDays(d, 1))}>
@@ -133,7 +135,7 @@ export default function TodayPage() {
                       <div className="flex items-start gap-4">
                         <div className="text-center">
                           <p className="text-lg font-bold text-gray-900">
-                            {format(new Date(apt.startsAt), 'HH:mm')}
+                            {formatTimeOnly(apt.startsAt)}
                           </p>
                           <p className="text-xs text-gray-500">
                             {apt.durationMinutes} phút
@@ -153,7 +155,7 @@ export default function TodayPage() {
                             </p>
                           )}
                           <p className="mt-1 text-sm text-gray-400">
-                            Check-in: {apt.checkInAt ? format(new Date(apt.checkInAt), 'HH:mm') : 'Chưa check-in'}
+                            Check-in: {apt.checkInAt ? formatTimeOnly(apt.checkInAt) : 'Chưa check-in'}
                           </p>
                         </div>
                       </div>
