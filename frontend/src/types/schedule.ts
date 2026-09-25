@@ -4,13 +4,15 @@
 // backend/prisma/schema.prisma (WorkingSchedule, TimeOff)
 //
 // Both features live in the Appointments module, not Payroll — there's no
-// dedicated schedule/time-off controller. Only create + list exist on the
-// backend; there's no update/delete/approve for either, so this UI doesn't
-// offer them.
+// dedicated schedule/time-off controller. Time-off has an approval flow and
+// days can be overridden (ADR-0009 phase 3); working schedules are still
+// create + list only.
 // =============================================================================
 
 export type ShiftType = 'MORNING' | 'AFTERNOON' | 'FULL_DAY' | 'NIGHT';
 export type TimeOffType = 'VACATION' | 'SICK' | 'TRAINING' | 'OTHER';
+/** Only APPROVED blocks bookings (BR-SCH-001). */
+export type TimeOffStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 // GET /appointments/schedules returns the raw WorkingSchedule row — no
 // `dentist` relation included, so there's no dentistName here at all;
@@ -52,6 +54,11 @@ export interface TimeOff {
   endAt: string;
   type: TimeOffType;
   reason: string | null;
+  status: TimeOffStatus;
+  createdBy: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
   createdAt: string;
 }
 
@@ -75,4 +82,39 @@ export interface CreateTimeOffPayload {
   endAt: string; // ISO datetime
   type: TimeOffType;
   reason?: string;
+}
+
+export type ScheduleOverrideKind = 'CLOSED' | 'CHANGED_HOURS';
+
+/** One day that differs from the weekly schedule (BR-SCH-003/004). */
+export interface ScheduleOverride {
+  id: string;
+  dentistId: string;
+  date: string; // "YYYY-MM-DD"
+  kind: ScheduleOverrideKind;
+  startTime: string | null; // "HH:mm"; null + CLOSED = whole day
+  endTime: string | null;
+  reason: string;
+  createdAt: string;
+}
+
+export interface CreateScheduleOverridePayload {
+  dentistId: string;
+  date: string;
+  kind: ScheduleOverrideKind;
+  startTime?: string;
+  endTime?: string;
+  reason: string;
+}
+
+export interface CreateScheduleOverrideResult extends ScheduleOverride {
+  affectedAppointments: TimeOffAffectedAppointment[];
+}
+
+/** GET /appointments/schedule-impact row (BR-SCH-005). */
+export interface ImpactedAppointment extends TimeOffAffectedAppointment {
+  dentistId: string;
+  dentistName: string;
+  reason: 'OUTSIDE_WORKING_HOURS' | 'CLOSED' | 'TIME_OFF';
+  message: string;
 }
