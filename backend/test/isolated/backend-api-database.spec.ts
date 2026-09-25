@@ -32,8 +32,15 @@ describe('Real HTTP and PostgreSQL regression', () => {
     const result = await api('post', '/patients').send(patientBody()).expect(201);
     return result.body.data.id as string;
   }
+  // A distinct 15-minute slot 2+ days ahead, always 08:00–21:00 clinic time:
+  // "now + 48h + n×30min" used to run past the dentist's 23:59 day end
+  // depending on the wall clock, failing the suite at some hours.
   function slot() {
-    const start = new Date(Date.now() + (48 * 60 + ++serial * 30) * 60000);
+    const n = ++serial;
+    const day = new Date(Date.now() + (2 + Math.floor(n / 40)) * 86400000 + 7 * 3600000)
+      .toISOString()
+      .slice(0, 10);
+    const start = new Date(new Date(`${day}T08:00:00+07:00`).getTime() + (n % 40) * 20 * 60000);
     return {
       startAt: start.toISOString(),
       endAt: new Date(start.getTime() + 15 * 60000).toISOString(),
@@ -1418,6 +1425,201 @@ describe('Real HTTP and PostgreSQL regression', () => {
       await api('post', '/appointments/walk-in')
         .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 15 })
         .expect(201);
+    });
+  });
+
+  describe('dispatch queue (ADR-0009 phase 6)', () => {
+    let d1: string;
+    let d2: string;
+
+    async function allDayDentist(email: string) {
+      const role = await db.role.findFirstOrThrow({ where: { code: 'dentist' } });
+      const u = await db.user.create({
+        data: {
+          email,
+          fullName: email,
+          passwordHash: 'fixture',
+          status: 'ACTIVE',
+          userRoles: { create: { roleId: role.id } },
+        },
+      });
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        await db.workingSchedule.create({
+          data: {
+            dentistId: u.id,
+            dayOfWeek,
+            startTime: new Date('1970-01-01T00:00:00Z'),
+            endTime: new Date('1970-01-01T23:59:00Z'),
+            validFrom: new Date('2020-01-01'),
+            isPaidShift: false,
+          },
+        });
+      }
+      return u.id;
+    }
+
+    /** A 1-minute booking starting `offsetMin` from now, checked in through the API. */
+    async function checkedIn(dentistId: string, offsetMin: number) {
+      const start = new Date(Math.floor(Date.now() / 60000) * 60000 + offsetMin * 60000);
+      const a = await db.appointment.create({
+        data: {
+          patientId: await patient(),
+          dentistId,
+          startAt: start,
+          endAt: new Date(start.getTime() + 60000),
+          status: 'SCHEDULED',
+        },
+      });
+      await api('post', `/appointments/${a.id}/check-in`).send({}).expect(200);
+      return a.id;
+    }
+
+    const queueOf = async (dentistId: string) =>
+      (await api('get', `/queue?dentistId=${dentistId}`).expect(200)).body.data as Array<{
+        id: string;
+        appointmentId: string;
+        status: string;
+        priority: string;
+        position: number | null;
+      }>;
+
+    beforeAll(async () => {
+      d1 = await allDayDentist('queue-d1@test.local');
+      d2 = await allDayDentist('queue-d2@test.local');
+    });
+
+    it('orders by class, calls one at a time, skips, transfers and closes', async () => {
+      const late = await checkedIn(d1, -20);
+      const onTime = await checkedIn(d1, -5);
+      const walkIn = (
+        await api('post', '/appointments/walk-in')
+          .send({ patientId: await patient(), dentistId: d1, durationMin: 15 })
+          .expect(201)
+      ).body.data.id as string;
+
+      let q = await queueOf(d1);
+      expect(q.map(e => [e.appointmentId, e.priority, e.position])).toEqual([
+        [onTime, 'ON_TIME', 1],
+        [late, 'LATE', 2],
+        [walkIn, 'WALK_IN', 3],
+      ]);
+      const entry = (id: string) => q.find(e => e.appointmentId === id)!.id;
+
+      // BR-DSP-004: an emergency jumps the line.
+      await api('post', `/queue/${entry(walkIn)}/emergency`)
+        .send({ reason: 'Sưng mặt, sốt cao' })
+        .expect(200);
+      q = await queueOf(d1);
+      expect(q[0]).toMatchObject({ appointmentId: walkIn, priority: 'EMERGENCY', position: 1 });
+
+      // Another dentist cannot touch this queue; one called patient per dentist.
+      await api('post', `/queue/${entry(walkIn)}/call`, 'dentist').expect(404);
+      await api('post', `/queue/${entry(walkIn)}/call`).expect(200);
+      const busy = await api('post', `/queue/${entry(onTime)}/call`).expect(409);
+      expect(busy.body.code).toBe('QUEUE_DENTIST_BUSY');
+
+      // BR-DSP-003: skipped goes to the end, and the next one can be called.
+      await api('post', `/queue/${entry(walkIn)}/skip`)
+        .send({ reason: 'Gọi 2 lần' })
+        .expect(200);
+      await api('post', `/queue/${entry(onTime)}/call`).expect(200);
+      q = await queueOf(d1);
+      expect(q.map(e => e.status)).toEqual(['CALLED', 'WAITING', 'SKIPPED']);
+
+      // BR-DSP-005: the late patient moves to d2, keeping their class.
+      await api('post', `/queue/${entry(late)}/transfer`)
+        .send({ dentistId: d2, reason: 'BS 1 quá tải' })
+        .expect(200);
+      expect((await db.appointment.findUniqueOrThrow({ where: { id: late } })).dentistId).toBe(d2);
+      expect((await queueOf(d2)).map(e => [e.appointmentId, e.priority])).toEqual([[late, 'LATE']]);
+      expect(await db.appointmentRescheduleLog.count({ where: { appointmentId: late } })).toBe(1);
+
+      // Starting the exam and LEFT close entries (D5).
+      await api('post', `/appointments/${onTime}/start-encounter`).expect(200);
+      await api('post', `/appointments/${walkIn}/left`)
+        .send({ reason: 'Chờ lâu, xin về' })
+        .expect(200);
+      expect(await queueOf(d1)).toEqual([]);
+      const closed = await db.queueEntry.findMany({
+        where: { appointmentId: { in: [onTime, walkIn] } },
+        orderBy: { closeReason: 'asc' },
+      });
+      expect(closed.map(c => [c.closeReason, c.status])).toEqual([
+        ['LEFT', 'LEFT'],
+        ['STARTED', 'CALLED'],
+      ]);
+
+      const history = await api('get', `/appointments/${walkIn}/history`).expect(200);
+      expect(history.body.data.events.map((e: { action: string }) => e.action)).toEqual(
+        expect.arrayContaining([
+          'QUEUE_EMERGENCY',
+          'QUEUE_CALLED',
+          'QUEUE_SKIPPED',
+          'APPOINTMENT_LEFT',
+        ]),
+      );
+    });
+
+    it("reassigns a day's bookings to a substitute, listing what it could not move", async () => {
+      const day = new Date(Date.now() + 3 * 86400000 + 7 * 3600000).toISOString().slice(0, 10);
+      const at = (hhmm: string) => new Date(`${day}T${hhmm}:00+07:00`);
+      const book = async (dentistId: string, hhmm: string) =>
+        (
+          await db.appointment.create({
+            data: {
+              patientId: await patient(),
+              dentistId,
+              startAt: at(hhmm),
+              endAt: new Date(at(hhmm).getTime() + 30 * 60000),
+              status: 'SCHEDULED',
+            },
+          })
+        ).id;
+      const free = await book(d1, '10:00');
+      const clash = await book(d1, '11:00');
+      await book(d2, '11:15');
+
+      await api('post', '/queue/reassign-day', 'dentist')
+        .send({ fromDentistId: d1, toDentistId: d2, date: day, reason: 'BS 1 nghỉ ốm' })
+        .expect(403);
+      const res = await api('post', '/queue/reassign-day')
+        .send({ fromDentistId: d1, toDentistId: d2, date: day, reason: 'BS 1 nghỉ ốm' })
+        .expect(200);
+      expect(res.body.data.moved.map((m: { appointmentId: string }) => m.appointmentId)).toEqual([
+        free,
+      ]);
+      expect(res.body.data.failed.map((f: { appointmentId: string }) => f.appointmentId)).toEqual([
+        clash,
+      ]);
+      expect((await db.appointment.findUniqueOrThrow({ where: { id: clash } })).dentistId).toBe(d1);
+    });
+
+    it('a treatment may name an active catalogue service (D6)', async () => {
+      const enc = await fixtureEncounter();
+      const category = await db.serviceCategory.create({ data: { code: 'P6_TEST', name: 'P6' } });
+      const mk = (code: string, isActive: boolean) =>
+        db.service.create({
+          data: {
+            code,
+            categoryId: category.id,
+            name: code,
+            defaultDurationMin: 30,
+            basePrice: 300000,
+            isActive,
+          },
+        });
+      const active = await mk('P6_ON', true);
+      const inactive = await mk('P6_OFF', false);
+      const body = (serviceId: string) => ({ serviceId, procedure: 'Trám', unitPrice: 300000 });
+      await api('post', `/medical-records/encounters/${enc}/treatments`, 'dentist')
+        .send(body(inactive.id))
+        .expect(400);
+      const ok = await api('post', `/medical-records/encounters/${enc}/treatments`, 'dentist')
+        .send(body(active.id))
+        .expect(201);
+      expect(
+        (await db.treatment.findUniqueOrThrow({ where: { id: ok.body.data.id } })).serviceId,
+      ).toBe(active.id);
     });
   });
 });

@@ -35,6 +35,8 @@ interface PrismaTreatmentRow {
 
 function toCreateTreatmentBody(payload: CreateTreatmentPayload) {
   return {
+    serviceId: payload.serviceId || undefined,
+    durationMinutes: payload.durationMinutes || undefined,
     procedure: payload.treatmentName || payload.treatmentCode || '',
     description: payload.description ?? payload.notes,
     unitPrice: payload.priceCents,

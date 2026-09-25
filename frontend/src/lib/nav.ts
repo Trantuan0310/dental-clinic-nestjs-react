@@ -19,6 +19,7 @@ import {
   Contact,
   Stethoscope,
   ClipboardPlus,
+  ListOrdered,
 } from 'lucide-react';
 import type { RoleCode } from '@/types/auth';
 
@@ -71,6 +72,7 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
       items: [
         { to: '/patients', labelKey: 'Patients', icon: UserCircle, permission: 'patient.read' },
         { to: '/appointments', labelKey: 'Appointments', icon: CalendarDays, permission: 'appointment.read' },
+        { to: '/dispatch', labelKey: 'Dispatch', icon: ListOrdered, permission: 'queue.manage' },
       ],
     });
   }

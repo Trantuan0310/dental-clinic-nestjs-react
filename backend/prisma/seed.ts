@@ -261,6 +261,20 @@ const PERMISSIONS = [
     action: 'mark_left',
     description: 'Ghi nhận bệnh nhân đã về trước khi khám',
   },
+  // ADR-0009 phase 6 (migration 024 inserts the same rows)
+  { code: 'queue.read', resource: 'queue', action: 'read', description: 'Xem hàng đợi khám' },
+  {
+    code: 'queue.call',
+    resource: 'queue',
+    action: 'call',
+    description: 'Gọi / bỏ qua bệnh nhân trong hàng đợi',
+  },
+  {
+    code: 'queue.manage',
+    resource: 'queue',
+    action: 'manage',
+    description: 'Điều phối: ưu tiên cấp cứu, chuyển bác sĩ, thay bác sĩ cả ngày',
+  },
 
   // Schedule permissions (controllers use dotted/underscored aliases)
   {
@@ -713,6 +727,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'appointment.no_show',
     'appointment.mark_no_show',
     'appointment.mark_left',
+    'queue.read',
+    'queue.call',
+    'queue.manage',
     'appointment.schedule.manage',
     'schedule.write',
     'schedule.read',
@@ -748,6 +765,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   dentist: [
     'patient.read',
+    'queue.read',
+    'queue.call',
     'appointment.read',
     'appointment.read.own',
     'appointment.update',

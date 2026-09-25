@@ -482,6 +482,7 @@ model Appointment {
   encounter        Encounter?
   rescheduleLogs   AppointmentRescheduleLog[]
   services         AppointmentService[]
+  queueEntry       QueueEntry?
 
     // Active slot uniqueness is a partial index managed by migration 017.
   @@index([dentistId, startAt])
@@ -647,6 +648,8 @@ model Treatment {
   description     String?
   unitPrice       Decimal   @map("unit_price") @db.Decimal(12, 2)
   durationMinutes Int?      @map("duration_minutes")
+  /// ADR-0009 D6: set when the treatment was picked from the catalogue.
+  serviceId       String?   @map("service_id") @db.Uuid
   sequence        Int       @default(0)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
@@ -655,6 +658,7 @@ model Treatment {
 
   encounter         Encounter                  @relation(fields: [encounterId], references: [id])
   creator               User?               @relation("TreatmentCreator", fields: [createdBy], references: [id])
+  service               Service?            @relation(fields: [serviceId], references: [id])
   inventoryUsages       TreatmentInventoryUsage[]
   invoiceItems          InvoiceItem[]
   payrollDetails        PayrollEncounterDetail[]
@@ -1390,6 +1394,7 @@ model Service {
   category            ServiceCategory      @relation(fields: [categoryId], references: [id])
   dentistServices     DentistService[]
   appointmentServices AppointmentService[]
+  treatments          Treatment[]
 
   @@map("services")
 }
@@ -1468,4 +1473,50 @@ model AppointmentService {
   @@unique([appointmentId, serviceId])
   @@index([serviceId])
   @@map("appointment_services")
+}
+
+// ADR-0009 phase 6 — dispatch queue (D5): the time before the exam only.
+enum QueueStatus {
+  WAITING
+  CALLED
+  SKIPPED
+  LEFT
+}
+
+/// Declared in dispatch order: emergency first, walk-ins last.
+enum QueuePriority {
+  EMERGENCY
+  ON_TIME
+  LATE
+  WALK_IN
+}
+
+model QueueEntry {
+  id                String        @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId     String        @unique @map("appointment_id") @db.Uuid
+  dentistId         String        @map("dentist_id") @db.Uuid
+  queueDate         DateTime      @map("queue_date") @db.Date
+  status            QueueStatus   @default(WAITING)
+  priority          QueuePriority
+  checkedInAt       DateTime      @map("checked_in_at") @db.Timestamptz()
+  emergencyReason   String?       @map("emergency_reason")
+  calledAt          DateTime?     @map("called_at") @db.Timestamptz()
+  calledBy          String?       @map("called_by") @db.Uuid
+  callCount         Int           @default(0) @map("call_count") @db.SmallInt
+  skippedAt         DateTime?     @map("skipped_at") @db.Timestamptz()
+  skipReason        String?       @map("skip_reason")
+  skipCount         Int           @default(0) @map("skip_count") @db.SmallInt
+  transferredFromId String?       @map("transferred_from_id") @db.Uuid
+  transferReason    String?       @map("transfer_reason")
+  doneAt            DateTime?     @map("done_at") @db.Timestamptz()
+  /// STARTED | CANCELLED | LEFT
+  closeReason       String?       @map("close_reason") @db.VarChar(20)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy         String?       @map("created_by") @db.Uuid
+  updatedBy         String?       @map("updated_by") @db.Uuid
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("queue_entries")
 }

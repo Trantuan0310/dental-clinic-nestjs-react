@@ -55,6 +55,7 @@ import {
   ListTimeOffsQueryDto,
   ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
+import { closeQueueEntry, enqueue } from './domain/queue';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
@@ -317,22 +318,24 @@ export class AppointmentsService {
     // (e.g. cancel overwriting a check-in that already happened, patient
     // physically in the waiting room). Same guarded-updateMany pattern as
     // inventory stock writes and shift-registration approve/reject/cancel.
-    const checkInResult = await this.prisma.appointment.updateMany({
-      where: { id: appointmentId, status: appt.status },
-      data: {
-        status: AppointmentStatus.CHECKED_IN,
-        checkedInAt: new Date(now),
-        checkedInBy: actor.sub,
-        updatedBy: actor.sub,
-      },
-    });
-    if (checkInResult.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Appointment was changed by someone else — reload and try again',
-      );
-    }
-    const updated = await this.prisma.appointment.findUniqueOrThrow({
-      where: { id: appointmentId },
+    const updated = await this.prisma.$transaction(async tx => {
+      const checkInResult = await tx.appointment.updateMany({
+        where: { id: appointmentId, status: appt.status },
+        data: {
+          status: AppointmentStatus.CHECKED_IN,
+          checkedInAt: new Date(now),
+          checkedInBy: actor.sub,
+          updatedBy: actor.sub,
+        },
+      });
+      if (checkInResult.count === 0) {
+        throw new InvalidAppointmentStateException(
+          'Appointment was changed by someone else — reload and try again',
+        );
+      }
+      // ADR-0009 D5: checking in puts the patient in the dentist's queue.
+      await enqueue(tx, appt, new Date(now), actor.sub);
+      return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
     });
 
     await this.audit.log({
@@ -376,6 +379,7 @@ export class AppointmentsService {
         throw new InvalidAppointmentStateException('Encounter is cancelled');
       }
 
+      await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       const updated =
         appt.status === AppointmentStatus.CHECKED_IN
           ? await tx.appointment.update({
@@ -485,6 +489,7 @@ export class AppointmentsService {
         );
       }
       const u = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+      await closeQueueEntry(tx, appointmentId, 'CANCELLED', actor.sub);
 
       // Cascade: BD-0008 — if Encounter is in_progress, mark CANCELLED.
       // Handled here in same tx so ROLLBACK rolls back both. Sync emit below.
@@ -1772,7 +1777,7 @@ export class AppointmentsService {
    * dentist that day. Length = sum of each service's duration (the dentist's
    * override first, BR-SVC-006); buffers = the largest of the services (D4).
    */
-  private async planVisit(
+  async planVisit(
     dentistId: string,
     serviceIds: string[] | undefined,
     localDate: string,
@@ -1868,7 +1873,7 @@ export class AppointmentsService {
       await this.lockPatient(tx, dto.patientId);
       await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx, plan);
       await this.ensurePatientFree(dto.patientId, startAt, endAt, undefined, tx);
-      return tx.appointment.create({
+      const walkIn = await tx.appointment.create({
         data: {
           patientId: dto.patientId,
           dentistId: dto.dentistId,
@@ -1888,6 +1893,8 @@ export class AppointmentsService {
         },
         include: { services: true },
       });
+      await enqueue(tx, walkIn, walkIn.checkedInAt ?? startAt, actor.sub);
+      return walkIn;
     });
     await this.audit.log({
       action: 'APPOINTMENT_WALK_IN',
@@ -1916,20 +1923,23 @@ export class AppointmentsService {
         `Only a checked-in patient can leave before the exam (status is ${appt.status})`,
       );
     }
-    const result = await this.prisma.appointment.updateMany({
-      where: { id: appointmentId, status: AppointmentStatus.CHECKED_IN },
-      data: {
-        status: AppointmentStatus.LEFT,
-        leftAt: new Date(),
-        leftReason: dto.reason.trim(),
-        updatedBy: actor.sub,
-      },
+    await this.prisma.$transaction(async tx => {
+      const result = await tx.appointment.updateMany({
+        where: { id: appointmentId, status: AppointmentStatus.CHECKED_IN },
+        data: {
+          status: AppointmentStatus.LEFT,
+          leftAt: new Date(),
+          leftReason: dto.reason.trim(),
+          updatedBy: actor.sub,
+        },
+      });
+      if (result.count === 0) {
+        throw new InvalidAppointmentStateException(
+          'Appointment was changed by someone else — reload and try again',
+        );
+      }
+      await closeQueueEntry(tx, appointmentId, 'LEFT', actor.sub);
     });
-    if (result.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Appointment was changed by someone else — reload and try again',
-      );
-    }
     await this.audit.log({
       action: 'APPOINTMENT_LEFT',
       actorUserId: actor.sub,
@@ -1985,7 +1995,7 @@ export class AppointmentsService {
    * dentist read-only-blocked from someone else's appointment nonetheless
    * edit, reschedule, cancel or start an encounter for it.
    */
-  private isRowScopedDentist(actor: JwtPayload): boolean {
+  isRowScopedDentist(actor: JwtPayload): boolean {
     return (
       actor.permissions.includes('appointment.read.own') &&
       !actor.permissions.includes('appointment.read.any')
@@ -2000,7 +2010,7 @@ export class AppointmentsService {
    * (created before migration 019 or by an old seed) are accepted by role
    * alone until PR-7 removes that fallback.
    */
-  private async validateDentist(dentistId: string, { forBooking = true } = {}) {
+  async validateDentist(dentistId: string, { forBooking = true } = {}) {
     const u = await this.prisma.user.findUnique({
       where: { id: dentistId },
       include: { userRoles: { include: { role: true } }, dentistProfile: true },
@@ -2043,7 +2053,7 @@ export class AppointmentsService {
    * BR-APPT-002/003/004/027, BR-SCH-001/003/004: throws when [startAt, endAt)
    * can't be booked. All rules live in AvailabilityService/day-calendar.
    */
-  private async ensureSlotAvailable(
+  async ensureSlotAvailable(
     dentistId: string,
     startAt: Date,
     endAt: Date,

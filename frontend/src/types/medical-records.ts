@@ -421,6 +421,9 @@ export interface CreateNotePayload {
 
 export interface CreateTreatmentPayload {
   encounterId: string;
+  /** Catalogue service the treatment was picked from (ADR-0009 D6). */
+  serviceId?: string;
+  durationMinutes?: number;
   toothNumber: number | string;
   treatmentCode: string;
   treatmentName?: string;
