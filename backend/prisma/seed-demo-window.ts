@@ -5,6 +5,8 @@ import { PrismaClient } from '@prisma/client';
 import { clinicDateOnly, CLINIC_UTC_OFFSET_MS } from '../src/common/date-range.util';
 
 const prisma = new PrismaClient();
+/** How long after global setup a flow may still book (suite ≈ 6 min + 15 min lead + 30 min visit). */
+const NEEDED_MIN = 60;
 /** What makes a row this script's fixture (see the leftover cleanup below). */
 const FIXTURE_SIGNATURE = {
   isPaidShift: false,
@@ -51,8 +53,14 @@ async function main() {
       OR: [{ validTo: null }, { validTo: { gte: date } }],
     },
   });
+  // The flows book "now + up to 15 min" for 30 min, several minutes after
+  // this runs (global setup happens before the whole suite), so the dentist
+  // must be working until well after that: NEEDED_MIN covers a full suite
+  // run plus the latest booking a flow makes.
   if (
-    schedules.some(s => minutesOf(s.startTime) <= minute + 3 && minutesOf(s.endTime) >= minute + 30)
+    schedules.some(
+      s => minutesOf(s.startTime) <= minute + 3 && minutesOf(s.endTime) >= minute + NEEDED_MIN,
+    )
   ) {
     process.stdout.write('none');
     return;
@@ -60,10 +68,11 @@ async function main() {
   // A window around "now". It may overlap a shift that ends too soon or starts
   // shortly: the calendar accepts a visit that fits any one window and lists
   // each free start once (day-calendar.ts), so the overlap is harmless and
-  // the suite can run at any hour except the last 30 minutes of the day.
+  // the suite can run at any hour except the last NEEDED_MIN of the day.
   const start = Math.max(0, minute - 2);
-  const end = Math.min(1439, minute + 45);
-  if (end < minute + 30) throw new Error('Too close to midnight for the full demo; run after 00:00');
+  const end = Math.min(1439, minute + NEEDED_MIN + 15);
+  if (end < minute + NEEDED_MIN)
+    throw new Error('Too close to midnight for the full demo; run after 00:00');
   const fixture = await prisma.workingSchedule.create({
     data: {
       dentistId: dentist.id,
