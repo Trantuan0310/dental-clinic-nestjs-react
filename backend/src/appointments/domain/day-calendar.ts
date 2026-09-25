@@ -41,8 +41,14 @@ export interface DayInputs {
   }>;
   /** APPROVED time-off overlapping the day. */
   timeOffs: Array<{ startAt: Date; endAt: Date }>;
-  /** Appointments holding a slot (not CANCELLED/NO_SHOW, not deleted). */
-  bookings: Array<{ id: string; startAt: Date; endAt: Date }>;
+  /** Appointments holding a slot (not CANCELLED/NO_SHOW/LEFT, not deleted). */
+  bookings: Array<{
+    id: string;
+    startAt: Date;
+    endAt: Date;
+    bufferBeforeMin?: number | null;
+    bufferAfterMin?: number | null;
+  }>;
 }
 
 export interface DayCalendar {
@@ -51,6 +57,7 @@ export interface DayCalendar {
   windows: Interval[];
   /** Time-off and closed ranges inside the day. */
   blocked: Array<Interval & { kind: 'TIME_OFF' | 'CLOSED' }>;
+  /** The time each booking occupies, buffers included (ADR-0009 D4). */
   bookings: Array<Interval & { id: string }>;
   closedAllDay: boolean;
   closedReason: string | null;
@@ -77,6 +84,19 @@ export function clinicHhmm(value: Date): string {
 }
 
 const overlaps = (a: Interval, b: Interval) => a.start < b.end && b.start < a.end;
+
+export interface Buffers {
+  beforeMin?: number;
+  afterMin?: number;
+}
+
+/** [start - before, end + after]: what a visit keeps the dentist busy for (D4). */
+export function occupied(visit: Interval, buffers: Buffers = {}): Interval {
+  return {
+    start: new Date(visit.start.getTime() - (buffers.beforeMin ?? 0) * 60_000),
+    end: new Date(visit.end.getTime() + (buffers.afterMin ?? 0) * 60_000),
+  };
+}
 
 export function buildDayCalendar(i: DayInputs): DayCalendar {
   const closedAll = i.overrides.find(o => o.kind === 'CLOSED' && !o.startTime);
@@ -108,7 +128,13 @@ export function buildDayCalendar(i: DayInputs): DayCalendar {
     date: i.date,
     windows,
     blocked,
-    bookings: i.bookings.map(b => ({ id: b.id, start: b.startAt, end: b.endAt })),
+    bookings: i.bookings.map(b => ({
+      id: b.id,
+      ...occupied(
+        { start: b.startAt, end: b.endAt },
+        { beforeMin: b.bufferBeforeMin ?? 0, afterMin: b.bufferAfterMin ?? 0 },
+      ),
+    })),
     closedAllDay: Boolean(closedAll),
     closedReason: closedAll?.reason ?? null,
     changedHours: Boolean(changed),
@@ -120,11 +146,15 @@ export function buildDayCalendar(i: DayInputs): DayCalendar {
  * Why [start, end) cannot be booked, or null. Checked in this order so the
  * message names the most basic reason: closed day → outside working hours →
  * closed range → time-off → another booking.
+ *
+ * The visit itself must fit a working window; its buffers (prep before,
+ * clean-up after) must not overlap time-off, closed ranges or another
+ * booking's occupied time, but may reach past the window edges (D4).
  */
 export function intervalProblem(
   cal: DayCalendar,
   slot: Interval,
-  opts: { excludeBookingId?: string; ignoreBookings?: boolean } = {},
+  opts: { excludeBookingId?: string; ignoreBookings?: boolean; buffers?: Buffers } = {},
 ): SlotProblem | null {
   if (cal.closedAllDay) {
     return { kind: 'CLOSED', message: `Dentist's calendar is closed on ${cal.date}` };
@@ -140,7 +170,8 @@ export function intervalProblem(
         : 'Dentist has no working schedule for this day',
     };
   }
-  const block = cal.blocked.find(b => overlaps(b, slot));
+  const busy = occupied(slot, opts.buffers);
+  const block = cal.blocked.find(b => overlaps(b, busy));
   if (block) {
     return block.kind === 'CLOSED'
       ? {
@@ -156,7 +187,7 @@ export function intervalProblem(
     const clash = cal.bookings.find(
       b =>
         (opts.excludeBookingId === undefined || b.id !== opts.excludeBookingId) &&
-        overlaps(b, slot),
+        overlaps(b, busy),
     );
     if (clash) return { kind: 'SLOT_CONFLICT', message: 'This time slot is already booked' };
   }
@@ -172,6 +203,7 @@ export function freeSlots(
   durationMin: number,
   stepMin: number,
   notBefore: Date,
+  buffers: Buffers = {},
 ): string[] {
   const slots = new Set<string>();
   for (const w of cal.windows) {
@@ -182,7 +214,7 @@ export function freeSlots(
     ) {
       if (t <= notBefore.getTime()) continue;
       const slot = { start: new Date(t), end: new Date(t + durationMin * 60_000) };
-      if (!intervalProblem(cal, slot)) slots.add(clinicHhmm(slot.start));
+      if (!intervalProblem(cal, slot, { buffers })) slots.add(clinicHhmm(slot.start));
     }
   }
   return [...slots].sort();

@@ -1296,4 +1296,128 @@ describe('Real HTTP and PostgreSQL regression', () => {
       })
       .expect(201);
   });
+
+  describe('multi-service appointments, walk-in and LEFT (ADR-0009 phase 5)', () => {
+    let serviceA: string;
+    let serviceB: string;
+    const day = new Date(Date.now() + 30 * 86400000 + 7 * 3600000).toISOString().slice(0, 10);
+    const at = (hhmm: string) => new Date(`${day}T${hhmm}:00+07:00`).toISOString();
+
+    beforeAll(async () => {
+      const category = await db.serviceCategory.create({
+        data: { code: 'P5_TEST', name: 'Phase 5' },
+      });
+      const mk = (code: string, minutes: number, before: number, after: number) =>
+        db.service.create({
+          data: {
+            code,
+            categoryId: category.id,
+            name: code,
+            defaultDurationMin: minutes,
+            bufferBeforeMin: before,
+            bufferAfterMin: after,
+            basePrice: 200000,
+          },
+        });
+      serviceA = (await mk('P5_A', 30, 0, 10)).id;
+      serviceB = (await mk('P5_B', 20, 5, 0)).id;
+      for (const serviceId of [serviceA, serviceB]) {
+        await db.dentistService.create({
+          data: { dentistId: users.dentist, serviceId, effectiveFrom: new Date('2020-01-01') },
+        });
+      }
+    });
+
+    it('books services as one visit with snapshots and buffers', async () => {
+      const res = await api('post', '/appointments')
+        .send({
+          patientId,
+          dentistId: users.dentist,
+          startAt: at('09:00'),
+          serviceIds: [serviceA, serviceB],
+          source: 'PHONE',
+        })
+        .expect(201);
+      const appt = await db.appointment.findUniqueOrThrow({
+        where: { id: res.body.data.id },
+        include: { services: true },
+      });
+      expect(appt.endAt.toISOString()).toBe(at('09:50'));
+      expect(appt).toMatchObject({
+        calculatedDurationMin: 50,
+        bufferBeforeMin: 5,
+        bufferAfterMin: 10,
+      });
+      expect(appt.services.map(sv => sv.serviceCode).sort()).toEqual(['P5_A', 'P5_B']);
+
+      // 09:50 + 10 min clean-up: 09:55 is taken, 10:00 is free.
+      const p2 = await patient();
+      await api('post', '/appointments')
+        .send({
+          patientId: p2,
+          dentistId: users.dentist,
+          startAt: at('09:55'),
+          endAt: at('10:10'),
+          source: 'PHONE',
+        })
+        .expect(409);
+      await api('post', '/appointments')
+        .send({
+          patientId: p2,
+          dentistId: users.dentist,
+          startAt: at('10:00'),
+          endAt: at('10:15'),
+          source: 'PHONE',
+        })
+        .expect(201);
+
+      const history = await api('get', `/appointments/${res.body.data.id}/history`).expect(200);
+      expect(history.body.data.events[0]).toMatchObject({ action: 'APPOINTMENT_CREATED' });
+    });
+
+    it('a walk-in is checked in now; LEFT releases the slot', async () => {
+      // A dentist of its own: the other tests keep users.dentist busy around now.
+      const role = await db.role.findFirstOrThrow({ where: { code: 'dentist' } });
+      const walkInDentist = await db.user.create({
+        data: {
+          email: 'walkin-dentist@test.local',
+          fullName: 'Walk-in dentist',
+          passwordHash: 'fixture',
+          status: 'ACTIVE',
+          userRoles: { create: { roleId: role.id } },
+        },
+      });
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        await db.workingSchedule.create({
+          data: {
+            dentistId: walkInDentist.id,
+            dayOfWeek,
+            startTime: new Date('1970-01-01T00:00:00Z'),
+            endTime: new Date('1970-01-01T23:59:00Z'),
+            validFrom: new Date('2020-01-01'),
+            isPaidShift: false,
+          },
+        });
+      }
+      const walkIn = await api('post', '/appointments/walk-in')
+        .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 15 })
+        .expect(201);
+      expect(walkIn.body.data).toMatchObject({ status: 'CHECKED_IN', visitKind: 'WALK_IN' });
+
+      await api('post', `/appointments/${walkIn.body.data.id}/left`, 'dentist')
+        .send({ reason: 'Bệnh nhân có việc gấp' })
+        .expect(403);
+      const left = await api('post', `/appointments/${walkIn.body.data.id}/left`)
+        .send({ reason: 'Bệnh nhân có việc gấp' })
+        .expect(200);
+      expect(left.body.data).toMatchObject({ status: 'LEFT', leftReason: 'Bệnh nhân có việc gấp' });
+      await api('post', `/appointments/${walkIn.body.data.id}/left`)
+        .send({ reason: 'Lần thứ hai' })
+        .expect(409);
+      // The slot is free again: another walk-in right now is accepted.
+      await api('post', '/appointments/walk-in')
+        .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 15 })
+        .expect(201);
+    });
+  });
 });

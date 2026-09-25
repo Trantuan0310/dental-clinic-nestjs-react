@@ -11,6 +11,8 @@ import {
   Matches,
   MinLength,
   MaxLength,
+  ArrayMaxSize,
+  ArrayUnique,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -66,6 +68,74 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsEnum(AppointmentType)
   appointmentType?: AppointmentType;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Catalogue services (≤ 5); duration and buffers are derived from them',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  serviceIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Required when endAt gives a different length than the services add up to',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  durationOverrideReason?: string;
+}
+
+/** A patient who walks in now (ADR-0009 phase 5): booked and checked in at once. */
+export class CreateWalkInDto {
+  @ApiProperty()
+  @IsUUID()
+  patientId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  dentistId!: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  serviceIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Visit length when no services are chosen' })
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(480)
+  durationMin?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  chiefComplaint?: string;
+
+  @ApiPropertyOptional({ enum: AppointmentType })
+  @IsOptional()
+  @IsEnum(AppointmentType)
+  appointmentType?: AppointmentType;
+}
+
+export class MarkLeftDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  reason!: string;
 }
 
 export class UpdateAppointmentDto {
@@ -211,8 +281,22 @@ export class AvailabilityQueryDto {
   @IsOptional()
   @IsInt()
   @Min(15)
-  @Max(120)
+  @Max(480)
   slotDuration?: number;
+
+  @ApiPropertyOptional({ description: 'Prep time before each visit (D4)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  bufferBeforeMin?: number;
+
+  @ApiPropertyOptional({ description: 'Clean-up time after each visit (D4)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  bufferAfterMin?: number;
 }
 
 export class AvailabilitySearchQueryDto {

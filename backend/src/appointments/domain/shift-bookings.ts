@@ -42,6 +42,7 @@ export function countActiveBookingsInShift(
         notIn: [
           AppointmentStatus.CANCELLED,
           AppointmentStatus.NO_SHOW,
+          AppointmentStatus.LEFT,
           AppointmentStatus.COMPLETED,
         ],
       },

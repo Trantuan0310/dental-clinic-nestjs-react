@@ -172,6 +172,69 @@ describe('day calendar decision table', () => {
     expect(problem?.kind ?? null).toBe(expected);
   });
 
+  describe('buffers (ADR-0009 D4)', () => {
+    const withBooking = (bufferAfterMin: number, bufferBeforeMin = 0) => {
+      const inputs = base();
+      inputs.bookings = [
+        { id: 'b1', startAt: at('09:00'), endAt: at('09:30'), bufferBeforeMin, bufferAfterMin },
+      ];
+      return buildDayCalendar(inputs);
+    };
+
+    it("an existing booking's clean-up time blocks the next visit", () => {
+      expect(intervalProblem(withBooking(10), { start: at('09:30'), end: at('10:00') })?.kind).toBe(
+        'SLOT_CONFLICT',
+      );
+      expect(intervalProblem(withBooking(10), { start: at('09:40'), end: at('10:10') })).toBeNull();
+    });
+
+    it("the new visit's prep time must not overlap the previous booking", () => {
+      const cal = withBooking(0);
+      expect(
+        intervalProblem(
+          cal,
+          { start: at('09:30'), end: at('10:00') },
+          { buffers: { beforeMin: 15 } },
+        )?.kind,
+      ).toBe('SLOT_CONFLICT');
+      expect(
+        intervalProblem(
+          cal,
+          { start: at('09:45'), end: at('10:15') },
+          { buffers: { beforeMin: 15 } },
+        ),
+      ).toBeNull();
+    });
+
+    it('buffers may reach past the working window but not into time-off', () => {
+      const inputs = base();
+      expect(
+        intervalProblem(
+          buildDayCalendar(inputs),
+          { start: at('08:00'), end: at('08:30') },
+          { buffers: { beforeMin: 10 } },
+        ),
+      ).toBeNull();
+      inputs.timeOffs = [{ startAt: at('10:00'), endAt: at('11:00') }];
+      expect(
+        intervalProblem(
+          buildDayCalendar(inputs),
+          { start: at('09:30'), end: at('10:00') },
+          { buffers: { afterMin: 10 } },
+        )?.kind,
+      ).toBe('TIME_OFF');
+    });
+
+    it('free slots account for buffers', () => {
+      const inputs = base();
+      inputs.schedules = [{ startTime: t('08:00'), endTime: t('10:00'), slotDurationMin: 30 }];
+      inputs.bookings = [{ id: 'b1', startAt: at('09:00'), endAt: at('09:30'), bufferAfterMin: 0 }];
+      expect(
+        freeSlots(buildDayCalendar(inputs), 30, 30, new Date('2000-01-01'), { afterMin: 10 }),
+      ).toEqual(['08:00', '09:30']);
+    });
+  });
+
   it('rescheduling ignores the appointment being moved', () => {
     const inputs = base();
     inputs.bookings = [{ id: 'moving', startAt: at('09:00'), endAt: at('09:30') }];
