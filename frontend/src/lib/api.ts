@@ -81,7 +81,10 @@ api.interceptors.response.use(
       original &&
       !original._retry &&
       original.url &&
-      !original.url.includes('/auth/')
+      !original.url.includes('/auth/') &&
+      // Public booking endpoints answer 401 for a wrong lookup code; that is
+      // the patient's error to show, not an expired staff session.
+      !original.url.startsWith('/public/')
     ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

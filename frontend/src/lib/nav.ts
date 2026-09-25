@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
+  Inbox,
   Users,
   CalendarDays,
   UserCircle,
@@ -73,6 +74,12 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         { to: '/patients', labelKey: 'Patients', icon: UserCircle, permission: 'patient.read' },
         { to: '/appointments', labelKey: 'Appointments', icon: CalendarDays, permission: 'appointment.read' },
         { to: '/dispatch', labelKey: 'Dispatch', icon: ListOrdered, permission: 'queue.manage' },
+        {
+          to: '/booking-requests',
+          labelKey: 'BookingRequests',
+          icon: Inbox,
+          permission: 'booking_request.read',
+        },
       ],
     });
   }

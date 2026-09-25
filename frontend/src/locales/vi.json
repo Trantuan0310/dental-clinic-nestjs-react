@@ -95,6 +95,11 @@
       "password": "Mật khẩu",
       "submit": "Đăng nhập",
       "forgotPassword": "Quên mật khẩu?",
+      "patient": {
+        "prompt": "Bạn là bệnh nhân?",
+        "book": "Đặt lịch khám",
+        "status": "Tra cứu yêu cầu"
+      },
       "hero": {
         "headlinePrefix": "Phòng khám ",
         "headlineHighlight": "vận hành gọn gàng",
@@ -151,6 +156,7 @@
     "Patients": "Bệnh nhân",
     "Appointments": "Lịch hẹn",
     "Today": "Hôm nay",
+    "BookingRequests": "Yêu cầu đặt lịch",
     "Dispatch": "Điều phối",
     "MyQueue": "Hàng chờ của tôi",
     "MedicalRecords": "Bệnh án",

@@ -247,6 +247,20 @@ const PERMISSIONS = [
     description: 'Tạo/sửa/ngừng dịch vụ và nhóm dịch vụ',
   },
 
+  // Online booking requests (migration 025 inserts the same rows)
+  {
+    code: 'booking_request.read',
+    resource: 'booking_request',
+    action: 'read',
+    description: 'Xem yêu cầu đặt lịch trực tuyến',
+  },
+  {
+    code: 'booking_request.manage',
+    resource: 'booking_request',
+    action: 'manage',
+    description: 'Xử lý yêu cầu đặt lịch trực tuyến',
+  },
+
   // Time-off approval (ADR-0009 phase 3; migration 021 inserts the same row)
   {
     code: 'time_off.approve',
@@ -738,6 +752,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'dentist.read',
     'dentist.manage_schedule',
     'service.read',
+    'booking_request.read',
+    'booking_request.manage',
     'encounter.read.basic',
     'encounter.start',
     'invoice.create',
