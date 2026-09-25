@@ -246,6 +246,14 @@ const PERMISSIONS = [
     description: 'Tạo/sửa/ngừng dịch vụ và nhóm dịch vụ',
   },
 
+  // Time-off approval (ADR-0009 phase 3; migration 021 inserts the same row)
+  {
+    code: 'time_off.approve',
+    resource: 'time_off',
+    action: 'approve',
+    description: 'Duyệt/từ chối đơn nghỉ phép của bác sĩ',
+  },
+
   // Schedule permissions (controllers use dotted/underscored aliases)
   {
     code: 'schedule.write',

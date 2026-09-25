@@ -20,7 +20,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
   let encounterId: string;
   let invoiceId: string;
   const password = 'Password123!';
-  const api = (method: 'get' | 'post' | 'put' | 'patch', path: string, role = 'admin') =>
+  const api = (method: 'get' | 'post' | 'put' | 'patch' | 'delete', path: string, role = 'admin') =>
     request(app.getHttpServer())[method](`/api/v1${path}`).auth(tokens[role], { type: 'bearer' });
   const patientBody = () => ({
     fullName: `Test patient ${++serial}`,
@@ -751,6 +751,8 @@ describe('Real HTTP and PostgreSQL regression', () => {
         endAt: new Date(s.endAt),
         type: 'VACATION',
         createdBy: users.admin,
+        // Only approved time-off blocks bookings (BR-SCH-001).
+        status: 'APPROVED',
       },
     });
     try {
@@ -1158,5 +1160,109 @@ describe('Real HTTP and PostgreSQL regression', () => {
     await api('post', `/medical-records/encounters/${encounterId}/cancel`)
       .send({ reason: 'Quản trị hủy' })
       .expect(200);
+  });
+
+  describe('time-off approval and schedule overrides (ADR-0009 phase 3)', () => {
+    // Front-desk calls use the admin token: the reception account is
+    // terminated by the staff tests above. A clinic day well clear of the
+    // other tests' bookings.
+    const day = new Date(Date.now() + 20 * 86400000 + 7 * 3600000).toISOString().slice(0, 10);
+    const at = (hhmm: string) => new Date(`${day}T${hhmm}:00+07:00`).toISOString();
+    let bookedId: string;
+
+    it('a dentist request stays PENDING and does not block bookings until approved', async () => {
+      const booked = await api('post', '/appointments')
+        .send({
+          patientId,
+          dentistId: users.dentist,
+          startAt: at('09:00'),
+          endAt: at('09:30'),
+          source: 'PHONE',
+        })
+        .expect(201);
+      bookedId = booked.body.data.id;
+
+      const request = await api('post', '/appointments/time-offs', 'dentist')
+        .send({
+          dentistId: users.dentist,
+          startAt: at('10:00'),
+          endAt: at('12:00'),
+          type: 'VACATION',
+        })
+        .expect(201);
+      expect(request.body.data.status).toBe('PENDING');
+      const timeOffId = request.body.data.id;
+
+      // Still bookable while pending.
+      const inside = await api('post', '/appointments')
+        .send({
+          patientId,
+          dentistId: users.dentist,
+          startAt: at('10:30'),
+          endAt: at('11:00'),
+          source: 'PHONE',
+        })
+        .expect(201);
+
+      await api('post', `/appointments/time-offs/${timeOffId}/approve`, 'dentist')
+        .send({})
+        .expect(403);
+      const approved = await api('post', `/appointments/time-offs/${timeOffId}/approve`)
+        .send({ note: 'Đồng ý' })
+        .expect(200);
+      expect(approved.body.data.status).toBe('APPROVED');
+      expect(approved.body.data.affectedAppointments.map((a: { id: string }) => a.id)).toContain(
+        inside.body.data.id,
+      );
+
+      const refused = await api('post', '/appointments')
+        .send({
+          patientId,
+          dentistId: users.dentist,
+          startAt: at('11:00'),
+          endAt: at('11:30'),
+          source: 'PHONE',
+        })
+        .expect(400);
+      expect(refused.body.message).toMatch(/time-off/);
+      await api('post', `/appointments/${inside.body.data.id}/cancel`)
+        .send({ reason: 'Bác sĩ nghỉ phép' })
+        .expect(200);
+    });
+
+    it('closing the day lists the booking in the impact report until the override is removed', async () => {
+      await api('post', '/appointments/schedule-overrides', 'dentist')
+        .send({ dentistId: users.dentist, date: day, kind: 'CLOSED', reason: 'Tự đóng lịch' })
+        .expect(403);
+      const closed = await api('post', '/appointments/schedule-overrides')
+        .send({ dentistId: users.dentist, date: day, kind: 'CLOSED', reason: 'Sửa ghế nha' })
+        .expect(201);
+      expect(closed.body.data.affectedAppointments.map((a: { id: string }) => a.id)).toContain(
+        bookedId,
+      );
+
+      const impact = await api(
+        'get',
+        `/appointments/schedule-impact?dentistId=${users.dentist}&from=${day}&to=${day}`,
+      ).expect(200);
+      expect(impact.body.data).toContainEqual(
+        expect.objectContaining({ id: bookedId, reason: 'CLOSED' }),
+      );
+
+      const availability = await api(
+        'get',
+        `/appointments/availability?dentistId=${users.dentist}&date=${day}`,
+      ).expect(200);
+      expect(availability.body.data ?? availability.body).toMatchObject({
+        blockedReason: 'CLOSED',
+      });
+
+      await api('delete', `/appointments/schedule-overrides/${closed.body.data.id}`).expect(204);
+      const after = await api(
+        'get',
+        `/appointments/schedule-impact?dentistId=${users.dentist}&from=${day}&to=${day}`,
+      ).expect(200);
+      expect(after.body.data.map((a: { id: string }) => a.id)).not.toContain(bookedId);
+    });
   });
 });

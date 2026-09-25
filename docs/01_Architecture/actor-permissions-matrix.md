@@ -186,6 +186,17 @@ Chi tiết: [`schema-per-module/services.md`](../04_Database/schema-per-module/s
 | Tạo/sửa/ngừng dịch vụ và nhóm dịch vụ | ✅ | ❌ | ❌ | `service.manage` |
 | Phân công / ngừng phân công dịch vụ cho bác sĩ | ✅ | ❌ | ❌ | `dentist.assign_service` |
 
+### 3.7d Nghỉ phép & ngoại lệ lịch (ADR-0009 giai đoạn 3)
+
+Chi tiết: [`schema-per-module/schedule.md`](../04_Database/schema-per-module/schedule.md).
+
+| Action | Admin | Receptionist | Dentist | Permission code |
+| ------ | :---: | :----------: | :-----: | --------------- |
+| Ghi nghỉ phép (có hiệu lực ngay nếu có quyền duyệt, ngược lại là đơn chờ duyệt) | ✅ | ✅ (đơn chờ duyệt) | 🔒 (của mình, đơn chờ duyệt) | `schedule.write` |
+| Duyệt / từ chối đơn nghỉ phép | ✅ | ❌ | ❌ | `time_off.approve` |
+| Đóng lịch / đổi giờ làm một ngày | ✅ | ✅ | ❌ | `schedule.write` (không áp dụng cho bác sĩ bị giới hạn "chỉ của mình") |
+| Xem lịch hẹn bị ảnh hưởng | ✅ | ✅ | 🔒 (của mình) | `schedule.read` |
+
 ### 3.8 Shift Management (Phase 9 — BD-0010)
 
 || Action | Admin | Receptionist | Dentist | Permission code |

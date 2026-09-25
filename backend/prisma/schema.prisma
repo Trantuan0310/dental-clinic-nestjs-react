@@ -147,6 +147,7 @@ model User {
   employees                  Employee[]      @relation("EmployeeUser")
   dentistProfile             DentistProfile? @relation("DentistProfileUser")
   dentistServices            DentistService[] @relation("DentistServiceDentist")
+  scheduleOverrides          ScheduleOverride[] @relation("ScheduleOverrideDentist")
 
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
@@ -412,6 +413,13 @@ enum AppointmentType {
   FOLLOW_UP
 }
 
+enum TimeOffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum TimeOffType {
   VACATION
   SICK
@@ -499,6 +507,11 @@ model TimeOff {
   createdBy   String      @map("created_by") @db.Uuid
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz()
   deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz()
+  // Only APPROVED time-off blocks bookings (ADR-0009 phase 3, migration 021)
+  status       TimeOffStatus @default(PENDING)
+  decidedBy    String?       @map("decided_by") @db.Uuid
+  decidedAt    DateTime?     @map("decided_at") @db.Timestamptz()
+  decisionNote String?       @map("decision_note")
 
   dentist User @relation(fields: [dentistId], references: [id])
 
@@ -1385,4 +1398,34 @@ model DentistService {
   // migration 020 (dentist_services_open_key).
   @@index([dentistId])
   @@map("dentist_services")
+}
+
+// ============================================================================
+// Schedule overrides (ADR-0009 phase 3, migration 021)
+// Design: docs/04_Database/schema-per-module/schedule.md
+// ============================================================================
+
+enum ScheduleOverrideKind {
+  CLOSED
+  CHANGED_HOURS
+}
+
+model ScheduleOverride {
+  id        String               @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  dentistId String               @map("dentist_id") @db.Uuid
+  date      DateTime             @db.Date
+  kind      ScheduleOverrideKind
+  // CLOSED with both null = the whole day
+  startTime DateTime?            @map("start_time") @db.Time(0)
+  endTime   DateTime?            @map("end_time") @db.Time(0)
+  reason    String
+  createdBy String               @map("created_by") @db.Uuid
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz()
+  deletedAt DateTime?            @map("deleted_at") @db.Timestamptz()
+  deletedBy String?              @map("deleted_by") @db.Uuid
+
+  dentist User @relation("ScheduleOverrideDentist", fields: [dentistId], references: [id])
+
+  @@index([dentistId, date])
+  @@map("schedule_overrides")
 }

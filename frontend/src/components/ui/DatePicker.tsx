@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes } from 'react';
+import { useId, forwardRef, type InputHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface DatePickerProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> {
@@ -11,7 +11,10 @@ export interface DatePickerProps extends Omit<InputHTMLAttributes<HTMLInputEleme
 
 export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
   ({ className, label, error, hint, id, value, onChange, ...rest }, ref) => {
-    const inputId = id ?? rest.name;
+    // Without an id/name the <label> used to point at nothing, so the field
+    // had no accessible name; fall back to a generated id like Input does.
+    const generatedId = useId();
+    const inputId = id ?? rest.name ?? generatedId;
     return (
       <div className="w-full">
         {label && (

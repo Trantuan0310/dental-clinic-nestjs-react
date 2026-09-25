@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   Appointment,
   AppointmentStatus,
@@ -35,6 +35,7 @@ import {
   SlotConflictException,
 } from './domain/exceptions';
 import { lockDentistCalendar, lockPatientCalendar } from './domain/advisory-lock';
+import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import {
   AvailabilityQueryDto,
   CancelAppointmentDto,
@@ -45,6 +46,11 @@ import {
   NoShowDto,
   RescheduleAppointmentDto,
   UpdateAppointmentDto,
+  CreateScheduleOverrideDto,
+  DecideTimeOffDto,
+  ListScheduleOverridesQueryDto,
+  ListTimeOffsQueryDto,
+  ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
@@ -687,7 +693,7 @@ export class AppointmentsService {
 
     // Independent reads run in parallel: this endpoint refetches on every
     // date/dentist change in the booking form.
-    const [schedules, approvedShifts] = await Promise.all([
+    const [schedules, approvedShifts, overrides] = await Promise.all([
       this.prisma.workingSchedule.findMany({
         where: {
           dentistId: q.dentistId,
@@ -709,22 +715,38 @@ export class AppointmentsService {
         },
         orderBy: { startTime: 'asc' },
       }),
+      this.prisma.scheduleOverride.findMany({
+        where: { dentistId: q.dentistId, date: scheduleDate, deletedAt: null },
+      }),
     ]);
+    const dayOverrides = overrides ?? [];
+    const closedAllDay = dayOverrides.some(o => o.kind === 'CLOSED' && !o.startTime);
+    const changedHours = dayOverrides.find(o => o.kind === 'CHANGED_HOURS');
+    // BR-SCH-004: changed hours replace the weekly schedule for this day.
+    const weekly =
+      changedHours?.startTime && changedHours.endTime
+        ? [{ startTime: changedHours.startTime, endTime: changedHours.endTime }]
+        : schedules;
 
-    const windows = [
-      ...schedules.map(sched => ({
-        start: this.combineDateAndTime(q.date, this.toTimeString(sched.startTime)),
-        end: this.combineDateAndTime(q.date, this.toTimeString(sched.endTime)),
-      })),
-      ...approvedShifts.map(shift => ({
-        start: this.combineDateAndTime(q.date, shift.startTime),
-        end: this.combineDateAndTime(q.date, shift.endTime),
-      })),
-    ].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const windows = closedAllDay
+      ? []
+      : [
+          ...weekly.map(sched => ({
+            start: this.combineDateAndTime(q.date, this.toTimeString(sched.startTime)),
+            end: this.combineDateAndTime(q.date, this.toTimeString(sched.endTime)),
+          })),
+          ...approvedShifts.map(shift => ({
+            start: this.combineDateAndTime(q.date, shift.startTime),
+            end: this.combineDateAndTime(q.date, shift.endTime),
+          })),
+        ].sort((a, b) => a.start.getTime() - b.start.getTime());
 
     if (windows.length === 0) {
       // A day off is a normal answer for a slot picker, not a 404.
       return {
+        ...(closedAllDay
+          ? { closedReason: dayOverrides.find(o => o.kind === 'CLOSED')?.reason }
+          : {}),
         dentistId: q.dentistId,
         date: q.date,
         dayOfWeek: scheduleDate.getUTCDay(),
@@ -733,7 +755,7 @@ export class AppointmentsService {
         busy: [],
         slotDuration: q.slotDuration ?? 30,
         availableSlots: [],
-        blockedReason: 'NO_SCHEDULE',
+        blockedReason: closedAllDay ? 'CLOSED' : 'NO_SCHEDULE',
       };
     }
 
@@ -749,9 +771,11 @@ export class AppointmentsService {
         },
         select: { startAt: true, endAt: true },
       }),
+      // BR-SCH-001: pending time-off does not block slots yet.
       this.prisma.timeOff.findMany({
         where: {
           dentistId: q.dentistId,
+          status: 'APPROVED',
           startAt: { lt: dayEnd },
           endAt: { gt: dayStart },
           deletedAt: null,
@@ -759,6 +783,14 @@ export class AppointmentsService {
         select: { startAt: true, endAt: true },
       }),
     ]);
+    // BR-SCH-003: closed ranges block like time-off.
+    const closedRanges = dayOverrides
+      .filter(o => o.kind === 'CLOSED' && o.startTime && o.endTime)
+      .map(o => ({
+        startAt: this.combineDateAndTime(q.date, this.toTimeString(o.startTime!)),
+        endAt: this.combineDateAndTime(q.date, this.toTimeString(o.endTime!)),
+      }));
+    const blocked = [...(timeOffs ?? []), ...closedRanges];
 
     // Same lead time create() enforces — past slots today can't be booked.
     const earliestStart = Date.now() + 60_000;
@@ -772,7 +804,7 @@ export class AppointmentsService {
 
         const overlapsBooked = allBooked.some(b => slotStart < b.endAt && b.startAt < slotEnd);
         if (overlapsBooked) continue;
-        const overlapsTimeOff = timeOffs.some(o => slotStart < o.endAt && o.startAt < slotEnd);
+        const overlapsTimeOff = blocked.some(o => slotStart < o.endAt && o.startAt < slotEnd);
         if (overlapsTimeOff) continue;
 
         slots.add(this.toClinicTimeString(slotStart));
@@ -793,7 +825,7 @@ export class AppointmentsService {
         startTime: this.toClinicTimeString(w.start),
         endTime: this.toClinicTimeString(w.end),
       })),
-      busy: [...allBooked, ...timeOffs]
+      busy: [...allBooked, ...blocked]
         .map(b => ({
           startTime: b.startAt <= dayStart ? '00:00' : this.toClinicTimeString(b.startAt),
           endTime: b.endAt >= dayEnd ? '24:00' : this.toClinicTimeString(b.endAt),
@@ -1170,6 +1202,9 @@ export class AppointmentsService {
       throw new InvalidAppointmentStateException('Không thể ghi nhận nghỉ phép đã kết thúc');
     }
     await this.validateDentist(dto.dentistId, { forBooking: false });
+    // BR-SCH-001: whoever can approve records effective time-off directly;
+    // anyone else (a dentist asking for leave, front desk) files a request.
+    const autoApprove = actor.permissions.includes('time_off.approve');
 
     const overlapsWindow = {
       dentistId: dto.dentistId,
@@ -1182,12 +1217,15 @@ export class AppointmentsService {
     // the insert — it would be missing from affectedAppointments.
     const { created, affectedAppointments } = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, dto.dentistId);
-      const patientsInClinic = await tx.appointment.count({
-        where: {
-          ...overlapsWindow,
-          status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
-        },
-      });
+      await this.ensureNoOverlappingTimeOff(tx, dto.dentistId, startAt, endAt);
+      const patientsInClinic = !autoApprove
+        ? 0
+        : await tx.appointment.count({
+            where: {
+              ...overlapsWindow,
+              status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+            },
+          });
       if (patientsInClinic > 0) {
         throw new InvalidAppointmentStateException(
           `Dentist has ${patientsInClinic} checked-in/in-progress appointments during requested time-off window`,
@@ -1219,13 +1257,15 @@ export class AppointmentsService {
           type: dto.type,
           reason: dto.reason,
           createdBy: actor.sub,
+          status: autoApprove ? 'APPROVED' : 'PENDING',
+          ...(autoApprove ? { decidedBy: actor.sub, decidedAt: new Date() } : {}),
         },
       });
       return { created, affectedAppointments };
     });
 
     await this.audit.log({
-      action: 'TIME_OFF_CREATED',
+      action: autoApprove ? 'TIME_OFF_CREATED' : 'TIME_OFF_REQUESTED',
       actorUserId: actor.sub,
       actorEmail: actor.email,
       targetType: 'time_off',
@@ -1240,13 +1280,383 @@ export class AppointmentsService {
     return { ...created, affectedAppointments };
   }
 
-  async listTimeOffs(dentistId: string | undefined) {
+  async listTimeOffs(query: ListTimeOffsQueryDto) {
     return {
       data: await this.prisma.timeOff.findMany({
-        where: { deletedAt: null, ...(dentistId ? { dentistId } : {}) },
+        where: {
+          deletedAt: null,
+          ...(query.dentistId ? { dentistId: query.dentistId } : {}),
+          ...(query.status ? { status: query.status } : {}),
+        },
         orderBy: { startAt: 'desc' },
       }),
     };
+  }
+
+  /** BR-SCH-002: at most one pending/approved time-off over any moment. */
+  private async ensureNoOverlappingTimeOff(
+    tx: Prisma.TransactionClient,
+    dentistId: string,
+    startAt: Date,
+    endAt: Date,
+    excludeId?: string,
+  ) {
+    const clash = await tx.timeOff.findFirst({
+      where: {
+        dentistId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+        deletedAt: null,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+    });
+    if (clash) {
+      throw new BusinessRuleException(
+        'Dentist already has pending or approved time-off in this period',
+        HttpStatus.CONFLICT,
+        { timeOffId: clash.id, status: clash.status },
+        'TIME_OFF_OVERLAP',
+      );
+    }
+  }
+
+  /** BR-SCH-001: approving makes the time-off block bookings. */
+  async approveTimeOff(id: string, dto: DecideTimeOffDto, actor: JwtPayload) {
+    const current = await this.prisma.timeOff.findFirst({ where: { id, deletedAt: null } });
+    if (!current) throw new AppointmentNotFoundException(id);
+    if (current.status !== 'PENDING') {
+      throw new InvalidAppointmentStateException(`Time-off is ${current.status}, not PENDING`);
+    }
+    if (current.endAt.getTime() <= Date.now()) {
+      throw new InvalidAppointmentStateException('Time-off has already ended');
+    }
+    const { updated, affectedAppointments } = await this.prisma.$transaction(async tx => {
+      await this.lockDentist(tx, current.dentistId);
+      const window = {
+        dentistId: current.dentistId,
+        startAt: { lt: current.endAt },
+        endAt: { gt: current.startAt },
+        deletedAt: null,
+      };
+      const inClinic = await tx.appointment.count({
+        where: {
+          ...window,
+          status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+        },
+      });
+      if (inClinic > 0) {
+        throw new InvalidAppointmentStateException(
+          `Dentist has ${inClinic} checked-in/in-progress appointments during this time-off`,
+        );
+      }
+      const affectedAppointments = await this.affectedInWindow(tx, window);
+      const updated = await tx.timeOff.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          decidedBy: actor.sub,
+          decidedAt: new Date(),
+          decisionNote: dto.note ?? null,
+        },
+      });
+      return { updated, affectedAppointments };
+    });
+    await this.audit.log({
+      action: 'TIME_OFF_APPROVED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'time_off',
+      targetId: id,
+      metadata: {
+        dentistId: current.dentistId,
+        affectedAppointmentIds: affectedAppointments.map(a => a.id),
+      },
+    });
+    return { ...updated, affectedAppointments };
+  }
+
+  async rejectTimeOff(id: string, dto: DecideTimeOffDto, actor: JwtPayload) {
+    const note = dto.note?.trim();
+    if (!note || note.length < 5) {
+      throw new InvalidAppointmentStateException('A reason (≥ 5 characters) is required to reject');
+    }
+    const current = await this.prisma.timeOff.findFirst({ where: { id, deletedAt: null } });
+    if (!current) throw new AppointmentNotFoundException(id);
+    if (current.status !== 'PENDING') {
+      throw new InvalidAppointmentStateException(`Time-off is ${current.status}, not PENDING`);
+    }
+    const updated = await this.prisma.timeOff.update({
+      where: { id },
+      data: { status: 'REJECTED', decidedBy: actor.sub, decidedAt: new Date(), decisionNote: note },
+    });
+    await this.audit.log({
+      action: 'TIME_OFF_REJECTED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'time_off',
+      targetId: id,
+      metadata: { dentistId: current.dentistId, note },
+    });
+    return updated;
+  }
+
+  /** The dentist (own) or staff withdraws a pending or not-yet-ended approved time-off. */
+  async cancelTimeOff(id: string, actor: JwtPayload) {
+    const current = await this.prisma.timeOff.findFirst({ where: { id, deletedAt: null } });
+    if (!current) throw new AppointmentNotFoundException(id);
+    this.assertOwnScheduleOrStaff(actor, current.dentistId);
+    if (current.status !== 'PENDING' && current.status !== 'APPROVED') {
+      throw new InvalidAppointmentStateException(`Time-off is already ${current.status}`);
+    }
+    if (current.endAt.getTime() <= Date.now()) {
+      throw new InvalidAppointmentStateException('Time-off has already ended');
+    }
+    const updated = await this.prisma.timeOff.update({
+      where: { id },
+      data: { status: 'CANCELLED', decidedBy: actor.sub, decidedAt: new Date() },
+    });
+    await this.audit.log({
+      action: 'TIME_OFF_CANCELLED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'time_off',
+      targetId: id,
+      metadata: { dentistId: current.dentistId, previousStatus: current.status },
+    });
+    return updated;
+  }
+
+  private affectedInWindow(tx: Prisma.TransactionClient, window: Prisma.AppointmentWhereInput) {
+    return tx.appointment.findMany({
+      where: {
+        ...window,
+        status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+      },
+      orderBy: { startAt: 'asc' },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+        patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
+      },
+    });
+  }
+
+  // ==========================================================================
+  // Schedule overrides (ADR-0009 phase 3)
+  // ==========================================================================
+
+  /** Overrides change a whole day of the calendar: front desk/admin only. */
+  private assertStaff(actor: JwtPayload) {
+    if (this.isRowScopedDentist(actor)) {
+      throw new ForbiddenException('Chỉ lễ tân/quản trị được đóng lịch hoặc đổi giờ làm');
+    }
+  }
+
+  async createScheduleOverride(dto: CreateScheduleOverrideDto, actor: JwtPayload) {
+    this.assertStaff(actor);
+    const hasTimes = Boolean(dto.startTime) || Boolean(dto.endTime);
+    if (hasTimes && !(dto.startTime && dto.endTime)) {
+      throw new InvalidAppointmentStateException('Provide both startTime and endTime');
+    }
+    if (dto.kind === 'CHANGED_HOURS' && !hasTimes) {
+      throw new InvalidAppointmentStateException('Changed hours need startTime and endTime');
+    }
+    if (hasTimes && dto.endTime! <= dto.startTime!) {
+      throw new InvalidAppointmentStateException('endTime must be after startTime');
+    }
+    const localDate = dto.date.slice(0, 10);
+    if (localDate < clinicDateOnly()) {
+      throw new InvalidAppointmentStateException('Cannot change the calendar of a past day');
+    }
+    await this.validateDentist(dto.dentistId, { forBooking: false });
+    const date = new Date(localDate);
+    const dayStart = startOfClinicDay(localDate);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+    // For a closed range only that range matters; otherwise the whole day.
+    const windowStart =
+      dto.kind === 'CLOSED' && hasTimes
+        ? this.combineDateAndTime(localDate, dto.startTime!)
+        : dayStart;
+    const windowEnd =
+      dto.kind === 'CLOSED' && hasTimes ? this.combineDateAndTime(localDate, dto.endTime!) : dayEnd;
+
+    const { created, affectedAppointments } = await this.prisma.$transaction(async tx => {
+      await this.lockDentist(tx, dto.dentistId);
+      if (dto.kind === 'CHANGED_HOURS') {
+        const existing = await tx.scheduleOverride.findFirst({
+          where: { dentistId: dto.dentistId, date, kind: 'CHANGED_HOURS', deletedAt: null },
+        });
+        if (existing) {
+          throw new BusinessRuleException(
+            'This day already has changed hours; remove them first',
+            HttpStatus.CONFLICT,
+            { overrideId: existing.id },
+            'OVERRIDE_EXISTS',
+          );
+        }
+      }
+      const inClinic = await tx.appointment.count({
+        where: {
+          dentistId: dto.dentistId,
+          startAt: { lt: windowEnd },
+          endAt: { gt: windowStart },
+          deletedAt: null,
+          status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+        },
+      });
+      if (inClinic > 0) {
+        throw new InvalidAppointmentStateException(
+          `Dentist has ${inClinic} checked-in/in-progress appointments in this period`,
+        );
+      }
+      const created = await tx.scheduleOverride.create({
+        data: {
+          dentistId: dto.dentistId,
+          date,
+          kind: dto.kind,
+          startTime: hasTimes ? this.toPgTime(dto.startTime!) : null,
+          endTime: hasTimes ? this.toPgTime(dto.endTime!) : null,
+          reason: dto.reason.trim(),
+          createdBy: actor.sub,
+        },
+      });
+      // Bookings of that day that the new calendar no longer allows.
+      const candidates = await this.affectedInWindow(tx, {
+        dentistId: dto.dentistId,
+        startAt: { lt: dayEnd },
+        endAt: { gt: dayStart },
+        deletedAt: null,
+      });
+      const affectedAppointments = [];
+      for (const a of candidates) {
+        if (await this.calendarProblem(dto.dentistId, a.startAt, a.endAt, tx)) {
+          affectedAppointments.push(a);
+        }
+      }
+      return { created, affectedAppointments };
+    });
+    await this.audit.log({
+      action: 'SCHEDULE_OVERRIDE_CREATED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'schedule_override',
+      targetId: created.id,
+      metadata: {
+        dentistId: dto.dentistId,
+        date: localDate,
+        kind: dto.kind,
+        affectedAppointmentIds: affectedAppointments.map(a => a.id),
+      },
+    });
+    return { ...this.formatOverride(created), affectedAppointments };
+  }
+
+  async listScheduleOverrides(query: ListScheduleOverridesQueryDto) {
+    const rows = await this.prisma.scheduleOverride.findMany({
+      where: {
+        deletedAt: null,
+        date: { gte: new Date(query.from?.slice(0, 10) ?? clinicDateOnly()) },
+        ...(query.dentistId ? { dentistId: query.dentistId } : {}),
+      },
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
+    return rows.map(r => this.formatOverride(r));
+  }
+
+  async deleteScheduleOverride(id: string, actor: JwtPayload) {
+    this.assertStaff(actor);
+    const row = await this.prisma.scheduleOverride.findFirst({ where: { id, deletedAt: null } });
+    if (!row) throw new AppointmentNotFoundException(id);
+    await this.prisma.scheduleOverride.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedBy: actor.sub },
+    });
+    await this.audit.log({
+      action: 'SCHEDULE_OVERRIDE_DELETED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'schedule_override',
+      targetId: id,
+      metadata: {
+        dentistId: row.dentistId,
+        date: row.date.toISOString().slice(0, 10),
+        kind: row.kind,
+      },
+    });
+  }
+
+  private formatOverride(r: {
+    id: string;
+    dentistId: string;
+    date: Date;
+    kind: string;
+    startTime: Date | null;
+    endTime: Date | null;
+    reason: string;
+    createdBy: string;
+    createdAt: Date;
+  }) {
+    return {
+      id: r.id,
+      dentistId: r.dentistId,
+      date: r.date.toISOString().slice(0, 10),
+      kind: r.kind,
+      startTime: r.startTime ? this.toTimeString(r.startTime) : null,
+      endTime: r.endTime ? this.toTimeString(r.endTime) : null,
+      reason: r.reason,
+      createdBy: r.createdBy,
+      createdAt: r.createdAt,
+    };
+  }
+
+  /**
+   * BR-SCH-005: upcoming SCHEDULED/CONFIRMED bookings the current calendar no
+   * longer allows (approved time-off, closed day/range, changed or removed
+   * hours) — the front desk's to-do list for rescheduling.
+   */
+  async scheduleImpact(query: ScheduleImpactQueryDto, actor: JwtPayload) {
+    const from = query.from?.slice(0, 10) ?? clinicDateOnly();
+    const toDate = query.to?.slice(0, 10);
+    const start = new Date(Math.max(startOfClinicDay(from).getTime(), Date.now()));
+    const end = toDate
+      ? new Date(startOfClinicDay(toDate).getTime() + 24 * 60 * 60_000)
+      : new Date(startOfClinicDay(from).getTime() + 61 * 24 * 60 * 60_000);
+    const dentistId = this.isRowScopedDentist(actor) ? actor.sub : query.dentistId;
+    const rows = await this.prisma.appointment.findMany({
+      where: {
+        ...(dentistId ? { dentistId } : {}),
+        startAt: { gte: start, lt: end },
+        deletedAt: null,
+        status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+      },
+      orderBy: { startAt: 'asc' },
+      take: 500,
+      select: {
+        id: true,
+        dentistId: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+        dentist: { select: { fullName: true } },
+        patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
+      },
+    });
+    const affected = [];
+    for (const r of rows) {
+      const problem = await this.calendarProblem(r.dentistId, r.startAt, r.endAt, this.prisma);
+      if (problem) {
+        affected.push({
+          ...r,
+          dentistName: r.dentist.fullName,
+          reason: problem.kind,
+          message: problem.message,
+        });
+      }
+    }
+    return affected;
   }
 
   // ==========================================================================
@@ -1555,25 +1965,68 @@ export class AppointmentsService {
     });
     if (conflict) throw new SlotConflictException();
 
-    // BR-APPT-003: working schedule (or an APPROVED shift, BR-APPT-027) required
+    const problem = await this.calendarProblem(dentistId, startAt, endAt, client);
+    if (problem?.kind === 'OUTSIDE_WORKING_HOURS')
+      throw new OutsideWorkingHoursException(problem.message);
+    if (problem) throw new DentistUnavailableException(problem.message);
+  }
+
+  /**
+   * Why [startAt, endAt) can't be booked for the dentist, ignoring other
+   * bookings — or null. Shared by booking (ensureSlotAvailable) and the
+   * schedule-impact report, so both apply the same rules:
+   * - BR-APPT-003/027: inside the weekly schedule or an APPROVED shift. A
+   *   CHANGED_HOURS override replaces the weekly schedule for that day
+   *   (BR-SCH-004); shifts still add hours (ADR-0009 D3).
+   * - BR-SCH-003: not inside a CLOSED override (whole day or a range).
+   * - BR-APPT-004 / BR-SCH-001: not inside APPROVED time-off.
+   */
+  private async calendarProblem(
+    dentistId: string,
+    startAt: Date,
+    endAt: Date,
+    client: PrismaService | Prisma.TransactionClient,
+  ): Promise<{ kind: 'OUTSIDE_WORKING_HOURS' | 'CLOSED' | 'TIME_OFF'; message: string } | null> {
     const localDate = clinicDateOnly(startAt);
     const scheduleDate = new Date(localDate);
     const localStart = this.toClinicTimeString(startAt);
     const localEnd = this.toClinicTimeString(endAt);
-    const sched = await client.workingSchedule.findFirst({
-      where: {
-        dentistId,
-        dayOfWeek: scheduleDate.getUTCDay(),
-        startTime: { lte: this.toPgTime(localStart) },
-        endTime: { gte: this.toPgTime(localEnd) },
-        validFrom: { lte: scheduleDate },
-        OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
-        deletedAt: null,
-      },
-    });
-    let window: { startTime: string; endTime: string } | null = sched
-      ? { startTime: this.toTimeString(sched.startTime), endTime: this.toTimeString(sched.endTime) }
-      : null;
+
+    const overrides =
+      (await client.scheduleOverride.findMany({
+        where: { dentistId, date: scheduleDate, deletedAt: null },
+      })) ?? [];
+    if (overrides.some(o => o.kind === 'CLOSED' && !o.startTime)) {
+      return { kind: 'CLOSED', message: `Dentist's calendar is closed on ${localDate}` };
+    }
+    const changed = overrides.find(o => o.kind === 'CHANGED_HOURS');
+
+    let window: { startTime: string; endTime: string } | null = null;
+    if (changed?.startTime && changed.endTime) {
+      const hours = {
+        startTime: this.toTimeString(changed.startTime),
+        endTime: this.toTimeString(changed.endTime),
+      };
+      if (hours.startTime <= localStart && localEnd <= hours.endTime) window = hours;
+    } else {
+      const sched = await client.workingSchedule.findFirst({
+        where: {
+          dentistId,
+          dayOfWeek: scheduleDate.getUTCDay(),
+          startTime: { lte: this.toPgTime(localStart) },
+          endTime: { gte: this.toPgTime(localEnd) },
+          validFrom: { lte: scheduleDate },
+          OR: [{ validTo: null }, { validTo: { gte: scheduleDate } }],
+          deletedAt: null,
+        },
+      });
+      if (sched) {
+        window = {
+          startTime: this.toTimeString(sched.startTime),
+          endTime: this.toTimeString(sched.endTime),
+        };
+      }
+    }
     if (!window) {
       // "HH:mm" strings compare correctly as text (zero-padded).
       const shift = await client.shiftRegistration.findFirst({
@@ -1589,40 +2042,53 @@ export class AppointmentsService {
       if (shift) window = { startTime: shift.startTime, endTime: shift.endTime };
     }
     if (!window) {
-      throw new OutsideWorkingHoursException('Dentist has no working schedule for this day');
+      return {
+        kind: 'OUTSIDE_WORKING_HOURS',
+        message: changed
+          ? `Dentist works ${this.toTimeString(changed.startTime!)}-${this.toTimeString(changed.endTime!)} on ${localDate} (changed hours)`
+          : 'Dentist has no working schedule for this day',
+      };
     }
     const schedStart = this.combineDateAndTime(localDate, window.startTime);
     const schedEnd = this.combineDateAndTime(localDate, window.endTime);
     if (startAt < schedStart || endAt > schedEnd) {
-      throw new OutsideWorkingHoursException(
-        `Appointment ${startAt.toISOString()} → ${endAt.toISOString()} falls outside working hours ${window.startTime}-${window.endTime}`,
-      );
+      return {
+        kind: 'OUTSIDE_WORKING_HOURS',
+        message: `Appointment ${startAt.toISOString()} → ${endAt.toISOString()} falls outside working hours ${window.startTime}-${window.endTime}`,
+      };
     }
 
-    // BR-APPT-004: time-off overlap
-    await this.ensureNoTimeOff(dentistId, startAt, endAt, txClient);
-  }
+    const closedRange = overrides.find(
+      o =>
+        o.kind === 'CLOSED' &&
+        o.startTime &&
+        o.endTime &&
+        this.toTimeString(o.startTime) < localEnd &&
+        localStart < this.toTimeString(o.endTime),
+    );
+    if (closedRange) {
+      return {
+        kind: 'CLOSED',
+        message: `Dentist's calendar is closed ${this.toTimeString(closedRange.startTime!)}-${this.toTimeString(closedRange.endTime!)} on ${localDate}`,
+      };
+    }
 
-  private async ensureNoTimeOff(
-    dentistId: string,
-    startAt: Date,
-    endAt: Date,
-    txClient?: Prisma.TransactionClient,
-  ) {
-    const client = (txClient ?? this.prisma) as PrismaService;
-    const overlap = await client.timeOff.findFirst({
+    const timeOff = await client.timeOff.findFirst({
       where: {
         dentistId,
+        status: 'APPROVED',
         startAt: { lt: endAt },
         endAt: { gt: startAt },
         deletedAt: null,
       },
     });
-    if (overlap) {
-      throw new DentistUnavailableException(
-        `Dentist is on time-off from ${overlap.startAt.toISOString()} to ${overlap.endAt.toISOString()}`,
-      );
+    if (timeOff) {
+      return {
+        kind: 'TIME_OFF',
+        message: `Dentist is on time-off from ${timeOff.startAt.toISOString()} to ${timeOff.endAt.toISOString()}`,
+      };
     }
+    return null;
   }
 
   /** A patient can't be in two chairs at once, whichever dentists are involved. */

@@ -6,6 +6,11 @@ import type {
   TimeOff,
   CreateTimeOffPayload,
   CreateTimeOffResult,
+  CreateScheduleOverridePayload,
+  CreateScheduleOverrideResult,
+  ImpactedAppointment,
+  ScheduleOverride,
+  TimeOffStatus,
 } from '@/types/schedule';
 
 const get = async <T>(url: string, config?: Parameters<typeof api.get>[1]) => {
@@ -20,8 +25,17 @@ const post = async <T>(url: string, body?: unknown) => {
 
 export const scheduleKeys = {
   workingSchedules: (dentistId?: string) => ['schedule', 'working', dentistId ?? 'all'] as const,
-  timeOffs: (dentistId?: string) => ['schedule', 'time-off', dentistId ?? 'all'] as const,
+  timeOffs: (dentistId?: string, status?: TimeOffStatus) =>
+    ['schedule', 'time-off', dentistId ?? 'all', status ?? 'all'] as const,
+  overrides: (dentistId?: string) => ['schedule', 'overrides', dentistId ?? 'all'] as const,
+  impact: (dentistId?: string) => ['schedule', 'impact', dentistId ?? 'all'] as const,
 };
+
+/** Anything that changes a dentist's calendar changes bookable slots and the impact list. */
+function invalidateCalendar(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['schedule'] });
+  qc.invalidateQueries({ queryKey: ['appointments', 'availability'] });
+}
 
 // startTime/endTime come back as Postgres TIME(0) columns serialized by
 // Prisma as full ISO datetimes anchored at 1970-01-01
@@ -65,12 +79,12 @@ export function useCreateWorkingSchedule() {
   });
 }
 
-export function useTimeOffs(dentistId?: string) {
+export function useTimeOffs(dentistId?: string, status?: TimeOffStatus) {
   return useQuery({
-    queryKey: scheduleKeys.timeOffs(dentistId),
+    queryKey: scheduleKeys.timeOffs(dentistId, status),
     queryFn: () =>
       get<TimeOff[]>('/appointments/time-offs', {
-        params: dentistId ? { dentistId } : undefined,
+        params: { ...(dentistId ? { dentistId } : {}), ...(status ? { status } : {}) },
       }),
   });
 }
@@ -79,9 +93,54 @@ export function useCreateTimeOff() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateTimeOffPayload) => post<CreateTimeOffResult>('/appointments/time-offs', payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['schedule', 'time-off'] });
-      qc.invalidateQueries({ queryKey: ['appointments', 'availability'] });
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useDecideTimeOff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action, note }: { id: string; action: 'approve' | 'reject' | 'cancel'; note?: string }) =>
+      post<CreateTimeOffResult>(`/appointments/time-offs/${id}/${action}`, action === 'cancel' ? {} : { note }),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useScheduleOverrides(dentistId?: string) {
+  return useQuery({
+    queryKey: scheduleKeys.overrides(dentistId),
+    queryFn: () =>
+      get<ScheduleOverride[]>('/appointments/schedule-overrides', {
+        params: dentistId ? { dentistId } : undefined,
+      }),
+  });
+}
+
+export function useCreateScheduleOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateScheduleOverridePayload) =>
+      post<CreateScheduleOverrideResult>('/appointments/schedule-overrides', payload),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useDeleteScheduleOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/appointments/schedule-overrides/${id}`);
     },
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useScheduleImpact(dentistId?: string) {
+  return useQuery({
+    queryKey: scheduleKeys.impact(dentistId),
+    queryFn: () =>
+      get<ImpactedAppointment[]>('/appointments/schedule-impact', {
+        params: dentistId ? { dentistId } : undefined,
+      }),
   });
 }

@@ -1,4 +1,5 @@
 import {
+  Delete,
   Controller,
   Get,
   Post,
@@ -34,6 +35,11 @@ import {
   RescheduleAppointmentDto,
   UpdateAppointmentDto,
   WaitingQueueQueryDto,
+  CreateScheduleOverrideDto,
+  DecideTimeOffDto,
+  ListScheduleOverridesQueryDto,
+  ListTimeOffsQueryDto,
+  ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
 
 @ApiTags('Appointments')
@@ -123,8 +129,70 @@ export class AppointmentsController {
 
   @Get('time-offs')
   @RequirePermissions('schedule.read')
-  async listTimeOffs(@Query('dentistId') dentistId?: string) {
-    return wrapAsPaginated(await this.appointments.listTimeOffs(dentistId));
+  async listTimeOffs(@Query() query: ListTimeOffsQueryDto) {
+    return wrapAsPaginated(await this.appointments.listTimeOffs(query));
+  }
+
+  @Post('time-offs/:id/approve')
+  @RequirePermissions('time_off.approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Approve pending time-off (BR-SCH-001); returns bookings to move' })
+  async approveTimeOff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DecideTimeOffDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.approveTimeOff(id, dto, actor) };
+  }
+
+  @Post('time-offs/:id/reject')
+  @RequirePermissions('time_off.approve')
+  @HttpCode(HttpStatus.OK)
+  async rejectTimeOff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DecideTimeOffDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.rejectTimeOff(id, dto, actor) };
+  }
+
+  @Post('time-offs/:id/cancel')
+  @RequirePermissions('schedule.write')
+  @HttpCode(HttpStatus.OK)
+  async cancelTimeOff(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.cancelTimeOff(id, actor) };
+  }
+
+  // ==========================================================================
+  // Schedule overrides + impact (ADR-0009 phase 3)
+  // ==========================================================================
+
+  @Post('schedule-overrides')
+  @RequirePermissions('schedule.write')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Close a day/range or change one day of hours (BR-SCH-003/004)' })
+  async createOverride(@Body() dto: CreateScheduleOverrideDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.createScheduleOverride(dto, actor) };
+  }
+
+  @Get('schedule-overrides')
+  @RequirePermissions('schedule.read')
+  async listOverrides(@Query() query: ListScheduleOverridesQueryDto) {
+    return { data: await this.appointments.listScheduleOverrides(query) };
+  }
+
+  @Delete('schedule-overrides/:id')
+  @RequirePermissions('schedule.write')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteOverride(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    await this.appointments.deleteScheduleOverride(id, actor);
+  }
+
+  @Get('schedule-impact')
+  @RequirePermissions('schedule.read')
+  @ApiOperation({ summary: 'Upcoming bookings the current calendar no longer allows (BR-SCH-005)' })
+  async scheduleImpact(@Query() query: ScheduleImpactQueryDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.scheduleImpact(query, actor) };
   }
 
   // ==========================================================================

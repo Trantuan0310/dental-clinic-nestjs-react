@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Plus, CalendarOff } from 'lucide-react';
-import { Alert, Button, Card, Select, Input, Textarea, Modal, EmptyState } from '@/components/ui';
+import { Badge, Button, Card, Select, Input, Textarea, Modal, EmptyState } from '@/components/ui';
+import type { BadgeProps } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
-import { useTimeOffs, useCreateTimeOff } from './scheduleApi';
+import { useTimeOffs, useCreateTimeOff, useDecideTimeOff } from './scheduleApi';
 import { useSchedulableDentists } from './useSchedulableDentists';
-import type { TimeOffAffectedAppointment, TimeOffType } from '@/types/schedule';
+import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
+import { formatDateTime } from './format';
+import type { TimeOff, TimeOffAffectedAppointment, TimeOffStatus, TimeOffType } from '@/types/schedule';
 
 const TIME_OFF_TYPE_LABELS: Record<TimeOffType, string> = {
   VACATION: 'Nghỉ phép',
@@ -17,22 +21,36 @@ const TIME_OFF_TYPE_LABELS: Record<TimeOffType, string> = {
   OTHER: 'Khác',
 };
 
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+const STATUS_LABEL: Record<TimeOffStatus, string> = {
+  PENDING: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Từ chối',
+  CANCELLED: 'Đã hủy',
+};
+
+const STATUS_VARIANT: Record<TimeOffStatus, BadgeProps['variant']> = {
+  PENDING: 'warning',
+  APPROVED: 'success',
+  REJECTED: 'danger',
+  CANCELLED: 'default',
+};
 
 export function TimeOffTab() {
   const [dentistFilter, setDentistFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<TimeOffStatus | ''>('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [rejecting, setRejecting] = useState<TimeOff | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
+  const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
 
   const { data: dentists = [] } = useDentistOptions();
-  const { data: timeOffs, isLoading } = useTimeOffs(dentistFilter || undefined);
+  const { data: timeOffs, isLoading } = useTimeOffs(dentistFilter || undefined, statusFilter || undefined);
+  const decide = useDecideTimeOff();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const userId = useAuthStore((s) => s.user?.id);
+  const canApprove = hasPermission('time_off.approve');
+  const canWrite = hasPermission('schedule.write');
+  const ownOnly = hasPermission('appointment.read.own') && !hasPermission('appointment.read.any');
 
   const dentistNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -40,11 +58,40 @@ export function TimeOffTab() {
     return map;
   }, [dentists]);
 
+  const run = (t: TimeOff, action: 'approve' | 'reject' | 'cancel', note?: string) =>
+    decide.mutate(
+      { id: t.id, action, note },
+      {
+        onSuccess: (result) => {
+          notify.success(
+            action === 'approve'
+              ? 'Đã duyệt nghỉ phép'
+              : action === 'reject'
+                ? 'Đã từ chối đơn nghỉ phép'
+                : 'Đã hủy nghỉ phép',
+          );
+          setRejecting(null);
+          setRejectNote('');
+          if (action === 'approve' && result.affectedAppointments?.length) {
+            setAffected(result.affectedAppointments);
+          }
+        },
+        onError: (err) => notify.error(getApiErrorMessage(err, 'Không thực hiện được')),
+      },
+    );
+
+  const canCancel = (t: TimeOff) =>
+    canWrite &&
+    (t.status === 'PENDING' || t.status === 'APPROVED') &&
+    new Date(t.endAt).getTime() > Date.now() &&
+    (!ownOnly || t.dentistId === userId);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="w-full max-w-xs">
+        <div className="flex flex-wrap gap-2">
           <Select
+            aria-label="Lọc theo bác sĩ"
             value={dentistFilter}
             onChange={(e) => setDentistFilter(e.target.value)}
             options={[
@@ -52,11 +99,23 @@ export function TimeOffTab() {
               ...dentists.map((d) => ({ value: d.id, label: d.fullName })),
             ]}
           />
+          <Select
+            aria-label="Lọc theo trạng thái"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as TimeOffStatus | '')}
+            options={[
+              { value: '', label: 'Mọi trạng thái' },
+              ...(Object.keys(STATUS_LABEL) as TimeOffStatus[]).map((v) => ({
+                value: v,
+                label: STATUS_LABEL[v],
+              })),
+            ]}
+          />
         </div>
         <PermissionGuard permission="schedule.write">
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" />
-            Thêm nghỉ phép
+            {canApprove ? 'Thêm nghỉ phép' : 'Xin nghỉ phép'}
           </Button>
         </PermissionGuard>
       </div>
@@ -68,7 +127,7 @@ export function TimeOffTab() {
           <EmptyState
             icon={<CalendarOff className="h-10 w-10 text-gray-400" />}
             title="Chưa có lịch nghỉ nào"
-            description="Ghi nhận nghỉ phép/nghỉ ốm để hệ thống tự động chặn đặt lịch hẹn trong khoảng thời gian đó."
+            description="Nghỉ phép đã duyệt sẽ chặn đặt lịch hẹn trong khoảng thời gian đó; đơn chờ duyệt thì chưa chặn."
           />
         </Card>
       ) : (
@@ -82,6 +141,8 @@ export function TimeOffTab() {
                   <th>Từ</th>
                   <th>Đến</th>
                   <th>Lý do</th>
+                  <th>Trạng thái</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -92,6 +153,27 @@ export function TimeOffTab() {
                     <td>{formatDateTime(t.startAt)}</td>
                     <td>{formatDateTime(t.endAt)}</td>
                     <td className="text-gray-500">{t.reason || '—'}</td>
+                    <td>
+                      <Badge variant={STATUS_VARIANT[t.status]}>{STATUS_LABEL[t.status]}</Badge>
+                      {t.decisionNote && <p className="mt-1 text-xs text-gray-500">{t.decisionNote}</p>}
+                    </td>
+                    <td className="whitespace-nowrap text-right">
+                      {t.status === 'PENDING' && canApprove && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => run(t, 'approve')}>
+                            Duyệt
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setRejecting(t)}>
+                            Từ chối
+                          </Button>
+                        </>
+                      )}
+                      {canCancel(t) && (
+                        <Button size="sm" variant="ghost" onClick={() => run(t, 'cancel')}>
+                          Hủy
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -101,6 +183,39 @@ export function TimeOffTab() {
       )}
 
       <CreateTimeOffModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
+
+      <Modal open={rejecting !== null} onClose={() => setRejecting(null)} title="Từ chối nghỉ phép" size="sm">
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (rejecting) run(rejecting, 'reject', rejectNote.trim());
+          }}
+        >
+          <Textarea
+            label="Lý do từ chối"
+            required
+            minLength={5}
+            rows={3}
+            value={rejectNote}
+            onChange={(e) => setRejectNote(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setRejecting(null)}>
+              Hủy
+            </Button>
+            <Button type="submit" variant="danger" isLoading={decide.isPending}>
+              Từ chối
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <AffectedAppointmentsModal
+        open={affected !== null}
+        appointments={affected ?? []}
+        onClose={() => setAffected(null)}
+      />
     </div>
   );
 }
@@ -108,9 +223,10 @@ export function TimeOffTab() {
 function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { dentists, defaultDentistId } = useSchedulableDentists();
   const createTimeOff = useCreateTimeOff();
+  const canApprove = useAuthStore((s) => s.hasPermission('time_off.approve'));
 
   const [dentistId, setDentistId] = useState(defaultDentistId);
-  // Appointments still booked inside the time-off just recorded — shown
+  // Appointments still booked inside approved time-off just recorded — shown
   // instead of closing, so front desk knows who to call and move.
   const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
   const [startAt, setStartAt] = useState('');
@@ -140,8 +256,10 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
         type,
         reason: reason || undefined,
       });
-      notify.success('Đã ghi nhận nghỉ phép');
-      if (created.affectedAppointments.length > 0) {
+      notify.success(
+        created.status === 'PENDING' ? 'Đã gửi đơn nghỉ phép — chờ quản trị duyệt' : 'Đã ghi nhận nghỉ phép',
+      );
+      if (created.status === 'APPROVED' && created.affectedAppointments.length > 0) {
         setAffected(created.affectedAppointments);
         return;
       }
@@ -158,37 +276,17 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   if (affected) {
-    return (
-      <Modal open={open} onClose={close} title="Lịch hẹn cần xử lý" size="sm">
-        <div className="space-y-4">
-          <Alert variant="warning">
-            Còn {affected.length} lịch hẹn trong thời gian nghỉ. Vui lòng liên hệ bệnh nhân để đổi
-            lịch hoặc hủy — hệ thống không tự dời các lịch này.
-          </Alert>
-          <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
-            {affected.map((a) => (
-              <li key={a.id} className="px-3 py-2 text-sm">
-                <p className="font-medium text-gray-900">
-                  {a.patient.fullName} <span className="text-gray-500">— {a.patient.code}</span>
-                </p>
-                <p className="text-gray-600">
-                  {formatDateTime(a.startAt)}
-                  {a.patient.primaryPhone ? ` • ${a.patient.primaryPhone}` : ''}
-                </p>
-              </li>
-            ))}
-          </ul>
-          <div className="flex justify-end border-t border-gray-100 pt-4">
-            <Button onClick={close}>Đã hiểu</Button>
-          </div>
-        </div>
-      </Modal>
-    );
+    return <AffectedAppointmentsModal open={open} appointments={affected} onClose={close} />;
   }
 
   return (
-    <Modal open={open} onClose={close} title="Thêm nghỉ phép" size="sm">
+    <Modal open={open} onClose={close} title={canApprove ? 'Thêm nghỉ phép' : 'Xin nghỉ phép'} size="sm">
       <div className="space-y-4">
+        {!canApprove && (
+          <p className="text-sm text-gray-600 dark:text-surface-300">
+            Đơn sẽ ở trạng thái chờ duyệt và chưa chặn lịch hẹn cho tới khi quản trị duyệt.
+          </p>
+        )}
         <Select
           label="Bác sĩ"
           value={dentistId}
@@ -232,7 +330,7 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
           placeholder="VD: Nghỉ phép năm"
         />
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+        <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
           <Button variant="outline" onClick={close}>
             Hủy
           </Button>
@@ -241,7 +339,7 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
             isLoading={createTimeOff.isPending}
             disabled={!dentistId || !startAt || !endAt || !isRangeValid}
           >
-            Thêm
+            {canApprove ? 'Thêm' : 'Gửi đơn'}
           </Button>
         </div>
       </div>

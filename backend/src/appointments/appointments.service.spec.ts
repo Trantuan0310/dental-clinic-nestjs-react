@@ -13,6 +13,8 @@ describe('AppointmentsService', () => {
   let audit: { log: jest.Mock };
   let events: { emit: jest.Mock };
   const actor = adminPayload();
+  // Records time-off as effective immediately (BR-SCH-001).
+  const approver = { ...actor, permissions: [...actor.permissions, 'time_off.approve'] };
 
   beforeEach(async () => {
     prisma = createPrismaMock();
@@ -1191,7 +1193,7 @@ describe('AppointmentsService', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(activeDentist);
       (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
 
-      await expect(service.createTimeOff(timeOffDto, actor)).rejects.toThrow(/checked-in/);
+      await expect(service.createTimeOff(timeOffDto, approver)).rejects.toThrow(/checked-in/);
       expect(prisma.appointment.count).toHaveBeenCalledWith({
         where: expect.objectContaining({
           startAt: { lt: new Date(timeOffDto.endAt) },
@@ -1344,7 +1346,7 @@ describe('AppointmentsService', () => {
           endAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
           type: 'SICK',
         } as any,
-        actor,
+        approver,
       );
 
       expect(prisma.$transaction).toHaveBeenCalled();
@@ -1505,5 +1507,198 @@ describe('AppointmentsService', () => {
     await expect(pending).resolves.toEqual(
       expect.objectContaining({ availableSlots: ['08:00', '08:30'] }),
     );
+  });
+
+  describe('time-off approval and schedule overrides (ADR-0009 phase 3)', () => {
+    const dentist = {
+      id: 'dentist-1',
+      status: 'ACTIVE',
+      userRoles: [{ role: { code: 'dentist' } }],
+    };
+    const future = (h: number) => new Date(Date.now() + h * 60 * 60 * 1000).toISOString();
+    const timeOffDto = {
+      dentistId: 'dentist-1',
+      startAt: future(24),
+      endAt: future(48),
+      type: 'VACATION',
+    } as any;
+
+    beforeEach(() => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(dentist);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.timeOff.create as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        id: 'to-1',
+        ...data,
+      }));
+    });
+
+    it('BR-SCH-001: a request from someone who cannot approve is PENDING', async () => {
+      const result = await service.createTimeOff(timeOffDto, receptionistPayload());
+      expect(result.status).toBe('PENDING');
+      // Nothing is blocked yet, so patients in the clinic are not checked.
+      expect(prisma.appointment.count).not.toHaveBeenCalled();
+    });
+
+    it('BR-SCH-001: an approver records APPROVED time-off directly', async () => {
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      const result = await service.createTimeOff(timeOffDto, approver);
+      expect(result).toMatchObject({ status: 'APPROVED', decidedBy: approver.sub });
+    });
+
+    it('BR-SCH-002: refuses time-off overlapping a pending or approved one', async () => {
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue({ id: 'to-0', status: 'PENDING' });
+      const error = await service.createTimeOff(timeOffDto, approver).catch(e => e);
+      expect(error.getResponse().error).toBe('TIME_OFF_OVERLAP');
+      expect(prisma.timeOff.create).not.toHaveBeenCalled();
+    });
+
+    it('approving a pending time-off returns the bookings to move', async () => {
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue({
+        id: 'to-1',
+        dentistId: 'dentist-1',
+        status: 'PENDING',
+        startAt: new Date(future(24)),
+        endAt: new Date(future(48)),
+      });
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([{ id: 'appt-1' }]);
+      (prisma.timeOff.update as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        id: 'to-1',
+        ...data,
+      }));
+
+      const result = await service.approveTimeOff('to-1', {}, approver);
+      expect(result.status).toBe('APPROVED');
+      expect(result.affectedAppointments).toEqual([{ id: 'appt-1' }]);
+    });
+
+    it('rejecting needs a reason', async () => {
+      await expect(service.rejectTimeOff('to-1', { note: '' }, approver)).rejects.toThrow(/reason/);
+    });
+
+    it("a dentist cannot cancel a colleague's time-off", async () => {
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue({
+        id: 'to-1',
+        dentistId: 'dentist-other',
+        status: 'APPROVED',
+        endAt: new Date(future(48)),
+      });
+      await expect(service.cancelTimeOff('to-1', dentistPayload('dentist-self'))).rejects.toThrow(
+        /chính mình/,
+      );
+    });
+
+    describe('booking against the day calendar', () => {
+      const book = () =>
+        service.create(
+          {
+            dentistId: 'dentist-1',
+            patientId: 'patient-1',
+            startAt: '2027-03-15T02:15:00Z',
+          } as any,
+          actor,
+        );
+      beforeEach(() => {
+        (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+          id: 'patient-1',
+          deletedAt: null,
+        });
+        (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue({
+          startTime: new Date('1970-01-01T08:00:00Z'),
+          endTime: new Date('1970-01-01T17:00:00Z'),
+        });
+        (prisma.appointment.create as jest.Mock).mockResolvedValue({ id: 'appt-new' });
+      });
+
+      it('only APPROVED time-off blocks a booking', async () => {
+        await book();
+        expect((prisma.timeOff.findFirst as jest.Mock).mock.calls[0][0].where.status).toBe(
+          'APPROVED',
+        );
+      });
+
+      it('BR-SCH-003: a closed day refuses bookings', async () => {
+        (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
+          { kind: 'CLOSED', startTime: null, endTime: null },
+        ]);
+        await expect(book()).rejects.toThrow(/closed/);
+        expect(prisma.appointment.create).not.toHaveBeenCalled();
+      });
+
+      it('BR-SCH-003: a closed range refuses bookings inside it', async () => {
+        (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
+          {
+            kind: 'CLOSED',
+            startTime: new Date('1970-01-01T09:00:00Z'),
+            endTime: new Date('1970-01-01T10:00:00Z'),
+          },
+        ]);
+        await expect(book()).rejects.toThrow(/closed 09:00-10:00/);
+      });
+
+      it('BR-SCH-004: changed hours replace the weekly schedule', async () => {
+        (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
+          {
+            kind: 'CHANGED_HOURS',
+            startTime: new Date('1970-01-01T13:00:00Z'),
+            endTime: new Date('1970-01-01T17:00:00Z'),
+          },
+        ]);
+        await expect(book()).rejects.toThrow(/changed hours/);
+        expect(prisma.workingSchedule.findFirst).not.toHaveBeenCalled();
+      });
+    });
+
+    it('availability reports a closed day', async () => {
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+        {
+          startTime: new Date('1970-01-01T08:00:00Z'),
+          endTime: new Date('1970-01-01T17:00:00Z'),
+          slotDurationMin: 30,
+        },
+      ]);
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
+        { kind: 'CLOSED', startTime: null, endTime: null, reason: 'Sửa ghế' },
+      ]);
+      const result = await service.getAvailability({
+        dentistId: 'dentist-1',
+        date: '2027-03-15',
+      } as any);
+      expect(result).toMatchObject({
+        blockedReason: 'CLOSED',
+        availableSlots: [],
+        closedReason: 'Sửa ghế',
+      });
+    });
+
+    it('overrides are front desk/admin only', async () => {
+      await expect(
+        service.createScheduleOverride(
+          { dentistId: 'dentist-self', date: '2099-01-05', kind: 'CLOSED', reason: 'Nghỉ' } as any,
+          dentistPayload('dentist-self'),
+        ),
+      ).rejects.toThrow(/lễ tân/);
+    });
+
+    it('a day can have only one changed-hours override', async () => {
+      (prisma.scheduleOverride.findFirst as jest.Mock).mockResolvedValue({ id: 'ov-1' });
+      const error = await service
+        .createScheduleOverride(
+          {
+            dentistId: 'dentist-1',
+            date: '2099-01-05',
+            kind: 'CHANGED_HOURS',
+            startTime: '13:00',
+            endTime: '17:00',
+            reason: 'Họp buổi sáng',
+          } as any,
+          actor,
+        )
+        .catch(e => e);
+      expect(error.getResponse().error).toBe('OVERRIDE_EXISTS');
+    });
   });
 });
