@@ -9,6 +9,7 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import { staffApi, useDentistOverview, useStaffMutation } from './staffApi';
 import { DentistProfileForm } from './DentistProfileForm';
 import { BlockingAppointmentsList } from './BlockingAppointmentsList';
+import { DentistServicesCard } from '@/features/catalog/DentistServicesCard';
 import {
   DAY_OF_WEEK_LABEL,
   PRACTICE_STATUS_LABEL,
@@ -141,6 +142,10 @@ export default function DentistDetailPage() {
         </Card>
 
         <div className="space-y-6 lg:col-span-2">
+          <DentistServicesCard
+            dentistId={profile.userId}
+            canAssign={profile.practiceStatus === 'ACTIVE'}
+          />
           <Card title="Lịch làm việc cố định">
             {schedules.length === 0 ? (
               <p className="text-sm text-gray-500">Chưa có lịch làm việc.</p>

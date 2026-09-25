@@ -122,9 +122,7 @@ describe('ExpenseService', () => {
       // Someone else's write landed first — the guarded update matches 0 rows.
       (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      await expect(service.approve('exp-1', {}, approverActor)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.approve('exp-1', {}, approverActor)).rejects.toThrow(ConflictException);
       expect(prisma.expense.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
@@ -196,9 +194,9 @@ describe('ExpenseService', () => {
       (prisma.expense.findUnique as jest.Mock).mockResolvedValue(baseExpense());
       (prisma.expense.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.update('exp-1', { amount: 750000 } as any, actor),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.update('exp-1', { amount: 750000 } as any, actor)).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.expense.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 

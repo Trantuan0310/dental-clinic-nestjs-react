@@ -194,9 +194,7 @@ export class ExpenseService {
     });
 
     if (claimed.count === 0) {
-      throw new ConflictException(
-        `Expense ${id} was modified concurrently — reload and try again`,
-      );
+      throw new ConflictException(`Expense ${id} was modified concurrently — reload and try again`);
     }
 
     const updated = await this.prisma.expense.findUniqueOrThrow({
@@ -304,9 +302,7 @@ export class ExpenseService {
     });
 
     if (claimed.count === 0) {
-      throw new ConflictException(
-        `Expense ${id} was modified concurrently — reload and try again`,
-      );
+      throw new ConflictException(`Expense ${id} was modified concurrently — reload and try again`);
     }
 
     const updated = await this.prisma.expense.findUniqueOrThrow({

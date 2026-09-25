@@ -91,7 +91,7 @@ erDiagram
 | Bảng | Giai đoạn | Ghi chú |
 |---|---|---|
 | `employees`, `dentist_profiles` | 1 — Nhân sự, bác sĩ | Chi tiết: [`schema-per-module/staff.md`](../04_Database/schema-per-module/staff.md) |
-| `service_categories`, `services`, `dentist_services` | 2 — Dịch vụ | `dentist_services` có hiệu lực theo thời gian, thời lượng/giá riêng của bác sĩ |
+| `service_categories`, `services`, `dentist_services` | 2 — Dịch vụ | `dentist_services` có hiệu lực theo thời gian, thời lượng/giá riêng của bác sĩ. Chi tiết: [`schema-per-module/services.md`](../04_Database/schema-per-module/services.md) |
 | `schedule_overrides`; `time_offs` thêm `status/approved_by/approved_at` | 3 — Lịch làm việc | Nghỉ chờ duyệt **chưa** chặn slot; chỉ `APPROVED` chặn |
 | (không bảng mới) `AvailabilityService` | 4 — Slot trống | Gộp `getAvailability` + `ensureSlotAvailable`; một nguồn cho đặt lịch, đổi lịch, điều phối |
 | `appointment_services`; `appointments` thêm `visit_kind` (`BOOKED`/`WALK_IN`), `buffer_*`, `calculated_duration_min`, `duration_override_reason`; enum thêm `LEFT` | 5 — Lịch hẹn | Walk-in được đặt tại thời điểm hiện tại |

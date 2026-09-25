@@ -18,6 +18,7 @@ import {
   CalendarClock,
   Contact,
   Stethoscope,
+  ClipboardPlus,
 } from 'lucide-react';
 import type { RoleCode } from '@/types/auth';
 
@@ -112,6 +113,7 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
     items: [
       { to: '/staff', labelKey: 'Employees', icon: Contact, permission: 'employee.read' },
       { to: '/dentists', labelKey: 'Dentists', icon: Stethoscope, permission: 'dentist.read' },
+      { to: '/services', labelKey: 'Services', icon: ClipboardPlus, permission: 'service.read' },
       {
         to: '/payroll',
         labelKey: 'Payroll',

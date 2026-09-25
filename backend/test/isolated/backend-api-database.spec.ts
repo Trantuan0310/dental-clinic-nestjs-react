@@ -1005,4 +1005,116 @@ describe('Real HTTP and PostgreSQL regression', () => {
       ).toBe(0);
     });
   });
+
+  describe('service catalogue (ADR-0009 phase 2)', () => {
+    let categoryId: string;
+    let serviceId: string;
+    let dentistId: string;
+
+    beforeAll(async () => {
+      const role = await db.role.findFirstOrThrow({ where: { code: 'dentist' } });
+      const u = await db.user.create({
+        data: {
+          email: 'catalog-dentist@test.local',
+          fullName: 'Catalog dentist',
+          passwordHash: 'fixture',
+          status: 'ACTIVE',
+          userRoles: { create: { roleId: role.id } },
+        },
+      });
+      dentistId = u.id;
+      const employee = await db.employee.create({
+        data: {
+          code: 'NV-CAT01',
+          fullName: 'Catalog dentist',
+          employeeType: 'DENTIST',
+          userId: u.id,
+        },
+      });
+      await db.dentistProfile.create({
+        data: {
+          employeeId: employee.id,
+          userId: u.id,
+          calendarColor: '#65A30D',
+          specialties: ['TONG_QUAT'],
+        },
+      });
+    });
+
+    it('lets only admins manage the catalogue', async () => {
+      await api('post', '/service-categories', 'dentist')
+        .send({ code: 'TEST_CAT', name: 'Nhóm thử' })
+        .expect(403);
+      const category = await api('post', '/service-categories')
+        .send({ code: 'TEST_CAT', name: 'Nhóm thử', sortOrder: 99 })
+        .expect(201);
+      categoryId = category.body.data.id;
+      const created = await api('post', '/services')
+        .send({
+          code: 'TEST_SVC',
+          categoryId,
+          name: 'Dịch vụ thử',
+          defaultDurationMin: 25,
+          bufferAfterMin: 5,
+          basePrice: 300000,
+        })
+        .expect(201);
+      serviceId = created.body.data.id;
+      expect(created.body.data.basePrice).toBe(300000);
+      const duplicate = await api('post', '/services')
+        .send({ code: 'TEST_SVC', categoryId, name: 'Trùng mã', defaultDurationMin: 30 })
+        .expect(409);
+      expect(duplicate.body.code).toBe('CATALOG_CODE_TAKEN');
+      await api('get', '/services', 'dentist').expect(200);
+    });
+
+    it('rejects a service requiring a specialty the dentist lacks', async () => {
+      const implant = await api('post', '/services')
+        .send({
+          code: 'TEST_IMPLANT',
+          categoryId,
+          name: 'Implant thử',
+          defaultDurationMin: 90,
+          requiredSpecialty: 'IMPLANT',
+        })
+        .expect(201);
+      const res = await api('post', `/dentists/${dentistId}/services`)
+        .send({ serviceId: implant.body.data.id })
+        .expect(409);
+      expect(res.body.code).toBe('SPECIALTY_REQUIRED');
+    });
+
+    it('assigns a service once and lists the dentist as able to perform it', async () => {
+      const assigned = await api('post', `/dentists/${dentistId}/services`)
+        .send({ serviceId, durationMin: 30 })
+        .expect(201);
+      expect(assigned.body.data).toMatchObject({
+        effectiveDurationMin: 30,
+        effectivePrice: 300000,
+        current: true,
+      });
+      const overlap = await api('post', `/dentists/${dentistId}/services`)
+        .send({ serviceId })
+        .expect(409);
+      expect(overlap.body.code).toBe('ASSIGNMENT_OVERLAP');
+      const performers = await api('get', `/services/${serviceId}/dentists`, 'dentist').expect(200);
+      expect(performers.body.data.map((a: { dentist: { id: string } }) => a.dentist.id)).toContain(
+        dentistId,
+      );
+    });
+
+    it('deactivating a service ends its assignments and blocks new ones', async () => {
+      await api('post', `/services/${serviceId}/deactivate`).expect(200);
+      const rows = await db.dentistService.findMany({ where: { serviceId } });
+      expect(rows.every(r => r.effectiveTo !== null)).toBe(true);
+      await api('post', `/dentists/${dentistId}/services`)
+        .send({
+          serviceId,
+          effectiveFrom: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
+        })
+        .expect(409);
+      const listed = await api('get', '/services').expect(200);
+      expect(listed.body.data.map((s: { id: string }) => s.id)).not.toContain(serviceId);
+    });
+  });
 });
