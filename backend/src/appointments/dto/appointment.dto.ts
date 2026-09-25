@@ -277,10 +277,12 @@ export class AvailabilityQueryDto {
   @IsString()
   date!: string;
 
-  @ApiPropertyOptional()
+  // Visit length in minutes. Services may be as short as 5 min (catalogue
+  // DTO), so a short visit's reschedule picker must still get slots.
+  @ApiPropertyOptional({ description: 'Visit length; defaults to the shift slot step' })
   @IsOptional()
   @IsInt()
-  @Min(15)
+  @Min(5)
   @Max(480)
   slotDuration?: number;
 

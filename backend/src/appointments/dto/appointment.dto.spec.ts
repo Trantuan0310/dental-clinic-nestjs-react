@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
-import { ListAppointmentsQueryDto } from './appointment.dto';
+import { validateSync } from 'class-validator';
+import { AvailabilityQueryDto, ListAppointmentsQueryDto } from './appointment.dto';
 
 describe('ListAppointmentsQueryDto.status transform', () => {
   it('single bare value becomes a 1-element uppercase array', () => {
@@ -24,5 +25,27 @@ describe('ListAppointmentsQueryDto.status transform', () => {
   it('undefined stays undefined', () => {
     const dto = plainToInstance(ListAppointmentsQueryDto, {});
     expect(dto.status).toBeUndefined();
+  });
+});
+
+describe('AvailabilityQueryDto.slotDuration', () => {
+  const errorsFor = (slotDuration: number) =>
+    validateSync(
+      plainToInstance(AvailabilityQueryDto, {
+        dentistId: '01900000-0000-7000-8000-000000000000',
+        date: '2026-09-25',
+        slotDuration,
+      }),
+    ).map(e => e.property);
+
+  it('accepts a visit as short as the shortest catalogue service (5 min)', () => {
+    // Regression: the reschedule picker sends the visit length, and a 10-min
+    // X-ray visit got a 400 instead of free slots.
+    expect(errorsFor(10)).toEqual([]);
+    expect(errorsFor(5)).toEqual([]);
+  });
+
+  it('still rejects lengths below 5 min', () => {
+    expect(errorsFor(4)).toEqual(['slotDuration']);
   });
 });
