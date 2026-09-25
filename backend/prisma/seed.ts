@@ -931,7 +931,7 @@ async function main() {
       saltLength: 16,
     });
 
-    const admin = await prisma.user.create({
+    await prisma.user.create({
       data: {
         email: adminEmail,
         fullName: 'Quản trị viên',

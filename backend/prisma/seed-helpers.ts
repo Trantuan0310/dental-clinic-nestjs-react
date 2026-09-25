@@ -11,7 +11,14 @@
  * Build a Date at the given day-of-month, hour, minute (UTC).
  * Signature accepts up to 6 args — seconds default to 0.
  */
-export function utcDate(year: number, monthIdx: number, day: number, hour = 0, minute = 0, second = 0): Date {
+export function utcDate(
+  year: number,
+  monthIdx: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+): Date {
   return new Date(Date.UTC(year, monthIdx, day, hour, minute, second, 0));
 }
 
@@ -47,7 +54,11 @@ export function pick<T>(getRand: () => number, arr: readonly T[]): T {
  * Weighted pick: items[i] chosen with probability weights[i]/sum(weights).
  * Weights need not be normalised.
  */
-export function pickWeighted<T>(getRand: () => number, items: readonly T[], weights: readonly number[]): T {
+export function pickWeighted<T>(
+  getRand: () => number,
+  items: readonly T[],
+  weights: readonly number[],
+): T {
   const total = weights.reduce((a, b) => a + b, 0);
   let r = getRand() * total;
   for (let i = 0; i < items.length; i++) {
