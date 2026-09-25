@@ -176,6 +176,16 @@ Chi tiết: [`schema-per-module/staff.md`](../04_Database/schema-per-module/staf
 | Phân công dịch vụ *(giai đoạn 2)* | ✅ | ❌ | ❌ | `dentist.assign_service` |
 | Quản lý lịch làm việc *(thay dần `schedule.write`, giai đoạn 3)* | ✅ | ✅ | 🔒 | `dentist.manage_schedule` |
 
+### 3.7c Danh mục dịch vụ (ADR-0009 giai đoạn 2)
+
+Chi tiết: [`schema-per-module/services.md`](../04_Database/schema-per-module/services.md).
+
+| Action | Admin | Receptionist | Dentist | Permission code |
+| ------ | :---: | :----------: | :-----: | --------------- |
+| Xem danh mục dịch vụ, bác sĩ làm dịch vụ nào | ✅ | ✅ | ✅ | `service.read` |
+| Tạo/sửa/ngừng dịch vụ và nhóm dịch vụ | ✅ | ❌ | ❌ | `service.manage` |
+| Phân công / ngừng phân công dịch vụ cho bác sĩ | ✅ | ❌ | ❌ | `dentist.assign_service` |
+
 ### 3.8 Shift Management (Phase 9 — BD-0010)
 
 || Action | Admin | Receptionist | Dentist | Permission code |
