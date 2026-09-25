@@ -41,6 +41,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/my-payroll/compensation': 'Đãi ngộ của tôi',
   '/my-shifts': 'Ca của tôi',
   '/schedule': 'Lịch làm việc',
+  '/staff': 'Nhân sự',
+  '/dentists': 'Bác sĩ',
   '/shifts': 'Ca làm việc',
   '/shifts/pending': 'Duyệt ca làm việc',
   '/me': 'Hồ sơ của tôi',

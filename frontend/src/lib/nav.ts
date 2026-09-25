@@ -16,6 +16,8 @@ import {
   WalletCards,
   Briefcase,
   CalendarClock,
+  Contact,
+  Stethoscope,
 } from 'lucide-react';
 import type { RoleCode } from '@/types/auth';
 
@@ -108,6 +110,8 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
   groups.push({
     titleKey: 'Nhân sự & Lương',
     items: [
+      { to: '/staff', labelKey: 'Employees', icon: Contact, permission: 'employee.read' },
+      { to: '/dentists', labelKey: 'Dentists', icon: Stethoscope, permission: 'dentist.read' },
       {
         to: '/payroll',
         labelKey: 'Payroll',

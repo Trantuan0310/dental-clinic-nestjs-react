@@ -3,7 +3,7 @@
 > **Module:** Staff (mới)
 > **Quyết định kiến trúc:** [ADR-0009](../../ADR/0009-staff-dentist-service-scheduling-model.md) — D1: bác sĩ vẫn định danh bằng `users.id`
 > **Migration dự kiến:** `019_staff_employees_dentist_profiles`
-> **Ngày tạo:** 2026-09-25 · **Trạng thái:** Bản thiết kế chờ duyệt, chưa có code
+> **Ngày tạo:** 2026-09-25 · **Trạng thái:** Đã triển khai (PR-1) — xem mục 10 cho các điểm khác bản thiết kế ban đầu
 
 ---
 
@@ -280,3 +280,23 @@ Ghi chú:
 - Chấm công, tính lương theo hồ sơ nhân sự (ngoài phạm vi, vì chỉ làm HR Core).
 - Ảnh đại diện, tài liệu đính kèm của nhân viên.
 - Bác sĩ không có tài khoản (xem ADR-0009, "Alternatives considered" 1).
+
+---
+
+## 10. Ghi chú triển khai (PR-1)
+
+Những điểm cụ thể hơn hoặc khác bản thiết kế ở trên:
+
+- **Mã nguồn:** backend `backend/src/staff/` (`EmployeesService`, `DentistsService`, `StaffModule`); frontend `frontend/src/features/staff/` với các trang `/staff` (Nhân sự), `/dentists` (Bác sĩ) và `/dentists/:userId` (chi tiết).
+- **Chuyển dữ liệu dùng chung:** `prisma/staff-backfill.ts` đọc đúng khối SQL giữa hai dấu `@staff-backfill-start/end` trong migration 019. `seed.ts` và `seed-clinical.ts` gọi hàm này sau khi tạo user, nên dữ liệu seed và dữ liệu thật đi qua cùng một câu lệnh.
+- **Quyền:** migration 019 cũng thêm các mã quyền và gán cho 3 role hệ thống (`ON CONFLICT DO NOTHING`), để database đang chạy có quyền mới mà không cần chạy lại seed.
+- **Gắn tài khoản:** API nhận `userId` (gắn tài khoản có sẵn) hoặc `loginEmail` (tạo mới qua `UsersService.create`, trạng thái `PENDING_SETUP`, gửi lời mời). Role mặc định theo loại nhân viên: `DENTIST` → `dentist`, `RECEPTIONIST` → `receptionist`; loại khác không tự gán role. Màn hình hiện chỉ có luồng tạo mới.
+- **Chuyển thành bác sĩ:** ngoài gán role `dentist`, `employee_type` của nhân viên được đổi thành `DENTIST`. Không cho đổi `employee_type` khỏi `DENTIST` khi đã có hồ sơ bác sĩ.
+- **Trạng thái hành nghề:** `POST /dentists/:userId/deactivate` (`SUSPENDED`/`INACTIVE`, kèm lý do) và `POST /dentists/:userId/activate`. Không cho kích hoạt lại khi nhân viên đã nghỉ việc hoặc tài khoản đã bị khóa.
+- **Nghỉ việc:** ngoài BR-STAFF-004/005, không cho tự cho mình nghỉ việc, và không cho nghỉ việc quản trị viên cuối cùng (`CANNOT_REMOVE_LAST_ADMIN`).
+- **BR-STAFF-006:** chỉ **đặt lịch** mới yêu cầu hồ sơ `ACTIVE`. Tạo lịch làm việc và nghỉ phép vẫn được khi bác sĩ bị tạm đình chỉ, để chuẩn bị cho lúc bác sĩ quay lại. Thời lượng mặc định của lịch hẹn lấy `default_slot_minutes` của hồ sơ (trước đây cố định 30 phút).
+- **Lịch:** khối lịch hẹn hiện một chấm màu `calendar_color` của bác sĩ cạnh tên; màu nền vẫn theo trạng thái lịch hẹn.
+- **Kiểm thử:**
+  - Unit: `employees.service.spec.ts`, `dentists.service.spec.ts`, và phần BR-STAFF-006 trong `appointments.service.spec.ts`.
+  - API trên Postgres thật: `test/isolated/backend-api-database.spec.ts`, nhóm "staff" (migration chạy 2 lần, seed, endpoint, phân quyền).
+  - E2E: `frontend/e2e/staff.spec.ts` và `staff-dentist-self.spec.ts`.

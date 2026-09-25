@@ -59,6 +59,9 @@ const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'));
 
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'));
 const UsersPage = lazy(() => import('@/features/admin/UsersPage'));
+const EmployeesPage = lazy(() => import('@/features/staff/EmployeesPage'));
+const DentistsPage = lazy(() => import('@/features/staff/DentistsPage'));
+const DentistDetailPage = lazy(() => import('@/features/staff/DentistDetailPage'));
 const RolesPage = lazy(() => import('@/features/admin/RolesPage'));
 const AuditLogsPage = lazy(() => import('@/features/admin/AuditLogsPage'));
 const SettingsPage = lazy(() => import('@/features/admin/SettingsPage'));
@@ -363,6 +366,30 @@ const router = createBrowserRouter(createRoutesFromElements(
                 element={
                   <ProtectedRoute permission="schedule.read">
                     <SchedulePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="staff"
+                element={
+                  <ProtectedRoute permission="employee.read">
+                    <EmployeesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="dentists"
+                element={
+                  <ProtectedRoute permission="dentist.read">
+                    <DentistsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="dentists/:userId"
+                element={
+                  <ProtectedRoute permission="dentist.read">
+                    <DentistDetailPage />
                   </ProtectedRoute>
                 }
               />

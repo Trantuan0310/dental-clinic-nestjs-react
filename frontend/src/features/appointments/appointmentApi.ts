@@ -448,13 +448,14 @@ export function useDentistOptions() {
     queryFn: async (): Promise<DentistMini[]> => {
       // Appointment users need a small dentist lookup, not access to the
       // admin-only user-management API.
-      const data = await get<Array<{ id: string; fullName: string }>>(
+      const data = await get<Array<{ id: string; fullName: string; calendarColor?: string | null }>>(
         '/appointments/dentists',
       );
       return data.map((dentist) => ({
         id: dentist.id,
         fullName: dentist.fullName,
         specialization: null,
+        calendarColor: dentist.calendarColor ?? null,
       }));
     },
     staleTime: 5 * 60_000,
