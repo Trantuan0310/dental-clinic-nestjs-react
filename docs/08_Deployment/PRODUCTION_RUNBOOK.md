@@ -2,15 +2,20 @@
 
 ## Cấu hình đã chuẩn bị
 
-Topology: Nginx phục vụ frontend và proxy API trên cùng HTTPS origin → một backend → PostgreSQL ngoài có TLS. Backend không mở cổng trực tiếp ra host. Rate limit hiện dùng bộ nhớ của một instance; chưa scale nhiều backend.
+Topology: Nginx phục vụ frontend và proxy API trên cùng HTTPS origin → một backend → PostgreSQL có TLS. Backend không mở cổng trực tiếp ra host. Rate limit hiện dùng bộ nhớ của một instance; chưa scale nhiều backend.
+
+- `docker-compose.prod.yml` (mặc định, đang chạy trên VPS gensmile.online): PostgreSQL 16 nội bộ trong Docker, không publish cổng 5432. Chuẩn bị chứng chỉ nội bộ theo [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md).
+- `docker-compose.external-db.yml` + `.env.production.external-db.example`: PostgreSQL ngoài (managed). Các bước bên dưới dùng `docker-compose.prod.yml`; với DB ngoài, thay tên file compose/env và tạo DB theo bước 2.
+
+**Nâng cấp một máy đang chạy:** xem [VPS_UPGRADE.md](./VPS_UPGRADE.md) (`scripts/deploy-vps.sh`).
 
 Docker Compose có release job `migrate`, backend chỉ chạy sau migrate thành công, web chỉ chạy sau readiness backend. `bootstrap` là profile chạy thủ công, không chạy lại seed mỗi lần deploy.
 
 ## Chuẩn bị máy chủ
 
 1. Cài Docker/Compose, trỏ DNS domain, chuẩn bị chứng chỉ TLS hợp lệ gồm `fullchain.pem` và `privkey.pem` trong một thư mục. Nếu dùng Let's Encrypt live symlink, tạo thư mục riêng chứa bản sao thực của hai file hoặc mount cả cây certificate phù hợp; mount chỉ thư mục live có thể làm symlink bị đứt. Thiết lập tự gia hạn và reload Nginx sau gia hạn.
-2. Tạo PostgreSQL có TLS và cho phép extensions `uuid-ossp`, `pgcrypto`, `pg_trgm`, `btree_gist`. Chọn bản PostgreSQL đã chạy staging test. Không trỏ vào database demo.
-3. Copy `.env.production.example` thành `.env.production`, nhập domain, đường dẫn certificate, URL DB, JWT ngẫu nhiên và SMTP thật; file production đã được gitignore. Không đưa secret vào VITE_*.
+2. Với `docker-compose.prod.yml`: dùng service PostgreSQL 16 trong compose; tạo `POSTGRES_CERT_DIR` và chứng chỉ nội bộ theo [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md); init script 01/02/03 tạo extensions, UUID v7 và sequences trên volume mới. Với DB ngoài: tạo PostgreSQL có TLS và cho phép extensions `uuid-ossp`, `pgcrypto`, `pg_trgm`, `btree_gist`; không trỏ vào database demo.
+3. Copy `.env.production.example` (hoặc `.env.production.external-db.example`) thành `.env.production`, nhập domain, thư mục certificate, thông tin PostgreSQL, JWT ngẫu nhiên và SMTP thật; file production đã được gitignore. Không đưa secret vào VITE_*.
 4. Tài khoản migration cần quyền tạo schema/extensions hoặc nhờ DBA tạo extensions trước. Tài khoản ứng dụng cần CONNECT, USAGE schema, CRUD bảng, USAGE/SELECT sequences và EXECUTE UUID function. DBA phải thiết lập default privileges của chủ sở hữu migration cho các bảng/sequence mới. Chạy smoke test bằng đúng tài khoản ứng dụng sau khi cấp quyền.
 
 ## Triển khai lần đầu

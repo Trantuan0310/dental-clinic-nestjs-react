@@ -102,20 +102,24 @@ VITE_API_BASE_URL="http://localhost:3000/api/v1"
 
 ---
 
-## Docker (`docker-compose.prod.yml` ở gốc repo)
+## Docker (gốc repo)
 
-```env
-POSTGRES_USER="postgres"
-POSTGRES_PASSWORD="strong-password-here"
-JWT_SECRET="your-super-secret-jwt-key-min-32-chars-here"
-CORS_ORIGIN="https://your-frontend-domain.com"
-THROTTLE_TTL="60000"
-THROTTLE_LIMIT="100"
-```
+Có hai file compose:
 
-`docker-compose.prod.yml` hiện tại **không** có service Redis — biến
-`REDIS_URL`/`REDIS_PASSWORD` không áp dụng trừ khi bạn tự thêm service Redis
-vào file compose.
+| File | Database | File env mẫu |
+|---|---|---|
+| `docker-compose.prod.yml` | PostgreSQL 16 **nội bộ** trong Docker có TLS (VPS gensmile.online) | `.env.production.example` |
+| `docker-compose.external-db.yml` | PostgreSQL **ngoài** có TLS (managed DB) | `.env.production.external-db.example` |
+
+Với `docker-compose.prod.yml`, compose tự dựng `DATABASE_URL` nội bộ
+(`postgresql://…@postgres:5432/…?sslmode=require`) từ `POSTGRES_DB`,
+`POSTGRES_USER`, `POSTGRES_PASSWORD`; không đặt `localhost` trong URL.
+`PUBLIC_APP_URL` (= `https://${DOMAIN}`) là gốc của link trong email đặt lịch
+online. Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
+[VPS_UPGRADE.md](./VPS_UPGRADE.md).
+
+Cả hai file **không** có service Redis — `REDIS_URL` để trống trừ khi bạn tự
+thêm service Redis.
 
 ---
 
