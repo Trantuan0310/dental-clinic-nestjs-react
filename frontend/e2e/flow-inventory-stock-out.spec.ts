@@ -152,7 +152,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     await loginAs(dentistPage, ACCOUNTS.secondDentist.email, ACCOUNTS.secondDentist.password);
     await dentistPage.goto('/my-queue');
     await dentistPage.waitForLoadState('networkidle');
-    const queueCard = dentistPage.locator('.space-y-3 > div').filter({ hasText: testName });
+    const queueCard = dentistPage.getByRole('list', { name: 'Hàng đợi' }).getByRole('listitem').filter({ hasText: testName });
     await expect(queueCard).toBeVisible({ timeout: 15_000 });
     await queueCard.getByRole('button', { name: /bắt đầu khám/i }).click();
     await dentistPage.waitForURL(/\/encounters\/[a-zA-Z0-9-]+$/, { timeout: 15_000 });

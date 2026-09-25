@@ -88,6 +88,9 @@ Trong đó:
 | Tiếp nhận khách vãng lai (check-in ngay) | ✅ | ✅ | ❌ | `appointment.create` |
 | Ghi nhận bệnh nhân đã về trước khi khám (`LEFT`) | ✅ | ✅ | ❌ | `appointment.mark_left` |
 | Xem nhật ký thao tác của lịch hẹn | ✅ | ✅ | 🔒 (chỉ lịch của mình) | `appointment.read.any` / `appointment.read.own` |
+| Xem hàng đợi khám | ✅ | ✅ | 🔒 (chỉ hàng của mình) | `queue.read` |
+| Gọi / bỏ qua bệnh nhân trong hàng đợi | ✅ | ✅ | 🔒 (chỉ hàng của mình) | `queue.call` |
+| Ưu tiên cấp cứu, chuyển bác sĩ, thay bác sĩ cả ngày | ✅ | ✅ | ❌ | `queue.manage` |
 
 ### 3.3 Medical Records module
 

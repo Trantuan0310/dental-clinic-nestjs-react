@@ -23,6 +23,7 @@ const AppointmentsListPage = lazy(() => import('@/features/appointments/Appointm
 
 const TodayPage = lazy(() => import('@/features/medical-records/TodayPage'));
 const MyQueuePage = lazy(() => import('@/features/medical-records/MyQueuePage'));
+const DispatchPage = lazy(() => import('@/features/dispatch/DispatchPage'));
 const MyPatientsPage = lazy(() => import('@/features/medical-records/MyPatientsPage'));
 const PatientEncountersPage = lazy(
   () => import('@/features/medical-records/PatientEncountersPage'),
@@ -166,6 +167,14 @@ const router = createBrowserRouter(createRoutesFromElements(
                   // access to the underlying data.
                   <ProtectedRoute permission="appointment.read">
                     <TodayPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="dispatch"
+                element={
+                  <ProtectedRoute permission="queue.manage">
+                    <DispatchPage />
                   </ProtectedRoute>
                 }
               />

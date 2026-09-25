@@ -29,6 +29,18 @@ async function savePrint(page: Page, name: string) {
   await page.pdf({ path: `${dir}/${name}.pdf`, format: 'A4', printBackground: true });
 }
 
+const queueEntry = (id: string, name: string) => ({
+  id: `q-${id}`, appointmentId: id, dentistId: 'demo-dentist', dentistName: 'Bác sĩ demo',
+  calendarColor: null, status: 'WAITING', priority: 'ON_TIME', position: 1,
+  checkedInAt: '2026-09-15T17:25:00Z', waitingMinutes: 5, emergencyReason: null, calledAt: null,
+  callCount: 0, skipReason: null, skipCount: 0, transferredFromId: null, transferReason: null,
+  appointment: {
+    id, status: 'CHECKED_IN', startAt: '2026-09-15T17:25:00Z', endAt: '2026-09-15T17:40:00Z',
+    visitKind: 'BOOKED', chiefComplaint: null, services: [],
+    patient: { id, code: `BN-${id}`, fullName: name, primaryPhone: null },
+  },
+});
+
 test.describe('Dentist UI regressions', () => {
   test.use({ storageState: 'e2e/.auth/dentist.json' });
 
@@ -46,18 +58,19 @@ test.describe('Dentist UI regressions', () => {
     await page.route('**/api/v1/appointments?*', async route => {
       queries.push(new URL(route.request().url()));
       await route.fulfill({ json: { data: [
-        row('waiting', 'Bệnh nhân chờ hôm nay', '2026-09-15T17:25:00Z', 'CHECKED_IN'),
         row('ongoing', 'Bệnh nhân đang khám', '2026-09-15T17:20:00Z', 'IN_PROGRESS'),
-        row('yesterday', 'Bệnh nhân ngày trước', '2026-09-15T16:40:00Z', 'CHECKED_IN'),
+        row('yesterday', 'Bệnh nhân ngày trước', '2026-09-15T16:40:00Z', 'IN_PROGRESS'),
       ], pagination: { pageSize: 50, hasMore: false, nextCursor: null } } });
     });
+    // Waiting patients come from the dispatch queue (ADR-0009 phase 6).
+    await page.route('**/api/v1/queue*', route => route.fulfill({ json: { data: [queueEntry('waiting', 'Bệnh nhân chờ hôm nay')] } }));
     await page.goto('/my-queue');
     await expect(page.getByText('Bệnh nhân chờ hôm nay', { exact: true })).toBeVisible();
     await expect(page.getByText('Bệnh nhân đang khám', { exact: true })).toBeVisible();
     await expect(page.getByText('Bệnh nhân ngày trước', { exact: true })).toHaveCount(0);
     expect(queries[0].searchParams.get('from')).toBe('2026-09-16');
     expect(queries[0].searchParams.get('to')).toBe('2026-09-16');
-    expect(queries[0].searchParams.getAll('status')).toEqual(['checked_in', 'in_progress']);
+    expect(queries[0].searchParams.getAll('status')).toEqual(['in_progress']);
     await page.reload();
     await expect(page.getByRole('button', { name: 'Tiếp tục khám', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Bắt đầu khám', exact: true })).toBeVisible();
@@ -65,9 +78,9 @@ test.describe('Dentist UI regressions', () => {
 
   test('queue API failure shows a retry action and recovers without a false empty state', async ({ page }) => {
     let fail = true;
-    await page.route('**/api/v1/appointments?*', route => route.fulfill(fail
+    await page.route('**/api/v1/queue*', route => route.fulfill(fail
       ? { status: 403, json: { message: 'Forbidden' } }
-      : { json: { data: [], pagination: { pageSize: 50, hasMore: false, nextCursor: null } } }));
+      : { json: { data: [] } }));
     await page.goto('/my-queue');
     await expect(page.getByText('Không thể tải hàng đợi', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Không có bệnh nhân nào đang chờ', { exact: true })).toHaveCount(0);
@@ -136,7 +149,9 @@ test('unsaved patient form blocks sidebar navigation and browser back', async ({
   await page.getByRole('button', { name: /^tạo bệnh nhân$/i }).first().click();
   await expect(page).toHaveURL(/\/patients\/new$/);
   await page.getByLabel(/họ và tên/i).fill('Dữ liệu chưa lưu');
-  page.on('dialog', dialog => dialog.dismiss());
+  // Both the route blocker and beforeunload can raise a dialog for one
+  // navigation; the second dismiss must not throw "No dialog is showing".
+  page.on('dialog', dialog => dialog.dismiss().catch(() => undefined));
   await page.locator('aside').getByRole('link', { name: /^dashboard$/i }).click();
   await expect(page).toHaveURL(/\/patients\/new$/);
   await expect(page.getByLabel(/họ và tên/i)).toHaveValue('Dữ liệu chưa lưu');
@@ -144,7 +159,7 @@ test('unsaved patient form blocks sidebar navigation and browser back', async ({
   await expect(page).toHaveURL(/\/patients\/new$/);
   await expect(page.getByLabel(/họ và tên/i)).toHaveValue('Dữ liệu chưa lưu');
   page.removeAllListeners('dialog');
-  page.once('dialog', dialog => dialog.accept());
+  page.once('dialog', dialog => dialog.accept().catch(() => undefined));
   await page.locator('aside').getByRole('link', { name: /^dashboard$/i }).click();
   await expect(page).not.toHaveURL(/\/patients\/new$/);
 });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { format } from 'date-fns';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/format';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
@@ -7,6 +8,7 @@ import { Button, Modal, Input, Textarea, Select, ConfirmDialog } from '@/compone
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useInventoryItems } from '@/features/inventory/inventoryApi';
+import { useBookableServices } from '@/features/appointments/appointmentApi';
 import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUsage } from '@/types/medical-records';
 
 interface TreatmentsTabProps {
@@ -28,6 +30,10 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const [quantity, setQuantity] = useState('1');
   const [unitPrice, setUnitPrice] = useState('');
   const [notes, setNotes] = useState('');
+  // ADR-0009 D6: optional catalogue pick; it pre-fills code, name and price.
+  const [serviceId, setServiceId] = useState('');
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const { data: catalogServices = [] } = useBookableServices(encounter.dentistId, today);
 
   // Materials consumed by this treatment — only meaningful on create; the
   // backend's UpdateTreatmentDto has no field for it, so editing an existing
@@ -64,6 +70,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setQuantity('1');
     setUnitPrice('');
     setNotes('');
+    setServiceId('');
     setInventoryUsages([]);
     setPickedItemId('');
     setPickedQty('1');
@@ -151,6 +158,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         priceCents: parseInt(unitPrice),
         description: notes,
         inventoryItemsUsed: inventoryUsages,
+        serviceId: serviceId || undefined,
+        durationMinutes: catalogServices.find((sv) => sv.serviceId === serviceId)?.durationMin,
       });
     }
   };
@@ -258,6 +267,25 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             onChange={(e) => setToothNumber(String(e.target.value))}
             placeholder="VD: 16, 26, 46"
           />
+          {!editingTreatment && catalogServices.length > 0 && (
+            <Select
+              label="Dịch vụ từ danh mục"
+              value={serviceId}
+              onChange={(e) => {
+                const sv = catalogServices.find((x) => x.serviceId === e.target.value);
+                setServiceId(e.target.value);
+                if (sv) {
+                  setProcedureCode(sv.code);
+                  setProcedureName(sv.name);
+                  setUnitPrice(String(sv.price));
+                }
+              }}
+              options={[
+                { value: '', label: '— Nhập tay —' },
+                ...catalogServices.map((sv) => ({ value: sv.serviceId, label: `${sv.name} (${sv.code})` })),
+              ]}
+            />
+          )}
           <Input
             label="Mã thủ thuật"
             value={procedureCode}

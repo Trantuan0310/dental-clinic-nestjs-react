@@ -91,6 +91,12 @@ const HISTORY_LABEL: Record<string, string> = {
   APPOINTMENT_AUTO_NO_SHOW: 'Tự động no-show',
   APPOINTMENT_LEFT: 'Bệnh nhân đã về (chưa khám)',
   ENCOUNTER_CANCELLED_VIA_APPOINTMENT: 'Hủy lượt khám theo lịch hẹn',
+  APPOINTMENT_CHECKED_IN: 'Check-in',
+  QUEUE_CALLED: 'Gọi vào khám',
+  QUEUE_SKIPPED: 'Bỏ qua khi gọi',
+  QUEUE_EMERGENCY: 'Ưu tiên cấp cứu',
+  APPOINTMENT_TRANSFERRED: 'Chuyển sang bác sĩ khác',
+  APPOINTMENT_REASSIGNED: 'Thay bác sĩ (cả ngày)',
 };
 
 const LATE_CHECK_IN_REASONS = [

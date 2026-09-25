@@ -1,19 +1,38 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Play, Clock } from 'lucide-react';
+import { RefreshCw, Stethoscope } from 'lucide-react';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { useStartEncounter } from '@/features/appointments/appointmentApi';
 import { Button, Card, EmptyState, FormSkeleton } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { useNavigate } from 'react-router-dom';
+import { QueueList } from '@/features/dispatch/QueueList';
+import { useQueue } from '@/features/dispatch/dispatchApi';
 
+/**
+ * The dentist's queue (ADR-0009 phase 6): patients waiting in dispatch
+ * order — emergency, on time, late, walk-in, then check-in time. Call the
+ * next one, start the exam, or skip someone who does not answer. Exams
+ * already running are listed below to resume.
+ */
 export default function MyQueuePage() {
   const navigate = useNavigate();
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const startEncounter = useStartEncounter();
   const today = format(new Date(), 'yyyy-MM-dd');
+  // The API scopes a dentist to their own queue; front desk sees every dentist.
+  const { data: queue = [], isLoading, isError, refetch, isFetching } = useQueue();
+
+  const { data: running } = useQuery({
+    queryKey: ['appointments', 'my-queue', 'in-progress', today],
+    queryFn: () =>
+      appointmentsApi.list({ status: ['in_progress'], from: today, to: today, pageSize: 50 }),
+    refetchInterval: 30_000,
+  });
+  // Clinic day, not the API's UTC range edge: drop anything from another day.
+  const inProgress = (running?.data ?? []).filter(
+    (apt) => format(new Date(apt.startsAt), 'yyyy-MM-dd') === today,
+  );
 
   const handleStart = async (appointmentId: string) => {
     try {
@@ -24,61 +43,37 @@ export default function MyQueuePage() {
     }
   };
 
-  const { data, refetch, isLoading, isError } = useQuery({
-    // Prefixed with 'appointments' (appointmentKeys.all's own prefix) so
-    // every appointment mutation's `invalidateQueries({queryKey:
-    // appointmentKeys.all})` — check-in, start-encounter, cancel, etc. —
-    // refreshes this queue immediately instead of only on the next 30s
-    // poll. The disjoint key ['my-queue'] this used to be was invisible to
-    // that invalidation net entirely.
-    queryKey: ['appointments', 'my-queue', today],
-    queryFn: () => appointmentsApi.list({
-      status: ['checked_in', 'in_progress'],
-      from: today,
-      to: today,
-      pageSize: 50,
-    }),
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
-  });
-
-  const appointments = data?.data ?? [];
-
-  // Filter to only today's appointments and sort by check-in time
-  const queue = appointments
-    .filter(apt => format(new Date(apt.startsAt), 'yyyy-MM-dd') === today)
-    .sort((a, b) => {
-      const aTime = a.checkInAt ? new Date(a.checkInAt).getTime() : Infinity;
-      const bTime = b.checkInAt ? new Date(b.checkInAt).getTime() : Infinity;
-      return aTime - bTime;
-    });
-
-  const getWaitingTime = (checkInAt?: string | null) => {
-    if (!checkInAt) return null;
-    const minutes = Math.floor((Date.now() - new Date(checkInAt).getTime()) / 60000);
-    return minutes;
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Hàng đợi của tôi</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Bệnh nhân đã check-in và đang chờ được khám
+            Thứ tự: cấp cứu → đúng giờ → đến trễ → vãng lai, rồi theo giờ check-in
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setIsRefreshing(true);
-            refetch().finally(() => setIsRefreshing(false));
-          }}
-          isLoading={isRefreshing}
-        >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+        <Button variant="outline" onClick={() => void refetch()} isLoading={isFetching}>
+          <RefreshCw className="h-4 w-4" />
           Làm mới
         </Button>
       </div>
+
+      {inProgress.length > 0 && (
+        <Card>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">Đang khám</h2>
+          <ul className="space-y-2">
+            {inProgress.map((apt) => (
+              <li key={apt.id} className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 p-3">
+                <span className="font-medium text-gray-900">{apt.patientName}</span>
+                <Button size="sm" onClick={() => navigate(`/encounters/${apt.encounterId}`)}>
+                  <Stethoscope className="h-4 w-4" />
+                  Tiếp tục khám
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card>
         {isLoading ? (
@@ -87,7 +82,7 @@ export default function MyQueuePage() {
           <EmptyState
             title="Không thể tải hàng đợi"
             description="Vui lòng kiểm tra kết nối hoặc quyền truy cập rồi thử lại."
-            action={{ label: 'Thử lại', onClick: () => refetch() }}
+            action={{ label: 'Thử lại', onClick: () => void refetch() }}
           />
         ) : queue.length === 0 ? (
           <EmptyState
@@ -96,87 +91,17 @@ export default function MyQueuePage() {
             description="Hàng đợi trống. Các bệnh nhân đã check-in sẽ xuất hiện ở đây."
           />
         ) : (
-          <div className="space-y-3">
-            {queue.map((apt, index) => {
-              const waitingMinutes = getWaitingTime(apt.checkInAt);
-              const isFirst = index === 0;
-
-              return (
-                <div
-                  key={apt.id}
-                  className={`rounded-lg border-2 p-4 ${
-                    isFirst
-                      ? 'border-brand-500 bg-brand-50'
-                      : 'border-gray-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      {/* Position */}
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-full font-bold ${
-                        isFirst ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {isFirst ? '★' : `#${index + 1}`}
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-lg font-bold text-gray-900">{apt.patientName}</p>
-                          {isFirst && <span className="rounded bg-brand-500 px-2 py-0.5 text-xs font-medium text-white">Tiếp theo</span>}
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                          <span className="text-gray-600">
-                            <span className="font-medium">Mã lịch hẹn:</span> {apt.id.slice(0, 8)}
-                          </span>
-                          <span className="text-gray-600">
-                            <span className="font-medium">Giờ hẹn:</span> {format(new Date(apt.startsAt), 'HH:mm')}
-                          </span>
-                          {waitingMinutes !== null && (
-                            <span className={`flex items-center gap-1 ${
-                              waitingMinutes > 30 ? 'text-red-600 font-medium' : 'text-gray-600'
-                            }`}>
-                              <Clock className="h-4 w-4" />
-                              Chờ: {waitingMinutes} phút
-                            </span>
-                          )}
-                        </div>
-                        {apt.chiefComplaint && (
-                          <p className="mt-2 text-sm text-gray-600">
-                            <span className="font-medium">Lý do khám:</span> {apt.chiefComplaint}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      {apt.status === 'in_progress' ? (
-                        <Button
-                          onClick={() => navigate(`/encounters/${apt.encounterId}`)}
-                        >
-                          Tiếp tục khám
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => handleStart(apt.id)}
-                          isLoading={startEncounter.isPending}
-                        >
-                          <Play className="h-4 w-4" />
-                          Bắt đầu khám
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <QueueList
+            entries={queue}
+            mode="dentist"
+            onStart={(id) => void handleStart(id)}
+            startingId={startEncounter.isPending ? (startEncounter.variables ?? null) : null}
+          />
         )}
       </Card>
 
       {queue.length > 0 && (
-        <p className="text-center text-sm text-gray-500">
-          Hàng đợi tự động làm mới mỗi 30 giây
-        </p>
+        <p className="text-center text-sm text-gray-500">Hàng đợi tự động làm mới mỗi 20 giây</p>
       )}
     </div>
   );
