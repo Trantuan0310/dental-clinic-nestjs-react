@@ -95,6 +95,11 @@
       "password": "Password",
       "submit": "Sign in",
       "forgotPassword": "Forgot password?",
+      "patient": {
+        "prompt": "Are you a patient?",
+        "book": "Book a visit",
+        "status": "Check a request"
+      },
       "hero": {
         "headlinePrefix": "A ",
         "headlineHighlight": "smoother-running clinic",
@@ -151,6 +156,7 @@
     "Patients": "Patients",
     "Appointments": "Appointments",
     "Today": "Today",
+    "BookingRequests": "Booking requests",
     "Dispatch": "Dispatch",
     "MyQueue": "My queue",
     "MedicalRecords": "Medical records",

@@ -149,6 +149,11 @@ model User {
   dentistServices            DentistService[] @relation("DentistServiceDentist")
   scheduleOverrides          ScheduleOverride[] @relation("ScheduleOverrideDentist")
 
+  // Online booking requests (migration 025)
+  bookingRequestsPreferred   BookingRequest[] @relation("BookingPreferredDentist")
+  bookingRequestsProposed    BookingRequest[] @relation("BookingProposedDentist")
+  bookingRequestsHandled     BookingRequest[] @relation("BookingHandler")
+
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
   // real constraint is a partial unique index — active rows only — created
@@ -324,6 +329,7 @@ model Patient {
   encounters    Encounter[]
   invoices      Invoice[]
 
+  bookingRequests BookingRequest[]
   @@unique([code])
   @@index([primaryPhone])
   @@index([fullName])
@@ -485,6 +491,7 @@ model Appointment {
   queueEntry       QueueEntry?
 
     // Active slot uniqueness is a partial index managed by migration 017.
+  bookingRequest BookingRequest?
   @@index([dentistId, startAt])
   @@index([patientId, startAt(sort: Desc)])
   @@index([startAt])
@@ -1396,6 +1403,7 @@ model Service {
   appointmentServices AppointmentService[]
   treatments          Treatment[]
 
+  bookingRequests     BookingRequest[]
   @@map("services")
 }
 
@@ -1519,4 +1527,60 @@ model QueueEntry {
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@map("queue_entries")
+}
+
+// ============================================================================
+// Online booking requests (migration 025). A patient asks for a service,
+// dentist and time on the public page; the front desk confirms it into an
+// appointment, proposes another time, asks for details or declines.
+// ============================================================================
+
+enum BookingRequestStatus {
+  PENDING_REVIEW
+  NEEDS_INFORMATION
+  PROPOSED
+  PATIENT_ACCEPTED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+}
+
+model BookingRequest {
+  id                 String               @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  referenceCode      String               @unique @map("reference_code") @db.VarChar(24)
+  accessTokenHash    String               @map("access_token_hash") @db.Char(64)
+  fullName           String               @map("full_name") @db.VarChar(200)
+  dob                DateTime             @db.Date
+  gender             Gender
+  phone              String               @db.VarChar(20)
+  email              String?              @db.VarChar(255)
+  contactPersonName  String?              @map("contact_person_name") @db.VarChar(200)
+  contactPersonPhone String?              @map("contact_person_phone") @db.VarChar(20)
+  serviceId          String               @map("service_id") @db.Uuid
+  preferredDentistId String               @map("preferred_dentist_id") @db.Uuid
+  requestedStartAt   DateTime             @map("requested_start_at") @db.Timestamptz()
+  proposedStartAt    DateTime?            @map("proposed_start_at") @db.Timestamptz()
+  proposedDentistId  String?              @map("proposed_dentist_id") @db.Uuid
+  reason             String?              @db.VarChar(1000)
+  status             BookingRequestStatus @default(PENDING_REVIEW)
+  responseMessage    String?              @map("response_message") @db.VarChar(1000)
+  receptionistNote   String?              @map("receptionist_note") @db.VarChar(2000)
+  consentedAt        DateTime             @map("consented_at") @db.Timestamptz()
+  patientId          String?              @map("patient_id") @db.Uuid
+  appointmentId      String?              @unique @map("appointment_id") @db.Uuid
+  handledBy          String?              @map("handled_by") @db.Uuid
+  notificationSentAt DateTime?            @map("notification_sent_at") @db.Timestamptz()
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz()
+
+  service          Service      @relation(fields: [serviceId], references: [id])
+  preferredDentist User         @relation("BookingPreferredDentist", fields: [preferredDentistId], references: [id])
+  proposedDentist  User?        @relation("BookingProposedDentist", fields: [proposedDentistId], references: [id])
+  patient          Patient?     @relation(fields: [patientId], references: [id])
+  appointment      Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  handler          User?        @relation("BookingHandler", fields: [handledBy], references: [id])
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([phone, createdAt(sort: Desc)])
+  @@map("booking_requests")
 }

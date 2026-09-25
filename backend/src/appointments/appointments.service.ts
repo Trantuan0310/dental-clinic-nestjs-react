@@ -2,6 +2,7 @@ import { ForbiddenException, HttpStatus, Injectable, Logger } from '@nestjs/comm
 import {
   Appointment,
   AppointmentStatus,
+  BookingRequestStatus,
   DentistProfile,
   EncounterStatus,
   Prisma,
@@ -77,7 +78,7 @@ const ACTIVE_APPOINTMENT_EXCLUDED_STATUSES: AppointmentStatus[] = [
 ];
 
 /** What a visit is made of when booked from the catalogue (ADR-0009 phase 5). */
-interface VisitPlan {
+export interface VisitPlan {
   services: Array<{
     serviceId: string;
     serviceCode: string;
@@ -120,7 +121,17 @@ export class AppointmentsService {
   // Appointment creation
   // ==========================================================================
 
-  async create(dto: CreateAppointmentDto, actor: JwtPayload) {
+  /**
+   * `fromBookingRequest`: an online request the front desk accepted. The
+   * visit is born CONFIRMED (the patient asked for this exact time) and the
+   * request is linked in the same transaction, so two staff confirming the
+   * same request can't both create a visit.
+   */
+  async create(
+    dto: CreateAppointmentDto,
+    actor: JwtPayload,
+    fromBookingRequest?: { id: string; expectedStatuses: BookingRequestStatus[] },
+  ) {
     const startAt = new Date(dto.startAt);
     if (startAt.getTime() <= Date.now() + 60_000) {
       throw new BackDatedAppointmentException();
@@ -167,7 +178,8 @@ export class AppointmentsService {
           startAt,
           endAt,
           ...this.planColumns(plan, overrideReason),
-          status: AppointmentStatus.SCHEDULED,
+          status: fromBookingRequest ? AppointmentStatus.CONFIRMED : AppointmentStatus.SCHEDULED,
+          ...(fromBookingRequest ? { confirmedAt: new Date(), confirmedBy: actor.sub } : {}),
           reason: blankToNull(dto.reason),
           chiefComplaint: blankToNull(dto.chiefComplaint),
           appointmentType: dto.appointmentType,
@@ -190,8 +202,30 @@ export class AppointmentsService {
           startAt: dto.startAt,
           ...(plan ? { serviceCodes: plan.services.map(sv => sv.serviceCode) } : {}),
           ...(overrideReason ? { durationOverrideReason: overrideReason } : {}),
+          ...(fromBookingRequest ? { bookingRequestId: fromBookingRequest.id } : {}),
         },
       });
+
+      if (fromBookingRequest) {
+        const attached = await tx.bookingRequest.updateMany({
+          where: {
+            id: fromBookingRequest.id,
+            status: { in: fromBookingRequest.expectedStatuses },
+            appointmentId: null,
+          },
+          data: {
+            appointmentId: created.id,
+            patientId: dto.patientId,
+            status: BookingRequestStatus.CONFIRMED,
+            handledBy: actor.sub,
+          },
+        });
+        if (attached.count !== 1) {
+          throw new InvalidAppointmentStateException(
+            'The booking request was handled by someone else — reload and try again',
+          );
+        }
+      }
 
       return created;
     });

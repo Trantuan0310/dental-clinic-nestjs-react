@@ -152,6 +152,7 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     scheduleOverride: buildModel(),
     appointmentService: buildModel(),
     queueEntry: buildModel(),
+    bookingRequest: buildModel(),
 
     ...overrides,
   };

@@ -745,6 +745,11 @@ async function main() {
   // 019 only backfills the users that existed when it ran).
   await backfillStaffRecords(prisma);
   await seedServiceCatalog(prisma);
+  // Demo: every dentist takes online bookings, so /booking has choices.
+  await prisma.dentistProfile.updateMany({
+    where: { deletedAt: null },
+    data: { acceptsOnlineBooking: true },
+  });
 
   // --------------------------------------------------------------------
   // Summary

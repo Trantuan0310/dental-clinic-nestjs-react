@@ -1300,6 +1300,54 @@ describe('AppointmentsService', () => {
       );
     });
 
+    it('create() from an online booking request books CONFIRMED and links the request in the same transaction', async () => {
+      (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.create(
+        {
+          dentistId: 'dentist-1',
+          patientId: 'patient-1',
+          startAt: '2099-03-15T02:00:00Z',
+          source: 'ONLINE',
+        } as any,
+        actor,
+        { id: 'request-1', expectedStatuses: ['PENDING_REVIEW'] as any },
+      );
+
+      expect((prisma.appointment.create as jest.Mock).mock.calls[0][0].data).toEqual(
+        expect.objectContaining({
+          status: AppointmentStatus.CONFIRMED,
+          confirmedBy: actor.sub,
+          source: 'ONLINE',
+        }),
+      );
+      expect(prisma.bookingRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'request-1', status: { in: ['PENDING_REVIEW'] }, appointmentId: null },
+        data: {
+          appointmentId: 'appt-new',
+          patientId: 'patient-1',
+          status: 'CONFIRMED',
+          handledBy: actor.sub,
+        },
+      });
+    });
+
+    it('create() from a booking request someone else already handled fails (the visit rolls back)', async () => {
+      (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.create(
+          {
+            dentistId: 'dentist-1',
+            patientId: 'patient-1',
+            startAt: '2099-03-15T02:00:00Z',
+          } as any,
+          actor,
+          { id: 'request-1', expectedStatuses: ['PENDING_REVIEW'] as any },
+        ),
+      ).rejects.toThrow('handled by someone else');
+    });
+
     it('create() stores blank text fields as null (previously an empty reason hid the chief complaint)', async () => {
       await service.create(
         {

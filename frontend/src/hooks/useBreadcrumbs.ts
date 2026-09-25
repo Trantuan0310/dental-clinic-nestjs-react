@@ -19,6 +19,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/inventory/items': 'Danh sách vật tư',
   '/my-queue': 'Hàng chờ của tôi',
   '/dispatch': 'Điều phối',
+  '/booking-requests': 'Yêu cầu đặt lịch',
   '/today': 'Hôm nay',
   '/queue': 'Hàng chờ',
   // Below: every route added for the medical-records redirect, billing
