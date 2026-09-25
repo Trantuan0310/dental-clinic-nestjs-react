@@ -7,6 +7,7 @@ import { ACCOUNTS, loginAs } from './flow-helpers';
  * UTC; the time picked in the form must still be sent as clinic time.
  */
 test('a front desk PC set to UTC still books clinic wall-clock time', async ({ browser }) => {
+  test.setTimeout(150_000);
   // Explicitly empty storage: the `browser` fixture would otherwise hand this
   // context admin.json, and reusing admin's refresh token here revokes every
   // admin session for the rest of the suite (see appointment-booking-roles).
@@ -16,7 +17,16 @@ test('a front desk PC set to UTC still books clinic wall-clock time', async ({ b
   });
   const page = await context.newPage();
   try {
-    await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password);
+    // POST /auth/login allows 5 per minute and the specs before this one
+    // (global setup, appointment-booking-roles) use most of it: if this
+    // login is throttled, wait out the window once and try again.
+    await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password).catch(
+      async () => {
+        await expect(page.getByText(/too many requests/i)).toBeVisible();
+        await page.waitForTimeout(61_000);
+        await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password);
+      },
+    );
     // A weekday at least 10 days out (seeded schedules run Monday–Friday).
     let day = new Date(Date.now() + 7 * 3600000 + 10 * 86400000);
     while ([0, 6].includes(day.getUTCDay())) day = new Date(day.getTime() + 86400000);
