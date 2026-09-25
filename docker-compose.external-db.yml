@@ -1,0 +1,66 @@
+services:
+  bootstrap:
+    profiles: [bootstrap]
+    build:
+      context: ./backend
+      target: migrate
+    command: ["node", "node_modules/ts-node/dist/bin.js", "--transpile-only", "prisma/seed.ts"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set TLS migration database URL}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    restart: "no"
+  migrate:
+    build:
+      context: ./backend
+      target: migrate
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set TLS migration database URL}
+    restart: "no"
+  backend:
+    build:
+      context: ./backend
+      target: runner
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:?Set TLS application database URL}
+      JWT_SECRET: ${JWT_SECRET:?Set random JWT secret}
+      CORS_ORIGIN: https://${DOMAIN:?Set public domain}
+      FRONTEND_URL: https://${DOMAIN}
+      TRUST_PROXY: '1'
+      EMAIL_MOCK: 'false'
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP host}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:?Set SMTP user}
+      SMTP_PASS: ${SMTP_PASS:?Set SMTP password}
+      EMAIL_FROM: ${EMAIL_FROM:?Set sender email}
+      REDIS_URL: ${REDIS_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ${TLS_CERT_DIR:?Set certificate directory}:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

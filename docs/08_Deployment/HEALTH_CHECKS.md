@@ -50,7 +50,7 @@ healthcheck:
   start_period: 40s
 ```
 
-(Đã áp dụng trong `docker-compose.prod.yml` ở gốc repo.)
+(Đã áp dụng trong `docker-compose.prod.yml` và `docker-compose.external-db.yml` ở gốc repo.)
 
 ---
 
