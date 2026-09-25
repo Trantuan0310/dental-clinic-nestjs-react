@@ -32,8 +32,15 @@ describe('Real HTTP and PostgreSQL regression', () => {
     const result = await api('post', '/patients').send(patientBody()).expect(201);
     return result.body.data.id as string;
   }
+  // A distinct 15-minute slot 2+ days ahead, always 08:00–21:00 clinic time:
+  // "now + 48h + n×30min" used to run past the dentist's 23:59 day end
+  // depending on the wall clock, failing the suite at some hours.
   function slot() {
-    const start = new Date(Date.now() + (48 * 60 + ++serial * 30) * 60000);
+    const n = ++serial;
+    const day = new Date(Date.now() + (2 + Math.floor(n / 40)) * 86400000 + 7 * 3600000)
+      .toISOString()
+      .slice(0, 10);
+    const start = new Date(new Date(`${day}T08:00:00+07:00`).getTime() + (n % 40) * 20 * 60000);
     return {
       startAt: start.toISOString(),
       endAt: new Date(start.getTime() + 15 * 60000).toISOString(),
