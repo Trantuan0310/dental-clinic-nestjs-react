@@ -1,5 +1,5 @@
 import { test, expect, getSharedContext, saveDemoVideo, persistAuthState } from './fixtures';
-import { loginAs, ACCOUNTS, randomVnPhone } from './flow-helpers';
+import { loginAs, ACCOUNTS, randomVnPhone, clinicNowMinutes } from './flow-helpers';
 
 /**
  * Detailed end-to-end journey ("test luồng chi tiết") requested by the
@@ -140,7 +140,8 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     // Backend does enforce a real double-booking check (ScheduleOverlap/
     // SlotConflictException), so retry with small offsets from "now" — all
     // safely inside the check-in window — until one isn't already taken.
-    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+    // Clinic wall-clock time, not the runner's — see clinicNowMinutes().
+    const nowMinutes = clinicNowMinutes();
     const offsetsFromNow = [3, 8, 13, 15];
     const timeInput = bookingDialog.locator('input[type="time"]');
     const createBtn = bookingDialog.getByRole('button', { name: /^tạo lịch hẹn$/i });
