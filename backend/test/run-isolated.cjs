@@ -34,7 +34,14 @@ function run(script, args, logName) {
     timeout: 240000,
   });
   appendFileSync(resolve(output, logName), `${result.stdout ?? ''}\n${result.stderr ?? ''}`);
-  if (result.status !== 0 || result.error) throw new Error(`${logName} failed; see ${output}`);
+  if (result.status !== 0 || result.error) {
+    // The evidence folder is an upload-only artifact on CI; print the failing
+    // tests here too so a red run can be diagnosed from the job log alone.
+    const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    const failures = text.split('\n').filter(line => /✕|●/.test(line));
+    console.error(failures.length ? failures.join('\n') : text.split('\n').slice(-60).join('\n'));
+    throw new Error(`${logName} failed; see ${output}`);
+  }
   console.log(`[backend-tests] Passed ${logName}`);
   return result.stdout;
 }
