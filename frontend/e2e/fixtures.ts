@@ -147,6 +147,23 @@ function persistOnRotation(context: BrowserContext, path: string): void {
   });
 }
 
+// A shared context also shares localStorage, so a test that switches the
+// language (i18n.spec) or theme (shell.spec) would leak that choice into every
+// later test on the same role — e.g. the shell tests then looked for "Mở menu"
+// on an English UI. Give each new page the default preferences once; the
+// sessionStorage flag survives reloads, so a test can still check that its own
+// choice persists across page.reload().
+function resetUiPreferences(): void {
+  try {
+    if (sessionStorage.getItem('e2e.uiPrefsReset')) return;
+    sessionStorage.setItem('e2e.uiPrefsReset', '1');
+    localStorage.removeItem('gensmile.i18n');
+    localStorage.removeItem('gensmile.theme');
+  } catch {
+    // about:blank and opaque origins have no storage.
+  }
+}
+
 // `storageState` accepts a file path (string) or an actual state object —
 // the cache key has to be a string either way, but the value handed to
 // newContext() must stay in whatever form the caller gave it (stringifying
@@ -170,10 +187,11 @@ export async function getSharedContext(
           ? { recordVideo: { dir: process.env.E2E_VIDEO_DIR ?? 'artifacts/playwright-videos', size: { width: 1280, height: 720 } } }
           : {}),
       })
-      .then((context) => {
+      .then(async (context) => {
         if (typeof resolvedState === 'string' && resolvedState.endsWith('.json')) {
           persistOnRotation(context, resolvedState);
         }
+        await context.addInitScript(resetUiPreferences);
         const originalNewPage = context.newPage.bind(context);
         context.newPage = (async (...args: Parameters<BrowserContext['newPage']>) =>
           instrumentPage(await originalNewPage(...args))) as BrowserContext['newPage'];

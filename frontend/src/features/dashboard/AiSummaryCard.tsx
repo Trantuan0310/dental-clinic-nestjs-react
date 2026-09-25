@@ -71,15 +71,15 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
         </span>
       }
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {showPatientPicker && (
-            <div className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm">
+            <div className="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm">
               <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
               <select
                 aria-label="Chọn bệnh nhân"
                 value={selectedPatientId ?? ''}
                 onChange={(e) => setSelectedPatientId(e.target.value || null)}
-                className="bg-transparent text-xs font-medium text-gray-700 focus:outline-none"
+                className="min-w-0 max-w-[12rem] truncate bg-transparent text-xs font-medium text-gray-700 focus:outline-none sm:max-w-xs"
               >
                 {patientOptions!.map((p) => (
                   <option key={p.id} value={p.id}>

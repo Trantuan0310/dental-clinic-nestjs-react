@@ -18,13 +18,24 @@ import { resolve } from 'node:path';
  */
 async function globalSetup(config: FullConfig) {
   const backendRoot = resolve('../backend');
-  const fixtureCommand = (args: string[]) => execFileSync(process.execPath, [
+  const fixtureCommand = (args: string[], dentistEmail?: string) => execFileSync(process.execPath, [
     '-r', 'ts-node/register', 'prisma/seed-demo-window.ts', ...args,
-  ], { cwd: backendRoot, encoding: 'utf8' }).trim();
-  let scheduleId = 'none';
+  ], {
+    cwd: backendRoot,
+    encoding: 'utf8',
+    env: dentistEmail ? { ...process.env, E2E_DENTIST_USERNAME: dentistEmail } : process.env,
+  }).trim();
+  // flow-patient-to-payment books the main dentist and flow-inventory-stock-out
+  // the second one: both must book within 15 minutes of "now" to be able to
+  // check in, so on one calendar the first booking left the second no slot.
+  const demoDentists = [
+    process.env.E2E_DENTIST_USERNAME ?? 'an.nguyen@clinic.local',
+    process.env.E2E_SECOND_DENTIST_USERNAME ?? 'binh.tran@clinic.local',
+  ];
+  const scheduleIds: string[] = [];
   const cleanup = () => {
-    if (scheduleId !== 'none') {
-      fixtureCommand(['cleanup', scheduleId]);
+    for (const id of scheduleIds.splice(0)) {
+      fixtureCommand(['cleanup', id]);
       console.log('[e2e] Temporary demo schedule removed.');
     }
   };
@@ -54,8 +65,15 @@ async function globalSetup(config: FullConfig) {
   // schedule already covers today, so leaving it on for ordinary runs is
   // safe — set E2E_DEMO_SCHEDULE=0 to opt out (e.g. against a DB that's
   // already seeded with a real recurring schedule).
-  scheduleId = process.env.E2E_DEMO_SCHEDULE === '0' ? 'none' : fixtureCommand([]);
-  if (scheduleId !== 'none') console.log(`[e2e] Temporary local demo schedule: ${scheduleId}`);
+  if (process.env.E2E_DEMO_SCHEDULE !== '0') {
+    for (const email of demoDentists) {
+      const scheduleId = fixtureCommand([], email);
+      if (scheduleId !== 'none') {
+        scheduleIds.push(scheduleId);
+        console.log(`[e2e] Temporary local demo schedule for ${email}: ${scheduleId}`);
+      }
+    }
+  }
   for (const role of roles) {
     const page = await browser.newPage({ baseURL });
     await page.goto('/login');

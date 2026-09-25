@@ -35,6 +35,14 @@ export const ACCOUNTS = {
     // the UI alone.
     fullName: 'Nguyễn Văn An',
   },
+  // A second dentist for flows that must not share the first one's calendar
+  // (see the demo schedules in global-setup.ts). No pre-baked storageState:
+  // log in with loginAs() in a throwaway context.
+  secondDentist: {
+    email: 'binh.tran@clinic.local',
+    password: 'Password123!',
+    fullName: 'Trần Thị Bình',
+  },
 };
 
 /** The clinic's timezone — the browser contexts in these specs run in it too. */

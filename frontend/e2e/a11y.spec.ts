@@ -68,12 +68,9 @@ test.describe('A11y — keyboard & landmarks', () => {
     const palette = page.getByRole('dialog', { name: /command palette/i });
     await expect(palette).toBeVisible();
 
-    // Focus is inside the dialog.
-    const focusedInsidePalette = await page.evaluate(() => {
-      const dialog = document.querySelector('[role="dialog"][aria-label="Command Palette"]');
-      return dialog ? dialog.contains(document.activeElement) : false;
-    });
-    expect(focusedInsidePalette).toBe(true);
+    // Focus moves inside the dialog (the palette focuses its input on a
+    // short timer after opening, so poll rather than check once).
+    await expect.poll(() => palette.evaluate((el) => el.contains(document.activeElement))).toBe(true);
     await page.keyboard.press('Shift+Tab');
     expect(await palette.evaluate((el) => el.contains(document.activeElement))).toBe(true);
     await page.keyboard.press('Tab');
