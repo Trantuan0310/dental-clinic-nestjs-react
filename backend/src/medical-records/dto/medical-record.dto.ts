@@ -63,6 +63,13 @@ export class AddAddendumDto {
 // ---------------------------------------------------------------------------
 
 export class CreateTreatmentDto {
+  @ApiPropertyOptional({
+    description: 'Catalogue service the treatment was picked from (ADR-0009 D6)',
+  })
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
+
   @ApiProperty({ example: 'Composite filling' })
   @IsString()
   @MinLength(2)

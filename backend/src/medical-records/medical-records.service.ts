@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +25,8 @@ import {
   UpdateTreatmentDto,
 } from './dto/medical-record.dto';
 import { isMinor } from '../patients/domain/patient-rules';
+import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
+import { closeQueueEntry } from '../appointments/domain/queue';
 
 /**
  * MedicalRecordsService — owns:
@@ -182,6 +184,7 @@ export class MedicalRecordsService {
           );
         }
       }
+      await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       if (current.status === 'CHECKED_IN') {
         await tx.appointment.update({
           where: { id: appointmentId },
@@ -781,10 +784,25 @@ export class MedicalRecordsService {
       });
       const sequence = (maxSeq._max.sequence ?? -1) + 1;
 
+      // D6: a catalogue pick must name an active service; the free-text
+      // procedure/price stay as sent (the form pre-fills them, staff may edit).
+      if (dto.serviceId) {
+        const service = await tx.service.findUnique({ where: { id: dto.serviceId } });
+        if (!service || !service.isActive) {
+          throw new BusinessRuleException(
+            'Dịch vụ không tồn tại hoặc đã ngừng',
+            HttpStatus.BAD_REQUEST,
+            { serviceId: dto.serviceId },
+            'SERVICE_INACTIVE',
+          );
+        }
+      }
+
       const treatment = await (async () => {
         const t = await tx.treatment.create({
           data: {
             encounterId,
+            serviceId: dto.serviceId ?? null,
             procedure: dto.procedure,
             description: dto.description ?? null,
             unitPrice: dto.unitPrice,

@@ -92,15 +92,8 @@ const buildModel = (): Record<string, AnyFn> => {
  * @param overrides — explicit model mocks to attach (e.g. { user: { findUnique: jest.fn(...) } })
  */
 export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMockShape => {
-  const baseTx = {
-    $executeRaw: jest.fn(async () => 0),
-    $executeRawUnsafe: jest.fn(async () => 0),
-    $queryRaw: jest.fn(async () => []),
-    $queryRawUnsafe: jest.fn(async () => []),
-  };
-
   const mock: PrismaMockShape = {
-    $transaction: jest.fn(async (cb: any) => (typeof cb === 'function' ? cb(baseTx) : cb)),
+    $transaction: jest.fn(async (cb: any) => (typeof cb === 'function' ? cb(mock) : cb)),
     $executeRaw: jest.fn(async () => 0),
     $executeRawUnsafe: jest.fn(async () => 0),
     $queryRaw: jest.fn(async () => []),
@@ -157,6 +150,8 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     service: buildModel(),
     dentistService: buildModel(),
     scheduleOverride: buildModel(),
+    appointmentService: buildModel(),
+    queueEntry: buildModel(),
 
     ...overrides,
   };
