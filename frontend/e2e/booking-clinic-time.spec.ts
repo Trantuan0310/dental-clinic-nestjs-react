@@ -7,7 +7,13 @@ import { ACCOUNTS, loginAs } from './flow-helpers';
  * UTC; the time picked in the form must still be sent as clinic time.
  */
 test('a front desk PC set to UTC still books clinic wall-clock time', async ({ browser }) => {
-  const context = await browser.newContext({ timezoneId: 'UTC' });
+  // Explicitly empty storage: the `browser` fixture would otherwise hand this
+  // context admin.json, and reusing admin's refresh token here revokes every
+  // admin session for the rest of the suite (see appointment-booking-roles).
+  const context = await browser.newContext({
+    timezoneId: 'UTC',
+    storageState: { cookies: [], origins: [] },
+  });
   const page = await context.newPage();
   try {
     await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password);

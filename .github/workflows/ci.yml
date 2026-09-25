@@ -65,7 +65,7 @@ jobs:
       # seed-demo-window.ts only runs against a localhost database.
       DATABASE_URL: postgresql://postgres:e2e_ci_only@127.0.0.1:5432/dental_e2e
       NODE_ENV: development
-      JWT_SECRET: e2e-ci-only-secret-2026
+      JWT_SECRET: e2e-ci-only-secret-at-least-32-characters-long
       # The suite makes more than the default 100 requests a minute (login
       # keeps its own 5/min limit).
       THROTTLE_LIMIT: '10000'
