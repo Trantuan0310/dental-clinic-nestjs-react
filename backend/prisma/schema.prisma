@@ -143,6 +143,10 @@ model User {
   createdPayrollAdjustments  PayrollAdjustment[]    @relation("PayrollAdjustmentActor")
   payrollConfigUpdated       PayrollConfig? @relation("PayrollConfigUpdater")
 
+  // Staff (ADR-0009 phase 1)
+  employees                  Employee[]      @relation("EmployeeUser")
+  dentistProfile             DentistProfile? @relation("DentistProfileUser")
+
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
   // real constraint is a partial unique index — active rows only — created
@@ -1232,4 +1236,86 @@ model ExpenseAudit {
 
   @@index([expenseId, createdAt(sort: Desc)])
   @@map("expense_audits")
+}
+
+// ============================================================================
+// Staff — employees and dentist profiles (ADR-0009 phase 1, migration 019)
+// Design: docs/04_Database/schema-per-module/staff.md
+// ============================================================================
+
+enum EmployeeType {
+  DENTIST
+  ASSISTANT
+  RECEPTIONIST
+  MANAGER
+  OTHER
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum PracticeStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+model Employee {
+  id               String           @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code             String           @unique @db.VarChar(20)
+  fullName         String           @map("full_name") @db.VarChar(200)
+  dob              DateTime?        @db.Date
+  gender           Gender?
+  phone            String?          @db.VarChar(20)
+  email            String?          @db.VarChar(255)
+  address          String?
+  employeeType     EmployeeType     @map("employee_type")
+  hireDate         DateTime         @default(dbgenerated("CURRENT_DATE")) @map("hire_date") @db.Date
+  terminationDate  DateTime?        @map("termination_date") @db.Date
+  employmentStatus EmploymentStatus @default(ACTIVE) @map("employment_status")
+  // Unique among non-deleted rows only: a partial index
+  // (employees_user_active_key) that Prisma's DSL can't express.
+  userId           String?          @map("user_id") @db.Uuid
+  notes            String?
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy        String?          @map("created_by") @db.Uuid
+  updatedBy        String?          @map("updated_by") @db.Uuid
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz()
+
+  user           User?           @relation("EmployeeUser", fields: [userId], references: [id])
+  dentistProfile DentistProfile?
+
+  @@index([userId])
+  @@map("employees")
+}
+
+model DentistProfile {
+  id                   String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  employeeId           String         @unique @map("employee_id") @db.Uuid
+  // The value every dentist_id column stores (ADR-0009 D1); must equal the
+  // employee's user_id.
+  userId               String         @unique @map("user_id") @db.Uuid
+  licenseNumber        String?        @map("license_number") @db.VarChar(50)
+  licenseIssuedAt      DateTime?      @map("license_issued_at") @db.Date
+  specialties          String[]       @default([])
+  calendarColor        String         @map("calendar_color") @db.Char(7)
+  defaultSlotMinutes   Int            @default(30) @map("default_slot_minutes") @db.SmallInt
+  acceptsOnlineBooking Boolean        @default(false) @map("accepts_online_booking")
+  acceptsNewPatients   Boolean        @default(true) @map("accepts_new_patients")
+  practiceStatus       PracticeStatus @default(ACTIVE) @map("practice_status")
+  bio                  String?
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy            String?        @map("created_by") @db.Uuid
+  updatedBy            String?        @map("updated_by") @db.Uuid
+  deletedAt            DateTime?      @map("deleted_at") @db.Timestamptz()
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+  user     User     @relation("DentistProfileUser", fields: [userId], references: [id])
+
+  @@map("dentist_profiles")
 }

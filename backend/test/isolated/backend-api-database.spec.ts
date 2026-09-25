@@ -841,4 +841,168 @@ describe('Real HTTP and PostgreSQL regression', () => {
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
   });
+
+  describe('staff: employees and dentist profiles (ADR-0009 phase 1)', () => {
+    let employeeId: string;
+
+    // A dentist of its own: earlier tests soft-delete `other` and give
+    // `dentist` future bookings. Signed directly (the login route is
+    // rate-limited and the rate-limit test above has used it up).
+    beforeAll(async () => {
+      const role = await db.role.findFirstOrThrow({
+        where: { code: 'dentist' },
+        include: { rolePermissions: { include: { permission: true } } },
+      });
+      const u = await db.user.create({
+        data: {
+          email: 'staff-dentist@test.local',
+          fullName: 'Staff dentist',
+          passwordHash: 'fixture',
+          status: 'ACTIVE',
+          userRoles: { create: { roleId: role.id } },
+        },
+      });
+      users.staffDentist = u.id;
+      tokens.staffDentist = app.get(JwtService).sign({
+        sub: u.id,
+        email: u.email,
+        permissions: role.rolePermissions.map(rp => rp.permission.code),
+      });
+      for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+        await db.workingSchedule.create({
+          data: {
+            dentistId: u.id,
+            dayOfWeek,
+            startTime: new Date('1970-01-01T00:00:00Z'),
+            endTime: new Date('1970-01-01T23:59:00Z'),
+            validFrom: new Date('2020-01-01'),
+            isPaidShift: false,
+          },
+        });
+      }
+    });
+
+    it('backfilled the seeded admin as a MANAGER employee', async () => {
+      const admin = await db.employee.findFirstOrThrow({ where: { userId: users.admin } });
+      expect(admin).toMatchObject({ employeeType: 'MANAGER', employmentStatus: 'ACTIVE' });
+      expect(admin.code).toMatch(/^NV-\d{5}$/);
+    });
+
+    it('lets reception read but not create employees', async () => {
+      await api('get', '/employees', 'reception').expect(200);
+      await api('post', '/employees', 'reception')
+        .send({ fullName: 'Không được tạo', employeeType: 'ASSISTANT' })
+        .expect(403);
+    });
+
+    it('creates an employee, links an account and makes them a dentist', async () => {
+      const created = await api('post', '/employees')
+        .send({ fullName: 'Staff dentist', employeeType: 'ASSISTANT', phone: '0901234567' })
+        .expect(201);
+      employeeId = created.body.data.id;
+      expect(created.body.data.code).toMatch(/^NV-\d{5}$/);
+
+      await api('post', `/employees/${employeeId}/dentist-profile`).send({}).expect(409);
+      await api('post', `/employees/${employeeId}/account`)
+        .send({ userId: users.staffDentist })
+        .expect(200);
+      const profile = await api('post', `/employees/${employeeId}/dentist-profile`)
+        .send({ licenseNumber: 'CCHN-TEST-001', calendarColor: '#0891B2', defaultSlotMinutes: 45 })
+        .expect(201);
+      expect(profile.body.data.userId).toBe(users.staffDentist);
+
+      const options = await api('get', '/appointments/dentists', 'reception').expect(200);
+      expect(options.body.data).toContainEqual(
+        expect.objectContaining({
+          id: users.staffDentist,
+          calendarColor: '#0891B2',
+          practiceStatus: 'ACTIVE',
+        }),
+      );
+    });
+
+    it('refuses to link an account that already belongs to an employee', async () => {
+      const second = await api('post', '/employees')
+        .send({ fullName: 'Second', employeeType: 'OTHER' })
+        .expect(201);
+      const res = await api('post', `/employees/${second.body.data.id}/account`)
+        .send({ userId: users.staffDentist })
+        .expect(409);
+      expect(res.body.code).toBe('STAFF_LINK_CONFLICT');
+    });
+
+    it('rejects a duplicate license number', async () => {
+      const emp = await api('post', '/employees')
+        .send({ fullName: 'dentist', employeeType: 'DENTIST' })
+        .expect(201);
+      await api('post', `/employees/${emp.body.data.id}/account`)
+        .send({ userId: users.dentist })
+        .expect(200);
+      const res = await api('post', `/employees/${emp.body.data.id}/dentist-profile`)
+        .send({ licenseNumber: 'CCHN-TEST-001' })
+        .expect(409);
+      expect(res.body.code).toBe('LICENSE_NUMBER_TAKEN');
+    });
+
+    it('lets a dentist edit only the self-service fields of their own profile', async () => {
+      await api('patch', `/dentists/${users.staffDentist}`, 'staffDentist')
+        .send({ bio: 'Nha chu', specialties: ['NHA_CHU'] })
+        .expect(200);
+      await api('patch', `/dentists/${users.staffDentist}`, 'staffDentist')
+        .send({ licenseNumber: 'CCHN-FAKE' })
+        .expect(403);
+      await api('patch', `/dentists/${users.staffDentist}`, 'dentist')
+        .send({ bio: 'x' })
+        .expect(403);
+    });
+
+    it('blocks suspending a dentist with upcoming bookings, then refuses new bookings once suspended', async () => {
+      const start = new Date(Date.now() + 5 * 24 * 60 * 60000);
+      const booked = await db.appointment.create({
+        data: {
+          patientId,
+          dentistId: users.staffDentist,
+          startAt: start,
+          endAt: new Date(start.getTime() + 30 * 60000),
+          status: 'CONFIRMED',
+        },
+      });
+      const blocked = await api('post', `/dentists/${users.staffDentist}/deactivate`)
+        .send({ status: 'SUSPENDED', reason: 'Tạm nghỉ phép dài' })
+        .expect(409);
+      expect(blocked.body.code).toBe('DENTIST_HAS_FUTURE_APPOINTMENTS');
+      expect(blocked.body.details.appointments.map((a: { id: string }) => a.id)).toContain(
+        booked.id,
+      );
+
+      await db.appointment.update({ where: { id: booked.id }, data: { status: 'CANCELLED' } });
+      await api('post', `/dentists/${users.staffDentist}/deactivate`)
+        .send({ status: 'SUSPENDED', reason: 'Tạm nghỉ phép dài' })
+        .expect(200);
+
+      const s = slot();
+      await api('post', '/appointments', 'reception')
+        .send({ patientId, dentistId: users.staffDentist, ...s, source: 'PHONE' })
+        .expect(404);
+      const options = await api('get', '/appointments/dentists', 'reception').expect(200);
+      expect(options.body.data.map((d: { id: string }) => d.id)).not.toContain(users.staffDentist);
+    });
+
+    it('terminating an employee deactivates the linked account', async () => {
+      const emp = await api('post', '/employees')
+        .send({ fullName: 'reception', employeeType: 'RECEPTIONIST' })
+        .expect(201);
+      await api('post', `/employees/${emp.body.data.id}/account`)
+        .send({ userId: users.reception })
+        .expect(200);
+      await api('post', `/employees/${emp.body.data.id}/terminate`)
+        .send({ reason: 'Hết hợp đồng lao động' })
+        .expect(200);
+      const account = await db.user.findUniqueOrThrow({ where: { id: users.reception } });
+      expect(account.status).toBe('DEACTIVATED');
+      expect(
+        await db.refreshToken.count({ where: { userId: users.reception, revokedAt: null } }),
+      ).toBe(0);
+    });
+  });
 });

@@ -106,16 +106,32 @@ describe('AppointmentsService', () => {
   });
 
   describe('listDentistOptions', () => {
-    it('returns only active dentist lookup fields', async () => {
-      const dentists = [
-        { id: 'dentist-1', fullName: 'Bác sĩ Nguyễn An' },
-        { id: 'dentist-2', fullName: 'Bác sĩ Trần Bình' },
-      ];
-      (prisma.user.findMany as jest.Mock).mockResolvedValue(dentists);
+    it('returns active dentists with their calendar colour, skipping inactive profiles', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'dentist-1',
+          fullName: 'Bác sĩ Nguyễn An',
+          dentistProfile: { calendarColor: '#2563EB', practiceStatus: 'ACTIVE' },
+        },
+        { id: 'dentist-2', fullName: 'Bác sĩ Trần Bình', dentistProfile: null },
+      ]);
 
       const result = await service.listDentistOptions();
 
-      expect(result).toEqual(dentists);
+      expect(result).toEqual([
+        {
+          id: 'dentist-1',
+          fullName: 'Bác sĩ Nguyễn An',
+          calendarColor: '#2563EB',
+          practiceStatus: 'ACTIVE',
+        },
+        {
+          id: 'dentist-2',
+          fullName: 'Bác sĩ Trần Bình',
+          calendarColor: null,
+          practiceStatus: null,
+        },
+      ]);
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         where: {
           status: 'ACTIVE',
@@ -129,10 +145,15 @@ describe('AppointmentsService', () => {
               },
             },
           },
+          OR: [
+            { dentistProfile: null },
+            { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
+          ],
         },
         select: {
           id: true,
           fullName: true,
+          dentistProfile: { select: { calendarColor: true, practiceStatus: true } },
         },
         orderBy: {
           fullName: 'asc',
@@ -236,6 +257,75 @@ describe('AppointmentsService', () => {
 
       expect(result.status).toBe(AppointmentStatus.CANCELLED);
       expect(audit.log).toHaveBeenCalled();
+    });
+  });
+
+  describe('dentist profiles (BR-STAFF-006)', () => {
+    const base = {
+      id: 'dentist-1',
+      status: 'ACTIVE',
+      userRoles: [{ role: { code: 'dentist' } }],
+    };
+    const profile = (overrides: Record<string, unknown> = {}) => ({
+      practiceStatus: 'ACTIVE',
+      defaultSlotMinutes: 45,
+      deletedAt: null,
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue({
+        startTime: new Date('1970-01-01T00:00:00Z'),
+        endTime: new Date('1970-01-01T23:00:00Z'),
+      });
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.create as jest.Mock).mockResolvedValue({ id: 'appt-new' });
+    });
+
+    it('refuses a booking for a suspended dentist', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...base,
+        dentistProfile: profile({ practiceStatus: 'SUSPENDED' }),
+      });
+      await expect(
+        service.create(
+          {
+            dentistId: 'dentist-1',
+            patientId: 'patient-1',
+            startAt: '2027-03-15T09:15:00Z',
+          } as any,
+          actor,
+        ),
+      ).rejects.toThrow(/suspended/);
+      expect(prisma.appointment.create).not.toHaveBeenCalled();
+    });
+
+    it("defaults the duration to the profile's slot length", async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...base,
+        dentistProfile: profile(),
+      });
+      await service.create(
+        { dentistId: 'dentist-1', patientId: 'patient-1', startAt: '2027-03-15T09:15:00Z' } as any,
+        actor,
+      );
+      expect((prisma.appointment.create as jest.Mock).mock.calls[0][0].data.endAt).toEqual(
+        new Date('2027-03-15T10:00:00Z'),
+      );
+    });
+
+    it('still accepts a dentist without a profile by role', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ ...base, dentistProfile: null });
+      await service.create(
+        { dentistId: 'dentist-1', patientId: 'patient-1', startAt: '2027-03-15T09:15:00Z' } as any,
+        actor,
+      );
+      expect(prisma.appointment.create).toHaveBeenCalled();
     });
   });
 

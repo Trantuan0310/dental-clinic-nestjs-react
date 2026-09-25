@@ -21,6 +21,7 @@
 
 import { PrismaClient, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { backfillStaffRecords } from './staff-backfill';
 import {
   utcDate,
   pickWeighted,
@@ -620,6 +621,9 @@ async function main() {
   await seedPayrollPeriods(admin, dentists, totalCreated);
   await seedExpenses(admin, receptionists);
   await seedAuditLogs(admin, dentists, receptionists, totalCreated);
+  // Employees + dentist profiles for the accounts created above (migration
+  // 019 only backfills the users that existed when it ran).
+  await backfillStaffRecords(prisma);
 
   // --------------------------------------------------------------------
   // Summary

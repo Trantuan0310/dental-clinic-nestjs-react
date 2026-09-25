@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { backfillStaffRecords } from './staff-backfill';
 
 const prisma = new PrismaClient();
 
@@ -161,6 +162,74 @@ const PERMISSIONS = [
     resource: 'appointment',
     action: 'schedule.manage',
     description: 'Quản lý lịch làm việc',
+  },
+
+  // Staff permissions (ADR-0009 phase 1; migration 019 inserts the same rows)
+  {
+    code: 'employee.read',
+    resource: 'employee',
+    action: 'read',
+    description: 'Xem danh sách và hồ sơ nhân viên',
+  },
+  {
+    code: 'employee.create',
+    resource: 'employee',
+    action: 'create',
+    description: 'Tạo hồ sơ nhân viên',
+  },
+  {
+    code: 'employee.update',
+    resource: 'employee',
+    action: 'update',
+    description: 'Cập nhật hồ sơ nhân viên, liên kết tài khoản',
+  },
+  {
+    code: 'employee.deactivate',
+    resource: 'employee',
+    action: 'deactivate',
+    description: 'Cho nhân viên nghỉ việc',
+  },
+  {
+    code: 'dentist.read',
+    resource: 'dentist',
+    action: 'read',
+    description: 'Xem hồ sơ bác sĩ',
+  },
+  {
+    code: 'dentist.create',
+    resource: 'dentist',
+    action: 'create',
+    description: 'Tạo hồ sơ bác sĩ cho nhân viên',
+  },
+  {
+    code: 'dentist.update',
+    resource: 'dentist',
+    action: 'update',
+    description: 'Cập nhật hồ sơ bác sĩ',
+  },
+  {
+    code: 'dentist.update.own',
+    resource: 'dentist',
+    action: 'update.own',
+    description: 'Bác sĩ cập nhật hồ sơ của chính mình',
+  },
+  {
+    code: 'dentist.deactivate',
+    resource: 'dentist',
+    action: 'deactivate',
+    description: 'Ngừng/tạm đình chỉ hành nghề bác sĩ',
+  },
+  {
+    code: 'dentist.assign_service',
+    resource: 'dentist',
+    action: 'assign_service',
+    description: 'Phân công dịch vụ cho bác sĩ',
+  },
+  {
+    code: 'dentist.manage_schedule',
+    resource: 'dentist',
+    action: 'manage_schedule',
+    description: 'Quản lý lịch làm việc bác sĩ',
   },
 
   // Schedule permissions (controllers use dotted/underscored aliases)
@@ -616,6 +685,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'appointment.schedule.manage',
     'schedule.write',
     'schedule.read',
+    'employee.read',
+    'dentist.read',
+    'dentist.manage_schedule',
     'encounter.read.basic',
     'encounter.start',
     'invoice.create',
@@ -651,6 +723,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'appointment.schedule.manage',
     'schedule.write',
     'schedule.read',
+    'dentist.read',
+    'dentist.update.own',
+    'dentist.manage_schedule',
     'shift_registration.write',
     'shift_registration.read',
     'encounter.start',
@@ -812,6 +887,8 @@ async function main() {
   } else {
     console.log(`Admin user already exists: ${adminEmail}`);
   }
+
+  await backfillStaffRecords(prisma);
 
   console.log('Seed completed successfully!');
 }
