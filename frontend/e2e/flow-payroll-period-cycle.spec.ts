@@ -28,7 +28,8 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   await page.goto('/payroll');
   await page.waitForLoadState('networkidle');
 
-  // With no periods yet the empty state repeats the header's "Tạo kỳ lương".
+  // The seeded periods (May–August) are listed; with none, the empty state
+  // repeats the header's "Tạo kỳ lương" — either way take the first.
   await page.getByRole('button', { name: /tạo kỳ lương/i }).first().click();
   const createDialog = page.getByRole('dialog');
   await createDialog.getByLabel(/ngày bắt đầu/i).fill(periodStart);
@@ -54,6 +55,10 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   await periodRow.click();
 
   await page.waitForURL(/\/payroll\/periods\/[a-zA-Z0-9-]+$/, { timeout: 10_000 });
+  // The detail page is lazy-loaded: the URL changes while the list is still
+  // on screen, and every DRAFT row there has its own "Tính lương" icon
+  // button (the seeded August period is one). Wait for the list to go.
+  await expect(page.getByRole('button', { name: /tạo kỳ lương/i })).toHaveCount(0, { timeout: 10_000 });
   await expect(page.getByRole('button', { name: /tính lương/i })).toBeVisible({ timeout: 10_000 });
 
   // ---- Compute: assert the RAW API response, not just that the button worked ----

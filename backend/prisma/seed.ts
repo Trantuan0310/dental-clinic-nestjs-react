@@ -1,6 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { backfillStaffRecords } from './staff-backfill';
+import { DEFAULT_TAX_BRACKETS } from '../src/payroll/domain/tax-calculator';
 
 const prisma = new PrismaClient();
 
@@ -822,6 +823,20 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
 };
 
+/**
+ * BR-PAY-001: the clinic's single payroll configuration, with the same
+ * defaults PayrollService.getConfig() creates on first use. Seeding it here
+ * lets seed-clinical.ts build its sample payroll periods, which it skips
+ * without a config. Never overwrites a config an admin has edited.
+ */
+async function ensurePayrollConfig() {
+  if (await prisma.payrollConfig.findFirst()) return;
+  await prisma.payrollConfig.create({
+    data: { taxBrackets: DEFAULT_TAX_BRACKETS as unknown as Prisma.InputJsonValue },
+  });
+  console.log('Default payroll config created');
+}
+
 async function main() {
   if (
     process.env.NODE_ENV === 'production' &&
@@ -941,6 +956,7 @@ async function main() {
   }
 
   await backfillStaffRecords(prisma);
+  await ensurePayrollConfig();
 
   console.log('Seed completed successfully!');
 }
