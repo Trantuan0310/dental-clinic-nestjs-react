@@ -5,6 +5,7 @@ import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import {
   DayCalendar,
   SlotProblem,
+  Buffers,
   buildDayCalendar,
   clinicHhmm,
   freeSlots,
@@ -17,6 +18,7 @@ type Db = PrismaService | Prisma.TransactionClient;
 export const SLOT_RELEASING_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.CANCELLED,
   AppointmentStatus.NO_SHOW,
+  AppointmentStatus.LEFT,
 ];
 
 /** Same lead time create() enforces: a start must be at least a minute ahead. */
@@ -76,7 +78,13 @@ export class AvailabilityService {
           endAt: { gt: dayStart },
           deletedAt: null,
         },
-        select: { id: true, startAt: true, endAt: true },
+        select: {
+          id: true,
+          startAt: true,
+          endAt: true,
+          bufferBeforeMin: true,
+          bufferAfterMin: true,
+        },
       }),
     ]);
     return buildDayCalendar({
@@ -94,18 +102,32 @@ export class AvailabilityService {
     dentistId: string,
     startAt: Date,
     endAt: Date,
-    opts: { db?: Db; excludeAppointmentId?: string; ignoreBookings?: boolean } = {},
+    opts: {
+      db?: Db;
+      excludeAppointmentId?: string;
+      ignoreBookings?: boolean;
+      buffers?: Buffers;
+    } = {},
   ): Promise<SlotProblem | null> {
     const cal = await this.loadDay(dentistId, clinicDateOnly(startAt), opts.db);
     return intervalProblem(
       cal,
       { start: startAt, end: endAt },
-      { excludeBookingId: opts.excludeAppointmentId, ignoreBookings: opts.ignoreBookings },
+      {
+        excludeBookingId: opts.excludeAppointmentId,
+        ignoreBookings: opts.ignoreBookings,
+        buffers: opts.buffers,
+      },
     );
   }
 
   /** GET /appointments/availability — the booking form's slot picker. */
-  async dayAvailability(dentistId: string, date: string, slotDuration?: number) {
+  async dayAvailability(
+    dentistId: string,
+    date: string,
+    slotDuration?: number,
+    buffers: Buffers = {},
+  ) {
     const cal = await this.loadDay(dentistId, date);
     const dayOfWeek = new Date(date).getUTCDay();
     if (cal.windows.length === 0) {
@@ -147,7 +169,7 @@ export class AvailabilityService {
         }))
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
       slotDuration: slotMin,
-      availableSlots: freeSlots(cal, slotMin, slotMin, new Date(Date.now() + LEAD_MS)),
+      availableSlots: freeSlots(cal, slotMin, slotMin, new Date(Date.now() + LEAD_MS), buffers),
       blockedReason: null,
     };
   }

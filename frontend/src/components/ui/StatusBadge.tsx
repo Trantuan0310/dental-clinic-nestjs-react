@@ -26,6 +26,7 @@ const statusConfig: Record<string, { type: StatusType; label: string }> = {
   completed: { type: 'success', label: 'Hoàn thành' },
   cancelled: { type: 'danger', label: 'Đã hủy' },
   no_show: { type: 'danger', label: 'Vắng mặt' },
+  left: { type: 'warning', label: 'Đã về (chưa khám)' },
 
   // Invoice statuses
   draft: { type: 'neutral', label: 'Bản nháp' },

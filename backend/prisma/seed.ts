@@ -254,6 +254,14 @@ const PERMISSIONS = [
     description: 'Duyệt/từ chối đơn nghỉ phép của bác sĩ',
   },
 
+  // ADR-0009 phase 5 (migration 023 inserts the same row)
+  {
+    code: 'appointment.mark_left',
+    resource: 'appointment',
+    action: 'mark_left',
+    description: 'Ghi nhận bệnh nhân đã về trước khi khám',
+  },
+
   // Schedule permissions (controllers use dotted/underscored aliases)
   {
     code: 'schedule.write',
@@ -704,6 +712,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'appointment.check_in',
     'appointment.no_show',
     'appointment.mark_no_show',
+    'appointment.mark_left',
     'appointment.schedule.manage',
     'schedule.write',
     'schedule.read',

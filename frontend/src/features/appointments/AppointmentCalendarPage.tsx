@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, parseISO } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, UserRoundPlus } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { Button, Card } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
@@ -15,6 +15,9 @@ import { DayView, WeekView } from './CalendarViews';
 // Heavy modals — only loaded when user opens create/edit dialog.
 const AppointmentFormModal = lazy(() =>
   import('./AppointmentFormModal').then((m) => ({ default: m.AppointmentFormModal })),
+);
+const WalkInModal = lazy(() =>
+  import('./WalkInModal').then((m) => ({ default: m.WalkInModal })),
 );
 const AppointmentDetailDrawer = lazy(() =>
   import('./AppointmentDetailDrawer').then((m) => ({ default: m.AppointmentDetailDrawer })),
@@ -29,6 +32,7 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
   completed: 'bg-emerald-500',
   cancelled: 'bg-red-400',
   no_show: 'bg-red-500',
+  left: 'bg-orange-400',
 };
 
 export default function AppointmentCalendarPage() {
@@ -49,6 +53,7 @@ export default function AppointmentCalendarPage() {
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(searchParams.get('view') as 'day' | 'week' | 'month' || 'day');
   const [selectedDentistId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId || wantsCreateModal);
+  const [showWalkIn, setShowWalkIn] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
   // Clicking an appointment block opens the same rich detail drawer
   // (check-in / cancel / reschedule / no-show / start-encounter) the
@@ -153,6 +158,12 @@ export default function AppointmentCalendarPage() {
             <Button variant="outline">Xem dạng bảng</Button>
           </Link>
           <PermissionGuard permission="appointment.create">
+            <Button variant="outline" onClick={() => setShowWalkIn(true)}>
+              <UserRoundPlus className="h-4 w-4" />
+              Khách vãng lai
+            </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="appointment.create">
             <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4" />
               Tạo lịch hẹn
@@ -245,6 +256,7 @@ export default function AppointmentCalendarPage() {
           { status: 'completed', label: 'Hoàn thành' },
           { status: 'cancelled', label: 'Đã hủy' },
           { status: 'no_show', label: 'Vắng mặt' },
+          { status: 'left', label: 'Đã về' },
         ] as { status: AppointmentStatus; label: string }[]).map((s) => (
           <div key={s.status} className="inline-flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[s.status]}`} />
@@ -267,6 +279,16 @@ export default function AppointmentCalendarPage() {
             defaultDate={selectedSlot?.date}
             defaultStartTime={selectedSlot?.time}
             defaultPatientId={prefilledPatientId}
+          />
+        </Suspense>
+      )}
+
+      {showWalkIn && (
+        <Suspense fallback={null}>
+          <WalkInModal
+            open={showWalkIn}
+            onClose={() => setShowWalkIn(false)}
+            onCreated={(id) => setDetailId(id)}
           />
         </Suspense>
       )}

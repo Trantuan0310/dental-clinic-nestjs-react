@@ -38,6 +38,8 @@ import {
   WaitingQueueQueryDto,
   AvailabilitySearchQueryDto,
   CreateScheduleOverrideDto,
+  CreateWalkInDto,
+  MarkLeftDto,
   DecideTimeOffDto,
   ListScheduleOverridesQueryDto,
   ListTimeOffsQueryDto,
@@ -279,9 +281,24 @@ export class AppointmentsController {
     };
   }
 
+  @Post('walk-in')
+  @RequirePermissions('appointment.create')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Walk-in: book from now and check in at once (BR-APPT-032)' })
+  async walkIn(@Body() dto: CreateWalkInDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.createWalkIn(dto, actor) };
+  }
+
   // ==========================================================================
   // Nested /:id routes — must be declared AFTER every static sub-route above.
   // ==========================================================================
+
+  @Get(':id/history')
+  @RequirePermissions('appointment.read.any', 'appointment.read.own')
+  @ApiOperation({ summary: 'Audit trail and reschedules of an appointment (BR-APPT-034)' })
+  async history(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.history(id, actor) };
+  }
 
   @Get(':id')
   @RequirePermissions('appointment.read.any', 'appointment.read.own')
@@ -377,5 +394,17 @@ export class AppointmentsController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.appointments.markNoShow(id, dto, actor) };
+  }
+
+  @Post(':id/left')
+  @RequirePermissions('appointment.mark_left')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Checked-in patient left before the exam (BR-APPT-033)' })
+  async left(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkLeftDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.markLeft(id, dto, actor) };
   }
 }

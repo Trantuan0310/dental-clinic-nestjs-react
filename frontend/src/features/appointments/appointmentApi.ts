@@ -3,6 +3,9 @@ import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import type {
   Appointment,
   AppointmentFilters,
+  AppointmentHistory,
+  BookableService,
+  CreateWalkInPayload,
   AppointmentListResponse,
   AvailabilitySlot,
   CalendarFetchParams,
@@ -77,6 +80,25 @@ export type PrismaAppointmentRow = {
   noShowAt?: Date | string | null;
   rescheduleCount?: number;
   encounterId?: string | null;
+  visitKind?: string;
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  calculatedDurationMin?: number | null;
+  durationOverrideReason?: string | null;
+  leftAt?: Date | string | null;
+  leftReason?: string | null;
+  services?: Array<{
+    id: string;
+    serviceId: string;
+    serviceCode: string;
+    serviceName: string;
+    // Prisma Decimal serialises as a string.
+    price: number | string;
+    durationMin: number;
+    bufferBeforeMin: number;
+    bufferAfterMin: number;
+    sortOrder?: number;
+  }>;
   createdAt: Date | string;
   updatedAt?: Date | string | null;
   patient?: {
@@ -132,6 +154,27 @@ export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
     noShowAt: toIso(raw.noShowAt),
     rescheduleCount: raw.rescheduleCount ?? 0,
     encounterId: raw.encounter?.id ?? raw.encounterId ?? null,
+    visitKind: raw.visitKind === 'WALK_IN' ? 'walk_in' : 'booked',
+    bufferBeforeMin: raw.bufferBeforeMin ?? 0,
+    bufferAfterMin: raw.bufferAfterMin ?? 0,
+    calculatedDurationMin: raw.calculatedDurationMin ?? null,
+    durationOverrideReason: raw.durationOverrideReason ?? null,
+    leftAt: toIso(raw.leftAt),
+    leftReason: raw.leftReason ?? null,
+    services: raw.services
+      ? [...raw.services]
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+          .map((sv) => ({
+            id: sv.id,
+            serviceId: sv.serviceId,
+            serviceCode: sv.serviceCode,
+            serviceName: sv.serviceName,
+            price: Number(sv.price),
+            durationMin: sv.durationMin,
+            bufferBeforeMin: sv.bufferBeforeMin,
+            bufferAfterMin: sv.bufferAfterMin,
+          }))
+      : undefined,
     createdAt: toIso(raw.createdAt) ?? new Date().toISOString(),
     updatedAt: toIso(raw.updatedAt) ?? undefined,
   };
@@ -150,8 +193,11 @@ export const appointmentKeys = {
   list: (filters?: AppointmentFilters) =>
     ['appointments', 'list', filters ?? {}] as const,
   detail: (id: string) => ['appointments', 'detail', id] as const,
-  availability: (dentistId: string, date: string) =>
-    ['appointments', 'availability', dentistId, date] as const,
+  availability: (dentistId: string, date: string, opts?: AvailabilityOptions) =>
+    ['appointments', 'availability', dentistId, date, opts ?? {}] as const,
+  history: (id: string) => ['appointments', 'history', id] as const,
+  bookableServices: (dentistId: string, date: string) =>
+    ['appointments', 'bookable-services', dentistId, date] as const,
   waitingQueue: (params?: { dentistId?: string; date?: string }) =>
     ['appointments', 'waiting-queue', params ?? {}] as const,
   today: ['appointments', 'today'] as const,
@@ -198,6 +244,8 @@ function buildCreateBody(payload: CreateAppointmentPayload): Record<string, unkn
     // Backend enums are upper-case (AppointmentType / AppointmentSource).
     appointmentType: payload.appointmentType?.toUpperCase(),
     source: payload.source?.toUpperCase(),
+    serviceIds: payload.serviceIds?.length ? payload.serviceIds : undefined,
+    durationOverrideReason: payload.durationOverrideReason?.trim() || undefined,
   };
 }
 
@@ -332,10 +380,22 @@ export function useCalendar(params: CalendarFetchParams) {
  * The BE returns `availableSlots: string[]` (HH:mm); we expand each entry into
  * a structured AvailabilitySlot with full startTime/endTime + `available`.
  */
-export function useAvailability(dentistId: string | undefined, date: string | undefined) {
+export interface AvailabilityOptions {
+  /** Visit length; defaults to the dentist's slot length. */
+  slotDuration?: number;
+  /** Prep/clean-up time the new visit needs (ADR-0009 D4). */
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+}
+
+export function useAvailability(
+  dentistId: string | undefined,
+  date: string | undefined,
+  opts?: AvailabilityOptions,
+) {
   return useQuery({
     enabled: !!dentistId && !!date,
-    queryKey: appointmentKeys.availability(dentistId ?? '', date ?? ''),
+    queryKey: appointmentKeys.availability(dentistId ?? '', date ?? '', opts),
     queryFn: async (): Promise<DentistAvailability> => {
       const raw = await get<{
         dentistId: string;
@@ -348,7 +408,13 @@ export function useAvailability(dentistId: string | undefined, date: string | un
         busy?: ClockInterval[];
         blockedReason?: string | null;
       }>('/appointments/availability', {
-        params: { dentistId, date },
+        params: {
+          dentistId,
+          date,
+          slotDuration: opts?.slotDuration || undefined,
+          bufferBeforeMin: opts?.bufferBeforeMin || undefined,
+          bufferAfterMin: opts?.bufferAfterMin || undefined,
+        },
       });
 
       const slots: AvailabilitySlot[] = (raw.availableSlots ?? []).map((hhmm) => {
@@ -674,6 +740,111 @@ export function useStartEncounter() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ADR-0009 phase 5 — services, walk-in, LEFT, history
+// ---------------------------------------------------------------------------
+
+/**
+ * Services the dentist performs on `date` (GET /dentists/:id/services, only
+ * the assignments current that day on an active service) — the booking
+ * form's service picker (BR-APPT-030).
+ */
+export function useBookableServices(dentistId: string | undefined, date: string | undefined) {
+  return useQuery({
+    enabled: !!dentistId && !!date,
+    queryKey: appointmentKeys.bookableServices(dentistId ?? '', date ?? ''),
+    queryFn: async (): Promise<BookableService[]> => {
+      const rows = await get<
+        Array<{
+          current: boolean;
+          effectiveDurationMin: number;
+          effectivePrice: number;
+          service: {
+            id: string;
+            code: string;
+            name: string;
+            categoryName: string;
+            isActive: boolean;
+            bufferBeforeMin?: number;
+            bufferAfterMin?: number;
+          };
+        }>
+      >(`/dentists/${dentistId}/services`, { params: { date } });
+      return rows
+        .filter((r) => r.current && r.service.isActive)
+        .map((r) => ({
+          serviceId: r.service.id,
+          code: r.service.code,
+          name: r.service.name,
+          categoryName: r.service.categoryName,
+          durationMin: r.effectiveDurationMin,
+          price: r.effectivePrice,
+          bufferBeforeMin: r.service.bufferBeforeMin ?? 0,
+          bufferAfterMin: r.service.bufferAfterMin ?? 0,
+        }));
+    },
+    staleTime: 60_000,
+  });
+}
+
+/** POST /appointments/walk-in — booked from now and checked in (BR-APPT-032). */
+export function useCreateWalkIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateWalkInPayload): Promise<Appointment> => {
+      const row = await post<PrismaAppointmentRow>('/appointments/walk-in', {
+        patientId: payload.patientId,
+        dentistId: payload.dentistId,
+        serviceIds: payload.serviceIds?.length ? payload.serviceIds : undefined,
+        durationMin: payload.serviceIds?.length ? undefined : payload.durationMin,
+        reason: payload.reason?.trim() || undefined,
+        chiefComplaint: payload.chiefComplaint?.trim() || undefined,
+        appointmentType: payload.appointmentType?.toUpperCase(),
+      });
+      return transformAppointment(row);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
+/** POST /appointments/:id/left — checked in, then left before the exam (BR-APPT-033). */
+export function useMarkLeft() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }): Promise<Appointment> => {
+      const row = await post<PrismaAppointmentRow>(`/appointments/${id}/left`, {
+        reason: reason.trim(),
+      });
+      return transformAppointment(row);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
+/** GET /appointments/:id/history — audit trail + reschedules (BR-APPT-034). */
+export function useAppointmentHistory(id: string | undefined) {
+  return useQuery({
+    enabled: !!id,
+    queryKey: appointmentKeys.history(id ?? ''),
+    queryFn: async (): Promise<AppointmentHistory> => {
+      const raw = await get<AppointmentHistory>(`/appointments/${id}/history`);
+      return {
+        events: raw.events.map((e) => ({ ...e, at: toIso(e.at) ?? '' })),
+        reschedules: raw.reschedules.map((r) => ({
+          ...r,
+          oldStartAt: toIso(r.oldStartAt) ?? '',
+          newStartAt: toIso(r.newStartAt) ?? '',
+          changedAt: toIso(r.changedAt) ?? '',
+        })),
+      };
     },
   });
 }

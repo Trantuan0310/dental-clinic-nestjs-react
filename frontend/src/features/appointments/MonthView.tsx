@@ -27,6 +27,7 @@ const STATUS_DOT_COLORS: Record<AppointmentStatus, string> = {
   completed: 'bg-emerald-500',
   cancelled: 'bg-red-400',
   no_show: 'bg-red-500',
+  left: 'bg-orange-400',
 };
 
 const APPOINTMENT_TYPE_LABEL: Record<AppointmentType, string> = {

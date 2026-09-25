@@ -1723,4 +1723,164 @@ describe('AppointmentsService', () => {
       expect(error.getResponse().error).toBe('OVERRIDE_EXISTS');
     });
   });
+
+  describe('services, walk-in and LEFT (ADR-0009 phase 5)', () => {
+    const dentist = {
+      id: 'dentist-1',
+      status: 'ACTIVE',
+      userRoles: [{ role: { code: 'dentist' } }],
+    };
+    const assignment = (serviceId: string, over: Record<string, unknown> = {}) => ({
+      serviceId,
+      durationMin: null,
+      price: null,
+      service: {
+        code: serviceId.toUpperCase(),
+        name: `Dịch vụ ${serviceId}`,
+        basePrice: 400000,
+        defaultDurationMin: 30,
+        bufferBeforeMin: 0,
+        bufferAfterMin: 5,
+      },
+      ...over,
+    });
+    const dto = {
+      dentistId: 'dentist-1',
+      patientId: 'patient-1',
+      startAt: '2027-03-15T02:00:00Z',
+      serviceIds: ['svc-a', 'svc-b'],
+    } as any;
+
+    beforeEach(() => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(dentist);
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+        { startTime: new Date('1970-01-01T00:00:00Z'), endTime: new Date('1970-01-01T23:59:00Z') },
+      ]);
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.create as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        id: 'appt-new',
+        ...data,
+      }));
+      (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([
+        assignment('svc-a', { durationMin: 45 }),
+        assignment('svc-b', {
+          service: { ...assignment('svc-b').service, bufferBeforeMin: 10, bufferAfterMin: 15 },
+          price: 500000,
+        }),
+      ]);
+    });
+
+    it('BR-APPT-030/031: length is the services total, buffers the largest, services snapshotted', async () => {
+      await service.create(dto, actor);
+      const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+      expect(data.endAt).toEqual(new Date('2027-03-15T03:15:00Z')); // 45 + 30 min
+      expect(data).toMatchObject({
+        calculatedDurationMin: 75,
+        bufferBeforeMin: 10,
+        bufferAfterMin: 15,
+      });
+      expect(data.services.create).toEqual([
+        expect.objectContaining({
+          serviceId: 'svc-a',
+          durationMin: 45,
+          price: 400000,
+          sortOrder: 0,
+        }),
+        expect.objectContaining({
+          serviceId: 'svc-b',
+          durationMin: 30,
+          price: 500000,
+          sortOrder: 1,
+        }),
+      ]);
+    });
+
+    it('BR-APPT-030: refuses a service the dentist does not perform that day', async () => {
+      (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([assignment('svc-a')]);
+      const error = await service.create(dto, actor).catch(e => e);
+      expect(error.getResponse()).toMatchObject({
+        error: 'SERVICE_NOT_ASSIGNED',
+        details: { serviceIds: ['svc-b'] },
+      });
+      expect(prisma.appointment.create).not.toHaveBeenCalled();
+    });
+
+    it('BR-APPT-031: a different length needs a reason, which is stored', async () => {
+      const shorter = { ...dto, endAt: '2027-03-15T03:00:00Z' };
+      await expect(service.create(shorter, actor)).rejects.toThrow(/needs a reason/);
+      await service.create(
+        { ...shorter, durationOverrideReason: 'Bệnh nhân tái khám nhanh' },
+        actor,
+      );
+      expect(
+        (prisma.appointment.create as jest.Mock).mock.calls[0][0].data.durationOverrideReason,
+      ).toBe('Bệnh nhân tái khám nhanh');
+    });
+
+    it("D4: the new visit's buffers are checked against the day's bookings", async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'prev',
+          startAt: new Date('2027-03-15T01:30:00Z'),
+          endAt: new Date('2027-03-15T01:55:00Z'),
+        },
+      ]);
+      // prep 10 min before 02:00 overlaps the booking ending 01:55
+      await expect(service.create(dto, actor)).rejects.toThrow();
+      expect(prisma.appointment.create).not.toHaveBeenCalled();
+    });
+
+    it('BR-APPT-032: a walk-in starts now and is checked in at once', async () => {
+      (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([]);
+      const before = Date.now();
+      await service.createWalkIn(
+        { dentistId: 'dentist-1', patientId: 'patient-1', durationMin: 20 } as any,
+        actor,
+      );
+      const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        visitKind: 'WALK_IN',
+        source: 'WALK_IN',
+        status: AppointmentStatus.CHECKED_IN,
+      });
+      expect(data.startAt.getTime()).toBeLessThanOrEqual(before);
+      expect(data.endAt.getTime() - data.startAt.getTime()).toBe(20 * 60_000);
+    });
+
+    it('BR-APPT-033: only a checked-in patient can be marked LEFT', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: AppointmentStatus.SCHEDULED,
+        deletedAt: null,
+      });
+      await expect(
+        service.markLeft('appt-1', { reason: 'Bệnh nhân bận việc' }, actor),
+      ).rejects.toThrow(/checked-in/);
+
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: AppointmentStatus.CHECKED_IN,
+        deletedAt: null,
+      });
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'LEFT',
+      });
+      await service.markLeft('appt-1', { reason: 'Bệnh nhân bận việc' }, actor);
+      expect(prisma.appointment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'appt-1', status: AppointmentStatus.CHECKED_IN },
+          data: expect.objectContaining({
+            status: AppointmentStatus.LEFT,
+            leftReason: 'Bệnh nhân bận việc',
+          }),
+        }),
+      );
+    });
+  });
 });

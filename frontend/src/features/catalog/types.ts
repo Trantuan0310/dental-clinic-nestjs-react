@@ -36,7 +36,15 @@ export interface ServicePayload {
 export interface DentistServiceAssignment {
   id: string;
   dentistId: string;
-  service: { id: string; code: string; name: string; categoryName: string; isActive: boolean };
+  service: {
+    id: string;
+    code: string;
+    name: string;
+    categoryName: string;
+    isActive: boolean;
+    bufferBeforeMin: number;
+    bufferAfterMin: number;
+  };
   durationMin: number | null;
   price: number | null;
   effectiveDurationMin: number;

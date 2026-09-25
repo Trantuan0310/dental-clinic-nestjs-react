@@ -48,7 +48,9 @@ import {
   RescheduleAppointmentDto,
   UpdateAppointmentDto,
   CreateScheduleOverrideDto,
+  CreateWalkInDto,
   DecideTimeOffDto,
+  MarkLeftDto,
   ListScheduleOverridesQueryDto,
   ListTimeOffsQueryDto,
   ScheduleImpactQueryDto,
@@ -70,7 +72,25 @@ const blankToNull = (v: string | undefined): string | null => (v?.trim() ? v.tri
 const ACTIVE_APPOINTMENT_EXCLUDED_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.CANCELLED,
   AppointmentStatus.NO_SHOW,
+  AppointmentStatus.LEFT,
 ];
+
+/** What a visit is made of when booked from the catalogue (ADR-0009 phase 5). */
+interface VisitPlan {
+  services: Array<{
+    serviceId: string;
+    serviceCode: string;
+    serviceName: string;
+    price: number;
+    durationMin: number;
+    bufferBeforeMin: number;
+    bufferAfterMin: number;
+    sortOrder: number;
+  }>;
+  durationMin: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
+}
 
 /**
  * AppointmentsService — owns:
@@ -107,17 +127,27 @@ export class AppointmentsService {
 
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
+    const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt));
 
     // Honor a client-provided endAt (e.g. a chosen duration) instead of
     // always defaulting — this DTO field has always been accepted and
     // validated but was silently discarded here, so every appointment was
     // persisted at defaultSlotMinutes regardless of what was requested.
+    // With services, the default length is what they add up to (D4).
     const endAt = dto.endAt
       ? new Date(dto.endAt)
-      : new Date(startAt.getTime() + this.defaultSlotMinutes(dentist) * 60_000);
+      : new Date(
+          startAt.getTime() + (plan?.durationMin ?? this.defaultSlotMinutes(dentist)) * 60_000,
+        );
     if (endAt.getTime() <= startAt.getTime()) {
       throw new BackDatedAppointmentException();
     }
+    const overrideReason = this.checkDurationOverride(
+      plan,
+      startAt,
+      endAt,
+      dto.durationOverrideReason,
+    );
 
     // Wrap the overlap check + insert in a single $transaction under an
     // advisory lock keyed by dentistId. This prevents two concurrent
@@ -126,7 +156,7 @@ export class AppointmentsService {
     return this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, dto.dentistId);
       await this.lockPatient(tx, dto.patientId);
-      await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx);
+      await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx, plan);
       await this.ensurePatientFree(dto.patientId, startAt, endAt, undefined, tx);
 
       const created = await tx.appointment.create({
@@ -135,6 +165,7 @@ export class AppointmentsService {
           dentistId: dto.dentistId,
           startAt,
           endAt,
+          ...this.planColumns(plan, overrideReason),
           status: AppointmentStatus.SCHEDULED,
           reason: blankToNull(dto.reason),
           chiefComplaint: blankToNull(dto.chiefComplaint),
@@ -156,6 +187,8 @@ export class AppointmentsService {
           dentistId: dto.dentistId,
           patientId: dto.patientId,
           startAt: dto.startAt,
+          ...(plan ? { serviceCodes: plan.services.map(sv => sv.serviceCode) } : {}),
+          ...(overrideReason ? { durationOverrideReason: overrideReason } : {}),
         },
       });
 
@@ -619,7 +652,10 @@ export class AppointmentsService {
     const result = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, newDentistId);
       await this.lockPatient(tx, appt.patientId);
-      await this.ensureSlotAvailable(newDentistId, newStart, newEnd, actor, appt.id, tx);
+      await this.ensureSlotAvailable(newDentistId, newStart, newEnd, actor, appt.id, tx, {
+        bufferBeforeMin: appt.bufferBeforeMin ?? 0,
+        bufferAfterMin: appt.bufferAfterMin ?? 0,
+      });
       await this.ensurePatientFree(appt.patientId, newStart, newEnd, appt.id, tx);
 
       // See checkIn() — guarded write, so a concurrent check-in/cancel or a
@@ -688,7 +724,10 @@ export class AppointmentsService {
   // ==========================================================================
 
   async getAvailability(q: AvailabilityQueryDto) {
-    return this.availability.dayAvailability(q.dentistId, q.date, q.slotDuration);
+    return this.availability.dayAvailability(q.dentistId, q.date, q.slotDuration, {
+      beforeMin: q.bufferBeforeMin,
+      afterMin: q.bufferAfterMin,
+    });
   }
 
   async getWaitingQueue(
@@ -751,6 +790,7 @@ export class AppointmentsService {
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
         encounter: { select: { id: true } },
+        services: { orderBy: { sortOrder: 'asc' } },
       },
     });
     if (!appt) throw new AppointmentNotFoundException(id);
@@ -1723,6 +1763,210 @@ export class AppointmentsService {
   // Helpers
   // ==========================================================================
 
+  // ==========================================================================
+  // Services, walk-in, LEFT, history (ADR-0009 phase 5)
+  // ==========================================================================
+
+  /**
+   * BR-APPT-030: every chosen service must be active and assigned to the
+   * dentist that day. Length = sum of each service's duration (the dentist's
+   * override first, BR-SVC-006); buffers = the largest of the services (D4).
+   */
+  private async planVisit(
+    dentistId: string,
+    serviceIds: string[] | undefined,
+    localDate: string,
+  ): Promise<VisitPlan | null> {
+    if (!serviceIds?.length) return null;
+    const day = new Date(localDate);
+    const assignments = await this.prisma.dentistService.findMany({
+      where: {
+        dentistId,
+        serviceId: { in: serviceIds },
+        effectiveFrom: { lte: day },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
+        service: { isActive: true },
+      },
+      include: { service: true },
+    });
+    const byService = new Map(assignments.map(a => [a.serviceId, a]));
+    const missing = serviceIds.filter(id => !byService.has(id));
+    if (missing.length > 0) {
+      throw new BusinessRuleException(
+        'The dentist does not perform every chosen service on that day',
+        HttpStatus.CONFLICT,
+        { serviceIds: missing },
+        'SERVICE_NOT_ASSIGNED',
+      );
+    }
+    const services = serviceIds.map((id, index) => {
+      const a = byService.get(id)!;
+      return {
+        serviceId: id,
+        serviceCode: a.service.code,
+        serviceName: a.service.name,
+        price: Number(a.price ?? a.service.basePrice),
+        durationMin: a.durationMin ?? a.service.defaultDurationMin,
+        bufferBeforeMin: a.service.bufferBeforeMin,
+        bufferAfterMin: a.service.bufferAfterMin,
+        sortOrder: index,
+      };
+    });
+    return {
+      services,
+      durationMin: services.reduce((sum, sv) => sum + sv.durationMin, 0),
+      bufferBeforeMin: Math.max(...services.map(sv => sv.bufferBeforeMin)),
+      bufferAfterMin: Math.max(...services.map(sv => sv.bufferAfterMin)),
+    };
+  }
+
+  /** BR-APPT-031: a length different from the services' total needs a reason. */
+  private checkDurationOverride(
+    plan: VisitPlan | null,
+    startAt: Date,
+    endAt: Date,
+    reason: string | undefined,
+  ): string | null {
+    if (!plan) return null;
+    const minutes = Math.round((endAt.getTime() - startAt.getTime()) / 60_000);
+    if (minutes === plan.durationMin) return null;
+    const trimmed = reason?.trim() ?? '';
+    if (trimmed.length < 5) {
+      throw new InvalidAppointmentStateException(
+        `The services add up to ${plan.durationMin} minutes; a different length (${minutes}) needs a reason (≥ 5 characters)`,
+      );
+    }
+    return trimmed;
+  }
+
+  private planColumns(plan: VisitPlan | null, overrideReason: string | null) {
+    if (!plan) return {};
+    return {
+      bufferBeforeMin: plan.bufferBeforeMin,
+      bufferAfterMin: plan.bufferAfterMin,
+      calculatedDurationMin: plan.durationMin,
+      durationOverrideReason: overrideReason,
+      services: { create: plan.services },
+    };
+  }
+
+  /**
+   * BR-APPT-032: a walk-in is booked from now and checked in at once. The
+   * dentist must be working, free and not on leave right now; the 1-minute
+   * lead time of pre-booked visits does not apply.
+   */
+  async createWalkIn(dto: CreateWalkInDto, actor: JwtPayload) {
+    const startAt = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    const dentist = await this.validateDentist(dto.dentistId);
+    await this.validateActivePatient(dto.patientId);
+    const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt));
+    const minutes = plan?.durationMin ?? dto.durationMin ?? this.defaultSlotMinutes(dentist);
+    const endAt = new Date(startAt.getTime() + minutes * 60_000);
+
+    const created = await this.prisma.$transaction(async tx => {
+      await this.lockDentist(tx, dto.dentistId);
+      await this.lockPatient(tx, dto.patientId);
+      await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx, plan);
+      await this.ensurePatientFree(dto.patientId, startAt, endAt, undefined, tx);
+      return tx.appointment.create({
+        data: {
+          patientId: dto.patientId,
+          dentistId: dto.dentistId,
+          startAt,
+          endAt,
+          ...this.planColumns(plan, null),
+          visitKind: 'WALK_IN',
+          source: 'WALK_IN',
+          status: AppointmentStatus.CHECKED_IN,
+          checkedInAt: new Date(),
+          checkedInBy: actor.sub,
+          reason: blankToNull(dto.reason),
+          chiefComplaint: blankToNull(dto.chiefComplaint),
+          appointmentType: dto.appointmentType,
+          createdBy: actor.sub,
+          updatedBy: actor.sub,
+        },
+        include: { services: true },
+      });
+    });
+    await this.audit.log({
+      action: 'APPOINTMENT_WALK_IN',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'appointment',
+      targetId: created.id,
+      metadata: {
+        dentistId: dto.dentistId,
+        patientId: dto.patientId,
+        startAt: startAt.toISOString(),
+        ...(plan ? { serviceCodes: plan.services.map(sv => sv.serviceCode) } : {}),
+      },
+    });
+    return created;
+  }
+
+  /**
+   * BR-APPT-033 (ADR-0009 D2): a checked-in patient who leaves before the
+   * exam starts is LEFT, not cancelled or no-show; the slot is released.
+   */
+  async markLeft(appointmentId: string, dto: MarkLeftDto, actor: JwtPayload) {
+    const appt = await this.requireAppointment(appointmentId);
+    if (appt.status !== AppointmentStatus.CHECKED_IN) {
+      throw new InvalidAppointmentStateException(
+        `Only a checked-in patient can leave before the exam (status is ${appt.status})`,
+      );
+    }
+    const result = await this.prisma.appointment.updateMany({
+      where: { id: appointmentId, status: AppointmentStatus.CHECKED_IN },
+      data: {
+        status: AppointmentStatus.LEFT,
+        leftAt: new Date(),
+        leftReason: dto.reason.trim(),
+        updatedBy: actor.sub,
+      },
+    });
+    if (result.count === 0) {
+      throw new InvalidAppointmentStateException(
+        'Appointment was changed by someone else — reload and try again',
+      );
+    }
+    await this.audit.log({
+      action: 'APPOINTMENT_LEFT',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'appointment',
+      targetId: appointmentId,
+      metadata: { reason: dto.reason.trim() },
+    });
+    // No encounter exists before the exam starts, so nothing else to close.
+    return this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+  }
+
+  /** BR-APPT-034: who did what to an appointment, oldest first. */
+  async history(appointmentId: string, actor: JwtPayload) {
+    await this.getById(appointmentId, actor); // 404 + row-level scope
+    const [events, reschedules] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { targetType: 'appointment', targetId: appointmentId },
+        orderBy: { occurredAt: 'asc' },
+        select: { action: true, occurredAt: true, actorEmailAtTime: true, metadata: true },
+      }),
+      this.prisma.appointmentRescheduleLog.findMany({
+        where: { appointmentId },
+        orderBy: { changedAt: 'asc' },
+      }),
+    ]);
+    return {
+      events: events.map(e => ({
+        action: e.action,
+        at: e.occurredAt,
+        actorEmail: e.actorEmailAtTime,
+        metadata: e.metadata,
+      })),
+      reschedules,
+    };
+  }
+
   private async requireAppointment(id: string) {
     const appt = await this.prisma.appointment.findUnique({ where: { id } });
     if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(id);
@@ -1806,10 +2050,14 @@ export class AppointmentsService {
     _actor: JwtPayload,
     excludeAppointmentId?: string,
     txClient?: Prisma.TransactionClient,
+    buffers?: { bufferBeforeMin: number; bufferAfterMin: number } | null,
   ) {
     const problem = await this.availability.checkSlot(dentistId, startAt, endAt, {
       db: txClient ?? this.prisma,
       excludeAppointmentId,
+      buffers: buffers
+        ? { beforeMin: buffers.bufferBeforeMin, afterMin: buffers.bufferAfterMin }
+        : undefined,
     });
     if (!problem) return;
     if (problem.kind === 'SLOT_CONFLICT') throw new SlotConflictException();

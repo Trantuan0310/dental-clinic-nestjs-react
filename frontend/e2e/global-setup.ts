@@ -31,6 +31,10 @@ async function globalSetup(config: FullConfig) {
   const demoDentists = [
     process.env.E2E_DENTIST_USERNAME ?? 'an.nguyen@clinic.local',
     process.env.E2E_SECOND_DENTIST_USERNAME ?? 'binh.tran@clinic.local',
+    // appointment-services books Cường (services) and walks a patient in to
+    // Dung, so neither eats the slots the flows above need.
+    'cuong.le@clinic.local',
+    'dung.pham@clinic.local',
   ];
   const scheduleIds: string[] = [];
   const cleanup = () => {

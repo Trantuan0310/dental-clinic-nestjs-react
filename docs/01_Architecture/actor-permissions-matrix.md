@@ -85,6 +85,9 @@ Trong đó:
 | Check-in | ✅ | ✅ | ❌ | `appointment.check_in` |
 | Hủy lịch (trước giờ hẹn) | ✅ | ✅ | 🔒 (chỉ hủy lịch của mình, trước 24h) | `appointment.cancel` |
 | Đánh dấu no-show | ✅ | ✅ | 🔒 (chỉ lịch của mình) | `appointment.no_show` (+ alias FE `appointment.mark_no_show`) |
+| Tiếp nhận khách vãng lai (check-in ngay) | ✅ | ✅ | ❌ | `appointment.create` |
+| Ghi nhận bệnh nhân đã về trước khi khám (`LEFT`) | ✅ | ✅ | ❌ | `appointment.mark_left` |
+| Xem nhật ký thao tác của lịch hẹn | ✅ | ✅ | 🔒 (chỉ lịch của mình) | `appointment.read.any` / `appointment.read.own` |
 
 ### 3.3 Medical Records module
 
