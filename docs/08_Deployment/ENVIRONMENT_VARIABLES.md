@@ -67,8 +67,20 @@ CORS_ORIGIN="https://your-frontend-domain.com"
 THROTTLE_TTL="60000"
 THROTTLE_LIMIT="100"
 
-# Email (mock cho MVP — chưa tích hợp SMTP thật)
+# Email — dùng cho cả "quên mật khẩu" và email mời thiết lập tài khoản khi
+# admin tạo user mới (xem backend/src/users/users.service.ts). EMAIL_MOCK="true"
+# chỉ log link ra console thay vì gửi thật; đặt "false" và điền SMTP_* bên dưới
+# để gửi email thật.
 EMAIL_MOCK="true"
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"
+SMTP_USER="your-smtp-username"
+SMTP_PASS="your-smtp-password"
+EMAIL_FROM="noreply@clinic.example.com"
+
+# URL của frontend — dùng để dựng link trong email (đặt lại mật khẩu, mời
+# thiết lập tài khoản). Không set thì fallback "http://localhost:5173".
+FRONTEND_URL="https://your-frontend-domain.com"
 ```
 
 > Không có `LOG_LEVEL` / `LOG_PRETTY` — app chưa dùng structured logging,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -122,6 +122,14 @@ export default function LoginPage() {
               error={errors.password?.message}
               required
             />
+            <div className="flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400"
+              >
+                {t('auth.login.forgotPassword')}
+              </Link>
+            </div>
             {submitError && (
               <Alert variant="error" announce>
                 {submitError}
