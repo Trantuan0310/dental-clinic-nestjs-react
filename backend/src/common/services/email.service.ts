@@ -129,4 +129,74 @@ Email này được gửi tự động từ hệ thống Nha Khoa.
       text,
     });
   }
+
+  async sendAccountSetupEmail(
+    to: string,
+    setupUrl: string,
+    expiresInMinutes: number,
+  ): Promise<boolean> {
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2BA3A0; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: #2BA3A0; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Chào mừng bạn đến với Nha Khoa</h1>
+    </div>
+    <div class="content">
+      <p>Xin chào,</p>
+      <p>Một tài khoản đã được tạo cho bạn trên hệ thống quản lý phòng khám.</p>
+      <p>Vui lòng nhấp vào nút bên dưới để thiết lập mật khẩu và kích hoạt tài khoản:</p>
+      <p style="text-align: center;">
+        <a href="${setupUrl}" class="button">Thiết lập mật khẩu</a>
+      </p>
+      <p>Hoặc sao chép và dán đường link này vào trình duyệt:</p>
+      <p style="word-break: break-all; color: #2BA3A0;">${setupUrl}</p>
+      <p><strong>Liên kết này sẽ hết hạn sau ${expiresInMinutes} phút.</strong></p>
+      <p>Nếu bạn không mong đợi email này, vui lòng liên hệ quản trị viên phòng khám.</p>
+    </div>
+    <div class="footer">
+      <p>Email này được gửi tự động từ hệ thống Nha Khoa. Vui lòng không trả lời email này.</p>
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+    const text = `
+Chào mừng bạn đến với Nha Khoa
+
+Xin chào,
+
+Một tài khoản đã được tạo cho bạn trên hệ thống quản lý phòng khám.
+
+Vui lòng nhấp vào đường link bên dưới để thiết lập mật khẩu và kích hoạt tài khoản:
+${setupUrl}
+
+Liên kết này sẽ hết hạn sau ${expiresInMinutes} phút.
+
+Nếu bạn không mong đợi email này, vui lòng liên hệ quản trị viên phòng khám.
+
+---
+Email này được gửi tự động từ hệ thống Nha Khoa.
+`;
+
+    return this.send({
+      to,
+      subject: 'Thiết lập tài khoản của bạn - Nha Khoa',
+      html,
+      text,
+    });
+  }
 }

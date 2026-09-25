@@ -112,6 +112,32 @@
         "required": "Please enter your email and password"
       }
     },
+    "forgotPassword": {
+      "title": "Forgot password",
+      "subtitle": "Enter your account email and we'll send you a reset link",
+      "email": "Email",
+      "submit": "Send reset link",
+      "backToLogin": "Back to sign in",
+      "success": "If that email exists in our system, a password reset link has been sent to it.",
+      "errors": {
+        "required": "Please enter a valid email"
+      }
+    },
+    "resetPassword": {
+      "title": "Reset password",
+      "subtitle": "Enter a new password for your account",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "submit": "Reset password",
+      "success": "Password reset successfully. Please sign in again.",
+      "backToLogin": "Back to sign in",
+      "missingToken": "Invalid link. Please use the link sent to your email again.",
+      "errors": {
+        "required": "Please enter a password",
+        "minLength": "Password must be at least 8 characters",
+        "mismatch": "Passwords do not match"
+      }
+    },
     "logout": "Log out",
     "session": {
       "expired": "Your session has expired. Please sign in again."
