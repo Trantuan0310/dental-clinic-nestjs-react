@@ -4,6 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../audit/audit.module';
 import { AppointmentsController } from './appointments.controller';
 import { AppointmentsService } from './appointments.service';
+import { AvailabilityService } from './availability.service';
 import { AppointmentsCron } from './appointments.cron';
 import { PayrollModule } from '../payroll/payroll.module';
 
@@ -12,7 +13,7 @@ import { PayrollModule } from '../payroll/payroll.module';
   // route delegates to ShiftRegistrationService.cancel (single implementation).
   imports: [ScheduleModule.forRoot(), PrismaModule, AuditModule, PayrollModule],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService, AppointmentsCron],
-  exports: [AppointmentsService],
+  providers: [AppointmentsService, AvailabilityService, AppointmentsCron],
+  exports: [AppointmentsService, AvailabilityService],
 })
 export class AppointmentsModule {}

@@ -3,7 +3,7 @@ import { adminPayload, dentistPayload } from '../../test/helpers';
 
 describe('AppointmentsController — legacy shift-registration cancel route (APPT-FU-07)', () => {
   const shiftRegistrations = { cancel: jest.fn().mockResolvedValue({ id: 'shift-1' }) };
-  const controller = new AppointmentsController({} as any, shiftRegistrations as any);
+  const controller = new AppointmentsController({} as any, shiftRegistrations as any, {} as any);
 
   afterEach(() => jest.clearAllMocks());
 

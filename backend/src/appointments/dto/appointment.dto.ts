@@ -215,6 +215,25 @@ export class AvailabilityQueryDto {
   slotDuration?: number;
 }
 
+export class AvailabilitySearchQueryDto {
+  @ApiProperty({ description: 'Clinic date YYYY-MM-DD' })
+  @IsDateString()
+  date!: string;
+
+  @ApiPropertyOptional({ description: 'Only dentists assigned this service that day' })
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
+
+  @ApiPropertyOptional({ description: 'Visit length; defaults to the dentist/service duration' })
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(5)
+  @Max(480)
+  durationMin?: number;
+}
+
 export class WaitingQueueQueryDto {
   @ApiPropertyOptional()
   @IsOptional()

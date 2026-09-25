@@ -18,6 +18,7 @@ import { PermissionsGuard, JwtPayload } from '../common/guards/permissions.guard
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { AppointmentsService } from './appointments.service';
+import { AvailabilityService } from './availability.service';
 import { ShiftRegistrationService } from '../payroll/shift-registration.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
@@ -35,6 +36,7 @@ import {
   RescheduleAppointmentDto,
   UpdateAppointmentDto,
   WaitingQueueQueryDto,
+  AvailabilitySearchQueryDto,
   CreateScheduleOverrideDto,
   DecideTimeOffDto,
   ListScheduleOverridesQueryDto,
@@ -50,6 +52,7 @@ export class AppointmentsController {
   constructor(
     private readonly appointments: AppointmentsService,
     private readonly shiftRegistrations: ShiftRegistrationService,
+    private readonly availabilityService: AvailabilityService,
   ) {}
 
   // ==========================================================================
@@ -87,6 +90,16 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Slot availability for dentist on a date' })
   async availability(@Query() q: AvailabilityQueryDto) {
     return { data: await this.appointments.getAvailability(q) };
+  }
+
+  @Get('availability/search')
+  @RequirePermissions('appointment.create', 'appointment.read.any')
+  @ApiOperation({
+    summary:
+      'Free start times per active dentist on a date, optionally only those assigned a service',
+  })
+  async searchAvailability(@Query() q: AvailabilitySearchQueryDto) {
+    return { data: await this.availabilityService.search(q) };
   }
 
   @Get('dentists')
