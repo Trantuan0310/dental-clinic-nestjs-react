@@ -8,6 +8,9 @@ import {
   IsArray,
   Min,
   Max,
+  Matches,
+  MinLength,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -15,7 +18,9 @@ import {
   AppointmentStatus,
   AppointmentSource,
   AppointmentType,
+  ScheduleOverrideKind,
   ShiftType,
+  TimeOffStatus,
   TimeOffType,
 } from '@prisma/client';
 
@@ -296,6 +301,87 @@ export class CreateTimeOffDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class ListTimeOffsQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  dentistId?: string;
+
+  @ApiPropertyOptional({ enum: TimeOffStatus })
+  @IsOptional()
+  @IsEnum(TimeOffStatus)
+  status?: TimeOffStatus;
+}
+
+export class DecideTimeOffDto {
+  @ApiPropertyOptional({ description: 'Required when rejecting' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export class CreateScheduleOverrideDto {
+  @ApiProperty()
+  @IsUUID()
+  dentistId!: string;
+
+  @ApiProperty({ description: 'Clinic date YYYY-MM-DD' })
+  @IsDateString()
+  date!: string;
+
+  @ApiProperty({ enum: ScheduleOverrideKind })
+  @IsEnum(ScheduleOverrideKind)
+  kind!: ScheduleOverrideKind;
+
+  @ApiPropertyOptional({ description: 'HH:mm; with endTime. CLOSED without times = whole day' })
+  @IsOptional()
+  @Matches(HHMM)
+  startTime?: string;
+
+  @ApiPropertyOptional({ description: 'HH:mm' })
+  @IsOptional()
+  @Matches(HHMM)
+  endTime?: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class ListScheduleOverridesQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  dentistId?: string;
+
+  @ApiPropertyOptional({ description: 'From clinic date (inclusive), defaults to today' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+}
+
+export class ScheduleImpactQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  dentistId?: string;
+
+  @ApiPropertyOptional({ description: 'Clinic date YYYY-MM-DD, defaults to today' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Clinic date YYYY-MM-DD, defaults to from + 60 days' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
 
 export class CreateShiftRegistrationDto {
