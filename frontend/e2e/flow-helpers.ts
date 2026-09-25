@@ -37,6 +37,28 @@ export const ACCOUNTS = {
   },
 };
 
+/** The clinic's timezone — the browser contexts in these specs run in it too. */
+export const CLINIC_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+/**
+ * Minutes since midnight right now on the clinic's wall clock.
+ *
+ * Don't use `new Date().getHours()` for values typed into the UI: that reads
+ * the *test runner's* timezone, while the browser (timezoneId above) and the
+ * backend work in clinic time. On a UTC runner (CI, cloud containers) the
+ * typed "now + 3 min" landed 7 hours in the past and booking got a 400.
+ */
+export function clinicNowMinutes(now: Date = new Date()): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: CLINIC_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: 'hour' | 'minute') => Number(parts.find((p) => p.type === type)?.value);
+  return get('hour') * 60 + get('minute');
+}
+
 export function isoDateOnly(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
