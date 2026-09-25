@@ -23,12 +23,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { backfillStaffRecords } from './staff-backfill';
 import { seedServiceCatalog } from './catalog-seed';
-import {
-  utcDate,
-  pickWeighted,
-  getOperatingDays,
-  pad,
-} from './seed-helpers';
+import { utcDate, getOperatingDays, pad } from './seed-helpers';
 
 const prisma = new PrismaClient();
 
@@ -36,51 +31,91 @@ const prisma = new PrismaClient();
 // Data range constants — single source of truth for the 3-month window
 // ----------------------------------------------------------------------
 
-const DATA_START_DATE = utcDate(2026, 4, 16);   // 16/05/2026
-const DATA_END_DATE   = utcDate(2026, 7, 16, 23, 59, 59); // 16/08/2026
+const DATA_START_DATE = utcDate(2026, 4, 16); // 16/05/2026
+const DATA_END_DATE = utcDate(2026, 7, 16, 23, 59, 59); // 16/08/2026
 
 /**
  * Per-month appointment target. The dashboard needs ~30/month for the trend
  * chart to look meaningful. May is half-month (16 onward), so 28 is fine.
  */
 const MONTH_TARGETS: Record<string, number> = {
-  '2026-05': 28,  // 16 -> 31 May (16 days)
-  '2026-06': 32,  // June full
-  '2026-07': 35,  // July full
-  '2026-08': 30,  // 1 -> 16 Aug (16 days)
+  '2026-05': 28, // 16 -> 31 May (16 days)
+  '2026-06': 32, // June full
+  '2026-07': 35, // July full
+  '2026-08': 30, // 1 -> 16 Aug (16 days)
 };
 const TARGET_PATIENTS = 80;
 
 const DEFAULT_PASSWORD = 'Password123!';
 
 const DENTISTS = [
-  { email: 'an.nguyen@clinic.local',  fullName: 'BS. Nguyễn Văn An' },
-  { email: 'binh.tran@clinic.local',   fullName: 'BS. Trần Thị Bình' },
-  { email: 'cuong.le@clinic.local',    fullName: 'BS. Lê Hoàng Cường' },
-  { email: 'dung.pham@clinic.local',   fullName: 'BS. Phạm Thị Dung' },
+  { email: 'an.nguyen@clinic.local', fullName: 'BS. Nguyễn Văn An' },
+  { email: 'binh.tran@clinic.local', fullName: 'BS. Trần Thị Bình' },
+  { email: 'cuong.le@clinic.local', fullName: 'BS. Lê Hoàng Cường' },
+  { email: 'dung.pham@clinic.local', fullName: 'BS. Phạm Thị Dung' },
 ];
 
 const RECEPTIONISTS = [
-  { email: 'hanh.le@clinic.local',     fullName: 'Lễ tân Lê Thị Hạnh' },
-  { email: 'long.bui@clinic.local',    fullName: 'Lễ tân Bùi Văn Long' },
+  { email: 'hanh.le@clinic.local', fullName: 'Lễ tân Lê Thị Hạnh' },
+  { email: 'long.bui@clinic.local', fullName: 'Lễ tân Bùi Văn Long' },
 ];
 
 const SERVICES = [
-  { procedure: 'Cạo vôi + đánh bóng',         unitPrice:   450_000 },
-  { procedure: 'Trám răng composite',          unitPrice:   650_000 },
-  { procedure: 'Nhổ răng (không biến chứng)', unitPrice:   600_000 },
-  { procedure: 'Bọc răng sứ',                 unitPrice: 4_200_000 },
-  { procedure: 'Cấy ghép Implant',            unitPrice: 8_900_000 },
+  { procedure: 'Cạo vôi + đánh bóng', unitPrice: 450_000 },
+  { procedure: 'Trám răng composite', unitPrice: 650_000 },
+  { procedure: 'Nhổ răng (không biến chứng)', unitPrice: 600_000 },
+  { procedure: 'Bọc răng sứ', unitPrice: 4_200_000 },
+  { procedure: 'Cấy ghép Implant', unitPrice: 8_900_000 },
   { procedure: 'Niềng răng (đợt thanh toán)', unitPrice: 1_800_000 },
 ];
 
 const FIRST_NAMES = [
-  'Nguyễn Văn', 'Trần Thị', 'Lê Hoàng', 'Phạm Thị', 'Hoàng Thị',
-  'Đỗ Quang', 'Vũ Thị', 'Bùi Văn', 'Đặng Thị', 'Ngô Văn',
-  'Dương Thị', 'Lý Văn', 'Phan Thị', 'Tôn Nữ', 'Chu Văn',
+  'Nguyễn Văn',
+  'Trần Thị',
+  'Lê Hoàng',
+  'Phạm Thị',
+  'Hoàng Thị',
+  'Đỗ Quang',
+  'Vũ Thị',
+  'Bùi Văn',
+  'Đặng Thị',
+  'Ngô Văn',
+  'Dương Thị',
+  'Lý Văn',
+  'Phan Thị',
+  'Tôn Nữ',
+  'Chu Văn',
 ];
-const MIDDLE_NAMES = ['Mai', 'Hùng', 'Hồng', 'Khoa', 'Lan', 'Minh', 'Ngọc', 'Phúc', 'Quân', 'Sơn', 'Trang', 'Uyên'];
-const LAST_NAMES = ['An', 'Bình', 'Cường', 'Dung', 'Hà', 'Hải', 'Hương', 'Linh', 'My', 'Nam', 'Phong', 'Quyết', 'Tú', 'Vy'];
+const MIDDLE_NAMES = [
+  'Mai',
+  'Hùng',
+  'Hồng',
+  'Khoa',
+  'Lan',
+  'Minh',
+  'Ngọc',
+  'Phúc',
+  'Quân',
+  'Sơn',
+  'Trang',
+  'Uyên',
+];
+const LAST_NAMES = [
+  'An',
+  'Bình',
+  'Cường',
+  'Dung',
+  'Hà',
+  'Hải',
+  'Hương',
+  'Linh',
+  'My',
+  'Nam',
+  'Phong',
+  'Quyết',
+  'Tú',
+  'Vy',
+];
 
 // ----------------------------------------------------------------------
 // Deterministic pseudo-random
@@ -106,11 +141,6 @@ function generatePatientCode(seq: number): string {
   return `PT-2026-${seq.toString().padStart(5, '0')}`;
 }
 
-function generateAppointmentCode(): string {
-  // not used — code is auto-assigned by app, not stored on appointment
-  return '';
-}
-
 function buildFullName(): string {
   return `${pick(FIRST_NAMES)} ${pick(MIDDLE_NAMES)} ${pick(LAST_NAMES)}`;
 }
@@ -129,10 +159,6 @@ function dobFor(ageMin: number, ageMax: number): Date {
   const month = randInt(0, 11);
   const day = randInt(1, 28);
   return new Date(Date.UTC(year, month, day));
-}
-
-function hourSlot(hour: number, minute: number): Date {
-  return new Date(Date.UTC(2026, 0, 1, hour, minute, 0, 0));
 }
 
 function addMinutes(d: Date, minutes: number): Date {
@@ -192,15 +218,62 @@ const DIAGNOSIS_TEMPLATES = [
   'Răng nhạy cảm',
 ];
 
-const DRUG_TEMPLATES: Array<{ drug: string; dosage: string; frequency: string; duration: string; note?: string }> = [
-  { drug: 'Amoxicillin 500mg',  dosage: '1 viên',    frequency: '3 lần/ngày', duration: '5 ngày',  note: 'Sau ăn' },
-  { drug: 'Paracetamol 500mg',  dosage: '1-2 viên',  frequency: 'Khi đau',     duration: '3 ngày',  note: 'Cách 4-6 giờ' },
-  { drug: 'Ibuprofen 400mg',    dosage: '1 viên',    frequency: '2 lần/ngày', duration: '3 ngày',  note: 'Sau ăn' },
-  { drug: 'Metronidazole 250mg',dosage: '1 viên',    frequency: '2 lần/ngày', duration: '5 ngày',  note: 'Tránh rượu' },
-  { drug: 'Nước súc miệng Chlorhexidine 0.12%', dosage: '15ml', frequency: '2 lần/ngày', duration: '7 ngày' },
-  { drug: 'Nystatin 500.000 IU', dosage: '1 viên',   frequency: '4 lần/ngày', duration: '7 ngày',  note: 'Ngậm tan' },
-  { drug: 'Cefuroxime 250mg',   dosage: '1 viên',    frequency: '2 lần/ngày', duration: '5 ngày' },
-  { drug: 'Ketorolac 10mg',     dosage: '1 viên',    frequency: 'Khi đau',     duration: '2 ngày',  note: 'Tối đa 3 viên/ngày' },
+const DRUG_TEMPLATES: Array<{
+  drug: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  note?: string;
+}> = [
+  {
+    drug: 'Amoxicillin 500mg',
+    dosage: '1 viên',
+    frequency: '3 lần/ngày',
+    duration: '5 ngày',
+    note: 'Sau ăn',
+  },
+  {
+    drug: 'Paracetamol 500mg',
+    dosage: '1-2 viên',
+    frequency: 'Khi đau',
+    duration: '3 ngày',
+    note: 'Cách 4-6 giờ',
+  },
+  {
+    drug: 'Ibuprofen 400mg',
+    dosage: '1 viên',
+    frequency: '2 lần/ngày',
+    duration: '3 ngày',
+    note: 'Sau ăn',
+  },
+  {
+    drug: 'Metronidazole 250mg',
+    dosage: '1 viên',
+    frequency: '2 lần/ngày',
+    duration: '5 ngày',
+    note: 'Tránh rượu',
+  },
+  {
+    drug: 'Nước súc miệng Chlorhexidine 0.12%',
+    dosage: '15ml',
+    frequency: '2 lần/ngày',
+    duration: '7 ngày',
+  },
+  {
+    drug: 'Nystatin 500.000 IU',
+    dosage: '1 viên',
+    frequency: '4 lần/ngày',
+    duration: '7 ngày',
+    note: 'Ngậm tan',
+  },
+  { drug: 'Cefuroxime 250mg', dosage: '1 viên', frequency: '2 lần/ngày', duration: '5 ngày' },
+  {
+    drug: 'Ketorolac 10mg',
+    dosage: '1 viên',
+    frequency: 'Khi đau',
+    duration: '2 ngày',
+    note: 'Tối đa 3 viên/ngày',
+  },
 ];
 
 async function createBundle(args: {
@@ -231,7 +304,10 @@ async function createBundle(args: {
     },
   });
 
-  const closedAt = addMinutes(startAt, Math.round((endAt.getTime() - startAt.getTime()) / 60_000) + 10);
+  const closedAt = addMinutes(
+    startAt,
+    Math.round((endAt.getTime() - startAt.getTime()) / 60_000) + 10,
+  );
   const diagnosis = pick(DIAGNOSIS_TEMPLATES);
   const encounter = await prisma.encounter.create({
     data: {
@@ -279,7 +355,7 @@ async function createBundle(args: {
       diagnosis,
       treatmentPlan: 'Theo phác đồ đã thống nhất với bệnh nhân.',
       notes: `Bệnh nhân ${pick(['chịu khó hợp tác', 'hơi lo lắng', 'rất thoải mái'])} trong quá trình điều trị.`,
-      isLocked: rand() < 0.25,  // 25% of notes are locked (immutable history)
+      isLocked: rand() < 0.25, // 25% of notes are locked (immutable history)
       lockedAt: rand() < 0.25 ? closedAt : null,
       lastEditedBy: dentist.id,
     },
@@ -295,7 +371,12 @@ async function createBundle(args: {
         encounterId: encounter.id,
         diagnosis,
         instructions: `Dùng theo hướng dẫn dưới đây. Tái khám sau ${randInt(7, 30)} ngày nếu triệu chứng không giảm.`,
-        followUpNote: pick(['Tái khám sau 1 tuần', 'Tái khám sau 2 tuần', 'Tái khám sau 1 tháng', null as unknown as string]),
+        followUpNote: pick([
+          'Tái khám sau 1 tuần',
+          'Tái khám sau 2 tuần',
+          'Tái khám sau 1 tháng',
+          null as unknown as string,
+        ]),
         notes: null,
         createdBy: dentist.id,
         lines: {
@@ -319,10 +400,14 @@ async function createBundle(args: {
   // Dental chart snapshot (1:1, deterministic JSON of "teeth")
   // --------------------------------------------------------------------
   const teeth: Array<{ number: number; condition: string }> = [];
-  for (let n = 11; n <= 18; n++) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
-  for (let n = 21; n <= 28; n++) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
-  for (let n = 31; n <= 38; n++) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
-  for (let n = 41; n <= 48; n++) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
+  for (let n = 11; n <= 18; n++)
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
+  for (let n = 21; n <= 28; n++)
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
+  for (let n = 31; n <= 38; n++)
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
+  for (let n = 41; n <= 48; n++)
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
   await prisma.dentalChartSnapshot.create({
     data: {
       encounterId: encounter.id,
@@ -341,7 +426,7 @@ async function createBundle(args: {
   let invStatus: 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'PAID';
   if (r < 0.05) invStatus = 'DRAFT';
   else if (r < 0.15) invStatus = 'ISSUED';
-  else if (r < 0.30) invStatus = 'PARTIAL';
+  else if (r < 0.3) invStatus = 'PARTIAL';
   else invStatus = 'PAID';
 
   let paidAmount = 0;
@@ -422,7 +507,12 @@ async function createBundle(args: {
     }
   }
 
-  return { appointmentId: appt.id, encounterId: encounter.id, dentistId: dentist.id, patientId: patient.id };
+  return {
+    appointmentId: appt.id,
+    encounterId: encounter.id,
+    dentistId: dentist.id,
+    patientId: patient.id,
+  };
 }
 
 async function main() {
@@ -434,7 +524,9 @@ async function main() {
   const existingInvoices = await prisma.invoice.count();
   const existingAppts = await prisma.appointment.count();
   if (existingInvoices > 0 || existingAppts > 0) {
-    console.log(`↺ Found ${existingInvoices} invoices / ${existingAppts} appointments — cleaning clinical data…`);
+    console.log(
+      `↺ Found ${existingInvoices} invoices / ${existingAppts} appointments — cleaning clinical data…`,
+    );
     // Order matters: respect FKs
     await prisma.auditLog.deleteMany({});
     await prisma.expenseAudit.deleteMany({});
@@ -534,7 +626,15 @@ async function main() {
         primaryPhone: buildPhone(),
         email: rand() < 0.3 ? `patient${i + 1}@example.com` : null,
         address: pick(['Hà Nội', 'TP. HCM', 'Đà Nẵng', 'Hải Phòng', 'Cần Thơ', 'Bình Dương']),
-        occupation: pick(['Kế toán', 'Giáo viên', 'Kỹ sư', 'Bác sĩ', 'Sinh viên', 'Kinh doanh', 'Nội trợ']),
+        occupation: pick([
+          'Kế toán',
+          'Giáo viên',
+          'Kỹ sư',
+          'Bác sĩ',
+          'Sinh viên',
+          'Kinh doanh',
+          'Nội trợ',
+        ]),
         allergies: [],
         chronicDiseases: [],
         currentMedications: [],
@@ -565,7 +665,7 @@ async function main() {
     // monthKey looks like '2026-05'
     const [yy, mm] = monthKey.split('-').map(Number);
     const monthStart = utcDate(yy, mm - 1, Math.max(1, DATA_START_DATE.getUTCDate())); // for May use 16
-    const monthEndRaw = utcDate(yy, mm, 0, 23, 59, 59);   // last day of month
+    const monthEndRaw = utcDate(yy, mm, 0, 23, 59, 59); // last day of month
     const monthStartClamped = new Date(Math.max(monthStart.getTime(), DATA_START_DATE.getTime()));
     const monthEndClamped = new Date(Math.min(monthEndRaw.getTime(), DATA_END_DATE.getTime()));
     if (monthStartClamped.getTime() > monthEndClamped.getTime()) continue;
@@ -573,14 +673,25 @@ async function main() {
     let attemptsInMonth = 0;
     const maxAttempts = monthCount * 6;
 
-    while (totalCreated < grandTotal - Object.entries(MONTH_TARGETS).filter(([k]) => k > monthKey).reduce((a, [, v]) => a + v, 0) && attemptsInMonth < maxAttempts) {
+    while (
+      totalCreated <
+        grandTotal -
+          Object.entries(MONTH_TARGETS)
+            .filter(([k]) => k > monthKey)
+            .reduce((a, [, v]) => a + v, 0) &&
+      attemptsInMonth < maxAttempts
+    ) {
       attemptsInMonth++;
 
       const day = randInt(monthStartClamped.getUTCDate(), monthEndClamped.getUTCDate());
       const startHour = pick([8, 9, 10, 11, 14, 15, 16, 17]);
       const startMin = pick([0, 15, 30, 45]);
       const startAt = utcDate(yy, mm - 1, day, startHour, startMin);
-      if (startAt.getTime() < DATA_START_DATE.getTime() || startAt.getTime() > DATA_END_DATE.getTime()) continue;
+      if (
+        startAt.getTime() < DATA_START_DATE.getTime() ||
+        startAt.getTime() > DATA_END_DATE.getTime()
+      )
+        continue;
       const duration = pick([30, 45, 60, 90]);
       const endAt = addMinutes(startAt, duration);
 
@@ -598,7 +709,11 @@ async function main() {
           if (!usedSlots.has(altKey)) {
             usedSlots.add(altKey);
             await createBundle({
-              patient, dentist, startAt: altStart, endAt: altEnd, receptionists,
+              patient,
+              dentist,
+              startAt: altStart,
+              endAt: altEnd,
+              receptionists,
             });
             totalCreated++;
             placed = true;
@@ -608,7 +723,11 @@ async function main() {
       }
       usedSlots.add(slotKey);
       await createBundle({
-        patient, dentist, startAt, endAt, receptionists,
+        patient,
+        dentist,
+        startAt,
+        endAt,
+        receptionists,
       });
       totalCreated++;
     }
@@ -636,7 +755,9 @@ async function main() {
   console.log('✓ Seed complete!');
   console.log(`  ${finalCount} invoices (${totalCreated} created)`);
   console.log(`  Total billed: ${Number(totalRevenue._sum.total ?? 0).toLocaleString('vi-VN')} ₫`);
-  console.log(`  Total paid:   ${Number(totalRevenue._sum.paidAmount ?? 0).toLocaleString('vi-VN')} ₫`);
+  console.log(
+    `  Total paid:   ${Number(totalRevenue._sum.paidAmount ?? 0).toLocaleString('vi-VN')} ₫`,
+  );
   console.log('\n  Test login:');
   console.log('    admin@clinic.local / Admin123!');
   console.log('    an.nguyen@clinic.local / Password123!');
@@ -673,11 +794,11 @@ async function seedWorkingSchedules(
         data: {
           dentistId: dentist.id,
           dayOfWeek: dow,
-          startTime: utcDate(2026, 0, 1, 8, 0),   // 08:00
-          endTime: utcDate(2026, 0, 1, 17, 0),    // 17:00
+          startTime: utcDate(2026, 0, 1, 8, 0), // 08:00
+          endTime: utcDate(2026, 0, 1, 17, 0), // 17:00
           slotDurationMin: 30,
-          validFrom: utcDate(2026, 3, 1),          // 2026-04-01
-          validTo: utcDate(2026, 11, 31),         // 2026-12-31
+          validFrom: utcDate(2026, 3, 1), // 2026-04-01
+          validTo: utcDate(2026, 11, 31), // 2026-12-31
           isPaidShift: true,
           shiftType: 'FULL_DAY',
           createdBy: admin.id,
@@ -709,7 +830,8 @@ async function seedShiftRegistrations(
       const dateOffset = randInt(0, 90);
       const date = new Date(DATA_START_DATE.getTime() + dateOffset * 86400 * 1000);
       // skip weekends
-      while (date.getUTCDay() === 0 || date.getUTCDay() === 6) date.setUTCDate(date.getUTCDate() + 1);
+      while (date.getUTCDay() === 0 || date.getUTCDay() === 6)
+        date.setUTCDate(date.getUTCDate() + 1);
       const r = rand();
       const status: 'PENDING' | 'APPROVED' | 'REJECTED' =
         r < 0.6 ? 'APPROVED' : r < 0.85 ? 'PENDING' : 'REJECTED';
@@ -745,11 +867,11 @@ async function seedShiftRegistrations(
 // ======================================================================
 
 const INVENTORY_CATEGORIES = [
-  { name: 'Vật liệu tiêu hao',          description: 'Găng tay, khẩu trang, cồn, bông gòn…' },
-  { name: 'Vật liệu nha khoa',           description: 'Composite, cement, amalgam, chỉ co nướu…' },
-  { name: 'Dụng cụ điều trị',            description: 'Mũi khoan, kìm nhổ, cây đo túi nha chu…' },
-  { name: 'Thuốc',                       description: 'Thuốc tê, thuốc kháng sinh, nước súc miệng…' },
-  { name: 'Văn phòng phẩm y tế',         description: 'Hồ sơ bệnh án, bút, giấy in chuyên dụng…' },
+  { name: 'Vật liệu tiêu hao', description: 'Găng tay, khẩu trang, cồn, bông gòn…' },
+  { name: 'Vật liệu nha khoa', description: 'Composite, cement, amalgam, chỉ co nướu…' },
+  { name: 'Dụng cụ điều trị', description: 'Mũi khoan, kìm nhổ, cây đo túi nha chu…' },
+  { name: 'Thuốc', description: 'Thuốc tê, thuốc kháng sinh, nước súc miệng…' },
+  { name: 'Văn phòng phẩm y tế', description: 'Hồ sơ bệnh án, bút, giấy in chuyên dụng…' },
 ];
 
 interface InventoryItemTemplate {
@@ -764,40 +886,280 @@ interface InventoryItemTemplate {
 
 const INVENTORY_ITEMS: InventoryItemTemplate[] = [
   // Vật liệu tiêu hao
-  { sku: 'CONSUM-GLV-M',    name: 'Găng tay nitrile size M (hộp 100)',   categoryIdx: 0, unit: 'hộp',  initialQty: 50, minStock: 10, costPrice: 90_000 },
-  { sku: 'CONSUM-GLV-S',    name: 'Găng tay nitrile size S (hộp 100)',   categoryIdx: 0, unit: 'hộp',  initialQty: 30, minStock: 10, costPrice: 90_000 },
-  { sku: 'CONSUM-MASK',     name: 'Khẩu trang y tế (hộp 50)',           categoryIdx: 0, unit: 'hộp',  initialQty: 40, minStock: 15, costPrice: 60_000 },
-  { sku: 'CONSUM-ALCOHOL',  name: 'Cồn y tế 70% (chai 1L)',             categoryIdx: 0, unit: 'chai', initialQty: 20, minStock:  5, costPrice: 45_000 },
-  { sku: 'CONSUM-COTTON',   name: 'Bông gòn y tế (gói 500g)',           categoryIdx: 0, unit: 'gói',  initialQty: 30, minStock:  8, costPrice: 55_000 },
-  { sku: 'CONSUM-SYRINGE',  name: 'Bơm tiêm 5ml (hộp 100)',             categoryIdx: 0, unit: 'hộp',  initialQty: 25, minStock:  6, costPrice: 80_000 },
+  {
+    sku: 'CONSUM-GLV-M',
+    name: 'Găng tay nitrile size M (hộp 100)',
+    categoryIdx: 0,
+    unit: 'hộp',
+    initialQty: 50,
+    minStock: 10,
+    costPrice: 90_000,
+  },
+  {
+    sku: 'CONSUM-GLV-S',
+    name: 'Găng tay nitrile size S (hộp 100)',
+    categoryIdx: 0,
+    unit: 'hộp',
+    initialQty: 30,
+    minStock: 10,
+    costPrice: 90_000,
+  },
+  {
+    sku: 'CONSUM-MASK',
+    name: 'Khẩu trang y tế (hộp 50)',
+    categoryIdx: 0,
+    unit: 'hộp',
+    initialQty: 40,
+    minStock: 15,
+    costPrice: 60_000,
+  },
+  {
+    sku: 'CONSUM-ALCOHOL',
+    name: 'Cồn y tế 70% (chai 1L)',
+    categoryIdx: 0,
+    unit: 'chai',
+    initialQty: 20,
+    minStock: 5,
+    costPrice: 45_000,
+  },
+  {
+    sku: 'CONSUM-COTTON',
+    name: 'Bông gòn y tế (gói 500g)',
+    categoryIdx: 0,
+    unit: 'gói',
+    initialQty: 30,
+    minStock: 8,
+    costPrice: 55_000,
+  },
+  {
+    sku: 'CONSUM-SYRINGE',
+    name: 'Bơm tiêm 5ml (hộp 100)',
+    categoryIdx: 0,
+    unit: 'hộp',
+    initialQty: 25,
+    minStock: 6,
+    costPrice: 80_000,
+  },
   // Vật liệu nha khoa
-  { sku: 'MATERIAL-COMP-A2', name: 'Composite A2 (tuýp 4g)',            categoryIdx: 1, unit: 'tuýp', initialQty: 25, minStock:  5, costPrice: 220_000 },
-  { sku: 'MATERIAL-COMP-A3', name: 'Composite A3 (tuýp 4g)',            categoryIdx: 1, unit: 'tuýp', initialQty: 18, minStock:  5, costPrice: 220_000 },
-  { sku: 'MATERIAL-CEMENT',  name: 'Glass ionomer cement (tuýp)',        categoryIdx: 1, unit: 'tuýp', initialQty: 15, minStock:  3, costPrice: 320_000 },
-  { sku: 'MATERIAL-ETCH',   name: 'Acid etch 37% (lọ 3ml)',             categoryIdx: 1, unit: 'lọ',   initialQty: 30, minStock:  8, costPrice: 65_000 },
-  { sku: 'MATERIAL-BOND',   name: 'Bonding agent (lọ 5ml)',              categoryIdx: 1, unit: 'lọ',   initialQty: 20, minStock:  5, costPrice: 180_000 },
+  {
+    sku: 'MATERIAL-COMP-A2',
+    name: 'Composite A2 (tuýp 4g)',
+    categoryIdx: 1,
+    unit: 'tuýp',
+    initialQty: 25,
+    minStock: 5,
+    costPrice: 220_000,
+  },
+  {
+    sku: 'MATERIAL-COMP-A3',
+    name: 'Composite A3 (tuýp 4g)',
+    categoryIdx: 1,
+    unit: 'tuýp',
+    initialQty: 18,
+    minStock: 5,
+    costPrice: 220_000,
+  },
+  {
+    sku: 'MATERIAL-CEMENT',
+    name: 'Glass ionomer cement (tuýp)',
+    categoryIdx: 1,
+    unit: 'tuýp',
+    initialQty: 15,
+    minStock: 3,
+    costPrice: 320_000,
+  },
+  {
+    sku: 'MATERIAL-ETCH',
+    name: 'Acid etch 37% (lọ 3ml)',
+    categoryIdx: 1,
+    unit: 'lọ',
+    initialQty: 30,
+    minStock: 8,
+    costPrice: 65_000,
+  },
+  {
+    sku: 'MATERIAL-BOND',
+    name: 'Bonding agent (lọ 5ml)',
+    categoryIdx: 1,
+    unit: 'lọ',
+    initialQty: 20,
+    minStock: 5,
+    costPrice: 180_000,
+  },
   // Dụng cụ điều trị
-  { sku: 'TOOL-BUR-HP',     name: 'Mũi khoan HP (cái)',                  categoryIdx: 2, unit: 'cái',  initialQty: 60, minStock: 15, costPrice: 35_000 },
-  { sku: 'TOOL-FORCEPS',    name: 'Kìm nhổ răng (cái)',                  categoryIdx: 2, unit: 'cái',  initialQty:  8, minStock:  2, costPrice: 380_000 },
-  { sku: 'TOOL-PROBE',      name: 'Cây đo túi nha chu (cái)',            categoryIdx: 2, unit: 'cái',  initialQty: 12, minStock:  3, costPrice: 145_000 },
-  { sku: 'TOOL-MIRROR',     name: 'Gương nha khoa (cái)',                categoryIdx: 2, unit: 'cái',  initialQty: 30, minStock:  8, costPrice: 25_000 },
-  { sku: 'TOOL-SCALER',     name: 'Dụng cụ cạo vôi siêu âm (cái)',       categoryIdx: 2, unit: 'cái',  initialQty:  6, minStock:  2, costPrice: 950_000 },
+  {
+    sku: 'TOOL-BUR-HP',
+    name: 'Mũi khoan HP (cái)',
+    categoryIdx: 2,
+    unit: 'cái',
+    initialQty: 60,
+    minStock: 15,
+    costPrice: 35_000,
+  },
+  {
+    sku: 'TOOL-FORCEPS',
+    name: 'Kìm nhổ răng (cái)',
+    categoryIdx: 2,
+    unit: 'cái',
+    initialQty: 8,
+    minStock: 2,
+    costPrice: 380_000,
+  },
+  {
+    sku: 'TOOL-PROBE',
+    name: 'Cây đo túi nha chu (cái)',
+    categoryIdx: 2,
+    unit: 'cái',
+    initialQty: 12,
+    minStock: 3,
+    costPrice: 145_000,
+  },
+  {
+    sku: 'TOOL-MIRROR',
+    name: 'Gương nha khoa (cái)',
+    categoryIdx: 2,
+    unit: 'cái',
+    initialQty: 30,
+    minStock: 8,
+    costPrice: 25_000,
+  },
+  {
+    sku: 'TOOL-SCALER',
+    name: 'Dụng cụ cạo vôi siêu âm (cái)',
+    categoryIdx: 2,
+    unit: 'cái',
+    initialQty: 6,
+    minStock: 2,
+    costPrice: 950_000,
+  },
   // Thuốc
-  { sku: 'DRUG-ANES-2',     name: 'Lidocain 2% epinephrine (ống)',       categoryIdx: 3, unit: 'ống',  initialQty: 100, minStock: 30, costPrice: 12_000 },
-  { sku: 'DRUG-ANES-4',     name: 'Articain 4% (ống)',                   categoryIdx: 3, unit: 'ống',  initialQty:  70, minStock: 20, costPrice: 22_000 },
-  { sku: 'DRUG-AMOX',       name: 'Amoxicillin 500mg (vỉ 10)',           categoryIdx: 3, unit: 'vỉ',   initialQty: 50, minStock: 15, costPrice: 65_000 },
-  { sku: 'DRUG-PARA',       name: 'Paracetamol 500mg (vỉ 10)',           categoryIdx: 3, unit: 'vỉ',   initialQty: 60, minStock: 20, costPrice: 28_000 },
-  { sku: 'DRUG-IBU',        name: 'Ibuprofen 400mg (vỉ 10)',             categoryIdx: 3, unit: 'vỉ',   initialQty: 45, minStock: 12, costPrice: 35_000 },
-  { sku: 'DRUG-METRO',      name: 'Metronidazole 250mg (vỉ 10)',         categoryIdx: 3, unit: 'vỉ',   initialQty: 35, minStock: 10, costPrice: 42_000 },
-  { sku: 'DRUG-CHX',        name: 'Nước súc miệng Chlorhexidine (chai)',  categoryIdx: 3, unit: 'chai', initialQty: 25, minStock:  6, costPrice: 75_000 },
+  {
+    sku: 'DRUG-ANES-2',
+    name: 'Lidocain 2% epinephrine (ống)',
+    categoryIdx: 3,
+    unit: 'ống',
+    initialQty: 100,
+    minStock: 30,
+    costPrice: 12_000,
+  },
+  {
+    sku: 'DRUG-ANES-4',
+    name: 'Articain 4% (ống)',
+    categoryIdx: 3,
+    unit: 'ống',
+    initialQty: 70,
+    minStock: 20,
+    costPrice: 22_000,
+  },
+  {
+    sku: 'DRUG-AMOX',
+    name: 'Amoxicillin 500mg (vỉ 10)',
+    categoryIdx: 3,
+    unit: 'vỉ',
+    initialQty: 50,
+    minStock: 15,
+    costPrice: 65_000,
+  },
+  {
+    sku: 'DRUG-PARA',
+    name: 'Paracetamol 500mg (vỉ 10)',
+    categoryIdx: 3,
+    unit: 'vỉ',
+    initialQty: 60,
+    minStock: 20,
+    costPrice: 28_000,
+  },
+  {
+    sku: 'DRUG-IBU',
+    name: 'Ibuprofen 400mg (vỉ 10)',
+    categoryIdx: 3,
+    unit: 'vỉ',
+    initialQty: 45,
+    minStock: 12,
+    costPrice: 35_000,
+  },
+  {
+    sku: 'DRUG-METRO',
+    name: 'Metronidazole 250mg (vỉ 10)',
+    categoryIdx: 3,
+    unit: 'vỉ',
+    initialQty: 35,
+    minStock: 10,
+    costPrice: 42_000,
+  },
+  {
+    sku: 'DRUG-CHX',
+    name: 'Nước súc miệng Chlorhexidine (chai)',
+    categoryIdx: 3,
+    unit: 'chai',
+    initialQty: 25,
+    minStock: 6,
+    costPrice: 75_000,
+  },
   // Văn phòng
-  { sku: 'OFF-PAPER-A4',   name: 'Giấy A4 (ram 500 tờ)',                categoryIdx: 4, unit: 'ram',  initialQty: 30, minStock: 10, costPrice: 80_000 },
-  { sku: 'OFF-FORM',        name: 'Form hồ sơ bệnh án (quyển 50)',       categoryIdx: 4, unit: 'quyển',initialQty: 25, minStock:  6, costPrice: 95_000 },
-  { sku: 'OFF-PEN',         name: 'Bút bi (hộp 12)',                     categoryIdx: 4, unit: 'hộp',  initialQty: 12, minStock:  3, costPrice: 45_000 },
-  { sku: 'OFF-BAG',         name: 'Túi đựng bệnh phẩm (cái)',            categoryIdx: 4, unit: 'cái',  initialQty: 200, minStock: 50, costPrice: 1_500 },
-  { sku: 'OFF-GLOVE-BX',   name: 'Hộp đựng găng tay (cái)',             categoryIdx: 4, unit: 'cái',  initialQty: 10, minStock:  3, costPrice: 35_000 },
-  { sku: 'OFF-SOAP',        name: 'Xà phòng rửa tay (chai 500ml)',       categoryIdx: 4, unit: 'chai', initialQty: 18, minStock:  5, costPrice: 55_000 },
-  { sku: 'OFF-XRAY-FILM',  name: 'Phim X-quang (hộp 100)',              categoryIdx: 4, unit: 'hộp',  initialQty: 12, minStock:  3, costPrice: 280_000 },
+  {
+    sku: 'OFF-PAPER-A4',
+    name: 'Giấy A4 (ram 500 tờ)',
+    categoryIdx: 4,
+    unit: 'ram',
+    initialQty: 30,
+    minStock: 10,
+    costPrice: 80_000,
+  },
+  {
+    sku: 'OFF-FORM',
+    name: 'Form hồ sơ bệnh án (quyển 50)',
+    categoryIdx: 4,
+    unit: 'quyển',
+    initialQty: 25,
+    minStock: 6,
+    costPrice: 95_000,
+  },
+  {
+    sku: 'OFF-PEN',
+    name: 'Bút bi (hộp 12)',
+    categoryIdx: 4,
+    unit: 'hộp',
+    initialQty: 12,
+    minStock: 3,
+    costPrice: 45_000,
+  },
+  {
+    sku: 'OFF-BAG',
+    name: 'Túi đựng bệnh phẩm (cái)',
+    categoryIdx: 4,
+    unit: 'cái',
+    initialQty: 200,
+    minStock: 50,
+    costPrice: 1_500,
+  },
+  {
+    sku: 'OFF-GLOVE-BX',
+    name: 'Hộp đựng găng tay (cái)',
+    categoryIdx: 4,
+    unit: 'cái',
+    initialQty: 10,
+    minStock: 3,
+    costPrice: 35_000,
+  },
+  {
+    sku: 'OFF-SOAP',
+    name: 'Xà phòng rửa tay (chai 500ml)',
+    categoryIdx: 4,
+    unit: 'chai',
+    initialQty: 18,
+    minStock: 5,
+    costPrice: 55_000,
+  },
+  {
+    sku: 'OFF-XRAY-FILM',
+    name: 'Phim X-quang (hộp 100)',
+    categoryIdx: 4,
+    unit: 'hộp',
+    initialQty: 12,
+    minStock: 3,
+    costPrice: 280_000,
+  },
 ];
 
 async function seedInventory(
@@ -902,7 +1264,7 @@ async function seedInventory(
   console.log(`  ✓ ${movOut} stock-out movements (encounter-driven)`);
 
   // ----- Top up some items to realistic levels
-  const lowItems = items.filter((i) => i.qty <= 20);
+  const lowItems = items.filter(i => i.qty <= 20);
   for (const it of lowItems.slice(0, 5)) {
     const topUpQty = randInt(30, 80);
     const current = await prisma.inventoryItem.findUnique({ where: { id: it.id } });
@@ -931,7 +1293,7 @@ async function seedInventory(
 async function seedPayrollPeriods(
   admin: { id: string; email: string },
   dentists: Array<{ id: string; fullName: string }>,
-  totalEncountersCreated: number,
+  _totalEncountersCreated: number,
 ): Promise<void> {
   console.log('\nSeeding payroll periods + line items…');
   const existing = await prisma.payrollPeriod.count();
@@ -981,11 +1343,15 @@ async function seedPayrollPeriods(
   }
 
   // Create one period per month in the data window
-  const periods: Array<{ start: Date; end: Date; status: 'LOCKED' | 'APPROVED' | 'PAID' | 'DRAFT' }> = [
-    { start: utcDate(2026, 4,  1), end: utcDate(2026, 4, 31), status: 'PAID'    }, // May paid
-    { start: utcDate(2026, 5,  1), end: utcDate(2026, 5, 30), status: 'PAID'    }, // Jun paid
-    { start: utcDate(2026, 6,  1), end: utcDate(2026, 6, 31), status: 'APPROVED' }, // Jul approved
-    { start: utcDate(2026, 7,  1), end: utcDate(2026, 7, 16), status: 'DRAFT'   }, // Aug partial draft
+  const periods: Array<{
+    start: Date;
+    end: Date;
+    status: 'LOCKED' | 'APPROVED' | 'PAID' | 'DRAFT';
+  }> = [
+    { start: utcDate(2026, 4, 1), end: utcDate(2026, 4, 31), status: 'PAID' }, // May paid
+    { start: utcDate(2026, 5, 1), end: utcDate(2026, 5, 30), status: 'PAID' }, // Jun paid
+    { start: utcDate(2026, 6, 1), end: utcDate(2026, 6, 31), status: 'APPROVED' }, // Jul approved
+    { start: utcDate(2026, 7, 1), end: utcDate(2026, 7, 16), status: 'DRAFT' }, // Aug partial draft
   ];
 
   for (const p of periods) {
@@ -1019,9 +1385,12 @@ async function seedPayrollPeriods(
     });
 
     for (const dentist of dentists) {
-      const myEncs = encountersInPeriod.filter((e) => e.dentistId === dentist.id);
-      const totalRevenue = myEncs.reduce((acc, e) => acc + e.treatments.reduce((a, t) => a + Number(t.unitPrice), 0), 0);
-      const workedShifts = randInt(8, 22);   // approximated; real value depends on ShiftRegistration
+      const myEncs = encountersInPeriod.filter(e => e.dentistId === dentist.id);
+      const totalRevenue = myEncs.reduce(
+        (acc, e) => acc + e.treatments.reduce((a, t) => a + Number(t.unitPrice), 0),
+        0,
+      );
+      const workedShifts = randInt(8, 22); // approximated; real value depends on ShiftRegistration
       const totalHours = workedShifts * 8;
       const overtimeHours = randInt(0, 6);
 
@@ -1031,8 +1400,8 @@ async function seedPayrollPeriods(
       const bonus = randInt(0, 1) ? randInt(500_000, 2_000_000) : 0;
       const penalty = 0;
       const gross = baseSalary + commission + overtimePay + bonus - penalty;
-      const tax = Math.round(gross * 0.1 / 1000) * 1000;
-      const bhxh = Math.round(gross * 0.105 / 1000) * 1000;  // 8% + 1.5% + 1%
+      const tax = Math.round((gross * 0.1) / 1000) * 1000;
+      const bhxh = Math.round((gross * 0.105) / 1000) * 1000; // 8% + 1.5% + 1%
       const net = gross - tax - bhxh;
 
       const lineItem = await prisma.payrollLineItem.create({
@@ -1074,7 +1443,7 @@ async function seedPayrollPeriods(
             encounterStartAt: firstEnc.startedAt,
             encounterEndAt: firstEnc.closedAt ?? firstEnc.startedAt,
             durationMinutes: firstEnc.treatments[0].durationMinutes ?? 30,
-            treatmentBreakdown: firstEnc.treatments.map((t) => ({
+            treatmentBreakdown: firstEnc.treatments.map(t => ({
               id: t.id,
               procedure: t.procedure,
               revenue: Number(t.unitPrice),
@@ -1083,7 +1452,9 @@ async function seedPayrollPeriods(
         });
       }
     }
-    console.log(`  ✓ period ${p.start.toISOString().slice(0, 10)} → ${p.status} (${encountersInPeriod.length} encounters across all dentists)`);
+    console.log(
+      `  ✓ period ${p.start.toISOString().slice(0, 10)} → ${p.status} (${encountersInPeriod.length} encounters across all dentists)`,
+    );
   }
 }
 
@@ -1092,30 +1463,30 @@ async function seedPayrollPeriods(
 // ======================================================================
 
 const EXPENSE_CATEGORIES = [
-  { name: 'Điện nước',         description: 'Hóa đơn điện, nước hàng tháng' },
-  { name: 'Vật tư y tế',       description: 'Mua vật tư tiêu hao, thiết bị' },
-  { name: 'Lương nhân viên',   description: 'Lương và phụ cấp (ngoài bác sĩ)' },
-  { name: 'Thuê mặt bằng',     description: 'Tiền thuê phòng khám' },
-  { name: 'Marketing',         description: 'Quảng cáo Facebook, Google' },
-  { name: 'Bảo trì thiết bị',  description: 'Bảo dưỡng ghế, máy X-quang' },
-  { name: 'Đào tạo',           description: 'Khóa học, hội thảo' },
-  { name: 'Văn phòng phẩm',    description: 'Giấy, bút, mực in' },
+  { name: 'Điện nước', description: 'Hóa đơn điện, nước hàng tháng' },
+  { name: 'Vật tư y tế', description: 'Mua vật tư tiêu hao, thiết bị' },
+  { name: 'Lương nhân viên', description: 'Lương và phụ cấp (ngoài bác sĩ)' },
+  { name: 'Thuê mặt bằng', description: 'Tiền thuê phòng khám' },
+  { name: 'Marketing', description: 'Quảng cáo Facebook, Google' },
+  { name: 'Bảo trì thiết bị', description: 'Bảo dưỡng ghế, máy X-quang' },
+  { name: 'Đào tạo', description: 'Khóa học, hội thảo' },
+  { name: 'Văn phòng phẩm', description: 'Giấy, bút, mực in' },
 ];
 
 const EXPENSE_DESCRIPTIONS: Record<string, string[]> = {
-  'Điện nước':        ['Hóa đơn điện tháng', 'Hóa đơn nước tháng'],
-  'Vật tư y tế':      ['Nhập găng tay + khẩu trang', 'Nhập composite A2/A3', 'Nhập thuốc tê lidocain'],
-  'Lương nhân viên':   ['Lương tháng cho 2 lễ tân', 'Phụ cấp cơm trưa', 'Thưởng KPI tháng'],
-  'Thuê mặt bằng':     ['Tiền thuê phòng khám Q2', 'Tiền thuê phòng khám Q3'],
-  'Marketing':         ['Quảng cáo Facebook tháng', 'Quảng cáo Google Ads', 'In banner quảng bá'],
-  'Bảo trì thiết bị':  ['Bảo dưỡng ghế nha khoa', 'Vệ sinh máy nén khí'],
-  'Đào tạo':           ['Hội thảo implant quốc tế', 'Khóa học chỉnh nha ngắn hạn'],
-  'Văn phòng phẩm':    ['Mua giấy in A4', 'Mua bút bi + kẹp giấy'],
+  'Điện nước': ['Hóa đơn điện tháng', 'Hóa đơn nước tháng'],
+  'Vật tư y tế': ['Nhập găng tay + khẩu trang', 'Nhập composite A2/A3', 'Nhập thuốc tê lidocain'],
+  'Lương nhân viên': ['Lương tháng cho 2 lễ tân', 'Phụ cấp cơm trưa', 'Thưởng KPI tháng'],
+  'Thuê mặt bằng': ['Tiền thuê phòng khám Q2', 'Tiền thuê phòng khám Q3'],
+  Marketing: ['Quảng cáo Facebook tháng', 'Quảng cáo Google Ads', 'In banner quảng bá'],
+  'Bảo trì thiết bị': ['Bảo dưỡng ghế nha khoa', 'Vệ sinh máy nén khí'],
+  'Đào tạo': ['Hội thảo implant quốc tế', 'Khóa học chỉnh nha ngắn hạn'],
+  'Văn phòng phẩm': ['Mua giấy in A4', 'Mua bút bi + kẹp giấy'],
 };
 
 async function seedExpenses(
   admin: { id: string },
-  receptionists: Array<{ id: string }>,
+  _receptionists: Array<{ id: string }>,
 ): Promise<void> {
   console.log('\nSeeding expenses…');
   const existing = await prisma.expense.count();
@@ -1137,7 +1508,10 @@ async function seedExpenses(
       await prisma.$executeRawUnsafe(
         `INSERT INTO expense_categories (id, name, description, type, is_active, created_at, updated_at)
          VALUES ($1::uuid, $2, $3, $4::"ExpenseType", true, now(), now())`,
-        id, c.name, c.description ?? null, 'OPERATING',
+        id,
+        c.name,
+        c.description ?? null,
+        'OPERATING',
       );
       cats.push({ id, name: c.name });
     }
@@ -1148,9 +1522,9 @@ async function seedExpenses(
   const n60 = 60;
   for (let i = 0; i < n60; i++) {
     const r = rand();
-    if (r < 0.10) statuses.push('DRAFT');
-    else if (r < 0.20) statuses.push('REJECTED');
-    else if (r < 0.40) statuses.push('REIMBURSED');
+    if (r < 0.1) statuses.push('DRAFT');
+    else if (r < 0.2) statuses.push('REJECTED');
+    else if (r < 0.4) statuses.push('REIMBURSED');
     else statuses.push('APPROVED');
   }
 
@@ -1164,7 +1538,6 @@ async function seedExpenses(
     const status = statuses[i];
     // Raw SQL kept from when `status` was `text`; it is the "ExpenseStatus"
     // enum since migration 016, so the bound parameter needs a cast.
-    const id = crypto.randomUUID();
     const code = `EXP-${pad(i + 1, 5)}`;
     const description = pick(descOptions);
     const dateStr = expDate.toISOString().slice(0, 10);
@@ -1173,7 +1546,16 @@ async function seedExpenses(
     await prisma.$executeRawUnsafe(
       `INSERT INTO expenses (id, code, amount, description, expense_date, status, category_id, notes, receipt_url, created_by, updated_by, created_at, updated_at, version)
        VALUES (gen_random_uuid(), $1, $2, $3, $4::date, $5::"ExpenseStatus", $6::uuid, $7, $8, $9::uuid, $10::uuid, now(), now(), 1)`,
-      code, amount, description, dateStr, status, cat.id, notesVal, receiptVal, admin.id, admin.id,
+      code,
+      amount,
+      description,
+      dateStr,
+      status,
+      cat.id,
+      notesVal,
+      receiptVal,
+      admin.id,
+      admin.id,
     );
     created++;
   }
@@ -1209,22 +1591,22 @@ const AUDIT_ACTIONS = [
 ];
 
 const AUDIT_TARGETS: Array<{ type: string; table: string }> = [
-  { type: 'patient',     table: 'patients' },
+  { type: 'patient', table: 'patients' },
   { type: 'appointment', table: 'appointments' },
-  { type: 'encounter',    table: 'encounters' },
-  { type: 'invoice',      table: 'invoices' },
-  { type: 'payment',      table: 'payments' },
-  { type: 'inventory',    table: 'inventory_items' },
-  { type: 'payroll',      table: 'payroll_periods' },
-  { type: 'expense',      table: 'expenses' },
-  { type: 'user',         table: 'users' },
+  { type: 'encounter', table: 'encounters' },
+  { type: 'invoice', table: 'invoices' },
+  { type: 'payment', table: 'payments' },
+  { type: 'inventory', table: 'inventory_items' },
+  { type: 'payroll', table: 'payroll_periods' },
+  { type: 'expense', table: 'expenses' },
+  { type: 'user', table: 'users' },
 ];
 
 async function seedAuditLogs(
   admin: { id: string; email: string },
   dentists: Array<{ id: string; email: string }>,
   receptionists: Array<{ id: string; email: string }>,
-  totalEncountersCreated: number,
+  _totalEncountersCreated: number,
 ): Promise<void> {
   console.log('\nSeeding audit logs…');
   const existing = await prisma.auditLog.count();
@@ -1246,13 +1628,15 @@ async function seedAuditLogs(
     const day = pick(opsDays);
     const hour = randInt(7, 19);
     const minute = randInt(0, 59);
-    const occurredAt = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour, minute));
+    const occurredAt = new Date(
+      Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour, minute),
+    );
     return { action, actor, target, occurredAt };
   });
 
   // Group by (actor, day) — used as upsert key (no unique constraint, so just createMany in chunks)
   await prisma.auditLog.createMany({
-    data: samples.map((s) => ({
+    data: samples.map(s => ({
       actorUserId: s.actor.id,
       actorEmailAtTime: s.actor.email,
       action: s.action,
@@ -1268,7 +1652,7 @@ async function seedAuditLogs(
 }
 
 main()
-  .catch((e) => {
+  .catch(e => {
     console.error('Seed failed:', e);
     process.exit(1);
   })

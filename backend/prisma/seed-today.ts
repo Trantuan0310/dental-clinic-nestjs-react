@@ -26,7 +26,15 @@ function todayAt(hour: number, minute: number): Date {
   const now = new Date();
   const localNow = new Date(now.getTime() + CLINIC_UTC_OFFSET_HOURS * 3_600_000);
   return new Date(
-    Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), hour, minute, 0, 0) -
+    Date.UTC(
+      localNow.getUTCFullYear(),
+      localNow.getUTCMonth(),
+      localNow.getUTCDate(),
+      hour,
+      minute,
+      0,
+      0,
+    ) -
       CLINIC_UTC_OFFSET_HOURS * 3_600_000,
   );
 }
@@ -108,7 +116,9 @@ async function buildCompletedBundle(args: {
       createdBy: dentist.id,
     },
   });
-  const treatment = await prisma.treatment.findFirstOrThrow({ where: { encounterId: encounter.id } });
+  const treatment = await prisma.treatment.findFirstOrThrow({
+    where: { encounterId: encounter.id },
+  });
 
   await prisma.clinicalNote.create({
     data: {
@@ -122,10 +132,14 @@ async function buildCompletedBundle(args: {
   });
 
   const teeth: Array<{ number: number; condition: string }> = [];
-  for (const n of [11, 12, 13, 14, 15, 16, 17, 18]) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
-  for (const n of [21, 22, 23, 24, 25, 26, 27, 28]) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
-  for (const n of [31, 32, 33, 34, 35, 36, 37, 38]) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
-  for (const n of [41, 42, 43, 44, 45, 46, 47, 48]) teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
+  for (const n of [11, 12, 13, 14, 15, 16, 17, 18])
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
+  for (const n of [21, 22, 23, 24, 25, 26, 27, 28])
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'filled', 'cavity']) });
+  for (const n of [31, 32, 33, 34, 35, 36, 37, 38])
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
+  for (const n of [41, 42, 43, 44, 45, 46, 47, 48])
+    teeth.push({ number: n, condition: pick(['healthy', 'healthy', 'missing', 'crown']) });
   await prisma.dentalChartSnapshot.create({
     data: {
       encounterId: encounter.id,
@@ -178,7 +192,11 @@ async function buildCompletedBundle(args: {
     },
   });
 
-  return { appointmentId: appt.id, encounterId: encounter.id, patientName: (patient as any).fullName };
+  return {
+    appointmentId: appt.id,
+    encounterId: encounter.id,
+    patientName: (patient as any).fullName,
+  };
 }
 
 async function buildCheckedInAppointment(args: {
@@ -265,7 +283,9 @@ async function main() {
     const startAt = todayAt(completedSlots[i].hour, completedSlots[i].minute);
     const endAt = addMinutes(startAt, 30);
     const r = await buildCompletedBundle({ patient, dentist, startAt, endAt, receptionistId });
-    results.push(`  ✓ COMPLETED  ${startAt.toISOString().slice(11, 16)}  ${patient.fullName} — bác sĩ ${dentist.fullName} — encounter ${r.encounterId.slice(0, 8)}… (có sơ đồ răng)`);
+    results.push(
+      `  ✓ COMPLETED  ${startAt.toISOString().slice(11, 16)}  ${patient.fullName} — bác sĩ ${dentist.fullName} — encounter ${r.encounterId.slice(0, 8)}… (có sơ đồ răng)`,
+    );
   }
 
   // 2 checked-in, waiting to be seen — test "Bắt đầu khám" flow live
@@ -279,7 +299,9 @@ async function main() {
     const startAt = todayAt(checkedInSlots[i].hour, checkedInSlots[i].minute);
     const endAt = addMinutes(startAt, 30);
     await buildCheckedInAppointment({ patient, dentist, startAt, endAt, receptionistId });
-    results.push(`  ✓ CHECKED_IN ${startAt.toISOString().slice(11, 16)}  ${patient.fullName} — bác sĩ ${dentist.fullName} — chờ "Bắt đầu khám"`);
+    results.push(
+      `  ✓ CHECKED_IN ${startAt.toISOString().slice(11, 16)}  ${patient.fullName} — bác sĩ ${dentist.fullName} — chờ "Bắt đầu khám"`,
+    );
   }
 
   // 2 confirmed, later today — populate the upcoming schedule
@@ -293,15 +315,19 @@ async function main() {
     const startAt = todayAt(scheduledSlots[i].hour, scheduledSlots[i].minute);
     const endAt = addMinutes(startAt, 30);
     await buildScheduledAppointment({ patient, dentist, startAt, endAt, receptionistId });
-    results.push(`  ✓ CONFIRMED  ${startAt.toISOString().slice(11, 16)}  ${patient.fullName} — bác sĩ ${dentist.fullName} — sắp tới`);
+    results.push(
+      `  ✓ CONFIRMED  ${startAt.toISOString().slice(11, 16)}  ${patient.fullName} — bác sĩ ${dentist.fullName} — sắp tới`,
+    );
   }
 
   console.log(results.join('\n'));
-  console.log('\n✓ Done — 6 appointment mới cho hôm nay (2 đã khám xong + sơ đồ răng, 2 đang chờ khám, 2 sắp tới).');
+  console.log(
+    '\n✓ Done — 6 appointment mới cho hôm nay (2 đã khám xong + sơ đồ răng, 2 đang chờ khám, 2 sắp tới).',
+  );
 }
 
 main()
-  .catch((e) => {
+  .catch(e => {
     console.error('Seed failed:', e);
     process.exit(1);
   })
