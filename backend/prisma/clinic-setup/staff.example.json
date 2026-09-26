@@ -1,0 +1,60 @@
+{
+  "_help": [
+    "Danh sách nhân viên cần tạo tài khoản. Sửa tên, email, số điện thoại cho đúng người thật.",
+    "Dòng nào còn email @example.com sẽ bị BỎ QUA (để chạy nhầm file mẫu không tạo tài khoản rác).",
+    "role: dentist | receptionist | clinic_admin",
+    "specialties (chỉ bác sĩ): TONG_QUAT, NHA_CHU, NOI_NHA, CHINH_NHA, NHO_RANG, PHUC_HINH, IMPLANT, NHA_TRE_EM, THAM_MY",
+    "calendarColor: màu lịch dạng #RRGGBB (bỏ trống để hệ thống tự chọn)",
+    "Email đã có tài khoản thì không tạo lại; bác sĩ chỉ được điền chuyên môn nếu hồ sơ đang trống."
+  ],
+  "staff": [
+    {
+      "role": "dentist",
+      "fullName": "BS. Nguyễn Văn A",
+      "email": "bs.a@example.com",
+      "phone": "0900000001",
+      "licenseNumber": "",
+      "specialties": ["TONG_QUAT", "NOI_NHA", "NHO_RANG"],
+      "calendarColor": "#2563EB"
+    },
+    {
+      "role": "dentist",
+      "fullName": "BS. Trần Thị B",
+      "email": "bs.b@example.com",
+      "phone": "0900000002",
+      "licenseNumber": "",
+      "specialties": ["TONG_QUAT", "PHUC_HINH", "THAM_MY"],
+      "calendarColor": "#16A34A"
+    },
+    {
+      "role": "dentist",
+      "fullName": "BS. Lê Văn C",
+      "email": "bs.c@example.com",
+      "phone": "0900000003",
+      "licenseNumber": "",
+      "specialties": ["CHINH_NHA", "NHA_TRE_EM"],
+      "calendarColor": "#9333EA"
+    },
+    {
+      "role": "dentist",
+      "fullName": "BS. Phạm Thị D",
+      "email": "bs.d@example.com",
+      "phone": "0900000004",
+      "licenseNumber": "",
+      "specialties": ["IMPLANT", "NHO_RANG", "NHA_CHU"],
+      "calendarColor": "#EA580C"
+    },
+    {
+      "role": "receptionist",
+      "fullName": "Lễ tân E",
+      "email": "letan.e@example.com",
+      "phone": "0900000005"
+    },
+    {
+      "role": "receptionist",
+      "fullName": "Lễ tân F",
+      "email": "letan.f@example.com",
+      "phone": "0900000006"
+    }
+  ]
+}
