@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { bookingErrorMessage } from "./errorMessage";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
@@ -32,6 +32,9 @@ const today = () => {
 
 export default function PublicBookingPage() {
   const navigate = useNavigate();
+  // The landing page links each service to /booking?service=<id>.
+  const [searchParams] = useSearchParams();
+  const preselected = searchParams.get("service") ?? "";
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState("");
   const service = useMemo(
@@ -61,12 +64,19 @@ export default function PublicBookingPage() {
   useEffect(() => {
     api
       .get<{ data: Service[] }>("/public/booking/options")
-      .then((r) => setServices(r.data.data))
+      .then((r) => {
+        setServices(r.data.data);
+        const pick = r.data.data.find((x) => x.id === preselected);
+        if (pick) {
+          setServiceId(pick.id);
+          if (pick.dentists.length === 1) setDentistId(pick.dentists[0].id);
+        }
+      })
       .catch(() =>
         setError("Không tải được danh sách dịch vụ. Vui lòng thử lại sau."),
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [preselected]);
 
   useEffect(() => {
     setSlots([]);

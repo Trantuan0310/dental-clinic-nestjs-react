@@ -1,5 +1,6 @@
-import { lazy, Suspense } from 'react';
-import { createBrowserRouter, createRoutesFromElements, RouterProvider, Outlet, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useRef } from 'react';
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Outlet, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/layouts/AppShell';
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
 import { SessionBoot } from '@/features/auth/SessionBoot';
@@ -12,6 +13,7 @@ const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage
 const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
 const PublicBookingPage = lazy(() => import('@/features/booking/PublicBookingPage'));
 const PublicBookingStatusPage = lazy(() => import('@/features/booking/PublicBookingStatusPage'));
+const LandingPage = lazy(() => import('@/features/landing/LandingPage'));
 const BookingRequestsPage = lazy(() => import('@/features/booking/BookingRequestsPage'));
 const DashboardPage = lazy(() => import('@/features/DashboardPage'));
 
@@ -75,6 +77,26 @@ const SettingsPage = lazy(() => import('@/features/admin/SettingsPage'));
 
 const BrandPreviewPage = lazy(() => import('@/features/brand/BrandPreviewPage'));
 
+/**
+ * The staff app lives at "/", which is also the address patients type in.
+ * A visitor without a session gets the public landing page there instead of
+ * being bounced to /login; every other staff route still requires a login.
+ * A session that ends while the app is open (expiry, sign-out elsewhere)
+ * still goes to /login, so staff are not dropped onto the marketing page.
+ */
+function StaffLayout() {
+  const signedIn = useAuthStore((s) => s.isAuthenticated && !!s.user);
+  const { pathname } = useLocation();
+  const hadSession = useRef(signedIn);
+  if (signedIn) hadSession.current = true;
+  if (!signedIn && !hadSession.current && pathname === '/') return <LandingPage />;
+  return (
+    <ProtectedRoute>
+      <AppShell />
+    </ProtectedRoute>
+  );
+}
+
 function SuspenseBoundary({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
@@ -87,7 +109,7 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="/booking" element={<PublicBookingPage />} />
             <Route path="/booking/status" element={<PublicBookingStatusPage />} />
 
-            <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+            <Route element={<StaffLayout />}>
               <Route
                 index
                 element={

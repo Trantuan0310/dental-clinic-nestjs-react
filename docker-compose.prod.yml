@@ -91,6 +91,17 @@ services:
   web:
     build:
       context: ./frontend
+      args:
+        VITE_CLINIC_NAME: ${CLINIC_NAME:-}
+        VITE_CLINIC_TAGLINE: ${CLINIC_TAGLINE:-}
+        VITE_CLINIC_PHONE: ${CLINIC_PHONE:-}
+        VITE_CLINIC_ZALO: ${CLINIC_ZALO:-}
+        VITE_CLINIC_EMAIL: ${CLINIC_EMAIL:-}
+        VITE_CLINIC_ADDRESS: ${CLINIC_ADDRESS:-}
+        VITE_CLINIC_MAP_URL: ${CLINIC_MAP_URL:-}
+        VITE_CLINIC_FACEBOOK_URL: ${CLINIC_FACEBOOK_URL:-}
+        VITE_CLINIC_HOURS: ${CLINIC_HOURS:-}
+        VITE_CLINIC_SUNDAY_HOURS: ${CLINIC_SUNDAY_HOURS:-}
     ports:
       - '80:80'
       - '443:443'
