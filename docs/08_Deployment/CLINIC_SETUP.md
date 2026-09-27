@@ -58,3 +58,37 @@ Sửa danh sách dịch vụ hoặc giá cho lần chạy sau: sửa `backend/pr
 - **Kho:** nhập kho lần đầu cho các vật tư đang có.
 
 Script không đặt lương hay hoa hồng bác sĩ (Lương → Cấu hình thù lao), vì đó là thỏa thuận riêng với từng người.
+
+## Trang chủ cho khách (landing page)
+
+`https://<domain>/` hiện trang giới thiệu phòng khám cho khách chưa đăng nhập. Nhân viên đã đăng nhập vẫn vào thẳng Dashboard; nếu phiên hết hạn khi đang mở app thì về màn đăng nhập như trước. Link "Nhân viên đăng nhập" nằm ở chân trang.
+
+**Dữ liệu tự động từ hệ thống:**
+
+- **Dịch vụ & bảng giá:** chỉ hiện dịch vụ đang bật và có ít nhất một bác sĩ **nhận đặt lịch online** được phân công, với đúng giá trên màn Dịch vụ. Nút "Đặt" mở `/booking` với dịch vụ đã chọn sẵn.
+- **Đội ngũ bác sĩ:** các bác sĩ đó, kèm chuyên môn.
+
+Sửa giá, dịch vụ hay phân công trên giao diện thì trang chủ cập nhật ngay, không cần build lại.
+
+**Thông tin liên hệ:** đặt trong `.env.production`. Để trống dòng nào thì mục đó bị ẩn.
+
+```sh
+CLINIC_NAME="Nha khoa GENSMILE"
+CLINIC_TAGLINE="Nha khoa thẩm mỹ"
+CLINIC_PHONE="0901 234 567"                       # nút Gọi, nút gọi nổi trên điện thoại
+CLINIC_ZALO="0901234567"                           # số Zalo hoặc link https://zalo.me/...
+CLINIC_EMAIL="lienhe@gensmile.online"
+CLINIC_ADDRESS="12 Nguyễn Trãi, Quận 1, TP.HCM"    # có địa chỉ thì hiện bản đồ Google
+CLINIC_MAP_URL="https://maps.app.goo.gl/..."       # tùy chọn: link Google Maps chính xác
+CLINIC_FACEBOOK_URL="https://facebook.com/..."
+CLINIC_HOURS="08:00 – 12:00 · 13:30 – 19:00"       # giờ Thứ Hai – Thứ Bảy
+CLINIC_SUNDAY_HOURS="Nghỉ"
+```
+
+Các giá trị này được đóng vào bản build web. Sửa xong phải build lại web:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build web
+```
+
+`scripts/deploy-vps.sh` cũng build lại web mỗi lần deploy.
