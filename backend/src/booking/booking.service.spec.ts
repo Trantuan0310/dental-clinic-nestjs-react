@@ -102,10 +102,91 @@ describe('BookingService public request security and validation', () => {
       id: 'request-1',
       accessTokenHash: createHash('sha256').update('right-token').digest('hex'),
     });
-    await expect(service.publicStatus('GS-ABC', 'wrong-token')).rejects.toBeInstanceOf(
+    await expect(service.publicStatus('GS-ABC', { token: 'wrong-token' })).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
     expect(prisma.bookingRequest.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
+
+  describe('lookup by reference and phone', () => {
+    const stored = {
+      id: 'request-1',
+      accessTokenHash: createHash('sha256').update('right-token').digest('hex'),
+      phone: '0901234567',
+      contactPersonPhone: '0987654321',
+    };
+    const full = {
+      ...stored,
+      referenceCode: 'GS-1A2B3C4D5E',
+      status: 'PENDING_REVIEW',
+      createdAt: new Date(),
+      requestedStartAt: new Date(),
+      service: { name: 'Khám', defaultDurationMin: 15 },
+      preferredDentist: { fullName: 'BS A' },
+      appointment: null,
+    };
+
+    beforeEach(() => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(stored);
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(full);
+    });
+
+    it('accepts the booking phone in any common format and a loosely typed code', async () => {
+      const result = await service.publicStatus('gs 1a2b3c4d5e', { phone: '+84 901 234 567' });
+      expect(prisma.bookingRequest.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { referenceCode: 'GS-1A2B3C4D5E' } }),
+      );
+      expect(result.referenceCode).toBe('GS-1A2B3C4D5E');
+      expect(result.service).toEqual({ name: 'Khám', durationMinutes: 15 });
+      expect(result).not.toHaveProperty('phone');
+    });
+
+    it("accepts the guardian's phone", async () => {
+      await expect(
+        service.publicStatus('GS-1A2B3C4D5E', { phone: '0987 654 321' }),
+      ).resolves.toMatchObject({ status: 'PENDING_REVIEW' });
+    });
+
+    it('rejects another phone, a missing credential and an unknown code alike', async () => {
+      await expect(
+        service.publicStatus('GS-1A2B3C4D5E', { phone: '0911111111' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(service.publicStatus('GS-1A2B3C4D5E', {})).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      prisma.bookingRequest.findUnique.mockResolvedValue(null);
+      await expect(service.publicStatus('GS-FFFFFFFFFF', { phone: '0901234567' })).rejects.toThrow(
+        'Mã đặt lịch hoặc số điện thoại không đúng',
+      );
+      expect(prisma.bookingRequest.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('lists recent requests for a phone alone, matching the guardian too', async () => {
+      prisma.bookingRequest.findMany = jest.fn().mockResolvedValue([full]);
+      const result = await service.lookupByPhone('+84 987 654 321');
+      const where = prisma.bookingRequest.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([{ phone: '0987654321' }, { contactPersonPhone: '0987654321' }]);
+      expect(where.createdAt.gte.getTime()).toBeLessThan(Date.now());
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ referenceCode: 'GS-1A2B3C4D5E', status: 'PENDING_REVIEW' });
+      expect(result[0]).not.toHaveProperty('phone');
+      expect(result[0]).not.toHaveProperty('fullName');
+    });
+
+    it('rejects a malformed phone before querying', async () => {
+      prisma.bookingRequest.findMany = jest.fn();
+      await expect(service.lookupByPhone('12345')).rejects.toThrow('Số điện thoại không hợp lệ');
+      await expect(service.lookupByPhone(undefined)).rejects.toThrow('Số điện thoại không hợp lệ');
+      expect(prisma.bookingRequest.findMany).not.toHaveBeenCalled();
+    });
+
+    it('lets the phone holder withdraw the request', async () => {
+      prisma.bookingRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      await expect(service.withdraw('GS-1A2B3C4D5E', { phone: '0901234567' })).resolves.toEqual({
+        referenceCode: 'GS-1A2B3C4D5E',
+        status: 'CANCELLED',
+      });
+    });
   });
 
   it('does not create a request if the availability result is stale', async () => {

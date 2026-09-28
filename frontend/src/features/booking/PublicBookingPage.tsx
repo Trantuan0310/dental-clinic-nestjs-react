@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { bookingErrorMessage } from "./errorMessage";
+import { PublicTopBar } from "./PublicTopBar";
+import { saveBooking } from "./savedBookings";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 
 type Dentist = { id: string; fullName: string; specialties: string[] };
@@ -113,12 +115,14 @@ export default function PublicBookingPage() {
         { ...form, serviceId, dentistId, startAt },
       );
       const result = response.data.data;
-      sessionStorage.setItem(
-        "booking:" + result.referenceCode,
-        result.accessToken,
-      );
+      // Remember it on this device so the status page opens without typing.
+      saveBooking({
+        ref: result.referenceCode,
+        token: result.accessToken,
+        phone: form.phone.trim(),
+      });
       navigate(
-        "/booking/status?ref=" + encodeURIComponent(result.referenceCode),
+        "/booking/status?new=1&ref=" + encodeURIComponent(result.referenceCode),
       );
     } catch (e: unknown) {
       setError(bookingErrorMessage(e, "Chưa gửi được yêu cầu. Khung giờ có thể vừa được người khác chọn."));
@@ -137,17 +141,14 @@ export default function PublicBookingPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-6 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-teal-700">
-            GENSMILE
-          </Link>
+        <PublicTopBar>
           <Link
             to="/booking/status"
-            className="text-sm font-medium text-teal-700 hover:underline"
+            className="text-brand-600 hover:underline"
           >
-            Tra cứu yêu cầu
+            Tra cứu lịch hẹn
           </Link>
-        </div>
+        </PublicTopBar>
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
           <h1 className="text-2xl font-semibold text-gray-900">
             Đặt lịch khám

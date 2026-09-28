@@ -38,6 +38,17 @@ const ACTIVE: BookingRequestStatus[] = [
   'PATIENT_ACCEPTED',
 ];
 
+const PUBLIC_INCLUDE = {
+  service: { select: { name: true, defaultDurationMin: true } },
+  preferredDentist: { select: { fullName: true } },
+  proposedDentist: { select: { fullName: true } },
+  appointment: { select: { status: true, startAt: true, endAt: true } },
+} satisfies Prisma.BookingRequestInclude;
+const LOOKUP_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
+
+/** How a requester proves they own a booking request (see verify()). */
+export type PublicAccess = { token?: string; phone?: string };
+
 @Injectable()
 export class BookingService {
   constructor(
@@ -166,12 +177,35 @@ export class BookingService {
     return { referenceCode: ref, accessToken: token, status: 'PENDING_REVIEW', notificationSent };
   }
 
-  async publicStatus(reference: string, token?: string) {
-    return this.toPublic(await this.verify(reference, token));
+  async publicStatus(reference: string, access: PublicAccess) {
+    return this.toPublic(await this.verify(reference, access));
   }
 
-  async acceptProposal(reference: string, token?: string) {
-    const row = await this.verify(reference, token);
+  /**
+   * Requests made with this phone (the patient's or the guardian's) in the
+   * last 180 days, newest first. The phone alone is the credential here, by
+   * the clinic's choice: it is what patients remember. The list shows only
+   * booking status (service, time, dentist), never the patient's details.
+   */
+  async lookupByPhone(input: string | undefined) {
+    const phone = this.normalize(input ?? '');
+    if (phone.length > 20 || !isValidVnPhone(phone)) {
+      throw new BadRequestException('Số điện thoại không hợp lệ');
+    }
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: {
+        OR: [{ phone }, { contactPersonPhone: phone }],
+        createdAt: { gte: new Date(Date.now() - LOOKUP_WINDOW_MS) },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: PUBLIC_INCLUDE,
+    });
+    return rows.map(row => this.toPublic(row));
+  }
+
+  async acceptProposal(reference: string, access: PublicAccess) {
+    const row = await this.verify(reference, access);
     if (row.status !== 'PROPOSED' || !row.proposedStartAt) {
       throw new ConflictException('Không có khung giờ mới cần xác nhận');
     }
@@ -183,15 +217,11 @@ export class BookingService {
       targetId: row.id,
       metadata: { referenceCode: row.referenceCode },
     });
-    return this.publicStatus(reference, token);
+    return this.publicStatus(reference, access);
   }
 
-  async updateDetails(
-    reference: string,
-    token: string | undefined,
-    dto: UpdatePublicBookingDetailsDto,
-  ) {
-    const row = await this.verify(reference, token);
+  async updateDetails(reference: string, access: PublicAccess, dto: UpdatePublicBookingDetailsDto) {
+    const row = await this.verify(reference, access);
     if (row.status !== 'NEEDS_INFORMATION') {
       throw new ConflictException('Yêu cầu hiện không cần bổ sung thông tin');
     }
@@ -226,11 +256,12 @@ export class BookingService {
       targetId: row.id,
       metadata: { referenceCode: row.referenceCode },
     });
-    return this.publicStatus(reference, token);
+    // The phone may have just changed; the caller proved access already.
+    return this.toPublic(await this.load(row.id));
   }
 
-  async withdraw(reference: string, token?: string) {
-    const row = await this.verify(reference, token);
+  async withdraw(reference: string, access: PublicAccess) {
+    const row = await this.verify(reference, access);
     if (!ACTIVE.includes(row.status)) {
       throw new ConflictException(
         'Yêu cầu này không thể hủy trực tuyến; vui lòng liên hệ phòng khám',
@@ -556,24 +587,49 @@ export class BookingService {
       throw new ConflictException('Khung giờ vừa được đặt hoặc không nằm trong lịch làm việc');
   }
 
-  private async verify(reference: string, token?: string) {
-    if (!token || token.length > 100) throw new UnauthorizedException('Mã tra cứu không hợp lệ');
+  /**
+   * A requester proves access with either the one-time token from the
+   * confirmation link, or the phone number the request was made with (theirs
+   * or the guardian's). The reference code is 40 random bits and the public
+   * routes are rate limited, so reference + phone cannot be enumerated.
+   * Both failures give the same answer, so neither reveals which part was
+   * wrong.
+   */
+  private async verify(reference: string, access: PublicAccess) {
+    const denied = new UnauthorizedException('Mã đặt lịch hoặc số điện thoại không đúng');
+    const code = this.normalizeReference(reference);
+    const token = access.token?.trim();
+    const phone = access.phone ? this.normalize(access.phone) : '';
+    if ((!token && !phone) || (token?.length ?? 0) > 100 || phone.length > 20) throw denied;
     const row = await this.prisma.bookingRequest.findUnique({
-      where: { referenceCode: reference },
+      where: { referenceCode: code },
+      select: { id: true, accessTokenHash: true, phone: true, contactPersonPhone: true },
     });
-    const expected = Buffer.from(row?.accessTokenHash ?? '0'.repeat(64));
-    const candidate = Buffer.from(this.hash(token));
-    if (!row || !timingSafeEqual(candidate, expected))
-      throw new UnauthorizedException('Mã tra cứu không hợp lệ');
+    if (token) {
+      const expected = Buffer.from(row?.accessTokenHash ?? '0'.repeat(64));
+      const candidate = Buffer.from(this.hash(token));
+      if (!row || !timingSafeEqual(candidate, expected)) throw denied;
+    } else {
+      const known = [row?.phone, row?.contactPersonPhone]
+        .filter((v): v is string => !!v)
+        .map(v => this.normalize(v));
+      if (!row || !isValidVnPhone(phone) || !known.includes(phone)) throw denied;
+    }
+    return this.load(row.id);
+  }
+
+  private load(id: string) {
     return this.prisma.bookingRequest.findUniqueOrThrow({
-      where: { id: row.id },
-      include: {
-        service: { select: { name: true } },
-        preferredDentist: { select: { fullName: true } },
-        proposedDentist: { select: { fullName: true } },
-        appointment: { select: { status: true, startAt: true } },
-      },
+      where: { id },
+      include: PUBLIC_INCLUDE,
     });
+  }
+
+  /** "gs 1a2b3c4d5e", "GS1A2B…", "1a2b3c4d5e" → "GS-1A2B3C4D5E". */
+  private normalizeReference(value: string) {
+    const clean = (value ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+    const body = clean.startsWith('GS') ? clean.slice(2) : clean;
+    return 'GS-' + body.slice(0, 32);
   }
 
   private toPublic(row: any) {
@@ -583,16 +639,25 @@ export class BookingService {
       status: row.status,
       requestedAt: row.createdAt,
       requestedStartAt: row.requestedStartAt,
-      service: { name: row.service?.name ?? null },
+      service: {
+        name: row.service?.name ?? null,
+        durationMinutes: row.service?.defaultDurationMin ?? null,
+      },
       dentist: {
-        fullName: useProposed
-          ? (row.proposedDentist?.fullName ?? null)
-          : (row.preferredDentist?.fullName ?? null),
+        // A proposal may keep the requested dentist (no proposedDentist).
+        fullName:
+          (useProposed ? row.proposedDentist?.fullName : null) ??
+          row.preferredDentist?.fullName ??
+          null,
       },
       proposedStartAt: row.proposedStartAt,
       responseMessage: row.responseMessage,
       appointment: row.appointment
-        ? { startAt: row.appointment.startAt, status: row.appointment.status }
+        ? {
+            startAt: row.appointment.startAt,
+            endAt: row.appointment.endAt,
+            status: row.appointment.status,
+          }
         : null,
     };
   }
@@ -639,16 +704,27 @@ export class BookingService {
       this.escape(name) +
       ',</p><p>' +
       this.escape(message) +
-      '</p><p>Mã yêu cầu: <strong>' +
+      '</p><p>Mã đặt lịch: <strong>' +
       this.escape(reference) +
       '</strong></p><p><a href="' +
       this.escape(link) +
-      '">Xem tình trạng yêu cầu</a></p>';
+      '">Xem tình trạng lịch hẹn</a></p>' +
+      '<p>Bạn cũng có thể tra cứu bất cứ lúc nào tại ' +
+      this.escape(base) +
+      '/booking/status bằng số điện thoại đã dùng khi đặt.</p>';
     return this.email.send({
       to,
       subject,
       html,
-      text: message + '\nMã yêu cầu: ' + reference + '\n' + link,
+      text:
+        message +
+        '\nMã đặt lịch: ' +
+        reference +
+        '\n' +
+        link +
+        '\nTra cứu bằng số điện thoại đã dùng khi đặt: ' +
+        base +
+        '/booking/status',
     });
   }
   private escape(value: string) {
