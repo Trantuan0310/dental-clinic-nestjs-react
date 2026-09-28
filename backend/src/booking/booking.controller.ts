@@ -49,32 +49,45 @@ export class PublicBookingController {
   async create(@Body() dto: CreatePublicBookingRequestDto) {
     return { data: await this.booking.createPublic(dto) };
   }
+  // Access is the one-time token from the confirmation link
+  // (X-Booking-Access-Token) or the phone the request was made with
+  // (X-Booking-Phone); see BookingService.verify().
   @Get('requests/:reference')
   @Throttle({ default: { limit: 15, ttl: 60000 } })
-  async status(@Param('reference') ref: string, @Headers('x-booking-access-token') token?: string) {
-    return { data: await this.booking.publicStatus(ref, token) };
+  async status(
+    @Param('reference') ref: string,
+    @Headers('x-booking-access-token') token?: string,
+    @Headers('x-booking-phone') phone?: string,
+  ) {
+    return { data: await this.booking.publicStatus(ref, { token, phone }) };
   }
   @Post('requests/:reference/accept-proposal')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async accept(@Param('reference') ref: string, @Headers('x-booking-access-token') token?: string) {
-    return { data: await this.booking.acceptProposal(ref, token) };
+  async accept(
+    @Param('reference') ref: string,
+    @Headers('x-booking-access-token') token?: string,
+    @Headers('x-booking-phone') phone?: string,
+  ) {
+    return { data: await this.booking.acceptProposal(ref, { token, phone }) };
   }
   @Put('requests/:reference/details')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async details(
     @Param('reference') ref: string,
-    @Headers('x-booking-access-token') token: string | undefined,
     @Body() dto: UpdatePublicBookingDetailsDto,
+    @Headers('x-booking-access-token') token?: string,
+    @Headers('x-booking-phone') phone?: string,
   ) {
-    return { data: await this.booking.updateDetails(ref, token, dto) };
+    return { data: await this.booking.updateDetails(ref, { token, phone }, dto) };
   }
   @Post('requests/:reference/withdraw')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async withdraw(
     @Param('reference') ref: string,
     @Headers('x-booking-access-token') token?: string,
+    @Headers('x-booking-phone') phone?: string,
   ) {
-    return { data: await this.booking.withdraw(ref, token) };
+    return { data: await this.booking.withdraw(ref, { token, phone }) };
   }
 }
 

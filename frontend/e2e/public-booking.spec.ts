@@ -51,9 +51,26 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await pub.getByRole('checkbox').check();
   await pub.getByRole('button', { name: 'Gửi yêu cầu đặt lịch' }).click();
 
-  await expect(pub).toHaveURL(/\/booking\/status\?ref=GS-/);
+  await expect(pub).toHaveURL(/\/booking\/status\?new=1&ref=GS-/);
+  await expect(pub.getByRole('heading', { name: 'Đã gửi yêu cầu đặt lịch' })).toBeVisible();
   await expect(pub.getByText('Đang chờ lễ tân xem xét')).toBeVisible();
   const reference = new URL(pub.url()).searchParams.get('ref')!;
+
+  // From another device the patient needs only the code and their phone,
+  // typed loosely (lower case, no dash, spaced phone).
+  const other = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const lookup = await other.newPage();
+  await lookup.goto('/booking/status');
+  await lookup.getByLabel('Mã đặt lịch').fill(reference.replace('-', ' ').toLowerCase());
+  await lookup.getByLabel('Số điện thoại đã dùng khi đặt').fill('0911111111');
+  await lookup.getByRole('button', { name: 'Xem lịch hẹn' }).click();
+  await expect(lookup.getByRole('alert')).toContainText('không đúng');
+  await lookup
+    .getByLabel('Số điện thoại đã dùng khi đặt')
+    .fill(phone.replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3'));
+  await lookup.getByRole('button', { name: 'Xem lịch hẹn' }).click();
+  await expect(lookup.getByText('Đang chờ lễ tân xem xét')).toBeVisible();
+  await expect(lookup.getByText(reference, { exact: true })).toBeVisible();
 
   // Front desk (the admin session holds booking_request.manage).
   await page.goto('/booking-requests');
@@ -63,8 +80,13 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await page.getByRole('button', { name: 'Xác nhận lịch' }).click();
   await expect(row).toContainText('Đã xác nhận');
 
-  // The patient's status page now shows the confirmed visit.
+  // The patient's status page now shows the confirmed visit, with a way to
+  // put it in their calendar; the lookup device remembers the booking too.
   await pub.reload();
   await expect(pub.getByText('Lịch hẹn đã được xác nhận')).toBeVisible();
+  await expect(pub.getByRole('link', { name: 'Thêm vào Google Calendar' })).toBeVisible();
+  await lookup.goto('/booking/status?ref=' + reference);
+  await expect(lookup.getByText('Lịch hẹn đã được xác nhận')).toBeVisible();
+  await other.close();
   await guest.close();
 });
