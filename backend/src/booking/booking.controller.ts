@@ -109,6 +109,12 @@ export class BookingRequestsController {
   async list(@Query() q: ListBookingRequestsDto) {
     return { data: await this.booking.listForStaff(q) };
   }
+  // Before ':id', which would otherwise try to parse "pending-count" as a UUID.
+  @Get('pending-count')
+  @RequirePermissions('booking_request.read')
+  async pendingCount() {
+    return { data: await this.booking.pendingCount() };
+  }
   @Get(':id/patient-matches')
   @RequirePermissions('booking_request.read')
   async matches(@Param('id', ParseUUIDPipe) id: string) {

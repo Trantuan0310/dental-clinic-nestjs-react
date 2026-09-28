@@ -108,6 +108,81 @@ describe('BookingService public request security and validation', () => {
     expect(prisma.bookingRequest.findUniqueOrThrow).not.toHaveBeenCalled();
   });
 
+  describe('front desk notifications', () => {
+    const slot = futureSlot();
+    const submit = () =>
+      service.createPublic({
+        fullName: 'Nguyen An',
+        dob: '1990-01-01',
+        gender: Gender.FEMALE,
+        phone: '0901234567',
+        serviceId: 'service-1',
+        dentistId: 'dentist-1',
+        startAt: slot.startAt,
+        consent: true,
+      } as any);
+
+    beforeEach(() => {
+      prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+      appointments.getAvailability.mockResolvedValue({ availableSlots: ['10:00'] });
+      prisma.bookingRequest.create.mockResolvedValue({
+        id: 'request-1',
+        referenceCode: 'GS-1A2B3C4D5E',
+        fullName: 'Nguyen An',
+        email: null,
+      });
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({
+        id: 'request-1',
+        referenceCode: 'GS-1A2B3C4D5E',
+        fullName: 'Nguyen An',
+        phone: '0901234567',
+        status: 'PENDING_REVIEW',
+        requestedStartAt: new Date(slot.startAt),
+        proposedStartAt: null,
+        reason: 'Đau răng <hàm>',
+        service: { name: 'Khám' },
+        preferredDentist: { fullName: 'BS A' },
+      });
+    });
+    afterEach(() => {
+      delete process.env.BOOKING_NOTIFY_EMAILS;
+    });
+    const flush = () => new Promise(resolve => setImmediate(resolve));
+
+    it('emails every configured clinic address about a new request', async () => {
+      process.env.BOOKING_NOTIFY_EMAILS = 'letan@gensmile.online, chu@gensmile.online;not-an-email';
+      email.send.mockResolvedValue(true);
+      await submit();
+      await flush();
+      const sent = email.send.mock.calls.map((c: any[]) => c[0]);
+      expect(sent.map((m: any) => m.to)).toEqual(['letan@gensmile.online', 'chu@gensmile.online']);
+      expect(sent[0].subject).toContain('Yêu cầu đặt lịch mới');
+      expect(sent[0].html).toContain('0901234567');
+      expect(sent[0].html).toContain('Đau răng &lt;hàm&gt;');
+    });
+
+    it('sends nothing when no clinic address is configured', async () => {
+      await submit();
+      await flush();
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it('still accepts the request when the clinic email fails', async () => {
+      process.env.BOOKING_NOTIFY_EMAILS = 'letan@gensmile.online';
+      email.send.mockRejectedValue(new Error('SMTP down'));
+      await expect(submit()).resolves.toMatchObject({ status: 'PENDING_REVIEW' });
+      await flush();
+    });
+
+    it('counts only requests waiting on the front desk', async () => {
+      prisma.bookingRequest.count = jest.fn().mockResolvedValue(3);
+      await expect(service.pendingCount()).resolves.toEqual({ count: 3 });
+      expect(prisma.bookingRequest.count).toHaveBeenCalledWith({
+        where: { status: { in: ['PENDING_REVIEW', 'PATIENT_ACCEPTED'] } },
+      });
+    });
+  });
+
   describe('lookup by reference and phone', () => {
     const stored = {
       id: 'request-1',

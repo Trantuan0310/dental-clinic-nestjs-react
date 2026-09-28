@@ -74,6 +74,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@gensmile.online}
+      BOOKING_NOTIFY_EMAILS: ${BOOKING_NOTIFY_EMAILS:-}
       REDIS_URL: ${REDIS_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}

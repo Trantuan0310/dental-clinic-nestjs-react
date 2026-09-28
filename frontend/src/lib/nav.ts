@@ -39,6 +39,8 @@ export interface NavItemDef {
   permission?: string;
   anyPermission?: string[];
   children?: NavChildDef[];
+  /** Live counter shown next to the label (see Sidebar). */
+  badge?: 'pendingBookings';
 }
 
 export interface NavGroupDef {
@@ -79,6 +81,7 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
           labelKey: 'BookingRequests',
           icon: Inbox,
           permission: 'booking_request.read',
+          badge: 'pendingBookings',
         },
       ],
     });

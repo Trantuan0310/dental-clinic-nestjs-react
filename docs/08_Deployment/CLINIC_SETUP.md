@@ -92,3 +92,21 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 ```
 
 `scripts/deploy-vps.sh` cũng build lại web mỗi lần deploy.
+
+## Báo lễ tân khi có yêu cầu đặt lịch online
+
+- **Trong app:** mục **Yêu cầu đặt lịch** trên menu hiện số yêu cầu đang chờ lễ tân xử lý: yêu cầu mới, hoặc khách đã đồng ý giờ phòng khám đề xuất. Số này tự cập nhật mỗi phút.
+  - Khi có yêu cầu mới, app hiện thông báo nổi và tiêu đề tab trình duyệt có dạng `(2) …`.
+  - Danh sách yêu cầu cũng tự làm mới mỗi phút.
+- **Qua email:** mỗi khi khách đặt lịch, đồng ý giờ mới hoặc bổ sung thông tin, hệ thống gửi email tới các địa chỉ trong `BOOKING_NOTIFY_EMAILS`. Email ghi tên khách, số điện thoại, dịch vụ, bác sĩ, giờ và lý do khám.
+
+```sh
+# .env.production (cần SMTP đã cấu hình); nhiều địa chỉ thì ngăn cách bằng dấu phẩy
+BOOKING_NOTIFY_EMAILS=letan@example.com,quanly@example.com
+```
+
+Để trống thì không gửi email; số đếm trên menu vẫn hoạt động. Sửa xong chạy lại backend:
+
+```sh
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d backend
+```

@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { buildNavGroups } from '@/lib/nav';
 import { BrandBadge } from '@/components/brand';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { usePendingBookingCount } from '@/features/booking/usePendingBookingCount';
 
 interface SidebarContentProps {
   collapsed?: boolean;
@@ -32,6 +33,7 @@ export function SidebarContent({
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
+  const pendingBookings = usePendingBookingCount();
 
   if (!user) return null;
 
@@ -71,6 +73,7 @@ export function SidebarContent({
                 const Icon = item.icon;
                 const hasChildren = !!item.children?.length;
                 const label = t(`nav.${item.labelKey}`, item.labelKey);
+                const badge = item.badge === 'pendingBookings' ? pendingBookings : 0;
                 if (!hasChildren) {
                   return (
                     <li key={item.to}>
@@ -87,10 +90,23 @@ export function SidebarContent({
                               : 'text-gray-700 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800',
                           )
                         }
-                        title={collapsed ? label : undefined}
+                        title={collapsed ? (badge ? `${label} (${badge})` : label) : undefined}
                       >
-                        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="relative shrink-0">
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                          {collapsed && badge > 0 && (
+                            <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-surface-900" aria-hidden="true" />
+                          )}
+                        </span>
                         {!collapsed && <span className="truncate">{label}</span>}
+                        {!collapsed && badge > 0 && (
+                          <span
+                            className="ml-auto min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
+                            aria-label={`${badge} yêu cầu chờ xử lý`}
+                          >
+                            {badge > 99 ? '99+' : badge}
+                          </span>
+                        )}
                       </NavLink>
                     </li>
                   );
