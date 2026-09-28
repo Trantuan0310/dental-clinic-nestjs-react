@@ -41,6 +41,10 @@ services:
       REDIS_URL: ${REDIS_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_API_FORMAT: ${AI_API_FORMAT:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -55,6 +59,7 @@ services:
     build:
       context: ./frontend
       args:
+        VITE_SITE_URL: https://${DOMAIN}
         VITE_CLINIC_NAME: ${CLINIC_NAME:-}
         VITE_CLINIC_TAGLINE: ${CLINIC_TAGLINE:-}
         VITE_CLINIC_PHONE: ${CLINIC_PHONE:-}

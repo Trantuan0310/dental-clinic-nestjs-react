@@ -6,6 +6,8 @@ COPY . .
 ENV VITE_API_BASE_URL=/api/v1
 # Public clinic details for the landing page (src/config/clinic.ts), passed
 # in by compose from CLINIC_* in .env.production. Empty hides the block.
+# Absolute site URL for link previews, canonical and structured data.
+ARG VITE_SITE_URL=
 ARG VITE_CLINIC_NAME=
 ARG VITE_CLINIC_TAGLINE=
 ARG VITE_CLINIC_PHONE=

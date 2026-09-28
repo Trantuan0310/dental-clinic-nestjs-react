@@ -33,7 +33,7 @@ export function SidebarContent({
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
-  const pendingBookings = usePendingBookingCount();
+  const pendingBookings = usePendingBookingCount() ?? 0;
 
   if (!user) return null;
 

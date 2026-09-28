@@ -12,7 +12,7 @@ export const PENDING_BOOKING_COUNT_KEY = ['booking-requests', 'pending-count'] a
  * Online booking requests waiting on the front desk (new, or the patient
  * accepted a proposed time). Polled every minute while the app is open.
  */
-export function usePendingBookingCount() {
+export function usePendingBookingCount(): number | undefined {
   const canRead = useAuthStore((s) => !!s.user && s.hasPermission('booking_request.read'));
   const { data } = useQuery({
     queryKey: PENDING_BOOKING_COUNT_KEY,
@@ -23,7 +23,9 @@ export function usePendingBookingCount() {
     refetchIntervalInBackground: true,
     staleTime: 30_000,
   });
-  return canRead ? (data ?? 0) : 0;
+  // undefined until the first answer, so the watcher can tell "not loaded
+  // yet" from "none waiting" and does not announce the initial count as new.
+  return canRead ? data : 0;
 }
 
 /**
@@ -32,10 +34,12 @@ export function usePendingBookingCount() {
  * title so it is visible from other browser tabs.
  */
 export function PendingBookingWatcher() {
-  const count = usePendingBookingCount();
+  const loaded = usePendingBookingCount();
+  const count = loaded ?? 0;
   const previous = useRef<number | null>(null);
 
   useEffect(() => {
+    if (loaded === undefined) return;
     if (previous.current !== null && count > previous.current) {
       notify.info(
         count - previous.current === 1
@@ -44,7 +48,7 @@ export function PendingBookingWatcher() {
       );
     }
     previous.current = count;
-  }, [count]);
+  }, [loaded, count]);
 
   useEffect(() => {
     const strip = () => document.title.replace(/^\(\d+\)\s+/, '');

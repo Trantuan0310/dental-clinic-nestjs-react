@@ -5,7 +5,7 @@
 
 import { api, unwrap } from '@/lib/api';
 
-export type SummarySource = 'gemini' | 'fallback';
+export type SummarySource = 'gemini' | 'llm' | 'fallback';
 
 export interface SummaryBullet {
   id: 'allergy' | 'open' | 'next';

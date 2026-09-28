@@ -123,3 +123,22 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d backe
 Trình duyệt tự thu nhỏ ảnh trước khi tải lên: ảnh phòng khám tối đa 1600 px, ảnh bác sĩ 800 px. Ảnh được lưu lại dưới dạng JPEG, bỏ thông tin EXIF như vị trí GPS. Chấp nhận ảnh JPG, PNG và WebP.
 
 Mọi ảnh ở đây đều công khai. Không dùng ảnh có mặt bệnh nhân hoặc giấy tờ nếu chưa được đồng ý.
+
+## Chia sẻ link và Google
+
+**Ảnh xem trước khi chia sẻ link.** Khi dán `https://<domain>` vào Facebook, Zalo hay Messenger, sẽ hiện ảnh `og-image.jpg` (1200×630) kèm tiêu đề và mô tả.
+- Muốn đổi ảnh: thay file `frontend/public/og-image.jpg` bằng ảnh khác cùng kích thước rồi deploy.
+- Facebook lưu ảnh cũ một thời gian. Sau khi đổi, mở [Sharing Debugger](https://developers.facebook.com/tools/debug/), dán link và bấm **Scrape Again**.
+
+**Thông tin cho Google.** Trang chủ có sẵn:
+- dữ liệu có cấu trúc `Dentist` (schema.org), lấy từ `CLINIC_*` trong `.env.production`: tên, số điện thoại, địa chỉ, giờ mở cửa;
+- `robots.txt`: chặn các trang đăng nhập và trang tra cứu lịch;
+- `sitemap.xml`: gồm trang chủ và trang đặt lịch.
+
+**Khai báo với Google Search Console (làm một lần):**
+1. Vào <https://search.google.com/search-console>, chọn **Thêm sản phẩm → Miền** và nhập `gensmile.online`.
+2. Google đưa một bản ghi TXT dạng `google-site-verification=...`. Thêm bản ghi đó ở Namecheap (**Advanced DNS → Add new record → TXT**, Host `@`), chờ vài phút rồi bấm **Xác minh**.
+3. Vào **Sơ đồ trang web**, nhập `sitemap.xml` và gửi.
+4. Vào **Kiểm tra URL**, nhập `https://gensmile.online/`, bấm **Yêu cầu lập chỉ mục**.
+
+Nên tạo thêm **Google Business Profile** (Google Maps) với cùng tên, địa chỉ, số điện thoại và link website, để phòng khám hiện trên bản đồ và khi khách tìm "nha khoa Hà Đông".

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -179,27 +179,7 @@ export class UsersService {
     // above is random and never surfaced anywhere, so the setup link is the
     // only way in. Default to sending unless the caller opts out explicitly.
     if (createUserDto.sendInvite !== false) {
-      const setupToken = crypto.randomUUID();
-      const tokenHash = crypto.createHash('sha256').update(setupToken).digest('hex');
-      const expiresAt = new Date(Date.now() + this.ACCOUNT_SETUP_TTL_MS);
-
-      await this.prisma.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          tokenHash,
-          expiresAt,
-        },
-      });
-
-      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      const setupUrl = `${baseUrl}/auth/reset-password?token=${setupToken}`;
-      const expiresInMinutes = Math.round(this.ACCOUNT_SETUP_TTL_MS / 60000);
-
-      if (process.env.EMAIL_MOCK === 'true' || process.env.NODE_ENV !== 'production') {
-        this.logger.warn(`[EMAIL] Account setup URL for ${user.email}: ${setupUrl}`);
-      }
-
-      await this.emailService.sendAccountSetupEmail(user.email, setupUrl, expiresInMinutes);
+      await this.issuePasswordLink(user, 'setup');
     }
 
     return {
@@ -439,12 +419,76 @@ export class UsersService {
       userAgent,
     });
 
+    // Emailing the temporary password itself would put a credential in the
+    // inbox; send a link to choose a new one instead (the account is now
+    // PENDING_SETUP, so it gets the setup email).
     if (sendEmail) {
-      this.logger.log(`[MOCK EMAIL] New password sent to ${user.email}`);
+      await this.issuePasswordLink(user, 'setup');
       return {};
     }
 
     return { temporaryPassword: tempPassword };
+  }
+
+  /**
+   * Emails a one-hour link to choose a password: the account-setup email for
+   * an account that never had one, the reset email otherwise. Unlike
+   * resetPassword() the current password keeps working until the link is used,
+   * so an accidental click locks nobody out.
+   */
+  async sendPasswordLink(
+    userId: string,
+    actorUserId: string,
+    actorEmail: string,
+    ipAddress: string | null,
+    userAgent: string | null,
+  ): Promise<{ sent: boolean; expiresInMinutes: number; kind: 'setup' | 'reset' }> {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    if (user.deactivatedAt) {
+      throw new BadRequestException(
+        'Tài khoản đã bị vô hiệu hóa; hãy kích hoạt lại trước khi gửi link',
+      );
+    }
+    const kind = user.status === 'PENDING_SETUP' ? 'setup' : 'reset';
+    const sent = await this.issuePasswordLink(user, kind);
+    await this.auditService.log({
+      action: 'USER_PASSWORD_LINK_SENT',
+      actorUserId,
+      actorEmail,
+      targetType: 'user',
+      targetId: userId,
+      ipAddress,
+      userAgent,
+      metadata: { kind, sent },
+    });
+    return { sent, expiresInMinutes: Math.round(this.ACCOUNT_SETUP_TTL_MS / 60000), kind };
+  }
+
+  /** Stores a one-hour reset token and emails its link; false if the email failed. */
+  private async issuePasswordLink(
+    user: { id: string; email: string },
+    kind: 'setup' | 'reset',
+  ): Promise<boolean> {
+    const token = crypto.randomUUID();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + this.ACCOUNT_SETUP_TTL_MS),
+      },
+    });
+
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const url = `${baseUrl}/auth/reset-password?token=${token}`;
+    const expiresInMinutes = Math.round(this.ACCOUNT_SETUP_TTL_MS / 60000);
+    if (process.env.EMAIL_MOCK === 'true' || process.env.NODE_ENV !== 'production') {
+      this.logger.warn(`[EMAIL] Password ${kind} URL for ${user.email}: ${url}`);
+    }
+    return kind === 'setup'
+      ? this.emailService.sendAccountSetupEmail(user.email, url, expiresInMinutes)
+      : this.emailService.sendPasswordResetEmail(user.email, url, expiresInMinutes);
   }
 
   async getLoginHistory(userId: string, limit: number = 20, cursor?: string) {

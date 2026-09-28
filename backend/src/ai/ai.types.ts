@@ -1,4 +1,5 @@
-export type SummarySource = 'gemini' | 'fallback';
+/** gemini: Google SDK; llm: an AI_BASE_URL gateway (compatible-llm.ts); fallback: rules. */
+export type SummarySource = 'gemini' | 'llm' | 'fallback';
 export type SummaryIcon = 'alert' | 'clock' | 'stethoscope';
 
 export interface SummaryBullet {

@@ -156,7 +156,10 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
 
           <p className="flex items-center justify-between text-[11px] text-gray-500">
             <span>
-              Nguồn: {data.source === 'gemini' ? `Gemini (${data.model ?? 'gemini-1.5-pro'})` : 'Rule-based fallback'}
+              Nguồn:{' '}
+              {data.source === 'fallback'
+                ? 'Quy tắc có sẵn (chưa bật AI)'
+                : `${data.source === 'gemini' ? 'Gemini' : 'AI'} (${data.model ?? 'không rõ model'})`}
               {data.cached ? ' · cache' : ''}
             </span>
             <span>

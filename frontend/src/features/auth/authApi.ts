@@ -26,6 +26,15 @@ export const authApi = {
     setSession(payload);
     return payload;
   },
+  /**
+   * Changing the password signs out every session, this one included (the
+   * server revokes all refresh tokens), so the caller sends the user back to
+   * the login page.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await api.post('/auth/change-password', { currentPassword, newPassword });
+    clearSession();
+  },
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');

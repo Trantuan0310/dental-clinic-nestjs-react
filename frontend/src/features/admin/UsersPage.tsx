@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, MoreHorizontal, UserX, UserCheck } from 'lucide-react';
+import { Plus, MoreHorizontal, UserX, UserCheck, KeyRound } from 'lucide-react';
 import { Button, Card, StatusBadge, SearchInput, Modal, Input, Select, Textarea, Spinner } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -10,6 +10,7 @@ import {
   useUpdateUser,
   useDeactivateUser,
   useReactivateUser,
+  useSendPasswordLink,
 } from './adminApi';
 import type { AdminUser, CreateAdminUserPayload } from '@/types/admin';
 import { NAV_ROLE_HINT } from '@/lib/nav';
@@ -41,6 +42,7 @@ export default function UsersPage() {
   const updateMutation = useUpdateUser(editingUser?.id ?? '');
   const deactivateMutation = useDeactivateUser();
   const reactivateMutation = useReactivateUser();
+  const sendLinkMutation = useSendPasswordLink();
 
   const allUsers = data?.data ?? [];
   const filteredUsers = allUsers.filter((user) => {
@@ -95,6 +97,21 @@ export default function UsersPage() {
       notify.success('Đã kích hoạt lại người dùng');
     } catch (err) {
       notify.error(getApiErrorMessage(err, 'Không thể kích hoạt lại người dùng. Vui lòng thử lại.'));
+    }
+  };
+
+  const handleSendLink = async (user: AdminUser) => {
+    try {
+      const result = await sendLinkMutation.mutateAsync(user.id);
+      if (result.sent) {
+        notify.success(
+          `Đã gửi link ${result.kind === 'setup' ? 'thiết lập tài khoản' : 'đặt lại mật khẩu'} tới ${user.email} (hiệu lực ${result.expiresInMinutes} phút)`,
+        );
+      } else {
+        notify.warning('Chưa gửi được email. Kiểm tra cấu hình SMTP của máy chủ.');
+      }
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, 'Không gửi được link. Vui lòng thử lại.'));
     }
   };
 
@@ -200,13 +217,28 @@ export default function UsersPage() {
                             <UserCheck className="h-4 w-4 text-green-500" />
                           </button>
                         ) : (
-                          <button
-                            className="rounded p-1 hover:bg-red-50"
-                            onClick={() => setDeactivateTarget(user)}
-                            title="Vô hiệu hóa"
-                          >
-                            <UserX className="h-4 w-4 text-red-400" />
-                          </button>
+                          <>
+                            <button
+                              className="rounded p-1 hover:bg-brand-50"
+                              onClick={() => handleSendLink(user)}
+                              disabled={sendLinkMutation.isPending && sendLinkMutation.variables === user.id}
+                              title={
+                                user.status.toLowerCase() === 'pending_setup'
+                                  ? 'Gửi lại link thiết lập tài khoản'
+                                  : 'Gửi link đặt lại mật khẩu'
+                              }
+                              aria-label={`Gửi link đặt mật khẩu cho ${user.email}`}
+                            >
+                              <KeyRound className="h-4 w-4 text-brand-500" />
+                            </button>
+                            <button
+                              className="rounded p-1 hover:bg-red-50"
+                              onClick={() => setDeactivateTarget(user)}
+                              title="Vô hiệu hóa"
+                            >
+                              <UserX className="h-4 w-4 text-red-400" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
