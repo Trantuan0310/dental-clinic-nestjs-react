@@ -48,7 +48,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/services': 'Dịch vụ',
   '/shifts': 'Ca làm việc',
   '/shifts/pending': 'Duyệt ca làm việc',
-  '/me': 'Hồ sơ của tôi',
+  '/me': 'Tài khoản của tôi',
   '/admin': 'Quản trị',
   '/admin/users': 'Người dùng',
   '/admin/roles': 'Vai trò',

@@ -122,6 +122,18 @@ export function useReactivateUser() {
   });
 }
 
+/** Emails the user a one-hour link to set (new account) or reset their password. */
+export function useSendPasswordLink() {
+  return useMutation({
+    mutationFn: async (id: string) =>
+      (
+        await api.post<{ data: { sent: boolean; expiresInMinutes: number; kind: 'setup' | 'reset' } }>(
+          `/admin/users/${id}/send-password-link`,
+        )
+      ).data.data,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Roles
 // ---------------------------------------------------------------------------

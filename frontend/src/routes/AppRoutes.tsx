@@ -75,6 +75,7 @@ const RolesPage = lazy(() => import('@/features/admin/RolesPage'));
 const AuditLogsPage = lazy(() => import('@/features/admin/AuditLogsPage'));
 const SettingsPage = lazy(() => import('@/features/admin/SettingsPage'));
 const SiteMediaPage = lazy(() => import('@/features/media/SiteMediaPage'));
+const MyAccountPage = lazy(() => import('@/features/auth/MyAccountPage'));
 
 const BrandPreviewPage = lazy(() => import('@/features/brand/BrandPreviewPage'));
 
@@ -503,6 +504,7 @@ const router = createBrowserRouter(createRoutesFromElements(
                   </ProtectedRoute>
                 }
               />
+              <Route path="me" element={<MyAccountPage />} />
               <Route
                 path="admin/settings"
                 element={

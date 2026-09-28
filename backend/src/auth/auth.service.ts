@@ -786,25 +786,23 @@ export class AuthService {
 
   private validatePasswordStrength(password: string, email: string): void {
     if (password.length < 8) {
-      throw new PasswordTooWeakException('Password must be at least 8 characters');
+      throw new PasswordTooWeakException('Mật khẩu phải có ít nhất 8 ký tự');
     }
 
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasDigit = /\d/.test(password);
 
     if (!hasLetter || !hasDigit) {
-      throw new PasswordTooWeakException('Password must contain at least 1 letter and 1 digit');
+      throw new PasswordTooWeakException('Mật khẩu phải có cả chữ và số');
     }
 
     const emailLocalPart = email.split('@')[0].toLowerCase();
     if (emailLocalPart && password.toLowerCase().includes(emailLocalPart)) {
-      throw new PasswordTooWeakException('Password cannot contain your email address');
+      throw new PasswordTooWeakException('Mật khẩu không được chứa tên email của bạn');
     }
 
     if (this.COMMON_PASSWORDS.has(password.toLowerCase())) {
-      throw new PasswordTooWeakException(
-        'Password is too common. Please choose a stronger password',
-      );
+      throw new PasswordTooWeakException('Mật khẩu quá phổ biến, hãy chọn mật khẩu khó đoán hơn');
     }
   }
 }

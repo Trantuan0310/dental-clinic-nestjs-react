@@ -181,6 +181,27 @@ export class UsersController {
     );
   }
 
+  @Post(':id/send-password-link')
+  @RequirePermissions('user.reset_password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Email the user a link to set or reset their password' })
+  async sendPasswordLink(
+    @Param('id', ParseUUIDPipe) id: string,
+    @User() currentUser: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return {
+      data: await this.usersService.sendPasswordLink(
+        id,
+        currentUser.sub,
+        currentUser.email,
+        req.ip || null,
+        req.get('user-agent') || null,
+      ),
+    };
+  }
+
   @Post(':id/reset-password')
   @RequirePermissions('user.reset_password')
   @HttpCode(HttpStatus.OK)
