@@ -260,6 +260,13 @@ const PERMISSIONS = [
     action: 'manage',
     description: 'Xử lý yêu cầu đặt lịch trực tuyến',
   },
+  // Dentists update allergies/chronic diseases/medications (migration 027)
+  {
+    code: 'patient.medical_history.update',
+    resource: 'patient',
+    action: 'medical_history.update',
+    description: 'Cập nhật dị ứng, bệnh nền, thuốc đang dùng của bệnh nhân',
+  },
   // Home page photos (migration 026 inserts the same row)
   {
     code: 'site_media.manage',
@@ -721,19 +728,36 @@ const PERMISSIONS = [
   },
 ];
 
+/**
+ * Authoring a medical record is a dentist's act. The clinic admin reads
+ * records but does not write them; an owner who also treats patients holds
+ * the dentist role too (migration 027).
+ */
+const CLINICAL_AUTHORING = new Set([
+  'encounter.start',
+  'encounter.complete',
+  'clinical_note.write',
+  'clinical_note.addendum',
+  'treatment.write',
+  'treatment.delete',
+  'prescription.write',
+  'dental_chart.write',
+]);
+
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   clinic_admin: [
-    ...PERMISSIONS.map(p => p.code),
+    ...PERMISSIONS.map(p => p.code).filter(code => !CLINICAL_AUTHORING.has(code)),
     'expense.read',
     'expense.create',
     'expense.update',
     'expense.delete',
     'expense.approve',
   ],
-  // Note: no shift_registration.approve/shift.approve here — approving a
-  // dentist's registered work shift feeds directly into payroll (worked
-  // hours -> compensation), so it belongs to admin/management, not front
-  // desk, even though front desk coordinates the calendar day-to-day.
+  // Front desk: books, checks in, bills and collects payment (migration 027).
+  // Not here on purpose: revenue/expense/profit reports (only outstanding
+  // balances, to chase payments), HR records, shift registration (a dentist
+  // payroll concept), editing working schedules (manager + each dentist
+  // own), starting an encounter (the dentist's step), approving shifts.
   receptionist: [
     'patient.create',
     'patient.read',
@@ -752,17 +776,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'queue.read',
     'queue.call',
     'queue.manage',
-    'appointment.schedule.manage',
-    'schedule.write',
     'schedule.read',
-    'employee.read',
     'dentist.read',
-    'dentist.manage_schedule',
     'service.read',
     'booking_request.read',
     'booking_request.manage',
     'encounter.read.basic',
-    'encounter.start',
     'invoice.create',
     'invoice.read',
     'invoice.read.any',
@@ -772,23 +791,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'inventory.read',
     'inventory.stock_in',
     'inventory.stock_out',
-    'shift_registration.write',
-    'shift_registration.read',
-    'shift.read.any',
-    'shift.read_self',
-    // Front desk reconciles daily cash/card intake and chases outstanding
-    // balances, so revenue/outstanding reports are part of the job —
-    // report.read is only a nav-gating alias, the actual data endpoints
-    // check these canonical permissions.
-    'report.revenue.read',
     'report.outstanding.read',
     // Frontend aliases (Phase 10.5)
     'medical_record.read',
-    'report.read',
     'ai.summary.read',
   ],
   dentist: [
     'patient.read',
+    // Only for patients they have treated (PatientsService / AppointmentsService).
+    'patient.medical_history.update',
+    'appointment.create',
     'queue.read',
     'queue.call',
     'appointment.read',

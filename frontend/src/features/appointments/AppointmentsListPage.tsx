@@ -312,7 +312,7 @@ export default function AppointmentsListPage() {
             >
               Xuất CSV
             </Button>
-            <PermissionGuard permission="appointment.create">
+            <PermissionGuard permission="appointment.check_in">
               <Button
                 variant="outline"
                 leftIcon={<UserRoundPlus className="h-4 w-4" />}

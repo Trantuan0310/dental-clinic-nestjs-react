@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { useInventoryItems } from '@/features/inventory/inventoryApi';
 import { useBookableServices } from '@/features/appointments/appointmentApi';
 import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUsage } from '@/types/medical-records';
+import { useAuthStore } from '@/stores/authStore';
 
 interface TreatmentsTabProps {
   encounter: Encounter;
@@ -166,7 +167,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
 
   const treatments = encounter.treatments || [];
   const totalTreatment = treatments.reduce((sum, t) => sum + (t.total ?? 0), 0);
-  const isEditable = encounter.status === 'in_progress';
+  const canWrite = useAuthStore((s) => s.hasPermission('treatment.write'));
+  const isEditable = encounter.status === 'in_progress' && canWrite;
 
   // Group treatments by tooth
   const treatmentsByTooth = treatments.reduce((acc, treatment) => {

@@ -107,6 +107,7 @@ describe('Phase one audit regressions', () => {
     async refresh => {
       db.patient.findFirst.mockResolvedValue({ id: 'p' });
       db.encounter.count.mockResolvedValue(0);
+      db.appointment.count.mockResolvedValue(0);
       const { cache, service } = ai();
       await expect(service.getPatientSummary('p', 3, refresh, dentist)).rejects.toThrow(
         'Patient not found',
@@ -115,6 +116,19 @@ describe('Phase one audit regressions', () => {
       expect(db.encounter.findMany).not.toHaveBeenCalled();
     },
   );
+
+  it('AI-01 lets a dentist summarise a first-visit patient booked on their calendar', async () => {
+    db.patient.findFirst.mockResolvedValue({ id: 'p' });
+    db.encounter.count.mockResolvedValue(0);
+    db.appointment.count.mockResolvedValue(1);
+    const { service } = ai();
+    await expect(service.getPatientSummary('p', 3, false, dentist)).resolves.toMatchObject({
+      patientId: 'p',
+    });
+    expect(db.appointment.count).toHaveBeenCalledWith({
+      where: { patientId: 'p', dentistId: dentist.sub },
+    });
+  });
 
   it.each([dentist, admin, receptionist])(
     'AI-01 preserves allowed cached access for $sub',

@@ -7,6 +7,8 @@ import {
   IsArray,
   ValidateNested,
   IsUUID,
+  ArrayMaxSize,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -273,4 +275,35 @@ export class MergePatientsDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+/**
+ * What a dentist may change on a patient they have treated
+ * (patient.medical_history.update): only the clinical history lists, never
+ * name, contact or identity fields.
+ */
+export class UpdateMedicalHistoryDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  allergies?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  chronicDiseases?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  currentMedications?: string[];
 }

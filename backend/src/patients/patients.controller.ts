@@ -26,6 +26,7 @@ import {
   MergePatientsDto,
   SoftDeletePatientDto,
   UpdatePatientDto,
+  UpdateMedicalHistoryDto,
   OverrideDobDto,
   PatientIdentifierInputDto,
 } from './dto/patient.dto';
@@ -81,6 +82,19 @@ export class PatientsController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.patients.update(id, dto, actor) };
+  }
+
+  // Front desk and admin edit these through PATCH :id (patient.update); a
+  // dentist only through here, and only for patients they have treated.
+  @Patch(':id/medical-history')
+  @RequirePermissions('patient.medical_history.update', 'patient.update')
+  @ApiOperation({ summary: 'Update allergies, chronic diseases and current medications' })
+  async updateMedicalHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMedicalHistoryDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.patients.updateMedicalHistory(id, dto, actor) };
   }
 
   @Patch(':id/override-dob')

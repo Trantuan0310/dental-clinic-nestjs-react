@@ -466,7 +466,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route
                 path="reports"
                 element={
-                  <ProtectedRoute permission="report.read">
+                  <ProtectedRoute anyPermission={['report.revenue.read', 'report.outstanding.read', 'report.read']}>
                     <ReportsPage />
                   </ProtectedRoute>
                 }

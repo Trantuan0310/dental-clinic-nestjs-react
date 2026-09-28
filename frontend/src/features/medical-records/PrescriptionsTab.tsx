@@ -6,6 +6,7 @@ import { Button, Modal, Input, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import type { Encounter, PrescriptionItem, CreatePrescriptionPayload } from '@/types/medical-records';
+import { useAuthStore } from '@/stores/authStore';
 
 interface PrescriptionsTabProps {
   encounter: Encounter;
@@ -79,7 +80,8 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
   };
 
   const prescriptions = encounter.prescriptions || [];
-  const isEditable = encounter.status === 'in_progress';
+  const canWrite = useAuthStore((s) => s.hasPermission('prescription.write'));
+  const isEditable = encounter.status === 'in_progress' && canWrite;
 
   return (
     <div className="space-y-4">

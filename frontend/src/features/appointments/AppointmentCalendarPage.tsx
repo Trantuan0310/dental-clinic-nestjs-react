@@ -159,7 +159,7 @@ export default function AppointmentCalendarPage() {
           <Link to="/appointments/list">
             <Button variant="outline">Xem dạng bảng</Button>
           </Link>
-          <PermissionGuard permission="appointment.create">
+          <PermissionGuard permission="appointment.check_in">
             <Button variant="outline" onClick={() => setShowWalkIn(true)}>
               <UserRoundPlus className="h-4 w-4" />
               Khách vãng lai

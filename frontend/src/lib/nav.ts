@@ -98,9 +98,12 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
       titleKey: 'Lâm sàng',
       items: [
         { to: '/today', labelKey: 'Today', icon: Calendar, permission: 'appointment.read' },
-        { to: '/my-queue', labelKey: 'MyQueue', icon: ListChecks, permission: 'appointment.read' },
-        ...(isDentist(roles) || isAdmin(roles)
+        // "My queue" and "My patients" are a treating dentist's lists; front
+        // desk and a non-treating admin have nothing in them (an owner who
+        // also treats holds the dentist role and sees both).
+        ...(isDentist(roles)
           ? [
+              { to: '/my-queue', labelKey: 'MyQueue', icon: ListChecks, permission: 'appointment.read' },
               // Route guard actually requires encounter.read.own (see
               // AppRoutes.tsx) — patient.read used to be granted here too,
               // which would show this link to a role that could click it
@@ -166,7 +169,14 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
   groups.push({
     titleKey: 'Báo cáo',
     items: [
-      { to: '/reports', labelKey: 'Reports', icon: ScrollText, permission: 'report.read' },
+      // Front desk sees only outstanding balances here; revenue sections need
+      // report.revenue.read (ReportsPage hides what the viewer can't read).
+      {
+        to: '/reports',
+        labelKey: 'Reports',
+        icon: ScrollText,
+        anyPermission: ['report.revenue.read', 'report.outstanding.read', 'report.read'],
+      },
     ],
   });
 
