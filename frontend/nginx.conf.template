@@ -24,6 +24,16 @@ server {
     location = /health/ready {
         proxy_pass http://backend:3000;
     }
+    # Search engines: index the public pages only (staff screens need a login
+    # anyway, and the booking lookup shows a patient's own bookings).
+    location = /robots.txt {
+        default_type text/plain;
+        return 200 "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /login\nDisallow: /forgot-password\nDisallow: /auth/\nDisallow: /booking/status\n\nSitemap: https://${DOMAIN}/sitemap.xml\n";
+    }
+    location = /sitemap.xml {
+        default_type application/xml;
+        return 200 '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://${DOMAIN}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://${DOMAIN}/booking</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n</urlset>\n';
+    }
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache";

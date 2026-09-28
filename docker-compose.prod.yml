@@ -93,6 +93,7 @@ services:
     build:
       context: ./frontend
       args:
+        VITE_SITE_URL: https://${DOMAIN}
         VITE_CLINIC_NAME: ${CLINIC_NAME:-}
         VITE_CLINIC_TAGLINE: ${CLINIC_TAGLINE:-}
         VITE_CLINIC_PHONE: ${CLINIC_PHONE:-}
