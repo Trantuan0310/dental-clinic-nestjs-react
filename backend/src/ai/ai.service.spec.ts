@@ -44,6 +44,55 @@ describe('AiService', () => {
     service = module.get<AiService>(AiService);
   });
 
+  describe('with an AI gateway configured', () => {
+    it('summarises through the gateway and labels the source', async () => {
+      const values: Record<string, string> = {
+        AI_BASE_URL: 'https://gw.test/v1',
+        AI_API_KEY: 'k',
+        AI_MODEL: 'gw-model',
+        GEMINI_API_KEY: 'also-set',
+      };
+      const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            choices: [
+              {
+                message: {
+                  content: '```json\n{"allergy":"Dị ứng Penicillin","open":"","next":""}\n```',
+                },
+              },
+            ],
+          }),
+      } as any);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AiService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: RedisCacheService, useValue: cache },
+          { provide: ConfigService, useValue: { get: jest.fn((k: string) => values[k]) } },
+        ],
+      }).compile();
+      const gatewayService = module.get<AiService>(AiService);
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      cache.getJSON.mockResolvedValue(null);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await gatewayService.getPatientSummary('pat-1', 3, true, actor);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://gw.test/v1/chat/completions',
+        expect.anything(),
+      );
+      expect(result.source).toBe('llm');
+      expect(result.model).toBe('gw-model');
+      expect(result.bullets.map(b => b.id)).toContain('allergy');
+      fetchMock.mockRestore();
+    });
+  });
+
   describe('getPatientSummary', () => {
     it('throws NotFoundException when patient not found', async () => {
       (prisma.patient.findFirst as jest.Mock).mockResolvedValue(null);

@@ -6,6 +6,7 @@ import { RedisCacheService } from '../common/redis-cache.service';
 import { SYSTEM_PROMPT, buildUserPrompt, type SummaryInput } from './prompts/summary-prompt';
 import { AiPatientSummary, SummaryBullet, SummarySource } from './ai.types';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { CompatibleLlm, createCompatibleLlm, extractJsonObject } from './compatible-llm';
 
 const CACHE_TTL_SECONDS = 3600;
 const MAX_TOKENS = 350;
@@ -15,17 +16,24 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly genAI: GoogleGenerativeAI | null;
   private readonly model: string;
+  /** A gateway model (AI_BASE_URL); preferred over Gemini when configured. */
+  private readonly gateway: CompatibleLlm | null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: RedisCacheService,
     config: ConfigService,
   ) {
+    this.gateway = createCompatibleLlm(key => config.get<string>(key));
     const apiKey = config.get<string>('GEMINI_API_KEY');
     this.model = config.get<string>('GEMINI_MODEL') ?? 'gemini-3.6-flash';
-    this.genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
-    if (!this.genAI) {
-      this.logger.warn('GEMINI_API_KEY not set; AI summary will always fall back to rule-based');
+    this.genAI = apiKey && !this.gateway ? new GoogleGenerativeAI(apiKey) : null;
+    if (this.gateway) {
+      this.logger.log(`AI summary uses ${this.gateway.format} gateway model ${this.gateway.model}`);
+    } else if (!this.genAI) {
+      this.logger.warn(
+        'Neither AI_BASE_URL nor GEMINI_API_KEY is set; AI summary will always fall back to rule-based',
+      );
     }
   }
 
@@ -63,14 +71,16 @@ export class AiService {
     let source: SummarySource = 'fallback';
     let modelName: string | undefined;
 
-    if (this.genAI) {
+    if (this.gateway || this.genAI) {
       try {
-        const llmResult = await this.callGemini(input);
+        const llmResult = this.gateway
+          ? await this.callGateway(this.gateway, input)
+          : await this.callGemini(input);
         bullets = llmResult.bullets;
-        source = 'gemini';
+        source = this.gateway ? 'llm' : 'gemini';
         modelName = llmResult.model;
       } catch (err) {
-        this.logger.warn(`Gemini failed, using fallback: ${(err as Error).message}`);
+        this.logger.warn(`AI model failed, using fallback: ${(err as Error).message}`);
         bullets = this.ruleBasedSummary(input);
       }
     } else {
@@ -154,6 +164,19 @@ export class AiService {
     return value
       .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
       .map(v => v.trim());
+  }
+
+  private async callGateway(
+    gateway: CompatibleLlm,
+    input: SummaryInput,
+  ): Promise<{ bullets: SummaryBullet[]; model: string }> {
+    const text = await gateway.complete(
+      `${SYSTEM_PROMPT}\n\nChỉ trả về một đối tượng JSON, không kèm giải thích.`,
+      buildUserPrompt(input),
+      MAX_TOKENS,
+    );
+    const parsed = extractJsonObject(text) as { allergy?: string; open?: string; next?: string };
+    return { bullets: this.parseBullets(parsed, input), model: gateway.model };
   }
 
   private async callGemini(
