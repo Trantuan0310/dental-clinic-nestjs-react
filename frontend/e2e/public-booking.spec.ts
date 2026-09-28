@@ -69,13 +69,22 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await expect(lookup.getByText('Đang chờ lễ tân xem xét')).toBeVisible();
   await expect(lookup.getByText(reference, { exact: true })).toBeVisible();
 
-  // Front desk (the admin session holds booking_request.manage).
+  // Front desk (the admin session holds booking_request.manage). The sidebar
+  // counts requests waiting on them, including this one.
   await page.goto('/booking-requests');
+  const pendingBadge = page
+    .getByRole('link', { name: /Yêu cầu đặt lịch/ })
+    .getByLabel(/yêu cầu chờ xử lý/);
+  await expect(pendingBadge).toBeVisible();
+  const pendingBefore = Number(await pendingBadge.textContent());
   const row = page.getByRole('row').filter({ hasText: name });
   await expect(row).toContainText(reference);
   await row.getByRole('button', { name: 'Xử lý' }).click();
   await page.getByRole('button', { name: 'Xác nhận lịch' }).click();
   await expect(row).toContainText('Đã xác nhận');
+  // Confirming it takes it off the front desk's count.
+  if (pendingBefore > 1) await expect(pendingBadge).toHaveText(String(pendingBefore - 1));
+  else await expect(pendingBadge).toBeHidden();
 
   // The patient's status page now shows the confirmed visit, with a way to
   // put it in their calendar; the lookup device remembers the booking too.

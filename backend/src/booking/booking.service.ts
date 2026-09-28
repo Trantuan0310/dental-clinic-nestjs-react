@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -44,6 +45,7 @@ const PUBLIC_INCLUDE = {
   proposedDentist: { select: { fullName: true } },
   appointment: { select: { status: true, startAt: true, endAt: true } },
 } satisfies Prisma.BookingRequestInclude;
+const STAFF_ACTION_STATUSES: BookingRequestStatus[] = ['PENDING_REVIEW', 'PATIENT_ACCEPTED'];
 const LOOKUP_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
 
 /** How a requester proves they own a booking request (see verify()). */
@@ -51,6 +53,8 @@ export type PublicAccess = { token?: string; phone?: string };
 
 @Injectable()
 export class BookingService {
+  private readonly logger = new Logger(BookingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly appointments: AppointmentsService,
@@ -174,6 +178,7 @@ export class BookingService {
           data: { notificationSentAt: new Date() },
         });
     }
+    void this.notifyStaff(row.id, 'Yêu cầu đặt lịch mới');
     return { referenceCode: ref, accessToken: token, status: 'PENDING_REVIEW', notificationSent };
   }
 
@@ -217,6 +222,7 @@ export class BookingService {
       targetId: row.id,
       metadata: { referenceCode: row.referenceCode },
     });
+    void this.notifyStaff(row.id, 'Khách đã đồng ý giờ mới — cần xác nhận');
     return this.publicStatus(reference, access);
   }
 
@@ -256,6 +262,7 @@ export class BookingService {
       targetId: row.id,
       metadata: { referenceCode: row.referenceCode },
     });
+    void this.notifyStaff(row.id, 'Khách đã bổ sung thông tin — cần xử lý');
     // The phone may have just changed; the caller proved access already.
     return this.toPublic(await this.load(row.id));
   }
@@ -280,6 +287,14 @@ export class BookingService {
       metadata: { referenceCode: row.referenceCode },
     });
     return { referenceCode: row.referenceCode, status: 'CANCELLED' };
+  }
+
+  /** Requests waiting on the front desk (the sidebar badge). */
+  async pendingCount() {
+    const count = await this.prisma.bookingRequest.count({
+      where: { status: { in: STAFF_ACTION_STATUSES } },
+    });
+    return { count };
   }
 
   async listForStaff(q: ListBookingRequestsDto) {
@@ -727,6 +742,79 @@ export class BookingService {
         '/booking/status',
     });
   }
+  /**
+   * Email the clinic (BOOKING_NOTIFY_EMAILS, comma separated) when a request
+   * needs the front desk. Never throws: the patient's action has already
+   * succeeded and must not fail because the clinic inbox is unreachable.
+   */
+  private async notifyStaff(id: string, headline: string) {
+    const recipients = (process.env.BOOKING_NOTIFY_EMAILS ?? '')
+      .split(/[,;\s]+/)
+      .map(v => v.trim())
+      .filter(v => v && isValidEmail(v));
+    if (!recipients.length) return;
+    try {
+      const row = await this.prisma.bookingRequest.findUniqueOrThrow({
+        where: { id },
+        include: {
+          service: { select: { name: true } },
+          preferredDentist: { select: { fullName: true } },
+        },
+      });
+      const when = (
+        row.proposedStartAt && row.status === 'PATIENT_ACCEPTED'
+          ? row.proposedStartAt
+          : row.requestedStartAt
+      ).toLocaleString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const base =
+        process.env.FRONTEND_URL || process.env.PUBLIC_APP_URL || 'https://gensmile.online';
+      const link = base + '/booking-requests';
+      const lines: Array<[string, string]> = [
+        ['Mã', row.referenceCode],
+        ['Khách', row.fullName],
+        ['Điện thoại', row.phone],
+        ['Dịch vụ', row.service?.name ?? '—'],
+        ['Bác sĩ', row.preferredDentist?.fullName ?? '—'],
+        ['Thời gian', when],
+        ...(row.reason ? ([['Lý do', row.reason]] as Array<[string, string]>) : []),
+      ];
+      const html =
+        '<p><strong>' +
+        this.escape(headline) +
+        '</strong></p><table cellpadding="4">' +
+        lines
+          .map(
+            ([k, v]) =>
+              '<tr><td style="color:#666">' + k + '</td><td>' + this.escape(v) + '</td></tr>',
+          )
+          .join('') +
+        '</table><p><a href="' +
+        this.escape(link) +
+        '">Mở danh sách yêu cầu đặt lịch</a></p>';
+      const text = headline + '\n' + lines.map(([k, v]) => k + ': ' + v).join('\n') + '\n' + link;
+      await Promise.all(
+        recipients.map(to =>
+          this.email.send({
+            to,
+            subject: '[GENSMILE] ' + headline + ' — ' + row.fullName + ', ' + when,
+            html,
+            text,
+          }),
+        ),
+      );
+    } catch (error) {
+      this.logger.warn(`Could not notify the clinic about booking ${id}: ${String(error)}`);
+    }
+  }
+
   private escape(value: string) {
     return value.replace(
       /[&<>"']/g,

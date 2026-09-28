@@ -75,6 +75,8 @@ export default function BookingRequestsPage() {
           params: filter ? { status: filter } : {},
         })
       ).data.data,
+    // New online requests show up without a manual refresh.
+    refetchInterval: 60_000,
   });
   const options = useQuery({
     queryKey: ["public-booking-options"],
