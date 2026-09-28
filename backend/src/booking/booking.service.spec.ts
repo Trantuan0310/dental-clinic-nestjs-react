@@ -161,6 +161,25 @@ describe('BookingService public request security and validation', () => {
       expect(prisma.bookingRequest.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
+    it('lists recent requests for a phone alone, matching the guardian too', async () => {
+      prisma.bookingRequest.findMany = jest.fn().mockResolvedValue([full]);
+      const result = await service.lookupByPhone('+84 987 654 321');
+      const where = prisma.bookingRequest.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([{ phone: '0987654321' }, { contactPersonPhone: '0987654321' }]);
+      expect(where.createdAt.gte.getTime()).toBeLessThan(Date.now());
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ referenceCode: 'GS-1A2B3C4D5E', status: 'PENDING_REVIEW' });
+      expect(result[0]).not.toHaveProperty('phone');
+      expect(result[0]).not.toHaveProperty('fullName');
+    });
+
+    it('rejects a malformed phone before querying', async () => {
+      prisma.bookingRequest.findMany = jest.fn();
+      await expect(service.lookupByPhone('12345')).rejects.toThrow('Số điện thoại không hợp lệ');
+      await expect(service.lookupByPhone(undefined)).rejects.toThrow('Số điện thoại không hợp lệ');
+      expect(prisma.bookingRequest.findMany).not.toHaveBeenCalled();
+    });
+
     it('lets the phone holder withdraw the request', async () => {
       prisma.bookingRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
       await expect(service.withdraw('GS-1A2B3C4D5E', { phone: '0901234567' })).resolves.toEqual({

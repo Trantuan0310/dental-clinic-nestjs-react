@@ -31,15 +31,7 @@ export function saveBooking(entry: Omit<SavedBooking, 'savedAt'>) {
     ].slice(0, MAX);
     localStorage.setItem(KEY, JSON.stringify(next));
   } catch {
-    /* storage unavailable: lookup by code + phone still works */
-  }
-}
-
-export function forgetBooking(ref: string) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(loadSavedBookings().filter((b) => b.ref !== ref)));
-  } catch {
-    /* ignore */
+    /* storage unavailable: lookup by phone still works */
   }
 }
 

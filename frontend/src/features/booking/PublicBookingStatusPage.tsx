@@ -19,11 +19,9 @@ import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
 import {
   findSavedBooking,
-  forgetBooking,
   loadSavedBookings,
   normalizeReference,
   saveBooking,
-  type SavedBooking,
 } from "./savedBookings";
 
 type Status = {
@@ -315,11 +313,12 @@ function DetailsForm({
 export default function PublicBookingStatusPage() {
   const [params, setParams] = useSearchParams();
   const justBooked = params.get("new") === "1";
-  const [reference, setReference] = useState(params.get("ref") ?? "");
-  const [phone, setPhone] = useState("");
+  // Prefill the phone this device last booked or looked up with.
+  const [phone, setPhone] = useState(() => loadSavedBookings().find((b) => b.phone)?.phone ?? "");
+  // Every request made with the phone just looked up (when there are several).
+  const [results, setResults] = useState<Status[] | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
-  const [saved, setSaved] = useState<SavedBooking[]>(() => loadSavedBookings());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -335,9 +334,7 @@ export default function PublicBookingStatusPage() {
       const data = response.data.data;
       setStatus(data);
       setAccess(a);
-      setReference(data.referenceCode);
       saveBooking({ ref: data.referenceCode, ...a });
-      setSaved(loadSavedBookings());
       return true;
     } catch (e: unknown) {
       if (!quiet) setError(bookingErrorMessage(e, "Mã đặt lịch hoặc số điện thoại không đúng."));
@@ -364,14 +361,41 @@ export default function PublicBookingStatusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const choose = (item: Status, byPhone: string) => {
+    setStatus(item);
+    setAccess({ phone: byPhone });
+    setError("");
+    saveBooking({ ref: item.referenceCode, phone: byPhone });
+    setParams({ ref: item.referenceCode }, { replace: true });
+  };
+
   const lookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ref = normalizeReference(reference);
-    if (!ref) {
-      setError("Nhập mã đặt lịch, ví dụ GS-1A2B3C4D5E.");
-      return;
+    const byPhone = phone.trim();
+    setBusy(true);
+    setError("");
+    setResults(null);
+    try {
+      const response = await api.get<{ data: Status[] }>("/public/booking/lookup", {
+        headers: { "x-booking-phone": byPhone },
+      });
+      const list = response.data.data;
+      if (list.length === 0) {
+        setError(
+          "Chưa có lịch đặt nào với số điện thoại này trong 6 tháng gần đây. Kiểm tra lại số, hoặc gọi lễ tân để được hỗ trợ.",
+        );
+        return;
+      }
+      setResults(list);
+      // One request, or the one an email link pointed at: open it directly.
+      const wanted = normalizeReference(params.get("ref") ?? "");
+      const pick = list.length === 1 ? list[0] : list.find((x) => x.referenceCode === wanted);
+      if (pick) choose(pick, byPhone);
+    } catch (e: unknown) {
+      setError(bookingErrorMessage(e, "Không tra cứu được. Vui lòng kiểm tra số điện thoại và thử lại."));
+    } finally {
+      setBusy(false);
     }
-    if (await open(ref, { phone: phone.trim() })) setParams({ ref }, { replace: true });
   };
 
   const act = async (request: () => Promise<{ data: { data: Status } }>, fallback: string) => {
@@ -393,9 +417,8 @@ export default function PublicBookingStatusPage() {
   const reset = () => {
     setStatus(null);
     setAccess(null);
+    setResults(null);
     setError("");
-    setPhone("");
-    setReference("");
     setParams({}, { replace: true });
   };
 
@@ -432,37 +455,68 @@ export default function PublicBookingStatusPage() {
                 <h1 className="text-lg font-semibold">Đã gửi yêu cầu đặt lịch</h1>
                 <p className="mt-1 text-sm">
                   Mã đặt lịch của bạn là <strong className="font-mono">{status.referenceCode}</strong>.
-                  Hãy chụp màn hình hoặc lưu lại mã này. Để xem lại tình trạng, bạn chỉ cần mã này và số
-                  điện thoại đã dùng khi đặt. Trên máy này, trang sẽ tự nhớ.
+                  Để xem lại tình trạng bất cứ lúc nào, vào mục “Tra cứu lịch hẹn” và nhập số điện
+                  thoại bạn vừa dùng. Lễ tân sẽ liên hệ để xác nhận.
                 </p>
               </div>
             </div>
           </section>
         )}
 
-        {!status ? (
+        {!status && results && results.length > 1 ? (
+          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
+            <h1 className="text-2xl font-semibold text-gray-900">Lịch hẹn của bạn</h1>
+            <p className="mt-2 text-gray-600">
+              Số <span className="font-medium text-gray-900">{phone}</span> có {results.length} yêu cầu đặt
+              lịch. Chọn một lịch để xem chi tiết.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {results.map((item) => {
+                const itemState = STATE[item.status];
+                const itemTime =
+                  item.appointment?.startAt ??
+                  (["PROPOSED", "PATIENT_ACCEPTED"].includes(item.status) && item.proposedStartAt
+                    ? item.proposedStartAt
+                    : item.requestedStartAt);
+                return (
+                  <li key={item.referenceCode}>
+                    <button
+                      type="button"
+                      onClick={() => choose(item, phone.trim())}
+                      className="w-full rounded-xl border border-gray-200 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold capitalize text-gray-900">{when(itemTime)}</span>
+                        <span
+                          className={
+                            "rounded-full border px-2.5 py-0.5 text-xs font-medium " +
+                            TONE_STYLE[itemState?.tone ?? "wait"].box
+                          }
+                        >
+                          {itemState?.title ?? item.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600">
+                        {item.service?.name ?? "—"}
+                        {item.dentist?.fullName ? " · " + item.dentist.fullName : ""}
+                      </p>
+                      <p className="mt-1 font-mono text-xs text-gray-400">{item.referenceCode}</p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <button type="button" onClick={reset} className="mt-6 text-sm text-brand-600 hover:underline">
+              ← Tra cứu số điện thoại khác
+            </button>
+          </section>
+        ) : !status ? (
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
             <h1 className="text-2xl font-semibold text-gray-900">Tra cứu lịch hẹn</h1>
-            <p className="mt-2 text-gray-600">
-              Nhập mã đặt lịch (bắt đầu bằng <span className="font-mono">GS-</span>) và số điện thoại bạn
-              đã dùng khi đặt.
-            </p>
+            <p className="mt-2 text-gray-600">Nhập số điện thoại bạn đã dùng khi đặt lịch.</p>
             <form onSubmit={lookup} className="mt-6 space-y-4">
               <label className="block text-sm font-medium text-gray-700">
-                Mã đặt lịch
-                <input
-                  required
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value.toUpperCase())}
-                  placeholder="GS-1A2B3C4D5E"
-                  className={inputClass + " font-mono uppercase"}
-                />
-              </label>
-              <label className="block text-sm font-medium text-gray-700">
-                Số điện thoại đã dùng khi đặt
+                Số điện thoại
                 <input
                   required
                   type="tel"
@@ -487,40 +541,8 @@ export default function PublicBookingStatusPage() {
               </button>
             </form>
 
-            {saved.length > 0 && (
-              <div className="mt-8">
-                <h2 className="text-sm font-semibold text-gray-900">Lịch đã đặt trên thiết bị này</h2>
-                <ul className="mt-3 space-y-2">
-                  {saved.map((b) => (
-                    <li key={b.ref} className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void open(b.ref, { token: b.token, phone: b.phone }).then((ok) => ok && setParams({ ref: b.ref }, { replace: true }))}
-                        className="flex flex-1 items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-left hover:border-brand-200 hover:bg-brand-50"
-                      >
-                        <span className="font-mono font-medium text-gray-900">{b.ref}</span>
-                        <span className="text-sm text-brand-600">Xem</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          forgetBooking(b.ref);
-                          setSaved(loadSavedBookings());
-                        }}
-                        className="rounded-lg px-2 py-3 text-xs text-gray-500 hover:text-gray-800"
-                        aria-label={`Xóa ${b.ref} khỏi thiết bị này`}
-                      >
-                        Xóa
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             <div className="mt-8 border-t border-gray-100 pt-5 text-sm text-gray-600">
-              <p>Không nhớ mã đặt lịch? Gọi hoặc nhắn lễ tân, cung cấp số điện thoại đã đặt.</p>
+              <p>Không tìm thấy lịch của bạn? Gọi hoặc nhắn lễ tân để được hỗ trợ.</p>
               <div className="mt-3">
                 <ContactButtons />
               </div>
@@ -708,9 +730,23 @@ export default function PublicBookingStatusPage() {
               </div>
             )}
 
-            <button type="button" onClick={reset} className="mt-8 text-sm text-brand-600 hover:underline">
-              ← Tra cứu mã khác
-            </button>
+            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              {results && results.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatus(null);
+                    setError("");
+                  }}
+                  className="text-brand-600 hover:underline"
+                >
+                  ← Các lịch khác của số này
+                </button>
+              )}
+              <button type="button" onClick={reset} className="text-brand-600 hover:underline">
+                Tra cứu số điện thoại khác
+              </button>
+            </div>
           </section>
         )}
 

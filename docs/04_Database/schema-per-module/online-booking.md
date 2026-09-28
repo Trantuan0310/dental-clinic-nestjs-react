@@ -16,7 +16,7 @@ a one-time lookup code.
 | Column | Notes |
 |---|---|
 | `reference_code` | `GS-XXXXXXXXXX`, unique. Shown to the patient. |
-| `access_token_hash` | SHA-256 of the one-time token in the confirmation link. The token itself is never stored. It goes in the `x-booking-access-token` header. The requester can also prove access with the phone number the request was made with (`phone` or `contact_person_phone`), sent in the `x-booking-phone` header together with the reference code. |
+| `access_token_hash` | SHA-256 of the one-time token in the confirmation link. The token itself is never stored. It goes in the `x-booking-access-token` header. The requester can also prove access with the phone number the request was made with (`phone` or `contact_person_phone`), sent in the `x-booking-phone` header. `GET /public/booking/lookup` lists that phone's requests from the last 180 days (booking status only, no personal details); actions on one request take its reference code plus the same header. |
 | `full_name`, `dob`, `gender`, `phone`, `email`, `contact_person_*` | Patient details as typed. A patient record is only created or matched on confirm. |
 | `service_id` → `services` | The service asked for. |
 | `preferred_dentist_id` → `users` | The dentist asked for. |

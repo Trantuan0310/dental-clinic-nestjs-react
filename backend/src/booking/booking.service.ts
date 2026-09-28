@@ -38,6 +38,14 @@ const ACTIVE: BookingRequestStatus[] = [
   'PATIENT_ACCEPTED',
 ];
 
+const PUBLIC_INCLUDE = {
+  service: { select: { name: true, defaultDurationMin: true } },
+  preferredDentist: { select: { fullName: true } },
+  proposedDentist: { select: { fullName: true } },
+  appointment: { select: { status: true, startAt: true, endAt: true } },
+} satisfies Prisma.BookingRequestInclude;
+const LOOKUP_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
+
 /** How a requester proves they own a booking request (see verify()). */
 export type PublicAccess = { token?: string; phone?: string };
 
@@ -171,6 +179,29 @@ export class BookingService {
 
   async publicStatus(reference: string, access: PublicAccess) {
     return this.toPublic(await this.verify(reference, access));
+  }
+
+  /**
+   * Requests made with this phone (the patient's or the guardian's) in the
+   * last 180 days, newest first. The phone alone is the credential here, by
+   * the clinic's choice: it is what patients remember. The list shows only
+   * booking status (service, time, dentist), never the patient's details.
+   */
+  async lookupByPhone(input: string | undefined) {
+    const phone = this.normalize(input ?? '');
+    if (phone.length > 20 || !isValidVnPhone(phone)) {
+      throw new BadRequestException('Số điện thoại không hợp lệ');
+    }
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: {
+        OR: [{ phone }, { contactPersonPhone: phone }],
+        createdAt: { gte: new Date(Date.now() - LOOKUP_WINDOW_MS) },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: PUBLIC_INCLUDE,
+    });
+    return rows.map(row => this.toPublic(row));
   }
 
   async acceptProposal(reference: string, access: PublicAccess) {
@@ -590,12 +621,7 @@ export class BookingService {
   private load(id: string) {
     return this.prisma.bookingRequest.findUniqueOrThrow({
       where: { id },
-      include: {
-        service: { select: { name: true, defaultDurationMin: true } },
-        preferredDentist: { select: { fullName: true } },
-        proposedDentist: { select: { fullName: true } },
-        appointment: { select: { status: true, startAt: true, endAt: true } },
-      },
+      include: PUBLIC_INCLUDE,
     });
   }
 
@@ -685,7 +711,7 @@ export class BookingService {
       '">Xem tình trạng lịch hẹn</a></p>' +
       '<p>Bạn cũng có thể tra cứu bất cứ lúc nào tại ' +
       this.escape(base) +
-      '/booking/status bằng mã đặt lịch và số điện thoại đã dùng khi đặt.</p>';
+      '/booking/status bằng số điện thoại đã dùng khi đặt.</p>';
     return this.email.send({
       to,
       subject,
@@ -696,7 +722,7 @@ export class BookingService {
         reference +
         '\n' +
         link +
-        '\nTra cứu bằng mã đặt lịch và số điện thoại đã dùng khi đặt: ' +
+        '\nTra cứu bằng số điện thoại đã dùng khi đặt: ' +
         base +
         '/booking/status',
     });

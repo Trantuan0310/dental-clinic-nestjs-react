@@ -49,6 +49,13 @@ export class PublicBookingController {
   async create(@Body() dto: CreatePublicBookingRequestDto) {
     return { data: await this.booking.createPublic(dto) };
   }
+  // Phone-only lookup: the phone goes in a header, not the URL, so it stays
+  // out of access logs.
+  @Get('lookup')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  async lookup(@Headers('x-booking-phone') phone?: string) {
+    return { data: await this.booking.lookupByPhone(phone) };
+  }
   // Access is the one-time token from the confirmation link
   // (X-Booking-Access-Token) or the phone the request was made with
   // (X-Booking-Phone); see BookingService.verify().
