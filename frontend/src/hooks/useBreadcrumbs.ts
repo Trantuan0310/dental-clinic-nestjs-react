@@ -52,6 +52,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/admin': 'Quản trị',
   '/admin/users': 'Người dùng',
   '/admin/roles': 'Vai trò',
+  '/admin/site-media': 'Ảnh trang chủ',
   '/admin/settings': 'Cài đặt',
   // Real route is `admin/audit` (see AppRoutes.tsx) — this key used to say
   // `/admin/audit-logs`, which never matched, so both breadcrumb segments

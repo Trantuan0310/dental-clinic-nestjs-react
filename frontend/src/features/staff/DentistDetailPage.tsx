@@ -10,6 +10,7 @@ import { staffApi, useDentistOverview, useStaffMutation } from './staffApi';
 import { DentistProfileForm } from './DentistProfileForm';
 import { BlockingAppointmentsList } from './BlockingAppointmentsList';
 import { DentistServicesCard } from '@/features/catalog/DentistServicesCard';
+import { DentistPhotoCard } from '@/features/media/DentistPhotoCard';
 import {
   DAY_OF_WEEK_LABEL,
   PRACTICE_STATUS_LABEL,
@@ -115,31 +116,34 @@ export default function DentistDetailPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Hồ sơ hành nghề" className="lg:col-span-1">
-          <dl className="space-y-3">
-            <Field label="Trạng thái">
-              <Badge variant={PRACTICE_STATUS_VARIANT[profile.practiceStatus]}>
-                {PRACTICE_STATUS_LABEL[profile.practiceStatus]}
-              </Badge>
-            </Field>
-            <Field label="Chứng chỉ hành nghề">
-              {profile.licenseNumber ?? '—'}
-              {profile.licenseIssuedAt && ` (cấp ${formatDate(profile.licenseIssuedAt)})`}
-            </Field>
-            <Field label="Chuyên môn">
-              {profile.specialties.length
-                ? profile.specialties.map((s) => SPECIALTY_LABEL[s] ?? s).join(', ')
-                : '—'}
-            </Field>
-            <Field label="Khe mặc định">{profile.defaultSlotMinutes} phút</Field>
-            <Field label="Nhận bệnh nhân mới">{profile.acceptsNewPatients ? 'Có' : 'Không'}</Field>
-            <Field label="Nhận đặt lịch online">
-              {profile.acceptsOnlineBooking ? 'Có' : 'Không'}
-            </Field>
-            <Field label="Liên hệ">{[profile.phone, profile.email].filter(Boolean).join(' · ') || '—'}</Field>
-            {profile.bio && <Field label="Giới thiệu">{profile.bio}</Field>}
-          </dl>
-        </Card>
+        <div className="space-y-6 lg:col-span-1">
+          <Card title="Hồ sơ hành nghề">
+            <dl className="space-y-3">
+              <Field label="Trạng thái">
+                <Badge variant={PRACTICE_STATUS_VARIANT[profile.practiceStatus]}>
+                  {PRACTICE_STATUS_LABEL[profile.practiceStatus]}
+                </Badge>
+              </Field>
+              <Field label="Chứng chỉ hành nghề">
+                {profile.licenseNumber ?? '—'}
+                {profile.licenseIssuedAt && ` (cấp ${formatDate(profile.licenseIssuedAt)})`}
+              </Field>
+              <Field label="Chuyên môn">
+                {profile.specialties.length
+                  ? profile.specialties.map((s) => SPECIALTY_LABEL[s] ?? s).join(', ')
+                  : '—'}
+              </Field>
+              <Field label="Khe mặc định">{profile.defaultSlotMinutes} phút</Field>
+              <Field label="Nhận bệnh nhân mới">{profile.acceptsNewPatients ? 'Có' : 'Không'}</Field>
+              <Field label="Nhận đặt lịch online">
+                {profile.acceptsOnlineBooking ? 'Có' : 'Không'}
+              </Field>
+              <Field label="Liên hệ">{[profile.phone, profile.email].filter(Boolean).join(' · ') || '—'}</Field>
+              {profile.bio && <Field label="Giới thiệu">{profile.bio}</Field>}
+            </dl>
+          </Card>
+          <DentistPhotoCard dentistId={profile.userId} canEdit={canEditAll || canEditOwn} />
+        </div>
 
         <div className="space-y-6 lg:col-span-2">
           <DentistServicesCard

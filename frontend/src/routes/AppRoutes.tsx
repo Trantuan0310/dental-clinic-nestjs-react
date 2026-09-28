@@ -74,6 +74,7 @@ const ServicesPage = lazy(() => import('@/features/catalog/ServicesPage'));
 const RolesPage = lazy(() => import('@/features/admin/RolesPage'));
 const AuditLogsPage = lazy(() => import('@/features/admin/AuditLogsPage'));
 const SettingsPage = lazy(() => import('@/features/admin/SettingsPage'));
+const SiteMediaPage = lazy(() => import('@/features/media/SiteMediaPage'));
 
 const BrandPreviewPage = lazy(() => import('@/features/brand/BrandPreviewPage'));
 
@@ -491,6 +492,14 @@ const router = createBrowserRouter(createRoutesFromElements(
                 element={
                   <ProtectedRoute permission="audit.read">
                     <AuditLogsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/site-media"
+                element={
+                  <ProtectedRoute permission="site_media.manage">
+                    <SiteMediaPage />
                   </ProtectedRoute>
                 }
               />
