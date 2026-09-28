@@ -116,10 +116,12 @@ export default function PatientDetailPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(`/patients/${id}/edit`)}>
-            <Edit className="h-4 w-4" />
-            Sửa
-          </Button>
+          <PermissionGuard permission="patient.update">
+            <Button variant="outline" onClick={() => navigate(`/patients/${id}/edit`)}>
+              <Edit className="h-4 w-4" />
+              Sửa
+            </Button>
+          </PermissionGuard>
           <PermissionGuard permission="appointment.create">
             <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>
               <Calendar className="h-4 w-4" />

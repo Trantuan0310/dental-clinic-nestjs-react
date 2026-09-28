@@ -10,6 +10,7 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { AddendumModal } from './AddendumModal';
 import type { Encounter, ClinicalNote, NoteType } from '@/types/medical-records';
+import { useAuthStore } from '@/stores/authStore';
 
 interface ClinicalNotesTabProps {
   encounter: Encounter;
@@ -100,8 +101,12 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
     setShowEditModal(true);
   };
 
-  const isCompleted = encounter.status === 'completed';
-  const isEditable = encounter.status === 'in_progress';
+  // Writing the record is the dentist's act (clinical_note.*); an admin or
+  // front desk reading it gets no edit controls instead of a 403 on save.
+  const canWrite = useAuthStore((s) => s.hasPermission('clinical_note.write'));
+  const canAddendum = useAuthStore((s) => s.hasPermission('clinical_note.addendum'));
+  const isCompleted = encounter.status === 'completed' && canAddendum;
+  const isEditable = encounter.status === 'in_progress' && canWrite;
 
   return (
     <div className="space-y-4">

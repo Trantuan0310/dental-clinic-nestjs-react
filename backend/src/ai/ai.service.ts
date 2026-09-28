@@ -54,10 +54,19 @@ export class AiService {
       !actor.permissions.includes('patient.update') &&
       !actor.permissions.includes('patient.delete')
     ) {
+      // A first-visit patient on today's list has no encounter yet; an
+      // appointment on this dentist's calendar counts too (the dashboard
+      // offers exactly those patients).
       const treated = await this.prisma.encounter.count({
         where: { patientId, dentistId: actor.sub },
       });
-      if (treated === 0) throw new NotFoundException('Patient not found');
+      const booked =
+        treated > 0
+          ? 0
+          : await this.prisma.appointment.count({
+              where: { patientId, dentistId: actor.sub },
+            });
+      if (treated === 0 && booked === 0) throw new NotFoundException('Patient not found');
     }
 
     const cacheKey = this.cacheKey(patientId, top);

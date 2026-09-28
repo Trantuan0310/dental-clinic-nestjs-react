@@ -897,8 +897,10 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect(admin.code).toMatch(/^NV-\d{5}$/);
     });
 
-    it('lets reception read but not create employees', async () => {
-      await api('get', '/employees', 'reception').expect(200);
+    // HR records are the clinic admin's (migration 027): front desk neither
+    // reads nor creates them; it still lists dentists for booking below.
+    it('keeps employee records away from reception', async () => {
+      await api('get', '/employees', 'reception').expect(403);
       await api('post', '/employees', 'reception')
         .send({ fullName: 'Không được tạo', employeeType: 'ASSISTANT' })
         .expect(403);

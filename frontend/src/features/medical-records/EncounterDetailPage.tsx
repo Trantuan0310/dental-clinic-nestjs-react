@@ -11,10 +11,13 @@ import {
   Pill,
   BarChart3,
   ListChecks,
+  CalendarPlus,
 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
 import { Button, Card, StatusBadge } from '@/components/ui';
+import { PatientHistoryCard } from './PatientHistoryCard';
 import { cn } from '@/lib/cn';
+import { useAuthStore } from '@/stores/authStore';
 
 // Tabs are heavy (rich-text editor, dental chart canvas, etc.) — only the
 // tab the user has actually opened is fetched. Switching to a new tab triggers
@@ -33,6 +36,11 @@ const DentalChartPanel = lazy(() =>
 );
 const ToothDetailDrawer = lazy(() =>
   import('./ToothDetailDrawer').then((m) => ({ default: m.ToothDetailDrawer })),
+);
+const AppointmentFormModal = lazy(() =>
+  import('@/features/appointments/AppointmentFormModal').then((m) => ({
+    default: m.AppointmentFormModal,
+  })),
 );
 const SummaryTab = lazy(() =>
   import('./SummaryTab').then((m) => ({ default: m.SummaryTab })),
@@ -54,6 +62,10 @@ export default function EncounterDetailPage() {
   const [focusTooth, setFocusTooth] = useState<number | null>(null);
   const [initialTreatmentTooth, setInitialTreatmentTooth] = useState<number | null>(null);
   const [detailToothFdi, setDetailToothFdi] = useState<number | null>(null);
+  const canCloseEncounter = useAuthStore((s) => s.hasPermission('encounter.complete'));
+  const canEditChart = useAuthStore((s) => s.hasPermission('dental_chart.write'));
+  const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
+  const [booking, setBooking] = useState(false);
 
   const { data: encounter, isLoading } = useQuery({
     queryKey: ['encounter', id],
@@ -93,7 +105,8 @@ export default function EncounterDetailPage() {
     );
   }
 
-  const isEditable = encounter.status === 'in_progress';
+  // Chart edits and closing the visit are the treating dentist's steps.
+  const isEditable = encounter.status === 'in_progress' && canCloseEncounter;
   const elapsedMinutes = Math.floor(
     (Date.now() - new Date(encounter.startedAt).getTime()) / 60000,
   );
@@ -117,7 +130,8 @@ export default function EncounterDetailPage() {
             <StatusBadge status={encounter.status} />
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
-            BS. {encounter.dentistName} •{' '}
+            {/^BS\.?\s/i.test(encounter.dentistName) ? '' : 'BS. '}
+            {encounter.dentistName} •{' '}
             {format(new Date(encounter.startedAt), 'HH:mm, dd/MM/yyyy', { locale: vi })}
             {encounter.status === 'in_progress' && (
               <span className="ml-2 flex items-center gap-1 text-amber-600">
@@ -127,14 +141,20 @@ export default function EncounterDetailPage() {
             )}
           </p>
         </div>
-        {isEditable && activeTab !== 'summary' && (
-          <div className="flex gap-2">
+        <div className="flex gap-2">
+          {canBook && (
+            <Button variant="outline" onClick={() => setBooking(true)}>
+              <CalendarPlus className="h-4 w-4" />
+              Đặt lịch tái khám
+            </Button>
+          )}
+          {isEditable && activeTab !== 'summary' && (
             <Button variant="outline" onClick={() => setActiveTab('summary')}>
               <CheckCircle className="h-4 w-4" />
               Đóng Encounter
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Patient Info */}
@@ -158,6 +178,8 @@ export default function EncounterDetailPage() {
           )}
         </div>
       </Card>
+
+      <PatientHistoryCard patientId={encounter.patientId} />
 
       {/* Tabs */}
       <Card noPadding>
@@ -223,7 +245,7 @@ export default function EncounterDetailPage() {
             <Suspense fallback={TabFallback}>
               <DentalChartPanel
                 encounter={encounter}
-                isLocked={!isEditable}
+                isLocked={encounter.status !== 'in_progress' || !canEditChart}
                 highlightToothNumbers={treatmentToothNumbers}
                 focusToothNumber={focusTooth}
                 onSwitchToTreatmentTab={(tooth) => setInitialTreatmentTooth(tooth)}
@@ -267,6 +289,18 @@ export default function EncounterDetailPage() {
             <span className="text-xs text-gray-400">Click để nhảy nhanh tới sơ đồ răng.</span>
           </div>
         </Card>
+      )}
+
+      {booking && (
+        <Suspense fallback={null}>
+          <AppointmentFormModal
+            open={booking}
+            onClose={() => setBooking(false)}
+            defaultPatientId={encounter.patientId}
+            defaultDentistId={encounter.dentistId}
+            defaultType="follow_up"
+          />
+        </Suspense>
       )}
 
       {/* Tooth Detail Drawer (page-level so it survives tab switches) */}

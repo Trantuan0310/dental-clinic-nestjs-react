@@ -34,6 +34,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
 import { Search, UserPlus } from 'lucide-react';
 import { clinicIso, clinicMinutes, clinicParts, clinicToday } from '@/lib/clinicTime';
+import { useAuthStore } from '@/stores/authStore';
 
 interface AppointmentFormModalProps {
   open: boolean;
@@ -43,6 +44,8 @@ interface AppointmentFormModalProps {
   defaultDentistId?: string;
   defaultPatientId?: string;
   defaultStartTime?: string;
+  /** e.g. 'follow_up' when a dentist books the next visit from an encounter. */
+  defaultType?: AppointmentType;
 }
 
 const APPOINTMENT_TYPE_OPTIONS: { value: AppointmentType; label: string }[] = [
@@ -90,8 +93,18 @@ export function AppointmentFormModal({
   defaultDentistId,
   defaultPatientId,
   defaultStartTime,
+  defaultType,
 }: AppointmentFormModalProps) {
   const isEdit = !!appointment;
+  // A dentist (own appointments only) books on their own calendar, for
+  // patients they have treated (enforced by the API); front desk books for
+  // anyone and can quick-create a patient.
+  const me = useAuthStore((s) => s.user?.id);
+  const ownCalendarOnly = useAuthStore(
+    (s) => s.hasPermission('appointment.read.own') && !s.hasPermission('appointment.read.any'),
+  );
+  const canCreatePatient = useAuthStore((s) => s.hasPermission('patient.create'));
+  const lockedDentistId = ownCalendarOnly ? me : undefined;
 
   const initialParts = appointment ? clinicParts(appointment.startsAt) : null;
   const initialDate = appointment ? initialParts!.date : (defaultDate ?? clinicToday());
@@ -119,14 +132,16 @@ export function AppointmentFormModal({
     null,
   );
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
-  const [dentistId, setDentistId] = useState(appointment?.dentistId ?? defaultDentistId ?? '');
+  const [dentistId, setDentistId] = useState(
+    appointment?.dentistId ?? lockedDentistId ?? defaultDentistId ?? '',
+  );
   const [date, setDate] = useState(initialDate);
   const [startTime, setStartTime] = useState(initialStart);
   const [duration, setDuration] = useState(
     String(appointment?.durationMinutes ?? 30),
   );
   const [appointmentType, setAppointmentType] = useState<AppointmentType>(
-    appointment?.appointmentType ?? 'consultation',
+    appointment?.appointmentType ?? defaultType ?? 'consultation',
   );
   const [reason, setReason] = useState(appointment?.reason ?? '');
   const [chiefComplaint, setChiefComplaint] = useState(appointment?.chiefComplaint ?? '');
@@ -310,11 +325,11 @@ export function AppointmentFormModal({
     } else {
       setSelectedPatient(null);
       setSource('phone');
-      setDentistId(defaultDentistId ?? '');
+      setDentistId(lockedDentistId ?? defaultDentistId ?? '');
       setDate(defaultDate ?? clinicToday());
       setStartTime(defaultStartTime ?? '09:00');
       setDuration('30');
-      setAppointmentType('consultation');
+      setAppointmentType(defaultType ?? 'consultation');
       setReason('');
       setChiefComplaint('');
       setNotes('');
@@ -324,7 +339,7 @@ export function AppointmentFormModal({
     resetNewPatient();
     setPatientSearch('');
     setTab('info');
-  }, [open, appointment, defaultDate, defaultDentistId, defaultPatientId, defaultStartTime]);
+  }, [open, appointment, defaultDate, defaultDentistId, defaultPatientId, defaultStartTime, defaultType, lockedDentistId]);
 
   const create = useCreateAppointment();
   const update = useUpdateAppointment(appointment?.id ?? '');
@@ -453,7 +468,7 @@ export function AppointmentFormModal({
             tabs={[
               { id: 'info', label: 'Chọn bệnh nhân' },
               { id: 'lookup', label: 'Tra cứu nhanh' },
-              { id: 'new-patient', label: 'Bệnh nhân mới' },
+              ...(canCreatePatient ? [{ id: 'new-patient', label: 'Bệnh nhân mới' }] : []),
             ]}
           />
         </div>
@@ -646,14 +661,17 @@ export function AppointmentFormModal({
                     <Select
                       aria-label="Bác sĩ"
                       value={dentistId}
+                      disabled={!!lockedDentistId}
                       onChange={(e) => {
                         setDentistId(e.target.value);
                         setServiceIds([]);
                       }}
-                      options={(dentists ?? []).map((d) => ({
-                        value: d.id,
-                        label: d.fullName + (d.specialization ? ` (${d.specialization})` : ''),
-                      }))}
+                      options={(dentists ?? [])
+                        .filter((d) => !lockedDentistId || d.id === lockedDentistId)
+                        .map((d) => ({
+                          value: d.id,
+                          label: d.fullName + (d.specialization ? ` (${d.specialization})` : ''),
+                        }))}
                       placeholder={isLoadingDentists ? 'Đang tải...' : 'Chọn bác sĩ'}
                     />
                   </div>

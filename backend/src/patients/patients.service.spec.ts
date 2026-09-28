@@ -363,6 +363,61 @@ describe('PatientsService', () => {
     });
   });
 
+  describe('updateMedicalHistory', () => {
+    beforeEach(() => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue({ id: 'p1' });
+      (prisma.patient.update as jest.Mock).mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          id: 'p1',
+          allergies: data.allergies ?? [],
+          chronicDiseases: data.chronicDiseases ?? [],
+          currentMedications: data.currentMedications ?? [],
+        }),
+      );
+    });
+
+    it('lets a dentist record history for a patient they treated, trimming and de-duplicating', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(2);
+      const result = await service.updateMedicalHistory(
+        'p1',
+        { allergies: [' Penicillin ', 'Penicillin', ''], currentMedications: ['Aspirin'] },
+        dentistPayload(),
+      );
+      expect(prisma.encounter.count).toHaveBeenCalledWith({
+        where: { patientId: 'p1', dentistId: 'dentist-1' },
+      });
+      const data = (prisma.patient.update as jest.Mock).mock.calls[0][0].data;
+      expect(data).toEqual({
+        allergies: ['Penicillin'],
+        currentMedications: ['Aspirin'],
+        updatedBy: 'dentist-1',
+      });
+      expect(data).not.toHaveProperty('fullName');
+      expect(result.allergies).toEqual(['Penicillin']);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PATIENT_MEDICAL_HISTORY_UPDATED' }),
+      );
+    });
+
+    it('hides a patient the dentist never treated', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      await expect(
+        service.updateMedicalHistory('p1', { allergies: ['X'] }, dentistPayload()),
+      ).rejects.toBeInstanceOf(PatientNotFoundException);
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
+
+    it('does not scope the front desk or admin', async () => {
+      await service.updateMedicalHistory(
+        'p1',
+        { chronicDiseases: ['Tiểu đường'] },
+        userPayloadWithPermissions(['patient.update']),
+      );
+      expect(prisma.encounter.count).not.toHaveBeenCalled();
+      expect(prisma.patient.update).toHaveBeenCalled();
+    });
+  });
+
   describe('getDetailWithSummary (BR-PT-021 financial masking, BR-PT-014 dentist row-level)', () => {
     // getById() (called internally) selects `identifiers` and `encounters`
     // (for lastVisitAt/By) via `include` — the mock needs both present even

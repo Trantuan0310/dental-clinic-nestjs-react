@@ -281,8 +281,10 @@ export class AppointmentsController {
     };
   }
 
+  // A walk-in is booked and checked in at once: front-desk work, so it needs
+  // check-in rights (a dentist may book follow-ups, not receive walk-ins).
   @Post('walk-in')
-  @RequirePermissions('appointment.create')
+  @RequirePermissions('appointment.check_in')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Walk-in: book from now and check in at once (BR-APPT-032)' })
   async walkIn(@Body() dto: CreateWalkInDto, @User() actor: JwtPayload) {

@@ -14,6 +14,7 @@ import {
   UpdatePatientDto,
   OverrideDobDto,
   PatientIdentifierInputDto,
+  UpdateMedicalHistoryDto,
 } from './dto/patient.dto';
 import {
   DobLockedException,
@@ -417,6 +418,57 @@ export class PatientsService {
       ...base,
       lastVisitAt: patient.encounters[0]?.startedAt ?? null,
       lastVisitBy: patient.encounters[0]?.dentist?.fullName ?? null,
+    };
+  }
+
+  /**
+   * Allergies, chronic diseases and current medications. A dentist (row-scoped)
+   * may change them only for a patient they have treated, so a newly found
+   * allergy is recorded during the visit; other fields stay front-desk work.
+   */
+  async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload) {
+    const current = await this.prisma.patient.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!current) throw new PatientNotFoundException(id);
+    if (this.isRowScopedDentist(actor)) {
+      const treated = await this.prisma.encounter.count({
+        where: { patientId: id, dentistId: actor.sub },
+      });
+      if (treated === 0) throw new PatientNotFoundException(id);
+    }
+    const clean = (list?: string[]) =>
+      list === undefined
+        ? undefined
+        : ([
+            ...new Set(list.map(v => v.trim()).filter(Boolean)),
+          ] as unknown as Prisma.InputJsonValue);
+    const data = {
+      ...(dto.allergies !== undefined && { allergies: clean(dto.allergies) }),
+      ...(dto.chronicDiseases !== undefined && { chronicDiseases: clean(dto.chronicDiseases) }),
+      ...(dto.currentMedications !== undefined && {
+        currentMedications: clean(dto.currentMedications),
+      }),
+    };
+    const updated = await this.prisma.patient.update({
+      where: { id },
+      data: { ...data, updatedBy: actor.sub },
+      select: { id: true, allergies: true, chronicDiseases: true, currentMedications: true },
+    });
+    await this.audit.log({
+      action: 'PATIENT_MEDICAL_HISTORY_UPDATED',
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'patient',
+      targetId: id,
+      metadata: { fields: Object.keys(data) },
+    });
+    return {
+      id: updated.id,
+      allergies: readJsonStringArray(updated.allergies),
+      chronicDiseases: readJsonStringArray(updated.chronicDiseases),
+      currentMedications: readJsonStringArray(updated.currentMedications),
     };
   }
 

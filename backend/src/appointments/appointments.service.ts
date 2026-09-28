@@ -136,6 +136,7 @@ export class AppointmentsService {
     if (startAt.getTime() <= Date.now() + 60_000) {
       throw new BackDatedAppointmentException();
     }
+    await this.assertDentistMayBook(dto.dentistId, dto.patientId, actor);
 
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
@@ -1896,6 +1897,7 @@ export class AppointmentsService {
    */
   async createWalkIn(dto: CreateWalkInDto, actor: JwtPayload) {
     const startAt = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    await this.assertDentistMayBook(dto.dentistId, dto.patientId, actor);
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
     const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt));
@@ -2029,6 +2031,24 @@ export class AppointmentsService {
    * dentist read-only-blocked from someone else's appointment nonetheless
    * edit, reschedule, cancel or start an encounter for it.
    */
+  /**
+   * A dentist (row-scoped: appointment.read.own only) books follow-up visits
+   * on their own calendar, for patients they have already treated. Front
+   * desk and admin book for anyone.
+   */
+  private async assertDentistMayBook(dentistId: string, patientId: string, actor: JwtPayload) {
+    if (!this.isRowScopedDentist(actor)) return;
+    if (dentistId !== actor.sub) {
+      throw new ForbiddenException('Bác sĩ chỉ đặt lịch vào lịch làm việc của chính mình');
+    }
+    const treated = await this.prisma.encounter.count({
+      where: { patientId, dentistId: actor.sub },
+    });
+    if (treated === 0) {
+      throw new ForbiddenException('Bác sĩ chỉ đặt lịch tái khám cho bệnh nhân mình đã khám');
+    }
+  }
+
   isRowScopedDentist(actor: JwtPayload): boolean {
     return (
       actor.permissions.includes('appointment.read.own') &&

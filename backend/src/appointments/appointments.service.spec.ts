@@ -847,6 +847,26 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.create).not.toHaveBeenCalled();
     });
 
+    it('lets a dentist book a follow-up only on their own calendar, for a patient they treated', async () => {
+      const self = dentistPayload('dentist-1');
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.create({ ...dto, dentistId: 'dentist-2' }, self)).rejects.toThrow(
+        'lịch làm việc của chính mình',
+      );
+
+      (prisma.encounter.count as jest.Mock).mockResolvedValueOnce(0);
+      await expect(service.create(dto, self)).rejects.toThrow('bệnh nhân mình đã khám');
+      expect(prisma.appointment.create).not.toHaveBeenCalled();
+
+      (prisma.encounter.count as jest.Mock).mockResolvedValueOnce(1);
+      await service.create(dto, self);
+      expect(prisma.encounter.count).toHaveBeenLastCalledWith({
+        where: { patientId: 'patient-1', dentistId: 'dentist-1' },
+      });
+      expect(prisma.appointment.create).toHaveBeenCalled();
+    });
+
     it('takes a dentist lock then a patient lock, in separate namespaces', async () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
 
