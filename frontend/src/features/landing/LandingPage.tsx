@@ -22,6 +22,7 @@ import {
 import { api } from '@/lib/api';
 import { clinic } from '@/config/clinic';
 import { SPECIALTY_LABEL } from '@/features/staff/labels';
+import { mediaUrl, useSiteMedia, type SiteMedia } from '@/features/media/mediaApi';
 
 /**
  * Public home page for patients (gensmile.online/). Services, prices and
@@ -215,7 +216,7 @@ function SiteHeader() {
   );
 }
 
-function Hero() {
+function Hero({ media }: { media?: SiteMedia }) {
   return (
     <section id="top" className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white">
       <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:py-20 md:grid-cols-[1.15fr_1fr]">
@@ -267,12 +268,23 @@ function Hero() {
             )}
           </dl>
         </div>
-        <div className="relative mx-auto w-full max-w-sm" aria-hidden>
-          <div className="absolute inset-0 -z-0 rounded-full bg-brand-100 blur-3xl" />
-          <div className="relative rounded-[2.5rem] bg-white p-10 shadow-xl ring-1 ring-brand-100">
-            <img src="/logo-full.svg" alt="" className="mx-auto w-full max-w-[260px]" />
+        {media?.hero ? (
+          <div className="relative mx-auto w-full max-w-lg">
+            <div className="absolute -inset-3 -z-0 rounded-[2.5rem] bg-brand-100 blur-2xl" aria-hidden />
+            <img
+              src={mediaUrl(media.hero.id)}
+              alt={media.hero.caption ?? `Không gian ${clinic.name}`}
+              className="relative aspect-[4/3] w-full rounded-[2rem] object-cover shadow-xl ring-1 ring-brand-100"
+            />
           </div>
-        </div>
+        ) : (
+          <div className="relative mx-auto w-full max-w-sm" aria-hidden>
+            <div className="absolute inset-0 -z-0 rounded-full bg-brand-100 blur-3xl" />
+            <div className="relative rounded-[2.5rem] bg-white p-10 shadow-xl ring-1 ring-brand-100">
+              <img src="/logo-full.svg" alt="" className="mx-auto w-full max-w-[260px]" />
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -380,7 +392,7 @@ function Services({ services, isLoading, isError }: { services: PublicService[];
   );
 }
 
-function Dentists({ services }: { services: PublicService[] }) {
+function Dentists({ services, photos }: { services: PublicService[]; photos: Record<string, string> }) {
   const dentists = useMemo(() => {
     const byId = new Map<string, PublicDentist>();
     for (const s of services) for (const d of s.dentists) byId.set(d.id, d);
@@ -399,9 +411,18 @@ function Dentists({ services }: { services: PublicService[] }) {
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {dentists.map((d) => (
           <div key={d.id} className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm">
-            <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-2xl font-bold text-white">
-              {initials(d.fullName) || <UserRound className="h-8 w-8" aria-hidden />}
-            </span>
+            {photos[d.id] ? (
+              <img
+                src={mediaUrl(photos[d.id])}
+                alt={d.fullName}
+                loading="lazy"
+                className="mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-brand-50"
+              />
+            ) : (
+              <span className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-2xl font-bold text-white">
+                {initials(d.fullName) || <UserRound className="h-8 w-8" aria-hidden />}
+              </span>
+            )}
             <h3 className="mt-4 font-semibold text-gray-900">{d.fullName}</h3>
             {d.specialties.length > 0 && (
               <ul className="mt-3 flex flex-wrap justify-center gap-1.5">
@@ -415,6 +436,39 @@ function Dentists({ services }: { services: PublicService[] }) {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function Gallery({ items }: { items: SiteMedia['gallery'] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="mx-auto max-w-6xl px-4 py-14" aria-labelledby="khong-gian-title">
+      <h2 id="khong-gian-title" className="text-center text-3xl font-bold text-gray-900">
+        Không gian phòng khám
+      </h2>
+      <ul
+        className={
+          'mt-10 grid grid-cols-2 gap-3 sm:gap-4 ' +
+          (items.length >= 4 ? 'md:grid-cols-4' : 'md:grid-cols-3')
+        }
+      >
+        {items.map((g) => (
+          <li key={g.id} className="relative overflow-hidden rounded-2xl bg-gray-100">
+            <img
+              src={mediaUrl(g.id)}
+              alt={g.caption ?? 'Ảnh phòng khám'}
+              loading="lazy"
+              className="aspect-[4/3] w-full object-cover"
+            />
+            {g.caption && (
+              <p className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 pb-2 pt-6 text-sm font-medium text-white">
+                {g.caption}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -601,6 +655,7 @@ function SiteFooter() {
 
 export default function LandingPage() {
   const { data: services = [], isLoading, isError } = useBookingOptions();
+  const { data: media } = useSiteMedia();
 
   useEffect(() => {
     const previous = document.title;
@@ -614,10 +669,11 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white text-gray-900">
       <SiteHeader />
       <main>
-        <Hero />
+        <Hero media={media} />
         <Highlights />
         <Services services={services} isLoading={isLoading} isError={isError} />
-        <Dentists services={services} />
+        <Dentists services={services} photos={media?.dentists ?? {}} />
+        <Gallery items={media?.gallery ?? []} />
         <Steps />
         <Faq />
         <Contact />

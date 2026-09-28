@@ -12,6 +12,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { PatientsModule } from './patients/patients.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { BookingModule } from './booking/booking.module';
+import { MediaModule } from './media/media.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
 import { BillingModule } from './billing/billing.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -51,6 +52,7 @@ import { CatalogModule } from './catalog/catalog.module';
     PatientsModule,
     AppointmentsModule,
     BookingModule,
+    MediaModule,
     MedicalRecordsModule,
     BillingModule,
     InventoryModule,

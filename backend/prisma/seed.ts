@@ -260,6 +260,13 @@ const PERMISSIONS = [
     action: 'manage',
     description: 'Xử lý yêu cầu đặt lịch trực tuyến',
   },
+  // Home page photos (migration 026 inserts the same row)
+  {
+    code: 'site_media.manage',
+    resource: 'site_media',
+    action: 'manage',
+    description: 'Quản lý ảnh phòng khám trên trang chủ',
+  },
 
   // Time-off approval (ADR-0009 phase 3; migration 021 inserts the same row)
   {

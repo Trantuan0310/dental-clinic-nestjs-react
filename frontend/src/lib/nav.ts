@@ -21,6 +21,7 @@ import {
   Stethoscope,
   ClipboardPlus,
   ListOrdered,
+  Images,
 } from 'lucide-react';
 import type { RoleCode } from '@/types/auth';
 
@@ -176,6 +177,7 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         { to: '/admin/users', labelKey: 'Users', icon: Users, permission: 'user.read' },
         { to: '/admin/roles', labelKey: 'Roles', icon: ShieldCheck, permission: 'role.read' },
         { to: '/admin/audit', labelKey: 'AuditLogs', icon: ClipboardList, permission: 'audit.read' },
+        { to: '/admin/site-media', labelKey: 'SiteMedia', icon: Images, permission: 'site_media.manage' },
         { to: '/admin/settings', labelKey: 'Settings', icon: Settings, permission: 'settings.read' },
       ],
     });

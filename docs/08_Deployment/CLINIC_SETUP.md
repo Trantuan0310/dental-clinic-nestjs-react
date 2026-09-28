@@ -110,3 +110,16 @@ BOOKING_NOTIFY_EMAILS=letan@example.com,quanly@example.com
 ```sh
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d backend
 ```
+
+## Ảnh trên trang chủ
+
+Ảnh được tải lên ngay trong app và lưu trong database, nên không cần chép file lên VPS. Ảnh cũng được backup cùng database mỗi lần deploy.
+
+- **Ảnh phòng khám:** vào **Quản trị → Ảnh trang chủ** (cần quyền `site_media.manage`, tài khoản quản trị phòng khám đã có sẵn).
+  - **Ảnh chính:** 1 ảnh ở đầu trang, thay cho logo.
+  - **Không gian phòng khám:** tối đa 12 ảnh, có chú thích. Khi có ít nhất một ảnh, trang chủ hiện thêm mục này.
+- **Ảnh bác sĩ:** vào **Bác sĩ**, mở hồ sơ bác sĩ, dùng ô **Ảnh trên trang chủ**. Bác sĩ tự đổi được ảnh của chính mình.
+
+Trình duyệt tự thu nhỏ ảnh trước khi tải lên: ảnh phòng khám tối đa 1600 px, ảnh bác sĩ 800 px. Ảnh được lưu lại dưới dạng JPEG, bỏ thông tin EXIF như vị trí GPS. Chấp nhận ảnh JPG, PNG và WebP.
+
+Mọi ảnh ở đây đều công khai. Không dùng ảnh có mặt bệnh nhân hoặc giấy tờ nếu chưa được đồng ý.

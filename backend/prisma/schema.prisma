@@ -153,6 +153,7 @@ model User {
   bookingRequestsPreferred   BookingRequest[] @relation("BookingPreferredDentist")
   bookingRequestsProposed    BookingRequest[] @relation("BookingProposedDentist")
   bookingRequestsHandled     BookingRequest[] @relation("BookingHandler")
+  mediaPhotos                MediaAsset[]     @relation("DentistPhotos")
 
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
@@ -1583,4 +1584,22 @@ model BookingRequest {
   @@index([status, createdAt(sort: Desc)])
   @@index([phone, createdAt(sort: Desc)])
   @@map("booking_requests")
+}
+
+/// Home page photos (migration 026): clinic hero/gallery and dentist portraits.
+model MediaAsset {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  purpose    String   @db.VarChar(30)
+  dentistId  String?  @map("dentist_id") @db.Uuid
+  mimeType   String   @map("mime_type") @db.VarChar(40)
+  bytes      Bytes
+  byteSize   Int      @map("byte_size")
+  caption    String?  @db.VarChar(200)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy  String?  @map("created_by") @db.Uuid
+  dentist    User?    @relation("DentistPhotos", fields: [dentistId], references: [id], onDelete: Cascade)
+
+  @@index([purpose, sortOrder, createdAt])
+  @@map("media_assets")
 }
