@@ -35,21 +35,14 @@ const NOTE_TYPE_LABEL: Partial<Record<NoteType, string>> = {
   progress_note: 'Ghi chú tiến triển',
 };
 
-// "Thêm" never replaces what is already written: a progress note is appended
-// server-side with a time + author stamp; any other section gets the new text
-// appended below its current content. "Sửa" edits one section, pre-filled
-// with its full current value, and only sends that section.
-function buildNotePayload(
-  type: NoteType,
-  content: string,
-  mode: 'add' | 'edit',
-  existing: Encounter['clinicalNote'],
-) {
+// "Thêm" never replaces what is already written: the server appends the text
+// to that section with a time + author stamp (under the encounter lock, so
+// two quick saves both survive). "Sửa" edits one section, pre-filled with its
+// full current value, and only sends that section.
+function buildNotePayload(type: NoteType, content: string, mode: 'add' | 'edit') {
   const field = NOTE_TYPE_TO_FIELD[type];
   if (mode === 'edit') return { [field]: content };
-  if (field === 'notes') return { appendNote: content };
-  const current = existing?.[field]?.trim();
-  return { [field]: current ? `${current}\n${content}` : content };
+  return { appendNote: content, appendTo: field };
 }
 
 export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
@@ -67,7 +60,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
     mutationFn: (payload: { type: NoteType; content: string; mode: 'add' | 'edit' }) =>
       medicalRecordsApi.upsertClinicalNote(
         encounter.id,
-        buildNotePayload(payload.type, payload.content, payload.mode, encounter.clinicalNote),
+        buildNotePayload(payload.type, payload.content, payload.mode),
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });

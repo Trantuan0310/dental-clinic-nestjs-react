@@ -142,8 +142,9 @@ export const medicalRecordsApi = {
       diagnosis?: string;
       treatmentPlan?: string;
       notes?: string;
-      /** Appended to `notes` server-side with a time + author stamp. */
+      /** Appended server-side to `appendTo` (default notes) with a time + author stamp. */
       appendNote?: string;
+      appendTo?: 'chiefComplaint' | 'diagnosis' | 'treatmentPlan' | 'notes';
     },
   ): Promise<ClinicalNote> {
     const { data } = await api.put<{ data: ClinicalNote }>(

@@ -598,6 +598,29 @@ describe('PatientsService', () => {
       );
     });
 
+    it('a legacy child without a contact person can still be edited when contacts are resent unchanged', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({
+          dob: new Date(Date.now() - 5 * 365 * 86400000),
+          primaryPhone: '0901234567',
+          contactPersonName: null,
+          contactPersonPhone: null,
+        }),
+      );
+      (prisma.patient.update as jest.Mock).mockResolvedValue(validPatient());
+      await expect(
+        service.update(
+          'p1',
+          { address: 'Hà Nội', primaryPhone: '0901234567', contactPersonName: '' } as any,
+          actor,
+        ),
+      ).resolves.toBeDefined();
+      // Changing a contact field applies the rule and says what is missing.
+      await expect(
+        service.update('p1', { primaryPhone: '0907654321' } as any, actor),
+      ).rejects.toThrow(/cần bổ sung họ tên và số điện thoại người liên hệ/);
+    });
+
     it('update touching unrelated fields does not re-check contact rules', async () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
         validPatient({ primaryPhone: null, contactPersonName: null, contactPersonPhone: null }),

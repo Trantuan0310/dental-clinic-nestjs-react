@@ -89,6 +89,10 @@ describe('Clinical data audit regressions', () => {
       db.encounter.findUnique.mockResolvedValue({ ...encounter(86400000), clinicalNote: null });
       db.clinicalNote.upsert.mockResolvedValue({ id: 'new-note' });
       await service.addAddendum('e', { content: 'Correction' }, actor);
+      // Takes the encounter lock (shared with close) before creating the note.
+      expect(db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        db.clinicalNote.upsert.mock.invocationCallOrder[0],
+      );
       expect(db.clinicalNote.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { encounterId: 'e' },

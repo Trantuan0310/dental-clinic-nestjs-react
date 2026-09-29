@@ -202,12 +202,12 @@ export class PatientsService {
     const hasContactPerson = !!contact.contactPersonPhone && !!contact.contactPersonName;
     if (!hasPrimary && !hasContactPerson) {
       throw new PatientContactRequiredException(
-        'Cần ít nhất một số liên lạc (số điện thoại chính hoặc người liên hệ)',
+        'Cần ít nhất một số liên lạc: nhập số điện thoại chính, hoặc họ tên và số điện thoại người liên hệ',
       );
     }
     if (isMinor(dob) && !hasContactPerson) {
       throw new PatientContactRequiredException(
-        'Bệnh nhân nhỏ hơn 12 tuổi cần thông tin người liên hệ',
+        'Bệnh nhân nhỏ hơn 12 tuổi cần bổ sung họ tên và số điện thoại người liên hệ',
       );
     }
   }
@@ -247,15 +247,20 @@ export class PatientsService {
 
     // Create's contact rules apply to the record as it will be after this
     // update — an update used to be able to clear every number of a child,
-    // or turn an adult with only a primary phone into a child.
+    // or turn an adult with only a primary phone into a child. Only when the
+    // request really changes dob or a contact field: a legacy record that
+    // already breaks the rule can still have its other fields edited.
+    type ContactKey = 'primaryPhone' | 'contactPersonName' | 'contactPersonPhone';
+    const contactChanged = (k: ContactKey) =>
+      dto[k] !== undefined && (dto[k] ?? '').trim() !== (current[k] ?? '').trim();
+    const dobChanged = !!dto.dob && new Date(dto.dob).getTime() !== current.dob.getTime();
     if (
-      dto.dob !== undefined ||
-      dto.primaryPhone !== undefined ||
-      dto.contactPersonName !== undefined ||
-      dto.contactPersonPhone !== undefined
+      dobChanged ||
+      contactChanged('primaryPhone') ||
+      contactChanged('contactPersonName') ||
+      contactChanged('contactPersonPhone')
     ) {
-      const pick = <K extends 'primaryPhone' | 'contactPersonName' | 'contactPersonPhone'>(k: K) =>
-        dto[k] !== undefined ? dto[k] : current[k];
+      const pick = (k: ContactKey) => (dto[k] !== undefined ? dto[k] : current[k]);
       this.assertContactRules(dto.dob ? new Date(dto.dob) : current.dob, {
         primaryPhone: pick('primaryPhone'),
         contactPersonName: pick('contactPersonName'),

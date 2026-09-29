@@ -77,6 +77,14 @@ describe('HttpExceptionFilter — input errors that used to be 500s', () => {
     ['413 body too large', bodyParser(413, 'entity.too.large'), 413, 'PAYLOAD_TOO_LARGE'],
     ['400 malformed JSON', bodyParser(400, 'entity.parse.failed'), 400, 'BAD_REQUEST'],
     ['other Prisma errors stay 500', known('P2025'), 500, 'INTERNAL_ERROR'],
+    [
+      'an unrelated "out of range" driver error stays 500',
+      new Prisma.PrismaClientUnknownRequestError('index out of range', {
+        clientVersion: '5.22.0',
+      }),
+      500,
+      'INTERNAL_ERROR',
+    ],
   ])('%s', (_name, exception, status, code) => {
     const body = codeOf(exception);
     expect(body).toMatchObject({ status, code });

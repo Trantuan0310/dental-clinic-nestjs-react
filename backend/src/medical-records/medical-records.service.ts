@@ -29,6 +29,7 @@ import {
 } from './domain/exceptions';
 import { isValidFdiToothNumber } from './domain/tooth-numbers';
 import {
+  ClinicalNoteField,
   CloseEncounterDto,
   CreatePrescriptionDto,
   CreateTreatmentDto,
@@ -852,29 +853,30 @@ export class MedicalRecordsService {
       // addendum trail. The two actors need not be different people (a dentist
       // closing on one device while saving on another), but an admin closing
       // an encounter the dentist is still writing up is the common case.
-      // "Thêm ghi chú tiến triển" appends a stamped entry instead of replacing
+      // "Thêm" appends a stamped entry to one section instead of replacing
       // what is already there; the encounter row lock (withEditableEncounter)
-      // serialises this read-then-write.
-      let notes = dto.notes;
+      // serialises this read-then-write, so two quick saves both survive.
+      const sections: Partial<Record<ClinicalNoteField, string>> = {
+        ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
+        ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
+        ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+      };
       if (dto.appendNote?.trim()) {
+        const field = dto.appendTo ?? 'notes';
         const [existing, author] = await Promise.all([
-          tx.clinicalNote.findUnique({ where: { encounterId }, select: { notes: true } }),
+          tx.clinicalNote.findUnique({ where: { encounterId }, select: { [field]: true } }),
           tx.user.findUnique({ where: { id: actor.sub }, select: { fullName: true } }),
         ]);
         const entry = `[${clinicDateTimeLabel()} — ${author?.fullName ?? actor.email}]\n${dto.appendNote.trim()}`;
-        const base = notes !== undefined ? notes : existing?.notes;
-        notes = base?.trim() ? `${base.trimEnd()}\n\n${entry}` : entry;
+        const base =
+          sections[field] ?? (existing as Record<string, string | null> | null)?.[field] ?? null;
+        sections[field] = base?.trim() ? `${base.trimEnd()}\n\n${entry}` : entry;
       }
 
       const guarded = await tx.clinicalNote.updateMany({
         where: { encounterId, isLocked: false },
-        data: {
-          ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
-          ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
-          ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
-          ...(notes !== undefined && { notes }),
-          lastEditedBy: actor.sub,
-        },
+        data: { ...sections, lastEditedBy: actor.sub },
       });
 
       let note;
@@ -888,10 +890,10 @@ export class MedicalRecordsService {
         note = await tx.clinicalNote.create({
           data: {
             encounterId,
-            chiefComplaint: dto.chiefComplaint ?? null,
-            diagnosis: dto.diagnosis ?? null,
-            treatmentPlan: dto.treatmentPlan ?? null,
-            notes: notes ?? null,
+            chiefComplaint: sections.chiefComplaint ?? null,
+            diagnosis: sections.diagnosis ?? null,
+            treatmentPlan: sections.treatmentPlan ?? null,
+            notes: sections.notes ?? null,
             lastEditedBy: actor.sub,
           },
         });
@@ -937,18 +939,27 @@ export class MedicalRecordsService {
       // A visit closed with treatments only has no note row; the addendum
       // needs one, so create an empty one (locked when the visit is closed)
       // instead of refusing the correction.
-      const note =
-        encounter.clinicalNote ??
-        (await tx.clinicalNote.upsert({
+      // Same encounter lock as close/edit, and the status re-read under it, so
+      // a note created while the visit is being closed is born locked.
+      let note = encounter.clinicalNote;
+      if (!note) {
+        await this.lockEncounter(tx, encounterId);
+        const fresh = await tx.encounter.findUnique({
+          where: { id: encounterId },
+          select: { status: true },
+        });
+        const locked = fresh?.status !== EncounterStatus.IN_PROGRESS;
+        note = await tx.clinicalNote.upsert({
           where: { encounterId },
           update: {},
           create: {
             encounterId,
-            isLocked: encounter.status === EncounterStatus.COMPLETED,
-            lockedAt: encounter.status === EncounterStatus.COMPLETED ? new Date() : null,
+            isLocked: locked,
+            lockedAt: locked ? new Date() : null,
             lastEditedBy: actor.sub,
           },
-        }));
+        });
+      }
       return tx.clinicalNoteAddendum.create({
         data: {
           clinicalNoteId: note.id,

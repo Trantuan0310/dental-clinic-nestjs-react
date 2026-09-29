@@ -26,6 +26,14 @@ import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 // Clinical note
 // ---------------------------------------------------------------------------
 
+export const CLINICAL_NOTE_FIELDS = [
+  'chiefComplaint',
+  'diagnosis',
+  'treatmentPlan',
+  'notes',
+] as const;
+export type ClinicalNoteField = (typeof CLINICAL_NOTE_FIELDS)[number];
+
 export class UpsertClinicalNoteDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -51,13 +59,21 @@ export class UpsertClinicalNoteDto {
   @MaxLength(8000)
   notes?: string;
 
-  /** Progress note appended to `notes` with a time + author stamp (never overwrites). */
+  /**
+   * Text appended server-side to the `appendTo` section (default `notes`)
+   * with a time + author stamp — never overwrites what is already there.
+   */
   @ApiPropertyOptional({ maxLength: 2000 })
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(2000)
   appendNote?: string;
+
+  @ApiPropertyOptional({ enum: CLINICAL_NOTE_FIELDS, default: 'notes' })
+  @IsOptional()
+  @IsIn(CLINICAL_NOTE_FIELDS as unknown as string[])
+  appendTo?: ClinicalNoteField;
 }
 
 export class AddAddendumDto {

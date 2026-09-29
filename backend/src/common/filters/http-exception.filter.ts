@@ -35,7 +35,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       status = HttpStatus.BAD_REQUEST;
       code = 'BAD_REQUEST';
       message = badInput;
-      this.logger.warn(`Rejected input: ${(exception as Error).message}`);
+      // Logged in full: a dangling reference or driver-level rejection can
+      // also be a server bug, not only bad input.
+      this.logger.error(
+        `Database rejected input: ${(exception as Error).message}`,
+        (exception as Error).stack,
+      );
     } else if (parserStatus) {
       // body-parser errors carry their own 4xx (413 too large, 400 bad JSON).
       status = parserStatus;
@@ -113,9 +118,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
     if (exception instanceof Prisma.PrismaClientUnknownRequestError) {
       const msg = exception.message;
-      if (/\b22001\b|value too long/i.test(msg)) return tooLong;
+      // Only Postgres' own SQLSTATE codes / messages for these input errors.
+      if (/\b22001\b|value too long for type/i.test(msg)) return tooLong;
       if (
-        /\b(22003|22021|22P05)\b|numeric field overflow|invalid byte sequence|out of range/i.test(
+        /\b(22003|22021|22P05)\b|numeric field overflow|invalid byte sequence for encoding/i.test(
           msg,
         )
       ) {
