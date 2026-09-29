@@ -1,7 +1,6 @@
 import {
   IsString,
   IsOptional,
-  IsDateString,
   IsEnum,
   IsEmail,
   IsArray,
@@ -14,6 +13,7 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender, IdentifierType } from '@prisma/client';
+import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
 export class PatientIdentifierInputDto {
   @ApiProperty({ enum: IdentifierType })
@@ -22,26 +22,29 @@ export class PatientIdentifierInputDto {
 
   @ApiProperty()
   @IsString()
+  @MaxLength(50)
   value: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   issuedAt?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   issuedBy?: string;
 }
 
 export class CreatePatientDto {
   @ApiProperty()
   @IsString()
+  @MaxLength(200)
   fullName: string;
 
   @ApiProperty()
-  @IsDateString()
+  @IsCalendarDate()
   dob: string;
 
   @ApiProperty({ enum: Gender })
@@ -51,11 +54,13 @@ export class CreatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   primaryPhone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsEmail()
+  @MaxLength(255)
   email?: string | null;
 
   @ApiPropertyOptional()
@@ -66,6 +71,7 @@ export class CreatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   occupation?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -86,11 +92,13 @@ export class CreatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   contactPersonName?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   contactPersonPhone?: string | null;
 
   @ApiPropertyOptional()
@@ -110,11 +118,12 @@ export class UpdatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   fullName?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   dob?: string;
 
   @ApiPropertyOptional({ enum: Gender })
@@ -125,11 +134,13 @@ export class UpdatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   primaryPhone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsEmail()
+  @MaxLength(255)
   email?: string | null;
 
   @ApiPropertyOptional()
@@ -140,6 +151,7 @@ export class UpdatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   occupation?: string;
 
   @ApiPropertyOptional({ type: [String] })
@@ -160,11 +172,13 @@ export class UpdatePatientDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   contactPersonName?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   contactPersonPhone?: string | null;
 
   @ApiPropertyOptional()
@@ -182,7 +196,7 @@ export class SoftDeletePatientDto {
 
 export class OverrideDobDto {
   @ApiProperty()
-  @IsDateString()
+  @IsCalendarDate()
   dob: string;
 
   @ApiProperty({ minLength: 10, maxLength: 1000 })
@@ -206,12 +220,12 @@ export class ListPatientsQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   dobFrom?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   dobTo?: string;
 
   @ApiPropertyOptional({
@@ -234,9 +248,9 @@ export class ListPatientsQueryDto {
   @IsOptional()
   pageSize?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   cursor?: string;
 }
 
@@ -258,7 +272,7 @@ export class LookupPatientDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   dob?: string;
 
   @ApiPropertyOptional()

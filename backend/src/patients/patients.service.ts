@@ -30,6 +30,7 @@ import {
 import {
   DobLockedException,
   IdentifierAlreadyExistsException,
+  IdentifierDuplicateOnPatientException,
   PatientCannotDeleteException,
   PatientCodeConflictException,
   PatientContactRequiredException,
@@ -101,19 +102,7 @@ export class PatientsService {
       throw new PatientContactRequiredException('Email không hợp lệ');
     }
 
-    // BR-PT-012 + BR-PT-013
-    const hasPrimary = !!dto.primaryPhone;
-    const hasContactPerson = !!dto.contactPersonPhone && !!dto.contactPersonName;
-    if (!hasPrimary && !hasContactPerson) {
-      throw new PatientContactRequiredException(
-        'Cần ít nhất một số liên lạc (số điện thoại chính hoặc người liên hệ)',
-      );
-    }
-    if (isMinor(dob) && !hasContactPerson) {
-      throw new PatientContactRequiredException(
-        'Bệnh nhân nhỏ hơn 12 tuổi cần thông tin người liên hệ',
-      );
-    }
+    this.assertContactRules(dob, dto);
 
     for (const ident of dto.identifiers ?? []) {
       if (!isValidIdentifierValue(ident.type, ident.value)) {
@@ -190,6 +179,29 @@ export class PatientsService {
     return created;
   }
 
+  /** BR-PT-012 + BR-PT-013 — shared by create and update (on the merged record). */
+  private assertContactRules(
+    dob: Date,
+    contact: {
+      primaryPhone?: string | null;
+      contactPersonName?: string | null;
+      contactPersonPhone?: string | null;
+    },
+  ) {
+    const hasPrimary = !!contact.primaryPhone;
+    const hasContactPerson = !!contact.contactPersonPhone && !!contact.contactPersonName;
+    if (!hasPrimary && !hasContactPerson) {
+      throw new PatientContactRequiredException(
+        'Cần ít nhất một số liên lạc (số điện thoại chính hoặc người liên hệ)',
+      );
+    }
+    if (isMinor(dob) && !hasContactPerson) {
+      throw new PatientContactRequiredException(
+        'Bệnh nhân nhỏ hơn 12 tuổi cần thông tin người liên hệ',
+      );
+    }
+  }
+
   async update(id: string, dto: UpdatePatientDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findUnique({ where: { id } });
     if (!current) throw new PatientNotFoundException(id);
@@ -221,6 +233,24 @@ export class PatientsService {
       !isValidVnPhone(dto.primaryPhone)
     ) {
       throw new PatientContactRequiredException('Số điện thoại không hợp lệ');
+    }
+
+    // Create's contact rules apply to the record as it will be after this
+    // update — an update used to be able to clear every number of a child,
+    // or turn an adult with only a primary phone into a child.
+    if (
+      dto.dob !== undefined ||
+      dto.primaryPhone !== undefined ||
+      dto.contactPersonName !== undefined ||
+      dto.contactPersonPhone !== undefined
+    ) {
+      const pick = <K extends 'primaryPhone' | 'contactPersonName' | 'contactPersonPhone'>(k: K) =>
+        dto[k] !== undefined ? dto[k] : current[k];
+      this.assertContactRules(dto.dob ? new Date(dto.dob) : current.dob, {
+        primaryPhone: pick('primaryPhone'),
+        contactPersonName: pick('contactPersonName'),
+        contactPersonPhone: pick('contactPersonPhone'),
+      });
     }
 
     const phoneChanged =
@@ -335,13 +365,20 @@ export class PatientsService {
         const patient = await tx.patient.findUnique({ where: { id } });
         if (!patient) throw new PatientNotFoundException(id);
 
-        const [futureAppointments, outstandingInvoices] = await Promise.all([
+        const [futureAppointments, outstandingInvoices, openEncounters] = await Promise.all([
           tx.appointment.count({
             where: {
               patientId: id,
-              status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
-              startAt: { gte: new Date() },
               deletedAt: null,
+              OR: [
+                {
+                  status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
+                  startAt: { gte: new Date() },
+                },
+                // A patient in the clinic right now blocks even once the slot
+                // start has passed.
+                { status: { in: ['CHECKED_IN', 'IN_PROGRESS'] } },
+              ],
             },
           }),
           tx.invoice.count({
@@ -351,17 +388,26 @@ export class PatientsService {
               deletedAt: null,
             },
           }),
+          tx.encounter.count({ where: { patientId: id, status: 'IN_PROGRESS' } }),
         ]);
 
-        if (futureAppointments > 0 || outstandingInvoices > 0) {
+        if (futureAppointments > 0 || outstandingInvoices > 0 || (openEncounters ?? 0) > 0) {
+          const parts = [
+            futureAppointments > 0 && `${futureAppointments} lịch hẹn chưa hoàn tất`,
+            outstandingInvoices > 0 && `${outstandingInvoices} hóa đơn chưa thanh toán`,
+            (openEncounters ?? 0) > 0 && `${openEncounters} phiên khám đang mở`,
+          ].filter(Boolean);
           throw new PatientCannotDeleteException(
-            `Patient has ${futureAppointments} future appointments and ${outstandingInvoices} outstanding invoices`,
+            `Không thể xóa bệnh nhân: còn ${parts.join(', ')}`,
             [
               ...(futureAppointments > 0
                 ? [{ field: 'appointments', code: 'future_appointment', count: futureAppointments }]
                 : []),
               ...(outstandingInvoices > 0
                 ? [{ field: 'invoices', code: 'outstanding_invoice', count: outstandingInvoices }]
+                : []),
+              ...((openEncounters ?? 0) > 0
+                ? [{ field: 'encounters', code: 'open_encounter', count: openEncounters }]
                 : []),
             ],
           );
@@ -830,17 +876,28 @@ export class PatientsService {
     if (existing && existing.patientId !== id) {
       throw new IdentifierAlreadyExistsException(dto.type, dto.value);
     }
+    // Same paper added twice to the same patient used to hit the unique
+    // index (P2002) and surface as a 500.
+    if (existing) throw new IdentifierDuplicateOnPatientException(dto.type, dto.value);
 
-    const created = await this.prisma.patientIdentifier.create({
-      data: {
-        patientId: id,
-        type: dto.type,
-        value: dto.value,
-        issuedAt: dto.issuedAt ? new Date(dto.issuedAt) : null,
-        issuedBy: dto.issuedBy ?? null,
-        createdBy: actor.sub,
-      },
-    });
+    let created;
+    try {
+      created = await this.prisma.patientIdentifier.create({
+        data: {
+          patientId: id,
+          type: dto.type,
+          value: dto.value,
+          issuedAt: dto.issuedAt ? new Date(dto.issuedAt) : null,
+          issuedBy: dto.issuedBy ?? null,
+          createdBy: actor.sub,
+        },
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === 'P2002') {
+        throw new IdentifierDuplicateOnPatientException(dto.type, dto.value);
+      }
+      throw err;
+    }
 
     await this.audit.log({
       action: 'PATIENT_IDENTIFIER_ADDED',
@@ -895,17 +952,17 @@ export class PatientsService {
         const target = await tx.patient.findUnique({ where: { id: dto.targetPatientId } });
         if (!source) throw new PatientNotFoundException(dto.sourcePatientId);
         if (!target) throw new PatientNotFoundException(dto.targetPatientId);
-        if (source.deletedAt) throw new PatientMergeInvalidException('Source patient is deleted');
-        if (target.deletedAt) throw new PatientMergeInvalidException('Target patient is deleted');
+        if (source.deletedAt) throw new PatientMergeInvalidException('Hồ sơ nguồn đã bị xóa');
+        if (target.deletedAt) throw new PatientMergeInvalidException('Hồ sơ đích đã bị xóa');
         // The name/DOB match rule is unchanged here (tightening it is a follow-up).
         if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
           throw new PatientMergeInvalidException(
-            'BR-PT-019: Source and target must have the same full name (case-insensitive)',
+            'Chỉ gộp được hai hồ sơ cùng họ tên (BR-PT-019)',
           );
         }
         if (source.dob.getTime() !== target.dob.getTime()) {
           throw new PatientMergeInvalidException(
-            'BR-PT-019: Source and target must have the same date of birth',
+            'Chỉ gộp được hai hồ sơ cùng ngày sinh (BR-PT-019)',
           );
         }
 
@@ -928,12 +985,12 @@ export class PatientsService {
         ]);
         if (srcFutureAppts > 0) {
           throw new PatientMergeInvalidException(
-            `Source patient has ${srcFutureAppts} future appointments`,
+            `Hồ sơ nguồn còn ${srcFutureAppts} lịch hẹn sắp tới`,
           );
         }
         if (srcOutstandingInvoices > 0) {
           throw new PatientMergeInvalidException(
-            `Source patient has ${srcOutstandingInvoices} outstanding invoices`,
+            `Hồ sơ nguồn còn ${srcOutstandingInvoices} hóa đơn chưa thanh toán`,
           );
         }
 
@@ -949,6 +1006,18 @@ export class PatientsService {
           where: { patientId: source.id },
           data: { patientId: target.id },
         });
+        // Online booking requests and the phone trail follow the person too.
+        const bookingUpdate = await tx.bookingRequest.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        const phoneHistoryUpdate = await tx.patientPhoneHistory.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        // The source's phone is cleared below; keep it on the target when the
+        // target has none, rather than losing the only number on file.
+        const inheritPhone = !target.primaryPhone && !!source.primaryPhone;
 
         // Identity papers follow the person: move the source's to the target,
         // dropping only exact duplicates (same type + number) the target holds.
@@ -998,8 +1067,22 @@ export class PatientsService {
         };
         await tx.patient.update({
           where: { id: target.id },
-          data: { ...medicalHistory, updatedBy: actor.sub },
+          data: {
+            ...medicalHistory,
+            ...(inheritPhone && { primaryPhone: source.primaryPhone }),
+            updatedBy: actor.sub,
+          },
         });
+        if (inheritPhone) {
+          await tx.patientPhoneHistory.create({
+            data: {
+              patientId: target.id,
+              oldPhone: null,
+              newPhone: source.primaryPhone as string,
+              changedBy: actor.sub,
+            },
+          });
+        }
 
         await tx.patientMergeLog.create({
           data: {
@@ -1010,10 +1093,10 @@ export class PatientsService {
                 fullName: target.fullName,
                 dob: target.dob,
                 gender: target.gender,
-                primaryPhone: target.primaryPhone,
+                primaryPhone: inheritPhone ? source.primaryPhone : target.primaryPhone,
               },
               discardedFromSource: {
-                primaryPhone: source.primaryPhone,
+                primaryPhone: inheritPhone ? null : source.primaryPhone,
                 email: source.email,
               },
               medicalHistoryBefore: {
@@ -1034,6 +1117,8 @@ export class PatientsService {
               appointments: apptUpdate.count,
               encounters: encUpdate.count,
               invoices: invUpdate.count,
+              bookingRequests: bookingUpdate.count,
+              phoneHistory: phoneHistoryUpdate.count,
               identifiersMoved: movedIds.length,
               identifiersDropped: duplicateIds.length,
             },
@@ -1058,6 +1143,8 @@ export class PatientsService {
             appointments: apptUpdate.count,
             encounters: encUpdate.count,
             invoices: invUpdate.count,
+            bookingRequests: bookingUpdate.count,
+            phoneHistory: phoneHistoryUpdate.count,
             identifiersMoved: movedIds.length,
             identifiersDropped: duplicateIds.length,
           },

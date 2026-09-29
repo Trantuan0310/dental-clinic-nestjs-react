@@ -25,6 +25,7 @@ import {
   TimeOffStatus,
   TimeOffType,
 } from '@prisma/client';
+import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
 export class CreateAppointmentDto {
   @ApiProperty()
@@ -36,12 +37,12 @@ export class CreateAppointmentDto {
   dentistId!: string;
 
   @ApiProperty()
-  @IsDateString()
+  @IsCalendarDate()
   startAt!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   endAt?: string;
 
   @ApiPropertyOptional()
@@ -223,12 +224,12 @@ export class ListAppointmentsQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   from?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   to?: string;
 
   // Three boundary quirks fixed here:
@@ -262,9 +263,9 @@ export class ListAppointmentsQueryDto {
   @Max(200)
   pageSize?: number;
 
-  @ApiPropertyOptional({ description: 'Cursor (last seen appointment ID)' })
+  @ApiPropertyOptional({ description: 'Cursor (last seen appointment ID)', format: 'uuid' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   cursor?: string;
 }
 
@@ -273,8 +274,8 @@ export class AvailabilityQueryDto {
   @IsUUID()
   dentistId!: string;
 
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ description: 'Clinic date YYYY-MM-DD' })
+  @IsCalendarDate()
   date!: string;
 
   // Visit length in minutes. Services may be as short as 5 min (catalogue
@@ -303,7 +304,7 @@ export class AvailabilityQueryDto {
 
 export class AvailabilitySearchQueryDto {
   @ApiProperty({ description: 'Clinic date YYYY-MM-DD' })
-  @IsDateString()
+  @IsCalendarDate()
   date!: string;
 
   @ApiPropertyOptional({ description: 'Only dentists assigned this service that day' })
@@ -367,12 +368,12 @@ export class CreateWorkingScheduleDto {
   slotDurationMin?: number;
 
   @ApiProperty()
-  @IsDateString()
+  @IsCalendarDate()
   validFrom!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   validTo?: string;
 
   @ApiPropertyOptional()
@@ -391,11 +392,11 @@ export class CreateTimeOffDto {
   dentistId!: string;
 
   @ApiProperty()
-  @IsDateString()
+  @IsCalendarDate()
   startAt!: string;
 
   @ApiProperty()
-  @IsDateString()
+  @IsCalendarDate()
   endAt!: string;
 
   @ApiProperty({ enum: TimeOffType })
@@ -436,7 +437,7 @@ export class CreateScheduleOverrideDto {
   dentistId!: string;
 
   @ApiProperty({ description: 'Clinic date YYYY-MM-DD' })
-  @IsDateString()
+  @IsCalendarDate()
   date!: string;
 
   @ApiProperty({ enum: ScheduleOverrideKind })
@@ -468,7 +469,7 @@ export class ListScheduleOverridesQueryDto {
 
   @ApiPropertyOptional({ description: 'From clinic date (inclusive), defaults to today' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   from?: string;
 }
 
@@ -480,12 +481,12 @@ export class ScheduleImpactQueryDto {
 
   @ApiPropertyOptional({ description: 'Clinic date YYYY-MM-DD, defaults to today' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   from?: string;
 
   @ApiPropertyOptional({ description: 'Clinic date YYYY-MM-DD, defaults to from + 60 days' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   to?: string;
 }
 

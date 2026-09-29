@@ -5,7 +5,6 @@ import {
   IsBoolean,
   IsEnum,
   IsUUID,
-  IsDateString,
   IsArray,
   IsObject,
   IsNumber,
@@ -21,6 +20,7 @@ import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PatientType } from '@prisma/client';
 import { FDI_TOOTH_NUMBERS } from '../domain/tooth-numbers';
+import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
 // ---------------------------------------------------------------------------
 // Clinical note
@@ -394,11 +394,11 @@ export class ListEncountersQueryDto {
 
   @ApiPropertyOptional({ example: '2026-07-01' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   from?: string;
 
   @ApiPropertyOptional({ example: '2026-07-31' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   to?: string;
 }
