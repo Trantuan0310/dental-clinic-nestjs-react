@@ -61,10 +61,24 @@ export interface AffectedAppointment {
 export class DentistHasFutureAppointmentsException extends BusinessRuleException {
   constructor(appointments: AffectedAppointment[]) {
     super(
-      `Dentist still has ${appointments.length} upcoming appointment(s); reassign or cancel them first`,
+      `Bác sĩ còn ${appointments.length} lịch hẹn chưa xong (sắp tới hoặc đang khám). ` +
+        'Hãy chuyển sang bác sĩ khác, hủy hoặc hoàn tất các lịch này trước.',
       HttpStatus.CONFLICT,
       { appointments },
       'DENTIST_HAS_FUTURE_APPOINTMENTS',
+    );
+  }
+}
+
+/** BR-STAFF-004: an encounter left IN_PROGRESS can only be closed by its dentist. */
+export class DentistHasOpenEncountersException extends BusinessRuleException {
+  constructor(count: number) {
+    super(
+      `Bác sĩ còn ${count} phiên khám đang mở. ` +
+        'Bác sĩ cần đóng (hoàn tất) hoặc hủy các phiên khám này trước khi cho nghỉ/tạm ngưng.',
+      HttpStatus.CONFLICT,
+      { openEncounters: count },
+      'DENTIST_HAS_OPEN_ENCOUNTERS',
     );
   }
 }

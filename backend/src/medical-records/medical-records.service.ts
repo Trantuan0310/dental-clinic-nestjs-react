@@ -5,7 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { endOfDayInclusive } from '../common/date-range.util';
-import { ENCOUNTER_CLOSED_EVENT, EncounterClosedEvent } from '../common/events/domain-events';
+import {
+  ENCOUNTER_CLOSED_EVENT,
+  EncounterClosedEvent,
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
+} from '../common/events/domain-events';
 import {
   EncounterNotClosableException,
   EncounterNotFoundException,
@@ -15,7 +20,9 @@ import {
   PrescriptionVersionConflictException,
   TreatmentNotInEncounterException,
   DentalChartPatientMismatchException,
+  DentalChartInvalidToothException,
 } from './domain/exceptions';
+import { isValidFdiToothNumber } from './domain/tooth-numbers';
 import {
   CloseEncounterDto,
   CreatePrescriptionDto,
@@ -31,6 +38,7 @@ import { findAllergyConflicts } from './domain/allergy-check';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { closeQueueEntry, reopenStartedQueueEntry } from '../appointments/domain/queue';
 import { reopenCancelledEncounter } from './domain/reopen-encounter';
+import { dentistCanReadPatient } from '../common/dentist-patient-access';
 
 /**
  * MedicalRecordsService — owns:
@@ -71,8 +79,9 @@ export class MedicalRecordsService {
    * other dentist's encounter, not just their own (live-verified gap
    * flagged by the whole-system audit; per
    * docs/03_Specification/MedicalRecords/SPEC.md §7.1, every one of
-   * these is documented 🔒 (own) for dentist except dental_chart.read,
-   * which is deliberately ✅ unrestricted — see getLatestDentalChartForPatient).
+   * these is documented 🔒 (own) for dentist. Reads are wider: a dentist
+   * may read (never write) the whole record of a patient they treated or
+   * are booked with — see common/dentist-patient-access.ts).
    *
    * Deliberately NOT used by startEncounterForAppointment or
    * listEncounters, whose row-scope checks need the extra
@@ -106,12 +115,20 @@ export class MedicalRecordsService {
     await tx.$queryRaw`SELECT id FROM encounters WHERE id = ${encounterId}::uuid FOR UPDATE`;
   }
 
+  /** After commit: lets cached derivatives (AI summary) drop stale data. */
+  private emitClinicalDataChanged(patientId: string | undefined): void {
+    if (!patientId) return;
+    const payload: PatientClinicalDataChangedEvent = { patientId };
+    this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
+  }
+
   private async withEditableEncounter<T>(
     encounterId: string,
     actor: JwtPayload,
     write: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    return this.prisma.$transaction(async tx => {
+    let patientId: string | undefined;
+    const result = await this.prisma.$transaction(async tx => {
       // All clinical writes and close share this lock, including first-note creation.
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
@@ -121,8 +138,11 @@ export class MedicalRecordsService {
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
         throw new EncounterNotClosableException('Only IN_PROGRESS encounters can be edited');
       }
+      patientId = encounter.patientId;
       return write(tx);
     });
+    this.emitClinicalDataChanged(patientId);
+    return result;
   }
 
   // ==========================================================================
@@ -164,7 +184,8 @@ export class MedicalRecordsService {
       );
     }
 
-    return this.prisma.$transaction(async tx => {
+    let opened = false;
+    const result = await this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
       const current = await tx.appointment.findUnique({ where: { id: appointmentId } });
       if (!current || current.deletedAt) throw new EncounterNotFoundException(appointmentId);
@@ -204,10 +225,13 @@ export class MedicalRecordsService {
             startedAt: new Date(),
           },
         });
+        opened = true;
         return { encounterId: created.id };
       }
       return { encounterId: existing.id };
     });
+    if (opened) this.emitClinicalDataChanged(appt.patientId);
+    return result;
   }
 
   async getEncounter(id: string, actor: JwtPayload) {
@@ -240,12 +264,15 @@ export class MedicalRecordsService {
     });
     if (!e) throw new EncounterNotFoundException(id);
     // Row-level: a caller without encounter.read.any (i.e. only
-    // encounter.read.own) may only read encounters they authored. 404
-    // rather than 403 so out-of-scope ids can't be enumerated — this
-    // route previously had no row-level check at all, letting any dentist
-    // read any other dentist's clinical records by guessing/observing a
-    // UUID.
-    if (this.isRowScopedDentist(actor) && e.dentistId !== actor.sub) {
+    // encounter.read.own) may read their own encounters, plus — read-only —
+    // any encounter of a patient they have treated or are booked with
+    // (dentistCanReadPatient). 404 rather than 403 so out-of-scope ids
+    // can't be enumerated.
+    if (
+      this.isRowScopedDentist(actor) &&
+      e.dentistId !== actor.sub &&
+      !(await dentistCanReadPatient(this.prisma, e.patientId, actor.sub))
+    ) {
       throw new EncounterNotFoundException(id);
     }
     return this.formatEncounter(e);
@@ -273,6 +300,11 @@ export class MedicalRecordsService {
       treatments: (e.treatments ?? []).map((t: Record<string, any>) => this.formatTreatment(t)),
       prescriptions: prescription ? [this.formatPrescription(prescription)] : [],
       notes: this.formatClinicalNoteList(e.clinicalNote),
+      // BR-MR-012: the chart type snapshotDentalChart will accept, so the
+      // UI never has to re-derive the age band on its own clock.
+      ...(e.patient?.dob && {
+        dentalChartPatientType: isMinor(new Date(e.patient.dob)) ? 'CHILD' : 'ADULT',
+      }),
     };
   }
 
@@ -373,9 +405,14 @@ export class MedicalRecordsService {
       }),
     };
 
-    // BR-MR-019: dentist row-level
+    // BR-MR-019: dentist row-level — own encounters only, except a single
+    // patient's history, which is readable in full once the dentist has
+    // treated or is booked with that patient (same rule as getEncounter).
     if (this.isRowScopedDentistExceptFrontDesk(query.actor)) {
-      where.dentistId = query.actor.sub;
+      const wholePatientHistory =
+        !!query.patientId &&
+        (await dentistCanReadPatient(this.prisma, query.patientId, query.actor.sub));
+      if (!wholePatientHistory) where.dentistId = query.actor.sub;
     }
 
     const rows = await this.prisma.encounter.findMany({
@@ -630,7 +667,7 @@ export class MedicalRecordsService {
         'ENCOUNTER_CANCEL_REASON_REQUIRED',
       );
     }
-    return this.prisma.$transaction(async tx => {
+    const patientId = await this.prisma.$transaction(async tx => {
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
       if (!encounter || (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub)) {
@@ -683,7 +720,9 @@ export class MedicalRecordsService {
           appointmentReturnedToCheckIn: appointment.count > 0,
         },
       });
+      return encounter.patientId;
     });
+    this.emitClinicalDataChanged(patientId);
   }
 
   // ==========================================================================
@@ -806,6 +845,7 @@ export class MedicalRecordsService {
       targetId: encounterId,
       metadata: { addendumId: addendum.id },
     });
+    this.emitClinicalDataChanged(encounter.patientId);
 
     return addendum;
   }
@@ -1153,7 +1193,7 @@ export class MedicalRecordsService {
       });
       if (!encounter) throw new EncounterNotFoundException(encounterId);
       // dental_chart.update is 🔒 (own, khi in_progress) per SPEC §7.1 —
-      // unlike dental_chart.read (deliberately unrestricted, see
+      // unlike dental_chart.read (any patient the dentist may read, see
       // getLatestDentalChartForPatient), only the treating dentist may write
       // a snapshot for their own encounter.
       if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
@@ -1168,6 +1208,16 @@ export class MedicalRecordsService {
       const expected = minor ? 'CHILD' : 'ADULT';
       if (dto.patientType !== expected) {
         throw new DentalChartPatientMismatchException();
+      }
+      // Keys are FDI numbers. CHILD = mixed dentition (primary 51–85 plus
+      // permanent 11–48); ADULT = permanent only.
+      const invalidTeeth = Object.keys(dto.teeth ?? {}).filter(key => {
+        const n = /^\d{2}$/.test(key) ? Number(key) : NaN;
+        if (!isValidFdiToothNumber(n)) return true;
+        return dto.patientType === 'ADULT' && n >= 50;
+      });
+      if (invalidTeeth.length > 0) {
+        throw new DentalChartInvalidToothException(invalidTeeth, dto.patientType);
       }
 
       const existing = await tx.dentalChartSnapshot.findUnique({
@@ -1199,9 +1249,16 @@ export class MedicalRecordsService {
 
   /**
    * Read the latest dental chart snapshot for a patient (across encounters).
-   * Used by the Patients proxy controller too.
+   * A row-scoped dentist gets it only for a patient they may read
+   * (dentistCanReadPatient) — same scope as the encounter history.
    */
-  async getLatestDentalChartForPatient(patientId: string) {
+  async getLatestDentalChartForPatient(patientId: string, actor: JwtPayload) {
+    if (
+      this.isRowScopedDentist(actor) &&
+      !(await dentistCanReadPatient(this.prisma, patientId, actor.sub))
+    ) {
+      throw new BusinessRuleException('Không tìm thấy bệnh nhân', HttpStatus.NOT_FOUND);
+    }
     const lastEncounter = await this.prisma.encounter.findFirst({
       where: { patientId, dentalChart: { isNot: null } },
       orderBy: { startedAt: 'desc' },

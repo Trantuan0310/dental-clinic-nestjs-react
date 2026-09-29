@@ -36,7 +36,7 @@ describe('Clinical data audit regressions', () => {
       service = new MedicalRecordsService(
         db as unknown as PrismaService,
         { log: jest.fn() } as unknown as AuditService,
-        {} as EventEmitter2,
+        { emit: jest.fn() } as unknown as EventEmitter2,
       );
       db.clinicalNoteAddendum.create.mockResolvedValue({ id: 'a', content: 'Correction' });
     });

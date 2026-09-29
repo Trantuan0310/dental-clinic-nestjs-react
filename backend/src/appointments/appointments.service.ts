@@ -59,6 +59,7 @@ import {
 } from './dto/appointment.dto';
 import { closeQueueEntry, enqueue } from './domain/queue';
 import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
+import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
@@ -2134,10 +2135,8 @@ export class AppointmentsService {
     if (dentistId !== actor.sub) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch vào lịch làm việc của chính mình');
     }
-    const treated = await this.prisma.encounter.count({
-      where: { patientId, dentistId: actor.sub },
-    });
-    if (treated === 0) {
+    // Follow-ups need a real (non-cancelled) visit, not just a booking.
+    if (!(await dentistHasTreatedPatient(this.prisma, patientId, actor.sub))) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch tái khám cho bệnh nhân mình đã khám');
     }
   }

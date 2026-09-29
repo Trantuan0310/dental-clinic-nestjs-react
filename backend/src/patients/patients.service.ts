@@ -1,10 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Gender } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { PaginatedResult, PaginationSchema } from '../common/dto/pagination.dto';
 import { endOfDayInclusive } from '../common/date-range.util';
+import {
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
+} from '../common/events/domain-events';
+import {
+  dentistCanReadPatient,
+  patientIdsReadableByDentist,
+  patientReadableByDentistWhere,
+} from '../common/dentist-patient-access';
 import {
   CreatePatientDto,
   LookupPatientDto,
@@ -49,7 +59,14 @@ export class PatientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /** Allergies/history feed the cached AI summary — let it drop stale copies. */
+  private emitClinicalDataChanged(patientId: string): void {
+    const payload: PatientClinicalDataChangedEvent = { patientId };
+    this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
+  }
 
   // ============================================================================
   // Code generator (BR-PT-001)
@@ -265,6 +282,7 @@ export class PatientsService {
         phoneChanged,
       },
     });
+    this.emitClinicalDataChanged(id);
 
     return updated;
   }
@@ -442,8 +460,9 @@ export class PatientsService {
 
   /**
    * Allergies, chronic diseases and current medications. A dentist (row-scoped)
-   * may change them only for a patient they have treated, so a newly found
-   * allergy is recorded during the visit; other fields stay front-desk work.
+   * may change them only for a patient they have treated or are booked with
+   * (dentistCanReadPatient), so a newly found allergy is recorded during the
+   * visit; other fields stay front-desk work.
    */
   async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findFirst({
@@ -452,10 +471,9 @@ export class PatientsService {
     });
     if (!current) throw new PatientNotFoundException(id);
     if (this.isRowScopedDentist(actor)) {
-      const treated = await this.prisma.encounter.count({
-        where: { patientId: id, dentistId: actor.sub },
-      });
-      if (treated === 0) throw new PatientNotFoundException(id);
+      if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
+        throw new PatientNotFoundException(id);
+      }
     }
     const clean = (list?: string[]) =>
       list === undefined
@@ -483,6 +501,7 @@ export class PatientsService {
       targetId: id,
       metadata: { fields: Object.keys(data) },
     });
+    this.emitClinicalDataChanged(id);
     return {
       id: updated.id,
       allergies: readJsonStringArray(updated.allergies),
@@ -504,21 +523,13 @@ export class PatientsService {
     const isDentist = this.isRowScopedDentist(actor);
 
     // BR-PT-014: dentist row-level access — a dentist may only view patients
-    // they have actually treated. Reusing this count as the ownership check
-    // (rather than a separate query) and 404'ing on zero avoids leaking PII
-    // for patients outside their scope, and matches the anti-enumeration
-    // pattern used elsewhere (404, not 403, for out-of-scope resources).
-    let encountersCount: number;
-    if (isDentist) {
-      encountersCount = await this.prisma.encounter.count({
-        where: { patientId: id, dentistId: actor.sub },
-      });
-      if (encountersCount === 0) {
-        throw new PatientNotFoundException(id);
-      }
-    } else {
-      encountersCount = await this.prisma.encounter.count({ where: { patientId: id } });
+    // they have treated or are booked with (dentistCanReadPatient); 404, not
+    // 403, for out-of-scope patients (anti-enumeration). Once in scope they
+    // read the whole record, so the encounter total is patient-wide.
+    if (isDentist && !(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
+      throw new PatientNotFoundException(id);
     }
+    const encountersCount = await this.prisma.encounter.count({ where: { patientId: id } });
 
     // BR-PT-021: financial fields are Admin-only on this endpoint, plus a
     // dentist scoped to invoices from encounters they themselves treated
@@ -608,17 +619,9 @@ export class PatientsService {
       }),
     };
 
-    // BR-PT-014: row-level filter for dentist
+    // BR-PT-014: row-level filter for dentist (treated or booked with).
     if (this.isRowScopedDentist(actor)) {
-      const encounters = await this.prisma.encounter.findMany({
-        where: { dentistId: actor.sub },
-        select: { patientId: true },
-        distinct: ['patientId'],
-      });
-      const patientIds = encounters.map(e => e.patientId);
-      where.id = {
-        in: patientIds.length === 0 ? ['00000000-0000-0000-0000-000000000000'] : patientIds,
-      };
+      where.AND = [patientReadableByDentistWhere(actor.sub)];
     }
 
     const items = await this.prisma.patient.findMany({
@@ -749,12 +752,13 @@ export class PatientsService {
     // last-visit info by phone, CCCD, or name, bypassing the exact
     // row-level restriction list() enforces for the same PII.
     if (this.isRowScopedDentist(actor)) {
-      const encounters = await this.prisma.encounter.findMany({
-        where: { dentistId: actor.sub, patientId: { in: patientRows.map(p => p.id) } },
-        select: { patientId: true },
-        distinct: ['patientId'],
-      });
-      const allowedIds = new Set(encounters.map(e => e.patientId));
+      const allowedIds = new Set(
+        await patientIdsReadableByDentist(
+          this.prisma,
+          actor.sub,
+          patientRows.map(p => p.id),
+        ),
+      );
       patientRows = patientRows.filter(p => allowedIds.has(p.id));
     }
 
@@ -791,13 +795,9 @@ export class PatientsService {
     });
     if (!patient) throw new PatientNotFoundException(id);
 
-    // BR-PT-014: same row-level scoping as getDetailWithSummary — a dentist
-    // may only see phone history for patients they have actually treated.
+    // BR-PT-014: same row-level scoping as getDetailWithSummary.
     if (this.isRowScopedDentist(actor)) {
-      const encountersCount = await this.prisma.encounter.count({
-        where: { patientId: id, dentistId: actor.sub },
-      });
-      if (encountersCount === 0) {
+      if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
         throw new PatientNotFoundException(id);
       }
     }

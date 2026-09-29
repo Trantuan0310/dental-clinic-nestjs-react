@@ -5,7 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { asTransaction, createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-mock';
 import { createMockJwtPayload } from '../../test/helpers/auth-mock';
-import { DentistHasFutureAppointmentsException } from './staff.exceptions';
+import {
+  DentistHasFutureAppointmentsException,
+  DentistHasOpenEncountersException,
+} from './staff.exceptions';
 
 describe('DentistsService', () => {
   let service: DentistsService;
@@ -125,8 +128,43 @@ describe('DentistsService', () => {
       expect(prisma.dentistProfile.update).not.toHaveBeenCalled();
     });
 
+    it('counts a visit being treated even after its slot has ended', async () => {
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.encounter.count.mockResolvedValue(0);
+      await service.deactivate(
+        'user-9',
+        { status: 'SUSPENDED' as never, reason: 'Tạm nghỉ' },
+        admin,
+        meta,
+      );
+      const where = prisma.appointment.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual(
+        expect.arrayContaining([
+          { status: 'IN_PROGRESS' },
+          expect.objectContaining({
+            status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
+          }),
+        ]),
+      );
+    });
+
+    it('refuses while the dentist still has an open encounter', async () => {
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.encounter.count.mockResolvedValue(2);
+      const error = await service
+        .deactivate('user-9', { status: 'SUSPENDED' as never, reason: 'Tạm nghỉ' }, admin, meta)
+        .catch(e => e);
+      expect(error).toBeInstanceOf(DentistHasOpenEncountersException);
+      expect(error.getResponse().message).toContain('2 phiên khám đang mở');
+      expect(prisma.encounter.count).toHaveBeenCalledWith({
+        where: { dentistId: 'user-9', status: 'IN_PROGRESS' },
+      });
+      expect(prisma.dentistProfile.update).not.toHaveBeenCalled();
+    });
+
     it('suspends a dentist with no upcoming bookings', async () => {
       prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.encounter.count.mockResolvedValue(0);
       const result = await service.deactivate(
         'user-9',
         { status: 'SUSPENDED' as never, reason: 'Tạm nghỉ' },

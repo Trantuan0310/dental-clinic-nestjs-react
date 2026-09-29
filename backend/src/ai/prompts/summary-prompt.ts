@@ -19,6 +19,8 @@ export interface SummaryInput {
     chiefComplaint: string | null;
     diagnosis: string | null;
     treatmentPlan: string | null;
+    /** Latest clinical-note addendums (corrections after close), newest first. */
+    addendums?: string[];
     status: string;
     treatments: Array<{ code: string | null; name: string }>;
   }>;
@@ -49,8 +51,11 @@ export function buildUserPrompt(input: SummaryInput): string {
               .join(', ')}`
           : '';
       const plan = enc.treatmentPlan ? ` | KH: ${enc.treatmentPlan.slice(0, 120)}` : '';
+      const addendum = enc.addendums?.length
+        ? ` | Bổ sung: ${enc.addendums.map(a => a.slice(0, 120)).join('; ')}`
+        : '';
       sections.push(
-        `- ${enc.date} [${enc.status}] SĐC: ${enc.chiefComplaint ?? '—'} | CĐ: ${enc.diagnosis ?? '—'}${plan}${tx}`,
+        `- ${enc.date} [${enc.status}] SĐC: ${enc.chiefComplaint ?? '—'} | CĐ: ${enc.diagnosis ?? '—'}${plan}${addendum}${tx}`,
       );
     }
   }

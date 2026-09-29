@@ -10,12 +10,11 @@ import {
   UpdateDentistProfileDto,
 } from './dto/staff.dto';
 import {
-  DentistHasFutureAppointmentsException,
   DentistProfileNotFoundException,
   EmployeeValidationException,
   LicenseNumberTakenException,
 } from './staff.exceptions';
-import { futureActiveAppointments, toDateOnly } from './staff-rules';
+import { assertDentistHasNoOpenWork, toDateOnly } from './staff-rules';
 import type { RequestMeta } from './employees.service';
 
 const PROFILE_INCLUDE = {
@@ -129,8 +128,7 @@ export class DentistsService {
     }
     const updated = await this.prisma.$transaction(
       async tx => {
-        const blocking = await futureActiveAppointments(tx, userId);
-        if (blocking.length > 0) throw new DentistHasFutureAppointmentsException(blocking);
+        await assertDentistHasNoOpenWork(tx, userId);
         return tx.dentistProfile.update({
           where: { userId },
           data: { practiceStatus: dto.status, updatedBy: actor.sub },

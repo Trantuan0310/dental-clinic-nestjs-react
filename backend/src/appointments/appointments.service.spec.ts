@@ -1058,7 +1058,7 @@ describe('AppointmentsService', () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValueOnce(1);
       await service.create(dto, self);
       expect(prisma.encounter.count).toHaveBeenLastCalledWith({
-        where: { patientId: 'patient-1', dentistId: 'dentist-1' },
+        where: { patientId: 'patient-1', dentistId: 'dentist-1', status: { not: 'CANCELLED' } },
       });
       expect(prisma.appointment.create).toHaveBeenCalled();
     });

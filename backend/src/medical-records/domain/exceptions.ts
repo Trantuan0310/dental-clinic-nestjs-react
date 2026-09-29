@@ -99,3 +99,13 @@ export class PrescriptionAllergyConflictException extends BusinessRuleException 
     );
   }
 }
+
+export class DentalChartInvalidToothException extends BusinessRuleException {
+  constructor(keys: string[], patientType: 'ADULT' | 'CHILD') {
+    super(
+      `Số răng không hợp lệ trên sơ đồ ${patientType === 'CHILD' ? 'trẻ em' : 'người lớn'}: ${keys.join(', ')}`,
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      { invalidTeeth: keys, patientType },
+    );
+  }
+}
