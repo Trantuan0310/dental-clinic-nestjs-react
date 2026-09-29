@@ -1,7 +1,7 @@
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Gender } from '@prisma/client';
-import { BookingService } from './booking.service';
+import { BookingService, EXPIRED_MESSAGE } from './booking.service';
 
 const plan = {
   services: [],
@@ -27,6 +27,7 @@ describe('BookingService public request security and validation', () => {
         update: jest.fn(),
         findUnique: jest.fn(),
         findUniqueOrThrow: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
     };
     appointments = {
@@ -34,7 +35,7 @@ describe('BookingService public request security and validation', () => {
       planVisit: jest.fn().mockResolvedValue(plan),
       create: jest.fn(),
     };
-    patients = { create: jest.fn() };
+    patients = { create: jest.fn(), softDelete: jest.fn().mockResolvedValue(undefined) };
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     email = { send: jest.fn().mockResolvedValue(false) };
     service = new BookingService(prisma, appointments, patients, audit, email);
@@ -174,11 +175,22 @@ describe('BookingService public request security and validation', () => {
       await flush();
     });
 
-    it('counts only requests waiting on the front desk', async () => {
+    it('counts only requests waiting on the front desk whose time has not passed', async () => {
       prisma.bookingRequest.count = jest.fn().mockResolvedValue(3);
       await expect(service.pendingCount()).resolves.toEqual({ count: 3 });
-      expect(prisma.bookingRequest.count).toHaveBeenCalledWith({
-        where: { status: { in: ['PENDING_REVIEW', 'PATIENT_ACCEPTED'] } },
+      const where = prisma.bookingRequest.count.mock.calls[0][0].where;
+      const now = where.OR[0].requestedStartAt.gt;
+      expect(now).toBeInstanceOf(Date);
+      expect(where).toEqual({
+        OR: [
+          { status: { in: ['PENDING_REVIEW'] }, requestedStartAt: { gt: now } },
+          { status: { in: ['PATIENT_ACCEPTED'] }, proposedStartAt: { gt: now } },
+          {
+            status: { in: ['PATIENT_ACCEPTED'] },
+            proposedStartAt: null,
+            requestedStartAt: { gt: now },
+          },
+        ],
       });
     });
   });
@@ -373,5 +385,284 @@ describe('BookingService public request security and validation', () => {
       expect.objectContaining({ sub: 'staff-1' }),
       { id: 'request-1', expectedStatuses: ['PENDING_REVIEW'] },
     );
+  });
+
+  describe('requests whose time has passed', () => {
+    // 2026-10-01 08:00 at the clinic (UTC+7).
+    const NOW = new Date('2026-10-01T01:00:00Z');
+    const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000);
+    const actor = { sub: 'staff-1', email: 's@x', permissions: [] } as any;
+    const request = (over: Record<string, unknown> = {}) => ({
+      id: 'request-1',
+      referenceCode: 'GS-1A2B3C4D5E',
+      status: 'PENDING_REVIEW',
+      appointmentId: null,
+      serviceId: 'service-1',
+      preferredDentistId: 'dentist-1',
+      proposedDentistId: null,
+      requestedStartAt: minutes(-10),
+      proposedStartAt: null,
+      reason: null,
+      phone: '0901234567',
+      contactPersonPhone: null,
+      fullName: 'Nguyen An',
+      dob: new Date('1990-01-01'),
+      gender: 'FEMALE',
+      email: null,
+      accessTokenHash: createHash('sha256').update('right-token').digest('hex'),
+      ...over,
+    });
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW });
+      prisma.bookingRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      prisma.bookingRequest.findMany = jest.fn().mockResolvedValue([]);
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+      delete process.env.BOOKING_MIN_LEAD_MIN;
+    });
+
+    it('expires open, unbooked requests past their effective time in one conditional update', async () => {
+      prisma.bookingRequest.findMany.mockResolvedValue([
+        { id: 'r1', referenceCode: 'GS-1' },
+        { id: 'r2', referenceCode: 'GS-2' },
+      ]);
+      prisma.bookingRequest.updateMany.mockResolvedValue({ count: 2 });
+
+      await expect(service.expireOverdue()).resolves.toEqual({ expired: 2 });
+
+      const { where, data } = prisma.bookingRequest.updateMany.mock.calls[0][0];
+      expect(data).toEqual({ status: 'EXPIRED', responseMessage: EXPIRED_MESSAGE });
+      expect(where.appointmentId).toBeNull();
+      expect(where.id).toEqual({ in: ['r1', 'r2'] });
+      expect(where.OR).toEqual([
+        {
+          status: { in: ['PENDING_REVIEW', 'NEEDS_INFORMATION'] },
+          requestedStartAt: { lte: NOW },
+        },
+        { status: { in: ['PROPOSED', 'PATIENT_ACCEPTED'] }, proposedStartAt: { lte: NOW } },
+        {
+          status: { in: ['PROPOSED', 'PATIENT_ACCEPTED'] },
+          proposedStartAt: null,
+          requestedStartAt: { lte: NOW },
+        },
+      ]);
+      expect(audit.log).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'BOOKING_REQUEST_EXPIRED',
+          actorUserId: null,
+          metadata: { count: 2, referenceCodes: ['GS-1', 'GS-2'] },
+        }),
+      );
+    });
+
+    it('does nothing (and logs nothing) when no request is overdue', async () => {
+      await expect(service.expireOverdue()).resolves.toEqual({ expired: 0 });
+      expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
+    });
+
+    it('refuses to confirm a request whose time has passed, before touching patient records', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(request());
+      await expect(service.confirm('request-1', actor)).rejects.toThrow('Giờ hẹn đã qua');
+      expect(prisma.dentistService.findFirst).not.toHaveBeenCalled();
+      expect(prisma.patient.findMany).not.toHaveBeenCalled();
+      expect(patients.create).not.toHaveBeenCalled();
+      expect(appointments.create).not.toHaveBeenCalled();
+    });
+
+    it('uses the accepted proposed time, not the original one, to decide', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(
+        request({
+          status: 'PATIENT_ACCEPTED',
+          requestedStartAt: minutes(24 * 60),
+          proposedStartAt: minutes(-5),
+          proposedDentistId: 'dentist-2',
+        }),
+      );
+      await expect(service.confirm('request-1', actor)).rejects.toBeInstanceOf(ConflictException);
+      expect(patients.create).not.toHaveBeenCalled();
+    });
+
+    it('archives the patient record it just created when the visit cannot be booked', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(
+        request({ requestedStartAt: minutes(24 * 60) }),
+      );
+      prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+      patients.create.mockResolvedValue({ id: 'patient-new' });
+      appointments.create.mockRejectedValue(new ConflictException('Slot taken'));
+
+      await expect(service.confirm('request-1', actor)).rejects.toThrow('Slot taken');
+      expect(patients.softDelete).toHaveBeenCalledWith(
+        'patient-new',
+        expect.objectContaining({ reason: expect.stringContaining('GS-1A2B3C4D5E') }),
+        actor,
+      );
+    });
+
+    it('leaves an existing patient record alone when the visit cannot be booked', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(
+        request({ requestedStartAt: minutes(24 * 60) }),
+      );
+      prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+      prisma.patient.findMany.mockResolvedValue([
+        { id: 'patient-1', fullName: 'Nguyen An', dob: new Date('1990-01-01') },
+      ]);
+      appointments.create.mockRejectedValue(new ConflictException('Slot taken'));
+
+      await expect(service.confirm('request-1', actor)).rejects.toThrow('Slot taken');
+      expect(patients.softDelete).not.toHaveBeenCalled();
+    });
+
+    it('does not let the patient accept a proposed time that has passed', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(request());
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(
+        request({ status: 'PROPOSED', proposedStartAt: minutes(-1) }),
+      );
+      await expect(
+        service.acceptProposal('GS-1A2B3C4D5E', { phone: '0901234567' }),
+      ).rejects.toThrow('Giờ phòng khám đề xuất đã qua');
+      expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not take new details for a request whose time has passed', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(request());
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(
+        request({ status: 'NEEDS_INFORMATION' }),
+      );
+      await expect(
+        service.updateDetails('GS-1A2B3C4D5E', { phone: '0901234567' }, {
+          fullName: 'Nguyen An',
+          dob: '1990-01-01',
+          gender: Gender.FEMALE,
+          phone: '0901234567',
+        } as any),
+      ).rejects.toThrow('Giờ hẹn của yêu cầu này đã qua');
+      expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not ask for details on an overdue request, but still lets staff propose a new time', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(request());
+      await expect(
+        service.requestInformation('request-1', { message: 'Cần CCCD' }, actor),
+      ).rejects.toThrow('Giờ hẹn đã qua');
+
+      const newTime = new Date('2026-10-02T03:00:00Z'); // 10:00 next day at the clinic
+      prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+      appointments.getAvailability.mockResolvedValue({ availableSlots: ['10:00'] });
+      jest.spyOn(service, 'getForStaff').mockResolvedValue({ id: 'request-1' } as any);
+      await service.propose(
+        'request-1',
+        { dentistId: 'dentist-1', startAt: newTime.toISOString(), message: 'Mời đến giờ này' },
+        actor,
+      );
+      expect(prisma.bookingRequest.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'PROPOSED', proposedStartAt: newTime }),
+        }),
+      );
+    });
+
+    it('lists open requests nearest time first, then the rest newest first', async () => {
+      const soon = request({ id: 'soon', requestedStartAt: minutes(60) });
+      const proposedEarly = request({
+        id: 'proposed',
+        status: 'PROPOSED',
+        requestedStartAt: minutes(24 * 60),
+        proposedStartAt: minutes(30),
+      });
+      const late = request({ id: 'late', requestedStartAt: minutes(120) });
+      const done = request({ id: 'done', status: 'EXPIRED' });
+      prisma.bookingRequest.findMany
+        .mockResolvedValueOnce([soon, late, proposedEarly])
+        .mockResolvedValueOnce([done]);
+
+      const rows = await service.listForStaff({});
+      expect(rows.map((r: any) => r.id)).toEqual(['proposed', 'soon', 'late', 'done']);
+      expect(rows[0]).not.toHaveProperty('accessTokenHash');
+      expect(prisma.bookingRequest.findMany.mock.calls[1][0]).toMatchObject({
+        where: {
+          status: {
+            notIn: ['PENDING_REVIEW', 'NEEDS_INFORMATION', 'PROPOSED', 'PATIENT_ACCEPTED'],
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 97,
+      });
+    });
+
+    it('filters on EXPIRED like any closed status', async () => {
+      await service.listForStaff({ status: 'EXPIRED' as any });
+      expect(prisma.bookingRequest.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.bookingRequest.findMany.mock.calls[0][0]).toMatchObject({
+        where: { status: 'EXPIRED' },
+        orderBy: { createdAt: 'desc' },
+      });
+    });
+
+    describe('minimum notice for online requests', () => {
+      const submit = (startAt: Date) =>
+        service.createPublic({
+          fullName: 'Nguyen An',
+          dob: '1990-01-01',
+          gender: Gender.FEMALE,
+          phone: '0901234567',
+          serviceId: 'service-1',
+          dentistId: 'dentist-1',
+          startAt: startAt.toISOString(),
+          consent: true,
+        } as any);
+
+      beforeEach(() => {
+        prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+        appointments.getAvailability.mockResolvedValue({
+          availableSlots: ['08:30', '09:30', '10:00', '10:30', '14:00'],
+        });
+      });
+
+      it('offers only slots at least 2 hours ahead by default', async () => {
+        const result = await service.slots({
+          serviceId: 'service-1',
+          dentistId: 'dentist-1',
+          date: '2026-10-01',
+        });
+        expect(result.availableSlots).toEqual(['10:30', '14:00']);
+      });
+
+      it('follows BOOKING_MIN_LEAD_MIN', async () => {
+        process.env.BOOKING_MIN_LEAD_MIN = '30';
+        const result = await service.slots({
+          serviceId: 'service-1',
+          dentistId: 'dentist-1',
+          date: '2026-10-01',
+        });
+        expect(result.availableSlots).toEqual(['09:30', '10:00', '10:30', '14:00']);
+      });
+
+      it('refuses a request inside the notice period before writing anything', async () => {
+        await expect(submit(minutes(90))).rejects.toThrow('ít nhất 2 giờ');
+        expect(prisma.bookingRequest.create).not.toHaveBeenCalled();
+      });
+
+      it('refuses a second open request from the same phone for the same time', async () => {
+        prisma.bookingRequest.findFirst.mockResolvedValue({ id: 'request-0' });
+        const startAt = new Date('2026-10-01T07:00:00Z'); // 14:00 at the clinic
+        await expect(submit(startAt)).rejects.toThrow('đã có yêu cầu đặt lịch đang chờ xử lý');
+        expect(prisma.bookingRequest.findFirst).toHaveBeenCalledWith({
+          where: {
+            phone: '0901234567',
+            status: {
+              in: ['PENDING_REVIEW', 'NEEDS_INFORMATION', 'PROPOSED', 'PATIENT_ACCEPTED'],
+            },
+            appointmentId: null,
+            OR: [{ requestedStartAt: startAt }, { proposedStartAt: startAt }],
+          },
+          select: { id: true },
+        });
+        expect(prisma.bookingRequest.create).not.toHaveBeenCalled();
+      });
+    });
   });
 });

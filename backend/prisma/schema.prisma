@@ -1544,6 +1544,7 @@ enum BookingRequestStatus {
   CONFIRMED
   DECLINED
   CANCELLED
+  EXPIRED
 }
 
 model BookingRequest {

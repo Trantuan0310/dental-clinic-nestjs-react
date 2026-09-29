@@ -38,6 +38,7 @@ services:
       SMTP_PASS: ${SMTP_PASS:?Set SMTP password}
       EMAIL_FROM: ${EMAIL_FROM:?Set sender email}
       BOOKING_NOTIFY_EMAILS: ${BOOKING_NOTIFY_EMAILS:-}
+      BOOKING_MIN_LEAD_MIN: ${BOOKING_MIN_LEAD_MIN:-120}
       REDIS_URL: ${REDIS_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}

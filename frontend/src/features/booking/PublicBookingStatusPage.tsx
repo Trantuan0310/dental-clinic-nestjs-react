@@ -81,6 +81,12 @@ const STATE: Record<string, { title: string; text: string; tone: Tone; step: num
     tone: "bad",
     step: 0,
   },
+  EXPIRED: {
+    title: "Yêu cầu đã quá hạn",
+    text: "Đã qua giờ hẹn mà phòng khám chưa kịp xác nhận yêu cầu này, nên lịch không được giữ. Vui lòng đặt lịch mới hoặc gọi lễ tân để được sắp xếp.",
+    tone: "bad",
+    step: 0,
+  },
 };
 /** A confirmed request whose visit was later changed at the clinic. */
 const VISIT_STATE: Record<string, { title: string; text: string; tone: Tone }> = {
@@ -101,6 +107,18 @@ const VISIT_STATE: Record<string, { title: string; text: string; tone: Tone }> =
   },
 };
 const ACTIVE = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
+/**
+ * An open request whose time has passed is shown as EXPIRED straight away;
+ * the clinic's server closes it within a few minutes anyway.
+ */
+const shownStatus = (s: Status) => {
+  if (!ACTIVE.includes(s.status) || s.appointment) return s.status;
+  const at =
+    ["PROPOSED", "PATIENT_ACCEPTED"].includes(s.status) && s.proposedStartAt
+      ? s.proposedStartAt
+      : s.requestedStartAt;
+  return new Date(at).getTime() <= Date.now() ? "EXPIRED" : s.status;
+};
 const TONE_STYLE: Record<Tone, { box: string; icon: typeof Clock }> = {
   wait: { box: "border-amber-200 bg-amber-50 text-amber-900", icon: Clock },
   action: { box: "border-sky-200 bg-sky-50 text-sky-900", icon: AlertCircle },
@@ -422,8 +440,9 @@ export default function PublicBookingStatusPage() {
     setParams({}, { replace: true });
   };
 
+  const current = status ? shownStatus(status) : "";
   const visit = status?.status === "CONFIRMED" ? VISIT_STATE[status.appointment?.status ?? ""] : undefined;
-  const state = status ? (visit ? { ...STATE.CONFIRMED, ...visit } : STATE[status.status]) : undefined;
+  const state = status ? (visit ? { ...STATE.CONFIRMED, ...visit } : STATE[current]) : undefined;
   const tone = TONE_STYLE[state?.tone ?? "wait"];
   const ToneIcon = tone.icon;
   const time = status
@@ -472,7 +491,7 @@ export default function PublicBookingStatusPage() {
             </p>
             <ul className="mt-6 space-y-3">
               {results.map((item) => {
-                const itemState = STATE[item.status];
+                const itemState = STATE[shownStatus(item)];
                 const itemTime =
                   item.appointment?.startAt ??
                   (["PROPOSED", "PATIENT_ACCEPTED"].includes(item.status) && item.proposedStartAt
@@ -627,7 +646,7 @@ export default function PublicBookingStatusPage() {
             )}
 
             <div className="mt-6 flex flex-col gap-3 empty:hidden sm:flex-row sm:flex-wrap">
-              {status.status === "PROPOSED" && (
+              {current === "PROPOSED" && (
                 <button
                   disabled={busy}
                   onClick={() =>
@@ -651,7 +670,7 @@ export default function PublicBookingStatusPage() {
                   <CalendarPlus className="h-5 w-5" aria-hidden /> Thêm vào Google Calendar
                 </a>
               )}
-              {["DECLINED", "CANCELLED"].includes(status.status) || visit ? (
+              {["DECLINED", "CANCELLED", "EXPIRED"].includes(current) || visit ? (
                 <Link
                   to="/booking"
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600"
@@ -661,7 +680,7 @@ export default function PublicBookingStatusPage() {
               ) : null}
             </div>
 
-            {status.status === "NEEDS_INFORMATION" && (
+            {current === "NEEDS_INFORMATION" && (
               <DetailsForm
                 phone={access?.phone ?? ""}
                 busy={busy}
@@ -689,7 +708,7 @@ export default function PublicBookingStatusPage() {
               </div>
             </div>
 
-            {ACTIVE.includes(status.status) && (
+            {ACTIVE.includes(current) && (
               <div className="mt-6 text-sm">
                 {!confirmCancel ? (
                   <button
