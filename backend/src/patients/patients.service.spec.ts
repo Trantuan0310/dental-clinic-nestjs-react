@@ -540,7 +540,11 @@ describe('PatientsService', () => {
 
     it('update refuses turning an adult with only a primary phone into a child', async () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
-        validPatient({ primaryPhone: '0901234567', contactPersonName: null, contactPersonPhone: null }),
+        validPatient({
+          primaryPhone: '0901234567',
+          contactPersonName: null,
+          contactPersonPhone: null,
+        }),
       );
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
       const childDob = new Date(Date.now() - 5 * 365 * 86400000).toISOString().slice(0, 10);
@@ -554,7 +558,9 @@ describe('PatientsService', () => {
         validPatient({ primaryPhone: null, contactPersonName: null, contactPersonPhone: null }),
       );
       (prisma.patient.update as jest.Mock).mockResolvedValue(validPatient());
-      await expect(service.update('p1', { address: 'Hà Nội' } as any, actor)).resolves.toBeDefined();
+      await expect(
+        service.update('p1', { address: 'Hà Nội' } as any, actor),
+      ).resolves.toBeDefined();
     });
 
     it('softDelete also blocks on a patient in the chair (IN_PROGRESS encounter)', async () => {
@@ -582,7 +588,10 @@ describe('PatientsService', () => {
 
     it('addIdentifier: the same paper twice on one patient is a 409, not a P2002 500', async () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient({ id: 'p1' }));
-      (prisma.patientIdentifier.findFirst as jest.Mock).mockResolvedValue({ id: 'i', patientId: 'p1' });
+      (prisma.patientIdentifier.findFirst as jest.Mock).mockResolvedValue({
+        id: 'i',
+        patientId: 'p1',
+      });
       await expect(
         service.addIdentifier('p1', { type: IdentifierType.CCCD, value: '079123456789' }, actor),
       ).rejects.toMatchObject({ status: 409 });

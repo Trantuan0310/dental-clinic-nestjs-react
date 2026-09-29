@@ -157,7 +157,7 @@ export function intervalProblem(
   opts: { excludeBookingId?: string; ignoreBookings?: boolean; buffers?: Buffers } = {},
 ): SlotProblem | null {
   if (cal.closedAllDay) {
-    return { kind: 'CLOSED', message: `Dentist's calendar is closed on ${cal.date}` };
+    return { kind: 'CLOSED', message: `Lịch của bác sĩ đóng cả ngày ${cal.date}` };
   }
   // BR-APPT-003/027: the whole visit fits in one working window (a gap such
   // as lunch between two windows is not bookable).
@@ -166,8 +166,8 @@ export function intervalProblem(
     return {
       kind: 'OUTSIDE_WORKING_HOURS',
       message: hours
-        ? `${clinicHhmm(slot.start)}-${clinicHhmm(slot.end)} is outside working hours ${hours}${cal.changedHours ? ' (changed hours)' : ''} on ${cal.date}`
-        : 'Dentist has no working schedule for this day',
+        ? `${clinicHhmm(slot.start)}-${clinicHhmm(slot.end)} nằm ngoài giờ làm việc ${hours}${cal.changedHours ? ' (giờ đã điều chỉnh)' : ''} ngày ${cal.date}`
+        : 'Bác sĩ không có lịch làm việc ngày này',
     };
   }
   const busy = occupied(slot, opts.buffers);
@@ -176,11 +176,11 @@ export function intervalProblem(
     return block.kind === 'CLOSED'
       ? {
           kind: 'CLOSED',
-          message: `Dentist's calendar is closed ${clinicHhmm(block.start)}-${clinicHhmm(block.end)} on ${cal.date}`,
+          message: `Lịch của bác sĩ đóng ${clinicHhmm(block.start)}-${clinicHhmm(block.end)} ngày ${cal.date}`,
         }
       : {
           kind: 'TIME_OFF',
-          message: `Dentist is on time-off from ${block.start.toISOString()} to ${block.end.toISOString()}`,
+          message: `Bác sĩ nghỉ phép từ ${clinicHhmm(block.start)} đến ${clinicHhmm(block.end)} ngày ${cal.date}`,
         };
   }
   if (!opts.ignoreBookings) {
@@ -189,7 +189,7 @@ export function intervalProblem(
         (opts.excludeBookingId === undefined || b.id !== opts.excludeBookingId) &&
         overlaps(b, busy),
     );
-    if (clash) return { kind: 'SLOT_CONFLICT', message: 'This time slot is already booked' };
+    if (clash) return { kind: 'SLOT_CONFLICT', message: 'Khung giờ này đã có lịch hẹn' };
   }
   return null;
 }

@@ -319,7 +319,10 @@ describe('MedicalRecordsService', () => {
       (prisma.dentalChartSnapshot.create as jest.Mock).mockResolvedValue({ id: 's' });
       await service.snapshotDentalChart(
         'enc-1',
-        { patientType: 'ADULT', teeth: { '55': { status: 'missing' }, '16': { status: 'healthy' } } },
+        {
+          patientType: 'ADULT',
+          teeth: { '55': { status: 'missing' }, '16': { status: 'healthy' } },
+        },
         dentistActor,
       );
       expect(prisma.dentalChartSnapshot.create).toHaveBeenCalled();
@@ -944,7 +947,7 @@ describe('MedicalRecordsService', () => {
 
       await expect(
         service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
-      ).rejects.toThrow(/Gloves.*requires 100.*only 5 available/);
+      ).rejects.toThrow(/Gloves.*cần 100.*chỉ còn 5/);
     });
   });
 

@@ -956,9 +956,7 @@ export class PatientsService {
         if (target.deletedAt) throw new PatientMergeInvalidException('Hồ sơ đích đã bị xóa');
         // The name/DOB match rule is unchanged here (tightening it is a follow-up).
         if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
-          throw new PatientMergeInvalidException(
-            'Chỉ gộp được hai hồ sơ cùng họ tên (BR-PT-019)',
-          );
+          throw new PatientMergeInvalidException('Chỉ gộp được hai hồ sơ cùng họ tên (BR-PT-019)');
         }
         if (source.dob.getTime() !== target.dob.getTime()) {
           throw new PatientMergeInvalidException(

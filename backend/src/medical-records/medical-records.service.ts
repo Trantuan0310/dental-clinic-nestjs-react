@@ -388,8 +388,7 @@ export class MedicalRecordsService {
       sections.push({ type: 'chief_complaint', content: note.chiefComplaint });
     if (note.diagnosis) sections.push({ type: 'diagnosis', content: note.diagnosis });
     // Each section keeps its own type so an edit goes back to its own column.
-    if (note.treatmentPlan)
-      sections.push({ type: 'treatment_plan', content: note.treatmentPlan });
+    if (note.treatmentPlan) sections.push({ type: 'treatment_plan', content: note.treatmentPlan });
     if (note.notes) sections.push({ type: 'progress_note', content: note.notes });
     return sections.map((section, i) => ({
       id: `${note.id}-${i}`,
@@ -1270,7 +1269,7 @@ export class MedicalRecordsService {
         throw new EncounterNotFoundException(encounterId);
       }
       if (encounter.patient.deletedAt) {
-        throw new EncounterNotClosableException('Patient is deleted');
+        throw new EncounterNotClosableException('Bệnh nhân đã bị xóa');
       }
 
       // BR-MR-012: patientType must match age band

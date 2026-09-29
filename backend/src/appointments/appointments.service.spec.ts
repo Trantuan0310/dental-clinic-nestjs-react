@@ -308,7 +308,7 @@ describe('AppointmentsService', () => {
           } as any,
           actor,
         ),
-      ).rejects.toThrow(/suspended/);
+      ).rejects.toThrow(/tạm ngưng/);
       expect(prisma.appointment.create).not.toHaveBeenCalled();
     });
 
@@ -980,7 +980,7 @@ describe('AppointmentsService', () => {
 
       await expect(
         service.reschedule('appt-1', { ...future, newDentistId: 'receptionist-1' } as any, actor),
-      ).rejects.toThrow(/not active or lacks dentist role/);
+      ).rejects.toThrow(/không còn hoạt động/);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -1174,7 +1174,7 @@ describe('AppointmentsService', () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.shiftRegistration.findFirst as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.create(dto, actor)).rejects.toThrow(/no working schedule/);
+      await expect(service.create(dto, actor)).rejects.toThrow(/không có lịch làm việc/);
     });
   });
 
@@ -1339,7 +1339,7 @@ describe('AppointmentsService', () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(scheduled);
 
       await expect(service.confirm('appt-1', dentistPayload('dentist-2'))).rejects.toThrow(
-        /not found/,
+        /Không tìm thấy lịch hẹn/,
       );
     });
   });
@@ -1449,7 +1449,7 @@ describe('AppointmentsService', () => {
           } as any,
           actor,
         ),
-      ).rejects.toThrow(/lacks dentist role/);
+      ).rejects.toThrow(/không còn hoạt động/);
     });
 
     it("forbids a dentist from recording a colleague's time-off", async () => {
@@ -1983,7 +1983,7 @@ describe('AppointmentsService', () => {
         (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
           { kind: 'CLOSED', startTime: null, endTime: null },
         ]);
-        await expect(book()).rejects.toThrow(/closed/);
+        await expect(book()).rejects.toThrow(/đóng cả ngày/);
         expect(prisma.appointment.create).not.toHaveBeenCalled();
       });
 
@@ -1995,7 +1995,7 @@ describe('AppointmentsService', () => {
             endTime: new Date('1970-01-01T10:00:00Z'),
           },
         ]);
-        await expect(book()).rejects.toThrow(/closed 09:00-10:00/);
+        await expect(book()).rejects.toThrow(/đóng 09:00-10:00/);
       });
 
       it('BR-SCH-004: changed hours replace the weekly schedule', async () => {
@@ -2006,7 +2006,7 @@ describe('AppointmentsService', () => {
             endTime: new Date('1970-01-01T17:00:00Z'),
           },
         ]);
-        await expect(book()).rejects.toThrow(/changed hours/);
+        await expect(book()).rejects.toThrow(/giờ đã điều chỉnh/);
         expect(prisma.workingSchedule.findFirst).not.toHaveBeenCalled();
       });
     });

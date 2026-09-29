@@ -4,13 +4,13 @@ import type { AllergyConflict } from './allergy-check';
 
 export class EncounterNotFoundException extends BusinessRuleException {
   constructor(id: string) {
-    super('Encounter not found', HttpStatus.NOT_FOUND, `Encounter ${id} does not exist`);
+    super('Không tìm thấy phiên khám', HttpStatus.NOT_FOUND, `Encounter ${id} does not exist`);
   }
 }
 
 export class EncounterNotClosableException extends BusinessRuleException {
   constructor(reason: string) {
-    super('Encounter not closable', HttpStatus.CONFLICT, reason);
+    super('Phiên khám không ở trạng thái cho phép thao tác này', HttpStatus.CONFLICT, reason);
   }
 }
 
@@ -27,7 +27,7 @@ export class ClinicalNoteLockedException extends BusinessRuleException {
 export class TreatmentNotInEncounterException extends BusinessRuleException {
   constructor() {
     super(
-      'Treatment not in encounter',
+      'Điều trị không thuộc phiên khám này',
       HttpStatus.UNPROCESSABLE_ENTITY,
       'Treatment does not belong to the given encounter',
     );
@@ -43,7 +43,7 @@ export class InsufficientStockException extends BusinessRuleException {
     // short. Put the specifics in `message` itself; `details` still carries
     // the structured fields for any caller that wants them programmatically.
     super(
-      `Insufficient stock for '${itemName}': requires ${required}, only ${available} available`,
+      `Không đủ tồn kho '${itemName}': cần ${required}, chỉ còn ${available}`,
       HttpStatus.UNPROCESSABLE_ENTITY,
       { itemName, required, available },
       'INSUFFICIENT_STOCK',
@@ -54,7 +54,7 @@ export class InsufficientStockException extends BusinessRuleException {
 export class DentalChartPatientMismatchException extends BusinessRuleException {
   constructor() {
     super(
-      'Patient type mismatch',
+      'Loại sơ đồ răng không khớp với tuổi bệnh nhân',
       HttpStatus.UNPROCESSABLE_ENTITY,
       'DentalChartSnapshot.patientType must match Patient.dob age band (minor/adult)',
     );
@@ -64,7 +64,7 @@ export class DentalChartPatientMismatchException extends BusinessRuleException {
 export class PrescriptionAlreadyExistsException extends BusinessRuleException {
   constructor() {
     super(
-      'Prescription already exists',
+      'Phiên khám này đã có đơn thuốc',
       HttpStatus.CONFLICT,
       'Each encounter may only have one prescription',
     );
