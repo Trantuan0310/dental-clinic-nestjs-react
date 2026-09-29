@@ -25,7 +25,11 @@ import {
 } from './domain/exceptions';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { CreateTreatmentDto } from './dto/medical-record.dto';
+import {
+  CreatePrescriptionDto,
+  CreateTreatmentDto,
+  UpdatePrescriptionDto,
+} from './dto/medical-record.dto';
 
 describe('MedicalRecordsService', () => {
   let service: MedicalRecordsService;
@@ -834,6 +838,188 @@ describe('MedicalRecordsService', () => {
       await expect(
         service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
       ).rejects.toThrow(/Gloves.*requires 100.*only 5 available/);
+    });
+
+    describe('allergy re-check against the current prescription', () => {
+      const activeRx = {
+        id: 'rx-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        version: 2,
+        lines: [{ drugName: 'Augmentin 625mg', deletedAt: null }],
+      };
+
+      beforeEach(() => {
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+          ...validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+          treatments: [],
+        });
+        (prisma.prescription.findUnique as jest.Mock).mockResolvedValue(activeRx);
+        // allergy recorded after the prescription was saved
+        (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+          allergies: ['Không chịu được Penicillin'],
+        });
+        (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
+      });
+
+      it('409s PRESCRIPTION_ALLERGY_CONFLICT and closes nothing', async () => {
+        const err = await service
+          .closeEncounter('enc-1', { summary: 'done' } as any, dentistActor)
+          .catch(e => e);
+
+        expect(err).toBeInstanceOf(PrescriptionAllergyConflictException);
+        expect(err.getResponse()).toEqual(
+          expect.objectContaining({
+            error: 'PRESCRIPTION_ALLERGY_CONFLICT',
+            details: {
+              conflicts: [
+                expect.objectContaining({
+                  drugName: 'Augmentin 625mg',
+                  allergy: 'Không chịu được Penicillin',
+                }),
+              ],
+            },
+          }),
+        );
+        expect(prisma.encounter.update).not.toHaveBeenCalled();
+        expect(events.emit).not.toHaveBeenCalled();
+      });
+
+      it('rejects a reason under 10 characters', async () => {
+        await expect(
+          service.closeEncounter(
+            'enc-1',
+            { summary: 'done', allergyOverrideReason: 'ngắn' } as any,
+            dentistActor,
+          ),
+        ).rejects.toThrow(/ít nhất 10 ký tự/);
+      });
+
+      it('closes when the same pair was already overridden on this prescription', async () => {
+        (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+          {
+            metadata: {
+              prescriptionId: 'rx-1',
+              conflicts: [{ drugName: 'AUGMENTIN 625mg', allergy: 'Không chịu được penicillin' }],
+            },
+          },
+        ]);
+
+        await service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor);
+
+        expect(prisma.encounter.update).toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'PRESCRIPTION_ALLERGY_OVERRIDE' }),
+        );
+      });
+
+      it('still 409s when the override was for another prescription or another allergy', async () => {
+        (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+          {
+            metadata: {
+              prescriptionId: 'rx-old',
+              conflicts: [{ drugName: 'Augmentin 625mg', allergy: 'Không chịu được Penicillin' }],
+            },
+          },
+          {
+            metadata: {
+              prescriptionId: 'rx-1',
+              conflicts: [{ drugName: 'Augmentin 625mg', allergy: 'Dị ứng Amoxicillin' }],
+            },
+          },
+        ]);
+
+        await expect(
+          service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
+        ).rejects.toThrow(PrescriptionAllergyConflictException);
+      });
+
+      it('closes with a reason and records PRESCRIPTION_ALLERGY_OVERRIDE', async () => {
+        await service.closeEncounter(
+          'enc-1',
+          { summary: 'done', allergyOverrideReason: '  Đã hỏi lại, BN dùng Augmentin ổn  ' } as any,
+          dentistActor,
+        );
+
+        expect(prisma.encounter.update).toHaveBeenCalled();
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+            targetId: 'enc-1',
+            metadata: expect.objectContaining({
+              prescriptionId: 'rx-1',
+              reason: 'Đã hỏi lại, BN dùng Augmentin ổn',
+              atClose: true,
+              conflicts: [expect.objectContaining({ drugName: 'Augmentin 625mg' })],
+            }),
+          }),
+        );
+      });
+
+      it('ignores a deleted prescription', async () => {
+        (prisma.prescription.findUnique as jest.Mock).mockResolvedValue({
+          ...activeRx,
+          deletedAt: new Date(),
+        });
+        await service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor);
+        expect(prisma.encounter.update).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('prescription DTO limits', () => {
+    const errorsFor = (line: Record<string, unknown>) =>
+      validateSync(
+        plainToInstance(CreatePrescriptionDto, { lines: [{ drugName: 'Amoxicillin', ...line }] }),
+      );
+
+    it('caps dosage/frequency at the VARCHAR(100) columns and quantity at 10000', () => {
+      expect(
+        errorsFor({ dosage: 'x'.repeat(100), frequency: 'y'.repeat(100), quantity: 10000 }),
+      ).toEqual([]);
+      expect(errorsFor({ dosage: 'x'.repeat(101) })).not.toEqual([]);
+      expect(errorsFor({ frequency: 'y'.repeat(101) })).not.toEqual([]);
+      expect(errorsFor({ quantity: 3e9 })).not.toEqual([]);
+    });
+
+    it('requires version on the PATCH payload', () => {
+      expect(validateSync(plainToInstance(UpdatePrescriptionDto, { notes: 'x' }))).not.toEqual([]);
+      expect(
+        validateSync(plainToInstance(UpdatePrescriptionDto, { notes: 'x', version: 0 })),
+      ).toEqual([]);
+    });
+  });
+
+  describe('updatePrescription', () => {
+    beforeEach(() => {
+      (prisma.prescription.findUnique as jest.Mock).mockResolvedValue({
+        id: 'rx-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        version: 3,
+        encounter: { dentistId: dentistActor.sub },
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS, dentistId: dentistActor.sub }),
+      );
+      (prisma.prescription.update as jest.Mock).mockResolvedValue({ id: 'rx-1', version: 4 });
+    });
+
+    it('409s PRESCRIPTION_VERSION_CONFLICT on a stale version and writes nothing', async () => {
+      await expect(
+        service.updatePrescription('rx-1', { notes: 'x', version: 2 }, dentistActor),
+      ).rejects.toThrow(PrescriptionVersionConflictException);
+      expect(prisma.prescription.update).not.toHaveBeenCalled();
+    });
+
+    it('updates when the version matches', async () => {
+      await service.updatePrescription('rx-1', { notes: 'x', version: 3 }, dentistActor);
+      expect(prisma.prescription.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'rx-1' },
+          data: expect.objectContaining({ notes: 'x', version: { increment: 1 } }),
+        }),
+      );
     });
   });
 

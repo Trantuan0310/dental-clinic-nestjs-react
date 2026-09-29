@@ -252,18 +252,21 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                   <Input
                     label="Tên thuốc"
                     value={item.drugName}
+                    maxLength={255}
                     onChange={(e) => updateItem(index, 'drugName', e.target.value)}
                     placeholder="VD: Amoxicillin 500mg"
                   />
                   <Input
                     label="Liều"
                     value={item.dosage}
+                    maxLength={100}
                     onChange={(e) => updateItem(index, 'dosage', e.target.value)}
                     placeholder="VD: 500mg"
                   />
                   <Input
                     label="Tần suất"
                     value={item.frequency}
+                    maxLength={100}
                     onChange={(e) => updateItem(index, 'frequency', e.target.value)}
                     placeholder="VD: 3 lần/ngày"
                   />
@@ -272,13 +275,17 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                       label="Số lượng"
                       type="number"
                       min="1"
+                      max="10000"
                       value={item.quantity?.toString() || ''}
-                      onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || undefined)}
+                      onChange={(e) =>
+                        updateItem(index, 'quantity', Math.min(parseInt(e.target.value) || 0, 10000) || undefined)
+                      }
                       placeholder="15"
                     />
                     <Input
                       label="Đơn vị"
                       value={item.unit || ''}
+                      maxLength={50}
                       onChange={(e) => updateItem(index, 'unit', e.target.value)}
                       placeholder="viên"
                     />

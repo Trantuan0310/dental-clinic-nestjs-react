@@ -102,7 +102,10 @@ export interface CreatePatientPayload {
   documents?: Omit<PatientDocument, 'id'>[];
 }
 
-export interface UpdatePatientPayload extends Partial<CreatePatientPayload> {}
+export interface UpdatePatientPayload extends Partial<CreatePatientPayload> {
+  /** `updatedAt` the form loaded; the backend 409s if the record changed since. */
+  expectedUpdatedAt?: string;
+}
 
 export interface PatientLookupResult {
   id: string;

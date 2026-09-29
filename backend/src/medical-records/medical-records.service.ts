@@ -34,7 +34,7 @@ import {
   UpdateTreatmentDto,
 } from './dto/medical-record.dto';
 import { isMinor, readJsonStringArray } from '../patients/domain/patient-rules';
-import { findAllergyConflicts } from './domain/allergy-check';
+import { AllergyConflict, findAllergyConflicts, normalizeTerm } from './domain/allergy-check';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { closeQueueEntry, reopenStartedQueueEntry } from '../appointments/domain/queue';
 import { reopenCancelledEncounter } from './domain/reopen-encounter';
@@ -512,6 +512,15 @@ export class MedicalRecordsService {
           throw new EncounterNotClosableException('Encounter was cancelled');
         }
 
+        // An allergy recorded after the prescription was saved must not slip
+        // through: re-screen before anything is written.
+        const allergyOverride = await this.screenPrescriptionAtClose(
+          tx,
+          encounterId,
+          encounter.patientId,
+          dto.allergyOverrideReason,
+        );
+
         // Decrement inventory FIRST (fail-fast). Use updateMany with a
         // conditional WHERE clause to prevent read-then-update races: only
         // succeed when quantityOnHand >= usage (per BR-INV-003 stock-out).
@@ -619,6 +628,23 @@ export class MedicalRecordsService {
             ),
           },
         });
+
+        if (allergyOverride) {
+          await this.audit.log({
+            action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+            actorUserId: actor.sub,
+            actorEmail: actor.email,
+            targetType: 'encounter',
+            targetId: encounterId,
+            metadata: {
+              prescriptionId: allergyOverride.prescriptionId,
+              patientId: encounter.patientId,
+              reason: allergyOverride.reason,
+              conflicts: allergyOverride.conflicts,
+              atClose: true,
+            },
+          });
+        }
 
         const result: EncounterClosedEvent = {
           encounterId: encounter.id,
@@ -1150,6 +1176,64 @@ export class MedicalRecordsService {
   }
 
   /**
+   * Re-screens the encounter's active prescription against the patient's
+   * allergies as they are now. Pairs already overridden with a reason for
+   * this prescription (PRESCRIPTION_ALLERGY_OVERRIDE audit) pass; any other
+   * pair needs `reason` (≥ 10 chars) or the close is refused with 409.
+   * Returns what to audit when the close overrides new pairs.
+   */
+  private async screenPrescriptionAtClose(
+    tx: Prisma.TransactionClient,
+    encounterId: string,
+    patientId: string,
+    reasonInput: string | undefined,
+  ): Promise<{ prescriptionId: string; reason: string; conflicts: AllergyConflict[] } | null> {
+    const prescription = await tx.prescription.findUnique({
+      where: { encounterId },
+      include: { lines: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } } },
+    });
+    if (!prescription || prescription.deletedAt || prescription.lines.length === 0) return null;
+    const patient = await tx.patient.findUnique({
+      where: { id: patientId },
+      select: { allergies: true },
+    });
+    const conflicts = findAllergyConflicts(
+      prescription.lines,
+      readJsonStringArray(patient?.allergies),
+    );
+    if (conflicts.length === 0) return null;
+
+    const overrides = await tx.auditLog.findMany({
+      where: {
+        action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+        targetType: 'encounter',
+        targetId: encounterId,
+      },
+      select: { metadata: true },
+    });
+    const pairKey = (drugName: string, allergy: string) =>
+      `${normalizeTerm(drugName)}|${normalizeTerm(allergy)}`;
+    const overridden = new Set<string>();
+    for (const row of overrides) {
+      const meta = row.metadata as { prescriptionId?: unknown; conflicts?: unknown } | null;
+      if (meta?.prescriptionId !== prescription.id || !Array.isArray(meta.conflicts)) continue;
+      for (const c of meta.conflicts as Array<Partial<AllergyConflict>>) {
+        if (typeof c?.drugName === 'string' && typeof c?.allergy === 'string') {
+          overridden.add(pairKey(c.drugName, c.allergy));
+        }
+      }
+    }
+    const unresolved = conflicts.filter(c => !overridden.has(pairKey(c.drugName, c.allergy)));
+    if (unresolved.length === 0) return null;
+
+    const reason = reasonInput?.trim() ?? '';
+    if (reason.length < 10) {
+      throw new PrescriptionAllergyConflictException(unresolved, reason.length > 0);
+    }
+    return { prescriptionId: prescription.id, reason, conflicts: unresolved };
+  }
+
+  /**
    * Partial update of a prescription (PATCH semantics).
    *
    * Lines themselves are not edited here — callers replace the whole
@@ -1171,6 +1255,7 @@ export class MedicalRecordsService {
       if (this.isRowScopedDentist(actor) && existing.encounter.dentistId !== actor.sub) {
         throw new EncounterNotFoundException(prescriptionId);
       }
+      if (dto.version !== existing.version) throw new PrescriptionVersionConflictException();
 
       const updated = await tx.prescription.update({
         where: { id: prescriptionId },
@@ -1188,7 +1273,10 @@ export class MedicalRecordsService {
         actorUserId: actor.sub,
         targetType: 'prescription',
         targetId: prescriptionId,
-        metadata: { encounterId: existing.encounterId, fields: Object.keys(dto) },
+        metadata: {
+          encounterId: existing.encounterId,
+          fields: Object.keys(dto).filter(k => k !== 'version'),
+        },
       });
 
       return updated;

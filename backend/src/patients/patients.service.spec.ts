@@ -20,6 +20,7 @@ import {
   PatientCannotDeleteException,
   PatientMergeInvalidException,
   IdentifierAlreadyExistsException,
+  PatientVersionConflictException,
 } from './domain/exceptions';
 
 describe('PatientsService', () => {
@@ -198,6 +199,50 @@ describe('PatientsService', () => {
       await service.update('p1', { primaryPhone: '0901111111' } as any, actor);
 
       expect(prisma.patientPhoneHistory.create).not.toHaveBeenCalled();
+    });
+
+    it('with expectedUpdatedAt, writes only if the row is unchanged since the form loaded', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.patient.findUniqueOrThrow as jest.Mock).mockResolvedValue(validPatient());
+
+      await service.update(
+        'p1',
+        { fullName: 'Nguyễn Văn A', expectedUpdatedAt: '2026-09-01T02:03:04.567Z' },
+        actor,
+      );
+
+      const call = (prisma.patient.updateMany as jest.Mock).mock.calls[0][0];
+      expect(call.where).toEqual({
+        id: 'p1',
+        updatedAt: {
+          gte: new Date('2026-09-01T02:03:04.567Z'),
+          lt: new Date('2026-09-01T02:03:04.568Z'),
+        },
+      });
+      expect(call.data).toEqual({ fullName: 'Nguyễn Văn A', updatedBy: actor.sub });
+      expect(call.data).not.toHaveProperty('allergies');
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+      expect(audit.log.mock.calls[0][0].metadata.fields).toEqual(['fullName']);
+    });
+
+    it('409s PATIENT_VERSION_CONFLICT when the patient changed after the form loaded', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      const err = await service
+        .update('p1', { allergies: [], expectedUpdatedAt: '2026-09-01T02:03:04.567Z' }, actor)
+        .catch(e => e);
+
+      expect(err).toBeInstanceOf(PatientVersionConflictException);
+      expect(err.getStatus()).toBe(409);
+      expect(err.getResponse()).toEqual(
+        expect.objectContaining({
+          code: 'PATIENT_VERSION_CONFLICT',
+          message: 'Hồ sơ vừa được cập nhật ở nơi khác, tải lại rồi thử lại',
+        }),
+      );
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -606,6 +651,47 @@ describe('PatientsService', () => {
       );
       expect(prisma.encounter.count).not.toHaveBeenCalled();
       expect(prisma.patient.update).toHaveBeenCalled();
+    });
+
+    it('guards the write on expectedUpdatedAt and returns the new updatedAt', async () => {
+      const updatedAt = new Date('2026-09-02T00:00:00.000Z');
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.patient.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        id: 'p1',
+        allergies: ['Latex'],
+        chronicDiseases: [],
+        currentMedications: [],
+        updatedAt,
+      });
+
+      const result = await service.updateMedicalHistory(
+        'p1',
+        { allergies: ['Latex'], expectedUpdatedAt: '2026-09-01T00:00:00.000Z' },
+        userPayloadWithPermissions(['patient.update']),
+      );
+
+      expect((prisma.patient.updateMany as jest.Mock).mock.calls[0][0].where).toEqual({
+        id: 'p1',
+        updatedAt: {
+          gte: new Date('2026-09-01T00:00:00.000Z'),
+          lt: new Date('2026-09-01T00:00:00.001Z'),
+        },
+      });
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+      expect(result).toEqual(expect.objectContaining({ allergies: ['Latex'], updatedAt }));
+    });
+
+    it('409s when the history changed after the card loaded, writing nothing', async () => {
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await expect(
+        service.updateMedicalHistory(
+          'p1',
+          { allergies: [], expectedUpdatedAt: '2026-09-01T00:00:00.000Z' },
+          userPayloadWithPermissions(['patient.update']),
+        ),
+      ).rejects.toBeInstanceOf(PatientVersionConflictException);
+      expect(audit.log).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
     });
   });
 

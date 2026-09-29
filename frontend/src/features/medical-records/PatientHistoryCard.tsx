@@ -4,16 +4,20 @@ import { AlertTriangle, Pencil } from 'lucide-react';
 import { Button, Card, Modal, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { api } from '@/lib/api';
-import { getApiErrorMessage } from '@/lib/errors';
+import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/authStore';
 
 interface MedicalHistory {
   allergies: string[];
   chronicDiseases: string[];
   currentMedications: string[];
+  updatedAt?: string;
 }
 
-const FIELDS: Array<{ key: keyof MedicalHistory; label: string; empty: string }> = [
+type HistoryKey = 'allergies' | 'chronicDiseases' | 'currentMedications';
+type Draft = Record<HistoryKey, string>;
+
+const FIELDS: Array<{ key: HistoryKey; label: string; empty: string }> = [
   { key: 'allergies', label: 'Dị ứng', empty: 'Chưa ghi nhận' },
   { key: 'chronicDiseases', label: 'Bệnh nền', empty: 'Không' },
   { key: 'currentMedications', label: 'Thuốc đang dùng', empty: 'Không' },
@@ -37,11 +41,14 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
     (s) => s.hasPermission('patient.medical_history.update') || s.hasPermission('patient.update'),
   );
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Record<keyof MedicalHistory, string>>({
+  const [draft, setDraft] = useState<Draft>({
     allergies: '',
     chronicDiseases: '',
     currentMedications: '',
   });
+  // What the modal opened with: only lists the user edits are sent, and the
+  // save is refused (409) if the record changed since `updatedAt`.
+  const [baseline, setBaseline] = useState<{ draft: Draft; updatedAt?: string } | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['patients', 'medical-history', patientId],
@@ -50,7 +57,7 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
   });
 
   const save = useMutation({
-    mutationFn: async (body: MedicalHistory) =>
+    mutationFn: async (body: Partial<MedicalHistory> & { expectedUpdatedAt?: string }) =>
       (await api.patch<{ data: MedicalHistory }>(`/patients/${patientId}/medical-history`, body)).data
         .data,
     onSuccess: (saved) => {
@@ -60,13 +67,35 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
       notify.success('Đã cập nhật tiền sử bệnh nhân');
       setEditing(false);
     },
-    onError: (e) => notify.error(getApiErrorMessage(e, 'Không lưu được tiền sử')),
+    onError: (e) => {
+      notify.error(getApiErrorMessage(e, 'Không lưu được tiền sử'));
+      if (getApiErrorCode(e) === 'PATIENT_VERSION_CONFLICT') {
+        // Reload what was saved elsewhere; the user re-opens and re-applies.
+        qc.invalidateQueries({ queryKey: ['patients', 'medical-history', patientId] });
+        setEditing(false);
+      }
+    },
   });
+
+  const submit = () => {
+    if (!baseline) return;
+    const body: Partial<MedicalHistory> & { expectedUpdatedAt?: string } = {};
+    for (const { key } of FIELDS) {
+      if (draft[key] !== baseline.draft[key]) body[key] = fromLines(draft[key]);
+    }
+    if (Object.keys(body).length === 0) {
+      setEditing(false);
+      return;
+    }
+    if (baseline.updatedAt) body.expectedUpdatedAt = baseline.updatedAt;
+    save.mutate(body);
+  };
 
   const history: MedicalHistory = {
     allergies: data?.allergies ?? [],
     chronicDiseases: data?.chronicDiseases ?? [],
     currentMedications: data?.currentMedications ?? [],
+    updatedAt: data?.updatedAt,
   };
 
   return (
@@ -81,11 +110,13 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
             size="sm"
             variant="ghost"
             onClick={() => {
-              setDraft({
+              const opened: Draft = {
                 allergies: toLines(history.allergies),
                 chronicDiseases: toLines(history.chronicDiseases),
                 currentMedications: toLines(history.currentMedications),
-              });
+              };
+              setDraft(opened);
+              setBaseline({ draft: opened, updatedAt: history.updatedAt });
               setEditing(true);
             }}
           >
@@ -137,16 +168,7 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
             <Button variant="outline" onClick={() => setEditing(false)}>
               Hủy
             </Button>
-            <Button
-              isLoading={save.isPending}
-              onClick={() =>
-                save.mutate({
-                  allergies: fromLines(draft.allergies),
-                  chronicDiseases: fromLines(draft.chronicDiseases),
-                  currentMedications: fromLines(draft.currentMedications),
-                })
-              }
-            >
+            <Button isLoading={save.isPending} onClick={submit}>
               Lưu
             </Button>
           </>

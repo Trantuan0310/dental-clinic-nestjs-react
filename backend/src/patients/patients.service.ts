@@ -35,6 +35,7 @@ import {
   PatientContactRequiredException,
   PatientMergeInvalidException,
   PatientNotFoundException,
+  PatientVersionConflictException,
 } from './domain/exceptions';
 import {
   isMinor,
@@ -45,6 +46,15 @@ import {
   mergeStringLists,
   readJsonStringArray,
 } from './domain/patient-rules';
+
+/**
+ * Matches the millisecond a client echoed back: timestamptz keeps
+ * microseconds, JSON dates only milliseconds.
+ */
+function sameInstant(iso: string): Prisma.DateTimeFilter {
+  const at = new Date(iso);
+  return { gte: at, lt: new Date(at.getTime() + 1) };
+}
 
 /**
  * PatientsService — root aggregate for patient demographics.
@@ -227,35 +237,44 @@ export class PatientsService {
       dto.primaryPhone !== undefined && dto.primaryPhone !== current.primaryPhone;
 
     const updated = await this.prisma.$transaction(async tx => {
-      const u = await tx.patient.update({
-        where: { id },
-        data: {
-          ...(dto.fullName !== undefined && { fullName: dto.fullName.trim() }),
-          ...(dto.dob !== undefined && { dob: new Date(dto.dob) }),
-          ...(dto.gender !== undefined && { gender: dto.gender }),
-          ...(dto.primaryPhone !== undefined && { primaryPhone: dto.primaryPhone ?? null }),
-          ...(dto.email !== undefined && { email: dto.email ? dto.email.toLowerCase() : null }),
-          ...(dto.address !== undefined && { address: dto.address ?? null }),
-          ...(dto.occupation !== undefined && { occupation: dto.occupation ?? null }),
-          ...(dto.allergies !== undefined && {
-            allergies: dto.allergies as unknown as Prisma.InputJsonValue,
-          }),
-          ...(dto.chronicDiseases !== undefined && {
-            chronicDiseases: dto.chronicDiseases as unknown as Prisma.InputJsonValue,
-          }),
-          ...(dto.currentMedications !== undefined && {
-            currentMedications: dto.currentMedications as unknown as Prisma.InputJsonValue,
-          }),
-          ...(dto.contactPersonName !== undefined && {
-            contactPersonName: dto.contactPersonName ?? null,
-          }),
-          ...(dto.contactPersonPhone !== undefined && {
-            contactPersonPhone: dto.contactPersonPhone ?? null,
-          }),
-          ...(dto.notes !== undefined && { notes: dto.notes ?? null }),
-          updatedBy: actor.sub,
-        },
-      });
+      const data: Prisma.PatientUncheckedUpdateManyInput = {
+        ...(dto.fullName !== undefined && { fullName: dto.fullName.trim() }),
+        ...(dto.dob !== undefined && { dob: new Date(dto.dob) }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
+        ...(dto.primaryPhone !== undefined && { primaryPhone: dto.primaryPhone ?? null }),
+        ...(dto.email !== undefined && { email: dto.email ? dto.email.toLowerCase() : null }),
+        ...(dto.address !== undefined && { address: dto.address ?? null }),
+        ...(dto.occupation !== undefined && { occupation: dto.occupation ?? null }),
+        ...(dto.allergies !== undefined && {
+          allergies: dto.allergies as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.chronicDiseases !== undefined && {
+          chronicDiseases: dto.chronicDiseases as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.currentMedications !== undefined && {
+          currentMedications: dto.currentMedications as unknown as Prisma.InputJsonValue,
+        }),
+        ...(dto.contactPersonName !== undefined && {
+          contactPersonName: dto.contactPersonName ?? null,
+        }),
+        ...(dto.contactPersonPhone !== undefined && {
+          contactPersonPhone: dto.contactPersonPhone ?? null,
+        }),
+        ...(dto.notes !== undefined && { notes: dto.notes ?? null }),
+        updatedBy: actor.sub,
+      };
+      let u;
+      if (dto.expectedUpdatedAt !== undefined) {
+        // Guarded write: only when the row is still the one the form loaded.
+        const { count } = await tx.patient.updateMany({
+          where: { id, updatedAt: sameInstant(dto.expectedUpdatedAt) },
+          data,
+        });
+        if (count === 0) throw new PatientVersionConflictException();
+        u = await tx.patient.findUniqueOrThrow({ where: { id } });
+      } else {
+        u = await tx.patient.update({ where: { id }, data });
+      }
 
       // BR-PT-009: phone history when phone changes
       if (phoneChanged) {
@@ -279,7 +298,7 @@ export class PatientsService {
       targetType: 'patient',
       targetId: id,
       metadata: {
-        fields: Object.keys(dto),
+        fields: Object.keys(dto).filter(k => k !== 'expectedUpdatedAt'),
         phoneChanged,
       },
     });
@@ -494,11 +513,30 @@ export class PatientsService {
         currentMedications: clean(dto.currentMedications),
       }),
     };
-    const updated = await this.prisma.patient.update({
-      where: { id },
-      data: { ...data, updatedBy: actor.sub },
-      select: { id: true, allergies: true, chronicDiseases: true, currentMedications: true },
-    });
+    const select = {
+      id: true,
+      allergies: true,
+      chronicDiseases: true,
+      currentMedications: true,
+      updatedAt: true,
+    } as const;
+    let updated;
+    if (dto.expectedUpdatedAt !== undefined) {
+      // Guarded write: a list edited elsewhere since the card loaded (e.g. an
+      // allergy added at the front desk) must not be silently replaced.
+      const { count } = await this.prisma.patient.updateMany({
+        where: { id, updatedAt: sameInstant(dto.expectedUpdatedAt) },
+        data: { ...data, updatedBy: actor.sub },
+      });
+      if (count === 0) throw new PatientVersionConflictException();
+      updated = await this.prisma.patient.findUniqueOrThrow({ where: { id }, select });
+    } else {
+      updated = await this.prisma.patient.update({
+        where: { id },
+        data: { ...data, updatedBy: actor.sub },
+        select,
+      });
+    }
     await this.audit.log({
       action: 'PATIENT_MEDICAL_HISTORY_UPDATED',
       actorUserId: actor.sub,
@@ -513,6 +551,7 @@ export class PatientsService {
       allergies: readJsonStringArray(updated.allergies),
       chronicDiseases: readJsonStringArray(updated.chronicDiseases),
       currentMedications: readJsonStringArray(updated.currentMedications),
+      updatedAt: updated.updatedAt,
     };
   }
 

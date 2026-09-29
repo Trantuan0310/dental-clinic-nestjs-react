@@ -108,3 +108,22 @@ export class DobLockedException extends HttpException {
     this.name = 'DobLockedException';
   }
 }
+
+/**
+ * The patient changed after the form was opened (optimistic concurrency on
+ * `updatedAt`) — saving would overwrite e.g. a newly recorded allergy.
+ */
+export class PatientVersionConflictException extends HttpException {
+  constructor() {
+    super(
+      {
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'PATIENT_VERSION_CONFLICT',
+        message: 'Hồ sơ vừa được cập nhật ở nơi khác, tải lại rồi thử lại',
+      },
+      HttpStatus.CONFLICT,
+    );
+    this.name = 'PatientVersionConflictException';
+  }
+}
