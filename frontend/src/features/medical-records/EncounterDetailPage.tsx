@@ -22,6 +22,12 @@ import type { PrescriptionAllergyConflict } from '@/types/medical-records';
 import { PatientHistoryCard } from './PatientHistoryCard';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/authStore';
+import { useIsOwnEncounterScope } from './encounterUtils';
+
+/** Close failures (thiếu kho, thiếu giá…) carry a Vietnamese server message. */
+function notifyCloseError(err: unknown) {
+  notify.error(getApiErrorMessage(err, 'Không thể đóng phiên khám'));
+}
 
 // Tabs are heavy (rich-text editor, dental chart canvas, etc.) — only the
 // tab the user has actually opened is fetched. Switching to a new tab triggers
@@ -99,13 +105,15 @@ export default function EncounterDetailPage() {
         setCloseConflicts(details?.conflicts ?? []);
         return;
       }
-      notify.error(getApiErrorMessage(err, 'Không thể đóng phiên khám'));
+      notifyCloseError(err);
     },
   });
   const dismissCloseConflicts = () => {
     setCloseConflicts(null);
     setCloseOverrideReason('');
   };
+  // A colleague's encounter (dentist row scope) is read-only here.
+  const ownScope = useIsOwnEncounterScope(encounter);
 
   // When navigating from the dental chart panel to add a treatment, switch tabs and pass the tooth.
   useEffect(() => {
@@ -133,7 +141,7 @@ export default function EncounterDetailPage() {
   }
 
   // Chart edits and closing the visit are the treating dentist's steps.
-  const isEditable = encounter.status === 'in_progress' && canCloseEncounter;
+  const isEditable = encounter.status === 'in_progress' && canCloseEncounter && ownScope;
   const elapsedMinutes = Math.floor(
     (Date.now() - new Date(encounter.startedAt).getTime()) / 60000,
   );
@@ -279,7 +287,7 @@ export default function EncounterDetailPage() {
             <Suspense fallback={TabFallback}>
               <DentalChartPanel
                 encounter={encounter}
-                isLocked={encounter.status !== 'in_progress' || !canEditChart}
+                isLocked={encounter.status !== 'in_progress' || !canEditChart || !ownScope}
                 highlightToothNumbers={treatmentToothNumbers}
                 focusToothNumber={focusTooth}
                 onSwitchToTreatmentTab={(tooth) => setInitialTreatmentTooth(tooth)}

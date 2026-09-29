@@ -1,13 +1,15 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
 export class AppointmentNotFoundException extends HttpException {
-  constructor(id?: string) {
+  /** `message` overrides the default for the related look-ups that reuse this 404. */
+  constructor(id?: string, message?: string) {
     super(
       {
         statusCode: HttpStatus.NOT_FOUND,
         error: 'Not Found',
         code: 'APPOINTMENT_NOT_FOUND',
-        message: id ? `Appointment ${id} not found` : 'Appointment not found',
+        message: message ?? 'Không tìm thấy lịch hẹn',
+        ...(id && { details: { id } }),
       },
       HttpStatus.NOT_FOUND,
     );

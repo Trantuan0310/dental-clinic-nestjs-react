@@ -1334,7 +1334,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
           source: 'PHONE',
         })
         .expect(400);
-      expect(refused.body.message).toMatch(/time-off/);
+      expect(refused.body.message).toMatch(/nghỉ phép/);
       await api('post', `/appointments/${inside.body.data.id}/cancel`)
         .send({ reason: 'Bác sĩ nghỉ phép' })
         .expect(200);

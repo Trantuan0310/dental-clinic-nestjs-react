@@ -4,7 +4,12 @@ import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { clinicDateOnly, endOfDayInclusive, startOfClinicDay } from '../common/date-range.util';
+import {
+  clinicDateOnly,
+  clinicDateTimeLabel,
+  endOfDayInclusive,
+  startOfClinicDay,
+} from '../common/date-range.util';
 import {
   ENCOUNTER_CLOSED_EVENT,
   EncounterClosedEvent,
@@ -214,7 +219,9 @@ export class MedicalRecordsService {
       // A cancelled encounter whose patient is back at CHECKED_IN (see
       // cancelEncounter) is restarted on the same row — appointment_id is
       // unique. Anything recorded before the cancel stays visible and
-      // editable; the cancel/reopen pair is kept in encounter_audits.
+      // editable for the same dentist (another dentist's work is retired, see
+      // reopenCancelledEncounter); the cancel/reopen pair is kept in
+      // encounter_audits.
       if (existing?.status === EncounterStatus.CANCELLED) {
         await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
         opened = true;
@@ -388,8 +395,9 @@ export class MedicalRecordsService {
     if (note.chiefComplaint)
       sections.push({ type: 'chief_complaint', content: note.chiefComplaint });
     if (note.diagnosis) sections.push({ type: 'diagnosis', content: note.diagnosis });
-    if (note.treatmentPlan) sections.push({ type: 'other', content: note.treatmentPlan });
-    if (note.notes) sections.push({ type: 'other', content: note.notes });
+    // Each section keeps its own type so an edit goes back to its own column.
+    if (note.treatmentPlan) sections.push({ type: 'treatment_plan', content: note.treatmentPlan });
+    if (note.notes) sections.push({ type: 'progress_note', content: note.notes });
     return sections.map((section, i) => ({
       id: `${note.id}-${i}`,
       encounterId: note.encounterId,
@@ -835,13 +843,27 @@ export class MedicalRecordsService {
       // addendum trail. The two actors need not be different people (a dentist
       // closing on one device while saving on another), but an admin closing
       // an encounter the dentist is still writing up is the common case.
+      // "Thêm ghi chú tiến triển" appends a stamped entry instead of replacing
+      // what is already there; the encounter row lock (withEditableEncounter)
+      // serialises this read-then-write.
+      let notes = dto.notes;
+      if (dto.appendNote?.trim()) {
+        const [existing, author] = await Promise.all([
+          tx.clinicalNote.findUnique({ where: { encounterId }, select: { notes: true } }),
+          tx.user.findUnique({ where: { id: actor.sub }, select: { fullName: true } }),
+        ]);
+        const entry = `[${clinicDateTimeLabel()} — ${author?.fullName ?? actor.email}]\n${dto.appendNote.trim()}`;
+        const base = notes !== undefined ? notes : existing?.notes;
+        notes = base?.trim() ? `${base.trimEnd()}\n\n${entry}` : entry;
+      }
+
       const guarded = await tx.clinicalNote.updateMany({
         where: { encounterId, isLocked: false },
         data: {
           ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
           ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
           ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
-          ...(dto.notes !== undefined && { notes: dto.notes }),
+          ...(notes !== undefined && { notes }),
           lastEditedBy: actor.sub,
         },
       });
@@ -860,7 +882,7 @@ export class MedicalRecordsService {
             chiefComplaint: dto.chiefComplaint ?? null,
             diagnosis: dto.diagnosis ?? null,
             treatmentPlan: dto.treatmentPlan ?? null,
-            notes: dto.notes ?? null,
+            notes: notes ?? null,
             lastEditedBy: actor.sub,
           },
         });
@@ -890,25 +912,41 @@ export class MedicalRecordsService {
     if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
       throw new EncounterNotFoundException(encounterId);
     }
-    if (!encounter.clinicalNote) {
-      throw new EncounterNotClosableException('No clinical note exists yet');
-    }
     if (encounter.status !== EncounterStatus.IN_PROGRESS) {
       if (encounter.status !== EncounterStatus.COMPLETED || !encounter.closedAt) {
-        throw new ForbiddenException('Addendums require an active or completed encounter');
+        throw new ForbiddenException(
+          'Chỉ thêm ghi chú bổ sung cho phiên khám đang mở hoặc đã hoàn tất',
+        );
       }
       // BR-MR-005: append corrections without modifying the sealed original note.
       if (Date.now() >= encounter.closedAt.getTime() + 30 * 24 * 60 * 60 * 1000) {
-        throw new ForbiddenException('Addendum window expired');
+        throw new ForbiddenException('Đã quá hạn 30 ngày để thêm ghi chú bổ sung');
       }
     }
 
-    const addendum = await this.prisma.clinicalNoteAddendum.create({
-      data: {
-        clinicalNoteId: encounter.clinicalNote.id,
-        content: dto.content,
-        addedBy: actor.sub,
-      },
+    const addendum = await this.prisma.$transaction(async tx => {
+      // A visit closed with treatments only has no note row; the addendum
+      // needs one, so create an empty one (locked when the visit is closed)
+      // instead of refusing the correction.
+      const note =
+        encounter.clinicalNote ??
+        (await tx.clinicalNote.upsert({
+          where: { encounterId },
+          update: {},
+          create: {
+            encounterId,
+            isLocked: encounter.status === EncounterStatus.COMPLETED,
+            lockedAt: encounter.status === EncounterStatus.COMPLETED ? new Date() : null,
+            lastEditedBy: actor.sub,
+          },
+        }));
+      return tx.clinicalNoteAddendum.create({
+        data: {
+          clinicalNoteId: note.id,
+          content: dto.content,
+          addedBy: actor.sub,
+        },
+      });
     });
 
     await this.audit.log({
@@ -957,6 +995,24 @@ export class MedicalRecordsService {
             HttpStatus.BAD_REQUEST,
             { serviceId: dto.serviceId },
             'SERVICE_INACTIVE',
+          );
+        }
+      }
+
+      // A usage pointing at a missing item used to surface as an FK 500.
+      const usageItemIds = [...new Set((dto.inventoryUsages ?? []).map(u => u.inventoryItemId))];
+      if (usageItemIds.length > 0) {
+        const found = await tx.inventoryItem.findMany({
+          where: { id: { in: usageItemIds }, deletedAt: null },
+          select: { id: true },
+        });
+        const missing = usageItemIds.filter(id => !found.some(f => f.id === id));
+        if (missing.length > 0) {
+          throw new BusinessRuleException(
+            'Vật tư được chọn không tồn tại hoặc đã bị xóa',
+            HttpStatus.BAD_REQUEST,
+            { inventoryItemIds: missing },
+            'INVENTORY_ITEM_NOT_FOUND',
           );
         }
       }
@@ -1024,6 +1080,9 @@ export class MedicalRecordsService {
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
           ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
+          ...(dto.toothNumbers !== undefined && {
+            toothNumbers: dto.toothNumbers as unknown as Prisma.InputJsonValue,
+          }),
         },
       });
     });
@@ -1336,7 +1395,7 @@ export class MedicalRecordsService {
         throw new EncounterNotFoundException(encounterId);
       }
       if (encounter.patient.deletedAt) {
-        throw new EncounterNotClosableException('Patient is deleted');
+        throw new EncounterNotClosableException('Bệnh nhân đã bị xóa');
       }
 
       // BR-MR-012: patientType must match age band
@@ -1346,11 +1405,18 @@ export class MedicalRecordsService {
         throw new DentalChartPatientMismatchException();
       }
       // Keys are FDI numbers. CHILD = mixed dentition (primary 51–85 plus
-      // permanent 11–48); ADULT = permanent only.
-      const invalidTeeth = Object.keys(dto.teeth ?? {}).filter(key => {
+      // permanent 11–48); ADULT = permanent, plus primary teeth already on
+      // record (mixed dentition outlasts the CHILD band, ~13 y) so they are
+      // carried over instead of silently dropped.
+      const keys = Object.keys(dto.teeth ?? {});
+      const recordedPrimary =
+        dto.patientType === 'ADULT' && keys.some(k => Number(k) >= 50)
+          ? await this.recordedPrimaryTeeth(tx, encounter.patientId, encounterId)
+          : new Set<string>();
+      const invalidTeeth = keys.filter(key => {
         const n = /^\d{2}$/.test(key) ? Number(key) : NaN;
         if (!isValidFdiToothNumber(n)) return true;
-        return dto.patientType === 'ADULT' && n >= 50;
+        return dto.patientType === 'ADULT' && n >= 50 && !recordedPrimary.has(key);
       });
       if (invalidTeeth.length > 0) {
         throw new DentalChartInvalidToothException(invalidTeeth, dto.patientType);
@@ -1388,6 +1454,34 @@ export class MedicalRecordsService {
    * A row-scoped dentist gets it only for a patient they may read
    * (dentistCanReadPatient) — same scope as the encounter history.
    */
+  /** Primary-tooth keys in this encounter's chart or the patient's latest earlier one. */
+  private async recordedPrimaryTeeth(
+    tx: Prisma.TransactionClient,
+    patientId: string,
+    encounterId: string,
+  ): Promise<Set<string>> {
+    const [own, previous] = await Promise.all([
+      tx.dentalChartSnapshot.findUnique({ where: { encounterId }, select: { teeth: true } }),
+      tx.encounter.findFirst({
+        where: {
+          patientId,
+          id: { not: encounterId },
+          status: { not: EncounterStatus.CANCELLED },
+          dentalChart: { isNot: null },
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { dentalChart: { select: { teeth: true } } },
+      }),
+    ]);
+    const keys = new Set<string>();
+    for (const teeth of [own?.teeth, previous?.dentalChart?.teeth]) {
+      if (teeth && typeof teeth === 'object' && !Array.isArray(teeth)) {
+        Object.keys(teeth).forEach(k => Number(k) >= 50 && keys.add(k));
+      }
+    }
+    return keys;
+  }
+
   async getLatestDentalChartForPatient(patientId: string, actor: JwtPayload) {
     if (
       this.isRowScopedDentist(actor) &&
@@ -1396,7 +1490,12 @@ export class MedicalRecordsService {
       throw new BusinessRuleException('Không tìm thấy bệnh nhân', HttpStatus.NOT_FOUND);
     }
     const lastEncounter = await this.prisma.encounter.findFirst({
-      where: { patientId, dentalChart: { isNot: null } },
+      // A cancelled visit's chart is not the patient's current state.
+      where: {
+        patientId,
+        status: { not: EncounterStatus.CANCELLED },
+        dentalChart: { isNot: null },
+      },
       orderBy: { startedAt: 'desc' },
       include: { dentalChart: true },
     });

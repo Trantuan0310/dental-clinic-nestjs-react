@@ -29,6 +29,7 @@ import {
   CreatePrescriptionDto,
   CreateTreatmentDto,
   UpdatePrescriptionDto,
+  UpdateTreatmentDto,
 } from './dto/medical-record.dto';
 
 describe('MedicalRecordsService', () => {
@@ -265,6 +266,9 @@ describe('MedicalRecordsService', () => {
           userPayloadWithPermissions(['encounter.read.any']),
         ),
       ).resolves.toEqual({ id: 'c' });
+      expect((prisma.encounter.findFirst as jest.Mock).mock.calls[0][0].where.status).toEqual({
+        not: EncounterStatus.CANCELLED,
+      });
     });
   });
 
@@ -309,6 +313,32 @@ describe('MedicalRecordsService', () => {
       await expect(
         service.snapshotDentalChart('enc-1', { patientType: 'ADULT', teeth: {} }, dentistActor),
       ).rejects.toBeInstanceOf(DentalChartPatientMismatchException);
+    });
+
+    it('keeps primary teeth already on record when a 12-year-old moves to the ADULT chart', async () => {
+      withDob(12);
+      (prisma.dentalChartSnapshot.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.findFirst as jest.Mock).mockResolvedValue({
+        dentalChart: { teeth: { '55': { status: 'cavity' }, '16': { status: 'healthy' } } },
+      });
+      (prisma.dentalChartSnapshot.create as jest.Mock).mockResolvedValue({ id: 's' });
+      await service.snapshotDentalChart(
+        'enc-1',
+        {
+          patientType: 'ADULT',
+          teeth: { '55': { status: 'missing' }, '16': { status: 'healthy' } },
+        },
+        dentistActor,
+      );
+      expect(prisma.dentalChartSnapshot.create).toHaveBeenCalled();
+      // A primary tooth that was never recorded is still refused.
+      await expect(
+        service.snapshotDentalChart(
+          'enc-1',
+          { patientType: 'ADULT', teeth: { '65': { status: 'cavity' } } },
+          dentistActor,
+        ),
+      ).rejects.toBeInstanceOf(DentalChartInvalidToothException);
     });
 
     it.each([
@@ -542,6 +572,7 @@ describe('MedicalRecordsService', () => {
         cancelledBy: 'admin-1',
         cancelledReason: 'Bắt đầu nhầm phiên khám',
       });
+      (prisma.treatment.findMany as jest.Mock).mockResolvedValue([]);
 
       await service.startEncounterForAppointment('appt-1', dentistActor);
 
@@ -555,6 +586,89 @@ describe('MedicalRecordsService', () => {
           }),
         }),
       });
+    });
+
+    it("retires the previous dentist's treatments, prescription and note when reopened for another dentist", async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        id: 'enc-1',
+        status: EncounterStatus.CANCELLED,
+        dentistId: 'dentist-old',
+        startedAt: new Date('2026-09-01T01:00:00Z'),
+        cancelledAt: null,
+        cancelledBy: null,
+        cancelledReason: null,
+      });
+      (prisma.treatment.findMany as jest.Mock).mockResolvedValue([{ id: 'tr-1' }]);
+      (prisma.prescription.findFirst as jest.Mock).mockResolvedValue({ id: 'rx-1' });
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(
+        validClinicalNote({ id: 'note-1', diagnosis: 'Sâu răng 16', notes: null }),
+      );
+
+      await service.startEncounterForAppointment('appt-1', dentistActor);
+
+      expect(prisma.treatment.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['tr-1'] } },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.prescription.update).toHaveBeenCalledWith({
+        where: { id: 'rx-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.clinicalNoteAddendum.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          clinicalNoteId: 'note-1',
+          addedBy: 'dentist-old',
+          content: expect.stringContaining('Chẩn đoán: Sâu răng 16'),
+        }),
+      });
+      expect(prisma.clinicalNote.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ diagnosis: null }) }),
+      );
+      expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'REOPENED',
+          after: expect.objectContaining({
+            dentistId: 'dentist-1',
+            handover: expect.objectContaining({
+              previousDentistId: 'dentist-old',
+              retiredTreatmentIds: ['tr-1'],
+              retiredPrescriptionId: 'rx-1',
+            }),
+          }),
+        }),
+      });
+    });
+
+    it('keeps everything when the same dentist reopens the encounter', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        id: 'enc-1',
+        status: EncounterStatus.CANCELLED,
+        dentistId: 'dentist-1',
+        startedAt: new Date('2026-09-01T01:00:00Z'),
+        cancelledAt: null,
+        cancelledBy: null,
+        cancelledReason: null,
+      });
+
+      await service.startEncounterForAppointment('appt-1', dentistActor);
+
+      expect(prisma.treatment.updateMany).not.toHaveBeenCalled();
+      expect(prisma.prescription.update).not.toHaveBeenCalled();
+      expect(prisma.clinicalNoteAddendum.create).not.toHaveBeenCalled();
     });
 
     it('still refuses a COMPLETED encounter', async () => {
@@ -699,6 +813,38 @@ describe('MedicalRecordsService', () => {
       expect(prisma.clinicalNote.upsert).not.toHaveBeenCalled();
     });
 
+    it('appendNote adds a stamped progress entry instead of overwriting notes', async () => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue({ notes: 'Ghi chú cũ' });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.clinicalNote.findUniqueOrThrow as jest.Mock).mockResolvedValue(validClinicalNote());
+
+      await service.upsertClinicalNote('enc-1', { appendNote: 'Đỡ đau' } as any, dentistActor);
+
+      const data = (prisma.clinicalNote.updateMany as jest.Mock).mock.calls[0][0].data;
+      expect(data.notes).toMatch(
+        /^Ghi chú cũ\n\n\[\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} — BS An\]\nĐỡ đau$/,
+      );
+      // Other sections are left alone.
+      expect(data).not.toHaveProperty('chiefComplaint');
+      expect(data).not.toHaveProperty('treatmentPlan');
+    });
+
+    it('appendNote on a first save creates the note with just the stamped entry', async () => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.clinicalNote.create as jest.Mock).mockResolvedValue(validClinicalNote());
+
+      await service.upsertClinicalNote('enc-1', { appendNote: 'Lần 1' } as any, dentistActor);
+
+      expect(prisma.clinicalNote.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ notes: expect.stringMatching(/— BS An\]\nLần 1$/) }),
+        }),
+      );
+    });
+
     it('rejects modification when clinical note is locked (encounter closed)', async () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ status: EncounterStatus.COMPLETED }),
@@ -837,7 +983,7 @@ describe('MedicalRecordsService', () => {
 
       await expect(
         service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
-      ).rejects.toThrow(/Gloves.*requires 100.*only 5 available/);
+      ).rejects.toThrow(/Gloves.*cần 100.*chỉ còn 5/);
     });
 
     describe('allergy re-check against the current prescription', () => {
@@ -1321,6 +1467,54 @@ describe('MedicalRecordsService', () => {
       await expect(
         service.updateTreatment('enc-1', 'tr-1', { description: 'new' } as any, dentistActor),
       ).rejects.toThrow(TreatmentNotInEncounterException);
+    });
+
+    it('writes the edited tooth number (was silently dropped)', async () => {
+      (prisma.treatment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'tr-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        encounter: { dentistId: 'dentist-1' },
+      });
+      await service.updateTreatment('enc-1', 'tr-1', { toothNumbers: [26] } as any, dentistActor);
+      expect(prisma.treatment.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ toothNumbers: [26] }) }),
+      );
+    });
+  });
+
+  describe('treatment DTO limits', () => {
+    it('rejects a unit price beyond numeric(12,2) instead of failing with a 500', () => {
+      const errs = validateSync(
+        plainToInstance(CreateTreatmentDto, { procedure: 'Trám', unitPrice: 1e12 }),
+      );
+      expect(errs.some(e => e.property === 'unitPrice')).toBe(true);
+      const ok = validateSync(
+        plainToInstance(UpdateTreatmentDto, { unitPrice: 9_999_999_999.99, toothNumbers: [55] }),
+      );
+      expect(ok).toHaveLength(0);
+      expect(
+        validateSync(plainToInstance(UpdateTreatmentDto, { toothNumbers: [99] })),
+      ).not.toHaveLength(0);
+    });
+
+    it('rejects inventory usages that point at a missing item (was an FK 500)', async () => {
+      (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
+      (prisma.inventoryItem.findMany as jest.Mock).mockResolvedValue([]);
+      await expect(
+        service.createTreatment(
+          'enc-1',
+          {
+            procedure: 'Trám',
+            unitPrice: 1,
+            inventoryUsages: [
+              { inventoryItemId: '00000000-0000-4000-8000-000000000001', quantity: 1, unit: 'g' },
+            ],
+          } as any,
+          dentistActor,
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(prisma.treatment.create).not.toHaveBeenCalled();
     });
   });
 

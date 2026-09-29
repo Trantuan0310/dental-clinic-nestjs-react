@@ -60,9 +60,19 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
 ) {
   const upper = useMemo(() => ADULT_TEETH.filter((t) => t.arch === 'upper'), []);
   const lower = useMemo(() => ADULT_TEETH.filter((t) => t.arch === 'lower'), []);
-  const primaryUpper = useMemo(() => PRIMARY_TEETH.filter((t) => t.arch === 'upper'), []);
-  const primaryLower = useMemo(() => PRIMARY_TEETH.filter((t) => t.arch === 'lower'), []);
   const isChild = patientType === 'CHILD';
+  // Mixed dentition lasts past the CHILD band (~13 y): an ADULT chart still
+  // shows the primary teeth already recorded, so they are not lost.
+  const primaryUpper = useMemo(
+    () => PRIMARY_TEETH.filter((t) => t.arch === 'upper' && (isChild || !!teeth[String(t.number)])),
+    [isChild, teeth],
+  );
+  const primaryLower = useMemo(
+    () => PRIMARY_TEETH.filter((t) => t.arch === 'lower' && (isChild || !!teeth[String(t.number)])),
+    [isChild, teeth],
+  );
+  const showPrimaryUpper = primaryUpper.length > 0;
+  const showPrimaryLower = primaryLower.length > 0;
   const highlightSet = useMemo(() => new Set(highlightToothNumbers ?? []), [highlightToothNumbers]);
   const dim = SIZE[size];
   const internalRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -150,19 +160,19 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
             <div className={cn('mb-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
               Hàm trên
             </div>
-            {isChild && renderSubLabel('Răng vĩnh viễn')}
+            {showPrimaryUpper && renderSubLabel('Răng vĩnh viễn')}
             {renderArch(upper)}
-            {isChild && renderSubLabel('Răng sữa')}
-            {isChild && renderArch(primaryUpper)}
+            {showPrimaryUpper && renderSubLabel('Răng sữa')}
+            {showPrimaryUpper && renderArch(primaryUpper)}
           </div>
 
           <div className="mx-auto my-1 h-px w-3/4 bg-gray-300" aria-hidden="true" />
 
           <div>
-            {isChild && renderArch(primaryLower)}
-            {isChild && renderSubLabel('Răng sữa')}
+            {showPrimaryLower && renderArch(primaryLower)}
+            {showPrimaryLower && renderSubLabel('Răng sữa')}
             {renderArch(lower)}
-            {isChild && renderSubLabel('Răng vĩnh viễn')}
+            {showPrimaryLower && renderSubLabel('Răng vĩnh viễn')}
             <div className={cn('mt-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
               Hàm dưới
             </div>

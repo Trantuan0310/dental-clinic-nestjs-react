@@ -64,6 +64,11 @@ function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
       description: payload.description ?? payload.notes,
     }),
     ...(payload.priceCents !== undefined && { unitPrice: payload.priceCents }),
+    // Tooth edits were silently dropped before UpdateTreatmentDto accepted them.
+    // Quantity is not sent: treatments have no quantity column (billed as 1).
+    ...(payload.toothNumber !== undefined && {
+      toothNumbers: payload.toothNumber !== '' ? [Number(payload.toothNumber)] : [],
+    }),
   };
 }
 
@@ -129,7 +134,14 @@ export const medicalRecordsApi = {
   // Clinical note — single upsert per encounter (PUT /encounters/:id/clinical-note).
   async upsertClinicalNote(
     encounterId: string,
-    payload: { chiefComplaint?: string; diagnosis?: string; treatmentPlan?: string; notes?: string },
+    payload: {
+      chiefComplaint?: string;
+      diagnosis?: string;
+      treatmentPlan?: string;
+      notes?: string;
+      /** Appended to `notes` server-side with a time + author stamp. */
+      appendNote?: string;
+    },
   ): Promise<ClinicalNote> {
     const { data } = await api.put<{ data: ClinicalNote }>(
       `${BASE}/encounters/${encounterId}/clinical-note`,

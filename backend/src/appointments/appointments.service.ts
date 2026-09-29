@@ -1770,7 +1770,7 @@ export class AppointmentsService {
     actor: JwtPayload,
   ) {
     if (dto.dentistId !== actor.sub && !actor.permissions.includes('shift.approve')) {
-      throw new AppointmentNotFoundException(dto.dentistId);
+      throw new AppointmentNotFoundException(dto.dentistId, 'Không tìm thấy bác sĩ');
     }
     if (this.toMinutes(dto.endTime) <= this.toMinutes(dto.startTime)) {
       throw new InvalidAppointmentStateException('endTime must be after startTime');
@@ -2264,7 +2264,8 @@ export class AppointmentsService {
     });
     if (!u || u.status !== 'ACTIVE' || !u.userRoles.some(ur => ur.role.code === 'dentist')) {
       throw new AppointmentNotFoundException(
-        `Dentist ${dentistId} is not active or lacks dentist role`,
+        dentistId,
+        'Bác sĩ không tồn tại hoặc không còn hoạt động',
       );
     }
     const profile = u.dentistProfile && !u.dentistProfile.deletedAt ? u.dentistProfile : null;
@@ -2274,7 +2275,8 @@ export class AppointmentsService {
       );
     } else if (forBooking && profile.practiceStatus !== 'ACTIVE') {
       throw new AppointmentNotFoundException(
-        `Dentist ${dentistId} is ${profile.practiceStatus.toLowerCase()} and cannot take bookings`,
+        dentistId,
+        'Bác sĩ đang tạm ngưng hoặc đã nghỉ, không nhận lịch hẹn',
       );
     }
     return u;
@@ -2283,7 +2285,10 @@ export class AppointmentsService {
   private async validateActivePatient(patientId: string) {
     const p = await this.prisma.patient.findUnique({ where: { id: patientId } });
     if (!p || p.deletedAt) {
-      throw new AppointmentNotFoundException(`Patient ${patientId} is deleted`);
+      throw new AppointmentNotFoundException(
+        patientId,
+        'Không tìm thấy bệnh nhân hoặc hồ sơ đã bị xóa',
+      );
     }
     return p;
   }

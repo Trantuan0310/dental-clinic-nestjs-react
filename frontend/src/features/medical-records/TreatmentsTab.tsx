@@ -12,6 +12,7 @@ import { useBookableServices } from '@/features/appointments/appointmentApi';
 import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUsage } from '@/types/medical-records';
 import { isValidFdiToothNumber } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
+import { useIsOwnEncounterScope } from './encounterUtils';
 
 interface TreatmentsTabProps {
   encounter: Encounter;
@@ -174,7 +175,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const treatments = encounter.treatments || [];
   const totalTreatment = treatments.reduce((sum, t) => sum + (t.total ?? 0), 0);
   const canWrite = useAuthStore((s) => s.hasPermission('treatment.write'));
-  const isEditable = encounter.status === 'in_progress' && canWrite;
+  const ownScope = useIsOwnEncounterScope(encounter);
+  const isEditable = encounter.status === 'in_progress' && canWrite && ownScope;
 
   // Group treatments by tooth
   const treatmentsByTooth = treatments.reduce((acc, treatment) => {

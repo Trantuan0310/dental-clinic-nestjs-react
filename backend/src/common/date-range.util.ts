@@ -29,3 +29,9 @@ export function startOfClinicDay(value: string): Date {
 export function endOfClinicDay(value: string): Date {
   return new Date(value.includes('T') ? value : `${value}T23:59:59.999+07:00`);
 }
+
+/** `dd/MM/yyyy HH:mm` in clinic time, for stamps written into free text. */
+export function clinicDateTimeLabel(value = new Date()): string {
+  const iso = new Date(value.getTime() + CLINIC_UTC_OFFSET_MS).toISOString();
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} ${iso.slice(11, 16)}`;
+}

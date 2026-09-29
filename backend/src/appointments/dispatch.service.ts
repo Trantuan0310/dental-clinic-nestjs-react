@@ -116,7 +116,7 @@ export class DispatchService {
       entry.doneAt ||
       (this.appointments.isRowScopedDentist(actor) && entry.dentistId !== actor.sub)
     ) {
-      throw new AppointmentNotFoundException(`Queue entry ${id}`);
+      throw new AppointmentNotFoundException(id, 'Không tìm thấy lượt chờ');
     }
     return entry;
   }

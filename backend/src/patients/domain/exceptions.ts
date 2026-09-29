@@ -71,7 +71,7 @@ export class IdentifierAlreadyExistsException extends HttpException {
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'IDENTIFIER_ALREADY_EXISTS',
-        message: `Identifier ${type}:${value} already exists for another patient`,
+        message: `Giấy tờ ${type} số ${value} đã được dùng cho bệnh nhân khác`,
       },
       HttpStatus.BAD_REQUEST,
     );
@@ -101,7 +101,7 @@ export class DobLockedException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'DOB_LOCKED',
-        message: 'Date of birth cannot be changed after encounters have been created',
+        message: 'Không thể sửa ngày sinh khi bệnh nhân đã có phiên khám',
       },
       HttpStatus.CONFLICT,
     );
@@ -125,5 +125,21 @@ export class PatientVersionConflictException extends HttpException {
       HttpStatus.CONFLICT,
     );
     this.name = 'PatientVersionConflictException';
+  }
+}
+
+/** The same identifier was added twice to one patient. */
+export class IdentifierDuplicateOnPatientException extends HttpException {
+  constructor(type: string, value: string) {
+    super(
+      {
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'IDENTIFIER_DUPLICATE',
+        message: `Bệnh nhân đã có giấy tờ ${type} số ${value}`,
+      },
+      HttpStatus.CONFLICT,
+    );
+    this.name = 'IdentifierDuplicateOnPatientException';
   }
 }

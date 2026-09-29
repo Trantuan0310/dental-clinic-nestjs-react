@@ -1,5 +1,13 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Nháp',
+  ISSUED: 'Đã phát hành',
+  PARTIAL: 'Thanh toán một phần',
+  PAID: 'Đã thanh toán',
+  VOIDED: 'Đã hủy',
+};
+
 export class InvoiceNotFoundException extends HttpException {
   constructor(id?: string) {
     super(
@@ -7,7 +15,8 @@ export class InvoiceNotFoundException extends HttpException {
         statusCode: HttpStatus.NOT_FOUND,
         error: 'Not Found',
         code: 'INVOICE_NOT_FOUND',
-        message: id ? `Invoice ${id} not found` : 'Invoice not found',
+        message: 'Không tìm thấy hóa đơn',
+        ...(id && { details: { id } }),
       },
       HttpStatus.NOT_FOUND,
     );
@@ -22,7 +31,8 @@ export class InvoiceAlreadyExistsException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'INVOICE_ALREADY_EXISTS',
-        message: `Invoice already exists for encounter ${encounterId}`,
+        message: 'Phiên khám này đã có hóa đơn',
+        details: { encounterId },
       },
       HttpStatus.CONFLICT,
     );
@@ -37,7 +47,8 @@ export class InvoiceNotEditableException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'INVOICE_NOT_EDITABLE',
-        message: `Invoice cannot be edited in status ${currentStatus}`,
+        message: `Không thể sửa hóa đơn ở trạng thái ${INVOICE_STATUS_LABEL[currentStatus] ?? currentStatus}`,
+        details: { status: currentStatus },
       },
       HttpStatus.CONFLICT,
     );

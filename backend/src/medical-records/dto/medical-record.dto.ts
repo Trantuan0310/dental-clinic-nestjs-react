@@ -5,7 +5,6 @@ import {
   IsBoolean,
   IsEnum,
   IsUUID,
-  IsDateString,
   IsArray,
   IsObject,
   IsNumber,
@@ -21,6 +20,7 @@ import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PatientType } from '@prisma/client';
 import { FDI_TOOTH_NUMBERS } from '../domain/tooth-numbers';
+import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
 // ---------------------------------------------------------------------------
 // Clinical note
@@ -50,6 +50,14 @@ export class UpsertClinicalNoteDto {
   @IsString()
   @MaxLength(8000)
   notes?: string;
+
+  /** Progress note appended to `notes` with a time + author stamp (never overwrites). */
+  @ApiPropertyOptional({ maxLength: 2000 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  appendNote?: string;
 }
 
 export class AddAddendumDto {
@@ -63,6 +71,9 @@ export class AddAddendumDto {
 // ---------------------------------------------------------------------------
 // Treatment
 // ---------------------------------------------------------------------------
+
+/** treatments.unit_price is numeric(12,2). */
+export const MAX_UNIT_PRICE = 9_999_999_999.99;
 
 export class CreateTreatmentDto {
   @ApiPropertyOptional({
@@ -84,9 +95,10 @@ export class CreateTreatmentDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiProperty({ example: 12, minimum: 0 })
+  @ApiProperty({ example: 12, minimum: 0, maximum: MAX_UNIT_PRICE })
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice!: number;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 600 })
@@ -154,11 +166,23 @@ export class UpdateTreatmentDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maximum: MAX_UNIT_PRICE })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice?: number;
+
+  // Same FDI rule as create; lets "Sửa điều trị" move the treatment to another tooth.
+  @ApiPropertyOptional({ type: [Number], example: [16] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @IsIn(FDI_TOOTH_NUMBERS as number[], {
+    each: true,
+    message: 'Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa)',
+  })
+  toothNumbers?: number[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -389,11 +413,11 @@ export class ListEncountersQueryDto {
 
   @ApiPropertyOptional({ example: '2026-07-01' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   from?: string;
 
   @ApiPropertyOptional({ example: '2026-07-31' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   to?: string;
 }
