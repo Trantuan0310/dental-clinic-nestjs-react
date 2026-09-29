@@ -109,6 +109,16 @@ const VISIT_STATE: Record<string, { title: string; text: string; tone: Tone }> =
     text: "Phòng khám ghi nhận bạn chưa đến khám theo lịch này. Bạn có thể đặt lịch mới.",
     tone: "bad",
   },
+  CHECKED_IN: {
+    title: "Bạn đang ở phòng khám",
+    text: "Phòng khám đã ghi nhận bạn đến. Vui lòng chờ đến lượt khám.",
+    tone: "good",
+  },
+  IN_PROGRESS: {
+    title: "Bạn đang ở phòng khám",
+    text: "Bạn đang được khám theo lịch hẹn này.",
+    tone: "good",
+  },
   LEFT: {
     title: "Bạn đã rời phòng khám",
     text: "Phòng khám ghi nhận bạn đã về trước khi được khám theo lịch này. Gọi lễ tân hoặc đặt lịch mới nếu bạn vẫn cần khám.",
@@ -271,21 +281,20 @@ function ContactButtons() {
 }
 
 function DetailsForm({
-  phone,
   busy,
   onSubmit,
 }: {
-  phone: string;
   busy: boolean;
   onSubmit: (details: Record<string, string>) => void;
 }) {
-  // The status page never shows the details sent earlier, so only what the
-  // patient knows here is filled in; a field left empty keeps its old value.
+  // The status page never shows the details sent earlier, so nothing is
+  // prefilled (not even the phone used to look up: it may be the
+  // guardian's); a field left empty keeps its old value.
   const [d, setD] = useState({
     fullName: "",
     dob: "",
     gender: "",
-    phone,
+    phone: "",
     email: "",
     contactPersonName: "",
     contactPersonPhone: "",
@@ -730,7 +739,6 @@ export default function PublicBookingStatusPage() {
 
             {current === "NEEDS_INFORMATION" && (
               <DetailsForm
-                phone={access?.phone ?? ""}
                 busy={busy}
                 onSubmit={(details) =>
                   void act(async () => {

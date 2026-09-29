@@ -58,8 +58,10 @@ a one-time lookup code.
   (`matchedBy`) and whether name and date of birth match
   (`sameNameAndDob`). The front desk picks one (`patientId`), picks
   "Tạo hồ sơ mới" (`createNewPatient: true`, no matching), or leaves it to
-  the server: exactly one candidate with the same name (NFC, collapsed
-  spaces, any case) and date of birth is used, no candidate creates a record,
+  the server: the one candidate with the same name (NFC, collapsed spaces,
+  any case) and date of birth is used only if its own `primary_phone` is the
+  request's `phone` (a match through a guardian phone, typed by whoever
+  filled in the form, always needs a person); no candidate creates a record;
   anything else is a 409 asking them to choose. This works from
   `PENDING_REVIEW` as well as `PATIENT_ACCEPTED`.
 - **Answers taken by phone.** `POST /booking-requests/:id/information-received`
@@ -73,16 +75,19 @@ a one-time lookup code.
   time (clinic time, `dd/MM/yyyy HH:mm`) and dentist, then the note.
 - **Details sent by the patient.** Every field of `PUT …/details` is
   optional: a field left out keeps its value (the public API never returns
-  the stored details, so the form cannot prefill them). The merged details
-  are checked like a new request.
+  the stored details, so the form prefills nothing, not even the lookup
+  phone). Only values that differ from the stored ones after normalizing
+  count; none is a 400. The merged details are checked like a new request.
+  `proposedStartAt` sent when accepting must carry Z or an offset.
 - **Validation (public).** Name trimmed before the length check; no NUL
   characters; `dob` must be a real `YYYY-MM-DD` day; the guardian phone
   must be a valid Vietnamese number.
 - **After confirming.** The public page and the inbox show the visit's
   dentist and time (`appointment.dentist`, `appointment.startAt`), which
   the clinic may have changed. The public page also reports a cancelled,
-  missed (`NO_SHOW`), left (`LEFT`), completed or moved
-  (`rescheduled`) visit, and offers "Thêm vào Google Calendar" only while
+  missed (`NO_SHOW`), left (`LEFT`), completed, in-clinic
+  (`CHECKED_IN` / `IN_PROGRESS`) or moved visit (`rescheduled`: a
+  reschedule count or any reschedule-log row, e.g. a dentist transfer), and offers "Thêm vào Google Calendar" only while
   the visit still stands.
 - **Effective time.** The proposed time for `PROPOSED` / `PATIENT_ACCEPTED`
   (when set), otherwise the requested time.

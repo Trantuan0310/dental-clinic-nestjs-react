@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { clinicIso, clinicParts } from "@/lib/clinicTime";
 import { bookingErrorMessage } from "./errorMessage";
+import { notify } from "@/components/ui/Toast";
 
 type RequestRow = {
   id: string;
@@ -192,7 +193,19 @@ export default function BookingRequestsPage() {
       await query.refetch();
       setSelected(null);
     },
-    onError: (e: unknown) => setError(bookingErrorMessage(e, "Không thực hiện được thao tác.")),
+    onError: async (e: unknown) => {
+      const text = bookingErrorMessage(e, "Không thực hiện được thao tác.");
+      setError(text);
+      // 409: the request changed or its time passed meanwhile. Say so and
+      // reload, so the dialog shows its current state and actions.
+      if ((e as { response?: { status?: number } })?.response?.status === 409) {
+        notify.error(text);
+        const fresh = await query.refetch();
+        const row = fresh.data?.find((r) => r.id === selected?.id);
+        if (row) setSelected(row);
+        setNow(Date.now());
+      }
+    },
   });
   const counts = useMemo(() => {
     const rows = query.data ?? [];

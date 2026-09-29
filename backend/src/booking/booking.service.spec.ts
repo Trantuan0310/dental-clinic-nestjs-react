@@ -363,7 +363,12 @@ describe('BookingService public request security and validation', () => {
       dob: new Date('1990-01-01'),
     });
     prisma.patient.findMany.mockResolvedValue([
-      { id: 'patient-1', fullName: 'Nguyen An', dob: new Date('1990-01-01') },
+      {
+        id: 'patient-1',
+        fullName: 'Nguyen An',
+        dob: new Date('1990-01-01'),
+        primaryPhone: '0901234567',
+      },
     ]);
     prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
     appointments.create.mockResolvedValue({ id: 'appt-1' });
@@ -546,7 +551,12 @@ describe('BookingService public request security and validation', () => {
       );
       prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
       prisma.patient.findMany.mockResolvedValue([
-        { id: 'patient-1', fullName: 'Nguyen An', dob: new Date('1990-01-01') },
+        {
+          id: 'patient-1',
+          fullName: 'Nguyen An',
+          dob: new Date('1990-01-01'),
+          primaryPhone: '0901234567',
+        },
       ]);
       appointments.create.mockRejectedValue(new ConflictException('Slot taken'));
 
@@ -796,15 +806,38 @@ describe('BookingService public request security and validation', () => {
       it('matches the name after NFC, whitespace and case folding', async () => {
         prisma.bookingRequest.findUnique.mockResolvedValue(request());
         prisma.patient.findMany.mockResolvedValue([
-          { id: 'mother', fullName: 'Trần Thị Mẹ', dob: new Date('1990-01-01') },
+          {
+            id: 'mother',
+            fullName: 'Trần Thị Mẹ',
+            dob: new Date('1990-01-01'),
+            primaryPhone: '0901234567',
+          },
           {
             id: 'child',
             fullName: '  NGUYỄN   bé an '.normalize('NFD'),
             dob: new Date('2020-03-04'),
+            primaryPhone: '+84 901 234 567',
           },
         ]);
         await service.confirm('request-1', actor);
         expect(appointments.create.mock.calls[0][0].patientId).toBe('child');
+        expect(patients.create).not.toHaveBeenCalled();
+      });
+
+      it('never picks a record found only through a guardian phone by itself', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([
+          // Same name and date of birth, but on file under the request's
+          // number only as its guardian phone.
+          {
+            id: 'child',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: null,
+          },
+        ]);
+        await expect(service.confirm('request-1', actor)).rejects.toThrow('chọn hồ sơ phù hợp');
+        expect(appointments.create).not.toHaveBeenCalled();
         expect(patients.create).not.toHaveBeenCalled();
       });
 
@@ -920,6 +953,26 @@ describe('BookingService public request security and validation', () => {
         expect(include.appointment.select.dentist).toEqual({ select: { fullName: true } });
       });
 
+      it('reports a visit moved without a reschedule count (dentist transfer) as moved', async () => {
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(
+          request({
+            status: 'CONFIRMED',
+            appointment: {
+              status: 'CONFIRMED',
+              startAt: minutes(60),
+              endAt: minutes(90),
+              rescheduleCount: 0,
+              deletedAt: null,
+              dentist: { fullName: 'BS C' },
+              _count: { rescheduleLogs: 1 },
+            },
+          }),
+        );
+        const result = await service.publicStatus('GS-1A2B3C4D5E', { phone: '0901234567' });
+        expect(result.appointment?.rescheduled).toBe(true);
+        expect(result.dentist.fullName).toBe('BS C');
+      });
+
       it('reports an archived visit as cancelled', async () => {
         prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(
           request({
@@ -981,8 +1034,28 @@ describe('BookingService public request security and validation', () => {
         );
       });
 
+      it('treats values equal to the stored ones (after normalizing) as no change', async () => {
+        await expect(
+          update({
+            phone: '+84 901 234 567',
+            fullName: ' Nguyễn Bé An ',
+            email: 'ME@x.vn',
+            contactPersonPhone: '0987 654 321',
+            dob: '1990-01-01',
+            reason: 'Đau răng',
+          }),
+        ).rejects.toThrow('Chưa có thông tin nào thay đổi');
+        expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+
+        await update({ phone: '0912345678', email: 'me@x.vn' });
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).toEqual({
+          phone: '0912345678',
+          status: 'PENDING_REVIEW',
+        });
+      });
+
       it('refuses an empty answer, an impossible date and a bad guardian phone', async () => {
-        await expect(update({})).rejects.toThrow('Vui lòng nhập thông tin cần bổ sung');
+        await expect(update({})).rejects.toThrow('Chưa có thông tin nào thay đổi');
         await expect(update({ dob: '2020-02-30' })).rejects.toThrow('Ngày sinh không hợp lệ');
         await expect(update({ contactPersonPhone: '12345' })).rejects.toThrow(
           'người giám hộ không hợp lệ',

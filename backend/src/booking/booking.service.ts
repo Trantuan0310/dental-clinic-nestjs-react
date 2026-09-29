@@ -56,6 +56,8 @@ const PUBLIC_INCLUDE = {
       rescheduleCount: true,
       deletedAt: true,
       dentist: { select: { fullName: true } },
+      // Any move of time or dentist (reschedule, transfer, reassigned day).
+      _count: { select: { rescheduleLogs: true } },
     },
   },
 } satisfies Prisma.BookingRequestInclude;
@@ -384,21 +386,38 @@ export class BookingService {
         'Giờ hẹn của yêu cầu này đã qua nên không thể bổ sung thông tin. Vui lòng đặt lịch mới hoặc gọi phòng khám.',
       );
     }
-    // Only the fields sent change; a field left out keeps what was stored
-    // (the public API never shows the stored details, so the form cannot
-    // send them back). The checks run on the merged result.
+    // Only real changes are written; a field left out (or sent unchanged)
+    // keeps what was stored (the public API never shows the stored details,
+    // so the form cannot send them back). The checks run on the merged result.
     const changes: Prisma.BookingRequestUpdateManyMutationInput = {};
-    if (dto.fullName?.trim()) changes.fullName = dto.fullName.trim();
-    if (dto.dob !== undefined) changes.dob = this.parseDob(dto.dob);
-    if (dto.gender !== undefined) changes.gender = dto.gender;
-    if (dto.phone?.trim()) changes.phone = this.normalize(dto.phone);
-    if (dto.email?.trim()) changes.email = dto.email.trim().toLowerCase();
-    if (dto.contactPersonName?.trim()) changes.contactPersonName = dto.contactPersonName.trim();
-    if (dto.contactPersonPhone?.trim())
-      changes.contactPersonPhone = this.normalize(dto.contactPersonPhone);
-    if (dto.reason?.trim()) changes.reason = dto.reason.trim();
+    const differs = (next: string | undefined, stored: string | null) =>
+      next !== undefined && next !== '' && next !== (stored ?? '');
+    const fullName = dto.fullName?.trim();
+    if (differs(fullName, row.fullName)) changes.fullName = fullName;
+    if (dto.dob !== undefined) {
+      const dob = this.parseDob(dto.dob);
+      if (dob.getTime() !== row.dob.getTime()) changes.dob = dob;
+    }
+    if (dto.gender !== undefined && dto.gender !== row.gender) changes.gender = dto.gender;
+    const phone = dto.phone?.trim() ? this.normalize(dto.phone) : undefined;
+    if (differs(phone, this.normalize(row.phone))) changes.phone = phone;
+    const email = dto.email?.trim().toLowerCase();
+    if (differs(email, row.email)) changes.email = email;
+    const guardianName = dto.contactPersonName?.trim();
+    if (differs(guardianName, row.contactPersonName)) changes.contactPersonName = guardianName;
+    const guardianPhone = dto.contactPersonPhone?.trim()
+      ? this.normalize(dto.contactPersonPhone)
+      : undefined;
+    const storedGuardianPhone = row.contactPersonPhone
+      ? this.normalize(row.contactPersonPhone)
+      : null;
+    if (differs(guardianPhone, storedGuardianPhone)) changes.contactPersonPhone = guardianPhone;
+    const reason = dto.reason?.trim();
+    if (differs(reason, row.reason)) changes.reason = reason;
     if (!Object.keys(changes).length) {
-      throw new BadRequestException('Vui lòng nhập thông tin cần bổ sung');
+      throw new BadRequestException(
+        'Chưa có thông tin nào thay đổi. Vui lòng nhập thông tin phòng khám cần bổ sung.',
+      );
     }
     const merged = { ...row, ...changes } as typeof row;
     this.checkContact({
@@ -814,11 +833,22 @@ export class BookingService {
     if (!choice.createNewPatient) {
       const matches = await this.prisma.patient.findMany({
         where: this.patientsByPhone(phones),
-        select: { id: true, fullName: true, dob: true },
+        select: { id: true, fullName: true, dob: true, primaryPhone: true },
         take: 20,
       });
+      // Picked automatically only as before: the record's own phone is the
+      // request's phone, with the same name and date of birth, and no other
+      // record shares that name and date. A match through a guardian phone
+      // (typed by whoever filled in the public form) always needs a person.
       const exact = matches.filter(p => this.sameNameAndDob(p, row));
-      if (exact.length === 1) return { id: exact[0].id, created: false };
+      const own = this.normalize(row.phone);
+      if (
+        exact.length === 1 &&
+        !!exact[0].primaryPhone &&
+        this.normalize(exact[0].primaryPhone) === own
+      ) {
+        return { id: exact[0].id, created: false };
+      }
       if (matches.length > 0) {
         throw new ConflictException(
           'Đã có hồ sơ dùng số điện thoại này. Hãy chọn hồ sơ phù hợp hoặc chọn tạo hồ sơ mới trước khi xác nhận.',
@@ -1085,7 +1115,8 @@ export class BookingService {
             endAt: visit.endAt,
             // An archived visit no longer holds the time.
             status: visit.deletedAt ? 'CANCELLED' : visit.status,
-            rescheduled: (visit.rescheduleCount ?? 0) > 0,
+            rescheduled:
+              (visit.rescheduleCount ?? 0) > 0 || (visit._count?.rescheduleLogs ?? 0) > 0,
           }
         : null,
     };
