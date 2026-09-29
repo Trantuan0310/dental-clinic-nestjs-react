@@ -1046,6 +1046,7 @@ describe('MedicalRecordsService', () => {
           {
             metadata: {
               prescriptionId: 'rx-1',
+              prescriptionVersion: 2,
               conflicts: [{ drugName: 'AUGMENTIN 625mg', allergy: 'Không chịu được penicillin' }],
             },
           },
@@ -1054,9 +1055,30 @@ describe('MedicalRecordsService', () => {
         await service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor);
 
         expect(prisma.encounter.update).toHaveBeenCalled();
-        expect(audit.log).not.toHaveBeenCalledWith(
-          expect.objectContaining({ action: 'PRESCRIPTION_ALLERGY_OVERRIDE' }),
-        );
+        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+      });
+
+      it('ignores an override recorded for another version of the same row (re-issued after soft delete, legacy rows without version)', async () => {
+        (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+          {
+            metadata: {
+              prescriptionId: 'rx-1',
+              prescriptionVersion: 1,
+              conflicts: [{ drugName: 'Augmentin 625mg', allergy: 'Không chịu được Penicillin' }],
+            },
+          },
+          {
+            metadata: {
+              prescriptionId: 'rx-1',
+              conflicts: [{ drugName: 'Augmentin 625mg', allergy: 'Không chịu được Penicillin' }],
+            },
+          },
+        ]);
+
+        await expect(
+          service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor),
+        ).rejects.toThrow(PrescriptionAllergyConflictException);
+        expect(prisma.encounter.update).not.toHaveBeenCalled();
       });
 
       it('still 409s when the override was for another prescription or another allergy', async () => {
@@ -1088,17 +1110,24 @@ describe('MedicalRecordsService', () => {
         );
 
         expect(prisma.encounter.update).toHaveBeenCalled();
-        expect(audit.log).toHaveBeenCalledWith(
-          expect.objectContaining({
+        // written in the close transaction, not through AuditService
+        expect(prisma.auditLog.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
             action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+            actorUserId: dentistActor.sub,
+            targetType: 'encounter',
             targetId: 'enc-1',
             metadata: expect.objectContaining({
               prescriptionId: 'rx-1',
+              prescriptionVersion: 2,
               reason: 'Đã hỏi lại, BN dùng Augmentin ổn',
               atClose: true,
               conflicts: [expect.objectContaining({ drugName: 'Augmentin 625mg' })],
             }),
           }),
+        });
+        expect(audit.log).not.toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'PRESCRIPTION_ALLERGY_OVERRIDE' }),
         );
       });
 
@@ -1321,7 +1350,7 @@ describe('MedicalRecordsService', () => {
         validEncounter({ status: EncounterStatus.IN_PROGRESS }),
       );
       (prisma.prescription.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.prescription.create as jest.Mock).mockResolvedValue({ id: 'rx-1' });
+      (prisma.prescription.create as jest.Mock).mockResolvedValue({ id: 'rx-1', version: 0 });
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
         allergies: ['Dị ứng Penicillin'],
       });
@@ -1382,6 +1411,7 @@ describe('MedicalRecordsService', () => {
           action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
           targetId: 'enc-1',
           metadata: expect.objectContaining({
+            prescriptionVersion: 0,
             reason: 'Đã test da âm tính, bệnh nhân đồng ý',
             conflicts: [expect.objectContaining({ drugName: 'Augmentin 625mg' })],
           }),

@@ -191,6 +191,13 @@ export function PatientForm() {
 
   const onSubmit = (data: PatientFormData) => {
     if (patientId) {
+      // Without the loaded version the save could overwrite a newer record
+      // (e.g. an allergy added meanwhile) — reload instead of skipping the check.
+      if (!patient?.updatedAt) {
+        notify.error('Không xác định được phiên bản hồ sơ, tải lại rồi thử lại');
+        queryClient.invalidateQueries({ queryKey: ['patient', patientId] });
+        return;
+      }
       // Backend treats any dob present in the payload as an attempt to
       // change it and 409s once the patient has encounters — omit it here
       // when the user didn't actually touch the date field, instead of
@@ -208,7 +215,7 @@ export function PatientForm() {
         ...(changed(allergies, patient?.allergies) && { allergies }),
         ...(changed(chronicDiseases, patient?.chronicDiseases) && { chronicDiseases }),
         ...(changed(currentMedications, patient?.currentMedications) && { currentMedications }),
-        ...(patient?.updatedAt && { expectedUpdatedAt: patient.updatedAt }),
+        expectedUpdatedAt: patient.updatedAt,
       };
       updateMutation.mutate(payload);
     } else {

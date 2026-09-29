@@ -46,6 +46,7 @@ describe('allergy-check', () => {
     ['Amoxicillin 500mg', ['No penicillin']],
     ['Amoxicillin 500mg', ['Không dị ứng thức ăn nhưng dị ứng Penicillin']],
     ['Amoxicillin 500mg', ['Không dị ứng thức ăn có dị ứng Penicillin']],
+    ['Amoxicillin 500mg', ['Không dị ứng thức ăn, thuốc: Amoxicillin']],
     // brand names and abbreviations
     ['Hagimox 500mg', ['Penicillin']],
     ['Clamoxyl 250mg', ['Amoxicillin']],
@@ -90,6 +91,10 @@ describe('allergy-check', () => {
     ['Amoxicillin 500mg', ['No known drug allergies']],
     ['Amoxicillin 500mg', ['None']],
     ['Amoxicillin 500mg', ['Không; Chưa ghi nhận']],
+    // clauses left with only generic words ("thuốc", "thức ăn") name nothing
+    ['Thuốc ho Bảo Thanh', ['Không dị ứng thức ăn, thuốc']],
+    ['Thuốc ho Bảo Thanh', ['Dị ứng thuốc']],
+    ['Thuốc ho Bảo Thanh', ['Thức ăn; thuốc tây']],
     // prefixes and the painkiller wording stay within their classes
     ['Chlorhexidine 0.12%', ['Dị ứng thuốc giảm đau']],
     ['Amoxicillin 500mg', ['Dị ứng thuốc giảm đau']],
