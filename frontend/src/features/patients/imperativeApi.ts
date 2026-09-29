@@ -45,6 +45,7 @@ interface BackendPatientPayload {
   contactPersonName?: string | null;
   contactPersonPhone?: string | null;
   notes?: string;
+  expectedUpdatedAt?: string;
 }
 
 function toBackendPayload(p: CreatePatientPayload | UpdatePatientPayload): BackendPatientPayload {
@@ -66,6 +67,7 @@ function toBackendPayload(p: CreatePatientPayload | UpdatePatientPayload): Backe
   if (p.address !== undefined) out.address = p.address;
   if (p.occupation !== undefined) out.occupation = p.occupation;
   if (p.notes !== undefined) out.notes = p.notes;
+  if ('expectedUpdatedAt' in p && p.expectedUpdatedAt) out.expectedUpdatedAt = p.expectedUpdatedAt;
   return out;
 }
 

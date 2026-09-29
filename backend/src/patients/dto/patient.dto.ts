@@ -171,6 +171,15 @@ export class UpdatePatientDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  /**
+   * `updatedAt` of the patient as the form loaded it. When given, the save is
+   * refused with 409 PATIENT_VERSION_CONFLICT if the record changed since.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }
 
 export class SoftDeletePatientDto {
@@ -310,4 +319,13 @@ export class UpdateMedicalHistoryDto {
   @IsString({ each: true })
   @MaxLength(200, { each: true })
   currentMedications?: string[];
+
+  /**
+   * `updatedAt` of the patient as the form loaded it. When given, the save is
+   * refused with 409 PATIENT_VERSION_CONFLICT if the record changed since.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }

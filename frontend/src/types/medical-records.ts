@@ -541,6 +541,8 @@ export interface UpdatePrescriptionPayload {
   instructions?: string | null;
   followUpNote?: string | null;
   notes?: string | null;
+  /** Echo of the prescription's current `version` (409 if stale). */
+  version: number;
 }
 
 export interface EncounterClosePayload {

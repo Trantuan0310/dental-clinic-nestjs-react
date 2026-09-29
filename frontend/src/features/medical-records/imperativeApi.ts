@@ -111,8 +111,13 @@ export const medicalRecordsApi = {
   // (POST /appointments/:id/start-encounter), not a route on this module —
   // see useStartEncounter in features/appointments/appointmentApi.ts.
 
-  async closeEncounter(id: string, summary: string): Promise<Encounter> {
-    const { data } = await api.post<{ data: Encounter }>(`${BASE}/encounters/${id}/close`, { summary });
+  // allergyOverrideReason answers a 409 PRESCRIPTION_ALLERGY_CONFLICT (an
+  // allergy recorded after the prescription was saved).
+  async closeEncounter(id: string, summary: string, allergyOverrideReason?: string): Promise<Encounter> {
+    const { data } = await api.post<{ data: Encounter }>(`${BASE}/encounters/${id}/close`, {
+      summary,
+      ...(allergyOverrideReason && { allergyOverrideReason }),
+    });
     return unwrap(data);
   },
 

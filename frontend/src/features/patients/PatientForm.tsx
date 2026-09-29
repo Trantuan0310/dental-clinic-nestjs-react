@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useBlocker, useNavigate, useParams } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,7 +10,7 @@ import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
 import { Button, Card, Input, Textarea, Alert } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
-import { getApiErrorMessage } from '@/lib/errors';
+import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import type { CreatePatientPayload, UpdatePatientPayload, PatientLookupResult } from '@/types/patients';
 
 // VN mobile numbers: 10 digits starting 0, next digit one of 3/5/7/8/9.
@@ -78,6 +78,7 @@ type PatientFormData = z.infer<typeof patientSchema>;
 
 export function PatientForm() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   // "patients/new" has no :id param, so this is undefined there — that's how
   // the form tells "create" apart from "edit" (patients/:id/edit).
   const { id: patientId } = useParams<{ id: string }>();
@@ -114,6 +115,11 @@ export function PatientForm() {
     },
     onError: (err) => {
       notify.error(getApiErrorMessage(err, 'Không thể lưu thông tin bệnh nhân'));
+      // Someone else saved this patient after the form loaded: reload it so
+      // the next save starts from (and keeps) their changes.
+      if (getApiErrorCode(err) === 'PATIENT_VERSION_CONFLICT') {
+        queryClient.invalidateQueries({ queryKey: ['patient', patientId] });
+      }
     },
   });
 
@@ -192,12 +198,17 @@ export function PatientForm() {
       const dobUnchanged =
         !!patient && data.dateOfBirth === patient.dateOfBirth.split('T')[0];
       const { dateOfBirth, ...rest } = data;
+      // Same for the history lists: resending the lists loaded with the form
+      // would overwrite an allergy recorded meanwhile (e.g. by the dentist).
+      const changed = (next: string[], loaded?: string[]) =>
+        JSON.stringify(next) !== JSON.stringify(loaded ?? []);
       const payload: UpdatePatientPayload = {
         ...rest,
         ...(dobUnchanged ? {} : { dateOfBirth }),
-        allergies,
-        chronicDiseases,
-        currentMedications,
+        ...(changed(allergies, patient?.allergies) && { allergies }),
+        ...(changed(chronicDiseases, patient?.chronicDiseases) && { chronicDiseases }),
+        ...(changed(currentMedications, patient?.currentMedications) && { currentMedications }),
+        ...(patient?.updatedAt && { expectedUpdatedAt: patient.updatedAt }),
       };
       updateMutation.mutate(payload);
     } else {

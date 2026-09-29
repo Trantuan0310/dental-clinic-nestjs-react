@@ -200,6 +200,12 @@ export class UpdatePrescriptionDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  /** Echo of the prescription's current `version`; a stale value → 409. */
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  version!: number;
 }
 
 export class CreatePrescriptionDto {
@@ -263,16 +269,17 @@ export class PrescriptionLineInputDto {
   @MaxLength(255)
   drugName!: string;
 
-  @ApiPropertyOptional()
+  // prescription_lines.dosage / frequency are VARCHAR(100).
+  @ApiPropertyOptional({ maxLength: 100 })
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(100)
   dosage?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 100 })
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(100)
   frequency?: string;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 365 })
@@ -282,10 +289,11 @@ export class PrescriptionLineInputDto {
   @Max(365)
   durationDays?: number;
 
-  @ApiPropertyOptional({ minimum: 1 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 10000 })
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(10000)
   quantity?: number;
 
   @ApiPropertyOptional({ example: 'viên' })
@@ -331,6 +339,17 @@ export class CloseEncounterDto {
   @IsOptional()
   @IsBoolean()
   forceStockOut?: boolean = false;
+
+  /**
+   * Required (≥ 10 chars) to close when the current prescription matches an
+   * allergy recorded after it was saved and that drug/allergy pair was never
+   * overridden (PRESCRIPTION_ALLERGY_CONFLICT otherwise).
+   */
+  @ApiPropertyOptional({ minLength: 10, maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  allergyOverrideReason?: string;
 }
 
 export class CancelEncounterDto {

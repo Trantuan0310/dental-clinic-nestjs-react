@@ -60,25 +60,32 @@ export class AiService {
     if (!patient) throw new NotFoundException('Patient not found');
 
     // Match PatientsService's roster scope, including when a cached summary exists.
-    if (
-      !actor.permissions.includes('patient.update') &&
-      !actor.permissions.includes('patient.delete')
-    ) {
-      // Same scope as the patient record: treated (non-cancelled encounter)
-      // or booked with a live/completed appointment — a first-visit patient
-      // on today's list counts; a CANCELLED/NO_SHOW booking does not.
-      if (!(await dentistCanReadPatient(this.prisma, patientId, actor.sub))) {
-        throw new NotFoundException('Patient not found');
-      }
-    }
+    const wholeRoster =
+      actor.permissions.includes('patient.update') || actor.permissions.includes('patient.delete');
+    // Same scope as the patient record: treated (non-cancelled encounter)
+    // or booked with a live/completed appointment — a first-visit patient
+    // on today's list counts; a CANCELLED/NO_SHOW booking does not.
+    const scoped = wholeRoster
+      ? null
+      : await dentistCanReadPatient(this.prisma, patientId, actor.sub);
+    if (scoped === false) throw new NotFoundException('Patient not found');
 
-    const cacheKey = this.cacheKey(patientId, top);
+    // Diagnoses, plans and notes are clinical content (BR-MR-022): only a
+    // record reader (encounter.read.any, or encounter.read.own within the
+    // dentist's patient scope) gets them. The front desk sees the whole
+    // roster but only the allergy/history and "pending" bullets.
+    const clinical =
+      actor.permissions.includes('encounter.read.any') ||
+      (actor.permissions.includes('encounter.read.own') &&
+        (scoped ?? (await dentistCanReadPatient(this.prisma, patientId, actor.sub))));
+
+    const cacheKey = this.cacheKey(patientId, top, clinical);
     if (!refresh) {
       const cached = await this.cache.getJSON<AiPatientSummary>(cacheKey);
       if (cached) return { ...cached, cached: true };
     }
 
-    const input = await this.collectSummaryInput(patientId, top, patient);
+    const input = await this.collectSummaryInput(patientId, top, patient, clinical);
     let bullets: SummaryBullet[] = [];
     let source: SummarySource = 'fallback';
     let modelName: string | undefined;
@@ -98,6 +105,7 @@ export class AiService {
     } else {
       bullets = this.ruleBasedSummary(input);
     }
+    if (!clinical) bullets = bullets.filter(b => b.id !== 'next');
 
     const asOf = {
       encounterCount: input.recentEncounters.length,
@@ -118,8 +126,9 @@ export class AiService {
     return result;
   }
 
-  private cacheKey(patientId: string, top: number): string {
-    return `ai:patient:${patientId}:top${top}`;
+  /** Split by access level so a clinical summary never reaches the front desk. */
+  private cacheKey(patientId: string, top: number, clinical: boolean): string {
+    return `ai:patient:${patientId}:top${top}:${clinical ? 'full' : 'basic'}`;
   }
 
   /** Drop every cached summary (all `top` variants) of one patient. */
@@ -141,40 +150,13 @@ export class AiService {
     patientId: string,
     top: number,
     patient: { allergies: unknown; chronicDiseases: unknown; currentMedications: unknown },
+    clinical: boolean,
   ): Promise<SummaryInput & { openEncounterCount: number; outstandingInvoiceCount: number }> {
     const [encounters, openEncounterCount, outstandingInvoiceCount] = await Promise.all([
-      this.prisma.encounter.findMany({
-        where: { patientId, cancelledAt: null, status: { not: 'CANCELLED' } },
-        orderBy: { startedAt: 'desc' },
-        take: top,
-        select: {
-          id: true,
-          status: true,
-          startedAt: true,
-          closedAt: true,
-          // The record lives in ClinicalNote (one per encounter, upserted in
-          // place) plus append-only addendums; the legacy encounter columns
-          // chiefComplaint/diagnosis/treatmentPlanText are never written.
-          clinicalNote: {
-            select: {
-              chiefComplaint: true,
-              diagnosis: true,
-              treatmentPlan: true,
-              addendums: {
-                orderBy: { addedAt: 'desc' },
-                take: ADDENDUMS_PER_ENCOUNTER,
-                select: { content: true },
-              },
-            },
-          },
-          treatments: {
-            where: { deletedAt: null },
-            orderBy: { sequence: 'asc' },
-            take: 8,
-            select: { procedure: true, description: true },
-          },
-        },
-      }),
+      // Without clinical access no note/diagnosis/plan is even loaded.
+      clinical
+        ? this.fetchRecentEncounters(patientId, top)
+        : Promise.resolve([] as Awaited<ReturnType<AiService['fetchRecentEncounters']>>),
       this.prisma.encounter.count({ where: { patientId, status: 'IN_PROGRESS' } }),
       this.prisma.invoice.count({
         where: { patientId, outstandingAmount: { gt: 0 }, voidedAt: null, deletedAt: null },
@@ -197,6 +179,41 @@ export class AiService {
       openEncounterCount,
       outstandingInvoiceCount,
     };
+  }
+
+  private fetchRecentEncounters(patientId: string, top: number) {
+    return this.prisma.encounter.findMany({
+      where: { patientId, cancelledAt: null, status: { not: 'CANCELLED' } },
+      orderBy: { startedAt: 'desc' },
+      take: top,
+      select: {
+        id: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+        // The record lives in ClinicalNote (one per encounter, upserted in
+        // place) plus append-only addendums; the legacy encounter columns
+        // chiefComplaint/diagnosis/treatmentPlanText are never written.
+        clinicalNote: {
+          select: {
+            chiefComplaint: true,
+            diagnosis: true,
+            treatmentPlan: true,
+            addendums: {
+              orderBy: { addedAt: 'desc' },
+              take: ADDENDUMS_PER_ENCOUNTER,
+              select: { content: true },
+            },
+          },
+        },
+        treatments: {
+          where: { deletedAt: null },
+          orderBy: { sequence: 'asc' },
+          take: 8,
+          select: { procedure: true, description: true },
+        },
+      },
+    });
   }
 
   private normalizeStringList(value: unknown): string[] {

@@ -9,7 +9,11 @@ import { NotFoundException } from '@nestjs/common';
 import { buildUserPrompt } from './prompts/summary-prompt';
 
 describe('AiService', () => {
-  const actor = { sub: 'admin', email: 'admin@example.invalid', permissions: ['patient.delete'] };
+  const actor = {
+    sub: 'admin',
+    email: 'admin@example.invalid',
+    permissions: ['patient.delete', 'encounter.read.any'],
+  };
   let service: AiService;
   let prisma: PrismaMockShape;
   let cache: jest.Mocked<RedisCacheService>;
@@ -288,6 +292,82 @@ describe('AiService', () => {
           ]),
         }),
       });
+    });
+  });
+
+  describe('front desk (no clinical read)', () => {
+    const receptionist = {
+      sub: 'rec-1',
+      email: 'r@example.invalid',
+      permissions: ['ai.summary.read', 'patient.update', 'encounter.read.basic'],
+    };
+
+    it('gets only allergy/history and pending bullets, never diagnosis or plan', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([
+        {
+          ...validEncounter({ status: 'COMPLETED' }),
+          clinicalNote: { diagnosis: 'Viêm tủy', treatmentPlan: 'Chữa tủy R36', addendums: [] },
+          treatments: [],
+        },
+      ]);
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(2);
+
+      const result = await service.getPatientSummary('pat-1', 3, false, receptionist);
+
+      expect(prisma.encounter.findMany).not.toHaveBeenCalled();
+      expect(prisma.appointment.count).not.toHaveBeenCalled(); // whole roster
+      expect(result.bullets.map(b => b.id)).toEqual(['allergy', 'open']);
+      expect(JSON.stringify(result)).not.toMatch(/Viêm tủy|Chữa tủy/);
+      expect(result.asOf.encounterCount).toBe(0);
+      expect(cache.getJSON).toHaveBeenCalledWith('ai:patient:pat-1:top3:basic');
+      expect(cache.setJSON).toHaveBeenCalledWith(
+        'ai:patient:pat-1:top3:basic',
+        expect.anything(),
+        expect.any(Number),
+      );
+    });
+
+    it('drops a "next" bullet the model returns for the front desk', async () => {
+      const values: Record<string, string> = { AI_BASE_URL: 'https://gw.test/v1', AI_MODEL: 'm' };
+      const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            choices: [
+              { message: { content: '{"allergy":"Penicillin","open":"","next":"Chữa tủy"}' } },
+            ],
+          }),
+      } as any);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AiService,
+          { provide: PrismaService, useValue: prisma },
+          { provide: RedisCacheService, useValue: cache },
+          { provide: ConfigService, useValue: { get: jest.fn((k: string) => values[k]) } },
+        ],
+      }).compile();
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue(null);
+
+      const result = await module
+        .get<AiService>(AiService)
+        .getPatientSummary('pat-1', 3, true, receptionist);
+
+      expect(result.bullets.map(b => b.id)).toEqual(['allergy']);
+      fetchMock.mockRestore();
+    });
+
+    it('keeps full and basic summaries in separate cache entries', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue({ patientId: 'pat-1', bullets: [] });
+      await service.getPatientSummary('pat-1', 3, false, actor);
+      await service.getPatientSummary('pat-1', 3, false, receptionist);
+      expect(cache.getJSON).toHaveBeenNthCalledWith(1, 'ai:patient:pat-1:top3:full');
+      expect(cache.getJSON).toHaveBeenNthCalledWith(2, 'ai:patient:pat-1:top3:basic');
     });
   });
 
