@@ -11,6 +11,8 @@ import {
   EncounterNotFoundException,
   InsufficientStockException,
   PrescriptionAlreadyExistsException,
+  PrescriptionAllergyConflictException,
+  PrescriptionVersionConflictException,
   TreatmentNotInEncounterException,
   DentalChartPatientMismatchException,
 } from './domain/exceptions';
@@ -24,9 +26,11 @@ import {
   UpdatePrescriptionDto,
   UpdateTreatmentDto,
 } from './dto/medical-record.dto';
-import { isMinor } from '../patients/domain/patient-rules';
+import { isMinor, readJsonStringArray } from '../patients/domain/patient-rules';
+import { findAllergyConflicts } from './domain/allergy-check';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
-import { closeQueueEntry } from '../appointments/domain/queue';
+import { closeQueueEntry, reopenStartedQueueEntry } from '../appointments/domain/queue';
+import { reopenCancelledEncounter } from './domain/reopen-encounter';
 
 /**
  * MedicalRecordsService — owns:
@@ -173,16 +177,8 @@ export class MedicalRecordsService {
         where: { appointmentId },
         select: { id: true, status: true },
       });
-      if (existing) {
-        if (existing.status === EncounterStatus.COMPLETED) {
-          throw new EncounterNotClosableException('Encounter already completed');
-        }
-        // CANCELLED → re-open not allowed; throw.
-        if (existing.status === EncounterStatus.CANCELLED) {
-          throw new EncounterNotClosableException(
-            'Encounter is cancelled; create a new appointment instead',
-          );
-        }
+      if (existing?.status === EncounterStatus.COMPLETED) {
+        throw new EncounterNotClosableException('Encounter already completed');
       }
       await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       if (current.status === 'CHECKED_IN') {
@@ -190,6 +186,13 @@ export class MedicalRecordsService {
           where: { id: appointmentId },
           data: { status: 'IN_PROGRESS', updatedBy: actor.sub },
         });
+      }
+      // A cancelled encounter whose patient is back at CHECKED_IN (see
+      // cancelEncounter) is restarted on the same row — appointment_id is
+      // unique. Anything recorded before the cancel stays visible and
+      // editable; the cancel/reopen pair is kept in encounter_audits.
+      if (existing?.status === EncounterStatus.CANCELLED) {
+        await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
       }
       if (!existing) {
         const created = await tx.encounter.create({
@@ -224,7 +227,8 @@ export class MedicalRecordsService {
         },
         prescription: {
           include: {
-            lines: { orderBy: { sequence: 'asc' } },
+            // Replaced lines are soft-deleted (upsertPrescription).
+            lines: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } },
             creator: { select: { fullName: true } },
           },
         },
@@ -254,8 +258,12 @@ export class MedicalRecordsService {
   // Prisma column names (`procedure`/`unitPrice`/`toothNumbers`) to the
   // names the tabs read (`treatmentName`/`priceCents`/`toothNumber`, etc).
   private formatEncounter(e: Record<string, any>) {
+    // A to-one include can't filter, so drop a soft-deleted prescription here
+    // (it used to be returned and printed as if still valid).
+    const prescription = e.prescription && !e.prescription.deletedAt ? e.prescription : null;
     return {
       ...e,
+      prescription,
       patientId: e.patient?.id ?? e.patientId,
       patientCode: e.patient?.code ?? '',
       patientName: e.patient?.fullName ?? '',
@@ -263,7 +271,7 @@ export class MedicalRecordsService {
       dentistName: e.dentist?.fullName ?? '',
       status: String(e.status).toLowerCase(),
       treatments: (e.treatments ?? []).map((t: Record<string, any>) => this.formatTreatment(t)),
-      prescriptions: e.prescription ? [this.formatPrescription(e.prescription)] : [],
+      prescriptions: prescription ? [this.formatPrescription(prescription)] : [],
       notes: this.formatClinicalNoteList(e.clinicalNote),
     };
   }
@@ -313,6 +321,7 @@ export class MedicalRecordsService {
       notes: p.notes,
       instructions: p.instructions,
       followUpNote: p.followUpNote,
+      version: p.version,
       issuedAt: p.createdAt,
       prescribedAt: p.createdAt,
       prescribedByUserId: p.createdBy,
@@ -603,8 +612,24 @@ export class MedicalRecordsService {
    * encounter.read.any may only cancel their own encounter (404 otherwise,
    * so other dentists' encounter ids can't be probed). encounter.cancel is
    * admin-only in the seeded roles, but a custom role may be granted it.
+   *
+   * The patient is still in the clinic, so in the same transaction the
+   * appointment goes back to CHECKED_IN and its queue entry reopens; the
+   * exam can then be started again (startEncounterForAppointment reopens
+   * this encounter row — appointment_id is unique). Previously the
+   * appointment was left IN_PROGRESS with no open encounter: it could be
+   * neither restarted, completed nor cancelled.
    */
   async cancelEncounter(encounterId: string, reason: string, actor: JwtPayload) {
+    const trimmed = reason?.trim() ?? '';
+    if (trimmed.length < 10) {
+      throw new BusinessRuleException(
+        'Lý do hủy phiên khám phải có ít nhất 10 ký tự',
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        'ENCOUNTER_CANCEL_REASON_REQUIRED',
+      );
+    }
     return this.prisma.$transaction(async tx => {
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
@@ -622,15 +647,40 @@ export class MedicalRecordsService {
           status: EncounterStatus.CANCELLED,
           cancelledAt: new Date(),
           cancelledBy: actor.sub,
-          cancelledReason: reason,
+          cancelledReason: trimmed,
         },
       });
+      const appointment = await tx.appointment.updateMany({
+        where: { id: encounter.appointmentId, status: 'IN_PROGRESS' },
+        data: { status: 'CHECKED_IN', updatedBy: actor.sub },
+      });
+      if (appointment.count > 0) {
+        await reopenStartedQueueEntry(tx, encounter.appointmentId, actor.sub);
+      }
       await tx.encounterAudit.create({
         data: {
           encounterId,
           action: 'CANCELLED',
           actorId: actor.sub,
-          after: { status: 'CANCELLED' },
+          before: { status: encounter.status },
+          after: {
+            status: 'CANCELLED',
+            reason: trimmed,
+            appointmentStatus: appointment.count > 0 ? 'CHECKED_IN' : 'unchanged',
+          },
+        },
+      });
+      await this.audit.log({
+        action: 'ENCOUNTER_CANCELLED',
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'encounter',
+        targetId: encounterId,
+        metadata: {
+          appointmentId: encounter.appointmentId,
+          patientId: encounter.patientId,
+          reason: trimmed,
+          appointmentReturnedToCheckIn: appointment.count > 0,
         },
       });
     });
@@ -896,6 +946,19 @@ export class MedicalRecordsService {
   // Prescription
   // ==========================================================================
 
+  /**
+   * Create the encounter's prescription, or replace it (header + every line)
+   * while the encounter is IN_PROGRESS.
+   *   - no row: create.
+   *   - soft-deleted row (encounter_id is unique, so a new row can't be
+   *     inserted): reuse it — this is a fresh prescription, so it gets the
+   *     new author and lines.
+   *   - active row: replace only when the caller echoes its `version`
+   *     (the edit form); a plain create still gets 409 so a stale page can't
+   *     silently overwrite a prescription it never saw.
+   * Old lines are soft-deleted, never removed (BR-MR-006).
+   * Every save is screened against the patient's recorded allergies.
+   */
   async upsertPrescription(encounterId: string, dto: CreatePrescriptionDto, actor: JwtPayload) {
     return this.withEditableEncounter(encounterId, actor, async tx => {
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
@@ -905,42 +968,66 @@ export class MedicalRecordsService {
       }
 
       const existing = await tx.prescription.findUnique({ where: { encounterId } });
-      if (existing) {
-        throw new PrescriptionAlreadyExistsException();
+      const active = existing && !existing.deletedAt ? existing : null;
+      if (active) {
+        if (dto.version === undefined) throw new PrescriptionAlreadyExistsException();
+        if (dto.version !== active.version) throw new PrescriptionVersionConflictException();
       }
 
-      const prescription = await (async () => {
-        const p = await tx.prescription.create({
+      const patient = await tx.patient.findUnique({
+        where: { id: encounter.patientId },
+        select: { allergies: true },
+      });
+      const conflicts = findAllergyConflicts(dto.lines, readJsonStringArray(patient?.allergies));
+      const overrideReason = dto.allergyOverrideReason?.trim() ?? '';
+      if (conflicts.length > 0 && overrideReason.length < 10) {
+        throw new PrescriptionAllergyConflictException(conflicts, overrideReason.length > 0);
+      }
+
+      const header = {
+        diagnosis: dto.diagnosis ?? null,
+        instructions: dto.instructions ?? null,
+        followUpNote: dto.followUpNote ?? null,
+        notes: dto.notes ?? null,
+      };
+      let prescription;
+      if (existing) {
+        await tx.prescriptionLine.updateMany({
+          where: { prescriptionId: existing.id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        prescription = await tx.prescription.update({
+          where: { id: existing.id },
           data: {
-            encounterId,
-            diagnosis: dto.diagnosis ?? null,
-            instructions: dto.instructions ?? null,
-            followUpNote: dto.followUpNote ?? null,
-            notes: dto.notes ?? null,
-            createdBy: actor.sub,
+            ...header,
+            ...(!active && { deletedAt: null, createdAt: new Date(), createdBy: actor.sub }),
+            version: { increment: 1 },
           },
         });
-        for (let i = 0; i < dto.lines.length; i++) {
-          const line = dto.lines[i];
-          await tx.prescriptionLine.create({
-            data: {
-              prescriptionId: p.id,
-              sequence: i,
-              drugName: line.drugName,
-              dosage: line.dosage ?? '',
-              frequency: line.frequency ?? '',
-              duration: line.durationDays ? String(line.durationDays) : '',
-              quantity: line.quantity ?? null,
-              unit: line.unit ?? null,
-              instructions: line.instructions ?? null,
-            },
-          });
-        }
-        return p;
-      })();
+      } else {
+        prescription = await tx.prescription.create({
+          data: { encounterId, ...header, createdBy: actor.sub },
+        });
+      }
+      for (let i = 0; i < dto.lines.length; i++) {
+        const line = dto.lines[i];
+        await tx.prescriptionLine.create({
+          data: {
+            prescriptionId: prescription.id,
+            sequence: i,
+            drugName: line.drugName,
+            dosage: line.dosage ?? '',
+            frequency: line.frequency ?? '',
+            duration: line.durationDays ? String(line.durationDays) : '',
+            quantity: line.quantity ?? null,
+            unit: line.unit ?? null,
+            instructions: line.instructions ?? null,
+          },
+        });
+      }
 
       await this.audit.log({
-        action: 'PRESCRIPTION_CREATED',
+        action: active ? 'PRESCRIPTION_REPLACED' : 'PRESCRIPTION_CREATED',
         actorUserId: actor.sub,
         targetType: 'encounter',
         targetId: encounterId,
@@ -950,8 +1037,25 @@ export class MedicalRecordsService {
           hasDiagnosis: !!dto.diagnosis,
           hasInstructions: !!dto.instructions,
           hasFollowUpNote: !!dto.followUpNote,
+          ...(existing && !active && { reusedDeletedPrescription: true }),
         },
       });
+
+      if (conflicts.length > 0) {
+        await this.audit.log({
+          action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: {
+            prescriptionId: prescription.id,
+            patientId: encounter.patientId,
+            reason: overrideReason,
+            conflicts,
+          },
+        });
+      }
 
       return prescription;
     });
@@ -961,7 +1065,7 @@ export class MedicalRecordsService {
    * Partial update of a prescription (PATCH semantics).
    *
    * Lines themselves are not edited here — callers replace the whole
-   * prescription via the POST upsert path. This method updates the
+   * prescription via the POST upsert path (with `version`). This method updates the
    * header-level fields (diagnosis, instructions, followUpNote, notes)
    * and bumps `version` for optimistic concurrency.
    */

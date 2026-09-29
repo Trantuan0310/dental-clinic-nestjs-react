@@ -16,7 +16,7 @@ import {
   ArrayMinSize,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PatientType } from '@prisma/client';
 
@@ -228,6 +228,27 @@ export class CreatePrescriptionDto {
   @ValidateNested({ each: true })
   @Type(() => PrescriptionLineInputDto)
   lines!: PrescriptionLineInputDto[];
+
+  /**
+   * Echo of the current prescription's `version` to replace it (header and
+   * all lines) while the encounter is IN_PROGRESS. Omitted = create; a
+   * create against an existing prescription is rejected with 409.
+   */
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  version?: number;
+
+  /**
+   * Required (≥ 10 chars) to save a prescription whose drugs match the
+   * patient's recorded allergies (PRESCRIPTION_ALLERGY_CONFLICT otherwise).
+   */
+  @ApiPropertyOptional({ minLength: 10, maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  allergyOverrideReason?: string;
 }
 
 export class PrescriptionLineInputDto {
@@ -305,6 +326,15 @@ export class CloseEncounterDto {
   @IsOptional()
   @IsBoolean()
   forceStockOut?: boolean = false;
+}
+
+export class CancelEncounterDto {
+  @ApiProperty({ minLength: 10, maxLength: 1000 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(10, { message: 'Lý do hủy phiên khám phải có ít nhất 10 ký tự' })
+  @MaxLength(1000)
+  reason!: string;
 }
 
 // ---------------------------------------------------------------------------
