@@ -18,11 +18,19 @@ export interface AllergyConflict {
 /**
  * Drug classes common in dental prescribing. An allergy that names the class
  * or any member flags every member (cross-reactivity within the class).
- * Names are in normalized form (see normalize); include common VN spellings.
+ * Names are in normalized form (see normalizeTerm); include common VN spellings.
  */
-const DRUG_CLASSES: Array<{ label: string; names: string[] }> = [
+interface DrugClass {
+  label: string;
+  names: string[];
+  /** Covered by a generic "dị ứng kháng sinh" / "antibiotic" allergy. */
+  antibiotic?: boolean;
+}
+
+const DRUG_CLASSES: DrugClass[] = [
   {
     label: 'nhóm Penicillin (beta-lactam)',
+    antibiotic: true,
     names: [
       'penicillin',
       'penicilin',
@@ -44,6 +52,7 @@ const DRUG_CLASSES: Array<{ label: string; names: string[] }> = [
   },
   {
     label: 'nhóm Cephalosporin',
+    antibiotic: true,
     names: [
       'cephalosporin',
       'cephalosporine',
@@ -86,6 +95,7 @@ const DRUG_CLASSES: Array<{ label: string; names: string[] }> = [
   },
   {
     label: 'nhóm Macrolide',
+    antibiotic: true,
     names: [
       'macrolide',
       'macrolid',
@@ -98,14 +108,17 @@ const DRUG_CLASSES: Array<{ label: string; names: string[] }> = [
   },
   {
     label: 'nhóm Nitroimidazole (Metronidazole)',
+    antibiotic: true,
     names: ['nitroimidazole', 'metronidazole', 'metronidazol', 'flagyl', 'tinidazole', 'rodogyl'],
   },
   {
     label: 'nhóm Tetracycline',
+    antibiotic: true,
     names: ['tetracycline', 'tetracyclin', 'doxycycline', 'doxycyclin', 'minocycline'],
   },
   {
     label: 'nhóm Sulfonamide',
+    antibiotic: true,
     names: ['sulfa', 'sulfonamide', 'sulfamid', 'sulfamethoxazole', 'cotrimoxazole', 'bactrim'],
   },
   {
@@ -127,19 +140,28 @@ const DRUG_CLASSES: Array<{ label: string; names: string[] }> = [
   },
 ];
 
-/** Allergy entries that mean "none recorded" rather than a real allergen. */
-const NO_ALLERGY = new Set([
-  'khong',
-  'khong co',
-  'khong ro',
-  'khong di ung',
-  'chua ghi nhan',
-  'chua phat hien',
-  'none',
-  'no',
-  'n a',
-  'na',
-]);
+/** Generic allergy wording that covers every antibiotic class. */
+const ANTIBIOTIC_TERMS = ['khang sinh', 'antibiotic', 'antibiotics', 'antibiotique'];
+
+/**
+ * Classes with known cross-reactivity (both directions): a penicillin allergy
+ * still warns on a cephalosporin and vice versa.
+ */
+const CROSS_REACTIVE: Array<[string, string]> = [
+  ['nhóm Penicillin (beta-lactam)', 'nhóm Cephalosporin'],
+];
+
+/**
+ * Entries that negate rather than name an allergen ("Không dị ứng", "Không
+ * có", "Chưa ghi nhận", "NKDA"). "Không dung nạp …" (intolerance) is kept —
+ * it names a real reaction.
+ */
+const NEGATION_PREFIXES = ['khong', 'chua', 'none', 'no', 'n a', 'na', 'nka', 'nkda'];
+
+function isNegation(normalized: string): boolean {
+  if (normalized.startsWith('khong dung nap')) return false;
+  return NEGATION_PREFIXES.some(p => normalized === p || normalized.startsWith(`${p} `));
+}
 
 /** Drug-name words that describe the form, not the substance. */
 const FORM_WORDS = new Set([
@@ -166,13 +188,24 @@ const FORM_WORDS = new Set([
   'cream',
   'suc',
   'mieng',
+  // salt / acid parts of a substance name ("Acid tranexamic", "Natri
+  // fluorid", "Lidocain hydroclorid") say nothing about the allergen
+  'acid',
+  'natri',
+  'sodium',
+  'kali',
+  'potassium',
+  'hydroclorid',
+  'hydrochlorid',
+  'hydrochloride',
+  'hcl',
 ]);
 
 /** Lowercase, drop Vietnamese diacritics (đ → d), keep letters/digits as words. */
 export function normalizeTerm(value: string): string {
   return value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{M}/gu, '')
     .replace(/[đĐ]/g, 'd')
     .toLowerCase()
     .replace(/([a-z])(\d)/g, '$1 $2')
@@ -190,12 +223,36 @@ function classesMentioned(normalized: string) {
   return DRUG_CLASSES.filter(c => c.names.some(n => containsPhrase(normalized, n)));
 }
 
+/** Label of the class-level link between an allergy and a drug, if any. */
+function classLink(allergyNorm: string, drugClasses: DrugClass[]): string | undefined {
+  const allergyClasses = classesMentioned(allergyNorm);
+  const same = allergyClasses.find(c => drugClasses.includes(c));
+  if (same) return same.label;
+  if (ANTIBIOTIC_TERMS.some(t => containsPhrase(allergyNorm, t))) {
+    const antibiotic = drugClasses.find(c => c.antibiotic);
+    if (antibiotic) return `kháng sinh — ${antibiotic.label}`;
+  }
+  for (const [a, b] of CROSS_REACTIVE) {
+    for (const [from, to] of [
+      [a, b],
+      [b, a],
+    ]) {
+      if (allergyClasses.some(c => c.label === from) && drugClasses.some(c => c.label === to)) {
+        return `phản ứng chéo ${from} ↔ ${to}`;
+      }
+    }
+  }
+  return undefined;
+}
+
 /**
  * Pairs every prescription line with every recorded allergy it may trigger.
  * A pair matches when the drug name contains the allergy (e.g. "Amoxicillin
  * 500mg" / "amoxicillin"), the allergy text names a substance word of the
- * drug (e.g. "Dị ứng amoxicillin" / "Amoxicillin"), or both fall in the same
- * drug class (e.g. "Penicillin" / "Augmentin 625mg").
+ * drug (e.g. "Dị ứng amoxicillin" / "Amoxicillin"), both fall in the same
+ * drug class (e.g. "Penicillin" / "Augmentin 625mg"), the allergy is a generic
+ * "kháng sinh" and the drug is an antibiotic, or the classes cross-react
+ * (penicillin ↔ cephalosporin).
  */
 export function findAllergyConflicts(
   lines: Array<{ drugName: string }>,
@@ -203,7 +260,7 @@ export function findAllergyConflicts(
 ): AllergyConflict[] {
   const recorded = allergies
     .map(raw => ({ raw: raw.trim(), norm: normalizeTerm(raw) }))
-    .filter(a => a.norm.length >= 3 && !NO_ALLERGY.has(a.norm));
+    .filter(a => a.norm.length >= 3 && !isNegation(a.norm));
   if (recorded.length === 0) return [];
 
   const conflicts: AllergyConflict[] = [];
@@ -218,15 +275,13 @@ export function findAllergyConflicts(
     for (const allergy of recorded) {
       const allergyWords = new Set(allergy.norm.split(' '));
       const direct = containsPhrase(drug, allergy.norm) || drugWords.some(w => allergyWords.has(w));
-      const shared = direct
-        ? undefined
-        : classesMentioned(allergy.norm).find(c => drugClasses.includes(c));
-      if (direct || shared) {
+      const link = direct ? undefined : classLink(allergy.norm, drugClasses);
+      if (direct || link) {
         conflicts.push({
           lineIndex,
           drugName: line.drugName,
           allergy: allergy.raw,
-          ...(shared && { drugClass: shared.label }),
+          ...(link && { drugClass: link }),
         });
       }
     }

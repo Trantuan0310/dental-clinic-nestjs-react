@@ -238,7 +238,8 @@ describe('MedicalRecordsService', () => {
         data: { status: 'CHECKED_IN', updatedBy: admin.sub },
       });
       expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
-        where: { appointmentId: 'appt-1', closeReason: 'STARTED' },
+        // only today's (clinic date) entry reopens
+        where: { appointmentId: 'appt-1', closeReason: 'STARTED', queueDate: expect.any(Date) },
         data: expect.objectContaining({ status: 'WAITING', doneAt: null, closeReason: null }),
       });
       expect(audit.log).toHaveBeenCalledWith(
@@ -279,6 +280,8 @@ describe('MedicalRecordsService', () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
         id: 'enc-1',
         status: EncounterStatus.CANCELLED,
+        dentistId: 'dentist-1',
+        startedAt: new Date('2026-09-01T01:00:00Z'),
         cancelledAt: new Date('2026-09-01T02:00:00Z'),
         cancelledBy: 'admin-1',
         cancelledReason: 'Bắt đầu nhầm phiên khám',
@@ -303,6 +306,38 @@ describe('MedicalRecordsService', () => {
       });
       expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ action: 'REOPENED', encounterId: 'enc-1' }),
+      });
+    });
+
+    it('keeps the dentist and start time from before the cancel in the REOPENED audit', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        id: 'enc-1',
+        status: EncounterStatus.CANCELLED,
+        dentistId: 'dentist-old',
+        startedAt: new Date('2026-09-01T01:00:00Z'),
+        cancelledAt: new Date('2026-09-01T02:00:00Z'),
+        cancelledBy: 'admin-1',
+        cancelledReason: 'Bắt đầu nhầm phiên khám',
+      });
+
+      await service.startEncounterForAppointment('appt-1', dentistActor);
+
+      expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'REOPENED',
+          before: expect.objectContaining({
+            status: EncounterStatus.CANCELLED,
+            dentistId: 'dentist-old',
+            startedAt: '2026-09-01T01:00:00.000Z',
+          }),
+        }),
       });
     });
 
@@ -678,6 +713,7 @@ describe('MedicalRecordsService', () => {
       });
       const updateData = (prisma.prescription.update as jest.Mock).mock.calls[0][0].data;
       expect(updateData).not.toHaveProperty('deletedAt');
+      expect(updateData).not.toHaveProperty('createdAt');
       expect(prisma.prescription.create).not.toHaveBeenCalled();
       expect(prisma.prescriptionLine.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ prescriptionId: 'rx-1', drugName: 'Paracetamol 500mg' }),
@@ -719,6 +755,10 @@ describe('MedicalRecordsService', () => {
         where: { id: 'rx-old' },
         data: expect.objectContaining({ deletedAt: null, createdBy: dentistActor.sub }),
       });
+      // the original issue time is kept
+      expect((prisma.prescription.update as jest.Mock).mock.calls[0][0].data).not.toHaveProperty(
+        'createdAt',
+      );
       expect(prisma.prescription.create).not.toHaveBeenCalled();
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -835,6 +875,33 @@ describe('MedicalRecordsService', () => {
       const result: any = await service.getEncounter('enc-1', dentistActor);
       expect(result.prescriptions).toEqual([]);
       expect(result.prescription).toBeNull();
+    });
+
+    it('flags an encounter reopened after a cancel that still carries earlier data', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...withPrescription(null),
+        audits: [{ id: 'aud-1' }],
+      });
+      const result: any = await service.getEncounter('enc-1', dentistActor);
+      expect(result.reopenedFromCancel).toBe(true);
+      expect(result).not.toHaveProperty('audits');
+    });
+
+    it('does not flag a reopened encounter with nothing recorded, or one never reopened', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...withPrescription(new Date('2026-09-01T00:00:00Z')),
+        audits: [{ id: 'aud-1' }],
+      });
+      expect(((await service.getEncounter('enc-1', dentistActor)) as any).reopenedFromCancel).toBe(
+        false,
+      );
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...withPrescription(null),
+        audits: [],
+      });
+      expect(((await service.getEncounter('enc-1', dentistActor)) as any).reopenedFromCancel).toBe(
+        false,
+      );
     });
 
     it('returns the active prescription with its version and filters deleted lines in the query', async () => {

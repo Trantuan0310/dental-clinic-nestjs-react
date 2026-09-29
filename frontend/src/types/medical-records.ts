@@ -169,6 +169,8 @@ export interface Encounter {
   treatments?: TreatmentLine[];
   prescriptions?: Prescription[];
   dentalChart?: DentalChart;
+  /** Reopened after a cancel while data from before the cancel is still attached. */
+  reopenedFromCancel?: boolean;
 }
 
 export interface EncounterSummary {

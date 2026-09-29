@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { BillingService } from '../../src/billing/billing.service';
 import { JwtService } from '@nestjs/jwt';
 import { createTestApp } from '../helpers/create-test-app';
+import { clinicDateOnly } from '../../src/common/date-range.util';
 
 describe('Real HTTP and PostgreSQL regression', () => {
   let app: INestApplication;
@@ -826,6 +827,20 @@ describe('Real HTTP and PostgreSQL regression', () => {
   it('cancelling an encounter started by mistake returns the appointment to CHECKED_IN and allows a restart', async () => {
     const id = await fixtureEncounter();
     const { appointmentId: apptId } = await db.encounter.findUniqueOrThrow({ where: { id } });
+    // The queue entry the start closed (the fixture books straight into CHECKED_IN).
+    const now = new Date();
+    await db.queueEntry.create({
+      data: {
+        appointmentId: apptId,
+        dentistId: users.dentist,
+        queueDate: new Date(clinicDateOnly()),
+        status: 'CALLED',
+        priority: 'ON_TIME',
+        checkedInAt: now,
+        doneAt: now,
+        closeReason: 'STARTED',
+      },
+    });
     await api('post', `/medical-records/encounters/${id}/cancel`)
       .send({ reason: 'Nhầm' })
       .expect(400);
@@ -835,11 +850,17 @@ describe('Real HTTP and PostgreSQL regression', () => {
     expect((await db.appointment.findUniqueOrThrow({ where: { id: apptId } })).status).toBe(
       'CHECKED_IN',
     );
+    const queued = await db.queueEntry.findUniqueOrThrow({ where: { appointmentId: apptId } });
+    expect(queued.status).toBe('WAITING');
+    expect(queued.doneAt).toBeNull();
     const restarted = await api('post', '/medical-records/encounters/start', 'dentist')
       .send({ appointmentId: apptId })
       .expect(200);
     expect(restarted.body.data.encounterId).toBe(id);
     expect((await db.encounter.findUniqueOrThrow({ where: { id } })).status).toBe('IN_PROGRESS');
+    expect(await db.encounterAudit.count({ where: { encounterId: id, action: 'REOPENED' } })).toBe(
+      1,
+    );
   });
   it('re-issues a deleted prescription and replaces lines when the version is echoed', async () => {
     const id = await fixtureEncounter();

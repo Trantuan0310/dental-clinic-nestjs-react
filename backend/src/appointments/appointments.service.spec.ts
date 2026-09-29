@@ -563,6 +563,8 @@ describe('AppointmentsService', () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
         id: 'encounter-cancelled',
         status: EncounterStatus.CANCELLED,
+        dentistId: 'dentist-self',
+        startedAt: new Date('2026-09-01T01:00:00Z'),
       });
       (prisma.appointment.update as jest.Mock).mockResolvedValue({
         ...ownAppt,

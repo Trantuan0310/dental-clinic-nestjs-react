@@ -80,11 +80,12 @@ export async function enqueue(
 /**
  * Puts a patient whose exam was started and then cancelled (encounter
  * created by mistake) back in line, keeping their priority and check-in time.
- * Only entries closed by STARTED reopen; LEFT/CANCELLED stay closed.
+ * Only today's (clinic date) entries closed by STARTED reopen; LEFT/CANCELLED
+ * and past days' entries stay closed.
  */
 export async function reopenStartedQueueEntry(db: Db, appointmentId: string, actorId: string) {
   await db.queueEntry.updateMany({
-    where: { appointmentId, closeReason: 'STARTED' },
+    where: { appointmentId, closeReason: 'STARTED', queueDate: new Date(clinicDateOnly()) },
     data: { status: QueueStatus.WAITING, doneAt: null, closeReason: null, updatedBy: actorId },
   });
 }

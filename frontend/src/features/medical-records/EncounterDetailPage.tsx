@@ -14,7 +14,7 @@ import {
   CalendarPlus,
 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
-import { Button, Card, StatusBadge } from '@/components/ui';
+import { Alert, Button, Card, StatusBadge } from '@/components/ui';
 import { PatientHistoryCard } from './PatientHistoryCard';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/authStore';
@@ -156,6 +156,13 @@ export default function EncounterDetailPage() {
           )}
         </div>
       </div>
+
+      {encounter.status === 'in_progress' && encounter.reopenedFromCancel && (
+        <Alert type="warning">
+          Phiên khám này được mở lại sau khi hủy — kiểm tra và xóa điều trị/đơn thuốc không còn
+          đúng trước khi đóng phiên.
+        </Alert>
+      )}
 
       {/* Patient Info */}
       <Card noPadding className="p-4">
