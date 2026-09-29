@@ -11,6 +11,10 @@ import {
   CannotRemoveLastAdminException,
   EmailAlreadyExistsException,
 } from '../common/exceptions/business-rule.exception';
+import {
+  DentistHasFutureAppointmentsException,
+  DentistHasOpenEncountersException,
+} from '../staff/staff.exceptions';
 
 jest.mock('argon2');
 
@@ -481,6 +485,57 @@ describe('UsersService', () => {
         expect.any(Function),
         expect.objectContaining({ isolationLevel: 'Serializable' }),
       );
+    });
+  });
+
+  describe('dentist open-work guard (BR-STAFF-004)', () => {
+    beforeEach(() => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser());
+      (prisma.role.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.userRole.findFirst as jest.Mock).mockResolvedValue({ userId: 'user-1' });
+    });
+
+    it('refuses to deactivate a dentist who still has an IN_PROGRESS encounter', async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
+
+      await expect(
+        service.deactivate('user-1', undefined, 'admin-1', 'admin@x.com', null, null),
+      ).rejects.toThrow(DentistHasOpenEncountersException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses to drop the dentist role while bookings still need the dentist', async () => {
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([
+        validRole({ id: 'r-rec', code: 'receptionist' }),
+      ]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'a1',
+          startAt: new Date(),
+          endAt: new Date(),
+          status: 'SCHEDULED',
+          patient: { fullName: 'BN' },
+        },
+      ]);
+
+      await expect(
+        service.updateRoles('user-1', { roleIds: ['r-rec'] }, 'admin-1', 'a@x.com', null, null),
+      ).rejects.toThrow(DentistHasFutureAppointmentsException);
+      expect(prisma.userRole.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('does not check open work when the dentist role is kept', async () => {
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([
+        validRole({ id: 'r-den', code: 'dentist' }),
+      ]);
+
+      await service
+        .updateRoles('user-1', { roleIds: ['r-den'] }, 'admin-1', 'a@x.com', null, null)
+        .catch(() => undefined);
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      expect(prisma.userRole.deleteMany).toHaveBeenCalled();
     });
   });
 

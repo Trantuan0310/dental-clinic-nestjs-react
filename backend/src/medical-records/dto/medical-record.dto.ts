@@ -50,6 +50,14 @@ export class UpsertClinicalNoteDto {
   @IsString()
   @MaxLength(8000)
   notes?: string;
+
+  /** Progress note appended to `notes` with a time + author stamp (never overwrites). */
+  @ApiPropertyOptional({ maxLength: 2000 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  appendNote?: string;
 }
 
 export class AddAddendumDto {

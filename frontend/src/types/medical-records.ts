@@ -4,7 +4,7 @@
 // =============================================================================
 
 export type EncounterStatus = 'in_progress' | 'completed' | 'cancelled';
-export type NoteType = 'chief_complaint' | 'diagnosis' | 'progress_note' | 'other';
+export type NoteType = 'chief_complaint' | 'diagnosis' | 'treatment_plan' | 'progress_note' | 'other';
 export type ToothSurface =
   | 'normal'
   | 'caries'

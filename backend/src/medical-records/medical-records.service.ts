@@ -4,7 +4,7 @@ import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { endOfDayInclusive } from '../common/date-range.util';
+import { clinicDateTimeLabel, endOfDayInclusive } from '../common/date-range.util';
 import {
   ENCOUNTER_CLOSED_EVENT,
   EncounterClosedEvent,
@@ -385,8 +385,10 @@ export class MedicalRecordsService {
     if (note.chiefComplaint)
       sections.push({ type: 'chief_complaint', content: note.chiefComplaint });
     if (note.diagnosis) sections.push({ type: 'diagnosis', content: note.diagnosis });
-    if (note.treatmentPlan) sections.push({ type: 'other', content: note.treatmentPlan });
-    if (note.notes) sections.push({ type: 'other', content: note.notes });
+    // Each section keeps its own type so an edit goes back to its own column.
+    if (note.treatmentPlan)
+      sections.push({ type: 'treatment_plan', content: note.treatmentPlan });
+    if (note.notes) sections.push({ type: 'progress_note', content: note.notes });
     return sections.map((section, i) => ({
       id: `${note.id}-${i}`,
       encounterId: note.encounterId,
@@ -776,13 +778,27 @@ export class MedicalRecordsService {
       // addendum trail. The two actors need not be different people (a dentist
       // closing on one device while saving on another), but an admin closing
       // an encounter the dentist is still writing up is the common case.
+      // "Thêm ghi chú tiến triển" appends a stamped entry instead of replacing
+      // what is already there; the encounter row lock (withEditableEncounter)
+      // serialises this read-then-write.
+      let notes = dto.notes;
+      if (dto.appendNote?.trim()) {
+        const [existing, author] = await Promise.all([
+          tx.clinicalNote.findUnique({ where: { encounterId }, select: { notes: true } }),
+          tx.user.findUnique({ where: { id: actor.sub }, select: { fullName: true } }),
+        ]);
+        const entry = `[${clinicDateTimeLabel()} — ${author?.fullName ?? actor.email}]\n${dto.appendNote.trim()}`;
+        const base = notes !== undefined ? notes : existing?.notes;
+        notes = base?.trim() ? `${base.trimEnd()}\n\n${entry}` : entry;
+      }
+
       const guarded = await tx.clinicalNote.updateMany({
         where: { encounterId, isLocked: false },
         data: {
           ...(dto.chiefComplaint !== undefined && { chiefComplaint: dto.chiefComplaint }),
           ...(dto.diagnosis !== undefined && { diagnosis: dto.diagnosis }),
           ...(dto.treatmentPlan !== undefined && { treatmentPlan: dto.treatmentPlan }),
-          ...(dto.notes !== undefined && { notes: dto.notes }),
+          ...(notes !== undefined && { notes }),
           lastEditedBy: actor.sub,
         },
       });
@@ -801,7 +817,7 @@ export class MedicalRecordsService {
             chiefComplaint: dto.chiefComplaint ?? null,
             diagnosis: dto.diagnosis ?? null,
             treatmentPlan: dto.treatmentPlan ?? null,
-            notes: dto.notes ?? null,
+            notes: notes ?? null,
             lastEditedBy: actor.sub,
           },
         });

@@ -664,6 +664,38 @@ describe('MedicalRecordsService', () => {
       expect(prisma.clinicalNote.upsert).not.toHaveBeenCalled();
     });
 
+    it('appendNote adds a stamped progress entry instead of overwriting notes', async () => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue({ notes: 'Ghi chú cũ' });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.clinicalNote.findUniqueOrThrow as jest.Mock).mockResolvedValue(validClinicalNote());
+
+      await service.upsertClinicalNote('enc-1', { appendNote: 'Đỡ đau' } as any, dentistActor);
+
+      const data = (prisma.clinicalNote.updateMany as jest.Mock).mock.calls[0][0].data;
+      expect(data.notes).toMatch(
+        /^Ghi chú cũ\n\n\[\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} — BS An\]\nĐỡ đau$/,
+      );
+      // Other sections are left alone.
+      expect(data).not.toHaveProperty('chiefComplaint');
+      expect(data).not.toHaveProperty('treatmentPlan');
+    });
+
+    it('appendNote on a first save creates the note with just the stamped entry', async () => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.clinicalNote.create as jest.Mock).mockResolvedValue(validClinicalNote());
+
+      await service.upsertClinicalNote('enc-1', { appendNote: 'Lần 1' } as any, dentistActor);
+
+      expect(prisma.clinicalNote.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ notes: expect.stringMatching(/— BS An\]\nLần 1$/) }),
+        }),
+      );
+    });
+
     it('rejects modification when clinical note is locked (encounter closed)', async () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ status: EncounterStatus.COMPLETED }),

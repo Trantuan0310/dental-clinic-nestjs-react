@@ -13,6 +13,7 @@ import type {
   CreatePrescriptionPayload,
 } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
+import { useIsOwnEncounterScope } from './encounterUtils';
 
 const MIN_OVERRIDE_REASON = 10;
 
@@ -134,7 +135,8 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
 
   const prescriptions = encounter.prescriptions || [];
   const canWrite = useAuthStore((s) => s.hasPermission('prescription.write'));
-  const isEditable = encounter.status === 'in_progress' && canWrite;
+  const ownScope = useIsOwnEncounterScope(encounter);
+  const isEditable = encounter.status === 'in_progress' && canWrite && ownScope;
 
   return (
     <div className="space-y-4">
