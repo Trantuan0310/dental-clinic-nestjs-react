@@ -85,6 +85,21 @@ describe('Clinical data audit regressions', () => {
       expect(db.clinicalNoteAddendum.create).not.toHaveBeenCalled();
     });
 
+    it('creates an empty locked note first when a closed visit has none (was a hard refusal)', async () => {
+      db.encounter.findUnique.mockResolvedValue({ ...encounter(86400000), clinicalNote: null });
+      db.clinicalNote.upsert.mockResolvedValue({ id: 'new-note' });
+      await service.addAddendum('e', { content: 'Correction' }, actor);
+      expect(db.clinicalNote.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { encounterId: 'e' },
+          create: expect.objectContaining({ encounterId: 'e', isLocked: true }),
+        }),
+      );
+      expect(db.clinicalNoteAddendum.create).toHaveBeenCalledWith({
+        data: { clinicalNoteId: 'new-note', content: 'Correction', addedBy: actor.sub },
+      });
+    });
+
     it('rejects a cancelled encounter', async () => {
       db.encounter.findUnique.mockResolvedValue({ ...encounter(86400000), status: 'CANCELLED' });
       await expect(service.addAddendum('e', { content: 'Correction' }, actor)).rejects.toThrow(

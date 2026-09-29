@@ -112,8 +112,8 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   // front desk reading it gets no edit controls instead of a 403 on save.
   const canWrite = useAuthStore((s) => s.hasPermission('clinical_note.write'));
   const canAddendum = useAuthStore((s) => s.hasPermission('clinical_note.addendum'));
-  const isCompleted = encounter.status === 'completed' && canAddendum;
   const ownScope = useIsOwnEncounterScope(encounter);
+  const isCompleted = encounter.status === 'completed' && canAddendum && ownScope;
   const isEditable = encounter.status === 'in_progress' && canWrite && ownScope;
 
   return (

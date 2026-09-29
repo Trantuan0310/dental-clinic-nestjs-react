@@ -310,6 +310,29 @@ describe('MedicalRecordsService', () => {
       ).rejects.toBeInstanceOf(DentalChartPatientMismatchException);
     });
 
+    it('keeps primary teeth already on record when a 12-year-old moves to the ADULT chart', async () => {
+      withDob(12);
+      (prisma.dentalChartSnapshot.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.findFirst as jest.Mock).mockResolvedValue({
+        dentalChart: { teeth: { '55': { status: 'cavity' }, '16': { status: 'healthy' } } },
+      });
+      (prisma.dentalChartSnapshot.create as jest.Mock).mockResolvedValue({ id: 's' });
+      await service.snapshotDentalChart(
+        'enc-1',
+        { patientType: 'ADULT', teeth: { '55': { status: 'missing' }, '16': { status: 'healthy' } } },
+        dentistActor,
+      );
+      expect(prisma.dentalChartSnapshot.create).toHaveBeenCalled();
+      // A primary tooth that was never recorded is still refused.
+      await expect(
+        service.snapshotDentalChart(
+          'enc-1',
+          { patientType: 'ADULT', teeth: { '65': { status: 'cavity' } } },
+          dentistActor,
+        ),
+      ).rejects.toBeInstanceOf(DentalChartInvalidToothException);
+    });
+
     it.each([
       ['ADULT', 30, '55'],
       ['ADULT', 30, '19'],

@@ -441,9 +441,10 @@ export function wireToSnapshotMap(
   for (const r of records ?? []) {
     const n = typeof r.number === 'string' ? Number(r.number) : r.number;
     if (typeof n !== 'number' || Number.isNaN(n)) continue;
-    // Drop teeth the current chart cannot show (e.g. primary teeth carried
-    // over from a childhood snapshot once the patient is charted as ADULT).
-    if (!shown.has(n)) continue;
+    // Drop teeth the current chart cannot show — except primary teeth already
+    // recorded: mixed dentition outlasts the CHILD band, so an ADULT chart
+    // keeps them (the backend accepts ones present in earlier data).
+    if (!shown.has(n) && !(n >= 51 && isValidFdiToothNumber(n))) continue;
     const status = (r.status ?? r.surface ?? 'healthy') as ToothStatus;
     map[String(n)] = {
       status: TOOTH_STATUSES.includes(status) ? status : 'healthy',

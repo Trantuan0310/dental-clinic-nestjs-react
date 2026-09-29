@@ -849,25 +849,41 @@ export class MedicalRecordsService {
     if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
       throw new EncounterNotFoundException(encounterId);
     }
-    if (!encounter.clinicalNote) {
-      throw new EncounterNotClosableException('No clinical note exists yet');
-    }
     if (encounter.status !== EncounterStatus.IN_PROGRESS) {
       if (encounter.status !== EncounterStatus.COMPLETED || !encounter.closedAt) {
-        throw new ForbiddenException('Addendums require an active or completed encounter');
+        throw new ForbiddenException(
+          'Chỉ thêm ghi chú bổ sung cho phiên khám đang mở hoặc đã hoàn tất',
+        );
       }
       // BR-MR-005: append corrections without modifying the sealed original note.
       if (Date.now() >= encounter.closedAt.getTime() + 30 * 24 * 60 * 60 * 1000) {
-        throw new ForbiddenException('Addendum window expired');
+        throw new ForbiddenException('Đã quá hạn 30 ngày để thêm ghi chú bổ sung');
       }
     }
 
-    const addendum = await this.prisma.clinicalNoteAddendum.create({
-      data: {
-        clinicalNoteId: encounter.clinicalNote.id,
-        content: dto.content,
-        addedBy: actor.sub,
-      },
+    const addendum = await this.prisma.$transaction(async tx => {
+      // A visit closed with treatments only has no note row; the addendum
+      // needs one, so create an empty one (locked when the visit is closed)
+      // instead of refusing the correction.
+      const note =
+        encounter.clinicalNote ??
+        (await tx.clinicalNote.upsert({
+          where: { encounterId },
+          update: {},
+          create: {
+            encounterId,
+            isLocked: encounter.status === EncounterStatus.COMPLETED,
+            lockedAt: encounter.status === EncounterStatus.COMPLETED ? new Date() : null,
+            lastEditedBy: actor.sub,
+          },
+        }));
+      return tx.clinicalNoteAddendum.create({
+        data: {
+          clinicalNoteId: note.id,
+          content: dto.content,
+          addedBy: actor.sub,
+        },
+      });
     });
 
     await this.audit.log({
@@ -1264,11 +1280,18 @@ export class MedicalRecordsService {
         throw new DentalChartPatientMismatchException();
       }
       // Keys are FDI numbers. CHILD = mixed dentition (primary 51–85 plus
-      // permanent 11–48); ADULT = permanent only.
-      const invalidTeeth = Object.keys(dto.teeth ?? {}).filter(key => {
+      // permanent 11–48); ADULT = permanent, plus primary teeth already on
+      // record (mixed dentition outlasts the CHILD band, ~13 y) so they are
+      // carried over instead of silently dropped.
+      const keys = Object.keys(dto.teeth ?? {});
+      const recordedPrimary =
+        dto.patientType === 'ADULT' && keys.some(k => Number(k) >= 50)
+          ? await this.recordedPrimaryTeeth(tx, encounter.patientId, encounterId)
+          : new Set<string>();
+      const invalidTeeth = keys.filter(key => {
         const n = /^\d{2}$/.test(key) ? Number(key) : NaN;
         if (!isValidFdiToothNumber(n)) return true;
-        return dto.patientType === 'ADULT' && n >= 50;
+        return dto.patientType === 'ADULT' && n >= 50 && !recordedPrimary.has(key);
       });
       if (invalidTeeth.length > 0) {
         throw new DentalChartInvalidToothException(invalidTeeth, dto.patientType);
@@ -1306,6 +1329,34 @@ export class MedicalRecordsService {
    * A row-scoped dentist gets it only for a patient they may read
    * (dentistCanReadPatient) — same scope as the encounter history.
    */
+  /** Primary-tooth keys in this encounter's chart or the patient's latest earlier one. */
+  private async recordedPrimaryTeeth(
+    tx: Prisma.TransactionClient,
+    patientId: string,
+    encounterId: string,
+  ): Promise<Set<string>> {
+    const [own, previous] = await Promise.all([
+      tx.dentalChartSnapshot.findUnique({ where: { encounterId }, select: { teeth: true } }),
+      tx.encounter.findFirst({
+        where: {
+          patientId,
+          id: { not: encounterId },
+          status: { not: EncounterStatus.CANCELLED },
+          dentalChart: { isNot: null },
+        },
+        orderBy: { startedAt: 'desc' },
+        select: { dentalChart: { select: { teeth: true } } },
+      }),
+    ]);
+    const keys = new Set<string>();
+    for (const teeth of [own?.teeth, previous?.dentalChart?.teeth]) {
+      if (teeth && typeof teeth === 'object' && !Array.isArray(teeth)) {
+        Object.keys(teeth).forEach(k => Number(k) >= 50 && keys.add(k));
+      }
+    }
+    return keys;
+  }
+
   async getLatestDentalChartForPatient(patientId: string, actor: JwtPayload) {
     if (
       this.isRowScopedDentist(actor) &&
