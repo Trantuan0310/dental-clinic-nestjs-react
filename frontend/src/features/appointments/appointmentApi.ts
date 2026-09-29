@@ -57,6 +57,8 @@ export const LIST_ALL_LIMIT = 1000;
  * cursor. Stops at LIST_ALL_LIMIT rows; `pagination.hasMore` then tells the
  * page to ask for a narrower filter instead of silently showing a cut list
  * (the default page of 50 used to be all the list page ever showed).
+ * Pages are read one after another, not as a snapshot: a booking moved
+ * meanwhile can be missed until the next refetch (repeats are dropped by id).
  */
 export async function fetchAllAppointments(
   params?: Record<string, unknown>,

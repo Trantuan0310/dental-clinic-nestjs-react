@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
-import { AppointmentsService } from './appointments.service';
+import { AppointmentsService, STALE_APPOINTMENT_MSG } from './appointments.service';
 import { lockDentistCalendar } from './domain/advisory-lock';
 import { compareQueue } from './domain/queue';
 import { AppointmentNotFoundException } from './domain/exceptions';
@@ -261,10 +261,7 @@ export class DispatchService {
         data: { dentistId: dto.dentistId, startAt: start, endAt: end, updatedBy: actor.sub },
       });
       if (moved.count === 0) {
-        throw queueError(
-          'Lịch hẹn vừa được người khác thay đổi — tải lại rồi thử lại',
-          'QUEUE_STALE',
-        );
+        throw queueError(STALE_APPOINTMENT_MSG, 'QUEUE_STALE');
       }
       await tx.appointmentRescheduleLog.create({
         data: {
@@ -374,7 +371,7 @@ export class DispatchService {
             },
             data: { dentistId: dto.toDentistId, updatedBy: actor.sub },
           });
-          if (res.count === 0) throw new Error('Lịch vừa được thay đổi, tải lại rồi thử lại');
+          if (res.count === 0) throw new Error(STALE_APPOINTMENT_MSG);
           await tx.appointmentRescheduleLog.create({
             data: {
               appointmentId: appt.id,
