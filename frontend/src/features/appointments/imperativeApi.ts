@@ -5,6 +5,7 @@
 
 import { api, unwrap } from '@/lib/api';
 import {
+  fetchAllAppointments,
   transformAppointment,
   transformAppointmentList,
   type PrismaAppointmentRow,
@@ -21,13 +22,17 @@ import type {
   DentistAvailability,
 } from '@/types/appointment';
 
+type ListParams = Omit<AppointmentFilters, 'status'> & {
+  status?: AppointmentFilters['status'] | Appointment['status'][];
+};
+
 // The backend returns Prisma rows (startAt/endAt, nested patient/dentist,
 // upper-case status) — every method here transforms them into the frontend
 // Appointment shape (startsAt/endsAt, flat patientName/dentistName) via the
 // same transform appointmentApi.ts's hooks use, rather than passing the raw
 // row through under an `Appointment`-typed lie.
 export const appointmentsApi = {
-  async list(params?: Omit<AppointmentFilters, 'status'> & { status?: AppointmentFilters['status'] | Appointment['status'][] }): Promise<AppointmentListResponse> {
+  async list(params?: ListParams): Promise<AppointmentListResponse> {
     const { data } = await api.get<{ data: PrismaAppointmentRow[]; pagination?: AppointmentListResponse['pagination'] }>(
       '/appointments',
       { params },
@@ -37,6 +42,11 @@ export const appointmentsApi = {
       pagination: data.pagination,
       total: data.data.length,
     };
+  },
+
+  /** Every matching appointment, all pages (see fetchAllAppointments). */
+  listAll(params?: Omit<ListParams, 'cursor' | 'pageSize'>): Promise<AppointmentListResponse> {
+    return fetchAllAppointments(params);
   },
 
   async get(id: string): Promise<Appointment> {

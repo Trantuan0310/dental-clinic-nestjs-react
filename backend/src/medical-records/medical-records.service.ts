@@ -4,7 +4,7 @@ import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { endOfDayInclusive } from '../common/date-range.util';
+import { clinicDateOnly, endOfDayInclusive, startOfClinicDay } from '../common/date-range.util';
 import {
   ENCOUNTER_CLOSED_EVENT,
   EncounterClosedEvent,
@@ -39,6 +39,9 @@ import { BusinessRuleException } from '../common/exceptions/business-rule.except
 import { closeQueueEntry, reopenStartedQueueEntry } from '../appointments/domain/queue';
 import { reopenCancelledEncounter } from './domain/reopen-encounter';
 import { dentistCanReadPatient } from '../common/dentist-patient-access';
+
+/** left_reason of a visit whose exam, started on an earlier day, was cancelled. */
+const PAST_DAY_ENCOUNTER_CANCELLED_REASON = 'Hủy phiên khám của ngày trước';
 
 /**
  * MedicalRecordsService — owns:
@@ -669,7 +672,8 @@ export class MedicalRecordsService {
    * exam can then be started again (startEncounterForAppointment reopens
    * this encounter row — appointment_id is unique). Previously the
    * appointment was left IN_PROGRESS with no open encounter: it could be
-   * neither restarted, completed nor cancelled.
+   * neither restarted, completed nor cancelled. An encounter of an earlier
+   * clinic day closes its appointment as LEFT instead.
    */
   async cancelEncounter(encounterId: string, reason: string, actor: JwtPayload) {
     const trimmed = reason?.trim() ?? '';
@@ -701,12 +705,40 @@ export class MedicalRecordsService {
           cancelledReason: trimmed,
         },
       });
-      const appointment = await tx.appointment.updateMany({
-        where: { id: encounter.appointmentId, status: 'IN_PROGRESS' },
+      // Only a visit of today goes back to the queue; one of an earlier
+      // clinic day can no longer be seen, so it closes as LEFT (its queue
+      // entry of that day stays closed) instead of an orphan CHECKED_IN.
+      const todayStart = startOfClinicDay(clinicDateOnly());
+      let appointmentStatus: 'CHECKED_IN' | 'LEFT' | 'unchanged' = 'unchanged';
+      const backToQueue = await tx.appointment.updateMany({
+        where: {
+          id: encounter.appointmentId,
+          status: 'IN_PROGRESS',
+          startAt: { gte: todayStart },
+        },
         data: { status: 'CHECKED_IN', updatedBy: actor.sub },
       });
-      if (appointment.count > 0) {
+      if (backToQueue.count > 0) {
+        appointmentStatus = 'CHECKED_IN';
         await reopenStartedQueueEntry(tx, encounter.appointmentId, actor.sub);
+      } else {
+        const left = await tx.appointment.updateMany({
+          where: {
+            id: encounter.appointmentId,
+            status: 'IN_PROGRESS',
+            startAt: { lt: todayStart },
+          },
+          data: {
+            status: 'LEFT',
+            leftAt: new Date(),
+            leftReason: PAST_DAY_ENCOUNTER_CANCELLED_REASON,
+            updatedBy: actor.sub,
+          },
+        });
+        if (left.count > 0) {
+          appointmentStatus = 'LEFT';
+          await closeQueueEntry(tx, encounter.appointmentId, 'LEFT', actor.sub);
+        }
       }
       await tx.encounterAudit.create({
         data: {
@@ -717,7 +749,7 @@ export class MedicalRecordsService {
           after: {
             status: 'CANCELLED',
             reason: trimmed,
-            appointmentStatus: appointment.count > 0 ? 'CHECKED_IN' : 'unchanged',
+            appointmentStatus,
           },
         },
       });
@@ -731,7 +763,8 @@ export class MedicalRecordsService {
           appointmentId: encounter.appointmentId,
           patientId: encounter.patientId,
           reason: trimmed,
-          appointmentReturnedToCheckIn: appointment.count > 0,
+          appointmentReturnedToCheckIn: appointmentStatus === 'CHECKED_IN',
+          ...(appointmentStatus === 'LEFT' ? { appointmentClosedAsLeft: true } : {}),
         },
       });
       return encounter.patientId;

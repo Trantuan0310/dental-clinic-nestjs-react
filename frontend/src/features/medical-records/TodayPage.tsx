@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { addDays, format } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Play, ArrowRight, AlertCircle } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
@@ -8,30 +8,35 @@ import { useStartEncounter } from '@/features/appointments/appointmentApi';
 import {
   isOverdueNotArrived,
   liveAppointmentQuery,
+  useClinicToday,
   useNow,
 } from '@/features/appointments/liveStatus';
 import { Button, Card, EmptyState, FormSkeleton } from '@/components/ui';
+import { PermissionGuard } from '@/components/PermissionGuard';
 import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
-import { clinicWallClock } from '@/lib/clinicTime';
 import { formatTimeOnly } from '@/lib/format';
 
 export default function TodayPage() {
   const navigate = useNavigate();
-  const [currentDate, setCurrentDate] = useState(() => clinicWallClock());
-  const today = format(currentDate, 'yyyy-MM-dd');
+  // null = follow the clinic's today, so a page left open overnight moves
+  // to the new day; the arrows pick a fixed date.
+  const clinicDay = useClinicToday();
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const today = pickedDay ?? clinicDay;
+  const currentDate = parseISO(today);
+  const goToDay = (delta: number) => {
+    const next = format(addDays(currentDate, delta), 'yyyy-MM-dd');
+    setPickedDay(next === clinicDay ? null : next);
+  };
   const startEncounter = useStartEncounter();
   const now = useNow();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['appointments', { from: today, to: today }],
-    queryFn: () => appointmentsApi.list({
-      from: today,
-      to: today,
-      pageSize: 100,
-    }),
+    queryKey: ['appointments', 'all', { from: today, to: today }],
+    queryFn: () => appointmentsApi.listAll({ from: today, to: today }),
     ...liveAppointmentQuery({ from: today, to: today }),
   });
 
@@ -75,13 +80,13 @@ export default function TodayPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" aria-label="Ngày trước" onClick={() => setCurrentDate(d => addDays(d, -1))}>
+          <Button variant="ghost" size="sm" aria-label="Ngày trước" onClick={() => goToDay(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setCurrentDate(clinicWallClock())}>
+          <Button variant="outline" size="sm" onClick={() => setPickedDay(null)}>
             Hôm nay
           </Button>
-          <Button variant="ghost" size="sm" aria-label="Ngày sau" onClick={() => setCurrentDate(d => addDays(d, 1))}>
+          <Button variant="ghost" size="sm" aria-label="Ngày sau" onClick={() => goToDay(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -173,14 +178,17 @@ export default function TodayPage() {
                           overdue={isOverdueNotArrived(apt, now)}
                         />
                         {apt.status === 'checked_in' && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleStart(apt.id)}
-                            isLoading={startEncounter.isPending && startEncounter.variables === apt.id}
-                          >
-                            <Play className="h-4 w-4" />
-                            Bắt đầu khám
-                          </Button>
+                          // Starting the exam is the dentist's step (encounter.start).
+                          <PermissionGuard permission="encounter.start" mode="hide">
+                            <Button
+                              size="sm"
+                              onClick={() => handleStart(apt.id)}
+                              isLoading={startEncounter.isPending && startEncounter.variables === apt.id}
+                            >
+                              <Play className="h-4 w-4" />
+                              Bắt đầu khám
+                            </Button>
+                          </PermissionGuard>
                         )}
                         {apt.status === 'in_progress' && (
                           <Button

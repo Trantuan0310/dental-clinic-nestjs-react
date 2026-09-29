@@ -205,14 +205,16 @@ export function QueueList({
                   )}
                   {/* Calling is optional: the dentist may start the exam straight away. */}
                   {mode === 'dentist' && e.status !== 'SKIPPED' && onStart && (
-                    <Button
-                      size="sm"
-                      leftIcon={<Play className="h-3.5 w-3.5" />}
-                      isLoading={startingId === e.appointmentId}
-                      onClick={() => onStart(e.appointmentId)}
-                    >
-                      Bắt đầu khám
-                    </Button>
+                    <PermissionGuard permission="encounter.start" mode="hide">
+                      <Button
+                        size="sm"
+                        leftIcon={<Play className="h-3.5 w-3.5" />}
+                        isLoading={startingId === e.appointmentId}
+                        onClick={() => onStart(e.appointmentId)}
+                      >
+                        Bắt đầu khám
+                      </Button>
+                    </PermissionGuard>
                   )}
                   {e.status !== 'SKIPPED' && (
                     <PermissionGuard permission="queue.call">
