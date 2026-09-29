@@ -18,7 +18,12 @@ import {
   InsufficientStockException,
   PrescriptionAlreadyExistsException,
   TreatmentNotInEncounterException,
+  DentalChartInvalidToothException,
+  DentalChartPatientMismatchException,
 } from './domain/exceptions';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import { CreateTreatmentDto } from './dto/medical-record.dto';
 
 describe('MedicalRecordsService', () => {
   let service: MedicalRecordsService;
@@ -161,6 +166,178 @@ describe('MedicalRecordsService', () => {
       );
       const result = await service.getEncounter('enc-1', actor);
       expect((result as any).id).toBe('enc-1');
+    });
+
+    it("lets a dentist booked with the patient read a colleague's encounter (read-only)", async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist', patientId: 'patient-1' }),
+      );
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      const result = await service.getEncounter('enc-1', dentistActor);
+      expect((result as any).id).toBe('enc-1');
+      expect(prisma.appointment.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ patientId: 'patient-1', dentistId: dentistActor.sub }),
+      });
+    });
+
+    it("lets a dentist who treated the patient read a colleague's encounter", async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'some-other-dentist' }),
+      );
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(2);
+      await expect(service.getEncounter('enc-1', dentistActor)).resolves.toBeDefined();
+      expect(prisma.encounter.count).toHaveBeenCalledWith({
+        where: {
+          patientId: 'patient-1',
+          dentistId: dentistActor.sub,
+          status: { not: 'CANCELLED' },
+        },
+      });
+    });
+
+    it('exposes the chart type the snapshot endpoint will accept (BR-MR-012)', async () => {
+      const childDob = new Date();
+      childDob.setFullYear(childDob.getFullYear() - 7);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...validEncounter({ dentistId: dentistActor.sub }),
+        patient: { id: 'patient-1', code: 'P1', fullName: 'Bé A', dob: childDob, deletedAt: null },
+      });
+      const result = await service.getEncounter('enc-1', dentistActor);
+      expect((result as any).dentalChartPatientType).toBe('CHILD');
+    });
+  });
+
+  describe('listEncounters (row-level)', () => {
+    it("returns every dentist's encounters of a patient the dentist may read", async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      await service.listEncounters({ patientId: 'patient-1', actor: dentistActor });
+      const where = (prisma.encounter.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(where).toEqual({ patientId: 'patient-1' });
+    });
+
+    it('keeps an unrelated dentist to their own encounters', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      await service.listEncounters({ patientId: 'patient-1', actor: dentistActor });
+      const where = (prisma.encounter.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(where).toEqual({ patientId: 'patient-1', dentistId: dentistActor.sub });
+    });
+
+    it('keeps the cross-patient list (My patients) to own encounters', async () => {
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      await service.listEncounters({ actor: dentistActor });
+      const where = (prisma.encounter.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(where).toEqual({ dentistId: dentistActor.sub });
+      expect(prisma.appointment.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getLatestDentalChartForPatient (row-level)', () => {
+    it('404s for a dentist with no relationship to the patient', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      await expect(
+        service.getLatestDentalChartForPatient('patient-1', dentistActor),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(prisma.encounter.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('returns the chart to a booked dentist and to encounter.read.any', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      (prisma.encounter.findFirst as jest.Mock).mockResolvedValue({ dentalChart: { id: 'c' } });
+      await expect(
+        service.getLatestDentalChartForPatient('patient-1', dentistActor),
+      ).resolves.toEqual({ id: 'c' });
+      await expect(
+        service.getLatestDentalChartForPatient(
+          'patient-1',
+          userPayloadWithPermissions(['encounter.read.any']),
+        ),
+      ).resolves.toEqual({ id: 'c' });
+    });
+  });
+
+  describe('snapshotDentalChart (BR-MR-012, FDI)', () => {
+    beforeEach(() => {
+      prisma.dentalChartSnapshot = {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      };
+    });
+
+    const withDob = (years: number) => {
+      const dob = new Date();
+      dob.setFullYear(dob.getFullYear() - years);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...validEncounter({ dentistId: dentistActor.sub }),
+        patient: { dob, deletedAt: null },
+      });
+    };
+
+    it('saves a mixed-dentition CHILD chart with primary and permanent teeth', async () => {
+      withDob(8);
+      (prisma.dentalChartSnapshot.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.dentalChartSnapshot.create as jest.Mock).mockResolvedValue({ id: 's' });
+      await service.snapshotDentalChart(
+        'enc-1',
+        {
+          patientType: 'CHILD',
+          teeth: { '55': { status: 'cavity' }, '16': { status: 'healthy' } },
+        },
+        dentistActor,
+      );
+      expect(prisma.dentalChartSnapshot.create).toHaveBeenCalled();
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'patient-1',
+      });
+    });
+
+    it('rejects an ADULT chart for a child', async () => {
+      withDob(8);
+      await expect(
+        service.snapshotDentalChart('enc-1', { patientType: 'ADULT', teeth: {} }, dentistActor),
+      ).rejects.toBeInstanceOf(DentalChartPatientMismatchException);
+    });
+
+    it.each([
+      ['ADULT', 30, '55'],
+      ['ADULT', 30, '19'],
+      ['CHILD', 8, '56'],
+      ['CHILD', 8, 'abc'],
+    ])('rejects tooth key on a %s chart (age %d): %s', async (type, age, key) => {
+      withDob(age as number);
+      await expect(
+        service.snapshotDentalChart(
+          'enc-1',
+          {
+            patientType: type as 'ADULT' | 'CHILD',
+            teeth: { [key as string]: { status: 'cavity' } },
+          },
+          dentistActor,
+        ),
+      ).rejects.toBeInstanceOf(DentalChartInvalidToothException);
+      expect(prisma.dentalChartSnapshot.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CreateTreatmentDto.toothNumbers (FDI)', () => {
+    const errors = (toothNumbers: number[]) =>
+      validateSync(
+        plainToInstance(CreateTreatmentDto, { procedure: 'Trám', unitPrice: 1, toothNumbers }),
+      ).filter(e => e.property === 'toothNumbers');
+
+    it.each([[[11, 18, 48]], [[51, 55, 65, 75, 85]]])('accepts %j', teeth => {
+      expect(errors(teeth)).toHaveLength(0);
+    });
+
+    it.each([[[19]], [[50]], [[56]], [[86]], [[10]], [[49]], [[90]]])('rejects %j', teeth => {
+      expect(errors(teeth)).not.toHaveLength(0);
     });
   });
 

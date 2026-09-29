@@ -15,10 +15,12 @@ import {
   MaxLength,
   ArrayMinSize,
   ValidateNested,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PatientType } from '@prisma/client';
+import { FDI_TOOTH_NUMBERS } from '../domain/tooth-numbers';
 
 // ---------------------------------------------------------------------------
 // Clinical note
@@ -94,12 +96,15 @@ export class CreateTreatmentDto {
   @Max(600)
   durationMinutes?: number;
 
+  // FDI: permanent 11–48 and primary (deciduous) 51–85 — see tooth-numbers.ts.
   @ApiPropertyOptional({ type: [Number], example: [16, 17] })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
-  @Min(11, { each: true })
-  @Max(48, { each: true })
+  @IsIn(FDI_TOOTH_NUMBERS as number[], {
+    each: true,
+    message: 'Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa)',
+  })
   toothNumbers?: number[];
 
   @ApiPropertyOptional({

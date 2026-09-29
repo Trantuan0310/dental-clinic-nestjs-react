@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { useInventoryItems } from '@/features/inventory/inventoryApi';
 import { useBookableServices } from '@/features/appointments/appointmentApi';
 import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUsage } from '@/types/medical-records';
+import { isValidFdiToothNumber } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
 
 interface TreatmentsTabProps {
@@ -137,6 +138,11 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   };
 
   const handleSubmit = () => {
+    // Mirrors the backend DTO: permanent 11–48 or primary 51–85 (FDI).
+    if (toothNumber.trim() !== '' && !isValidFdiToothNumber(Number(toothNumber.trim()))) {
+      notify.error('Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa).');
+      return;
+    }
     if (editingTreatment) {
       updateMutation.mutate({
         id: editingTreatment.id,
@@ -267,7 +273,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             label="Số răng"
             value={toothNumber}
             onChange={(e) => setToothNumber(String(e.target.value))}
-            placeholder="VD: 16, 26, 46"
+            placeholder="VD: 16 (răng sữa: 51–85)"
           />
           {!editingTreatment && catalogServices.length > 0 && (
             <Select

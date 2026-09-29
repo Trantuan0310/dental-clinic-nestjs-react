@@ -28,13 +28,15 @@ import {
   useSaveDentalChart,
 } from './medicalRecordsApi';
 import {
-  ADULT_TEETH,
   TOOTH_STATUSES,
   TOOTH_STATUS_LABEL,
+  baseTeethFor,
+  chartTeethFor,
+  dentalChartPatientTypeForDob,
   snapshotToWire,
-  toothQuadrantOf,
   toothStatusColor,
   wireToSnapshotMap,
+  type DentalChartPatientType,
   type DentalChartSnapshot,
   type Encounter,
   type ToothDescriptor,
@@ -70,16 +72,26 @@ const TOOTH_OPTIONS: Array<{ value: ToothStatus; label: string }> = TOOTH_STATUS
   label: TOOTH_STATUS_LABEL[s],
 }));
 
-const EMPTY_TEETH: Record<string, ToothEntry> = ADULT_TEETH.reduce<Record<string, ToothEntry>>((acc, t) => {
-  acc[String(t.number)] = { status: 'healthy', notes: '' };
-  return acc;
-}, {});
+function emptyTeethFor(patientType: DentalChartPatientType): Record<string, ToothEntry> {
+  return baseTeethFor(patientType).reduce<Record<string, ToothEntry>>((acc, t) => {
+    acc[String(t.number)] = { status: 'healthy', notes: '' };
+    return acc;
+  }, {});
+}
 
-const QUADRANT_LABEL: Record<ToothQuadrant, string> = {
-  Q1: 'Q1 · Hàm trên, phải (18→11)',
-  Q2: 'Q2 · Hàm trên, trái (21→28)',
-  Q3: 'Q3 · Hàm dưới, trái (38→31)',
-  Q4: 'Q4 · Hàm dưới, phải (41→48)',
+const QUADRANT_LABEL: Record<DentalChartPatientType, Record<ToothQuadrant, string>> = {
+  ADULT: {
+    Q1: 'Q1 · Hàm trên, phải (18→11)',
+    Q2: 'Q2 · Hàm trên, trái (21→28)',
+    Q3: 'Q3 · Hàm dưới, trái (38→31)',
+    Q4: 'Q4 · Hàm dưới, phải (41→48)',
+  },
+  CHILD: {
+    Q1: 'Q1 · Hàm trên, phải — răng sữa (55→51)',
+    Q2: 'Q2 · Hàm trên, trái — răng sữa (61→65)',
+    Q3: 'Q3 · Hàm dưới, trái — răng sữa (75→71)',
+    Q4: 'Q4 · Hàm dưới, phải — răng sữa (81→85)',
+  },
 };
 
 type BulkScope = 'quadrant' | 'arch' | 'remaining';
@@ -98,9 +110,14 @@ export function DentalChartPanel({
   const patientId = _patientId ?? encounter.patientId;
   const { data: snapshot, isLoading } = useDentalChart(patientId);
   const save = useSaveDentalChart(encounter.id);
+  // BR-MR-012: backend rejects a snapshot whose patientType does not match
+  // the patient's age band, so prefer the server-computed value.
+  const patientType: DentalChartPatientType =
+    encounter.dentalChartPatientType ?? dentalChartPatientTypeForDob(encounter.patient?.dob);
+  const emptyTeeth = useMemo(() => emptyTeethFor(patientType), [patientType]);
 
-  const history = useHistory<Record<string, ToothEntry>>(EMPTY_TEETH);
-  const lastSavedHash = useRef<string>(hashTeethMap(EMPTY_TEETH));
+  const history = useHistory<Record<string, ToothEntry>>(emptyTeeth);
+  const lastSavedHash = useRef<string>(hashTeethMap(emptyTeeth));
 
   const [editingTooth, setEditingTooth] = useState<ToothDescriptor | null>(null);
   const [popoverTooth, setPopoverTooth] = useState<ToothDescriptor | null>(null);
@@ -117,11 +134,11 @@ export function DentalChartPanel({
   // ----- Bootstrap from server snapshot -----
   useEffect(() => {
     const records = wireRecordsFromSnapshot(snapshot);
-    const merged = wireToSnapshotMap(records);
+    const merged = wireToSnapshotMap(records, patientType);
     history.reset(merged);
     lastSavedHash.current = hashTeethMap(merged);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot?.id, snapshot?.snapshotAt]);
+  }, [snapshot?.id, snapshot?.snapshotAt, patientType]);
 
   const teeth = history.state;
   const currentHash = useMemo(() => hashTeethMap(teeth), [teeth]);
@@ -153,7 +170,7 @@ export function DentalChartPanel({
       const currentHash = hashTeethMap(teeth);
       if (currentHash === lastSavedHash.current) return;
       if (!isMounted) return;
-      const payload = snapshotToWire(teeth, 'ADULT');
+      const payload = snapshotToWire(teeth, patientType);
       save.mutate(
         { payload },
         {
@@ -166,7 +183,7 @@ export function DentalChartPanel({
         },
       );
     },
-    [teeth, isLocked],
+    [teeth, isLocked, patientType],
     1500,
   );
 
@@ -215,7 +232,13 @@ export function DentalChartPanel({
 
   const applyBulk = useCallback(() => {
     if (isLocked) return;
-    const targetFdis = pickTeethForBulk(bulkScope, bulkQuadrant, history.state, enabledStatuses);
+    const targetFdis = pickTeethForBulk(
+      baseTeethFor(patientType),
+      bulkScope,
+      bulkQuadrant,
+      history.state,
+      enabledStatuses,
+    );
     if (targetFdis.length === 0) {
       notify.info('Không có răng nào trong phạm vi đã chọn.');
       return;
@@ -227,23 +250,23 @@ export function DentalChartPanel({
     }
     history.push(next);
     setBulkOpen(false);
-  }, [bulkScope, bulkQuadrant, bulkStatus, history, enabledStatuses, isLocked]);
+  }, [bulkScope, bulkQuadrant, bulkStatus, history, enabledStatuses, isLocked, patientType]);
 
   const handleManualSave = useCallback(async () => {
     const currentHash = hashTeethMap(teeth);
     if (currentHash === lastSavedHash.current) return;
     try {
-      await save.mutateAsync({ payload: snapshotToWire(teeth, 'ADULT') });
+      await save.mutateAsync({ payload: snapshotToWire(teeth, patientType) });
       lastSavedHash.current = currentHash;
       notify.success('Đã lưu sơ đồ răng');
     } catch (err) {
       notify.error(getApiErrorMessage(err, 'Không thể lưu sơ đồ răng'));
     }
-  }, [save, teeth]);
+  }, [save, teeth, patientType]);
 
   const handleReset = useCallback(() => {
-    history.push({ ...EMPTY_TEETH });
-  }, [history]);
+    history.push({ ...emptyTeeth });
+  }, [history, emptyTeeth]);
 
   const summary = useMemo(() => {
     const counts: Record<ToothStatus, number> = {
@@ -264,10 +287,10 @@ export function DentalChartPanel({
   const filteredFdis = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return null;
-    return ADULT_TEETH.filter((t) => String(t.number).includes(q) || t.name.toLowerCase().includes(q)).map(
-      (t) => String(t.number),
-    );
-  }, [search]);
+    return chartTeethFor(patientType)
+      .filter((t) => String(t.number).includes(q) || t.name.toLowerCase().includes(q))
+      .map((t) => String(t.number));
+  }, [search, patientType]);
 
   return (
     <div className="space-y-5" data-testid="dental-chart-panel">
@@ -275,6 +298,11 @@ export function DentalChartPanel({
         title={
           <span className="flex items-center gap-2">
             Sơ đồ răng
+            {patientType === 'CHILD' && (
+              <span className="rounded bg-sky-50 px-2 py-0.5 text-xs font-normal text-sky-700">
+                Trẻ em (răng hỗn hợp)
+              </span>
+            )}
           </span>
         }
         description={
@@ -389,6 +417,7 @@ export function DentalChartPanel({
             teeth={teeth}
             onToothClick={handleToothClick}
             readOnly={isLocked}
+            patientType={patientType}
             highlightToothNumbers={Array.from(mergedHighlight)}
             dimFdis={filteredFdis ? new Set(filteredFdis) : undefined}
             filterEnabled={enabledStatuses}
@@ -476,6 +505,7 @@ export function DentalChartPanel({
         setStatus={setBulkStatus}
         onApply={applyBulk}
         enabledStatuses={enabledStatuses}
+        patientType={patientType}
       />
     </div>
   );
@@ -504,6 +534,7 @@ function wireRecordsFromSnapshot(snapshot: DentalChartSnapshot | undefined): Arr
 }
 
 function pickTeethForBulk(
+  baseTeeth: ToothDescriptor[],
   scope: BulkScope,
   quadrant: ToothQuadrant,
   teeth: Record<string, ToothEntry>,
@@ -511,16 +542,16 @@ function pickTeethForBulk(
 ): string[] {
   const result: string[] = [];
   if (scope === 'quadrant') {
-    for (const t of ADULT_TEETH) {
+    for (const t of baseTeeth) {
       if (t.quadrant === quadrant) result.push(String(t.number));
     }
   } else if (scope === 'arch') {
     const arch = quadrant === 'Q1' || quadrant === 'Q2' ? 'upper' : 'lower';
-    for (const t of ADULT_TEETH) {
+    for (const t of baseTeeth) {
       if (t.arch === arch) result.push(String(t.number));
     }
   } else {
-    for (const t of ADULT_TEETH) {
+    for (const t of baseTeeth) {
       const status = teeth[String(t.number)]?.status ?? 'healthy';
       if (!enabled.has(status)) result.push(String(t.number));
     }
@@ -672,6 +703,7 @@ interface BulkActionModalProps {
   setStatus: (s: ToothStatus) => void;
   onApply: () => void;
   enabledStatuses: Set<ToothStatus>;
+  patientType: DentalChartPatientType;
 }
 
 function BulkActionModal({
@@ -685,7 +717,9 @@ function BulkActionModal({
   setStatus,
   onApply,
   enabledStatuses,
+  patientType,
 }: BulkActionModalProps) {
+  const quadrantLabels = QUADRANT_LABEL[patientType];
   return (
     <Modal
       open={open}
@@ -725,9 +759,9 @@ function BulkActionModal({
             onChange={(e) => setQuadrant(toothQuadrantOfFromScope(scope, e.target.value))}
             options={
               scope === 'quadrant'
-                ? (Object.keys(QUADRANT_LABEL) as ToothQuadrant[]).map((q) => ({
+                ? (Object.keys(quadrantLabels) as ToothQuadrant[]).map((q) => ({
                     value: q,
-                    label: QUADRANT_LABEL[q],
+                    label: quadrantLabels[q],
                   }))
                 : [
                     { value: 'Q1', label: 'Hàm trên (Q1+Q2)' },
@@ -744,7 +778,7 @@ function BulkActionModal({
         />
         {scope === 'remaining' && (
           <p className="text-xs text-gray-500">
-            Áp dụng cho <strong>{[...enabledStatuses].length === TOOTH_STATUSES.length ? 'tất cả 32 răng' : 'các răng có trạng thái hiện đang được lọc'}</strong>.
+            Áp dụng cho <strong>{[...enabledStatuses].length === TOOTH_STATUSES.length ? `tất cả ${baseTeethFor(patientType).length} răng` : 'các răng có trạng thái hiện đang được lọc'}</strong>.
             Nhớ tắt các trạng thái bạn muốn giữ nguyên trước khi áp dụng.
           </p>
         )}
@@ -760,5 +794,6 @@ function toothQuadrantOfFromScope(scope: BulkScope, value: string): ToothQuadran
   if (scope === 'arch') {
     return value === 'Q1' ? 'Q1' : 'Q3';
   }
-  return toothQuadrantOf(parseInt(value, 10)) ?? 'Q1';
+  // Select values are the quadrant keys themselves ('Q1'…'Q4').
+  return (['Q1', 'Q2', 'Q3', 'Q4'] as const).find((q) => q === value) ?? 'Q1';
 }

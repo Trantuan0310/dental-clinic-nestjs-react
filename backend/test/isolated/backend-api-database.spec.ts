@@ -280,6 +280,23 @@ describe('Real HTTP and PostgreSQL regression', () => {
   it('blocks another dentist from accessing the encounter', async () => {
     await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);
   });
+  it('lets a dentist booked with the patient read, but not write, the encounter', async () => {
+    const booked = await db.appointment.create({
+      data: { patientId, dentistId: users.other, ...slot(), status: 'SCHEDULED' },
+    });
+    try {
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(200);
+      await api('get', `/patients/${patientId}`, 'other').expect(200);
+      await api('put', `/medical-records/encounters/${encounterId}/clinical-note`, 'other')
+        .send({ diagnosis: 'Not mine' })
+        .expect(404);
+      // A cancelled booking grants nothing.
+      await db.appointment.update({ where: { id: booked.id }, data: { status: 'CANCELLED' } });
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);
+    } finally {
+      await db.appointment.delete({ where: { id: booked.id } });
+    }
+  });
   it('writes a clinical note', async () => {
     await api('put', `/medical-records/encounters/${encounterId}/clinical-note`, 'dentist')
       .send({ diagnosis: 'Dental caries', notes: 'Test consultation' })

@@ -26,6 +26,7 @@ export interface PatientSummary {
   id: string;
   code: string;
   fullName: string;
+  dob?: string | null;
   allergies?: PatientAllergy[];
 }
 
@@ -159,6 +160,8 @@ export interface Encounter {
   treatments?: TreatmentLine[];
   prescriptions?: Prescription[];
   dentalChart?: DentalChart;
+  /** Server-computed chart type (BR-MR-012): CHILD for patients under 12. */
+  dentalChartPatientType?: DentalChartPatientType;
 }
 
 export interface EncounterSummary {
@@ -296,6 +299,13 @@ const UPPER_LEFT = [21, 22, 23, 24, 25, 26, 27, 28];
 const LOWER_LEFT = [38, 37, 36, 35, 34, 33, 32, 31];
 const LOWER_RIGHT = [48, 47, 46, 45, 44, 43, 42, 41];
 
+// Primary (deciduous) teeth, FDI quadrants 5–8. Mapped onto Q1–Q4 so bulk
+// actions by quadrant/arch work the same way as for the permanent set.
+const PRIMARY_UPPER_RIGHT = [55, 54, 53, 52, 51];
+const PRIMARY_UPPER_LEFT = [61, 62, 63, 64, 65];
+const PRIMARY_LOWER_LEFT = [75, 74, 73, 72, 71];
+const PRIMARY_LOWER_RIGHT = [85, 84, 83, 82, 81];
+
 function makeTooth(
   number: number,
   arch: ToothArch,
@@ -313,12 +323,60 @@ export const ADULT_TEETH: ToothDescriptor[] = [
   ...LOWER_RIGHT.map((n) => makeTooth(n, 'lower', 'right', 'Q4', `Răng ${n}`)),
 ];
 
+export const PRIMARY_TEETH: ToothDescriptor[] = [
+  ...PRIMARY_UPPER_RIGHT.map((n) => makeTooth(n, 'upper', 'right', 'Q1', `Răng sữa ${n}`)),
+  ...PRIMARY_UPPER_LEFT.map((n) => makeTooth(n, 'upper', 'left', 'Q2', `Răng sữa ${n}`)),
+  ...PRIMARY_LOWER_LEFT.map((n) => makeTooth(n, 'lower', 'left', 'Q3', `Răng sữa ${n}`)),
+  ...PRIMARY_LOWER_RIGHT.map((n) => makeTooth(n, 'lower', 'right', 'Q4', `Răng sữa ${n}`)),
+];
+
+export type DentalChartPatientType = 'ADULT' | 'CHILD';
+
+// Same age band as backend `isMinor` (patient-rules.ts) used by BR-MR-012:
+// under 12 → CHILD chart (mixed dentition).
+export const CHILD_CHART_MAX_AGE = 12;
+
+export function dentalChartPatientTypeForDob(
+  dob: string | null | undefined,
+  now: Date = new Date(),
+): DentalChartPatientType {
+  if (!dob) return 'ADULT';
+  // Compare calendar dates only (dob is a DATE column serialized as ISO).
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dob);
+  if (!m) return 'ADULT';
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  let age = now.getFullYear() - y;
+  const monthDiff = now.getMonth() + 1 - mo;
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d)) age -= 1;
+  return age < CHILD_CHART_MAX_AGE ? 'CHILD' : 'ADULT';
+}
+
+/** Teeth initialised as "healthy" and targeted by bulk actions. */
+export function baseTeethFor(patientType: DentalChartPatientType): ToothDescriptor[] {
+  return patientType === 'CHILD' ? PRIMARY_TEETH : ADULT_TEETH;
+}
+
+/** Teeth rendered on the chart: children get a mixed-dentition chart. */
+export function chartTeethFor(patientType: DentalChartPatientType): ToothDescriptor[] {
+  return patientType === 'CHILD' ? [...PRIMARY_TEETH, ...ADULT_TEETH] : ADULT_TEETH;
+}
+
+/** Valid FDI tooth number: permanent 11–18…41–48 or primary 51–55…81–85. */
+export function isValidFdiToothNumber(n: number): boolean {
+  if (!Number.isInteger(n)) return false;
+  const q = Math.floor(n / 10);
+  const i = n % 10;
+  if (q >= 1 && q <= 4) return i >= 1 && i <= 8;
+  if (q >= 5 && q <= 8) return i >= 1 && i <= 5;
+  return false;
+}
+
 export function toothQuadrantOf(number: number): ToothQuadrant {
-  if (number >= 11 && number <= 18) return 'Q1';
-  if (number >= 21 && number <= 28) return 'Q2';
-  if (number >= 31 && number <= 38) return 'Q3';
-  if (number >= 41 && number <= 48) return 'Q4';
-  throw new Error(`Tooth ${number} is not a valid permanent FDI number`);
+  if (!isValidFdiToothNumber(number)) {
+    throw new Error(`Tooth ${number} is not a valid FDI number`);
+  }
+  const q = Math.floor(number / 10);
+  return (['Q1', 'Q2', 'Q3', 'Q4'] as const)[(q - 1) % 4];
 }
 
 // ----- Addendums -----
@@ -361,14 +419,19 @@ export function snapshotToWire(
 
 export function wireToSnapshotMap(
   records: ReadonlyArray<{ number?: number | string; surface?: string; status?: string; notes?: string | null }>,
+  patientType: DentalChartPatientType = 'ADULT',
 ): Record<string, ToothEntry> {
   const map: Record<string, ToothEntry> = {};
-  for (const t of ADULT_TEETH) {
+  for (const t of baseTeethFor(patientType)) {
     map[String(t.number)] = { status: 'healthy', notes: '' };
   }
+  const shown = new Set(chartTeethFor(patientType).map((t) => t.number));
   for (const r of records ?? []) {
     const n = typeof r.number === 'string' ? Number(r.number) : r.number;
     if (typeof n !== 'number' || Number.isNaN(n)) continue;
+    // Drop teeth the current chart cannot show (e.g. primary teeth carried
+    // over from a childhood snapshot once the patient is charted as ADULT).
+    if (!shown.has(n)) continue;
     const status = (r.status ?? r.surface ?? 'healthy') as ToothStatus;
     map[String(n)] = {
       status: TOOTH_STATUSES.includes(status) ? status : 'healthy',

@@ -7,6 +7,7 @@ import { asTransaction, createPrismaMock, PrismaMockShape } from '../../test/hel
 import { createMockJwtPayload } from '../../test/helpers/auth-mock';
 import {
   DentistHasFutureAppointmentsException,
+  DentistHasOpenEncountersException,
   DentistProfileNotAllowedException,
   EmployeeValidationException,
   LastAdminTerminationException,
@@ -211,6 +212,22 @@ describe('EmployeesService', () => {
         .catch(e => e);
       expect(error).toBeInstanceOf(DentistHasFutureAppointmentsException);
       expect(error.getResponse().details.appointments).toHaveLength(1);
+      expect(error.getResponse().message).toContain('1 lịch hẹn');
+      expect(prisma.employee.update).not.toHaveBeenCalled();
+    });
+
+    it('blocks a dentist who still has an encounter in progress', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', dentistProfile: { id: 'dp-1' } }),
+      );
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.encounter.count.mockResolvedValue(1);
+
+      const error = await service
+        .terminate('emp-1', { reason: 'Nghỉ việc' }, actor, meta)
+        .catch(e => e);
+      expect(error).toBeInstanceOf(DentistHasOpenEncountersException);
+      expect(error.getResponse().details).toEqual({ openEncounters: 1 });
       expect(prisma.employee.update).not.toHaveBeenCalled();
     });
 

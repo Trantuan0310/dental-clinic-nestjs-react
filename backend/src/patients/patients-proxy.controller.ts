@@ -14,6 +14,7 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { dentistCanReadPatient } from '../common/dentist-patient-access';
 
 /**
  * Cross-module proxy controller (BR-PT-022).
@@ -79,10 +80,13 @@ export class PatientsProxyController {
     }
 
     // Admin (`encounter.read.any`) → full data
-    // Dentist (`encounter.read.own`) → only encounters owned by the actor
-    const where = actor.permissions.includes('encounter.read.any')
-      ? { patientId: id }
-      : { patientId: id, dentistId: actor.sub };
+    // Dentist (`encounter.read.own`) → every encounter (read-only) of a
+    // patient they treated or are booked with; otherwise only their own.
+    const where =
+      actor.permissions.includes('encounter.read.any') ||
+      (await dentistCanReadPatient(this.prisma, id, actor.sub))
+        ? { patientId: id }
+        : { patientId: id, dentistId: actor.sub };
 
     const rows = await this.prisma.encounter.findMany({
       where,
@@ -128,13 +132,13 @@ export class PatientsProxyController {
       throw new ForbiddenException('No dental chart snapshot yet for this patient');
     }
 
-    // Dentist: only own encounters
+    // Dentist: patients they treated or are booked with (same scope as the
+    // encounter history), not only charts from their own encounters.
     if (
-      !actor.permissions.includes('dental_chart.read') ||
-      (actor.permissions.includes('dental_chart.read') &&
-        !actor.permissions.includes('encounter.read.any') &&
-        !actor.permissions.includes('patient.delete') &&
-        lastEncounter.dentistId !== actor.sub)
+      !actor.permissions.includes('encounter.read.any') &&
+      !actor.permissions.includes('patient.delete') &&
+      lastEncounter.dentistId !== actor.sub &&
+      !(await dentistCanReadPatient(this.prisma, id, actor.sub))
     ) {
       throw new ForbiddenException('Dental chart not visible');
     }

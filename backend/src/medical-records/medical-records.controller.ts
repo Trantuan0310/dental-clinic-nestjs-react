@@ -212,8 +212,11 @@ export class MedicalRecordsController {
 
   @Get('patients/:patientId/dental-chart/latest')
   @RequirePermissions('dental_chart.read')
-  async getLatestChart(@Param('patientId', ParseUUIDPipe) patientId: string) {
-    const chart = await this.mr.getLatestDentalChartForPatient(patientId);
+  async getLatestChart(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @User() actor: JwtPayload,
+  ) {
+    const chart = await this.mr.getLatestDentalChartForPatient(patientId, actor);
     return { data: chart };
   }
 }
