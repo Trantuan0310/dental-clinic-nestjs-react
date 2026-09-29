@@ -76,7 +76,7 @@ const LATE_CANCEL_REASON_MIN_LENGTH = 5;
 export const END_OF_DAY_LEFT_REASON = 'Hệ thống đóng cuối ngày';
 
 // Front desk reads these messages as-is, so they are in Vietnamese.
-const STALE_APPOINTMENT_MSG = 'Lịch vừa được thay đổi, tải lại rồi thử lại';
+export const STALE_APPOINTMENT_MSG = 'Lịch vừa được thay đổi, tải lại rồi thử lại';
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
   SCHEDULED: 'đã đặt',
   CONFIRMED: 'đã xác nhận',
@@ -843,6 +843,7 @@ export class AppointmentsService {
         newDentistId,
         appt.services.map(sv => sv.serviceId),
         newDay,
+        { activeServicesOnly: false },
       );
     }
 
@@ -1127,6 +1128,8 @@ export class AppointmentsService {
         : {}),
     };
     const pageSize = q.pageSize ?? 50;
+    // Cursor paging is not a snapshot: a booking moved or added between two
+    // page reads may be skipped or seen twice (the client de-duplicates ids).
     const items = await this.prisma.appointment.findMany({
       where,
       // id breaks ties so cursor paging neither repeats nor skips rows
@@ -1992,6 +1995,7 @@ export class AppointmentsService {
     dentistId: string,
     serviceIds: string[] | undefined,
     localDate: string,
+    { activeServicesOnly = true } = {},
   ): Promise<VisitPlan | null> {
     if (!serviceIds?.length) return null;
     const day = new Date(localDate);
@@ -2001,7 +2005,8 @@ export class AppointmentsService {
         serviceId: { in: serviceIds },
         effectiveFrom: { lte: day },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
-        service: { isActive: true },
+        // A visit already booked keeps a service withdrawn since (reschedule).
+        ...(activeServicesOnly ? { service: { isActive: true } } : {}),
       },
       include: { service: true },
     });
@@ -2009,7 +2014,7 @@ export class AppointmentsService {
     const missing = serviceIds.filter(id => !byService.has(id));
     if (missing.length > 0) {
       throw new BusinessRuleException(
-        'The dentist does not perform every chosen service on that day',
+        'Bác sĩ này không thực hiện dịch vụ của lịch hẹn vào ngày đã chọn',
         HttpStatus.CONFLICT,
         { serviceIds: missing },
         'SERVICE_NOT_ASSIGNED',

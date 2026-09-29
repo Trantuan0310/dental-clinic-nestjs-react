@@ -1156,7 +1156,10 @@ describe('AppointmentsService', () => {
       (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([]);
 
       await expect(service.reschedule('appt-1', future as any, actor)).rejects.toMatchObject({
-        response: expect.objectContaining({ error: 'SERVICE_NOT_ASSIGNED' }),
+        response: expect.objectContaining({
+          error: 'SERVICE_NOT_ASSIGNED',
+          message: 'Bác sĩ này không thực hiện dịch vụ của lịch hẹn vào ngày đã chọn',
+        }),
       });
       expect(prisma.dentistService.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1167,6 +1170,9 @@ describe('AppointmentsService', () => {
           }),
         }),
       );
+      // A service withdrawn since the booking does not block moving it.
+      const where = (prisma.dentistService.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(where.service).toBeUndefined();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -2379,6 +2385,10 @@ describe('AppointmentsService', () => {
         details: { serviceIds: ['svc-b'] },
       });
       expect(prisma.appointment.create).not.toHaveBeenCalled();
+      // New bookings still need an active service.
+      expect((prisma.dentistService.findMany as jest.Mock).mock.calls[0][0].where.service).toEqual({
+        isActive: true,
+      });
     });
 
     it('BR-APPT-031: a different length needs a reason, which is stored', async () => {

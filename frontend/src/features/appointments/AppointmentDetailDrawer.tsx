@@ -175,15 +175,32 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     actionModal === 'reschedule' && !rowScopedDentist ? serviceIds : [],
     rescheduleDate || undefined,
   );
+  // The dentist the reschedule sends: shown and checked, even when filtered out.
+  const chosenDentist = rescheduleDentist || appointment?.dentistId || '';
+  const rescheduleDentistIncapable =
+    !!capableDentistIds && !!chosenDentist && !capableDentistIds.includes(chosenDentist);
   const rescheduleDentistOptions = (dentists ?? [])
     .filter((d) =>
       rowScopedDentist
         ? d.id === appointment?.dentistId // a dentist keeps their own calendar
-        : !capableDentistIds || capableDentistIds.includes(d.id) || d.id === rescheduleDentist,
+        : !capableDentistIds || capableDentistIds.includes(d.id) || d.id === chosenDentist,
     )
-    .map((d) => ({ value: d.id, label: d.fullName }));
-  const rescheduleDentistIncapable =
-    !!capableDentistIds && !!rescheduleDentist && !capableDentistIds.includes(rescheduleDentist);
+    .map((d) => ({
+      value: d.id,
+      label:
+        d.id === chosenDentist && rescheduleDentistIncapable
+          ? `${d.fullName} (không làm được dịch vụ)`
+          : d.fullName,
+    }));
+  if (chosenDentist && !rescheduleDentistOptions.some((o) => o.value === chosenDentist)) {
+    rescheduleDentistOptions.unshift({
+      value: chosenDentist,
+      label:
+        chosenDentist === appointment?.dentistId && appointment?.dentistName
+          ? appointment.dentistName
+          : 'Bác sĩ hiện tại',
+    });
+  }
   const { data: availability, isLoading: isAvailabilityLoading } = useAvailability(
     rescheduleTargetDentist,
     actionModal === 'reschedule' ? rescheduleDate : undefined,
@@ -362,7 +379,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       await reschedule.mutateAsync({
         id: appointment.id,
         payload: {
-          newDentistId: rescheduleDentist || undefined,
+          newDentistId: chosenDentist || undefined,
           newStartsAt: start.toISOString(),
           newEndsAt: end.toISOString(),
           reason: reason || 'Đổi lịch',
@@ -872,7 +889,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           {error && <AlertInline message={error} />}
           <Select
             label="Bác sĩ mới"
-            value={rescheduleDentist}
+            value={chosenDentist}
             onChange={(e) => setRescheduleDentist(e.target.value)}
             options={rescheduleDentistOptions}
             disabled={rowScopedDentist}
