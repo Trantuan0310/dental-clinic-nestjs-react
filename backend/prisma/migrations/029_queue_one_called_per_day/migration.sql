@@ -7,6 +7,27 @@
 -- Safe to re-run.
 BEGIN;
 
+-- Visits still CHECKED_IN from before today (clinic time) never saw the
+-- dentist: closed as LEFT the way AppointmentsService.closeStaleCheckIns
+-- does, with one history entry each. IN_PROGRESS visits are not touched.
+WITH closed AS (
+  UPDATE appointments
+  SET status = 'LEFT',
+      left_at = now(),
+      left_reason = 'Hệ thống đóng cuối ngày',
+      updated_by = NULL,
+      updated_at = now()
+  WHERE status = 'CHECKED_IN'
+    AND deleted_at IS NULL
+    AND start_at < (((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)::timestamp
+                    AT TIME ZONE 'Asia/Ho_Chi_Minh')
+  RETURNING id
+)
+INSERT INTO audit_logs (action, target_type, target_id, metadata)
+SELECT 'APPOINTMENT_LEFT', 'appointment', id,
+       '{"reason": "Hệ thống đóng cuối ngày", "auto": true}'::jsonb
+FROM closed;
+
 -- Entries of days before today (clinic time) still open: nobody can be
 -- waiting or called for a past day. Closed the way "left before the exam" is.
 UPDATE queue_entries

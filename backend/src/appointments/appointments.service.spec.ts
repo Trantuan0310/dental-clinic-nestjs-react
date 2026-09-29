@@ -681,16 +681,19 @@ describe('AppointmentsService', () => {
       expect(where.startAt.lt).toBeInstanceOf(Date);
       expect(where.endAt.lt).toBeInstanceOf(Date);
       expect(where.deletedAt).toBeNull();
-      expect(audit.log).toHaveBeenCalledTimes(2);
-      for (const id of ['a-1', 'a-2']) {
-        expect(audit.log).toHaveBeenCalledWith(
+      // One batched write, one history entry per appointment.
+      expect(prisma.auditLog.createMany).toHaveBeenCalledTimes(1);
+      const { data } = (prisma.auditLog.createMany as jest.Mock).mock.calls[0][0];
+      expect(data).toEqual(
+        ['a-1', 'a-2'].map(id =>
           expect.objectContaining({
             action: 'APPOINTMENT_AUTO_NO_SHOW',
+            actorUserId: null,
             targetType: 'appointment',
             targetId: id,
           }),
-        );
-      }
+        ),
+      );
     });
 
     it('audits only the appointments really marked when one was checked in meanwhile', async () => {
@@ -706,8 +709,8 @@ describe('AppointmentsService', () => {
       expect(reread).toEqual(
         expect.objectContaining({ status: AppointmentStatus.NO_SHOW, noShowAt: expect.any(Date) }),
       );
-      expect(audit.log).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ targetId: 'a-2' }));
+      const { data } = (prisma.auditLog.createMany as jest.Mock).mock.calls[0][0];
+      expect(data).toEqual([expect.objectContaining({ targetId: 'a-2' })]);
     });
 
     it('skips the audit entry when nothing was marked', async () => {
@@ -715,6 +718,7 @@ describe('AppointmentsService', () => {
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
       await expect(service.autoMarkNoShow()).resolves.toEqual({ updated: 0 });
+      expect(prisma.auditLog.createMany).not.toHaveBeenCalled();
       expect(audit.log).not.toHaveBeenCalled();
     });
   });
@@ -755,9 +759,17 @@ describe('AppointmentsService', () => {
         where: { appointmentId: 'old-1', doneAt: null },
         data: expect.objectContaining({ closeReason: 'LEFT', status: 'LEFT', updatedBy: null }),
       });
-      // Then every entry still open from an earlier day — not today's.
+      // Then every entry still open from an earlier day — not today's, and
+      // never one whose visit is still CHECKED_IN.
       const sweep = (prisma.queueEntry.updateMany as jest.Mock).mock.calls[1][0];
-      expect(sweep.where).toEqual({ doneAt: null, queueDate: { lt: new Date(clinicDateOnly()) } });
+      expect(sweep.where).toEqual({
+        doneAt: null,
+        queueDate: { lt: new Date(clinicDateOnly()) },
+        OR: [
+          { appointment: { status: { not: AppointmentStatus.CHECKED_IN } } },
+          { appointment: { deletedAt: { not: null } } },
+        ],
+      });
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'APPOINTMENT_LEFT',
@@ -789,6 +801,28 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
       expect(prisma.appointment.update).not.toHaveBeenCalled();
       expect(prisma.encounter.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps going when one visit fails, and leaves its queue entry to the CHECKED_IN guard', async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+        { id: 'bad-1' },
+        { id: 'old-2' },
+      ]);
+      (prisma.appointment.updateMany as jest.Mock)
+        .mockRejectedValueOnce(new Error('deadlock'))
+        .mockResolvedValueOnce({ count: 1 });
+      (prisma.queueEntry.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      const result = await service.closeStaleCheckIns();
+
+      expect(result).toEqual({ appointments: 1, failed: 1, queueEntries: 0 });
+      expect(audit.log).toHaveBeenCalledTimes(1);
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ targetId: 'old-2' }));
+      // The sweep still ran, restricted to visits no longer CHECKED_IN.
+      const sweep = (prisma.queueEntry.updateMany as jest.Mock).mock.calls.at(-1)![0];
+      expect(sweep.where.OR).toContainEqual({
+        appointment: { status: { not: AppointmentStatus.CHECKED_IN } },
+      });
     });
   });
 
@@ -1528,7 +1562,7 @@ describe('AppointmentsService', () => {
           actor,
           { id: 'request-1', expectedStatuses: ['PENDING_REVIEW'] as any },
         ),
-      ).rejects.toThrow('handled by someone else');
+      ).rejects.toThrow('vừa được xử lý hoặc đã quá hạn');
     });
 
     it('create() stores blank text fields as null (previously an empty reason hid the chief complaint)', async () => {

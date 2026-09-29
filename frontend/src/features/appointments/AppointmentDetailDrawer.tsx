@@ -52,7 +52,7 @@ import {
   getWeekdayLabel,
 } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { clinicIso, clinicParts } from '@/lib/clinicTime';
+import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useAuthStore } from '@/stores/authStore';
 import type { Appointment, AppointmentStatus } from '@/types/appointment';
 import { isOverdueNotArrived, minutesLate, OVERDUE_LABEL, useNow } from './liveStatus';
@@ -111,8 +111,9 @@ const LATE_CHECK_IN_REASONS = [
 // Backend requires ≥ 5 chars for a forced check-in (BR-APPT-007) and for
 // cancelling a checked-in visit after its start (BR-APPT-025).
 const OVERRIDE_REASON_MIN_LENGTH = 5;
-// Mirrors the backend check-in window (CHECKIN_WINDOW_AFTER_MIN): later than
-// this, check-in needs a reason.
+// Mirror the backend check-in window (CHECKIN_WINDOW_BEFORE/AFTER_MIN):
+// earlier is refused, later needs a reason.
+const CHECK_IN_WINDOW_BEFORE_MIN = 15;
 const CHECK_IN_WINDOW_AFTER_MIN = 30;
 
 /**
@@ -375,6 +376,17 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const started = !!appointment && now >= startMs;
   const overdue = !!appointment && isOverdueNotArrived(appointment, now);
   const checkInNeedsReason = started && now > startMs + CHECK_IN_WINDOW_AFTER_MIN * 60_000;
+  // Clinic "HH:mm" (plus the date when not today) the check-in window opens, while it is still shut.
+  const opensMs = startMs - CHECK_IN_WINDOW_BEFORE_MIN * 60_000;
+  const checkInOpensAt =
+    appointment && now < opensMs
+      ? (() => {
+          const opens = clinicParts(new Date(opensMs));
+          return opens.date === clinicToday(new Date(now))
+            ? opens.time
+            : `${opens.time} ngày ${opens.date.slice(8, 10)}/${opens.date.slice(5, 7)}`;
+        })()
+      : null;
   const cancelAllowed =
     !!appointment &&
     canCancel(appointment.status) &&
@@ -633,15 +645,27 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
               <div className="flex flex-wrap gap-2">
                 {appointment.status === 'scheduled' || appointment.status === 'confirmed' ? (
                   <PermissionGuard permission="appointment.check_in">
-                    <Button
-                      size="sm"
-                      leftIcon={<CheckCircle2 className="h-4 w-4" />}
-                      // Past the window the backend needs a reason: ask for it up front.
-                      onClick={checkInNeedsReason ? () => setActionModal('force_check_in') : handleCheckIn}
-                      isLoading={checkIn.isPending}
-                    >
-                      {overdue ? 'Check-in (muộn)' : 'Check-in'}
-                    </Button>
+                    {checkInOpensAt ? (
+                      // The backend refuses check-in this early; say when it opens.
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<CheckCircle2 className="h-4 w-4" />}
+                        disabled
+                      >
+                        Mở check-in từ {checkInOpensAt}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        leftIcon={<CheckCircle2 className="h-4 w-4" />}
+                        // Past the window the backend needs a reason: ask for it up front.
+                        onClick={checkInNeedsReason ? () => setActionModal('force_check_in') : handleCheckIn}
+                        isLoading={checkIn.isPending}
+                      >
+                        {overdue ? 'Check-in (muộn)' : 'Check-in'}
+                      </Button>
+                    )}
                   </PermissionGuard>
                 ) : null}
 

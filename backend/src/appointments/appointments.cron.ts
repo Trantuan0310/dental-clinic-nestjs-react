@@ -48,12 +48,8 @@ export class AppointmentsCron {
   @Cron('15 0 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async closeStaleCheckIns() {
     try {
-      const result = await this.appointments.closeStaleCheckIns();
-      if (result.appointments > 0 || result.queueEntries > 0) {
-        this.logger.log(
-          `End of day: closed ${result.appointments} check-ins and ${result.queueEntries} queue entries`,
-        );
-      }
+      // The service logs what it closed (and any row it could not).
+      await this.appointments.closeStaleCheckIns();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`closeStaleCheckIns failed: ${msg}`);
