@@ -19,7 +19,9 @@ import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import {
+  AcceptBookingProposalDto,
   BookingRequestMessageDto,
+  BookingRequestNoteDto,
   ConfirmBookingRequestDto,
   CreatePublicBookingRequestDto,
   ListBookingRequestsDto,
@@ -72,10 +74,11 @@ export class PublicBookingController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async accept(
     @Param('reference') ref: string,
+    @Body() dto: AcceptBookingProposalDto,
     @Headers('x-booking-access-token') token?: string,
     @Headers('x-booking-phone') phone?: string,
   ) {
-    return { data: await this.booking.acceptProposal(ref, { token, phone }) };
+    return { data: await this.booking.acceptProposal(ref, { token, phone }, dto ?? {}) };
   }
   @Put('requests/:reference/details')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -143,6 +146,27 @@ export class BookingRequestsController {
   ) {
     return this.booking.requestInformation(id, dto, actor);
   }
+  // The patient answered by phone instead of on the status page.
+  @Post(':id/information-received')
+  @RequirePermissions('booking_request.manage')
+  @HttpCode(HttpStatus.OK)
+  async informationReceived(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BookingRequestNoteDto,
+    @User() actor: JwtPayload,
+  ) {
+    return this.booking.markInformationReceived(id, dto, actor);
+  }
+  @Post(':id/accepted-by-phone')
+  @RequirePermissions('booking_request.manage')
+  @HttpCode(HttpStatus.OK)
+  async acceptedByPhone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BookingRequestNoteDto,
+    @User() actor: JwtPayload,
+  ) {
+    return this.booking.markProposalAcceptedByPhone(id, dto, actor);
+  }
   @Post(':id/decline')
   @RequirePermissions('booking_request.manage')
   async decline(
@@ -160,6 +184,9 @@ export class BookingRequestsController {
     @Body() body: ConfirmBookingRequestDto,
     @User() actor: JwtPayload,
   ) {
-    return this.booking.confirm(id, actor, body?.patientId);
+    return this.booking.confirm(id, actor, {
+      patientId: body?.patientId,
+      createNewPatient: body?.createNewPatient,
+    });
   }
 }

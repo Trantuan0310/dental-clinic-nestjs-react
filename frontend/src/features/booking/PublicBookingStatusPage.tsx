@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { clinic } from "@/config/clinic";
+import { clinicToday } from "@/lib/clinicTime";
 import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
 import {
@@ -34,7 +35,13 @@ type Status = {
   /** Open, but its time has passed (server clock). */
   overdue?: boolean;
   responseMessage?: string | null;
-  appointment?: { startAt: string; endAt?: string; status: string } | null;
+  appointment?: {
+    startAt: string;
+    endAt?: string;
+    status: string;
+    /** The clinic moved the visit after confirming it. */
+    rescheduled?: boolean;
+  } | null;
 };
 type Access = { token?: string; phone?: string };
 type Tone = "wait" | "action" | "good" | "bad";
@@ -102,11 +109,36 @@ const VISIT_STATE: Record<string, { title: string; text: string; tone: Tone }> =
     text: "Phòng khám ghi nhận bạn chưa đến khám theo lịch này. Bạn có thể đặt lịch mới.",
     tone: "bad",
   },
+  LEFT: {
+    title: "Bạn đã rời phòng khám",
+    text: "Phòng khám ghi nhận bạn đã về trước khi được khám theo lịch này. Gọi lễ tân hoặc đặt lịch mới nếu bạn vẫn cần khám.",
+    tone: "bad",
+  },
   COMPLETED: {
     title: "Đã khám xong",
     text: "Cảm ơn bạn đã tin tưởng phòng khám. Hẹn gặp lại bạn ở lần tái khám.",
     tone: "good",
   },
+};
+const RESCHEDULED = {
+  title: "Lịch hẹn đã được dời",
+  text: "Phòng khám đã đổi giờ hẹn của bạn. Giờ mới ở bên dưới; gọi lễ tân nếu giờ này không phù hợp.",
+  tone: "good" as Tone,
+};
+/** Visit states in which the booked time no longer stands. */
+const VISIT_OVER = ["CANCELLED", "NO_SHOW", "LEFT", "COMPLETED"];
+/**
+ * What to show for a request: its own state, or for a confirmed one the
+ * state of the visit it became (cancelled, missed, moved…).
+ */
+const stateOf = (s: Status) => {
+  const visit =
+    s.status === "CONFIRMED" && s.appointment
+      ? VISIT_STATE[s.appointment.status] ??
+        (s.appointment.rescheduled ? RESCHEDULED : undefined)
+      : undefined;
+  const state = visit ? { ...STATE.CONFIRMED, ...visit } : STATE[shownStatus(s)];
+  return { visit, state };
 };
 const ACTIVE = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
 /**
@@ -247,10 +279,12 @@ function DetailsForm({
   busy: boolean;
   onSubmit: (details: Record<string, string>) => void;
 }) {
+  // The status page never shows the details sent earlier, so only what the
+  // patient knows here is filled in; a field left empty keeps its old value.
   const [d, setD] = useState({
     fullName: "",
     dob: "",
-    gender: "UNDISCLOSED",
+    gender: "",
     phone,
     email: "",
     contactPersonName: "",
@@ -259,26 +293,33 @@ function DetailsForm({
   });
   const set = (key: keyof typeof d) => (e: { target: { value: string } }) =>
     setD((old) => ({ ...old, [key]: e.target.value }));
+  const filled = Object.fromEntries(
+    Object.entries(d)
+      .map(([k, v]) => [k, v.trim()])
+      .filter(([, v]) => v !== ""),
+  );
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(d);
+        onSubmit(filled);
       }}
       className="mt-6 space-y-4 border-t border-gray-100 pt-5"
     >
       <h3 className="font-semibold text-gray-900">Bổ sung thông tin</h3>
+      <p className="text-sm text-gray-600">
+        Chỉ điền những thông tin phòng khám cần hoặc cần sửa. Ô để trống sẽ giữ nguyên thông tin bạn đã gửi.
+      </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-medium text-gray-700 sm:col-span-2">
           Họ và tên người khám
-          <input required maxLength={200} value={d.fullName} onChange={set("fullName")} className={inputClass} />
+          <input maxLength={200} value={d.fullName} onChange={set("fullName")} className={inputClass} />
         </label>
         <label className="text-sm font-medium text-gray-700">
           Ngày sinh
           <input
-            required
             type="date"
-            max={new Date().toISOString().slice(0, 10)}
+            max={clinicToday()}
             value={d.dob}
             onChange={set("dob")}
             className={inputClass}
@@ -287,6 +328,7 @@ function DetailsForm({
         <label className="text-sm font-medium text-gray-700">
           Giới tính
           <select value={d.gender} onChange={set("gender")} className={inputClass + " bg-white"}>
+            <option value="">Giữ nguyên</option>
             <option value="UNDISCLOSED">Không muốn nêu</option>
             <option value="FEMALE">Nữ</option>
             <option value="MALE">Nam</option>
@@ -295,7 +337,7 @@ function DetailsForm({
         </label>
         <label className="text-sm font-medium text-gray-700">
           Số điện thoại
-          <input required type="tel" inputMode="tel" value={d.phone} onChange={set("phone")} className={inputClass} />
+          <input type="tel" inputMode="tel" value={d.phone} onChange={set("phone")} className={inputClass} />
         </label>
         <label className="text-sm font-medium text-gray-700">
           Email (không bắt buộc)
@@ -315,7 +357,7 @@ function DetailsForm({
         </label>
       </div>
       <button
-        disabled={busy}
+        disabled={busy || Object.keys(filled).length === 0}
         className="w-full rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60 sm:w-auto"
       >
         Gửi thông tin bổ sung
@@ -437,8 +479,12 @@ export default function PublicBookingStatusPage() {
   };
 
   const current = status ? shownStatus(status) : "";
-  const visit = status?.status === "CONFIRMED" ? VISIT_STATE[status.appointment?.status ?? ""] : undefined;
-  const state = status ? (visit ? { ...STATE.CONFIRMED, ...visit } : STATE[current]) : undefined;
+  const { visit, state } = status ? stateOf(status) : { visit: undefined, state: undefined };
+  // The visit still holds its (possibly moved) time.
+  const visitStands =
+    status?.status === "CONFIRMED" &&
+    !!status.appointment &&
+    !VISIT_OVER.includes(status.appointment.status);
   const tone = TONE_STYLE[state?.tone ?? "wait"];
   const ToneIcon = tone.icon;
   const time = status
@@ -487,7 +533,7 @@ export default function PublicBookingStatusPage() {
             </p>
             <ul className="mt-6 space-y-3">
               {results.map((item) => {
-                const itemState = STATE[shownStatus(item)];
+                const itemState = stateOf(item).state;
                 const itemTime =
                   item.appointment?.startAt ??
                   (["PROPOSED", "PATIENT_ACCEPTED"].includes(item.status) && item.proposedStartAt
@@ -594,7 +640,7 @@ export default function PublicBookingStatusPage() {
               </div>
             </div>
 
-            {!visit && state && state.step > 0 && <Progress step={state.step} />}
+            {(!visit || visitStands) && state && state.step > 0 && <Progress step={state.step} />}
 
             <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100">
               <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
@@ -647,7 +693,13 @@ export default function PublicBookingStatusPage() {
                   disabled={busy}
                   onClick={() =>
                     void act(
-                      () => api.post(path("/accept-proposal"), undefined, { headers: headers(access!) }),
+                      // The time on screen: refused if the clinic changed it meanwhile.
+                      () =>
+                        api.post(
+                          path("/accept-proposal"),
+                          { proposedStartAt: status.proposedStartAt ?? undefined },
+                          { headers: headers(access!) },
+                        ),
                       "Không xác nhận được giờ mới.",
                     )
                   }
@@ -656,7 +708,7 @@ export default function PublicBookingStatusPage() {
                   <CalendarCheck className="h-5 w-5" aria-hidden /> Đồng ý giờ mới
                 </button>
               )}
-              {status.status === "CONFIRMED" && !visit && status.appointment && (
+              {visitStands && (
                 <a
                   href={googleCalendarUrl(status)}
                   target="_blank"
@@ -666,7 +718,7 @@ export default function PublicBookingStatusPage() {
                   <CalendarPlus className="h-5 w-5" aria-hidden /> Thêm vào Google Calendar
                 </a>
               )}
-              {["DECLINED", "CANCELLED", "EXPIRED"].includes(current) || visit ? (
+              {["DECLINED", "CANCELLED", "EXPIRED"].includes(current) || (visit && !visitStands) ? (
                 <Link
                   to="/booking"
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600"
@@ -686,7 +738,7 @@ export default function PublicBookingStatusPage() {
                       headers: headers(access!),
                     });
                     // The phone may have changed; keep the new one for later lookups.
-                    if (access?.phone) {
+                    if (access?.phone && details.phone) {
                       const next = { ...access, phone: details.phone };
                       setAccess(next);
                       saveBooking({ ref: status.referenceCode, ...next });

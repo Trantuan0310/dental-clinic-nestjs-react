@@ -24,8 +24,11 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/services/email.service';
 import {
+  AcceptBookingProposalDto,
   BookingRequestMessageDto,
+  BookingRequestNoteDto,
   CreatePublicBookingRequestDto,
+  isCalendarDate,
   ListBookingRequestsDto,
   ProposeBookingTimeDto,
   PublicSlotsQueryDto,
@@ -43,7 +46,31 @@ const PUBLIC_INCLUDE = {
   service: { select: { name: true, defaultDurationMin: true } },
   preferredDentist: { select: { fullName: true } },
   proposedDentist: { select: { fullName: true } },
-  appointment: { select: { status: true, startAt: true, endAt: true } },
+  // Once booked, the visit (which the clinic may have moved or reassigned)
+  // is what the patient sees, not the request.
+  appointment: {
+    select: {
+      status: true,
+      startAt: true,
+      endAt: true,
+      rescheduleCount: true,
+      deletedAt: true,
+      dentist: { select: { fullName: true } },
+    },
+  },
+} satisfies Prisma.BookingRequestInclude;
+const STAFF_INCLUDE = {
+  service: { select: { id: true, name: true, defaultDurationMin: true } },
+  preferredDentist: { select: { id: true, fullName: true } },
+  proposedDentist: { select: { id: true, fullName: true } },
+  appointment: {
+    select: {
+      id: true,
+      status: true,
+      startAt: true,
+      dentist: { select: { id: true, fullName: true } },
+    },
+  },
 } satisfies Prisma.BookingRequestInclude;
 const STAFF_ACTION_STATUSES: BookingRequestStatus[] = ['PENDING_REVIEW', 'PATIENT_ACCEPTED'];
 /** Statuses whose effective time is the proposed one (when set). */
@@ -56,6 +83,29 @@ const LOCK_NS_BOOKING_PHONE = 3;
 export const EXPIRED_MESSAGE =
   'Đã quá giờ hẹn mà chưa được xác nhận. Vui lòng đặt lịch mới hoặc gọi phòng khám.';
 const OVERDUE_STAFF_MESSAGE = 'Giờ hẹn đã qua, hãy đề xuất giờ khác hoặc từ chối yêu cầu';
+const PROPOSAL_CHANGED_MESSAGE = 'Phòng khám vừa đổi giờ đề xuất, vui lòng xem lại';
+const PROPOSAL_OPEN_MESSAGE =
+  'Yêu cầu đang có giờ đề xuất nên không thể yêu cầu bổ sung (giờ đã thống nhất sẽ bị mất). ' +
+  'Hãy gọi khách để trao đổi, đề xuất giờ khác hoặc từ chối yêu cầu.';
+
+/** Names compared the way people type them: NFC, single spaces, any case. */
+export function normalizeName(value: string): string {
+  return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi');
+}
+
+/** "dd/MM/yyyy HH:mm" at the clinic (UTC+7). */
+export function formatClinicDateTime(value: Date): string {
+  const local = new Date(value.getTime() + CLINIC_UTC_OFFSET_MS).toISOString();
+  return (
+    local.slice(8, 10) +
+    '/' +
+    local.slice(5, 7) +
+    '/' +
+    local.slice(0, 4) +
+    ' ' +
+    local.slice(11, 16)
+  );
+}
 
 /**
  * The time a request is about: the proposed one while a proposal is on the
@@ -274,17 +324,27 @@ export class BookingService {
     return rows.map(row => this.toPublic(row));
   }
 
-  async acceptProposal(reference: string, access: PublicAccess) {
+  async acceptProposal(
+    reference: string,
+    access: PublicAccess,
+    dto: AcceptBookingProposalDto = {},
+  ) {
     const row = await this.verify(reference, access);
     if (row.status !== 'PROPOSED' || !row.proposedStartAt) {
       throw new ConflictException('Không có khung giờ mới cần xác nhận');
+    }
+    // The patient agrees to the time on their screen: if the front desk has
+    // proposed another one since, that is not what they agreed to.
+    const seen = dto.proposedStartAt ? new Date(dto.proposedStartAt) : row.proposedStartAt;
+    if (seen.getTime() !== row.proposedStartAt.getTime()) {
+      throw new ConflictException(PROPOSAL_CHANGED_MESSAGE);
     }
     if (row.proposedStartAt.getTime() <= Date.now()) {
       throw new ConflictException(
         'Giờ phòng khám đề xuất đã qua nên không thể đồng ý nữa. Vui lòng đặt lịch mới hoặc gọi phòng khám.',
       );
     }
-    await this.updateUnbookedRequest(row.id, row.status, { status: 'PATIENT_ACCEPTED' });
+    await this.acceptProposedTime(row.id, seen);
     await this.audit.log({
       action: 'BOOKING_REQUEST_PROPOSAL_ACCEPTED',
       actorUserId: null,
@@ -294,6 +354,24 @@ export class BookingService {
     });
     void this.notifyStaff(row.id, 'Khách đã đồng ý giờ mới — cần xác nhận');
     return this.publicStatus(reference, access);
+  }
+
+  /** PROPOSED → PATIENT_ACCEPTED, only while the proposal is still `proposedStartAt`. */
+  private async acceptProposedTime(id: string, proposedStartAt: Date, handledBy?: string) {
+    const result = await this.prisma.bookingRequest.updateMany({
+      where: { id, status: 'PROPOSED', appointmentId: null, proposedStartAt },
+      data: { status: 'PATIENT_ACCEPTED', ...(handledBy ? { handledBy } : {}) },
+    });
+    if (result.count) return;
+    const now = await this.prisma.bookingRequest.findUnique({
+      where: { id },
+      select: { status: true, proposedStartAt: true },
+    });
+    throw new ConflictException(
+      now?.status === 'PROPOSED' && now.proposedStartAt?.getTime() !== proposedStartAt.getTime()
+        ? PROPOSAL_CHANGED_MESSAGE
+        : 'Yêu cầu đã thay đổi; hãy tải lại trạng thái.',
+    );
   }
 
   async updateDetails(reference: string, access: PublicAccess, dto: UpdatePublicBookingDetailsDto) {
@@ -306,28 +384,32 @@ export class BookingService {
         'Giờ hẹn của yêu cầu này đã qua nên không thể bổ sung thông tin. Vui lòng đặt lịch mới hoặc gọi phòng khám.',
       );
     }
-    const phone = this.normalize(dto.phone);
-    const dob = new Date(dto.dob);
-    if (!isValidVnPhone(phone) || !isValidDob(dob)) {
-      throw new BadRequestException('Thông tin liên hệ hoặc ngày sinh không hợp lệ');
+    // Only the fields sent change; a field left out keeps what was stored
+    // (the public API never shows the stored details, so the form cannot
+    // send them back). The checks run on the merged result.
+    const changes: Prisma.BookingRequestUpdateManyMutationInput = {};
+    if (dto.fullName?.trim()) changes.fullName = dto.fullName.trim();
+    if (dto.dob !== undefined) changes.dob = this.parseDob(dto.dob);
+    if (dto.gender !== undefined) changes.gender = dto.gender;
+    if (dto.phone?.trim()) changes.phone = this.normalize(dto.phone);
+    if (dto.email?.trim()) changes.email = dto.email.trim().toLowerCase();
+    if (dto.contactPersonName?.trim()) changes.contactPersonName = dto.contactPersonName.trim();
+    if (dto.contactPersonPhone?.trim())
+      changes.contactPersonPhone = this.normalize(dto.contactPersonPhone);
+    if (dto.reason?.trim()) changes.reason = dto.reason.trim();
+    if (!Object.keys(changes).length) {
+      throw new BadRequestException('Vui lòng nhập thông tin cần bổ sung');
     }
-    if (dto.email && !isValidEmail(dto.email)) throw new BadRequestException('Email không hợp lệ');
-    const hasGuardian = !!dto.contactPersonName?.trim() && !!dto.contactPersonPhone;
-    if (isMinor(dob) && !hasGuardian) {
-      throw new BadRequestException('Bệnh nhân dưới 12 tuổi cần thông tin người giám hộ');
-    }
-    if (!!dto.contactPersonName !== !!dto.contactPersonPhone) {
-      throw new BadRequestException('Cần nhập đủ tên và số điện thoại người giám hộ');
-    }
+    const merged = { ...row, ...changes } as typeof row;
+    this.checkContact({
+      phone: merged.phone,
+      dob: merged.dob,
+      email: merged.email,
+      contactPersonName: merged.contactPersonName,
+      contactPersonPhone: merged.contactPersonPhone,
+    });
     await this.updateUnbookedRequest(row.id, row.status, {
-      fullName: dto.fullName.trim(),
-      dob,
-      gender: dto.gender,
-      phone,
-      email: dto.email?.trim().toLowerCase() || null,
-      contactPersonName: dto.contactPersonName?.trim() || null,
-      contactPersonPhone: dto.contactPersonPhone ? this.normalize(dto.contactPersonPhone) : null,
-      reason: dto.reason?.trim() || null,
+      ...changes,
       status: 'PENDING_REVIEW',
     });
     await this.audit.log({
@@ -380,12 +462,7 @@ export class BookingService {
    * are about to expire); the rest follow newest first.
    */
   async listForStaff(q: ListBookingRequestsDto) {
-    const include = {
-      service: { select: { id: true, name: true, defaultDurationMin: true } },
-      preferredDentist: { select: { id: true, fullName: true } },
-      proposedDentist: { select: { id: true, fullName: true } },
-      appointment: { select: { id: true, status: true, startAt: true } },
-    } satisfies Prisma.BookingRequestInclude;
+    const include = STAFF_INCLUDE;
     const activeStatuses = q.status ? ACTIVE.filter(s => s === q.status) : ACTIVE;
     // Capped at 100 like before. With more open requests than that, the cut
     // is by requested time, so a far-off request with an earlier proposal
@@ -459,30 +536,46 @@ export class BookingService {
   async getForStaff(id: string) {
     const row = await this.prisma.bookingRequest.findUnique({
       where: { id },
-      include: {
-        service: { select: { id: true, name: true, defaultDurationMin: true } },
-        preferredDentist: { select: { id: true, fullName: true } },
-        proposedDentist: { select: { id: true, fullName: true } },
-        appointment: { select: { id: true, status: true, startAt: true } },
-      },
+      include: STAFF_INCLUDE,
     });
     if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
     return this.toStaff(row);
   }
 
+  /**
+   * Patient records the request could belong to: any whose own phone or
+   * guardian phone is one of the request's phones (a child is often on
+   * file only under a parent's number). Each says which of its phones
+   * matched, and whether name and date of birth match too.
+   */
   async patientMatches(id: string) {
     const row = await this.prisma.bookingRequest.findUnique({
       where: { id },
-      select: { phone: true },
+      select: { phone: true, contactPersonPhone: true, fullName: true, dob: true },
     });
     if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
-    const phone = this.normalize(row.phone);
-    return this.prisma.patient.findMany({
-      where: { primaryPhone: { in: [phone, this.altPhone(phone)] }, deletedAt: null },
-      select: { id: true, code: true, fullName: true, dob: true, primaryPhone: true },
+    const phones = this.requestPhones(row);
+    const found = await this.prisma.patient.findMany({
+      where: this.patientsByPhone(phones),
+      select: {
+        id: true,
+        code: true,
+        fullName: true,
+        dob: true,
+        primaryPhone: true,
+        contactPersonName: true,
+        contactPersonPhone: true,
+      },
       take: 20,
       orderBy: { createdAt: 'desc' },
     });
+    return found.map(p => ({
+      ...p,
+      matchedBy: (['primaryPhone', 'contactPersonPhone'] as const).filter(
+        field => !!p[field] && phones.includes(this.normalize(p[field]!)),
+      ),
+      sameNameAndDob: this.sameNameAndDob(p, row),
+    }));
   }
 
   async propose(id: string, dto: ProposeBookingTimeDto, actor: JwtPayload) {
@@ -498,20 +591,31 @@ export class BookingService {
       handledBy: actor.sub,
     });
     await this.auditAction('BOOKING_REQUEST_TIME_PROPOSED', id, actor);
+    const data = await this.getForStaff(id);
+    // The email states the proposal itself, not only the front desk's note.
+    const dentistName = data?.proposedDentist?.fullName;
     const sent = row.email
       ? await this.sendNotice(
           row.email,
           'Phòng khám đề xuất giờ khám khác',
           row.fullName,
-          dto.message.trim(),
+          'Giờ phòng khám đề xuất: ' +
+            formatClinicDateTime(startAt) +
+            ' (giờ Việt Nam)' +
+            (dentistName ? ', bác sĩ ' + dentistName : '') +
+            '. Lời nhắn của phòng khám: ' +
+            dto.message.trim(),
           row.referenceCode,
         )
       : false;
-    return { data: await this.getForStaff(id), notificationSent: sent };
+    return { data, notificationSent: sent };
   }
 
   async requestInformation(id: string, dto: BookingRequestMessageDto, actor: JwtPayload) {
     const row = await this.requireActive(id);
+    // NEEDS_INFORMATION leads back to PENDING_REVIEW, which would drop the
+    // time and dentist already offered to (or agreed by) the patient.
+    if (PROPOSAL_STATUSES.includes(row.status)) throw new ConflictException(PROPOSAL_OPEN_MESSAGE);
     // The patient could not answer in time anyway (updateDetails refuses).
     // Proposing a new time is still allowed: that rescues an overdue request.
     if (this.isOverdue(row)) throw new ConflictException(OVERDUE_STAFF_MESSAGE);
@@ -531,6 +635,40 @@ export class BookingService {
         )
       : false;
     return { data: await this.getForStaff(id), notificationSent: sent };
+  }
+
+  /** The patient gave the missing details by phone: back to the front desk's review. */
+  async markInformationReceived(id: string, dto: BookingRequestNoteDto, actor: JwtPayload) {
+    const row = await this.requireActive(id);
+    if (row.status !== 'NEEDS_INFORMATION') {
+      throw new ConflictException('Yêu cầu không ở trạng thái chờ bổ sung thông tin');
+    }
+    if (this.isOverdue(row)) throw new ConflictException(OVERDUE_STAFF_MESSAGE);
+    await this.updateUnbookedRequest(id, row.status, {
+      status: 'PENDING_REVIEW',
+      handledBy: actor.sub,
+    });
+    await this.auditAction('BOOKING_REQUEST_INFORMATION_RECEIVED', id, actor, {
+      channel: 'STAFF',
+      ...(dto.note?.trim() ? { note: dto.note.trim() } : {}),
+    });
+    return { data: await this.getForStaff(id) };
+  }
+
+  /** The patient agreed to the proposed time by phone. */
+  async markProposalAcceptedByPhone(id: string, dto: BookingRequestNoteDto, actor: JwtPayload) {
+    const row = await this.requireActive(id);
+    if (row.status !== 'PROPOSED' || !row.proposedStartAt) {
+      throw new ConflictException('Không có giờ đề xuất đang chờ khách đồng ý');
+    }
+    if (this.isOverdue(row)) throw new ConflictException(OVERDUE_STAFF_MESSAGE);
+    await this.acceptProposedTime(id, row.proposedStartAt, actor.sub);
+    await this.auditAction('BOOKING_REQUEST_PROPOSAL_ACCEPTED', id, actor, {
+      channel: 'PHONE',
+      proposedStartAt: row.proposedStartAt.toISOString(),
+      ...(dto.note?.trim() ? { note: dto.note.trim() } : {}),
+    });
+    return { data: await this.getForStaff(id) };
   }
 
   async decline(id: string, dto: BookingRequestMessageDto, actor: JwtPayload) {
@@ -553,7 +691,11 @@ export class BookingService {
     return { data: await this.getForStaff(id), notificationSent: sent };
   }
 
-  async confirm(id: string, actor: JwtPayload, patientId?: string) {
+  async confirm(
+    id: string,
+    actor: JwtPayload,
+    choice: { patientId?: string; createNewPatient?: boolean } = {},
+  ) {
     const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
     if (row.appointmentId || !['PENDING_REVIEW', 'PATIENT_ACCEPTED'].includes(row.status)) {
@@ -570,7 +712,7 @@ export class BookingService {
       throw new ConflictException(OVERDUE_STAFF_MESSAGE);
     }
     await this.requireEligible(row.serviceId, dentistId, clinicDateOnly(startAt));
-    const patient = await this.resolvePatient(row, patientId, actor);
+    const patient = await this.resolvePatient(row, choice, actor);
     const resolvedPatientId = patient.id;
     // The visit length comes from the service (the dentist's own duration
     // first); create() re-checks the slot, buffers and double-booking.
@@ -616,6 +758,7 @@ export class BookingService {
     await this.auditAction('BOOKING_REQUEST_CONFIRMED', id, actor, {
       appointmentId: appointment.id,
       patientId: resolvedPatientId,
+      patientCreated: patient.created,
     });
     return { data: await this.getForStaff(id), notificationSent: sent };
   }
@@ -638,48 +781,55 @@ export class BookingService {
     }
   }
 
+  /**
+   * The patient record for the visit: the one the front desk picked, a new
+   * one when they asked for it, or else the single record with the same
+   * phone (own or guardian), name and date of birth. Any other record on
+   * those phones means a person must choose (a child on a parent's phone).
+   */
   private async resolvePatient(
     row: any,
-    patientId: string | undefined,
+    choice: { patientId?: string; createNewPatient?: boolean },
     actor: JwtPayload,
   ): Promise<{ id: string; created: boolean }> {
-    if (patientId) {
+    const phones = this.requestPhones(row);
+    if (choice.patientId && choice.createNewPatient) {
+      throw new BadRequestException('Chọn một hồ sơ có sẵn hoặc tạo hồ sơ mới, không chọn cả hai');
+    }
+    if (choice.patientId) {
       const found = await this.prisma.patient.findFirst({
-        where: { id: patientId, deletedAt: null },
+        where: { id: choice.patientId, deletedAt: null },
         select: { id: true, primaryPhone: true, contactPersonPhone: true },
       });
       if (!found)
         throw new BadRequestException('Hồ sơ bệnh nhân đã chọn không tồn tại hoặc đã lưu trữ');
-      const phoneMatches = [found.primaryPhone, found.contactPersonPhone]
+      const own = [found.primaryPhone, found.contactPersonPhone]
         .filter((value): value is string => !!value)
         .map(value => this.normalize(value));
-      if (!phoneMatches.includes(this.normalize(row.phone))) {
+      if (!own.some(value => phones.includes(value))) {
         throw new BadRequestException('Hồ sơ đã chọn không khớp số liên hệ của yêu cầu');
       }
       return { id: found.id, created: false };
     }
-    const phone = this.normalize(row.phone);
-    const matches = await this.prisma.patient.findMany({
-      where: { primaryPhone: { in: [phone, this.altPhone(phone)] }, deletedAt: null },
-      select: { id: true, fullName: true, dob: true },
-      take: 20,
-    });
-    const exact = matches.filter(
-      p =>
-        p.fullName.trim().toLocaleLowerCase() === row.fullName.trim().toLocaleLowerCase() &&
-        p.dob.toISOString().slice(0, 10) === row.dob.toISOString().slice(0, 10),
-    );
-    if (exact.length === 1) return { id: exact[0].id, created: false };
-    if (exact.length > 0 || matches.length > 0) {
-      throw new ConflictException(
-        'Đã có hồ sơ trùng số điện thoại. Hãy chọn hồ sơ phù hợp trước khi xác nhận.',
-      );
+    if (!choice.createNewPatient) {
+      const matches = await this.prisma.patient.findMany({
+        where: this.patientsByPhone(phones),
+        select: { id: true, fullName: true, dob: true },
+        take: 20,
+      });
+      const exact = matches.filter(p => this.sameNameAndDob(p, row));
+      if (exact.length === 1) return { id: exact[0].id, created: false };
+      if (matches.length > 0) {
+        throw new ConflictException(
+          'Đã có hồ sơ dùng số điện thoại này. Hãy chọn hồ sơ phù hợp hoặc chọn tạo hồ sơ mới trước khi xác nhận.',
+        );
+      }
     }
     const dto: CreatePatientDto = {
       fullName: row.fullName,
       dob: row.dob.toISOString().slice(0, 10),
       gender: row.gender,
-      primaryPhone: phone,
+      primaryPhone: this.normalize(row.phone),
       email: row.email,
       contactPersonName: row.contactPersonName,
       contactPersonPhone: row.contactPersonPhone,
@@ -687,30 +837,77 @@ export class BookingService {
     return { id: (await this.patients.create(dto, actor)).id, created: true };
   }
 
+  /** The request's phones (own and guardian), normalized to 0xxx. */
+  private requestPhones(row: { phone: string; contactPersonPhone?: string | null }) {
+    const set = new Set<string>();
+    for (const value of [row.phone, row.contactPersonPhone]) {
+      if (value) set.add(this.normalize(value));
+    }
+    return [...set];
+  }
+
+  /** Live records whose own or guardian phone is one of `phones` (0xxx or +84xxx). */
+  private patientsByPhone(phones: string[]): Prisma.PatientWhereInput {
+    const variants = phones.flatMap(p => [p, this.altPhone(p)]);
+    return {
+      deletedAt: null,
+      OR: [{ primaryPhone: { in: variants } }, { contactPersonPhone: { in: variants } }],
+    };
+  }
+
+  private sameNameAndDob(p: { fullName: string; dob: Date }, row: { fullName: string; dob: Date }) {
+    return (
+      normalizeName(p.fullName) === normalizeName(row.fullName) &&
+      p.dob.toISOString().slice(0, 10) === row.dob.toISOString().slice(0, 10)
+    );
+  }
+
   private validateDetails(dto: CreatePublicBookingRequestDto) {
     if (!dto.consent)
       throw new BadRequestException(
         'Cần đồng ý để phòng khám sử dụng thông tin nhằm xử lý yêu cầu đặt lịch',
       );
-    const phone = this.normalize(dto.phone),
-      dob = new Date(dto.dob);
-    if (!isValidVnPhone(phone)) throw new BadRequestException('Số điện thoại không hợp lệ');
-    if (!isValidDob(dob)) throw new BadRequestException('Ngày sinh không hợp lệ');
-    if (dto.email && !isValidEmail(dto.email)) throw new BadRequestException('Email không hợp lệ');
-    const guardian = !!dto.contactPersonName?.trim() && !!dto.contactPersonPhone;
-    if (isMinor(dob) && !guardian)
-      throw new BadRequestException('Bệnh nhân dưới 12 tuổi cần thông tin người giám hộ');
-    if (!!dto.contactPersonName !== !!dto.contactPersonPhone)
-      throw new BadRequestException('Cần nhập đủ tên và số điện thoại người giám hộ');
-    return {
-      fullName: dto.fullName.trim(),
-      dob,
+    const fullName = (dto.fullName ?? '').trim();
+    if (fullName.length < 2) throw new BadRequestException('Họ và tên không hợp lệ');
+    const details = {
+      fullName,
+      dob: this.parseDob(dto.dob),
       gender: dto.gender as Gender,
-      phone,
+      phone: this.normalize(dto.phone),
       email: dto.email?.trim().toLowerCase() || null,
       contactPersonName: dto.contactPersonName?.trim() || null,
-      contactPersonPhone: dto.contactPersonPhone ? this.normalize(dto.contactPersonPhone) : null,
+      contactPersonPhone: dto.contactPersonPhone?.trim()
+        ? this.normalize(dto.contactPersonPhone)
+        : null,
     };
+    this.checkContact(details);
+    return details;
+  }
+
+  /** "YYYY-MM-DD" of a real day (2026-02-30 is refused, not rolled over). */
+  private parseDob(value: string) {
+    if (!isCalendarDate(value)) throw new BadRequestException('Ngày sinh không hợp lệ');
+    return new Date(value + 'T00:00:00Z');
+  }
+
+  /** Contact rules shared by a new request and the patient's later details. */
+  private checkContact(d: {
+    phone: string;
+    dob: Date;
+    email: string | null;
+    contactPersonName: string | null;
+    contactPersonPhone: string | null;
+  }) {
+    if (!isValidVnPhone(d.phone)) throw new BadRequestException('Số điện thoại không hợp lệ');
+    if (!isValidDob(d.dob)) throw new BadRequestException('Ngày sinh không hợp lệ');
+    if (d.email && !isValidEmail(d.email)) throw new BadRequestException('Email không hợp lệ');
+    if (d.contactPersonPhone && !isValidVnPhone(d.contactPersonPhone))
+      throw new BadRequestException('Số điện thoại người giám hộ không hợp lệ');
+    const guardian = !!d.contactPersonName && !!d.contactPersonPhone;
+    if (isMinor(d.dob) && !guardian)
+      throw new BadRequestException('Bệnh nhân dưới 12 tuổi cần thông tin người giám hộ');
+    if (!!d.contactPersonName !== !!d.contactPersonPhone)
+      throw new BadRequestException('Cần nhập đủ tên và số điện thoại người giám hộ');
   }
 
   private async updateUnbookedRequest(id: string, expectedStatus: BookingRequestStatus, data: any) {
@@ -858,6 +1055,7 @@ export class BookingService {
 
   private toPublic(row: any) {
     const useProposed = ['PROPOSED', 'PATIENT_ACCEPTED'].includes(row.status);
+    const visit = row.appointment;
     return {
       referenceCode: row.referenceCode,
       status: row.status,
@@ -868,8 +1066,10 @@ export class BookingService {
         durationMinutes: row.service?.defaultDurationMin ?? null,
       },
       dentist: {
-        // A proposal may keep the requested dentist (no proposedDentist).
+        // The booked visit first (it may have been reassigned); a proposal
+        // may keep the requested dentist (no proposedDentist).
         fullName:
+          visit?.dentist?.fullName ??
           (useProposed ? row.proposedDentist?.fullName : null) ??
           row.preferredDentist?.fullName ??
           null,
@@ -879,11 +1079,13 @@ export class BookingService {
       // before the cron closes it.
       overdue: !row.appointment && this.isOverdue(row),
       responseMessage: row.responseMessage,
-      appointment: row.appointment
+      appointment: visit
         ? {
-            startAt: row.appointment.startAt,
-            endAt: row.appointment.endAt,
-            status: row.appointment.status,
+            startAt: visit.startAt,
+            endAt: visit.endAt,
+            // An archived visit no longer holds the time.
+            status: visit.deletedAt ? 'CANCELLED' : visit.status,
+            rescheduled: (visit.rescheduleCount ?? 0) > 0,
           }
         : null,
     };

@@ -6,6 +6,7 @@ import { PublicTopBar } from "./PublicTopBar";
 import { saveBooking } from "./savedBookings";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
+import { clinicToday } from "@/lib/clinicTime";
 
 type Dentist = { id: string; fullName: string; specialties: string[] };
 type Service = {
@@ -22,16 +23,10 @@ type BookingResult = {
   notificationSent: boolean;
 };
 
-const today = () => {
-  const d = new Date();
-  return (
-    d.getFullYear() +
-    "-" +
-    String(d.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(d.getDate()).padStart(2, "0")
-  );
-};
+// The clinic's date, not the browser's: a visitor abroad (or a PC set to
+// another zone) must not be offered yesterday or refused today.
+const today = () => clinicToday();
+const SLOT_ERROR = "Không tải được giờ trống. Chọn ngày khác hoặc liên hệ lễ tân.";
 
 export default function PublicBookingPage() {
   const navigate = useNavigate();
@@ -95,14 +90,12 @@ export default function PublicBookingPage() {
       )
       .then((r) => {
         setSlots(r.data.data.availableSlots);
+        // A later load worked: drop the earlier slot error (not other errors).
+        setError((old) => (old === SLOT_ERROR ? "" : old));
         if (typeof r.data.data.minLeadMinutes === "number")
           setMinLead(r.data.data.minLeadMinutes);
       })
-      .catch(() =>
-        setError(
-          "Không tải được giờ trống. Chọn ngày khác hoặc liên hệ lễ tân.",
-        ),
-      )
+      .catch(() => setError(SLOT_ERROR))
       .finally(() => setSlotLoading(false));
   }, [serviceId, dentistId, date]);
 
