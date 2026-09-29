@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { clinicIso, clinicParts } from "@/lib/clinicTime";
 import { bookingErrorMessage } from "./errorMessage";
 
 type RequestRow = {
@@ -76,12 +77,14 @@ const format = (value: string) =>
     timeStyle: "short",
     timeZone: "Asia/Ho_Chi_Minh",
   });
-const inputDate = (value: string) => {
-  const d = new Date(value);
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
+// The datetime-local field holds clinic wall-clock time, whatever the
+// workstation's time zone.
+const inputDate = (value: string | Date) => {
+  const { date, time } = clinicParts(value);
+  return date + "T" + time;
 };
+const fromInputDate = (value: string) =>
+  clinicIso(value.slice(0, 10), value.slice(11, 16));
 
 export default function BookingRequestsPage() {
   const qc = useQueryClient();
@@ -398,7 +401,7 @@ export default function BookingRequestsPage() {
                     Ngày và giờ
                     <input
                       type="datetime-local"
-                      min={inputDate(new Date(now).toISOString())}
+                      min={inputDate(new Date(now))}
                       value={proposeAt}
                       onChange={(e) => setProposeAt(e.target.value)}
                       className="mt-1 w-full rounded-md border px-3 py-2"
@@ -451,7 +454,7 @@ export default function BookingRequestsPage() {
                       path: "propose",
                       body: {
                         dentistId: proposeDentist,
-                        startAt: new Date(proposeAt).toISOString(),
+                        startAt: fromInputDate(proposeAt),
                         message,
                       },
                     })
