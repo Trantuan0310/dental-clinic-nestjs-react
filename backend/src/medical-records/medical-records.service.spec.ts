@@ -794,6 +794,23 @@ describe('MedicalRecordsService', () => {
       expect(data).not.toHaveProperty('treatmentPlan');
     });
 
+    it('appendTo stamps and appends to that section only, reading its current value server-side', async () => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue({ diagnosis: 'Sâu 16' });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });
+      (prisma.clinicalNote.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.clinicalNote.findUniqueOrThrow as jest.Mock).mockResolvedValue(validClinicalNote());
+
+      await service.upsertClinicalNote(
+        'enc-1',
+        { appendNote: 'Viêm tủy 26', appendTo: 'diagnosis' } as any,
+        dentistActor,
+      );
+
+      const data = (prisma.clinicalNote.updateMany as jest.Mock).mock.calls[0][0].data;
+      expect(data.diagnosis).toMatch(/^Sâu 16\n\n\[.* — BS An\]\nViêm tủy 26$/);
+      expect(data).not.toHaveProperty('notes');
+    });
+
     it('appendNote on a first save creates the note with just the stamped entry', async () => {
       (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });
