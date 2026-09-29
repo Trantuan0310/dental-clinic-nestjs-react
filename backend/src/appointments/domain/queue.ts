@@ -4,9 +4,9 @@ import { clinicDateOnly } from '../../common/date-range.util';
 /**
  * The dispatch queue (ADR-0009 D5): who a dentist sees next, before the
  * exam. The rules are pure so the ordering is covered by a decision table
- * (queue.spec.ts); the two writers below are the only way entries open and
+ * (queue.spec.ts); the writers below are the only way entries open and
  * close, and every path that checks a patient in, starts the exam, cancels
- * or marks LEFT goes through them.
+ * the exam, cancels the visit or marks LEFT goes through them.
  */
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -74,6 +74,18 @@ export async function enqueue(
     where: { appointmentId: appt.id },
     create: { appointmentId: appt.id, ...data, createdBy: actorId },
     update: data,
+  });
+}
+
+/**
+ * Puts a patient whose exam was started and then cancelled (encounter
+ * created by mistake) back in line, keeping their priority and check-in time.
+ * Only entries closed by STARTED reopen; LEFT/CANCELLED stay closed.
+ */
+export async function reopenStartedQueueEntry(db: Db, appointmentId: string, actorId: string) {
+  await db.queueEntry.updateMany({
+    where: { appointmentId, closeReason: 'STARTED' },
+    data: { status: QueueStatus.WAITING, doneAt: null, closeReason: null, updatedBy: actorId },
   });
 }
 

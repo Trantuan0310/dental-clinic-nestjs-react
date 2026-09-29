@@ -97,8 +97,11 @@ export class PatientsController {
     return { data: await this.patients.updateMedicalHistory(id, dto, actor) };
   }
 
+  // Admin-only (patient.dob.override, migration 030): the DOB drives the
+  // adult/child dental chart and dosing, so front desk (patient.update) must
+  // not rewrite it once encounters exist.
   @Patch(':id/override-dob')
-  @RequirePermissions('patient.update')
+  @RequirePermissions('patient.dob.override')
   @ApiOperation({ summary: 'Admin override DOB (BR-PT-017) when patient has encounters' })
   async overrideDob(
     @Param('id', ParseUUIDPipe) id: string,

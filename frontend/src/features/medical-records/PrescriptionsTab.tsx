@@ -1,12 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Printer } from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, Printer } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
 import { Button, Modal, Input, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
-import { getApiErrorMessage } from '@/lib/errors';
-import type { Encounter, PrescriptionItem, CreatePrescriptionPayload } from '@/types/medical-records';
+import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from '@/lib/errors';
+import type {
+  Encounter,
+  Prescription,
+  PrescriptionAllergyConflict,
+  PrescriptionItem,
+  CreatePrescriptionPayload,
+} from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
+
+const MIN_OVERRIDE_REASON = 10;
 
 interface PrescriptionsTabProps {
   encounter: Encounter;
@@ -19,6 +27,15 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
   const [instructions, setInstructions] = useState('');
   const [followUpNote, setFollowUpNote] = useState('');
   const [items, setItems] = useState<Omit<PrescriptionItem, 'id' | 'prescriptionId'>[]>([]);
+  // Set while editing: the version echoed back so the save replaces the
+  // current prescription (all lines) instead of being rejected as a duplicate.
+  const [editingVersion, setEditingVersion] = useState<number | undefined>();
+  // Drug/allergy pairs from a 409 PRESCRIPTION_ALLERGY_CONFLICT; non-null
+  // shows the red warning in place of the form.
+  const [allergyConflicts, setAllergyConflicts] = useState<PrescriptionAllergyConflict[] | null>(
+    null,
+  );
+  const [overrideReason, setOverrideReason] = useState('');
 
   const createMutation = useMutation({
     mutationFn: (payload: CreatePrescriptionPayload) =>
@@ -28,6 +45,11 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
       resetForm();
     },
     onError: (err) => {
+      if (getApiErrorCode(err) === 'PRESCRIPTION_ALLERGY_CONFLICT') {
+        const details = getApiErrorDetails<{ conflicts?: PrescriptionAllergyConflict[] }>(err);
+        setAllergyConflicts(details?.conflicts ?? []);
+        return;
+      }
       notify.error(getApiErrorMessage(err, 'Không thể lưu đơn thuốc'));
     },
   });
@@ -38,6 +60,35 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
     setInstructions('');
     setFollowUpNote('');
     setItems([]);
+    setEditingVersion(undefined);
+    setAllergyConflicts(null);
+    setOverrideReason('');
+  };
+
+  const openEdit = (prescription: Prescription) => {
+    setDiagnosis(prescription.diagnosis ?? '');
+    setInstructions(prescription.instructions ?? '');
+    setFollowUpNote(prescription.followUpNote ?? '');
+    setItems(
+      (prescription.items ?? prescription.lines ?? []).map((item) => ({
+        drugName: item.drugName || item.medicationName || '',
+        dosage: item.dosage ?? '',
+        frequency: item.frequency ?? '',
+        quantity: item.quantity,
+        unit: item.unit,
+        durationDays: item.durationDays,
+        instructions: item.instructions ?? undefined,
+      })),
+    );
+    setEditingVersion(prescription.version ?? 0);
+    setShowAddModal(true);
+  };
+
+  // Back to the form to change the drugs; the reason is dropped so a new
+  // conflict has to be confirmed again.
+  const backToForm = () => {
+    setAllergyConflicts(null);
+    setOverrideReason('');
   };
 
   const addItem = () => {
@@ -65,7 +116,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (allergyOverrideReason?: string) => {
     // Forward all four patient-facing fields. `notes` is a fallback for the
     // legacy `note` so callers that only set `note` still see it on the
     // printed sheet.
@@ -76,6 +127,8 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
       followUpNote,
       notes: followUpNote,
       items,
+      version: editingVersion,
+      allergyOverrideReason,
     });
   };
 
@@ -102,14 +155,22 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                 )}
                 <p className="text-sm text-gray-500">Kê bởi: {prescription.prescribedByUserName}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                aria-label="In đơn thuốc"
-                className="no-print rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <Printer className="h-4 w-4" />
-              </button>
+              <div className="no-print flex items-center gap-1">
+                {isEditable && (
+                  <Button variant="outline" size="sm" onClick={() => openEdit(prescription)}>
+                    <Pencil className="h-4 w-4" />
+                    Sửa đơn
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  aria-label="In đơn thuốc"
+                  className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <Printer className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             {prescription.items && prescription.items.length > 0 && (
@@ -166,11 +227,11 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
         </Button>
       )}
 
-      {/* Add Modal */}
+      {/* Add / edit modal — hidden (state kept) while the allergy warning is up */}
       <Modal
-        isOpen={showAddModal}
+        isOpen={showAddModal && allergyConflicts === null}
         onClose={resetForm}
-        title="Tạo đơn thuốc"
+        title={editingVersion !== undefined ? 'Sửa đơn thuốc' : 'Tạo đơn thuốc'}
         size="lg"
       >
         <div className="space-y-4">
@@ -269,11 +330,59 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
               Hủy
             </Button>
             <Button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit()}
               isLoading={createMutation.isPending}
               disabled={items.length === 0 || items.some((item) => !item.drugName.trim())}
             >
-              Tạo đơn thuốc
+              {editingVersion !== undefined ? 'Lưu đơn thuốc' : 'Tạo đơn thuốc'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Allergy conflict (409 PRESCRIPTION_ALLERGY_CONFLICT) */}
+      <Modal
+        isOpen={showAddModal && allergyConflicts !== null}
+        onClose={backToForm}
+        title={
+          <span className="flex items-center gap-2 text-red-700">
+            <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+            Cảnh báo dị ứng thuốc
+          </span>
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <p className="font-medium">Bệnh nhân có ghi nhận dị ứng trùng với thuốc trong đơn:</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {(allergyConflicts ?? []).map((c, i) => (
+                <li key={`${c.lineIndex}-${c.allergy}-${i}`}>
+                  <strong>{c.drugName}</strong> — dị ứng: <strong>{c.allergy}</strong>
+                  {c.drugClass ? ` (${c.drugClass})` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <Textarea
+            label="Lý do vẫn kê đơn"
+            value={overrideReason}
+            onChange={(e) => setOverrideReason(e.target.value)}
+            placeholder="VD: Đã test da âm tính, bệnh nhân đồng ý và được theo dõi"
+            rows={3}
+            hint={`Tối thiểu ${MIN_OVERRIDE_REASON} ký tự. Lý do được ghi vào nhật ký kiểm toán.`}
+          />
+          <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+            <Button variant="outline" onClick={backToForm}>
+              Quay lại sửa đơn
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => handleSubmit(overrideReason.trim())}
+              isLoading={createMutation.isPending}
+              disabled={overrideReason.trim().length < MIN_OVERRIDE_REASON}
+            >
+              Vẫn kê đơn
             </Button>
           </div>
         </div>

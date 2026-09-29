@@ -823,6 +823,53 @@ describe('Real HTTP and PostgreSQL regression', () => {
       .send({ procedure: 'Blocked treatment', unitPrice: 1000 })
       .expect(409);
   });
+  it('cancelling an encounter started by mistake returns the appointment to CHECKED_IN and allows a restart', async () => {
+    const id = await fixtureEncounter();
+    const { appointmentId: apptId } = await db.encounter.findUniqueOrThrow({ where: { id } });
+    await api('post', `/medical-records/encounters/${id}/cancel`)
+      .send({ reason: 'Nhầm' })
+      .expect(400);
+    await api('post', `/medical-records/encounters/${id}/cancel`)
+      .send({ reason: 'Bắt đầu nhầm phiên khám' })
+      .expect(200);
+    expect((await db.appointment.findUniqueOrThrow({ where: { id: apptId } })).status).toBe(
+      'CHECKED_IN',
+    );
+    const restarted = await api('post', '/medical-records/encounters/start', 'dentist')
+      .send({ appointmentId: apptId })
+      .expect(200);
+    expect(restarted.body.data.encounterId).toBe(id);
+    expect((await db.encounter.findUniqueOrThrow({ where: { id } })).status).toBe('IN_PROGRESS');
+  });
+  it('re-issues a deleted prescription and replaces lines when the version is echoed', async () => {
+    const id = await fixtureEncounter();
+    const body = (drugName: string) => ({
+      lines: [{ drugName, dosage: '500 mg', frequency: 'Twice daily', durationDays: 3 }],
+    });
+    const first = await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send(body('Paracetamol'))
+      .expect(201);
+    await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send(body('Paracetamol'))
+      .expect(409);
+    await api('delete', `/medical-records/prescriptions/${first.body.data.id}`, 'dentist').expect(
+      204,
+    );
+    let read = await api('get', `/medical-records/encounters/${id}`, 'dentist').expect(200);
+    expect(read.body.data.prescriptions).toEqual([]);
+    await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send(body('Ibuprofen'))
+      .expect(201);
+    read = await api('get', `/medical-records/encounters/${id}`, 'dentist').expect(200);
+    const [rx] = read.body.data.prescriptions;
+    await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send({ ...body('Chlorhexidine 0.12%'), version: rx.version })
+      .expect(201);
+    read = await api('get', `/medical-records/encounters/${id}`, 'dentist').expect(200);
+    expect(
+      read.body.data.prescriptions[0].items.map((l: { drugName: string }) => l.drugName),
+    ).toEqual(['Chlorhexidine 0.12%']);
+  });
   it('rejects overlapping payroll periods and reversed date ranges', async () => {
     await api('post', '/payroll/periods')
       .send({ periodStart: '2025-02-15', periodEnd: '2025-03-15', payrollCycle: 'MONTHLY' })

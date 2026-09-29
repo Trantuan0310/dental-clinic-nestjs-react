@@ -17,6 +17,8 @@ import {
   EncounterNotClosableException,
   InsufficientStockException,
   PrescriptionAlreadyExistsException,
+  PrescriptionAllergyConflictException,
+  PrescriptionVersionConflictException,
   TreatmentNotInEncounterException,
 } from './domain/exceptions';
 
@@ -170,6 +172,11 @@ describe('MedicalRecordsService', () => {
       'dentist-1',
     );
 
+    beforeEach(() => {
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.queueEntry.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    });
+
     it("404s for a dentist cancelling another dentist's encounter and changes nothing", async () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ dentistId: 'some-other-dentist' }),
@@ -203,6 +210,121 @@ describe('MedicalRecordsService', () => {
     });
   });
 
+  describe('cancelEncounter (appointment + queue)', () => {
+    const admin = userPayloadWithPermissions(['encounter.read.any', 'encounter.cancel']);
+
+    beforeEach(() => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.queueEntry.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    });
+
+    it('puts the IN_PROGRESS appointment back to CHECKED_IN and reopens its queue entry in the same transaction (regression: appointment stayed stuck IN_PROGRESS)', async () => {
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.cancelEncounter('enc-1', '  Bắt đầu nhầm phiên khám  ', admin);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.encounter.update).toHaveBeenCalledWith({
+        where: { id: 'enc-1' },
+        data: expect.objectContaining({
+          status: EncounterStatus.CANCELLED,
+          cancelledReason: 'Bắt đầu nhầm phiên khám',
+        }),
+      });
+      expect(prisma.appointment.updateMany).toHaveBeenCalledWith({
+        where: { id: 'appt-1', status: 'IN_PROGRESS' },
+        data: { status: 'CHECKED_IN', updatedBy: admin.sub },
+      });
+      expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
+        where: { appointmentId: 'appt-1', closeReason: 'STARTED' },
+        data: expect.objectContaining({ status: 'WAITING', doneAt: null, closeReason: null }),
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ENCOUNTER_CANCELLED' }),
+      );
+    });
+
+    it('leaves the queue alone when the appointment was not IN_PROGRESS', async () => {
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await service.cancelEncounter('enc-1', 'Bắt đầu nhầm phiên khám', admin);
+      expect(prisma.encounter.update).toHaveBeenCalled();
+      expect(prisma.queueEntry.updateMany).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, '', 'ngắn', '   quá ngắn   '])(
+      'rejects a missing or short reason (%p) without touching anything',
+      async reason => {
+        await expect(service.cancelEncounter('enc-1', reason as any, admin)).rejects.toThrow(
+          /ít nhất 10 ký tự/,
+        );
+        expect(prisma.encounter.update).not.toHaveBeenCalled();
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('startEncounterForAppointment after a cancel', () => {
+    it('reopens the cancelled encounter row instead of refusing (appointment_id is unique)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        patient: {},
+        dentist: {},
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        id: 'enc-1',
+        status: EncounterStatus.CANCELLED,
+        cancelledAt: new Date('2026-09-01T02:00:00Z'),
+        cancelledBy: 'admin-1',
+        cancelledReason: 'Bắt đầu nhầm phiên khám',
+      });
+
+      const result = await service.startEncounterForAppointment('appt-1', dentistActor);
+
+      expect(result.encounterId).toBe('enc-1');
+      expect(prisma.encounter.create).not.toHaveBeenCalled();
+      expect(prisma.encounter.update).toHaveBeenCalledWith({
+        where: { id: 'enc-1' },
+        data: expect.objectContaining({
+          status: EncounterStatus.IN_PROGRESS,
+          cancelledAt: null,
+          cancelledBy: null,
+          cancelledReason: null,
+        }),
+      });
+      expect(prisma.appointment.update).toHaveBeenCalledWith({
+        where: { id: 'appt-1' },
+        data: { status: 'IN_PROGRESS', updatedBy: dentistActor.sub },
+      });
+      expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: 'REOPENED', encounterId: 'enc-1' }),
+      });
+    });
+
+    it('still refuses a COMPLETED encounter', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: 'IN_PROGRESS',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        id: 'enc-1',
+        status: EncounterStatus.COMPLETED,
+      });
+      await expect(service.startEncounterForAppointment('appt-1', dentistActor)).rejects.toThrow(
+        EncounterNotClosableException,
+      );
+      expect(prisma.encounter.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('front-desk exemption (start / list)', () => {
     // A role with neither encounter.read.own nor .any (receptionist) must keep
     // starting and listing encounters for every dentist — the reason the
@@ -230,7 +352,7 @@ describe('MedicalRecordsService', () => {
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ dentistId: 'some-other-dentist' }),
       );
-      await expect(service.cancelEncounter('enc-1', 'x', writer)).rejects.toThrow(
+      await expect(service.cancelEncounter('enc-1', 'Hủy vì tạo nhầm', writer)).rejects.toThrow(
         EncounterNotFoundException,
       );
     });
@@ -518,6 +640,209 @@ describe('MedicalRecordsService', () => {
           unit: 'viên',
         }),
       });
+    });
+  });
+
+  describe('upsertPrescription (replace / restore)', () => {
+    const line = { drugName: 'Paracetamol 500mg', dosage: '1 viên', durationDays: 3 };
+
+    beforeEach(() => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({ allergies: [] });
+      (prisma.prescription.update as jest.Mock).mockResolvedValue({ id: 'rx-1', version: 3 });
+    });
+
+    it('replaces header and every line of the active prescription when the caller echoes its version', async () => {
+      (prisma.prescription.findUnique as jest.Mock).mockResolvedValue({
+        id: 'rx-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        version: 2,
+      });
+
+      await service.upsertPrescription(
+        'enc-1',
+        { version: 2, diagnosis: 'Viêm tủy', lines: [line] } as any,
+        dentistActor,
+      );
+
+      expect(prisma.prescriptionLine.updateMany).toHaveBeenCalledWith({
+        where: { prescriptionId: 'rx-1', deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.prescription.update).toHaveBeenCalledWith({
+        where: { id: 'rx-1' },
+        data: expect.objectContaining({ diagnosis: 'Viêm tủy', version: { increment: 1 } }),
+      });
+      const updateData = (prisma.prescription.update as jest.Mock).mock.calls[0][0].data;
+      expect(updateData).not.toHaveProperty('deletedAt');
+      expect(prisma.prescription.create).not.toHaveBeenCalled();
+      expect(prisma.prescriptionLine.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ prescriptionId: 'rx-1', drugName: 'Paracetamol 500mg' }),
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PRESCRIPTION_REPLACED' }),
+      );
+    });
+
+    it('409s a stale version and changes nothing', async () => {
+      (prisma.prescription.findUnique as jest.Mock).mockResolvedValue({
+        id: 'rx-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        version: 3,
+      });
+      await expect(
+        service.upsertPrescription('enc-1', { version: 2, lines: [line] } as any, dentistActor),
+      ).rejects.toThrow(PrescriptionVersionConflictException);
+      expect(prisma.prescriptionLine.updateMany).not.toHaveBeenCalled();
+      expect(prisma.prescription.update).not.toHaveBeenCalled();
+    });
+
+    it('reuses a soft-deleted prescription row instead of reporting "already exists" (regression)', async () => {
+      (prisma.prescription.findUnique as jest.Mock).mockResolvedValue({
+        id: 'rx-old',
+        encounterId: 'enc-1',
+        deletedAt: new Date('2026-09-01T00:00:00Z'),
+        version: 1,
+      });
+
+      await service.upsertPrescription('enc-1', { lines: [line] } as any, dentistActor);
+
+      expect(prisma.prescriptionLine.updateMany).toHaveBeenCalledWith({
+        where: { prescriptionId: 'rx-old', deletedAt: null },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.prescription.update).toHaveBeenCalledWith({
+        where: { id: 'rx-old' },
+        data: expect.objectContaining({ deletedAt: null, createdBy: dentistActor.sub }),
+      });
+      expect(prisma.prescription.create).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'PRESCRIPTION_CREATED',
+          metadata: expect.objectContaining({ reusedDeletedPrescription: true }),
+        }),
+      );
+    });
+  });
+
+  describe('upsertPrescription (allergy screening)', () => {
+    const amoxicillin = { drugName: 'Augmentin 625mg', dosage: '1 viên', frequency: '2 lần/ngày' };
+
+    beforeEach(() => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.prescription.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.prescription.create as jest.Mock).mockResolvedValue({ id: 'rx-1' });
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        allergies: ['Dị ứng Penicillin'],
+      });
+    });
+
+    it('409s PRESCRIPTION_ALLERGY_CONFLICT with the drug/allergy pairs and saves nothing', async () => {
+      const err = await service
+        .upsertPrescription('enc-1', { lines: [amoxicillin] } as any, dentistActor)
+        .catch(e => e);
+
+      expect(err).toBeInstanceOf(PrescriptionAllergyConflictException);
+      expect(err.getStatus()).toBe(409);
+      expect(err.getResponse()).toEqual(
+        expect.objectContaining({
+          error: 'PRESCRIPTION_ALLERGY_CONFLICT',
+          details: {
+            conflicts: [
+              expect.objectContaining({
+                lineIndex: 0,
+                drugName: 'Augmentin 625mg',
+                allergy: 'Dị ứng Penicillin',
+              }),
+            ],
+          },
+        }),
+      );
+      expect(prisma.patient.findUnique).toHaveBeenCalledWith({
+        where: { id: 'patient-1' },
+        select: { allergies: true },
+      });
+      expect(prisma.prescription.create).not.toHaveBeenCalled();
+      expect(prisma.prescriptionLine.create).not.toHaveBeenCalled();
+    });
+
+    it('still blocks when the override reason is under 10 characters', async () => {
+      await expect(
+        service.upsertPrescription(
+          'enc-1',
+          { lines: [amoxicillin], allergyOverrideReason: '  ngắn  ' } as any,
+          dentistActor,
+        ),
+      ).rejects.toThrow(/ít nhất 10 ký tự/);
+      expect(prisma.prescription.create).not.toHaveBeenCalled();
+    });
+
+    it('saves with a reason and records PRESCRIPTION_ALLERGY_OVERRIDE', async () => {
+      await service.upsertPrescription(
+        'enc-1',
+        {
+          lines: [amoxicillin],
+          allergyOverrideReason: 'Đã test da âm tính, bệnh nhân đồng ý',
+        } as any,
+        dentistActor,
+      );
+      expect(prisma.prescription.create).toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+          targetId: 'enc-1',
+          metadata: expect.objectContaining({
+            reason: 'Đã test da âm tính, bệnh nhân đồng ý',
+            conflicts: [expect.objectContaining({ drugName: 'Augmentin 625mg' })],
+          }),
+        }),
+      );
+    });
+
+    it('does not ask for a reason when nothing matches', async () => {
+      await service.upsertPrescription(
+        'enc-1',
+        { lines: [{ drugName: 'Paracetamol 500mg' }] } as any,
+        dentistActor,
+      );
+      expect(prisma.prescription.create).toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PRESCRIPTION_ALLERGY_OVERRIDE' }),
+      );
+    });
+  });
+
+  describe('getEncounter (prescription visibility)', () => {
+    const withPrescription = (deletedAt: Date | null) => ({
+      ...validEncounter({ dentistId: dentistActor.sub }),
+      patient: { id: 'patient-1', code: 'P1', fullName: 'A' },
+      dentist: { id: dentistActor.sub, fullName: 'B' },
+      treatments: [],
+      clinicalNote: null,
+      prescription: { id: 'rx-1', encounterId: 'enc-1', deletedAt, version: 4, lines: [] },
+    });
+
+    it('hides a soft-deleted prescription (regression: it was returned and printed)', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        withPrescription(new Date('2026-09-01T00:00:00Z')),
+      );
+      const result: any = await service.getEncounter('enc-1', dentistActor);
+      expect(result.prescriptions).toEqual([]);
+      expect(result.prescription).toBeNull();
+    });
+
+    it('returns the active prescription with its version and filters deleted lines in the query', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(withPrescription(null));
+      const result: any = await service.getEncounter('enc-1', dentistActor);
+      expect(result.prescriptions).toEqual([expect.objectContaining({ id: 'rx-1', version: 4 })]);
+      const include = (prisma.encounter.findUnique as jest.Mock).mock.calls[0][0].include;
+      expect(include.prescription.include.lines.where).toEqual({ deletedAt: null });
     });
   });
 

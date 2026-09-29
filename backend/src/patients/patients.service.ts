@@ -31,6 +31,7 @@ import {
   isValidEmail,
   isValidIdentifierValue,
   isValidVnPhone,
+  mergeStringLists,
   readJsonStringArray,
 } from './domain/patient-rules';
 
@@ -269,11 +270,15 @@ export class PatientsService {
   }
 
   /**
-   * Admin-only DOB override (BR-PT-017). Records audit with reason.
+   * Admin-only DOB override (BR-PT-017; permission patient.dob.override).
+   * Records audit with reason (≥ 10 chars).
    */
   async overrideDob(id: string, dto: OverrideDobDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findUnique({ where: { id } });
     if (!current) throw new PatientNotFoundException(id);
+    if ((dto.reason?.trim().length ?? 0) < 10) {
+      throw new PatientContactRequiredException('Lý do sửa ngày sinh phải có ít nhất 10 ký tự');
+    }
 
     const newDob = new Date(dto.dob);
     if (!isValidDob(newDob)) {
@@ -364,6 +369,20 @@ export class PatientsService {
   async restore(id: string, actor: JwtPayload) {
     const patient = await this.prisma.patient.findUnique({ where: { id } });
     if (!patient) throw new PatientNotFoundException(id);
+
+    // A merge source is archived via deletedAt too, but its appointments,
+    // encounters, invoices and identifiers now belong to the target —
+    // restoring it would resurrect an empty duplicate of a real patient.
+    const mergedInto = await this.prisma.patientMergeLog.findFirst({
+      where: { sourcePatientId: id },
+      orderBy: { mergedAt: 'desc' },
+      select: { target: { select: { code: true } } },
+    });
+    if (mergedInto) {
+      throw new PatientMergeInvalidException(
+        `Hồ sơ này đã được gộp vào hồ sơ ${mergedInto.target?.code ?? 'khác'} nên không thể khôi phục`,
+      );
+    }
 
     // BR-PT-016: if another active patient already uses this code, fail.
     const conflict = await this.prisma.patient.findFirst({
@@ -853,129 +872,204 @@ export class PatientsService {
   // ============================================================================
 
   async merge(dto: MergePatientsDto, actor: JwtPayload) {
-    const source = await this.prisma.patient.findUnique({
-      where: { id: dto.sourcePatientId },
-    });
-    const target = await this.prisma.patient.findUnique({
-      where: { id: dto.targetPatientId },
-    });
-    if (!source) throw new PatientNotFoundException(dto.sourcePatientId);
-    if (!target) throw new PatientNotFoundException(dto.targetPatientId);
-    if (source.deletedAt) throw new PatientMergeInvalidException('Source patient is deleted');
-    if (target.deletedAt) throw new PatientMergeInvalidException('Target patient is deleted');
-    if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
-      throw new PatientMergeInvalidException(
-        'BR-PT-019: Source and target must have the same full name (case-insensitive)',
-      );
-    }
-    if (source.dob.getTime() !== target.dob.getTime()) {
-      throw new PatientMergeInvalidException(
-        'BR-PT-019: Source and target must have the same date of birth',
-      );
+    if (dto.sourcePatientId === dto.targetPatientId) {
+      throw new PatientMergeInvalidException('Không thể gộp một hồ sơ vào chính nó');
     }
 
-    const [srcFutureAppts, srcOutstandingInvoices] = await Promise.all([
-      this.prisma.appointment.count({
-        where: {
-          patientId: source.id,
-          status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
-          startAt: { gte: new Date() },
-          deletedAt: null,
-        },
-      }),
-      this.prisma.invoice.count({
-        where: {
-          patientId: source.id,
-          status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
-          deletedAt: null,
-        },
-      }),
-    ]);
-    if (srcFutureAppts > 0) {
-      throw new PatientMergeInvalidException(
-        `Source patient has ${srcFutureAppts} future appointments`,
-      );
-    }
-    if (srcOutstandingInvoices > 0) {
-      throw new PatientMergeInvalidException(
-        `Source patient has ${srcOutstandingInvoices} outstanding invoices`,
-      );
-    }
+    // Checks and moves are one unit: both patient rows are locked (fixed
+    // order, so two opposite merges can't deadlock) and Serializable catches
+    // an appointment/invoice created for the source mid-merge — the checks
+    // used to run before the transaction (TOCTOU).
+    const result = await this.prisma.$transaction(
+      async tx => {
+        for (const id of [dto.sourcePatientId, dto.targetPatientId].sort()) {
+          await tx.$queryRaw`SELECT id FROM patients WHERE id = ${id}::uuid FOR UPDATE`;
+        }
+        const source = await tx.patient.findUnique({ where: { id: dto.sourcePatientId } });
+        const target = await tx.patient.findUnique({ where: { id: dto.targetPatientId } });
+        if (!source) throw new PatientNotFoundException(dto.sourcePatientId);
+        if (!target) throw new PatientNotFoundException(dto.targetPatientId);
+        if (source.deletedAt) throw new PatientMergeInvalidException('Source patient is deleted');
+        if (target.deletedAt) throw new PatientMergeInvalidException('Target patient is deleted');
+        // The name/DOB match rule is unchanged here (tightening it is a follow-up).
+        if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
+          throw new PatientMergeInvalidException(
+            'BR-PT-019: Source and target must have the same full name (case-insensitive)',
+          );
+        }
+        if (source.dob.getTime() !== target.dob.getTime()) {
+          throw new PatientMergeInvalidException(
+            'BR-PT-019: Source and target must have the same date of birth',
+          );
+        }
 
-    const result = await this.prisma.$transaction(async tx => {
-      const apptUpdate = await tx.appointment.updateMany({
-        where: { patientId: source.id },
-        data: { patientId: target.id },
-      });
-      const encUpdate = await tx.encounter.updateMany({
-        where: { patientId: source.id },
-        data: { patientId: target.id },
-      });
-      const invUpdate = await tx.invoice.updateMany({
-        where: { patientId: source.id },
-        data: { patientId: target.id },
-      });
-      const identUpdate = await tx.patientIdentifier.updateMany({
-        where: { patientId: source.id, deletedAt: null },
-        data: { deletedAt: new Date() },
-      });
-
-      await tx.patientMergeLog.create({
-        data: {
-          sourcePatientId: source.id,
-          targetPatientId: target.id,
-          fieldMapping: {
-            kept: {
-              fullName: target.fullName,
-              dob: target.dob,
-              gender: target.gender,
-              primaryPhone: target.primaryPhone,
+        const [srcFutureAppts, srcOutstandingInvoices] = await Promise.all([
+          tx.appointment.count({
+            where: {
+              patientId: source.id,
+              status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
+              startAt: { gte: new Date() },
+              deletedAt: null,
             },
-            discardedFromSource: {
-              primaryPhone: source.primaryPhone,
-              email: source.email,
+          }),
+          tx.invoice.count({
+            where: {
+              patientId: source.id,
+              status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
+              deletedAt: null,
             },
+          }),
+        ]);
+        if (srcFutureAppts > 0) {
+          throw new PatientMergeInvalidException(
+            `Source patient has ${srcFutureAppts} future appointments`,
+          );
+        }
+        if (srcOutstandingInvoices > 0) {
+          throw new PatientMergeInvalidException(
+            `Source patient has ${srcOutstandingInvoices} outstanding invoices`,
+          );
+        }
+
+        const apptUpdate = await tx.appointment.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        const encUpdate = await tx.encounter.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        const invUpdate = await tx.invoice.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+
+        // Identity papers follow the person: move the source's to the target,
+        // dropping only exact duplicates (same type + number) the target holds.
+        const [sourceIdents, targetIdents] = await Promise.all([
+          tx.patientIdentifier.findMany({
+            where: { patientId: source.id, deletedAt: null },
+            select: { id: true, type: true, value: true },
+          }),
+          tx.patientIdentifier.findMany({
+            where: { patientId: target.id, deletedAt: null },
+            select: { type: true, value: true },
+          }),
+        ]);
+        const identKey = (i: { type: string; value: string }) =>
+          `${i.type}:${i.value.trim().toUpperCase()}`;
+        const held = new Set(targetIdents.map(identKey));
+        const duplicateIds = sourceIdents.filter(i => held.has(identKey(i))).map(i => i.id);
+        const movedIds = sourceIdents.filter(i => !held.has(identKey(i))).map(i => i.id);
+        if (duplicateIds.length > 0) {
+          await tx.patientIdentifier.updateMany({
+            where: { id: { in: duplicateIds } },
+            data: { deletedAt: new Date() },
+          });
+        }
+        if (movedIds.length > 0) {
+          await tx.patientIdentifier.updateMany({
+            where: { id: { in: movedIds } },
+            data: { patientId: target.id },
+          });
+        }
+
+        // Safety-critical history is unioned, never dropped: an allergy known
+        // only on the duplicate record must survive the merge.
+        const medicalHistory = {
+          allergies: mergeStringLists(
+            readJsonStringArray(target.allergies),
+            readJsonStringArray(source.allergies),
+          ),
+          chronicDiseases: mergeStringLists(
+            readJsonStringArray(target.chronicDiseases),
+            readJsonStringArray(source.chronicDiseases),
+          ),
+          currentMedications: mergeStringLists(
+            readJsonStringArray(target.currentMedications),
+            readJsonStringArray(source.currentMedications),
+          ),
+        };
+        await tx.patient.update({
+          where: { id: target.id },
+          data: { ...medicalHistory, updatedBy: actor.sub },
+        });
+
+        await tx.patientMergeLog.create({
+          data: {
+            sourcePatientId: source.id,
+            targetPatientId: target.id,
+            fieldMapping: {
+              kept: {
+                fullName: target.fullName,
+                dob: target.dob,
+                gender: target.gender,
+                primaryPhone: target.primaryPhone,
+              },
+              discardedFromSource: {
+                primaryPhone: source.primaryPhone,
+                email: source.email,
+              },
+              medicalHistoryBefore: {
+                target: {
+                  allergies: target.allergies,
+                  chronicDiseases: target.chronicDiseases,
+                  currentMedications: target.currentMedications,
+                },
+                source: {
+                  allergies: source.allergies,
+                  chronicDiseases: source.chronicDiseases,
+                  currentMedications: source.currentMedications,
+                },
+              },
+              medicalHistoryAfter: medicalHistory,
+            },
+            migratedFkCount: {
+              appointments: apptUpdate.count,
+              encounters: encUpdate.count,
+              invoices: invUpdate.count,
+              identifiersMoved: movedIds.length,
+              identifiersDropped: duplicateIds.length,
+            },
+            mergedBy: actor.sub,
           },
-          migratedFkCount: {
+        });
+
+        await tx.patient.update({
+          where: { id: source.id },
+          data: {
+            deletedAt: new Date(),
+            deletedBy: actor.sub,
+            primaryPhone: null,
+            notes: `[MERGED→${target.code}] ${source.notes ?? ''}`.slice(0, 2000),
+          },
+        });
+
+        return {
+          source: { id: source.id, code: source.code },
+          target: { id: target.id, code: target.code },
+          migrated: {
             appointments: apptUpdate.count,
             encounters: encUpdate.count,
             invoices: invUpdate.count,
-            identifiers: identUpdate.count,
+            identifiersMoved: movedIds.length,
+            identifiersDropped: duplicateIds.length,
           },
-          mergedBy: actor.sub,
-        },
-      });
-
-      await tx.patient.update({
-        where: { id: source.id },
-        data: {
-          deletedAt: new Date(),
-          deletedBy: actor.sub,
-          primaryPhone: null,
-          notes: `[MERGED→${target.code}] ${source.notes ?? ''}`.slice(0, 2000),
-        },
-      });
-
-      return {
-        migrated: {
-          appointments: apptUpdate.count,
-          encounters: encUpdate.count,
-          invoices: invUpdate.count,
-          identifiersDropped: identUpdate.count,
-        },
-      };
-    });
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     await this.audit.log({
       action: 'PATIENT_MERGED',
       actorUserId: actor.sub,
       actorEmail: actor.email,
       targetType: 'patient',
-      targetId: target.id,
+      targetId: result.target.id,
       metadata: {
-        sourcePatientId: source.id,
-        sourceCode: source.code,
-        targetCode: target.code,
+        sourcePatientId: result.source.id,
+        sourceCode: result.source.code,
+        targetCode: result.target.code,
         reason: dto.reason,
         ...result.migrated,
       },
@@ -983,8 +1077,8 @@ export class PatientsService {
 
     return {
       merged: true,
-      target: { id: target.id, code: target.code },
-      sourceArchived: { id: source.id, code: source.code },
+      target: result.target,
+      sourceArchived: result.source,
       migrated: result.migrated,
     };
   }

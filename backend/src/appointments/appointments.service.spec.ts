@@ -554,6 +554,39 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.update).not.toHaveBeenCalled();
     });
 
+    it('startEncounter() restarts an encounter cancelled as started by mistake on the same row', async () => {
+      const ownAppt = {
+        ...otherDentistAppt,
+        dentistId: 'dentist-self',
+        status: AppointmentStatus.CHECKED_IN,
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        id: 'encounter-cancelled',
+        status: EncounterStatus.CANCELLED,
+      });
+      (prisma.appointment.update as jest.Mock).mockResolvedValue({
+        ...ownAppt,
+        status: AppointmentStatus.IN_PROGRESS,
+      });
+
+      const result = await service.startEncounter('appt-1', dentistActor);
+
+      expect(result.encounter.id).toBe('encounter-cancelled');
+      expect(prisma.encounter.create).not.toHaveBeenCalled();
+      expect(prisma.encounter.update).toHaveBeenCalledWith({
+        where: { id: 'encounter-cancelled' },
+        data: expect.objectContaining({
+          status: EncounterStatus.IN_PROGRESS,
+          dentistId: 'dentist-self',
+          cancelledAt: null,
+        }),
+      });
+      expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: 'REOPENED', encounterId: 'encounter-cancelled' }),
+      });
+    });
+
     it("markNoShow() 404s on another dentist's appointment (dentist gained appointment.no_show in this pass; this check ships alongside that grant so it doesn't newly expose the same ownership gap)", async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(otherDentistAppt);
 

@@ -58,6 +58,7 @@ import {
   ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
 import { closeQueueEntry, enqueue } from './domain/queue';
+import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
@@ -422,9 +423,6 @@ export class AppointmentsService {
       if (existing?.status === EncounterStatus.COMPLETED) {
         throw new InvalidAppointmentStateException('Encounter already completed');
       }
-      if (existing?.status === EncounterStatus.CANCELLED) {
-        throw new InvalidAppointmentStateException('Encounter is cancelled');
-      }
 
       await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       const updated =
@@ -434,6 +432,12 @@ export class AppointmentsService {
               data: { status: AppointmentStatus.IN_PROGRESS, updatedBy: actor.sub },
             })
           : appt;
+      // An encounter cancelled as started by mistake (MedicalRecordsService
+      // .cancelEncounter puts the appointment back to CHECKED_IN) restarts on
+      // the same row: appointment_id is unique on encounters.
+      if (existing?.status === EncounterStatus.CANCELLED) {
+        await reopenCancelledEncounter(tx, existing.id, appt.dentistId, actor.sub);
+      }
       const encounter =
         existing ??
         (await tx.encounter.create({

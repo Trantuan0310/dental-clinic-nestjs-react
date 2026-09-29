@@ -131,6 +131,16 @@ export interface Prescription {
   items?: PrescriptionLine[];
   lines?: PrescriptionLine[];
   warnings?: PrescriptionWarning[];
+  /** Optimistic-concurrency token; echo it back to replace the prescription. */
+  version?: number;
+}
+
+/** One drug/allergy pair from a 409 PRESCRIPTION_ALLERGY_CONFLICT. */
+export interface PrescriptionAllergyConflict {
+  lineIndex: number;
+  drugName: string;
+  allergy: string;
+  drugClass?: string;
 }
 
 // ----- Encounter -----
@@ -451,6 +461,10 @@ export interface CreatePrescriptionPayload {
   /** Wire alias for legacy FE code that used `notes`. */
   notes?: string;
   items: Omit<PrescriptionLine, 'id'>[];
+  /** Set when editing: replaces the current prescription (all lines). */
+  version?: number;
+  /** Required (≥ 10 chars) to prescribe despite a recorded allergy. */
+  allergyOverrideReason?: string;
 }
 
 /**
