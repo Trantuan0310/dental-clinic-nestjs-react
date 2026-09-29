@@ -260,6 +260,8 @@ export class MedicalRecordsService {
         patient: { select: { id: true, code: true, fullName: true, dob: true, deletedAt: true } },
         dentist: { select: { id: true, fullName: true } },
         appointment: { select: { startAt: true, endAt: true, status: true } },
+        // Only whether it was ever reopened after a cancel (formatEncounter).
+        audits: { where: { action: 'REOPENED' }, select: { id: true }, take: 1 },
       },
     });
     if (!e) throw new EncounterNotFoundException(id);
@@ -288,9 +290,20 @@ export class MedicalRecordsService {
     // A to-one include can't filter, so drop a soft-deleted prescription here
     // (it used to be returned and printed as if still valid).
     const prescription = e.prescription && !e.prescription.deletedAt ? e.prescription : null;
+    const { audits, ...rest } = e;
+    const treatments = e.treatments ?? [];
+    // Reopened after a cancel (reopenCancelledEncounter) with data recorded
+    // before the cancel still attached: the UI asks the dentist to review it
+    // before closing, since those treatments would be invoiced.
+    const reopenedFromCancel =
+      e.status === EncounterStatus.IN_PROGRESS &&
+      Array.isArray(audits) &&
+      audits.length > 0 &&
+      (treatments.length > 0 || !!prescription || !!e.clinicalNote);
     return {
-      ...e,
+      ...rest,
       prescription,
+      reopenedFromCancel,
       patientId: e.patient?.id ?? e.patientId,
       patientCode: e.patient?.code ?? '',
       patientName: e.patient?.fullName ?? '',
@@ -1040,7 +1053,8 @@ export class MedicalRecordsService {
           where: { id: existing.id },
           data: {
             ...header,
-            ...(!active && { deletedAt: null, createdAt: new Date(), createdBy: actor.sub }),
+            // createdAt keeps the original issue time (audit trail).
+            ...(!active && { deletedAt: null, createdBy: actor.sub }),
             version: { increment: 1 },
           },
         });

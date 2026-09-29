@@ -14,7 +14,14 @@ export async function reopenCancelledEncounter(
 ): Promise<void> {
   const before = await tx.encounter.findUnique({
     where: { id: encounterId },
-    select: { status: true, cancelledAt: true, cancelledBy: true, cancelledReason: true },
+    select: {
+      status: true,
+      dentistId: true,
+      startedAt: true,
+      cancelledAt: true,
+      cancelledBy: true,
+      cancelledReason: true,
+    },
   });
   await tx.encounter.update({
     where: { id: encounterId },
@@ -35,6 +42,8 @@ export async function reopenCancelledEncounter(
       before: before
         ? {
             status: before.status,
+            dentistId: before.dentistId,
+            startedAt: before.startedAt.toISOString(),
             cancelledAt: before.cancelledAt?.toISOString() ?? null,
             cancelledBy: before.cancelledBy,
             cancelledReason: before.cancelledReason,

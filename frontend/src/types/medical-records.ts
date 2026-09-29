@@ -172,6 +172,8 @@ export interface Encounter {
   dentalChart?: DentalChart;
   /** Server-computed chart type (BR-MR-012): CHILD for patients under 12. */
   dentalChartPatientType?: DentalChartPatientType;
+  /** Reopened after a cancel while data from before the cancel is still attached. */
+  reopenedFromCancel?: boolean;
 }
 
 export interface EncounterSummary {
