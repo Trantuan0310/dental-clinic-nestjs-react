@@ -28,6 +28,7 @@ import {
 import { AppointmentFormModal } from './AppointmentFormModal';
 import { AppointmentDetailDrawer } from './AppointmentDetailDrawer';
 import { WalkInModal } from './WalkInModal';
+import { isOverdueNotArrived, useNow } from './liveStatus';
 import type {
   Appointment,
   AppointmentSource,
@@ -217,6 +218,7 @@ export default function AppointmentsListPage() {
   });
 
   const rows = useMemo(() => data?.data ?? [], [data?.data]);
+  const now = useNow();
 
   // Status counts (across all rows returned by the query).
   const counts = useMemo(() => {
@@ -536,7 +538,10 @@ export default function AppointmentsListPage() {
                     </td>
                     <td className="text-sm text-gray-700">{r.durationMinutes} phút</td>
                     <td>
-                      <AppointmentStatusBadge status={r.status} />
+                      <AppointmentStatusBadge
+                        status={r.status}
+                        overdue={isOverdueNotArrived(r, now)}
+                      />
                     </td>
                     <td>
                       <button

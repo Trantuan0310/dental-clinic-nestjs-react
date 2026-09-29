@@ -104,7 +104,19 @@ export function StatusBadge({
 }
 
 // Convenience components for specific status types
-export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }) {
+/**
+ * `overdue`: booked (scheduled/confirmed), not checked in, well past the
+ * start — shown as a warning instead of the plain status so the front desk
+ * follows it up (the caller decides, see appointments/liveStatus.ts).
+ */
+export function AppointmentStatusBadge({
+  status,
+  overdue = false,
+}: {
+  status: AppointmentStatus;
+  overdue?: boolean;
+}) {
+  if (overdue) return <StatusBadge status={status} type="danger" label="Quá giờ – chưa đến" />;
   return <StatusBadge status={status} />;
 }
 

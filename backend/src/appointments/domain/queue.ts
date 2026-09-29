@@ -79,12 +79,15 @@ export async function enqueue(
 
 export type CloseReason = 'STARTED' | 'CANCELLED' | 'LEFT';
 
-/** Closes the open entry, if any (no-op for appointments that never queued). */
+/**
+ * Closes the open entry, if any (no-op for appointments that never queued).
+ * `actorId` is null when the system closes it (end-of-day job).
+ */
 export async function closeQueueEntry(
   db: Db,
   appointmentId: string,
   reason: CloseReason,
-  actorId: string,
+  actorId: string | null,
 ) {
   await db.queueEntry.updateMany({
     where: { appointmentId, doneAt: null },
