@@ -290,6 +290,22 @@ describe('Real HTTP and PostgreSQL regression', () => {
       await api('put', `/medical-records/encounters/${encounterId}/clinical-note`, 'other')
         .send({ diagnosis: 'Not mine' })
         .expect(404);
+      // An upcoming booking reads the history but may not edit it.
+      await api('patch', `/patients/${patientId}/medical-history`, 'other')
+        .send({ allergies: ['Latex'] })
+        .expect(403);
+      // Upcoming bookings count only within the next 7 days.
+      const far = Date.now() + 10 * 86400000;
+      await db.appointment.update({
+        where: { id: booked.id },
+        data: { startAt: new Date(far), endAt: new Date(far + 15 * 60000) },
+      });
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);
+      await db.appointment.update({
+        where: { id: booked.id },
+        data: { startAt: booked.startAt, endAt: booked.endAt },
+      });
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(200);
       // A cancelled booking grants nothing.
       await db.appointment.update({ where: { id: booked.id }, data: { status: 'CANCELLED' } });
       await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);

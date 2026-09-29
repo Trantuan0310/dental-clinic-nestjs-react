@@ -214,6 +214,7 @@ export class MedicalRecordsService {
       // editable; the cancel/reopen pair is kept in encounter_audits.
       if (existing?.status === EncounterStatus.CANCELLED) {
         await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
+        opened = true;
       }
       if (!existing) {
         const created = await tx.encounter.create({

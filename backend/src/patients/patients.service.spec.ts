@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PatientsService } from './patients.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -388,6 +389,13 @@ describe('PatientsService', () => {
       );
       expect(prisma.patientMergeLog.create).toHaveBeenCalled();
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PATIENT_MERGED' }));
+      // Both AI summaries are stale once history/encounters move.
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'p2',
+      });
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'p1',
+      });
     });
   });
 
@@ -537,19 +545,47 @@ describe('PatientsService', () => {
       });
     });
 
-    it('lets a dentist record a newly found allergy before the first encounter of a booked visit', async () => {
+    it('lets a dentist record a newly found allergy for a patient checked in with them today', async () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
-      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      // read scope, then "checked in / in the chair today"
+      (prisma.appointment.count as jest.Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(1);
       await service.updateMedicalHistory('p1', { allergies: ['Latex'] }, dentistPayload());
-      expect(prisma.appointment.count).toHaveBeenCalledWith({
+      expect(prisma.appointment.count).toHaveBeenLastCalledWith({
         where: {
           patientId: 'p1',
           dentistId: 'dentist-1',
           deletedAt: null,
-          status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] },
+          status: { in: ['CHECKED_IN', 'IN_PROGRESS'] },
+          startAt: { gte: expect.any(Date), lte: expect.any(Date) },
         },
       });
       expect(prisma.patient.update).toHaveBeenCalled();
+    });
+
+    it('only lets an upcoming booking read, not edit, the medical history (403)', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+      await expect(
+        service.updateMedicalHistory('p1', { allergies: ['Latex'] }, dentistPayload()),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
+
+    it('limits read access by upcoming booking to the next 7 days', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      await expect(
+        service.updateMedicalHistory('p1', { allergies: ['X'] }, dentistPayload()),
+      ).rejects.toBeInstanceOf(PatientNotFoundException);
+      const where = (prisma.appointment.count as jest.Mock).mock.calls[0][0].where;
+      const upcoming = where.OR.find((c: any) => c.startAt);
+      expect(upcoming.status).toEqual({ in: ['SCHEDULED', 'CONFIRMED'] });
+      const horizonDays = (upcoming.startAt.lte.getTime() - Date.now()) / 86400000;
+      expect(horizonDays).toBeGreaterThan(6.99);
+      expect(horizonDays).toBeLessThanOrEqual(7);
+      expect(where.OR).toContainEqual({
+        status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] },
+      });
     });
 
     it('hides a patient the dentist neither treated nor is booked with', async () => {

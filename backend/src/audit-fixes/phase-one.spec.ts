@@ -125,13 +125,17 @@ describe('Phase one audit regressions', () => {
     await expect(service.getPatientSummary('p', 3, false, dentist)).resolves.toMatchObject({
       patientId: 'p',
     });
-    // Only live/completed bookings count (not CANCELLED/NO_SHOW/LEFT).
+    // Only live/completed bookings count (not CANCELLED/NO_SHOW/LEFT);
+    // upcoming ones only within the next 7 days.
     expect(db.appointment.count).toHaveBeenCalledWith({
       where: {
         patientId: 'p',
         dentistId: dentist.sub,
         deletedAt: null,
-        status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] },
+        OR: [
+          { status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] } },
+          { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startAt: { lte: expect.any(Date) } },
+        ],
       },
     });
   });

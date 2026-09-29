@@ -22,6 +22,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppointmentCancelledEvent,
   APPOINTMENT_CANCELLED_EVENT,
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
 } from '../common/events/domain-events';
 import {
   AppointmentNotFoundException,
@@ -401,7 +403,8 @@ export class AppointmentsService {
 
   /** Transition the appointment and create its encounter atomically (BR-MR-001). */
   async startEncounter(appointmentId: string, actor: JwtPayload) {
-    return this.prisma.$transaction(async tx => {
+    let openedFor: string | null = null;
+    const result = await this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
       const appt = await tx.appointment.findUnique({ where: { id: appointmentId } });
       if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(appointmentId);
@@ -438,6 +441,7 @@ export class AppointmentsService {
       // the same row: appointment_id is unique on encounters.
       if (existing?.status === EncounterStatus.CANCELLED) {
         await reopenCancelledEncounter(tx, existing.id, appt.dentistId, actor.sub);
+        openedFor = appt.patientId;
       }
       const encounter =
         existing ??
@@ -450,9 +454,17 @@ export class AppointmentsService {
             startedAt: new Date(),
           },
         }));
+      if (!existing) openedFor = appt.patientId;
 
       return { ...updated, encounter: { id: encounter.id } };
     });
+    // After commit: an encounter opened (new or reopened) changes the AI
+    // summary's "open encounters" line.
+    if (openedFor) {
+      const payload: PatientClinicalDataChangedEvent = { patientId: openedFor };
+      this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
+    }
+    return result;
   }
 
   /**
