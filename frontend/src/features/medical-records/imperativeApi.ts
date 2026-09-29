@@ -64,6 +64,11 @@ function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
       description: payload.description ?? payload.notes,
     }),
     ...(payload.priceCents !== undefined && { unitPrice: payload.priceCents }),
+    // Tooth edits were silently dropped before UpdateTreatmentDto accepted them.
+    // Quantity is not sent: treatments have no quantity column (billed as 1).
+    ...(payload.toothNumber !== undefined && {
+      toothNumbers: payload.toothNumber !== '' ? [Number(payload.toothNumber)] : [],
+    }),
   };
 }
 

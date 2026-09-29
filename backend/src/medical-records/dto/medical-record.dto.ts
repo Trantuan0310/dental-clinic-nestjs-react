@@ -72,6 +72,9 @@ export class AddAddendumDto {
 // Treatment
 // ---------------------------------------------------------------------------
 
+/** treatments.unit_price is numeric(12,2). */
+export const MAX_UNIT_PRICE = 9_999_999_999.99;
+
 export class CreateTreatmentDto {
   @ApiPropertyOptional({
     description: 'Catalogue service the treatment was picked from (ADR-0009 D6)',
@@ -92,9 +95,10 @@ export class CreateTreatmentDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiProperty({ example: 12, minimum: 0 })
+  @ApiProperty({ example: 12, minimum: 0, maximum: MAX_UNIT_PRICE })
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice!: number;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 600 })
@@ -162,11 +166,23 @@ export class UpdateTreatmentDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maximum: MAX_UNIT_PRICE })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice?: number;
+
+  // Same FDI rule as create; lets "Sửa điều trị" move the treatment to another tooth.
+  @ApiPropertyOptional({ type: [Number], example: [16] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @IsIn(FDI_TOOTH_NUMBERS as number[], {
+    each: true,
+    message: 'Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa)',
+  })
+  toothNumbers?: number[];
 
   @ApiPropertyOptional()
   @IsOptional()

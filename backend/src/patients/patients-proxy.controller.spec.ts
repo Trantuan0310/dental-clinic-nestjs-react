@@ -51,6 +51,8 @@ describe('PatientsProxyController — dentist read scope', () => {
     await expect(controller.patientDentalChart('p', dentist)).resolves.toEqual({
       data: { id: 'chart' },
     });
+    // A cancelled visit's chart never counts as the latest one.
+    expect(db.encounter.findFirst.mock.calls[0][0].where.status).toEqual({ not: 'CANCELLED' });
   });
 
   it('hides the chart from an unrelated dentist', async () => {

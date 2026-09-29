@@ -211,7 +211,9 @@ export class MedicalRecordsService {
       // A cancelled encounter whose patient is back at CHECKED_IN (see
       // cancelEncounter) is restarted on the same row — appointment_id is
       // unique. Anything recorded before the cancel stays visible and
-      // editable; the cancel/reopen pair is kept in encounter_audits.
+      // editable for the same dentist (another dentist's work is retired, see
+      // reopenCancelledEncounter); the cancel/reopen pair is kept in
+      // encounter_audits.
       if (existing?.status === EncounterStatus.CANCELLED) {
         await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
         opened = true;
@@ -918,6 +920,24 @@ export class MedicalRecordsService {
         }
       }
 
+      // A usage pointing at a missing item used to surface as an FK 500.
+      const usageItemIds = [...new Set((dto.inventoryUsages ?? []).map(u => u.inventoryItemId))];
+      if (usageItemIds.length > 0) {
+        const found = await tx.inventoryItem.findMany({
+          where: { id: { in: usageItemIds }, deletedAt: null },
+          select: { id: true },
+        });
+        const missing = usageItemIds.filter(id => !found.some(f => f.id === id));
+        if (missing.length > 0) {
+          throw new BusinessRuleException(
+            'Vật tư được chọn không tồn tại hoặc đã bị xóa',
+            HttpStatus.BAD_REQUEST,
+            { inventoryItemIds: missing },
+            'INVENTORY_ITEM_NOT_FOUND',
+          );
+        }
+      }
+
       const treatment = await (async () => {
         const t = await tx.treatment.create({
           data: {
@@ -981,6 +1001,9 @@ export class MedicalRecordsService {
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
           ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
+          ...(dto.toothNumbers !== undefined && {
+            toothNumbers: dto.toothNumbers as unknown as Prisma.InputJsonValue,
+          }),
         },
       });
     });
@@ -1291,7 +1314,12 @@ export class MedicalRecordsService {
       throw new BusinessRuleException('Không tìm thấy bệnh nhân', HttpStatus.NOT_FOUND);
     }
     const lastEncounter = await this.prisma.encounter.findFirst({
-      where: { patientId, dentalChart: { isNot: null } },
+      // A cancelled visit's chart is not the patient's current state.
+      where: {
+        patientId,
+        status: { not: EncounterStatus.CANCELLED },
+        dentalChart: { isNot: null },
+      },
       orderBy: { startedAt: 'desc' },
       include: { dentalChart: true },
     });
