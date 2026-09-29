@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Gender } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +12,7 @@ import {
 } from '../common/events/domain-events';
 import {
   dentistCanReadPatient,
+  dentistMayEditMedicalHistory,
   patientIdsReadableByDentist,
   patientReadableByDentistWhere,
 } from '../common/dentist-patient-access';
@@ -460,9 +461,9 @@ export class PatientsService {
 
   /**
    * Allergies, chronic diseases and current medications. A dentist (row-scoped)
-   * may change them only for a patient they have treated or are booked with
-   * (dentistCanReadPatient), so a newly found allergy is recorded during the
-   * visit; other fields stay front-desk work.
+   * may change them only for a patient they have treated or have checked in /
+   * in the chair today (dentistMayEditMedicalHistory), so a newly found
+   * allergy is recorded during the visit; other fields stay front-desk work.
    */
   async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findFirst({
@@ -473,6 +474,11 @@ export class PatientsService {
     if (this.isRowScopedDentist(actor)) {
       if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
         throw new PatientNotFoundException(id);
+      }
+      if (!(await dentistMayEditMedicalHistory(this.prisma, id, actor.sub))) {
+        throw new ForbiddenException(
+          'Bác sĩ chỉ sửa dị ứng/tiền sử khi đã khám bệnh nhân hoặc bệnh nhân đã check-in hôm nay',
+        );
       }
     }
     const clean = (list?: string[]) =>
@@ -1074,6 +1080,9 @@ export class PatientsService {
         ...result.migrated,
       },
     });
+    // Allergies/history and encounters moved: drop both cached AI summaries.
+    this.emitClinicalDataChanged(result.target.id);
+    this.emitClinicalDataChanged(result.source.id);
 
     return {
       merged: true,

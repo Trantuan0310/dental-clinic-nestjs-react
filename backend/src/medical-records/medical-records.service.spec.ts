@@ -484,6 +484,10 @@ describe('MedicalRecordsService', () => {
       expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ action: 'REOPENED', encounterId: 'enc-1' }),
       });
+      // The AI summary's open-encounter count changed.
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'patient-1',
+      });
     });
 
     it('keeps the dentist and start time from before the cancel in the REOPENED audit', async () => {

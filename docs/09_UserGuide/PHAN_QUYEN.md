@@ -5,8 +5,8 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Việc | Quản trị viên | Bác sĩ | Lễ tân |
 |---|:---:|:---:|:---:|
 | **Bệnh nhân**: tạo, sửa thông tin, giấy tờ | ✔ | — | ✔ |
-| Xem hồ sơ bệnh nhân | ✔ tất cả | ✔ bệnh nhân mình đã khám hoặc đang có lịch hẹn (chưa hủy/vắng) với mình — xem (chỉ đọc) toàn bộ bệnh án, sơ đồ răng, các phiên khám của mọi bác sĩ | ✔ tất cả |
-| Sửa dị ứng, bệnh nền, thuốc đang dùng | ✔ | ✔ bệnh nhân mình đã khám hoặc đang có lịch hẹn với mình | ✔ |
+| Xem hồ sơ bệnh nhân | ✔ tất cả | ✔ bệnh nhân mình đã khám, hoặc có lịch với mình đã check-in/đang khám/đã xong, hoặc lịch sắp tới trong 7 ngày (không tính lịch hủy/vắng) — xem (chỉ đọc) toàn bộ bệnh án, sơ đồ răng, các phiên khám của mọi bác sĩ | ✔ tất cả |
+| Sửa dị ứng, bệnh nền, thuốc đang dùng | ✔ | ✔ bệnh nhân mình đã khám, hoặc đã check-in/đang khám với mình hôm nay (lịch sắp tới chỉ được xem) | ✔ |
 | Gộp, xóa, khôi phục hồ sơ | ✔ | — | — |
 | Sửa ngày sinh khi bệnh nhân đã có phiên khám (bắt buộc lý do) | ✔ | — | — |
 | **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Đặt lịch tái khám vào lịch của mình, cho bệnh nhân mình đã khám | ✔ |

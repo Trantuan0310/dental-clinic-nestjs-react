@@ -282,7 +282,10 @@ describe('AiService', () => {
       );
       expect(prisma.appointment.count).toHaveBeenCalledWith({
         where: expect.objectContaining({
-          status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] },
+          deletedAt: null,
+          OR: expect.arrayContaining([
+            { status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] } },
+          ]),
         }),
       });
     });

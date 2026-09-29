@@ -517,6 +517,7 @@ describe('AppointmentsService', () => {
     it("startEncounter() still works for a dentist's own checked-in appointment", async () => {
       const ownAppt = {
         ...otherDentistAppt,
+        patientId: 'patient-9',
         dentistId: 'dentist-self',
         status: AppointmentStatus.CHECKED_IN,
       };
@@ -557,6 +558,7 @@ describe('AppointmentsService', () => {
     it('startEncounter() restarts an encounter cancelled as started by mistake on the same row', async () => {
       const ownAppt = {
         ...otherDentistAppt,
+        patientId: 'patient-9',
         dentistId: 'dentist-self',
         status: AppointmentStatus.CHECKED_IN,
       };
@@ -587,6 +589,42 @@ describe('AppointmentsService', () => {
       expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ action: 'REOPENED', encounterId: 'encounter-cancelled' }),
       });
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: ownAppt.patientId,
+      });
+    });
+
+    it('startEncounter() announces a newly opened encounter after commit, not an idempotent re-entry', async () => {
+      const ownAppt = {
+        ...otherDentistAppt,
+        patientId: 'patient-9',
+        dentistId: 'dentist-self',
+        status: AppointmentStatus.CHECKED_IN,
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(ownAppt);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValueOnce(null);
+      (prisma.encounter.create as jest.Mock).mockResolvedValue({ id: 'enc-new' });
+      (prisma.appointment.update as jest.Mock).mockResolvedValue(ownAppt);
+
+      await service.startEncounter('appt-1', dentistActor);
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: ownAppt.patientId,
+      });
+
+      events.emit.mockClear();
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        ...ownAppt,
+        status: AppointmentStatus.IN_PROGRESS,
+      });
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValueOnce({
+        id: 'enc-new',
+        status: EncounterStatus.IN_PROGRESS,
+      });
+      await service.startEncounter('appt-1', dentistActor);
+      expect(events.emit).not.toHaveBeenCalledWith(
+        'patient.clinical_data.changed',
+        expect.anything(),
+      );
     });
 
     it("markNoShow() 404s on another dentist's appointment (dentist gained appointment.no_show in this pass; this check ships alongside that grant so it doesn't newly expose the same ownership gap)", async () => {

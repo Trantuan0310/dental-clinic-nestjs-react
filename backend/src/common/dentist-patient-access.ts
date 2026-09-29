@@ -1,15 +1,23 @@
 import { AppointmentStatus, Prisma } from '@prisma/client';
+import { clinicDateOnly, endOfClinicDay, startOfClinicDay } from './date-range.util';
 
 /**
  * Row-level access of a (row-scoped) dentist to a patient's clinical record.
  * Single source of truth for Patients, Medical Records, Appointments and AI.
  *
  *   - READ (whole record, every dentist's encounters, read-only): the dentist
- *     has treated the patient (a non-CANCELLED encounter) OR has a live /
- *     completed appointment with them — so a first-visit patient on today's
- *     list can be reviewed before the encounter starts.
+ *     has treated the patient (a non-CANCELLED encounter) OR has an
+ *     appointment with them that is CHECKED_IN / IN_PROGRESS / COMPLETED, or
+ *     SCHEDULED / CONFIRMED starting within the next 7 days — so a
+ *     first-visit patient can be reviewed before the encounter starts.
+ *   - Medical history (allergies…) WRITE: treated, or checked in / being
+ *     seen by this dentist today (clinic time) — see dentistMayEditMedicalHistory.
  *   - "Treated" alone gates follow-up booking.
- *   - WRITE stays on the dentist's own encounters (enforced by each writer).
+ *   - Clinical WRITE stays on the dentist's own encounters (each writer).
+ *
+ * Note: reopenCancelledEncounter (medical-records/domain/reopen-encounter.ts)
+ * reassigns the reopened encounter's dentistId to the appointment's current
+ * dentist, so "treated" follows that reassignment.
  */
 
 type Db = Pick<Prisma.TransactionClient, 'encounter' | 'appointment'>;
@@ -23,20 +31,39 @@ export const READ_GRANTING_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'COMPLETED',
 ];
 
+/** Upcoming bookings grant read access only this close to the visit. */
+export const UPCOMING_READ_WINDOW_DAYS = 7;
+const UPCOMING_STATUSES: AppointmentStatus[] = ['SCHEDULED', 'CONFIRMED'];
+const PRESENT_OR_PAST_STATUSES: AppointmentStatus[] = ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'];
+
 export function treatedByDentistWhere(dentistId: string): Prisma.EncounterWhereInput {
   return { dentistId, status: { not: 'CANCELLED' } };
 }
 
-export function bookedWithDentistWhere(dentistId: string): Prisma.AppointmentWhereInput {
-  return { dentistId, deletedAt: null, status: { in: READ_GRANTING_APPOINTMENT_STATUSES } };
+export function bookedWithDentistWhere(
+  dentistId: string,
+  now: Date = new Date(),
+): Prisma.AppointmentWhereInput {
+  const horizon = new Date(now.getTime() + UPCOMING_READ_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  return {
+    dentistId,
+    deletedAt: null,
+    OR: [
+      { status: { in: PRESENT_OR_PAST_STATUSES } },
+      { status: { in: UPCOMING_STATUSES }, startAt: { lte: horizon } },
+    ],
+  };
 }
 
 /** Patient filter equivalent to {@link dentistCanReadPatient}, for list queries. */
-export function patientReadableByDentistWhere(dentistId: string): Prisma.PatientWhereInput {
+export function patientReadableByDentistWhere(
+  dentistId: string,
+  now: Date = new Date(),
+): Prisma.PatientWhereInput {
   return {
     OR: [
       { encounters: { some: treatedByDentistWhere(dentistId) } },
-      { appointments: { some: bookedWithDentistWhere(dentistId) } },
+      { appointments: { some: bookedWithDentistWhere(dentistId, now) } },
     ],
   };
 }
@@ -56,10 +83,36 @@ export async function dentistCanReadPatient(
   db: Db,
   patientId: string,
   dentistId: string,
+  now: Date = new Date(),
 ): Promise<boolean> {
   if (await dentistHasTreatedPatient(db, patientId, dentistId)) return true;
   const n = await db.appointment.count({
-    where: { patientId, ...bookedWithDentistWhere(dentistId) },
+    where: { patientId, ...bookedWithDentistWhere(dentistId, now) },
+  });
+  return n > 0;
+}
+
+/**
+ * Allergies / chronic diseases / current medications may be edited by a
+ * dentist who has treated the patient, or who has them checked in / in the
+ * chair today (clinic day). An upcoming booking only grants read access.
+ */
+export async function dentistMayEditMedicalHistory(
+  db: Db,
+  patientId: string,
+  dentistId: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  if (await dentistHasTreatedPatient(db, patientId, dentistId)) return true;
+  const today = clinicDateOnly(now);
+  const n = await db.appointment.count({
+    where: {
+      patientId,
+      dentistId,
+      deletedAt: null,
+      status: { in: ['CHECKED_IN', 'IN_PROGRESS'] },
+      startAt: { gte: startOfClinicDay(today), lte: endOfClinicDay(today) },
+    },
   });
   return n > 0;
 }
