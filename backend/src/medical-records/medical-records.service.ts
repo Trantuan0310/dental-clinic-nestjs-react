@@ -627,18 +627,23 @@ export class MedicalRecordsService {
         });
 
         if (allergyOverride) {
-          await this.audit.log({
-            action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
-            actorUserId: actor.sub,
-            actorEmail: actor.email,
-            targetType: 'encounter',
-            targetId: encounterId,
-            metadata: {
-              prescriptionId: allergyOverride.prescriptionId,
-              patientId: encounter.patientId,
-              reason: allergyOverride.reason,
-              conflicts: allergyOverride.conflicts,
-              atClose: true,
+          // In the transaction: a close that fails later must not leave an
+          // override on record (it would pass the next close silently).
+          await tx.auditLog.create({
+            data: {
+              action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+              actorUserId: actor.sub,
+              actorEmailAtTime: actor.email ?? null,
+              targetType: 'encounter',
+              targetId: encounterId,
+              metadata: {
+                prescriptionId: allergyOverride.prescriptionId,
+                prescriptionVersion: allergyOverride.prescriptionVersion,
+                patientId: encounter.patientId,
+                reason: allergyOverride.reason,
+                conflicts: allergyOverride.conflicts,
+                atClose: true,
+              } as unknown as Prisma.InputJsonValue,
             },
           });
         }
@@ -1131,6 +1136,9 @@ export class MedicalRecordsService {
           targetId: encounterId,
           metadata: {
             prescriptionId: prescription.id,
+            // The override covers these lines only: close accepts it for
+            // this exact version (a re-issued/reused row gets a new one).
+            prescriptionVersion: prescription.version,
             patientId: encounter.patientId,
             reason: overrideReason,
             conflicts,
@@ -1145,7 +1153,9 @@ export class MedicalRecordsService {
   /**
    * Re-screens the encounter's active prescription against the patient's
    * allergies as they are now. Pairs already overridden with a reason for
-   * this prescription (PRESCRIPTION_ALLERGY_OVERRIDE audit) pass; any other
+   * this prescription at its current version (PRESCRIPTION_ALLERGY_OVERRIDE
+   * audit; a soft-deleted row re-issued keeps its id but not its version, and
+   * a header PATCH also asks again) pass; any other
    * pair needs `reason` (≥ 10 chars) or the close is refused with 409.
    * Returns what to audit when the close overrides new pairs.
    */
@@ -1154,7 +1164,12 @@ export class MedicalRecordsService {
     encounterId: string,
     patientId: string,
     reasonInput: string | undefined,
-  ): Promise<{ prescriptionId: string; reason: string; conflicts: AllergyConflict[] } | null> {
+  ): Promise<{
+    prescriptionId: string;
+    prescriptionVersion: number;
+    reason: string;
+    conflicts: AllergyConflict[];
+  } | null> {
     const prescription = await tx.prescription.findUnique({
       where: { encounterId },
       include: { lines: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } } },
@@ -1182,8 +1197,18 @@ export class MedicalRecordsService {
       `${normalizeTerm(drugName)}|${normalizeTerm(allergy)}`;
     const overridden = new Set<string>();
     for (const row of overrides) {
-      const meta = row.metadata as { prescriptionId?: unknown; conflicts?: unknown } | null;
-      if (meta?.prescriptionId !== prescription.id || !Array.isArray(meta.conflicts)) continue;
+      const meta = row.metadata as {
+        prescriptionId?: unknown;
+        prescriptionVersion?: unknown;
+        conflicts?: unknown;
+      } | null;
+      if (
+        meta?.prescriptionId !== prescription.id ||
+        meta.prescriptionVersion !== prescription.version ||
+        !Array.isArray(meta.conflicts)
+      ) {
+        continue;
+      }
       for (const c of meta.conflicts as Array<Partial<AllergyConflict>>) {
         if (typeof c?.drugName === 'string' && typeof c?.allergy === 'string') {
           overridden.add(pairKey(c.drugName, c.allergy));
@@ -1197,7 +1222,12 @@ export class MedicalRecordsService {
     if (reason.length < 10) {
       throw new PrescriptionAllergyConflictException(unresolved, reason.length > 0);
     }
-    return { prescriptionId: prescription.id, reason, conflicts: unresolved };
+    return {
+      prescriptionId: prescription.id,
+      prescriptionVersion: prescription.version,
+      reason,
+      conflicts: unresolved,
+    };
   }
 
   /**

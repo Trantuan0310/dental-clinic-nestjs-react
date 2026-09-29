@@ -714,6 +714,22 @@ describe('PatientsService', () => {
       encounters: [],
     });
 
+    // PatientForm / PatientHistoryCard echo it as expectedUpdatedAt.
+    it.each([
+      ['receptionist', receptionistPayload()],
+      ['dentist', dentistPayload()],
+      ['admin', adminPayload()],
+    ])('returns updatedAt to the %s', async (_role, who) => {
+      const updatedAt = new Date('2026-09-01T02:03:04.567Z');
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({ ...patientRow(), updatedAt });
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(2); // dentist has treated them
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getDetailWithSummary('p1', who);
+
+      expect(result.updatedAt).toEqual(updatedAt);
+    });
+
     it('masks all financial fields for receptionist (spec §8.5) even though she holds invoice.read.any', async () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
       (prisma.encounter.count as jest.Mock).mockResolvedValue(3);

@@ -87,7 +87,15 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
       setEditing(false);
       return;
     }
-    if (baseline.updatedAt) body.expectedUpdatedAt = baseline.updatedAt;
+    // Never save without the version the card loaded (it guards against
+    // overwriting an allergy recorded elsewhere meanwhile).
+    if (!baseline.updatedAt) {
+      notify.error('Không xác định được phiên bản hồ sơ, tải lại rồi thử lại');
+      qc.invalidateQueries({ queryKey: ['patients', 'medical-history', patientId] });
+      setEditing(false);
+      return;
+    }
+    body.expectedUpdatedAt = baseline.updatedAt;
     save.mutate(body);
   };
 

@@ -218,11 +218,49 @@ function isPureNegation(clause: string): boolean {
  * ứng Penicillin", "Không rõ, nghi dị ứng Amoxicillin"), so each is screened
  * on its own — a leading negation must not hide the allergen after it.
  */
+/**
+ * Words that name no substance. A clause made only of these ("thuốc",
+ * "thức ăn" left over from "Không dị ứng thức ăn, thuốc") must not match a
+ * drug whose name merely contains "thuốc".
+ */
+const GENERIC_WORDS = new Set([
+  'thuoc',
+  'tay',
+  'thuc',
+  'an',
+  'pham',
+  'di',
+  'ung',
+  'cac',
+  'loai',
+  'va',
+  'hay',
+  'hoac',
+  'voi',
+  'gi',
+  'nao',
+  'khac',
+  'co',
+  'khong',
+  'chua',
+  'ro',
+  'drug',
+  'drugs',
+  'food',
+  'medicine',
+  'allergy',
+  'allergies',
+]);
+
+function isGenericOnly(clause: string): boolean {
+  return clause.split(' ').every(w => GENERIC_WORDS.has(w));
+}
+
 function allergyClauses(raw: string): string[] {
   return raw
     .split(/[;,.\n/+]+|\s(?:nhưng|nhung|tuy nhiên|tuy nhien|ngoài ra|ngoai ra|but|however)\s/i)
     .map(part => normalizeTerm(part))
-    .filter(norm => norm.length >= 3 && !isPureNegation(norm));
+    .filter(norm => norm.length >= 3 && !isPureNegation(norm) && !isGenericOnly(norm));
 }
 
 /** Drug-name words that describe the form, not the substance. */
