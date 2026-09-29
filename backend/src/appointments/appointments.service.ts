@@ -241,7 +241,7 @@ export class AppointmentsService {
         });
         if (attached.count !== 1) {
           throw new InvalidAppointmentStateException(
-            'The booking request was handled by someone else — reload and try again',
+            'Yêu cầu đặt lịch vừa được xử lý hoặc đã quá hạn — tải lại rồi thử lại',
           );
         }
       }
@@ -684,15 +684,16 @@ export class AppointmentsService {
               select: { id: true },
             })
           ).map(a => a.id);
-    for (const id of marked) {
-      await this.audit.log({
+    // One batched write for the history entries (same columns as AuditService.log).
+    await this.prisma.auditLog.createMany({
+      data: marked.map(id => ({
         action: 'APPOINTMENT_AUTO_NO_SHOW',
         actorUserId: null,
         targetType: 'appointment',
         targetId: id,
-        metadata: { cutoff },
-      });
-    }
+        metadata: { cutoff: cutoff.toISOString() },
+      })),
+    });
 
     return { updated: updated.count };
   }
@@ -712,36 +713,53 @@ export class AppointmentsService {
       select: { id: true },
     });
     let closed = 0;
+    let failed = 0;
     for (const { id } of stale) {
-      const done = await this.prisma.$transaction(async tx => {
-        const res = await tx.appointment.updateMany({
-          where: { id, status: AppointmentStatus.CHECKED_IN, startAt: { lt: dayStart } },
-          data: {
-            status: AppointmentStatus.LEFT,
-            leftAt: new Date(),
-            leftReason: END_OF_DAY_LEFT_REASON,
-            updatedBy: null,
-          },
+      try {
+        const done = await this.prisma.$transaction(async tx => {
+          const res = await tx.appointment.updateMany({
+            where: { id, status: AppointmentStatus.CHECKED_IN, startAt: { lt: dayStart } },
+            data: {
+              status: AppointmentStatus.LEFT,
+              leftAt: new Date(),
+              leftReason: END_OF_DAY_LEFT_REASON,
+              updatedBy: null,
+            },
+          });
+          if (res.count === 0) return false;
+          await closeQueueEntry(tx, id, 'LEFT', null);
+          return true;
         });
-        if (res.count === 0) return false;
-        await closeQueueEntry(tx, id, 'LEFT', null);
-        return true;
-      });
-      if (!done) continue;
-      closed++;
-      await this.audit.log({
-        action: 'APPOINTMENT_LEFT',
-        actorUserId: null,
-        targetType: 'appointment',
-        targetId: id,
-        metadata: { reason: END_OF_DAY_LEFT_REASON, auto: true },
-      });
+        if (!done) continue;
+        closed++;
+        await this.audit.log({
+          action: 'APPOINTMENT_LEFT',
+          actorUserId: null,
+          targetType: 'appointment',
+          targetId: id,
+          metadata: { reason: END_OF_DAY_LEFT_REASON, auto: true },
+        });
+      } catch (err: unknown) {
+        // One bad row must not stop the others; it is retried next night.
+        failed++;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`closeStaleCheckIns: appointment ${id} not closed: ${msg}`);
+      }
     }
 
-    // Entries of earlier days still open (their visit already moved on, or
-    // was closed above): nobody can be waiting or called for a past day.
+    // Entries of earlier days still open whose visit has moved on (or was
+    // closed above): nobody can be waiting or called for a past day. An
+    // entry whose visit is still CHECKED_IN (its close failed above) stays
+    // open with it, so the two never disagree.
     const entries = await this.prisma.queueEntry.updateMany({
-      where: { doneAt: null, queueDate: { lt: new Date(today) } },
+      where: {
+        doneAt: null,
+        queueDate: { lt: new Date(today) },
+        OR: [
+          { appointment: { status: { not: AppointmentStatus.CHECKED_IN } } },
+          { appointment: { deletedAt: { not: null } } },
+        ],
+      },
       data: {
         doneAt: new Date(),
         closeReason: 'LEFT',
@@ -749,7 +767,12 @@ export class AppointmentsService {
         updatedBy: null,
       },
     });
-    return { appointments: closed, queueEntries: entries.count };
+    if (closed || failed || entries.count) {
+      this.logger.log(
+        `closeStaleCheckIns: ${closed} check-ins closed, ${failed} failed, ${entries.count} other queue entries closed`,
+      );
+    }
+    return { appointments: closed, failed, queueEntries: entries.count };
   }
 
   async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload) {
