@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { clinicIso } from '@/lib/clinicTime';
+import { liveAppointmentQuery } from './liveStatus';
 import type {
   Appointment,
   AppointmentFilters,
@@ -279,6 +280,7 @@ export function useAppointments(filters?: AppointmentFilters) {
         total: data.length,
       };
     },
+    ...liveAppointmentQuery({ from: filters?.from, to: filters?.to }),
   });
 }
 
@@ -290,6 +292,8 @@ export function useAppointment(id: string | undefined) {
       const row = await get<PrismaAppointmentRow>(`/appointments/${id}`);
       return transformAppointment(row);
     },
+    // The open drawer follows changes made at another desk.
+    ...liveAppointmentQuery(),
   });
 }
 
@@ -308,6 +312,7 @@ export function useTodayAppointments() {
       };
     },
     staleTime: 60_000,
+    ...liveAppointmentQuery(),
   });
 }
 
@@ -373,6 +378,7 @@ export function useCalendar(params: CalendarFetchParams) {
       return transformAppointmentList(data);
     },
     staleTime: 30_000,
+    ...liveAppointmentQuery({ from: params.from, to: params.to }),
   });
 }
 

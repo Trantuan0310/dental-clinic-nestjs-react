@@ -78,6 +78,7 @@ export function useQueue(params: { dentistId?: string; date?: string } = {}) {
       return unwrap(data);
     },
     refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
   });
 }
 
