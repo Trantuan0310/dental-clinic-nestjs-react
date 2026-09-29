@@ -5,6 +5,7 @@ import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
 import { saveBooking } from "./savedBookings";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
+import { clinic } from "@/config/clinic";
 
 type Dentist = { id: string; fullName: string; specialties: string[] };
 type Service = {
@@ -46,6 +47,8 @@ export default function PublicBookingPage() {
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState(today());
   const [slots, setSlots] = useState<string[]>([]);
+  // Minimum notice for online requests; the slots API reports the setting.
+  const [minLead, setMinLead] = useState(120);
   const [time, setTime] = useState("");
   const [loading, setLoading] = useState(true);
   const [slotLoading, setSlotLoading] = useState(false);
@@ -86,10 +89,15 @@ export default function PublicBookingPage() {
     if (!serviceId || !dentistId || !date) return;
     setSlotLoading(true);
     api
-      .get<{ data: { availableSlots: string[] } }>("/public/booking/slots", {
-        params: { serviceId, dentistId, date },
+      .get<{ data: { availableSlots: string[]; minLeadMinutes?: number } }>(
+        "/public/booking/slots",
+        { params: { serviceId, dentistId, date } },
+      )
+      .then((r) => {
+        setSlots(r.data.data.availableSlots);
+        if (typeof r.data.data.minLeadMinutes === "number")
+          setMinLead(r.data.data.minLeadMinutes);
       })
-      .then((r) => setSlots(r.data.data.availableSlots))
       .catch(() =>
         setError(
           "Không tải được giờ trống. Chọn ngày khác hoặc liên hệ lễ tân.",
@@ -244,6 +252,27 @@ export default function PublicBookingPage() {
                         </option>
                       ))}
                     </select>
+                    {minLead > 0 && (
+                      <span className="mt-1 block text-xs font-normal text-gray-500">
+                        Đặt trực tuyến trước ít nhất{" "}
+                        {minLead % 60 === 0
+                          ? minLead / 60 + " giờ"
+                          : minLead + " phút"}
+                        ; cần sớm hơn vui lòng gọi phòng khám
+                        {clinic.phone ? (
+                          <>
+                            {" "}
+                            <a
+                              href={`tel:${clinic.phoneHref}`}
+                              className="font-medium text-brand-600 hover:underline"
+                            >
+                              {clinic.phone}
+                            </a>
+                          </>
+                        ) : null}
+                        .
+                      </span>
+                    )}
                   </label>
                 </div>
               </div>

@@ -29,7 +29,10 @@ describe('BookingService public request security and validation', () => {
         findUniqueOrThrow: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      auditLog: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
+    prisma.$transaction = jest.fn((fn: (tx: any) => unknown) => fn(prisma));
     appointments = {
       getAvailability: jest.fn(),
       planVisit: jest.fn().mockResolvedValue(plan),
@@ -448,20 +451,55 @@ describe('BookingService public request security and validation', () => {
           requestedStartAt: { lte: NOW },
         },
       ]);
-      expect(audit.log).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(prisma.auditLog.createMany).toHaveBeenCalledTimes(1);
+      expect(prisma.auditLog.createMany.mock.calls[0][0].data).toEqual(
+        ['r1', 'r2'].map((id, i) => ({
           action: 'BOOKING_REQUEST_EXPIRED',
           actorUserId: null,
-          metadata: { count: 2, referenceCodes: ['GS-1', 'GS-2'] },
-        }),
+          targetType: 'booking_request',
+          targetId: id,
+          metadata: { referenceCode: 'GS-' + (i + 1), expiredAt: NOW.toISOString() },
+        })),
       );
+    });
+
+    it('audits only the requests actually expired when one was handled in between', async () => {
+      prisma.bookingRequest.findMany
+        .mockResolvedValueOnce([
+          { id: 'r1', referenceCode: 'GS-1' },
+          { id: 'r2', referenceCode: 'GS-2' },
+        ])
+        .mockResolvedValueOnce([{ id: 'r2', referenceCode: 'GS-2' }]);
+      prisma.bookingRequest.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(service.expireOverdue()).resolves.toEqual({ expired: 1 });
+      const rows = prisma.auditLog.createMany.mock.calls[0][0].data;
+      expect(rows.map((r: any) => r.targetId)).toEqual(['r2']);
+    });
+
+    it('tells the public page a request is overdue, by the server clock', async () => {
+      prisma.bookingRequest.findUnique.mockResolvedValue(request());
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({
+        ...request({ status: 'PROPOSED', proposedStartAt: minutes(-1) }),
+        createdAt: NOW,
+        appointment: null,
+      });
+      const overdue = await service.publicStatus('GS-1A2B3C4D5E', { phone: '0901234567' });
+      expect(overdue.overdue).toBe(true);
+
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({
+        ...request({ status: 'PROPOSED', proposedStartAt: minutes(30) }),
+        createdAt: NOW,
+        appointment: null,
+      });
+      const upcoming = await service.publicStatus('GS-1A2B3C4D5E', { phone: '0901234567' });
+      expect(upcoming.overdue).toBe(false);
     });
 
     it('does nothing (and logs nothing) when no request is overdue', async () => {
       await expect(service.expireOverdue()).resolves.toEqual({ expired: 0 });
       expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
-      expect(audit.log).not.toHaveBeenCalled();
+      expect(prisma.auditLog.createMany).not.toHaveBeenCalled();
     });
 
     it('refuses to confirm a request whose time has passed, before touching patient records', async () => {
@@ -629,6 +667,7 @@ describe('BookingService public request security and validation', () => {
           date: '2026-10-01',
         });
         expect(result.availableSlots).toEqual(['10:30', '14:00']);
+        expect(result.minLeadMinutes).toBe(120);
       });
 
       it('follows BOOKING_MIN_LEAD_MIN', async () => {
@@ -662,6 +701,29 @@ describe('BookingService public request security and validation', () => {
           select: { id: true },
         });
         expect(prisma.bookingRequest.create).not.toHaveBeenCalled();
+      });
+
+      it('checks for a duplicate and inserts under a per-phone lock in one transaction', async () => {
+        const order: string[] = [];
+        prisma.$executeRaw.mockImplementation((strings: TemplateStringsArray, ...values: any[]) => {
+          order.push('lock:' + strings.join('?') + ':' + values.join(','));
+          return Promise.resolve(1);
+        });
+        prisma.bookingRequest.findFirst.mockImplementation(() => {
+          order.push('findFirst');
+          return Promise.resolve(null);
+        });
+        prisma.bookingRequest.create.mockImplementation(() => {
+          order.push('create');
+          return Promise.resolve({ id: 'r1', referenceCode: 'GS-1', fullName: 'An', email: null });
+        });
+        await submit(new Date('2026-10-01T07:00:00Z'));
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(order).toEqual([
+          'lock:SELECT pg_advisory_xact_lock(?::int4, hashtext(?)):3,0901234567',
+          'findFirst',
+          'create',
+        ]);
       });
     });
   });

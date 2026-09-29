@@ -50,6 +50,9 @@ const STAFF_ACTION_STATUSES: BookingRequestStatus[] = ['PENDING_REVIEW', 'PATIEN
 const PROPOSAL_STATUSES: BookingRequestStatus[] = ['PROPOSED', 'PATIENT_ACCEPTED'];
 const LOOKUP_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_LEAD_MIN = 120;
+// Advisory-lock namespace for online submissions per phone (1 and 2 are the
+// dentist and patient calendars, appointments/domain/advisory-lock.ts).
+const LOCK_NS_BOOKING_PHONE = 3;
 export const EXPIRED_MESSAGE =
   'Đã quá giờ hẹn mà chưa được xác nhận. Vui lòng đặt lịch mới hoặc gọi phòng khám.';
 const OVERDUE_STAFF_MESSAGE = 'Giờ hẹn đã qua, hãy đề xuất giờ khác hoặc từ chối yêu cầu';
@@ -153,10 +156,12 @@ export class BookingService {
       bufferBeforeMin: plan.bufferBeforeMin,
       bufferAfterMin: plan.bufferAfterMin,
     });
-    const earliest = Date.now() + Math.max(bookingMinLeadMinutes() * 60_000, 60_000);
+    const minLeadMinutes = bookingMinLeadMinutes();
+    const earliest = Date.now() + Math.max(minLeadMinutes * 60_000, 60_000);
     return {
       ...data,
       serviceId: q.serviceId,
+      minLeadMinutes,
       availableSlots: data.availableSlots.filter(
         time => new Date(q.date + 'T' + time + ':00+07:00').getTime() > earliest,
       ),
@@ -177,38 +182,43 @@ export class BookingService {
           '. Nếu cần khám sớm hơn, hãy gọi phòng khám.',
       );
     }
-    // A double submit (or a second tab) must not queue the same visit twice.
-    const duplicate = await this.prisma.bookingRequest.findFirst({
-      where: {
-        phone: details.phone,
-        status: { in: ACTIVE },
-        appointmentId: null,
-        OR: [{ requestedStartAt: startAt }, { proposedStartAt: startAt }],
-      },
-      select: { id: true },
-    });
-    if (duplicate) {
-      throw new ConflictException(
-        'Số điện thoại này đã có yêu cầu đặt lịch đang chờ xử lý vào đúng giờ này. ' +
-          'Vui lòng tra cứu lịch hẹn bằng số điện thoại hoặc gọi phòng khám.',
-      );
-    }
     const plan = await this.requireEligible(dto.serviceId, dto.dentistId, clinicDateOnly(startAt));
     await this.assertSlot(dto.dentistId, startAt, plan);
     const token = randomBytes(32).toString('base64url');
     const ref = 'GS-' + randomBytes(5).toString('hex').toUpperCase();
-    const row = await this.prisma.bookingRequest.create({
-      data: {
-        referenceCode: ref,
-        accessTokenHash: this.hash(token),
-        ...details,
-        serviceId: dto.serviceId,
-        preferredDentistId: dto.dentistId,
-        requestedStartAt: startAt,
-        reason: dto.reason?.trim() || null,
-        consentedAt: new Date(),
-      },
-      select: { id: true, referenceCode: true, email: true, fullName: true },
+    const row = await this.prisma.$transaction(async tx => {
+      // A double submit (or a second tab) must not queue the same visit
+      // twice: submissions from one phone are serialized, so the duplicate
+      // check and the insert are atomic.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NS_BOOKING_PHONE}::int4, hashtext(${details.phone}))`;
+      const duplicate = await tx.bookingRequest.findFirst({
+        where: {
+          phone: details.phone,
+          status: { in: ACTIVE },
+          appointmentId: null,
+          OR: [{ requestedStartAt: startAt }, { proposedStartAt: startAt }],
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new ConflictException(
+          'Số điện thoại này đã có yêu cầu đặt lịch đang chờ xử lý vào đúng giờ này. ' +
+            'Vui lòng tra cứu lịch hẹn bằng số điện thoại hoặc gọi phòng khám.',
+        );
+      }
+      return tx.bookingRequest.create({
+        data: {
+          referenceCode: ref,
+          accessTokenHash: this.hash(token),
+          ...details,
+          serviceId: dto.serviceId,
+          preferredDentistId: dto.dentistId,
+          requestedStartAt: startAt,
+          reason: dto.reason?.trim() || null,
+          consentedAt: new Date(),
+        },
+        select: { id: true, referenceCode: true, email: true, fullName: true },
+      });
     });
     await this.audit.log({
       action: 'BOOKING_REQUEST_SUBMITTED',
@@ -377,6 +387,9 @@ export class BookingService {
       appointment: { select: { id: true, status: true, startAt: true } },
     } satisfies Prisma.BookingRequestInclude;
     const activeStatuses = q.status ? ACTIVE.filter(s => s === q.status) : ACTIVE;
+    // Capped at 100 like before. With more open requests than that, the cut
+    // is by requested time, so a far-off request with an earlier proposal
+    // could be left out; the expiry cron keeps the open set small.
     const active = activeStatuses.length
       ? await this.prisma.bookingRequest.findMany({
           where: { status: { in: activeStatuses } },
@@ -428,11 +441,16 @@ export class BookingService {
               where: { id: { in: candidates.map(c => c.id) }, status: 'EXPIRED' },
               select: { id: true, referenceCode: true },
             });
-      await this.audit.log({
-        action: 'BOOKING_REQUEST_EXPIRED',
-        actorUserId: null,
-        targetType: 'booking_request',
-        metadata: { count: result.count, referenceCodes: expired.map(c => c.referenceCode) },
+      // One history row per request, written in one statement (AuditService
+      // has no batch call).
+      await this.prisma.auditLog.createMany({
+        data: expired.map(c => ({
+          action: 'BOOKING_REQUEST_EXPIRED',
+          actorUserId: null,
+          targetType: 'booking_request',
+          targetId: c.id,
+          metadata: { referenceCode: c.referenceCode, expiredAt: now.toISOString() },
+        })),
       });
     }
     return { expired: result.count };
@@ -857,6 +875,9 @@ export class BookingService {
           null,
       },
       proposedStartAt: row.proposedStartAt,
+      // Open but its time has passed (server clock): shown as expired even
+      // before the cron closes it.
+      overdue: !row.appointment && this.isOverdue(row),
       responseMessage: row.responseMessage,
       appointment: row.appointment
         ? {

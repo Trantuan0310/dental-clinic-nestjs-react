@@ -56,7 +56,8 @@ a one-time lookup code.
   (`PENDING_REVIEW`, `NEEDS_INFORMATION`, `PROPOSED`, `PATIENT_ACCEPTED`)
   with no visit and an effective time in the past to `EXPIRED`, with a
   message telling the patient to book again or call. One conditional update,
-  one `BOOKING_REQUEST_EXPIRED` audit row per run. Until it runs:
+  then one `BOOKING_REQUEST_EXPIRED` audit row per expired request. Until it
+  runs (the public API also returns `overdue`, by the server clock):
   - the sidebar badge already leaves overdue requests out;
   - the patient cannot accept a passed proposed time or send details;
   - the front desk cannot confirm or ask for details, but may propose a new
@@ -69,7 +70,8 @@ a one-time lookup code.
   be at least `BOOKING_MIN_LEAD_MIN` minutes ahead (default 120). Front desk
   bookings are not limited.
 - **Duplicates.** A phone with an open request for the same time cannot send
-  another one for that time.
+  another one for that time. The check and the insert run in one transaction
+  under a per-phone advisory lock, so a double submit cannot slip through.
 - **Rate limits (per IP).**
   - Sending a request: 5 per minute.
   - Status lookups: 15 per minute.

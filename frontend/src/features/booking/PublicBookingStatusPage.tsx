@@ -31,6 +31,8 @@ type Status = {
   service?: { name: string | null; durationMinutes?: number | null };
   dentist?: { fullName: string | null };
   proposedStartAt?: string | null;
+  /** Open, but its time has passed (server clock). */
+  overdue?: boolean;
   responseMessage?: string | null;
   appointment?: { startAt: string; endAt?: string; status: string } | null;
 };
@@ -108,17 +110,11 @@ const VISIT_STATE: Record<string, { title: string; text: string; tone: Tone }> =
 };
 const ACTIVE = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
 /**
- * An open request whose time has passed is shown as EXPIRED straight away;
- * the clinic's server closes it within a few minutes anyway.
+ * An open request whose time has passed (the server says so, by its clock)
+ * is shown as EXPIRED straight away; the server closes it within minutes.
  */
-const shownStatus = (s: Status) => {
-  if (!ACTIVE.includes(s.status) || s.appointment) return s.status;
-  const at =
-    ["PROPOSED", "PATIENT_ACCEPTED"].includes(s.status) && s.proposedStartAt
-      ? s.proposedStartAt
-      : s.requestedStartAt;
-  return new Date(at).getTime() <= Date.now() ? "EXPIRED" : s.status;
-};
+const shownStatus = (s: Status) =>
+  s.overdue && ACTIVE.includes(s.status) ? "EXPIRED" : s.status;
 const TONE_STYLE: Record<Tone, { box: string; icon: typeof Clock }> = {
   wait: { box: "border-amber-200 bg-amber-50 text-amber-900", icon: Clock },
   action: { box: "border-sky-200 bg-sky-50 text-sky-900", icon: AlertCircle },
