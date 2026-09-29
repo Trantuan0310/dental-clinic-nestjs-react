@@ -410,8 +410,9 @@ describe('MedicalRecordsService', () => {
           cancelledReason: 'Bắt đầu nhầm phiên khám',
         }),
       });
+      expect(prisma.appointment.updateMany).toHaveBeenCalledTimes(1);
       expect(prisma.appointment.updateMany).toHaveBeenCalledWith({
-        where: { id: 'appt-1', status: 'IN_PROGRESS' },
+        where: { id: 'appt-1', status: 'IN_PROGRESS', startAt: { gte: expect.any(Date) } },
         data: { status: 'CHECKED_IN', updatedBy: admin.sub },
       });
       expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
@@ -422,6 +423,36 @@ describe('MedicalRecordsService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ENCOUNTER_CANCELLED' }),
       );
+    });
+
+    it("closes an earlier day's appointment as LEFT instead of an orphan CHECKED_IN", async () => {
+      (prisma.appointment.updateMany as jest.Mock)
+        .mockResolvedValueOnce({ count: 0 }) // not a visit of today
+        .mockResolvedValueOnce({ count: 1 });
+
+      await service.cancelEncounter('enc-1', 'Hủy phiên khám bị bỏ quên', admin);
+
+      const [today, earlier] = (prisma.appointment.updateMany as jest.Mock).mock.calls;
+      const todayStart = today[0].where.startAt.gte as Date;
+      expect(earlier[0]).toEqual({
+        where: { id: 'appt-1', status: 'IN_PROGRESS', startAt: { lt: todayStart } },
+        data: expect.objectContaining({
+          status: 'LEFT',
+          leftAt: expect.any(Date),
+          leftReason: 'Hủy phiên khám của ngày trước',
+        }),
+      });
+      // The stale entry is closed if still open, never reopened.
+      expect(prisma.queueEntry.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
+        where: { appointmentId: 'appt-1', doneAt: null },
+        data: expect.objectContaining({ closeReason: 'LEFT', status: 'LEFT' }),
+      });
+      expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          after: expect.objectContaining({ appointmentStatus: 'LEFT' }),
+        }),
+      });
     });
 
     it('leaves the queue alone when the appointment was not IN_PROGRESS', async () => {

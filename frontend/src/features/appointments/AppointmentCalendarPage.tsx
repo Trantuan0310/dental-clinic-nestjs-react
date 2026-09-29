@@ -6,7 +6,8 @@ import { clinicParts, clinicWallClock } from '@/lib/clinicTime';
 import { vi } from 'date-fns/locale';
 import { Plus, ChevronLeft, ChevronRight, UserRoundPlus } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
-import { Button, Card } from '@/components/ui';
+import { LIST_ALL_LIMIT } from './appointmentApi';
+import { Alert, Button, Card } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import type { Appointment, AppointmentFilters, AppointmentStatus } from '@/types/appointment';
@@ -84,12 +85,13 @@ export default function AppointmentCalendarPage() {
     from: format(dateRange.start, 'yyyy-MM-dd'),
     to: format(dateRange.end, 'yyyy-MM-dd'),
     dentistId: selectedDentistId || undefined,
-    pageSize: 100,
   };
 
+  // Every booking of the week/month (the old single page of 100 cut a busy
+  // month silently); the notice below covers the safety cap.
   const { data } = useQuery({
-    queryKey: ['appointments', filters],
-    queryFn: () => appointmentsApi.list(filters),
+    queryKey: ['appointments', 'all', filters],
+    queryFn: () => appointmentsApi.listAll(filters),
     ...liveAppointmentQuery(filters),
   });
 
@@ -175,6 +177,12 @@ export default function AppointmentCalendarPage() {
           </PermissionGuard>
         </div>
       </div>
+
+      {data?.pagination?.hasMore && (
+        <Alert type="warning">
+          Còn lịch chưa hiển thị (chỉ tải {LIST_ALL_LIMIT} lịch đầu), hãy thu hẹp bộ lọc.
+        </Alert>
+      )}
 
       <Card noPadding>
         {/* Toolbar */}

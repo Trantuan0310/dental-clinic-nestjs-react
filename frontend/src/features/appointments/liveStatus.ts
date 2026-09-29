@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Appointment } from '@/types/appointment';
+import { clinicToday } from '@/lib/clinicTime';
 
 /**
  * Keeping appointment screens current while the front desk works.
@@ -62,6 +63,26 @@ export function isOverdueNotArrived(
 /** Minutes past the booked start (0 before it). */
 export function minutesLate(startsAt: string, now = Date.now()): number {
   return Math.max(0, Math.floor((now - new Date(startsAt).getTime()) / 60_000));
+}
+
+/**
+ * Today's clinic date ("yyyy-MM-dd"), re-checked every minute and when the
+ * tab regains focus, so a page left open overnight moves to the new day.
+ */
+export function useClinicToday(): string {
+  const [today, setToday] = useState(() => clinicToday());
+  useEffect(() => {
+    const sync = () => setToday(clinicToday());
+    const id = window.setInterval(sync, 60_000);
+    window.addEventListener('focus', sync);
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('focus', sync);
+      document.removeEventListener('visibilitychange', sync);
+    };
+  }, []);
+  return today;
 }
 
 /** The current time, updated every `intervalMs` so time-based labels move on. */

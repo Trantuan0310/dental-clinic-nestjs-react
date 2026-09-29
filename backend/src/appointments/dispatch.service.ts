@@ -361,11 +361,20 @@ export class DispatchService {
             tx,
             appt,
           );
+          // The slot was checked for the time read above: a booking moved
+          // meanwhile must not be carried over at its new time unchecked.
           const res = await tx.appointment.updateMany({
-            where: { id: appt.id, dentistId: dto.fromDentistId, status: appt.status },
+            where: {
+              id: appt.id,
+              dentistId: dto.fromDentistId,
+              status: appt.status,
+              startAt: appt.startAt,
+              endAt: appt.endAt,
+              rescheduleCount: appt.rescheduleCount,
+            },
             data: { dentistId: dto.toDentistId, updatedBy: actor.sub },
           });
-          if (res.count === 0) throw new Error('Lịch hẹn vừa được người khác thay đổi');
+          if (res.count === 0) throw new Error('Lịch vừa được thay đổi, tải lại rồi thử lại');
           await tx.appointmentRescheduleLog.create({
             data: {
               appointmentId: appt.id,
