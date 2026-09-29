@@ -10,6 +10,7 @@ import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/ap
 import { formatTimeOnly, getWeekdayLabel } from '@/lib/format';
 import { clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
+import { isOverdueNotArrived, OVERDUE_DOT_CLASS, OVERDUE_LABEL, useNow } from './liveStatus';
 
 interface MonthViewProps {
   date: Date;
@@ -54,6 +55,7 @@ export function MonthView({
   onCreateAtSlot,
 }: MonthViewProps) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const now = useNow();
 
   // Build a 42-cell grid (6 rows x 7 columns) including leading padding days
   // so layout is always a full month-grid regardless of where the 1st falls.
@@ -160,6 +162,7 @@ export function MonthView({
                     key={apt.id}
                     appointment={apt}
                     onClick={() => onAppointmentClick(apt)}
+                    overdue={isOverdueNotArrived(apt, now)}
                   />
                 ))}
 
@@ -204,6 +207,7 @@ export function MonthView({
         {selectedDay && (
           <DayAppointmentsList
             appointments={selectedDayAppointments}
+            now={now}
             onAppointmentClick={(apt) => {
               onAppointmentClick(apt);
               setSelectedDay(null);
@@ -230,13 +234,15 @@ export function MonthView({
 interface AppointmentBlockProps {
   appointment: Appointment;
   onClick: () => void;
+  overdue?: boolean;
 }
 
-function AppointmentBlock({ appointment, onClick }: AppointmentBlockProps) {
+function AppointmentBlock({ appointment, onClick, overdue = false }: AppointmentBlockProps) {
   const type = appointment.appointmentType ?? 'consultation';
   const tooltipContent = (
     <div className="space-y-0.5 text-left">
       <p className="font-semibold">{appointment.patientName}</p>
+      {overdue && <p className="text-[11px] font-semibold">{OVERDUE_LABEL}</p>}
       <p className="text-[11px] opacity-90">
         {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} •{' '}
         {appointment.durationMinutes}p
@@ -263,12 +269,17 @@ function AppointmentBlock({ appointment, onClick }: AppointmentBlockProps) {
           TYPE_DOT[type],
           appointment.status === 'cancelled' && 'opacity-60 line-through',
           appointment.status === 'no_show' && 'opacity-60',
+          overdue && 'bg-rose-50 text-rose-800',
         )}
       >
         <span
-          className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT_COLORS[appointment.status])}
+          className={cn(
+            'h-1.5 w-1.5 shrink-0 rounded-full',
+            overdue ? OVERDUE_DOT_CLASS : STATUS_DOT_COLORS[appointment.status],
+          )}
           aria-hidden
         />
+        {overdue && <span className="sr-only">{OVERDUE_LABEL}</span>}
         <span className="shrink-0 tabular-nums text-[10px] text-gray-500">
           {formatTimeOnly(appointment.startsAt)}
         </span>
@@ -284,12 +295,14 @@ function AppointmentBlock({ appointment, onClick }: AppointmentBlockProps) {
 
 interface DayAppointmentsListProps {
   appointments: Appointment[];
+  now: number;
   onAppointmentClick: (apt: Appointment) => void;
   onCreateAtSlot?: () => void;
 }
 
 function DayAppointmentsList({
   appointments,
+  now,
   onAppointmentClick,
   onCreateAtSlot,
 }: DayAppointmentsListProps) {
@@ -337,7 +350,10 @@ function DayAppointmentsList({
                   >
                     {apt.patientName}
                   </p>
-                  <AppointmentStatusBadge status={apt.status} />
+                  <AppointmentStatusBadge
+                    status={apt.status}
+                    overdue={isOverdueNotArrived(apt, now)}
+                  />
                 </div>
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
                   <span className="inline-flex items-center gap-1">

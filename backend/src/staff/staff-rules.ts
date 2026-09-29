@@ -1,11 +1,19 @@
 import { Prisma } from '@prisma/client';
 import { clinicDateOnly } from '../common/date-range.util';
-import { AffectedAppointment } from './staff.exceptions';
+import {
+  AffectedAppointment,
+  DentistHasFutureAppointmentsException,
+  DentistHasOpenEncountersException,
+} from './staff.exceptions';
 
 type Db = Prisma.TransactionClient;
 
 /** Bookings that still need the dentist (BR-STAFF-004). */
-export const BLOCKING_APPOINTMENT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] as const;
+const UPCOMING_APPOINTMENT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] as const;
+export const BLOCKING_APPOINTMENT_STATUSES = [
+  ...UPCOMING_APPOINTMENT_STATUSES,
+  'IN_PROGRESS',
+] as const;
 
 export async function futureActiveAppointments(
   db: Db,
@@ -15,8 +23,14 @@ export async function futureActiveAppointments(
   const rows = await db.appointment.findMany({
     where: {
       dentistId: dentistUserId,
-      status: { in: [...BLOCKING_APPOINTMENT_STATUSES] },
-      endAt: { gt: now },
+      OR: [
+        {
+          status: { in: [...UPCOMING_APPOINTMENT_STATUSES] },
+          endAt: { gt: now },
+        },
+        // A visit being treated blocks even once its slot has run over.
+        { status: 'IN_PROGRESS' },
+      ],
     },
     select: {
       id: true,
@@ -35,6 +49,29 @@ export async function futureActiveAppointments(
     status: r.status,
     patientName: r.patient.fullName,
   }));
+}
+
+/** Encounters the dentist has started but not closed or cancelled. */
+export function openEncounterCount(db: Db, dentistUserId: string): Promise<number> {
+  return db.encounter.count({
+    where: { dentistId: dentistUserId, status: 'IN_PROGRESS' },
+  });
+}
+
+/**
+ * BR-STAFF-004: a dentist cannot be suspended/terminated while bookings
+ * still need them or while an encounter they opened is still in progress
+ * (it could never be closed — only its own dentist may close it).
+ */
+export async function assertDentistHasNoOpenWork(
+  db: Db,
+  dentistUserId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const blocking = await futureActiveAppointments(db, dentistUserId, now);
+  if (blocking.length > 0) throw new DentistHasFutureAppointmentsException(blocking);
+  const openEncounters = await openEncounterCount(db, dentistUserId);
+  if (openEncounters > 0) throw new DentistHasOpenEncountersException(openEncounters);
 }
 
 /** Parse a YYYY-MM-DD string as a DATE column value. */

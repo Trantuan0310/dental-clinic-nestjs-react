@@ -1,5 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { BusinessRuleException } from '../../common/exceptions/business-rule.exception';
+import type { AllergyConflict } from './allergy-check';
 
 export class EncounterNotFoundException extends BusinessRuleException {
   constructor(id: string) {
@@ -66,6 +67,45 @@ export class PrescriptionAlreadyExistsException extends BusinessRuleException {
       'Prescription already exists',
       HttpStatus.CONFLICT,
       'Each encounter may only have one prescription',
+    );
+  }
+}
+
+export class PrescriptionVersionConflictException extends BusinessRuleException {
+  constructor() {
+    super(
+      'Đơn thuốc vừa được thay đổi ở nơi khác — tải lại rồi thử lại',
+      HttpStatus.CONFLICT,
+      undefined,
+      'PRESCRIPTION_VERSION_CONFLICT',
+    );
+  }
+}
+
+/**
+ * A prescribed drug matches a recorded allergy. The client shows the pairs
+ * and may resend with `allergyOverrideReason` to prescribe anyway.
+ */
+export class PrescriptionAllergyConflictException extends BusinessRuleException {
+  constructor(conflicts: AllergyConflict[], reasonTooShort = false) {
+    const pairs = conflicts.map(c => `${c.drugName} (dị ứng: ${c.allergy})`).join('; ');
+    super(
+      reasonTooShort
+        ? `Lý do vẫn kê thuốc dù bệnh nhân dị ứng phải có ít nhất 10 ký tự. Thuốc trùng dị ứng: ${pairs}`
+        : `Đơn thuốc có thuốc trùng với dị ứng của bệnh nhân: ${pairs}`,
+      HttpStatus.CONFLICT,
+      { conflicts },
+      'PRESCRIPTION_ALLERGY_CONFLICT',
+    );
+  }
+}
+
+export class DentalChartInvalidToothException extends BusinessRuleException {
+  constructor(keys: string[], patientType: 'ADULT' | 'CHILD') {
+    super(
+      `Số răng không hợp lệ trên sơ đồ ${patientType === 'CHILD' ? 'trẻ em' : 'người lớn'}: ${keys.join(', ')}`,
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      { invalidTeeth: keys, patientType },
     );
   }
 }

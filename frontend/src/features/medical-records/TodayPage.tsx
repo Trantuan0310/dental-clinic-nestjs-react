@@ -5,7 +5,13 @@ import { vi } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Play, ArrowRight, AlertCircle } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { useStartEncounter } from '@/features/appointments/appointmentApi';
-import { Button, Card, StatusBadge, EmptyState, FormSkeleton } from '@/components/ui';
+import {
+  isOverdueNotArrived,
+  liveAppointmentQuery,
+  useNow,
+} from '@/features/appointments/liveStatus';
+import { Button, Card, EmptyState, FormSkeleton } from '@/components/ui';
+import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +23,7 @@ export default function TodayPage() {
   const [currentDate, setCurrentDate] = useState(() => clinicWallClock());
   const today = format(currentDate, 'yyyy-MM-dd');
   const startEncounter = useStartEncounter();
+  const now = useNow();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['appointments', { from: today, to: today }],
@@ -25,6 +32,7 @@ export default function TodayPage() {
       to: today,
       pageSize: 100,
     }),
+    ...liveAppointmentQuery({ from: today, to: today }),
   });
 
   const handleStart = async (appointmentId: string) => {
@@ -160,7 +168,10 @@ export default function TodayPage() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
-                        <StatusBadge status={apt.status} />
+                        <AppointmentStatusBadge
+                          status={apt.status}
+                          overdue={isOverdueNotArrived(apt, now)}
+                        />
                         {apt.status === 'checked_in' && (
                           <Button
                             size="sm"

@@ -44,3 +44,20 @@ export const readJsonStringArray = (json: unknown): string[] => {
   }
   return [];
 };
+
+/**
+ * Union of free-text lists (allergies, diseases, medications), trimmed and
+ * de-duplicated case-insensitively; the first spelling seen wins.
+ */
+export const mergeStringLists = (...lists: string[][]): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of lists.flat()) {
+    const value = item.trim();
+    const key = value.toLocaleLowerCase('vi');
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+};

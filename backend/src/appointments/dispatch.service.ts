@@ -139,7 +139,7 @@ export class DispatchService {
         );
       }
     } catch (e) {
-      // queue_entries_one_called_idx: one called patient per dentist.
+      // queue_entries_one_called_per_day_idx: one called patient per dentist per day.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw queueError(
           'Bác sĩ đang gọi một bệnh nhân khác — bắt đầu khám hoặc bỏ qua bệnh nhân đó trước',

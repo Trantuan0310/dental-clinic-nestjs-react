@@ -8,6 +8,8 @@ import { AppointmentsService } from './appointments.service';
  *     after grace period.
  *   - Every hour: auto-cancel PENDING shift registrations whose startTime
  *     is in the past.
+ *   - Just after clinic midnight: close check-ins and queue entries left
+ *     open from earlier days.
  */
 @Injectable()
 export class AppointmentsCron {
@@ -38,6 +40,19 @@ export class AppointmentsCron {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`autoCancelPastPendingShifts failed: ${msg}`);
+    }
+  }
+
+  // 00:15 clinic time, so yesterday's leftovers are gone before the new day
+  // starts; the job only ever touches days before "today", never the current one.
+  @Cron('15 0 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
+  async closeStaleCheckIns() {
+    try {
+      // The service logs what it closed (and any row it could not).
+      await this.appointments.closeStaleCheckIns();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`closeStaleCheckIns failed: ${msg}`);
     }
   }
 }

@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-mock';
 import { validPatient, validEncounter } from '../../test/helpers/fixtures';
 import { NotFoundException } from '@nestjs/common';
+import { buildUserPrompt } from './prompts/summary-prompt';
 
 describe('AiService', () => {
   const actor = { sub: 'admin', email: 'admin@example.invalid', permissions: ['patient.delete'] };
@@ -160,9 +161,12 @@ describe('AiService', () => {
       (prisma.encounter.findMany as jest.Mock).mockResolvedValue([
         {
           ...validEncounter({ id: 'enc-1', patientId: 'pat-1' }),
-          chiefComplaint: 'Toothache',
-          diagnosis: 'Caries',
-          treatmentPlanText: 'Root canal next week',
+          clinicalNote: {
+            chiefComplaint: 'Toothache',
+            diagnosis: 'Caries',
+            treatmentPlan: 'Root canal next week',
+            addendums: [],
+          },
           treatments: [],
         },
       ]);
@@ -183,9 +187,12 @@ describe('AiService', () => {
       (prisma.encounter.findMany as jest.Mock).mockResolvedValue([
         {
           ...validEncounter({ id: 'enc-1', patientId: 'pat-1' }),
-          chiefComplaint: 'Pain',
-          diagnosis: 'Caries grade 2',
-          treatmentPlanText: null,
+          clinicalNote: {
+            chiefComplaint: 'Pain',
+            diagnosis: 'Caries grade 2',
+            treatmentPlan: null,
+            addendums: [],
+          },
           treatments: [],
         },
       ]);
@@ -196,6 +203,101 @@ describe('AiService', () => {
 
       const nextBullet = result.bullets.find(b => b.id === 'next');
       expect(nextBullet?.text).toContain('Caries grade 2');
+    });
+
+    it('reads the record from ClinicalNote (not the unused encounter columns) and skips cancelled encounters', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([
+        {
+          ...validEncounter({ id: 'enc-1', patientId: 'pat-1' }),
+          // Legacy columns are never written; they must be ignored.
+          chiefComplaint: null,
+          diagnosis: null,
+          treatmentPlanText: null,
+          clinicalNote: null,
+          treatments: [],
+        },
+      ]);
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
+
+      const result = await service.getPatientSummary('pat-1', 3, false, actor);
+
+      const query = (prisma.encounter.findMany as jest.Mock).mock.calls[0][0];
+      expect(query.where).toEqual(
+        expect.objectContaining({ patientId: 'pat-1', status: { not: 'CANCELLED' } }),
+      );
+      expect(query.select.clinicalNote.select).toEqual(
+        expect.objectContaining({ chiefComplaint: true, diagnosis: true, treatmentPlan: true }),
+      );
+      expect(query.select).not.toHaveProperty('treatmentPlanText');
+      expect(result.bullets.find(b => b.id === 'next')?.text).toContain('Theo dõi chung');
+    });
+  });
+
+  describe('prompt', () => {
+    it('includes clinical-note addendums', () => {
+      const prompt = buildUserPrompt({
+        allergies: [],
+        chronicDiseases: [],
+        currentMedications: [],
+        recentEncounters: [
+          {
+            date: '2026-09-01',
+            chiefComplaint: 'Đau răng',
+            diagnosis: 'Sâu răng',
+            treatmentPlan: null,
+            addendums: ['Bổ sung: dị ứng Lidocaine'],
+            status: 'COMPLETED',
+            treatments: [],
+          },
+        ],
+        outstandingInvoiceCount: 0,
+        openEncounterCount: 0,
+      });
+      expect(prompt).toContain('SĐC: Đau răng');
+      expect(prompt).toContain('dị ứng Lidocaine');
+    });
+  });
+
+  describe('dentist access', () => {
+    const dentist = {
+      sub: 'dentist-1',
+      email: 'd@example.invalid',
+      permissions: ['ai.summary.read'],
+    };
+
+    it('allows a dentist with a live appointment and refuses one whose bookings were cancelled', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue({ patientId: 'pat-1', bullets: [] });
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+
+      await expect(service.getPatientSummary('pat-1', 3, false, dentist)).resolves.toMatchObject({
+        cached: true,
+      });
+      await expect(service.getPatientSummary('pat-1', 3, false, dentist)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.appointment.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          deletedAt: null,
+          OR: expect.arrayContaining([
+            { status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] } },
+          ]),
+        }),
+      });
+    });
+  });
+
+  describe('cache invalidation', () => {
+    it('drops every cached variant of the patient on clinical-data and encounter-closed events', async () => {
+      cache.delByPattern = jest.fn().mockResolvedValue(1);
+      await service.onClinicalDataChanged({ patientId: 'pat-1' });
+      await service.onEncounterClosed({ patientId: 'pat-2' } as any);
+      expect(cache.delByPattern).toHaveBeenNthCalledWith(1, 'ai:patient:pat-1:*');
+      expect(cache.delByPattern).toHaveBeenNthCalledWith(2, 'ai:patient:pat-2:*');
     });
   });
 });

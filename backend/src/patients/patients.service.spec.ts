@@ -1,4 +1,6 @@
 import { Test } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PatientsService } from './patients.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -24,11 +26,13 @@ describe('PatientsService', () => {
   let service: PatientsService;
   let prisma: PrismaMockShape;
   let audit: { log: jest.Mock };
+  let events: { emit: jest.Mock };
   const actor = adminPayload();
 
   beforeEach(async () => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    events = { emit: jest.fn() };
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 42n }]);
     // softDelete runs its check-then-write inside $transaction (BR-PT-010
     // TOCTOU fix) — the default mock's tx stub only has $executeRaw/$queryRaw,
@@ -42,6 +46,7 @@ describe('PatientsService', () => {
         PatientsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
+        { provide: EventEmitter2, useValue: events },
       ],
     }).compile();
 
@@ -223,6 +228,14 @@ describe('PatientsService', () => {
         service.overrideDob('p1', { dob: '1991-05-05', reason: 'x' } as any, actor),
       ).rejects.toThrow(PatientNotFoundException);
     });
+
+    it('requires a reason of at least 10 characters', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      await expect(
+        service.overrideDob('p1', { dob: '1991-05-05', reason: '  sai  ' } as any, actor),
+      ).rejects.toThrow(/ít nhất 10 ký tự/);
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('softDelete', () => {
@@ -309,6 +322,22 @@ describe('PatientsService', () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(null);
       await expect(service.restore('p1', actor)).rejects.toThrow(PatientNotFoundException);
     });
+
+    it('refuses to restore a patient that was merged into another record', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({ deletedAt: new Date() }),
+      );
+      (prisma.patientMergeLog.findFirst as jest.Mock).mockResolvedValue({
+        target: { code: 'BN-2026-00007' },
+      });
+      await expect(service.restore('p1', actor)).rejects.toThrow(
+        /đã được gộp vào hồ sơ BN-2026-00007/,
+      );
+      expect(prisma.patientMergeLog.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { sourcePatientId: 'p1' } }),
+      );
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('merge', () => {
@@ -341,7 +370,7 @@ describe('PatientsService', () => {
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
       (prisma.encounter.updateMany as jest.Mock).mockResolvedValue({ count: 5 });
       (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
-      (prisma.patientIdentifier.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.patientIdentifier.findMany as jest.Mock).mockResolvedValue([]);
 
       await service.merge(
         {
@@ -360,6 +389,119 @@ describe('PatientsService', () => {
       );
       expect(prisma.patientMergeLog.create).toHaveBeenCalled();
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PATIENT_MERGED' }));
+      // Both AI summaries are stale once history/encounters move.
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'p2',
+      });
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'p1',
+      });
+    });
+  });
+
+  describe('merge (medical history, identifiers, transaction)', () => {
+    const same = { fullName: 'Nguyễn Văn A', dob: new Date('1990-01-15') };
+
+    beforeEach(() => {
+      (prisma.patient.findUnique as jest.Mock)
+        .mockResolvedValueOnce(
+          validPatient({
+            ...same,
+            id: 'p1',
+            code: 'BN-1',
+            allergies: ['penicillin', 'Tôm'],
+            chronicDiseases: ['Tiểu đường'],
+            currentMedications: ['Metformin'],
+          }),
+        )
+        .mockResolvedValueOnce(
+          validPatient({
+            ...same,
+            id: 'p2',
+            code: 'BN-2',
+            allergies: ['Penicillin'],
+            chronicDiseases: [],
+            currentMedications: ['Aspirin'],
+          }),
+        );
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.encounter.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.patientIdentifier.findMany as jest.Mock).mockImplementation(({ where }: any) =>
+        Promise.resolve(
+          where.patientId === 'p1'
+            ? [
+                { id: 'i-cccd', type: IdentifierType.CCCD, value: '079123456789' },
+                { id: 'i-passport', type: IdentifierType.PASSPORT, value: 'b1234567' },
+              ]
+            : [{ type: IdentifierType.PASSPORT, value: 'B1234567' }],
+        ),
+      );
+    });
+
+    const run = () =>
+      service.merge(
+        { sourcePatientId: 'p1', targetPatientId: 'p2', reason: 'Trùng hồ sơ' } as any,
+        actor,
+      );
+
+    it('unions allergies, chronic diseases and medications into the target (case-insensitive de-dup)', async () => {
+      await run();
+      expect(prisma.patient.update).toHaveBeenCalledWith({
+        where: { id: 'p2' },
+        data: {
+          allergies: ['Penicillin', 'Tôm'],
+          chronicDiseases: ['Tiểu đường'],
+          currentMedications: ['Aspirin', 'Metformin'],
+          updatedBy: actor.sub,
+        },
+      });
+    });
+
+    it("moves the source's identifiers to the target and drops only exact duplicates", async () => {
+      const result = await run();
+      expect(prisma.patientIdentifier.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['i-passport'] } },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.patientIdentifier.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['i-cccd'] } },
+        data: { patientId: 'p2' },
+      });
+      expect(result.migrated).toEqual(
+        expect.objectContaining({ identifiersMoved: 1, identifiersDropped: 1 }),
+      );
+    });
+
+    it('runs the eligibility checks inside one Serializable transaction with both rows locked', async () => {
+      await run();
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: 'Serializable',
+      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+      // The reads happen after the locks, i.e. inside the transaction.
+      const lockOrder = (prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[1];
+      const readOrder = (prisma.patient.findUnique as jest.Mock).mock.invocationCallOrder[0];
+      const countOrder = (prisma.appointment.count as jest.Mock).mock.invocationCallOrder[0];
+      expect(readOrder).toBeGreaterThan(lockOrder);
+      expect(countOrder).toBeGreaterThan(lockOrder);
+    });
+
+    it('aborts without moving anything when the source still has future appointments', async () => {
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      await expect(run()).rejects.toThrow(PatientMergeInvalidException);
+      expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects merging a record into itself', async () => {
+      await expect(
+        service.merge({ sourcePatientId: 'p1', targetPatientId: 'p1' } as any, actor),
+      ).rejects.toThrow(PatientMergeInvalidException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 
@@ -384,7 +526,7 @@ describe('PatientsService', () => {
         dentistPayload(),
       );
       expect(prisma.encounter.count).toHaveBeenCalledWith({
-        where: { patientId: 'p1', dentistId: 'dentist-1' },
+        where: { patientId: 'p1', dentistId: 'dentist-1', status: { not: 'CANCELLED' } },
       });
       const data = (prisma.patient.update as jest.Mock).mock.calls[0][0].data;
       expect(data).toEqual({
@@ -397,14 +539,63 @@ describe('PatientsService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PATIENT_MEDICAL_HISTORY_UPDATED' }),
       );
+      // AI summary cache is keyed on this history — it must be invalidated.
+      expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
+        patientId: 'p1',
+      });
     });
 
-    it('hides a patient the dentist never treated', async () => {
+    it('lets a dentist record a newly found allergy for a patient checked in with them today', async () => {
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      // read scope, then "checked in / in the chair today"
+      (prisma.appointment.count as jest.Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+      await service.updateMedicalHistory('p1', { allergies: ['Latex'] }, dentistPayload());
+      expect(prisma.appointment.count).toHaveBeenLastCalledWith({
+        where: {
+          patientId: 'p1',
+          dentistId: 'dentist-1',
+          deletedAt: null,
+          status: { in: ['CHECKED_IN', 'IN_PROGRESS'] },
+          startAt: { gte: expect.any(Date), lte: expect.any(Date) },
+        },
+      });
+      expect(prisma.patient.update).toHaveBeenCalled();
+    });
+
+    it('only lets an upcoming booking read, not edit, the medical history (403)', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+      await expect(
+        service.updateMedicalHistory('p1', { allergies: ['Latex'] }, dentistPayload()),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
+
+    it('limits read access by upcoming booking to the next 7 days', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      await expect(
+        service.updateMedicalHistory('p1', { allergies: ['X'] }, dentistPayload()),
+      ).rejects.toBeInstanceOf(PatientNotFoundException);
+      const where = (prisma.appointment.count as jest.Mock).mock.calls[0][0].where;
+      const upcoming = where.OR.find((c: any) => c.startAt);
+      expect(upcoming.status).toEqual({ in: ['SCHEDULED', 'CONFIRMED'] });
+      const horizonDays = (upcoming.startAt.lte.getTime() - Date.now()) / 86400000;
+      expect(horizonDays).toBeGreaterThan(6.99);
+      expect(horizonDays).toBeLessThanOrEqual(7);
+      expect(where.OR).toContainEqual({
+        status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] },
+      });
+    });
+
+    it('hides a patient the dentist neither treated nor is booked with', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
       await expect(
         service.updateMedicalHistory('p1', { allergies: ['X'] }, dentistPayload()),
       ).rejects.toBeInstanceOf(PatientNotFoundException);
       expect(prisma.patient.update).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
     });
 
     it('does not scope the front desk or admin', async () => {
@@ -506,13 +697,40 @@ describe('PatientsService', () => {
       );
     });
 
-    it('404s for a dentist who has never treated this patient (BR-PT-014, anti-enumeration)', async () => {
+    it('404s for a dentist who neither treated nor is booked with this patient (BR-PT-014, anti-enumeration)', async () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
       (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
 
       await expect(service.getDetailWithSummary('p1', dentistPayload())).rejects.toThrow(
         PatientNotFoundException,
       );
+    });
+
+    it('lets a booked dentist see a first-visit patient, with the patient-wide encounter total', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
+      // 1st count: "treated by me" (none); 2nd: patient-wide total.
+      (prisma.encounter.count as jest.Mock).mockResolvedValueOnce(0).mockResolvedValueOnce(4);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getDetailWithSummary('p1', dentistPayload());
+
+      expect(result.summary).toEqual(expect.objectContaining({ totalEncounters: 4 }));
+      expect(prisma.encounter.count).toHaveBeenLastCalledWith({ where: { patientId: 'p1' } });
+    });
+
+    it('does not count a CANCELLED encounter as "treated"', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(patientRow());
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+
+      await expect(service.getDetailWithSummary('p1', dentistPayload())).rejects.toThrow(
+        PatientNotFoundException,
+      );
+      expect(prisma.encounter.count).toHaveBeenCalledWith({
+        where: { patientId: 'p1', dentistId: 'dentist-1', status: { not: 'CANCELLED' } },
+      });
     });
   });
 
@@ -520,6 +738,7 @@ describe('PatientsService', () => {
     it('finds patients by exact phone match (BR-PT-007)', async () => {
       (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient()]);
       (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
       const result = await service.lookup({ phone: '0901234567' } as any, actor);
       expect(result.matchType).toBe('phone_exact');
       expect(prisma.patient.findMany).toHaveBeenCalledWith(
@@ -542,6 +761,7 @@ describe('PatientsService', () => {
     it('dentist sees the match when they have an encounter with that patient (BR-PT-014)', async () => {
       (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient({ id: 'p-1' })]);
       (prisma.encounter.findMany as jest.Mock).mockResolvedValue([{ patientId: 'p-1' }]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
       const result = await service.lookup({ phone: '0901234567' } as any, dentistPayload());
       expect(result.candidates).toHaveLength(1);
       expect(prisma.encounter.findMany).toHaveBeenCalledWith(
@@ -554,9 +774,18 @@ describe('PatientsService', () => {
         validPatient({ id: 'p-1', fullName: 'Someone Else’s Patient' }),
       ]);
       (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
       const result = await service.lookup({ phone: '0901234567' } as any, dentistPayload());
       expect(result.candidates).toHaveLength(0);
       expect(result.total).toBe(0);
+    });
+
+    it('dentist sees a patient booked on their calendar but not yet treated', async () => {
+      (prisma.patient.findMany as jest.Mock).mockResolvedValue([validPatient({ id: 'p-1' })]);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([{ patientId: 'p-1' }]);
+      const result = await service.lookup({ phone: '0901234567' } as any, dentistPayload());
+      expect(result.candidates).toHaveLength(1);
     });
   });
 });

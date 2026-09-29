@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Stethoscope } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Stethoscope } from 'lucide-react';
+import { formatDate } from '@/lib/format';
 import { clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useNavigate } from 'react-router-dom';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
@@ -23,15 +24,20 @@ export default function MyQueuePage() {
   // The API scopes a dentist to their own queue; front desk sees every dentist.
   const { data: queue = [], isLoading, isError, refetch, isFetching } = useQueue();
 
+  // No lower bound: an exam left open on an earlier day must surface here —
+  // it is never closed automatically (it owns a medical record).
   const { data: running } = useQuery({
     queryKey: ['appointments', 'my-queue', 'in-progress', today],
-    queryFn: () =>
-      appointmentsApi.list({ status: ['in_progress'], from: today, to: today, pageSize: 50 }),
+    queryFn: () => appointmentsApi.list({ status: ['in_progress'], to: today, pageSize: 50 }),
     refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
-  // Clinic day, not the API's UTC range edge: drop anything from another day.
+  // Clinic day, not the API's UTC range edge.
   const inProgress = (running?.data ?? []).filter(
     (apt) => clinicParts(apt.startsAt).date === today,
+  );
+  const unfinished = (running?.data ?? []).filter(
+    (apt) => clinicParts(apt.startsAt).date < today,
   );
 
   const handleStart = async (appointmentId: string) => {
@@ -57,6 +63,34 @@ export default function MyQueuePage() {
           Làm mới
         </Button>
       </div>
+
+      {unfinished.length > 0 && (
+        <Card>
+          <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-rose-700">
+            <AlertTriangle className="h-4 w-4" />
+            Ca khám chưa kết thúc từ ngày trước
+          </h2>
+          <p className="mb-2 text-xs text-gray-500">
+            Hãy mở lại để hoàn tất hoặc hủy lượt khám — hệ thống không tự đóng bệnh án.
+          </p>
+          <ul className="space-y-2">
+            {unfinished.map((apt) => (
+              <li key={apt.id} className="flex items-center justify-between rounded-md border border-rose-200 bg-rose-50 p-3">
+                <span className="font-medium text-gray-900">
+                  {apt.patientName}
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    {formatDate(apt.startsAt, 'dd/MM/yyyy')} · {apt.dentistName}
+                  </span>
+                </span>
+                <Button size="sm" variant="outline" onClick={() => navigate(`/encounters/${apt.encounterId}`)}>
+                  <Stethoscope className="h-4 w-4" />
+                  Mở ca khám
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {inProgress.length > 0 && (
         <Card>

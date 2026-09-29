@@ -13,7 +13,7 @@
 | enum `QueueStatus` (mới) | `WAITING`, `CALLED`, `SKIPPED`, `LEFT` |
 | enum `QueuePriority` (mới) | `EMERGENCY`, `ON_TIME`, `LATE`, `WALK_IN` (khai báo theo thứ tự ưu tiên) |
 | `queue_entries` (mới) | một dòng cho mỗi lịch hẹn đã check-in (`appointment_id` unique): `dentist_id`, `queue_date`, `status`, `priority`, `checked_in_at`, `emergency_reason`, `called_at/by`, `call_count`, `skipped_at`, `skip_reason`, `skip_count`, `transferred_from_id`, `transfer_reason`, `done_at`, `close_reason` (`STARTED`/`CANCELLED`/`LEFT`) |
-| `queue_entries_one_called_idx` | unique `(dentist_id)` khi `status = CALLED` và chưa đóng — mỗi bác sĩ chỉ gọi một bệnh nhân một lúc |
+| `queue_entries_one_called_per_day_idx` | unique `(dentist_id, queue_date)` khi `status = CALLED` và chưa đóng — mỗi bác sĩ chỉ gọi một bệnh nhân một lúc trong một ngày (migration 029; thay `queue_entries_one_called_idx`) |
 | `treatments.service_id` (mới, có thể trống) | điều trị chọn từ danh mục dịch vụ (D6); dữ liệu cũ vẫn hợp lệ |
 | quyền mới | `queue.read`, `queue.call` (admin, lễ tân, bác sĩ); `queue.manage` (admin, lễ tân) |
 

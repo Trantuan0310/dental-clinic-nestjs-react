@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore';
 import type { Appointment, AppointmentFilters, AppointmentStatus } from '@/types/appointment';
 import { MonthView } from './MonthView';
 import { DayView, WeekView } from './CalendarViews';
+import { liveAppointmentQuery, OVERDUE_DOT_CLASS, OVERDUE_LABEL } from './liveStatus';
 
 // Heavy modals — only loaded when user opens create/edit dialog.
 const AppointmentFormModal = lazy(() =>
@@ -89,6 +90,7 @@ export default function AppointmentCalendarPage() {
   const { data } = useQuery({
     queryKey: ['appointments', filters],
     queryFn: () => appointmentsApi.list(filters),
+    ...liveAppointmentQuery(filters),
   });
 
   const appointments = useMemo(() => data?.data ?? [], [data]);
@@ -265,6 +267,10 @@ export default function AppointmentCalendarPage() {
             <span className="text-gray-700">{s.label}</span>
           </div>
         ))}
+        <div className="inline-flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-full ${OVERDUE_DOT_CLASS}`} />
+          <span className="text-gray-700">{OVERDUE_LABEL} (quá 15 phút)</span>
+        </div>
       </div>
 
       {/* Create modal — AppointmentFormModal renders its own <Modal> wrapper

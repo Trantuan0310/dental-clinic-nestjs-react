@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { Clock } from 'lucide-react';
+import { AlertTriangle, Clock } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useDentistOptions } from './appointmentApi';
+import { isOverdueNotArrived, OVERDUE_LABEL, OVERDUE_BLOCK_CLASS, useNow } from './liveStatus';
 import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
 import { formatTimeOnly } from '@/lib/format';
 import { clinicMinutes, clinicParts, clinicWallClock } from '@/lib/clinicTime';
@@ -75,6 +76,7 @@ interface DayViewProps {
 }
 
 export function DayView({ date, appointments, onSlotClick, onAppointmentClick }: DayViewProps) {
+  const now = useNow();
   const dayAppointments = useMemo(
     () =>
       appointments
@@ -134,6 +136,7 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
               top={appointmentTopPx(apt.startsAt)}
               height={appointmentHeightPx(apt.startsAt, apt.endsAt)}
               onClick={() => onAppointmentClick(apt)}
+              overdue={isOverdueNotArrived(apt, now)}
             />
           ))}
         </div>
@@ -161,6 +164,7 @@ export function WeekView({
   onAppointmentClick,
 }: WeekViewProps) {
   const today = clinicWallClock();
+  const now = useNow();
 
   return (
     <div className="min-h-[600px]">
@@ -258,6 +262,7 @@ export function WeekView({
                   top={appointmentTopPx(apt.startsAt)}
                   height={appointmentHeightPx(apt.startsAt, apt.endsAt)}
                   onClick={() => onAppointmentClick(apt)}
+                  overdue={isOverdueNotArrived(apt, now)}
                   compact
                 />
               ))}
@@ -279,9 +284,18 @@ interface AppointmentBlockProps {
   height: number;
   onClick: () => void;
   compact?: boolean;
+  /** Booked, not arrived, past the start by more than the grace time. */
+  overdue?: boolean;
 }
 
-function AppointmentBlock({ appointment, top, height, onClick, compact = false }: AppointmentBlockProps) {
+function AppointmentBlock({
+  appointment,
+  top,
+  height,
+  onClick,
+  compact = false,
+  overdue = false,
+}: AppointmentBlockProps) {
   const type = appointment.appointmentType ?? 'consultation';
   // Status keeps the block colour; the dentist's profile colour marks whose it is.
   const { data: dentists } = useDentistOptions();
@@ -289,6 +303,7 @@ function AppointmentBlock({ appointment, top, height, onClick, compact = false }
   const tooltipContent = (
     <div className="space-y-0.5 text-left">
       <p className="font-semibold">{appointment.patientName}</p>
+      {overdue && <p className="text-[11px] font-semibold">{OVERDUE_LABEL}</p>}
       <p className="text-[11px] opacity-90">
         {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} • {appointment.durationMinutes}p
       </p>
@@ -324,7 +339,7 @@ function AppointmentBlock({ appointment, top, height, onClick, compact = false }
           }}
           className={cn(
             'h-full w-full overflow-hidden rounded-md border-l-4 px-2 py-1 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
-            STATUS_BG[appointment.status],
+            overdue ? OVERDUE_BLOCK_CLASS : STATUS_BG[appointment.status],
             appointment.status === 'cancelled' && 'opacity-60 line-through',
             (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
           )}
@@ -336,11 +351,16 @@ function AppointmentBlock({ appointment, top, height, onClick, compact = false }
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 truncate text-[11px] font-semibold">
-                {showDetails && (
-                  <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                {overdue ? (
+                  <AlertTriangle className="h-3 w-3 shrink-0" aria-label={OVERDUE_LABEL} />
+                ) : (
+                  showDetails && <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                 )}
                 <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
               </div>
+              {overdue && showDetails && !compact && (
+                <p className="truncate text-[10px] font-semibold">{OVERDUE_LABEL}</p>
+              )}
               <p className={cn('truncate text-xs font-medium', compact ? 'text-[11px]' : 'text-xs')}>
                 {appointment.patientName}
               </p>

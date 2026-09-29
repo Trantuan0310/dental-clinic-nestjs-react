@@ -88,7 +88,7 @@ const CODE_MESSAGE: Record<string, string> = {
   STAFF_LINK_CONFLICT: 'Tài khoản hoặc hồ sơ này đã được gắn với nhân viên khác.',
   LICENSE_NUMBER_TAKEN: 'Số chứng chỉ hành nghề đã được dùng cho bác sĩ khác.',
   DENTIST_HAS_FUTURE_APPOINTMENTS:
-    'Bác sĩ còn lịch hẹn sắp tới. Hãy chuyển hoặc hủy các lịch này trước.',
+    'Bác sĩ còn lịch hẹn sắp tới hoặc đang khám. Hãy chuyển, hủy hoặc hoàn tất các lịch này trước.',
   CANNOT_REMOVE_LAST_ADMIN: 'Không thể cho nghỉ quản trị viên cuối cùng của phòng khám.',
   EMAIL_ALREADY_EXISTS: 'Email đăng nhập đã được dùng cho tài khoản khác.',
 };

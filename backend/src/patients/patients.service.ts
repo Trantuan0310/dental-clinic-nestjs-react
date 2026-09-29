@@ -1,10 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Gender } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { PaginatedResult, PaginationSchema } from '../common/dto/pagination.dto';
 import { endOfDayInclusive } from '../common/date-range.util';
+import {
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
+} from '../common/events/domain-events';
+import {
+  dentistCanReadPatient,
+  dentistMayEditMedicalHistory,
+  patientIdsReadableByDentist,
+  patientReadableByDentistWhere,
+} from '../common/dentist-patient-access';
 import {
   CreatePatientDto,
   LookupPatientDto,
@@ -31,6 +42,7 @@ import {
   isValidEmail,
   isValidIdentifierValue,
   isValidVnPhone,
+  mergeStringLists,
   readJsonStringArray,
 } from './domain/patient-rules';
 
@@ -48,7 +60,14 @@ export class PatientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /** Allergies/history feed the cached AI summary — let it drop stale copies. */
+  private emitClinicalDataChanged(patientId: string): void {
+    const payload: PatientClinicalDataChangedEvent = { patientId };
+    this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
+  }
 
   // ============================================================================
   // Code generator (BR-PT-001)
@@ -264,16 +283,21 @@ export class PatientsService {
         phoneChanged,
       },
     });
+    this.emitClinicalDataChanged(id);
 
     return updated;
   }
 
   /**
-   * Admin-only DOB override (BR-PT-017). Records audit with reason.
+   * Admin-only DOB override (BR-PT-017; permission patient.dob.override).
+   * Records audit with reason (≥ 10 chars).
    */
   async overrideDob(id: string, dto: OverrideDobDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findUnique({ where: { id } });
     if (!current) throw new PatientNotFoundException(id);
+    if ((dto.reason?.trim().length ?? 0) < 10) {
+      throw new PatientContactRequiredException('Lý do sửa ngày sinh phải có ít nhất 10 ký tự');
+    }
 
     const newDob = new Date(dto.dob);
     if (!isValidDob(newDob)) {
@@ -365,6 +389,20 @@ export class PatientsService {
     const patient = await this.prisma.patient.findUnique({ where: { id } });
     if (!patient) throw new PatientNotFoundException(id);
 
+    // A merge source is archived via deletedAt too, but its appointments,
+    // encounters, invoices and identifiers now belong to the target —
+    // restoring it would resurrect an empty duplicate of a real patient.
+    const mergedInto = await this.prisma.patientMergeLog.findFirst({
+      where: { sourcePatientId: id },
+      orderBy: { mergedAt: 'desc' },
+      select: { target: { select: { code: true } } },
+    });
+    if (mergedInto) {
+      throw new PatientMergeInvalidException(
+        `Hồ sơ này đã được gộp vào hồ sơ ${mergedInto.target?.code ?? 'khác'} nên không thể khôi phục`,
+      );
+    }
+
     // BR-PT-016: if another active patient already uses this code, fail.
     const conflict = await this.prisma.patient.findFirst({
       where: { code: patient.code, deletedAt: null, NOT: { id } },
@@ -423,7 +461,8 @@ export class PatientsService {
 
   /**
    * Allergies, chronic diseases and current medications. A dentist (row-scoped)
-   * may change them only for a patient they have treated, so a newly found
+   * may change them only for a patient they have treated or have checked in /
+   * in the chair today (dentistMayEditMedicalHistory), so a newly found
    * allergy is recorded during the visit; other fields stay front-desk work.
    */
   async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload) {
@@ -433,10 +472,14 @@ export class PatientsService {
     });
     if (!current) throw new PatientNotFoundException(id);
     if (this.isRowScopedDentist(actor)) {
-      const treated = await this.prisma.encounter.count({
-        where: { patientId: id, dentistId: actor.sub },
-      });
-      if (treated === 0) throw new PatientNotFoundException(id);
+      if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
+        throw new PatientNotFoundException(id);
+      }
+      if (!(await dentistMayEditMedicalHistory(this.prisma, id, actor.sub))) {
+        throw new ForbiddenException(
+          'Bác sĩ chỉ sửa dị ứng/tiền sử khi đã khám bệnh nhân hoặc bệnh nhân đã check-in hôm nay',
+        );
+      }
     }
     const clean = (list?: string[]) =>
       list === undefined
@@ -464,6 +507,7 @@ export class PatientsService {
       targetId: id,
       metadata: { fields: Object.keys(data) },
     });
+    this.emitClinicalDataChanged(id);
     return {
       id: updated.id,
       allergies: readJsonStringArray(updated.allergies),
@@ -485,21 +529,13 @@ export class PatientsService {
     const isDentist = this.isRowScopedDentist(actor);
 
     // BR-PT-014: dentist row-level access — a dentist may only view patients
-    // they have actually treated. Reusing this count as the ownership check
-    // (rather than a separate query) and 404'ing on zero avoids leaking PII
-    // for patients outside their scope, and matches the anti-enumeration
-    // pattern used elsewhere (404, not 403, for out-of-scope resources).
-    let encountersCount: number;
-    if (isDentist) {
-      encountersCount = await this.prisma.encounter.count({
-        where: { patientId: id, dentistId: actor.sub },
-      });
-      if (encountersCount === 0) {
-        throw new PatientNotFoundException(id);
-      }
-    } else {
-      encountersCount = await this.prisma.encounter.count({ where: { patientId: id } });
+    // they have treated or are booked with (dentistCanReadPatient); 404, not
+    // 403, for out-of-scope patients (anti-enumeration). Once in scope they
+    // read the whole record, so the encounter total is patient-wide.
+    if (isDentist && !(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
+      throw new PatientNotFoundException(id);
     }
+    const encountersCount = await this.prisma.encounter.count({ where: { patientId: id } });
 
     // BR-PT-021: financial fields are Admin-only on this endpoint, plus a
     // dentist scoped to invoices from encounters they themselves treated
@@ -589,17 +625,9 @@ export class PatientsService {
       }),
     };
 
-    // BR-PT-014: row-level filter for dentist
+    // BR-PT-014: row-level filter for dentist (treated or booked with).
     if (this.isRowScopedDentist(actor)) {
-      const encounters = await this.prisma.encounter.findMany({
-        where: { dentistId: actor.sub },
-        select: { patientId: true },
-        distinct: ['patientId'],
-      });
-      const patientIds = encounters.map(e => e.patientId);
-      where.id = {
-        in: patientIds.length === 0 ? ['00000000-0000-0000-0000-000000000000'] : patientIds,
-      };
+      where.AND = [patientReadableByDentistWhere(actor.sub)];
     }
 
     const items = await this.prisma.patient.findMany({
@@ -730,12 +758,13 @@ export class PatientsService {
     // last-visit info by phone, CCCD, or name, bypassing the exact
     // row-level restriction list() enforces for the same PII.
     if (this.isRowScopedDentist(actor)) {
-      const encounters = await this.prisma.encounter.findMany({
-        where: { dentistId: actor.sub, patientId: { in: patientRows.map(p => p.id) } },
-        select: { patientId: true },
-        distinct: ['patientId'],
-      });
-      const allowedIds = new Set(encounters.map(e => e.patientId));
+      const allowedIds = new Set(
+        await patientIdsReadableByDentist(
+          this.prisma,
+          actor.sub,
+          patientRows.map(p => p.id),
+        ),
+      );
       patientRows = patientRows.filter(p => allowedIds.has(p.id));
     }
 
@@ -772,13 +801,9 @@ export class PatientsService {
     });
     if (!patient) throw new PatientNotFoundException(id);
 
-    // BR-PT-014: same row-level scoping as getDetailWithSummary — a dentist
-    // may only see phone history for patients they have actually treated.
+    // BR-PT-014: same row-level scoping as getDetailWithSummary.
     if (this.isRowScopedDentist(actor)) {
-      const encountersCount = await this.prisma.encounter.count({
-        where: { patientId: id, dentistId: actor.sub },
-      });
-      if (encountersCount === 0) {
+      if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
         throw new PatientNotFoundException(id);
       }
     }
@@ -853,138 +878,216 @@ export class PatientsService {
   // ============================================================================
 
   async merge(dto: MergePatientsDto, actor: JwtPayload) {
-    const source = await this.prisma.patient.findUnique({
-      where: { id: dto.sourcePatientId },
-    });
-    const target = await this.prisma.patient.findUnique({
-      where: { id: dto.targetPatientId },
-    });
-    if (!source) throw new PatientNotFoundException(dto.sourcePatientId);
-    if (!target) throw new PatientNotFoundException(dto.targetPatientId);
-    if (source.deletedAt) throw new PatientMergeInvalidException('Source patient is deleted');
-    if (target.deletedAt) throw new PatientMergeInvalidException('Target patient is deleted');
-    if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
-      throw new PatientMergeInvalidException(
-        'BR-PT-019: Source and target must have the same full name (case-insensitive)',
-      );
-    }
-    if (source.dob.getTime() !== target.dob.getTime()) {
-      throw new PatientMergeInvalidException(
-        'BR-PT-019: Source and target must have the same date of birth',
-      );
+    if (dto.sourcePatientId === dto.targetPatientId) {
+      throw new PatientMergeInvalidException('Không thể gộp một hồ sơ vào chính nó');
     }
 
-    const [srcFutureAppts, srcOutstandingInvoices] = await Promise.all([
-      this.prisma.appointment.count({
-        where: {
-          patientId: source.id,
-          status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
-          startAt: { gte: new Date() },
-          deletedAt: null,
-        },
-      }),
-      this.prisma.invoice.count({
-        where: {
-          patientId: source.id,
-          status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
-          deletedAt: null,
-        },
-      }),
-    ]);
-    if (srcFutureAppts > 0) {
-      throw new PatientMergeInvalidException(
-        `Source patient has ${srcFutureAppts} future appointments`,
-      );
-    }
-    if (srcOutstandingInvoices > 0) {
-      throw new PatientMergeInvalidException(
-        `Source patient has ${srcOutstandingInvoices} outstanding invoices`,
-      );
-    }
+    // Checks and moves are one unit: both patient rows are locked (fixed
+    // order, so two opposite merges can't deadlock) and Serializable catches
+    // an appointment/invoice created for the source mid-merge — the checks
+    // used to run before the transaction (TOCTOU).
+    const result = await this.prisma.$transaction(
+      async tx => {
+        for (const id of [dto.sourcePatientId, dto.targetPatientId].sort()) {
+          await tx.$queryRaw`SELECT id FROM patients WHERE id = ${id}::uuid FOR UPDATE`;
+        }
+        const source = await tx.patient.findUnique({ where: { id: dto.sourcePatientId } });
+        const target = await tx.patient.findUnique({ where: { id: dto.targetPatientId } });
+        if (!source) throw new PatientNotFoundException(dto.sourcePatientId);
+        if (!target) throw new PatientNotFoundException(dto.targetPatientId);
+        if (source.deletedAt) throw new PatientMergeInvalidException('Source patient is deleted');
+        if (target.deletedAt) throw new PatientMergeInvalidException('Target patient is deleted');
+        // The name/DOB match rule is unchanged here (tightening it is a follow-up).
+        if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
+          throw new PatientMergeInvalidException(
+            'BR-PT-019: Source and target must have the same full name (case-insensitive)',
+          );
+        }
+        if (source.dob.getTime() !== target.dob.getTime()) {
+          throw new PatientMergeInvalidException(
+            'BR-PT-019: Source and target must have the same date of birth',
+          );
+        }
 
-    const result = await this.prisma.$transaction(async tx => {
-      const apptUpdate = await tx.appointment.updateMany({
-        where: { patientId: source.id },
-        data: { patientId: target.id },
-      });
-      const encUpdate = await tx.encounter.updateMany({
-        where: { patientId: source.id },
-        data: { patientId: target.id },
-      });
-      const invUpdate = await tx.invoice.updateMany({
-        where: { patientId: source.id },
-        data: { patientId: target.id },
-      });
-      const identUpdate = await tx.patientIdentifier.updateMany({
-        where: { patientId: source.id, deletedAt: null },
-        data: { deletedAt: new Date() },
-      });
-
-      await tx.patientMergeLog.create({
-        data: {
-          sourcePatientId: source.id,
-          targetPatientId: target.id,
-          fieldMapping: {
-            kept: {
-              fullName: target.fullName,
-              dob: target.dob,
-              gender: target.gender,
-              primaryPhone: target.primaryPhone,
+        const [srcFutureAppts, srcOutstandingInvoices] = await Promise.all([
+          tx.appointment.count({
+            where: {
+              patientId: source.id,
+              status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
+              startAt: { gte: new Date() },
+              deletedAt: null,
             },
-            discardedFromSource: {
-              primaryPhone: source.primaryPhone,
-              email: source.email,
+          }),
+          tx.invoice.count({
+            where: {
+              patientId: source.id,
+              status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
+              deletedAt: null,
             },
+          }),
+        ]);
+        if (srcFutureAppts > 0) {
+          throw new PatientMergeInvalidException(
+            `Source patient has ${srcFutureAppts} future appointments`,
+          );
+        }
+        if (srcOutstandingInvoices > 0) {
+          throw new PatientMergeInvalidException(
+            `Source patient has ${srcOutstandingInvoices} outstanding invoices`,
+          );
+        }
+
+        const apptUpdate = await tx.appointment.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        const encUpdate = await tx.encounter.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        const invUpdate = await tx.invoice.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+
+        // Identity papers follow the person: move the source's to the target,
+        // dropping only exact duplicates (same type + number) the target holds.
+        const [sourceIdents, targetIdents] = await Promise.all([
+          tx.patientIdentifier.findMany({
+            where: { patientId: source.id, deletedAt: null },
+            select: { id: true, type: true, value: true },
+          }),
+          tx.patientIdentifier.findMany({
+            where: { patientId: target.id, deletedAt: null },
+            select: { type: true, value: true },
+          }),
+        ]);
+        const identKey = (i: { type: string; value: string }) =>
+          `${i.type}:${i.value.trim().toUpperCase()}`;
+        const held = new Set(targetIdents.map(identKey));
+        const duplicateIds = sourceIdents.filter(i => held.has(identKey(i))).map(i => i.id);
+        const movedIds = sourceIdents.filter(i => !held.has(identKey(i))).map(i => i.id);
+        if (duplicateIds.length > 0) {
+          await tx.patientIdentifier.updateMany({
+            where: { id: { in: duplicateIds } },
+            data: { deletedAt: new Date() },
+          });
+        }
+        if (movedIds.length > 0) {
+          await tx.patientIdentifier.updateMany({
+            where: { id: { in: movedIds } },
+            data: { patientId: target.id },
+          });
+        }
+
+        // Safety-critical history is unioned, never dropped: an allergy known
+        // only on the duplicate record must survive the merge.
+        const medicalHistory = {
+          allergies: mergeStringLists(
+            readJsonStringArray(target.allergies),
+            readJsonStringArray(source.allergies),
+          ),
+          chronicDiseases: mergeStringLists(
+            readJsonStringArray(target.chronicDiseases),
+            readJsonStringArray(source.chronicDiseases),
+          ),
+          currentMedications: mergeStringLists(
+            readJsonStringArray(target.currentMedications),
+            readJsonStringArray(source.currentMedications),
+          ),
+        };
+        await tx.patient.update({
+          where: { id: target.id },
+          data: { ...medicalHistory, updatedBy: actor.sub },
+        });
+
+        await tx.patientMergeLog.create({
+          data: {
+            sourcePatientId: source.id,
+            targetPatientId: target.id,
+            fieldMapping: {
+              kept: {
+                fullName: target.fullName,
+                dob: target.dob,
+                gender: target.gender,
+                primaryPhone: target.primaryPhone,
+              },
+              discardedFromSource: {
+                primaryPhone: source.primaryPhone,
+                email: source.email,
+              },
+              medicalHistoryBefore: {
+                target: {
+                  allergies: target.allergies,
+                  chronicDiseases: target.chronicDiseases,
+                  currentMedications: target.currentMedications,
+                },
+                source: {
+                  allergies: source.allergies,
+                  chronicDiseases: source.chronicDiseases,
+                  currentMedications: source.currentMedications,
+                },
+              },
+              medicalHistoryAfter: medicalHistory,
+            },
+            migratedFkCount: {
+              appointments: apptUpdate.count,
+              encounters: encUpdate.count,
+              invoices: invUpdate.count,
+              identifiersMoved: movedIds.length,
+              identifiersDropped: duplicateIds.length,
+            },
+            mergedBy: actor.sub,
           },
-          migratedFkCount: {
+        });
+
+        await tx.patient.update({
+          where: { id: source.id },
+          data: {
+            deletedAt: new Date(),
+            deletedBy: actor.sub,
+            primaryPhone: null,
+            notes: `[MERGED→${target.code}] ${source.notes ?? ''}`.slice(0, 2000),
+          },
+        });
+
+        return {
+          source: { id: source.id, code: source.code },
+          target: { id: target.id, code: target.code },
+          migrated: {
             appointments: apptUpdate.count,
             encounters: encUpdate.count,
             invoices: invUpdate.count,
-            identifiers: identUpdate.count,
+            identifiersMoved: movedIds.length,
+            identifiersDropped: duplicateIds.length,
           },
-          mergedBy: actor.sub,
-        },
-      });
-
-      await tx.patient.update({
-        where: { id: source.id },
-        data: {
-          deletedAt: new Date(),
-          deletedBy: actor.sub,
-          primaryPhone: null,
-          notes: `[MERGED→${target.code}] ${source.notes ?? ''}`.slice(0, 2000),
-        },
-      });
-
-      return {
-        migrated: {
-          appointments: apptUpdate.count,
-          encounters: encUpdate.count,
-          invoices: invUpdate.count,
-          identifiersDropped: identUpdate.count,
-        },
-      };
-    });
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     await this.audit.log({
       action: 'PATIENT_MERGED',
       actorUserId: actor.sub,
       actorEmail: actor.email,
       targetType: 'patient',
-      targetId: target.id,
+      targetId: result.target.id,
       metadata: {
-        sourcePatientId: source.id,
-        sourceCode: source.code,
-        targetCode: target.code,
+        sourcePatientId: result.source.id,
+        sourceCode: result.source.code,
+        targetCode: result.target.code,
         reason: dto.reason,
         ...result.migrated,
       },
     });
+    // Allergies/history and encounters moved: drop both cached AI summaries.
+    this.emitClinicalDataChanged(result.target.id);
+    this.emitClinicalDataChanged(result.source.id);
 
     return {
       merged: true,
-      target: { id: target.id, code: target.code },
-      sourceArchived: { id: source.id, code: source.code },
+      target: result.target,
+      sourceArchived: result.source,
       migrated: result.migrated,
     };
   }

@@ -9,8 +9,9 @@ import {
   IsUUID,
   ArrayMaxSize,
   MaxLength,
+  MinLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Gender, IdentifierType } from '@prisma/client';
 
@@ -184,8 +185,11 @@ export class OverrideDobDto {
   @IsDateString()
   dob: string;
 
-  @ApiProperty()
+  @ApiProperty({ minLength: 10, maxLength: 1000 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @MinLength(10, { message: 'Lý do sửa ngày sinh phải có ít nhất 10 ký tự' })
+  @MaxLength(1000)
   reason: string;
 }
 

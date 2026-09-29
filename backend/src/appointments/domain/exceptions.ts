@@ -22,7 +22,7 @@ export class BackDatedAppointmentException extends HttpException {
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'BACK_DATED_APPOINTMENT',
-        message: 'Cannot create or reschedule appointments in the past',
+        message: 'Không thể đặt hoặc đổi lịch hẹn vào thời điểm đã qua',
       },
       HttpStatus.BAD_REQUEST,
     );
@@ -116,7 +116,7 @@ export class RescheduleLimitReachedException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'RESCHEDULE_LIMIT_REACHED',
-        message: 'Maximum reschedule limit (3) reached for this appointment',
+        message: 'Lịch hẹn này đã đổi tối đa 3 lần — hãy hủy và đặt lịch mới',
       },
       HttpStatus.CONFLICT,
     );
@@ -146,7 +146,7 @@ export class SlotConflictException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'SLOT_CONFLICT',
-        message: 'This time slot is already booked',
+        message: 'Khung giờ này đã có lịch hẹn khác',
       },
       HttpStatus.CONFLICT,
     );

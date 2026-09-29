@@ -6,6 +6,7 @@ import {
   DentistProfile,
   EncounterStatus,
   Prisma,
+  QueueStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -21,6 +22,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppointmentCancelledEvent,
   APPOINTMENT_CANCELLED_EVENT,
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
 } from '../common/events/domain-events';
 import {
   AppointmentNotFoundException,
@@ -57,6 +60,8 @@ import {
   ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
 import { closeQueueEntry, enqueue } from './domain/queue';
+import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
+import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
@@ -67,6 +72,21 @@ const CHECKIN_WINDOW_AFTER_MIN = 30;
 // instead of already being NO_SHOW.
 const NO_SHOW_GRACE_MIN = CHECKIN_WINDOW_AFTER_MIN;
 const LATE_CANCEL_REASON_MIN_LENGTH = 5;
+/** Reason recorded when the end-of-day job closes a check-in left open. */
+export const END_OF_DAY_LEFT_REASON = 'Hệ thống đóng cuối ngày';
+
+// Front desk reads these messages as-is, so they are in Vietnamese.
+const STALE_APPOINTMENT_MSG = 'Lịch hẹn vừa được người khác thay đổi — tải lại rồi thử lại';
+const STATUS_LABEL: Record<AppointmentStatus, string> = {
+  SCHEDULED: 'đã đặt',
+  CONFIRMED: 'đã xác nhận',
+  CHECKED_IN: 'đã check-in',
+  IN_PROGRESS: 'đang khám',
+  COMPLETED: 'đã hoàn thành',
+  CANCELLED: 'đã hủy',
+  NO_SHOW: 'vắng mặt',
+  LEFT: 'đã về (chưa khám)',
+};
 
 const blankToNull = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
 
@@ -223,7 +243,7 @@ export class AppointmentsService {
         });
         if (attached.count !== 1) {
           throw new InvalidAppointmentStateException(
-            'The booking request was handled by someone else — reload and try again',
+            'Yêu cầu đặt lịch vừa được xử lý hoặc đã quá hạn — tải lại rồi thử lại',
           );
         }
       }
@@ -258,12 +278,12 @@ export class AppointmentsService {
     if (appt.status === AppointmentStatus.CONFIRMED) return appt;
     if (appt.status !== AppointmentStatus.SCHEDULED) {
       throw new InvalidAppointmentStateException(
-        `Cannot confirm appointment in status ${appt.status}`,
+        `Không thể xác nhận lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
       );
     }
     if (Date.now() >= appt.startAt.getTime()) {
       throw new InvalidAppointmentStateException(
-        'Appointment has already started — check the patient in instead of confirming',
+        'Đã qua giờ hẹn — không cần xác nhận nữa, hãy check-in khi bệnh nhân đến',
       );
     }
 
@@ -278,9 +298,7 @@ export class AppointmentsService {
       },
     });
     if (result.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Appointment was changed by someone else — reload and try again',
-      );
+      throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
     }
     const updated = await this.prisma.appointment.findUniqueOrThrow({
       where: { id: appointmentId },
@@ -316,13 +334,13 @@ export class AppointmentsService {
       appt.status !== AppointmentStatus.CONFIRMED
     ) {
       throw new InvalidAppointmentStateException(
-        `Cannot check-in appointment in status ${appt.status}`,
+        `Không thể check-in lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
       );
     }
 
     if (now < windowStart) {
       throw new CheckInWindowException(
-        `Chưa đến giờ check-in. Window opens at ${new Date(windowStart).toISOString()}`,
+        `Chưa đến giờ check-in — mở từ ${this.toClinicTimeString(new Date(windowStart))} ngày ${clinicDateOnly(new Date(windowStart))}`,
       );
     }
     if (now > windowEnd && !override) {
@@ -336,13 +354,13 @@ export class AppointmentsService {
       );
     }
     if (override && (!overrideReason || overrideReason.length < 5)) {
-      throw new CheckInWindowException('Force check-in requires a reason (≥ 5 chars)');
+      throw new CheckInWindowException('Check-in muộn cần lý do (ít nhất 5 ký tự)');
     }
 
     // BR-APPT-008: active patient
     const patient = await this.prisma.patient.findUnique({ where: { id: appt.patientId } });
     if (!patient || patient.deletedAt) {
-      throw new InvalidAppointmentStateException('Patient is deleted');
+      throw new InvalidAppointmentStateException('Hồ sơ bệnh nhân đã bị xóa');
     }
 
     // Guarded write: only succeed if status is still what we just read.
@@ -364,9 +382,7 @@ export class AppointmentsService {
         },
       });
       if (checkInResult.count === 0) {
-        throw new InvalidAppointmentStateException(
-          'Appointment was changed by someone else — reload and try again',
-        );
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
       // ADR-0009 D5: checking in puts the patient in the dentist's queue.
       await enqueue(tx, appt, new Date(now), actor.sub);
@@ -387,7 +403,8 @@ export class AppointmentsService {
 
   /** Transition the appointment and create its encounter atomically (BR-MR-001). */
   async startEncounter(appointmentId: string, actor: JwtPayload) {
-    return this.prisma.$transaction(async tx => {
+    let openedFor: string | null = null;
+    const result = await this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
       const appt = await tx.appointment.findUnique({ where: { id: appointmentId } });
       if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(appointmentId);
@@ -410,9 +427,6 @@ export class AppointmentsService {
       if (existing?.status === EncounterStatus.COMPLETED) {
         throw new InvalidAppointmentStateException('Encounter already completed');
       }
-      if (existing?.status === EncounterStatus.CANCELLED) {
-        throw new InvalidAppointmentStateException('Encounter is cancelled');
-      }
 
       await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       const updated =
@@ -422,6 +436,13 @@ export class AppointmentsService {
               data: { status: AppointmentStatus.IN_PROGRESS, updatedBy: actor.sub },
             })
           : appt;
+      // An encounter cancelled as started by mistake (MedicalRecordsService
+      // .cancelEncounter puts the appointment back to CHECKED_IN) restarts on
+      // the same row: appointment_id is unique on encounters.
+      if (existing?.status === EncounterStatus.CANCELLED) {
+        await reopenCancelledEncounter(tx, existing.id, appt.dentistId, actor.sub);
+        openedFor = appt.patientId;
+      }
       const encounter =
         existing ??
         (await tx.encounter.create({
@@ -433,9 +454,17 @@ export class AppointmentsService {
             startedAt: new Date(),
           },
         }));
+      if (!existing) openedFor = appt.patientId;
 
       return { ...updated, encounter: { id: encounter.id } };
     });
+    // After commit: an encounter opened (new or reopened) changes the AI
+    // summary's "open encounters" line.
+    if (openedFor) {
+      const payload: PatientClinicalDataChangedEvent = { patientId: openedFor };
+      this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
+    }
+    return result;
   }
 
   /**
@@ -462,12 +491,13 @@ export class AppointmentsService {
       appt.status === AppointmentStatus.COMPLETED
     ) {
       throw new InvalidAppointmentStateException(
-        `Cannot cancel appointment in status ${appt.status}`,
+        `Không thể hủy lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
       );
     }
     if (appt.status === AppointmentStatus.IN_PROGRESS) {
+      // BR-APPT-011
       throw new InvalidAppointmentStateException(
-        'Cannot cancel appointment while encounter is in progress (BR-APPT-011)',
+        'Không thể hủy lịch khi bệnh nhân đang khám — hãy kết thúc hoặc hủy lượt khám trước',
       );
     }
 
@@ -485,8 +515,9 @@ export class AppointmentsService {
       }
       const hoursUntil = (appt.startAt.getTime() - now) / (1000 * 60 * 60);
       if (hoursUntil < 24) {
+        // BR-APPT-009
         throw new InvalidAppointmentStateException(
-          'Dentist may only cancel an appointment ≥ 24h before start (BR-APPT-009)',
+          'Bác sĩ chỉ được hủy lịch trước giờ hẹn ít nhất 24 giờ — hãy nhờ lễ tân hủy',
         );
       }
     } else if (now >= appt.startAt.getTime()) {
@@ -494,13 +525,14 @@ export class AppointmentsService {
       // be marked no-show (they did arrive), so cancel is the only way out —
       // without this the appointment stayed CHECKED_IN in the queue forever.
       if (appt.status !== AppointmentStatus.CHECKED_IN) {
+        // BR-APPT-010
         throw new InvalidAppointmentStateException(
-          'Receptionist/admin may only cancel before appointment start (BR-APPT-010)',
+          'Đã qua giờ hẹn nên không thể hủy — nếu bệnh nhân không đến, hãy đánh vắng mặt',
         );
       }
       if ((dto.reason?.trim().length ?? 0) < LATE_CANCEL_REASON_MIN_LENGTH) {
         throw new InvalidAppointmentStateException(
-          `Cancelling a checked-in appointment after its start requires a reason (≥ ${LATE_CANCEL_REASON_MIN_LENGTH} chars)`,
+          `Hủy lịch đã check-in sau giờ hẹn cần lý do (ít nhất ${LATE_CANCEL_REASON_MIN_LENGTH} ký tự)`,
         );
       }
       lateCheckedInCancel = true;
@@ -519,9 +551,7 @@ export class AppointmentsService {
         },
       });
       if (cancelResult.count === 0) {
-        throw new InvalidAppointmentStateException(
-          'Appointment was changed by someone else — reload and try again',
-        );
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
       const u = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
       await closeQueueEntry(tx, appointmentId, 'CANCELLED', actor.sub);
@@ -583,12 +613,23 @@ export class AppointmentsService {
       appt.status !== AppointmentStatus.SCHEDULED &&
       appt.status !== AppointmentStatus.CONFIRMED
     ) {
-      throw new InvalidAppointmentStateException(`Cannot mark no-show from status ${appt.status}`);
+      throw new InvalidAppointmentStateException(
+        `Không thể đánh vắng mặt lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
+      );
+    }
+    // A patient can't miss a visit that hasn't started yet; one who calls
+    // ahead to say they won't come is a cancellation.
+    const now = new Date();
+    if (now < appt.startAt) {
+      throw new InvalidAppointmentStateException(
+        'Chưa đến giờ hẹn, hãy dùng Hủy lịch nếu khách báo không đến',
+      );
     }
 
-    // See checkIn() above — same guarded-write race protection.
+    // See checkIn() above — same guarded-write race protection; the time
+    // filter also covers a concurrent reschedule to a later start.
     const noShowResult = await this.prisma.appointment.updateMany({
-      where: { id: appointmentId, status: appt.status },
+      where: { id: appointmentId, status: appt.status, startAt: { lte: now } },
       data: {
         status: AppointmentStatus.NO_SHOW,
         noShowAt: new Date(),
@@ -597,9 +638,7 @@ export class AppointmentsService {
       },
     });
     if (noShowResult.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Appointment was changed by someone else — reload and try again',
-      );
+      throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
     }
     const updated = await this.prisma.appointment.findUniqueOrThrow({
       where: { id: appointmentId },
@@ -624,17 +663,21 @@ export class AppointmentsService {
     const now = new Date();
     const cutoff = new Date(now.getTime() - NO_SHOW_GRACE_MIN * 60_000);
 
-    // Single guarded write: selecting ids first and then updating by id alone
-    // let a check-in that landed between the two queries be overwritten with
-    // NO_SHOW. Re-stating the status filter in the write itself closes that.
+    const due: Prisma.AppointmentWhereInput = {
+      status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+      // now > max(startAt + grace, endAt)
+      startAt: { lt: cutoff },
+      endAt: { lt: now },
+      deletedAt: null,
+    };
+    // The ids are read first so each appointment gets its own history entry
+    // (BR-APPT-034). The write re-states the whole filter, so a check-in that
+    // lands between the two queries is not overwritten with NO_SHOW.
+    const candidates = await this.prisma.appointment.findMany({ where: due, select: { id: true } });
+    if (candidates.length === 0) return { updated: 0 };
+    const ids = candidates.map(a => a.id);
     const updated = await this.prisma.appointment.updateMany({
-      where: {
-        status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-        // now > max(startAt + grace, endAt)
-        startAt: { lt: cutoff },
-        endAt: { lt: now },
-        deletedAt: null,
-      },
+      where: { ...due, id: { in: ids } },
       data: {
         status: AppointmentStatus.NO_SHOW,
         noShowAt: now,
@@ -643,14 +686,105 @@ export class AppointmentsService {
     });
     if (updated.count === 0) return { updated: 0 };
 
-    await this.audit.log({
-      action: 'APPOINTMENT_AUTO_NO_SHOW',
-      actorUserId: null,
-      targetType: 'appointment',
-      metadata: { count: updated.count, cutoff },
+    // Some rows changed in between: audit only the ones this run marked.
+    const marked =
+      updated.count === ids.length
+        ? ids
+        : (
+            await this.prisma.appointment.findMany({
+              where: { id: { in: ids }, status: AppointmentStatus.NO_SHOW, noShowAt: now },
+              select: { id: true },
+            })
+          ).map(a => a.id);
+    // One batched write for the history entries (same columns as AuditService.log).
+    await this.prisma.auditLog.createMany({
+      data: marked.map(id => ({
+        action: 'APPOINTMENT_AUTO_NO_SHOW',
+        actorUserId: null,
+        targetType: 'appointment',
+        targetId: id,
+        metadata: { cutoff: cutoff.toISOString() },
+      })),
     });
 
     return { updated: updated.count };
+  }
+
+  /**
+   * End of the clinic day: a patient still CHECKED_IN from an earlier day
+   * never saw the dentist, so the visit is closed as LEFT with its queue
+   * entry — a forgotten entry would otherwise keep the dentist "busy" in the
+   * queue the next day. IN_PROGRESS visits are left alone: they own an
+   * encounter (medical record) that only the dentist may close.
+   */
+  async closeStaleCheckIns() {
+    const today = clinicDateOnly();
+    const dayStart = startOfClinicDay(today);
+    const stale = await this.prisma.appointment.findMany({
+      where: { status: AppointmentStatus.CHECKED_IN, startAt: { lt: dayStart }, deletedAt: null },
+      select: { id: true },
+    });
+    let closed = 0;
+    let failed = 0;
+    for (const { id } of stale) {
+      try {
+        const done = await this.prisma.$transaction(async tx => {
+          const res = await tx.appointment.updateMany({
+            where: { id, status: AppointmentStatus.CHECKED_IN, startAt: { lt: dayStart } },
+            data: {
+              status: AppointmentStatus.LEFT,
+              leftAt: new Date(),
+              leftReason: END_OF_DAY_LEFT_REASON,
+              updatedBy: null,
+            },
+          });
+          if (res.count === 0) return false;
+          await closeQueueEntry(tx, id, 'LEFT', null);
+          return true;
+        });
+        if (!done) continue;
+        closed++;
+        await this.audit.log({
+          action: 'APPOINTMENT_LEFT',
+          actorUserId: null,
+          targetType: 'appointment',
+          targetId: id,
+          metadata: { reason: END_OF_DAY_LEFT_REASON, auto: true },
+        });
+      } catch (err: unknown) {
+        // One bad row must not stop the others; it is retried next night.
+        failed++;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`closeStaleCheckIns: appointment ${id} not closed: ${msg}`);
+      }
+    }
+
+    // Entries of earlier days still open whose visit has moved on (or was
+    // closed above): nobody can be waiting or called for a past day. An
+    // entry whose visit is still CHECKED_IN (its close failed above) stays
+    // open with it, so the two never disagree.
+    const entries = await this.prisma.queueEntry.updateMany({
+      where: {
+        doneAt: null,
+        queueDate: { lt: new Date(today) },
+        OR: [
+          { appointment: { status: { not: AppointmentStatus.CHECKED_IN } } },
+          { appointment: { deletedAt: { not: null } } },
+        ],
+      },
+      data: {
+        doneAt: new Date(),
+        closeReason: 'LEFT',
+        status: QueueStatus.LEFT,
+        updatedBy: null,
+      },
+    });
+    if (closed || failed || entries.count) {
+      this.logger.log(
+        `closeStaleCheckIns: ${closed} check-ins closed, ${failed} failed, ${entries.count} other queue entries closed`,
+      );
+    }
+    return { appointments: closed, failed, queueEntries: entries.count };
   }
 
   async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload) {
@@ -668,7 +802,7 @@ export class AppointmentsService {
       appt.status !== AppointmentStatus.CONFIRMED
     ) {
       throw new InvalidAppointmentStateException(
-        `Cannot reschedule appointment in status ${appt.status}`,
+        `Không thể đổi lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
       );
     }
     if (appt.rescheduleCount >= 3) {
@@ -720,9 +854,7 @@ export class AppointmentsService {
         },
       });
       if (rescheduleResult.count === 0) {
-        throw new InvalidAppointmentStateException(
-          'Appointment was changed by someone else — reload and try again',
-        );
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
       const updated = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
 
@@ -1775,22 +1907,21 @@ export class AppointmentsService {
    * BR-APPT-029: cron auto-cancel PENDING past-date shifts.
    */
   async autoCancelPastPendingShifts() {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    // `date` is a DATE column (UTC midnight of the calendar day); "today" is
+    // the clinic's, not UTC's, so 00:00–07:00 VN counts as the new day.
+    const today = new Date(clinicDateOnly());
 
-    const stale = await this.prisma.shiftRegistration.findMany({
+    // One guarded write: a shift approved between a read and this update
+    // must not be cancelled, so PENDING is part of the write itself.
+    const updated = await this.prisma.shiftRegistration.updateMany({
       where: {
         status: 'PENDING',
         date: { lt: today },
         deletedAt: null,
       },
-      select: { id: true },
-    });
-    if (stale.length === 0) return { updated: 0 };
-    const updated = await this.prisma.shiftRegistration.updateMany({
-      where: { id: { in: stale.map(s => s.id) } },
       data: { status: 'CANCELLED', cancelledAt: new Date() },
     });
+    if (updated.count === 0) return { updated: 0 };
     await this.audit.log({
       action: 'SHIFT_REGISTRATION_AUTO_CANCELLED',
       targetType: 'shift_registration',
@@ -1956,7 +2087,7 @@ export class AppointmentsService {
     const appt = await this.requireAppointment(appointmentId);
     if (appt.status !== AppointmentStatus.CHECKED_IN) {
       throw new InvalidAppointmentStateException(
-        `Only a checked-in patient can leave before the exam (status is ${appt.status})`,
+        `Chỉ ghi nhận "đã về" cho bệnh nhân đã check-in (lịch đang ở trạng thái "${STATUS_LABEL[appt.status]}")`,
       );
     }
     await this.prisma.$transaction(async tx => {
@@ -1970,9 +2101,7 @@ export class AppointmentsService {
         },
       });
       if (result.count === 0) {
-        throw new InvalidAppointmentStateException(
-          'Appointment was changed by someone else — reload and try again',
-        );
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
       await closeQueueEntry(tx, appointmentId, 'LEFT', actor.sub);
     });
@@ -2041,10 +2170,8 @@ export class AppointmentsService {
     if (dentistId !== actor.sub) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch vào lịch làm việc của chính mình');
     }
-    const treated = await this.prisma.encounter.count({
-      where: { patientId, dentistId: actor.sub },
-    });
-    if (treated === 0) {
+    // Follow-ups need a real (non-cancelled) visit, not just a booking.
+    if (!(await dentistHasTreatedPatient(this.prisma, patientId, actor.sub))) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch tái khám cho bệnh nhân mình đã khám');
     }
   }

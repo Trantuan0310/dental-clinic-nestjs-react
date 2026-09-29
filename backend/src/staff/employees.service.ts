@@ -14,7 +14,6 @@ import {
   UpdateEmployeeDto,
 } from './dto/staff.dto';
 import {
-  DentistHasFutureAppointmentsException,
   DentistProfileNotAllowedException,
   EmployeeNotFoundException,
   EmployeeValidationException,
@@ -24,7 +23,7 @@ import {
 } from './staff.exceptions';
 import {
   clinicToday,
-  futureActiveAppointments,
+  assertDentistHasNoOpenWork,
   nextCalendarColor,
   toDateOnly,
 } from './staff-rules';
@@ -187,8 +186,7 @@ export class EmployeesService {
     const updated = await this.prisma.$transaction(
       async tx => {
         if (current.dentistProfile && current.userId) {
-          const blocking = await futureActiveAppointments(tx, current.userId);
-          if (blocking.length > 0) throw new DentistHasFutureAppointmentsException(blocking);
+          await assertDentistHasNoOpenWork(tx, current.userId);
         }
         if (current.userId) await this.assertNotLastAdmin(tx, current.userId);
 

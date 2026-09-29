@@ -125,8 +125,18 @@ describe('Phase one audit regressions', () => {
     await expect(service.getPatientSummary('p', 3, false, dentist)).resolves.toMatchObject({
       patientId: 'p',
     });
+    // Only live/completed bookings count (not CANCELLED/NO_SHOW/LEFT);
+    // upcoming ones only within the next 7 days.
     expect(db.appointment.count).toHaveBeenCalledWith({
-      where: { patientId: 'p', dentistId: dentist.sub },
+      where: {
+        patientId: 'p',
+        dentistId: dentist.sub,
+        deletedAt: null,
+        OR: [
+          { status: { in: ['CHECKED_IN', 'IN_PROGRESS', 'COMPLETED'] } },
+          { status: { in: ['SCHEDULED', 'CONFIRMED'] }, startAt: { lte: expect.any(Date) } },
+        ],
+      },
     });
   });
 
@@ -142,8 +152,9 @@ describe('Phase one audit regressions', () => {
         !actor.permissions.includes('patient.update') &&
         !actor.permissions.includes('patient.delete')
       ) {
+        // A CANCELLED encounter does not count as "treated".
         expect(db.encounter.count).toHaveBeenCalledWith({
-          where: { patientId: 'p', dentistId: actor.sub },
+          where: { patientId: 'p', dentistId: actor.sub, status: { not: 'CANCELLED' } },
         });
       }
     },

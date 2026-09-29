@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OnEvent } from '@nestjs/event-emitter';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisCacheService } from '../common/redis-cache.service';
@@ -7,9 +8,18 @@ import { SYSTEM_PROMPT, buildUserPrompt, type SummaryInput } from './prompts/sum
 import { AiPatientSummary, SummaryBullet, SummarySource } from './ai.types';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { CompatibleLlm, createCompatibleLlm, extractJsonObject } from './compatible-llm';
+import { dentistCanReadPatient } from '../common/dentist-patient-access';
+import {
+  ENCOUNTER_CLOSED_EVENT,
+  EncounterClosedEvent,
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
+} from '../common/events/domain-events';
 
 const CACHE_TTL_SECONDS = 3600;
 const MAX_TOKENS = 350;
+/** Addendums per encounter fed to the summary (newest first). */
+const ADDENDUMS_PER_ENCOUNTER = 2;
 
 @Injectable()
 export class AiService {
@@ -54,19 +64,12 @@ export class AiService {
       !actor.permissions.includes('patient.update') &&
       !actor.permissions.includes('patient.delete')
     ) {
-      // A first-visit patient on today's list has no encounter yet; an
-      // appointment on this dentist's calendar counts too (the dashboard
-      // offers exactly those patients).
-      const treated = await this.prisma.encounter.count({
-        where: { patientId, dentistId: actor.sub },
-      });
-      const booked =
-        treated > 0
-          ? 0
-          : await this.prisma.appointment.count({
-              where: { patientId, dentistId: actor.sub },
-            });
-      if (treated === 0 && booked === 0) throw new NotFoundException('Patient not found');
+      // Same scope as the patient record: treated (non-cancelled encounter)
+      // or booked with a live/completed appointment — a first-visit patient
+      // on today's list counts; a CANCELLED/NO_SHOW booking does not.
+      if (!(await dentistCanReadPatient(this.prisma, patientId, actor.sub))) {
+        throw new NotFoundException('Patient not found');
+      }
     }
 
     const cacheKey = this.cacheKey(patientId, top);
@@ -119,6 +122,21 @@ export class AiService {
     return `ai:patient:${patientId}:top${top}`;
   }
 
+  /** Drop every cached summary (all `top` variants) of one patient. */
+  async invalidatePatientSummary(patientId: string): Promise<void> {
+    await this.cache.delByPattern(`ai:patient:${patientId}:*`);
+  }
+
+  @OnEvent(PATIENT_CLINICAL_DATA_CHANGED_EVENT)
+  async onClinicalDataChanged(payload: PatientClinicalDataChangedEvent): Promise<void> {
+    await this.invalidatePatientSummary(payload.patientId);
+  }
+
+  @OnEvent(ENCOUNTER_CLOSED_EVENT)
+  async onEncounterClosed(payload: EncounterClosedEvent): Promise<void> {
+    await this.invalidatePatientSummary(payload.patientId);
+  }
+
   private async collectSummaryInput(
     patientId: string,
     top: number,
@@ -126,7 +144,7 @@ export class AiService {
   ): Promise<SummaryInput & { openEncounterCount: number; outstandingInvoiceCount: number }> {
     const [encounters, openEncounterCount, outstandingInvoiceCount] = await Promise.all([
       this.prisma.encounter.findMany({
-        where: { patientId, cancelledAt: null },
+        where: { patientId, cancelledAt: null, status: { not: 'CANCELLED' } },
         orderBy: { startedAt: 'desc' },
         take: top,
         select: {
@@ -134,9 +152,21 @@ export class AiService {
           status: true,
           startedAt: true,
           closedAt: true,
-          chiefComplaint: true,
-          diagnosis: true,
-          treatmentPlanText: true,
+          // The record lives in ClinicalNote (one per encounter, upserted in
+          // place) plus append-only addendums; the legacy encounter columns
+          // chiefComplaint/diagnosis/treatmentPlanText are never written.
+          clinicalNote: {
+            select: {
+              chiefComplaint: true,
+              diagnosis: true,
+              treatmentPlan: true,
+              addendums: {
+                orderBy: { addedAt: 'desc' },
+                take: ADDENDUMS_PER_ENCOUNTER,
+                select: { content: true },
+              },
+            },
+          },
           treatments: {
             where: { deletedAt: null },
             orderBy: { sequence: 'asc' },
@@ -157,9 +187,10 @@ export class AiService {
       currentMedications: this.normalizeStringList(patient.currentMedications),
       recentEncounters: encounters.map(e => ({
         date: e.startedAt.toISOString().slice(0, 10),
-        chiefComplaint: e.chiefComplaint,
-        diagnosis: e.diagnosis,
-        treatmentPlan: e.treatmentPlanText,
+        chiefComplaint: e.clinicalNote?.chiefComplaint ?? null,
+        diagnosis: e.clinicalNote?.diagnosis ?? null,
+        treatmentPlan: e.clinicalNote?.treatmentPlan ?? null,
+        addendums: (e.clinicalNote?.addendums ?? []).map(a => a.content),
         status: e.status,
         treatments: e.treatments.map(t => ({ code: null, name: t.procedure })),
       })),

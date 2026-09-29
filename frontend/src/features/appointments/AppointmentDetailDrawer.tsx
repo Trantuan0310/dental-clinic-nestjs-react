@@ -52,8 +52,10 @@ import {
   getWeekdayLabel,
 } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { clinicIso, clinicParts } from '@/lib/clinicTime';
+import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
+import { useAuthStore } from '@/stores/authStore';
 import type { Appointment, AppointmentStatus } from '@/types/appointment';
+import { isOverdueNotArrived, minutesLate, OVERDUE_LABEL, useNow } from './liveStatus';
 
 interface AppointmentDetailDrawerProps {
   appointmentId: string | null;
@@ -88,8 +90,8 @@ const HISTORY_LABEL: Record<string, string> = {
   APPOINTMENT_RESCHEDULED: 'Đổi lịch',
   APPOINTMENT_CHECKIN_OVERRIDDEN: 'Check-in muộn (có lý do)',
   APPOINTMENT_CANCELLED: 'Hủy lịch',
-  APPOINTMENT_NO_SHOW: 'Đánh no-show',
-  APPOINTMENT_AUTO_NO_SHOW: 'Tự động no-show',
+  APPOINTMENT_NO_SHOW: 'Đánh vắng mặt',
+  APPOINTMENT_AUTO_NO_SHOW: 'Tự động đánh vắng mặt (quá giờ không đến)',
   APPOINTMENT_LEFT: 'Bệnh nhân đã về (chưa khám)',
   ENCOUNTER_CANCELLED_VIA_APPOINTMENT: 'Hủy lượt khám theo lịch hẹn',
   APPOINTMENT_CHECKED_IN: 'Check-in',
@@ -106,8 +108,13 @@ const LATE_CHECK_IN_REASONS = [
   'Bác sĩ đồng ý khám bù trong giờ hẹn',
 ];
 
-// Backend requires ≥ 5 chars for a forced check-in (BR-APPT-007).
+// Backend requires ≥ 5 chars for a forced check-in (BR-APPT-007) and for
+// cancelling a checked-in visit after its start (BR-APPT-025).
 const OVERRIDE_REASON_MIN_LENGTH = 5;
+// Mirror the backend check-in window (CHECKIN_WINDOW_BEFORE/AFTER_MIN):
+// earlier is refused, later needs a reason.
+const CHECK_IN_WINDOW_BEFORE_MIN = 15;
+const CHECK_IN_WINDOW_AFTER_MIN = 30;
 
 /**
  * The check-in window has closed but the backend offers a forced check-in
@@ -131,6 +138,11 @@ const STATUS_ORDER: AppointmentStatus[] = [
 export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: AppointmentDetailDrawerProps) {
   const navigate = useNavigate();
   const { data: appointment, isLoading } = useAppointment(appointmentId ?? undefined);
+  const now = useNow();
+  // Same test as the backend's isRowScopedDentist (cancel window BR-APPT-009).
+  const rowScopedDentist = useAuthStore(
+    (s) => s.hasPermission('appointment.read.own') && !s.hasPermission('appointment.read.any'),
+  );
   const [actionModal, setActionModal] = useState<ActionKey | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -265,6 +277,14 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       setError('Vui lòng nhập lý do hủy.');
       return;
     }
+    if (
+      appointment.status === 'checked_in' &&
+      Date.now() >= new Date(appointment.startsAt).getTime() &&
+      reason.trim().length < OVERRIDE_REASON_MIN_LENGTH
+    ) {
+      setError(`Vui lòng nhập lý do (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
+      return;
+    }
     setError(null);
     try {
       await cancel.mutateAsync({ id: appointment.id, payload: { reason } });
@@ -279,17 +299,17 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const handleNoShow = async () => {
     if (!appointment) return;
     if (!reason.trim()) {
-      setError('Vui lòng nhập lý do no-show.');
+      setError('Vui lòng nhập lý do vắng mặt.');
       return;
     }
     setError(null);
     try {
       await noShow.mutateAsync({ id: appointment.id, reason });
-      notify.success('Đã đánh dấu no-show');
+      notify.success('Đã đánh dấu vắng mặt');
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể đánh dấu no-show'));
+      setError(getApiErrorMessage(err, 'Không thể đánh dấu vắng mặt'));
     }
   };
 
@@ -350,6 +370,31 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
   if (!appointmentId) return null;
 
+  // Time-based rules the backend enforces, so the drawer only offers what
+  // will be accepted (recomputed every 30 s via useNow).
+  const startMs = appointment ? new Date(appointment.startsAt).getTime() : 0;
+  const started = !!appointment && now >= startMs;
+  const overdue = !!appointment && isOverdueNotArrived(appointment, now);
+  const checkInNeedsReason = started && now > startMs + CHECK_IN_WINDOW_AFTER_MIN * 60_000;
+  // Clinic "HH:mm" (plus the date when not today) the check-in window opens, while it is still shut.
+  const opensMs = startMs - CHECK_IN_WINDOW_BEFORE_MIN * 60_000;
+  const checkInOpensAt =
+    appointment && now < opensMs
+      ? (() => {
+          const opens = clinicParts(new Date(opensMs));
+          return opens.date === clinicToday(new Date(now))
+            ? opens.time
+            : `${opens.time} ngày ${opens.date.slice(8, 10)}/${opens.date.slice(5, 7)}`;
+        })()
+      : null;
+  const cancelAllowed =
+    !!appointment &&
+    canCancel(appointment.status) &&
+    (rowScopedDentist
+      ? startMs - now >= 24 * 60 * 60_000 // BR-APPT-009
+      : !started || appointment.status === 'checked_in'); // BR-APPT-010 / 025
+  const noShowAllowed = !!appointment && canNoShow(appointment.status) && started;
+
   return (
     <>
       <Drawer
@@ -379,8 +424,22 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                     </span>
                   </p>
                 </div>
-                <AppointmentStatusBadge status={appointment.status} />
+                <AppointmentStatusBadge status={appointment.status} overdue={overdue} />
               </div>
+              {overdue && (
+                <div
+                  role="status"
+                  className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"
+                >
+                  <p className="font-semibold">
+                    {OVERDUE_LABEL} — trễ {minutesLate(appointment.startsAt, now)} phút
+                  </p>
+                  <p className="mt-0.5">
+                    Gọi cho bệnh nhân; nếu khách đến thì check-in muộn, nếu không đến thì đánh
+                    vắng mặt (hệ thống tự đánh vắng mặt sau khi hết giờ hẹn).
+                  </p>
+                </div>
+              )}
               {/* Quick actions */}
               {appointment.patientPhone && (
                 <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3">
@@ -586,18 +645,32 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
               <div className="flex flex-wrap gap-2">
                 {appointment.status === 'scheduled' || appointment.status === 'confirmed' ? (
                   <PermissionGuard permission="appointment.check_in">
-                    <Button
-                      size="sm"
-                      leftIcon={<CheckCircle2 className="h-4 w-4" />}
-                      onClick={handleCheckIn}
-                      isLoading={checkIn.isPending}
-                    >
-                      Check-in
-                    </Button>
+                    {checkInOpensAt ? (
+                      // The backend refuses check-in this early; say when it opens.
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<CheckCircle2 className="h-4 w-4" />}
+                        disabled
+                      >
+                        Mở check-in từ {checkInOpensAt}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        leftIcon={<CheckCircle2 className="h-4 w-4" />}
+                        // Past the window the backend needs a reason: ask for it up front.
+                        onClick={checkInNeedsReason ? () => setActionModal('force_check_in') : handleCheckIn}
+                        isLoading={checkIn.isPending}
+                      >
+                        {overdue ? 'Check-in (muộn)' : 'Check-in'}
+                      </Button>
+                    )}
                   </PermissionGuard>
                 ) : null}
 
-                {appointment.status === 'scheduled' ? (
+                {/* Confirming is a reminder before the visit; the backend refuses it once started. */}
+                {appointment.status === 'scheduled' && !started ? (
                   <PermissionGuard permission="appointment.update">
                     <Button
                       size="sm"
@@ -638,7 +711,20 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   </PermissionGuard>
                 ) : null}
 
-                {canCancel(appointment.status) && (
+                {noShowAllowed && (
+                  <PermissionGuard permission="appointment.mark_no_show">
+                    <Button
+                      size="sm"
+                      variant={overdue ? 'danger' : 'outline'}
+                      leftIcon={<Trash2 className="h-4 w-4" />}
+                      onClick={() => setActionModal('no_show')}
+                    >
+                      Đánh vắng mặt
+                    </Button>
+                  </PermissionGuard>
+                )}
+
+                {cancelAllowed && (
                   <PermissionGuard permission="appointment.cancel">
                     <Button
                       size="sm"
@@ -660,19 +746,6 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       onClick={() => setActionModal('reschedule')}
                     >
                       Đổi lịch
-                    </Button>
-                  </PermissionGuard>
-                )}
-
-                {canNoShow(appointment.status) && (
-                  <PermissionGuard permission="appointment.mark_no_show">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      leftIcon={<Trash2 className="h-4 w-4" />}
-                      onClick={() => setActionModal('no_show')}
-                    >
-                      Đánh no-show
                     </Button>
                   </PermissionGuard>
                 )}
@@ -730,15 +803,15 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       <ActionDialog
         open={actionModal === 'no_show'}
         onClose={closeAction}
-        title="Đánh dấu No-show"
-        description="Bệnh nhân không đến sau khi quá thời gian check-in?"
+        title="Đánh vắng mặt"
+        description="Đã qua giờ hẹn mà bệnh nhân chưa đến? Lịch sẽ chuyển sang Vắng mặt và giờ hẹn được giải phóng."
         reason={reason}
         setReason={setReason}
         quickReasons={NO_SHOW_REASONS}
         error={error}
         onConfirm={handleNoShow}
         isLoading={noShow.isPending}
-        confirmLabel="Xác nhận no-show"
+        confirmLabel="Xác nhận vắng mặt"
         confirmVariant="danger"
       />
 

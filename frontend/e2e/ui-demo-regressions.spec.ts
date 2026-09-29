@@ -67,8 +67,13 @@ test.describe('Dentist UI regressions', () => {
     await page.goto('/my-queue');
     await expect(page.getByText('Bệnh nhân chờ hôm nay', { exact: true })).toBeVisible();
     await expect(page.getByText('Bệnh nhân đang khám', { exact: true })).toBeVisible();
-    await expect(page.getByText('Bệnh nhân ngày trước', { exact: true })).toHaveCount(0);
-    expect(queries[0].searchParams.get('from')).toBe('2026-09-16');
+    // An exam left open on an earlier clinic day is not part of today's
+    // "Đang khám" list; it surfaces in its own warning card instead.
+    await expect(page.getByRole('heading', { name: 'Ca khám chưa kết thúc từ ngày trước' })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Bệnh nhân ngày trước' })
+      .getByRole('button', { name: 'Mở ca khám' })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Bệnh nhân ngày trước' })).toHaveCount(1);
+    expect(queries[0].searchParams.get('from')).toBeNull();
     expect(queries[0].searchParams.get('to')).toBe('2026-09-16');
     expect(queries[0].searchParams.getAll('status')).toEqual(['in_progress']);
     await page.reload();

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { clinicIso, clinicParts } from "@/lib/clinicTime";
 import { bookingErrorMessage } from "./errorMessage";
 
 type RequestRow = {
@@ -43,19 +44,47 @@ const stateLabel: Record<string, string> = {
   CONFIRMED: "Đã xác nhận",
   DECLINED: "Từ chối",
   CANCELLED: "Đã rút",
+  EXPIRED: "Quá hạn",
 };
+const OPEN = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
+const SOON_MS = 2 * 60 * 60_000;
+/** The time the request is about: the proposed one while a proposal stands. */
+const effectiveAt = (row: RequestRow) =>
+  ["PROPOSED", "PATIENT_ACCEPTED"].includes(row.status) && row.proposedStartAt
+    ? row.proposedStartAt
+    : row.requestedStartAt;
+/** Open requests past their time (the server expires them within minutes) or close to it. */
+const urgency = (row: RequestRow, now: number) => {
+  if (!OPEN.includes(row.status) || row.appointment) return null;
+  const left = new Date(effectiveAt(row)).getTime() - now;
+  return left <= 0 ? "overdue" : left < SOON_MS ? "soon" : null;
+};
+function UrgencyBadge({ kind }: { kind: "overdue" | "soon" | null }) {
+  if (!kind) return null;
+  return kind === "overdue" ? (
+    <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+      Quá giờ
+    </span>
+  ) : (
+    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+      Sắp đến giờ
+    </span>
+  );
+}
 const format = (value: string) =>
   new Date(value).toLocaleString("vi-VN", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Ho_Chi_Minh",
   });
-const inputDate = (value: string) => {
-  const d = new Date(value);
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
+// The datetime-local field holds clinic wall-clock time, whatever the
+// workstation's time zone.
+const inputDate = (value: string | Date) => {
+  const { date, time } = clinicParts(value);
+  return date + "T" + time;
 };
+const fromInputDate = (value: string) =>
+  clinicIso(value.slice(0, 10), value.slice(11, 16));
 
 export default function BookingRequestsPage() {
   const qc = useQueryClient();
@@ -67,6 +96,12 @@ export default function BookingRequestsPage() {
   const [proposeAt, setProposeAt] = useState("");
   const [proposeDentist, setProposeDentist] = useState("");
   const [error, setError] = useState("");
+  // Re-evaluated every minute so "Sắp đến giờ" / "Quá giờ" stay current.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const query = useQuery({
     queryKey: ["booking-requests", filter],
     queryFn: async () =>
@@ -102,7 +137,9 @@ export default function BookingRequestsPage() {
       .then((r) => setMatches(r.data.data))
       .catch(() => setMatches([]));
     setProposeDentist(selected.preferredDentist.id);
-    setProposeAt(inputDate(selected.requestedStartAt));
+    // Never suggest a time that has already passed.
+    const start = effectiveAt(selected);
+    setProposeAt(new Date(start).getTime() > Date.now() ? inputDate(start) : "");
     // Reset the form only when a different request is opened, not when the
     // list refetch hands back a new object for the same one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,6 +163,12 @@ export default function BookingRequestsPage() {
       {} as Record<string, number>,
     );
   }, [query.data]);
+  const overdue = selected ? urgency(selected, now) === "overdue" : false;
+  // Any overdue open request can be rescued with a new time.
+  const canPropose =
+    !!selected &&
+    (["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(selected.status) ||
+      (overdue && OPEN.includes(selected.status)));
 
   return (
     <div className="space-y-5">
@@ -180,7 +223,7 @@ export default function BookingRequestsPage() {
                 <th className="px-4 py-3">Mã / bệnh nhân</th>
                 <th className="px-4 py-3">Dịch vụ</th>
                 <th className="px-4 py-3">Bác sĩ</th>
-                <th className="px-4 py-3">Giờ yêu cầu</th>
+                <th className="px-4 py-3">Giờ hẹn</th>
                 <th className="px-4 py-3">Trạng thái</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -196,9 +239,15 @@ export default function BookingRequestsPage() {
                   </td>
                   <td className="px-4 py-3">{row.service.name}</td>
                   <td className="px-4 py-3">{row.preferredDentist.fullName}</td>
-                  <td className="px-4 py-3">{format(row.requestedStartAt)}</td>
+                  <td className="px-4 py-3">
+                    {format(effectiveAt(row))}
+                    {effectiveAt(row) !== row.requestedStartAt && (
+                      <div className="text-xs text-gray-500">Giờ đề xuất</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {stateLabel[row.status] ?? row.status}
+                    <UrgencyBadge kind={urgency(row, now)} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -261,6 +310,12 @@ export default function BookingRequestsPage() {
                 <dt className="text-gray-500">Giờ mong muốn</dt>
                 <dd>{format(selected.requestedStartAt)}</dd>
               </div>
+              {selected.proposedStartAt && (
+                <div>
+                  <dt className="text-gray-500">Giờ phòng khám đề xuất</dt>
+                  <dd>{format(selected.proposedStartAt)}</dd>
+                </div>
+              )}
               <div>
                 <dt className="text-gray-500">Bác sĩ mong muốn</dt>
                 <dd>{selected.preferredDentist.fullName}</dd>
@@ -281,6 +336,19 @@ export default function BookingRequestsPage() {
               <p className="mt-4 rounded bg-emerald-50 p-3 text-sm text-emerald-800">
                 Lịch đã tạo: {format(selected.appointment.startAt)} (
                 {selected.appointment.status})
+              </p>
+            )}
+            {overdue && (
+              <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
+                Giờ hẹn {format(effectiveAt(selected))} đã qua. Hãy đề xuất giờ
+                khác hoặc từ chối; nếu không, yêu cầu sẽ tự chuyển sang “Quá
+                hạn”.
+              </p>
+            )}
+            {selected.status === "EXPIRED" && (
+              <p className="mt-4 rounded bg-slate-100 p-3 text-sm text-gray-700">
+                Yêu cầu đã quá giờ mà chưa được xác nhận. Khách được hướng dẫn
+                đặt lịch mới hoặc gọi phòng khám.
               </p>
             )}
             {selected.status === "PATIENT_ACCEPTED" && (
@@ -311,9 +379,7 @@ export default function BookingRequestsPage() {
                 )}
               </div>
             )}
-            {["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(
-              selected.status,
-            ) && (
+            {canPropose && (
               <div className="mt-5 rounded-lg bg-slate-50 p-4">
                 <h3 className="font-semibold">Giờ thay thế</h3>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -335,6 +401,7 @@ export default function BookingRequestsPage() {
                     Ngày và giờ
                     <input
                       type="datetime-local"
+                      min={inputDate(new Date(now))}
                       value={proposeAt}
                       onChange={(e) => setProposeAt(e.target.value)}
                       className="mt-1 w-full rounded-md border px-3 py-2"
@@ -360,7 +427,7 @@ export default function BookingRequestsPage() {
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t pt-4">
               {["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(
                 selected.status,
-              ) && (
+              ) && !overdue && (
                 <button
                   disabled={action.isPending}
                   onClick={() =>
@@ -374,9 +441,7 @@ export default function BookingRequestsPage() {
                   Xác nhận lịch
                 </button>
               )}
-              {["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(
-                selected.status,
-              ) && (
+              {canPropose && (
                 <button
                   disabled={
                     action.isPending ||
@@ -389,7 +454,7 @@ export default function BookingRequestsPage() {
                       path: "propose",
                       body: {
                         dentistId: proposeDentist,
-                        startAt: new Date(proposeAt).toISOString(),
+                        startAt: fromInputDate(proposeAt),
                         message,
                       },
                     })
@@ -401,7 +466,7 @@ export default function BookingRequestsPage() {
               )}
               {["PENDING_REVIEW", "PROPOSED", "PATIENT_ACCEPTED"].includes(
                 selected.status,
-              ) && (
+              ) && !overdue && (
                 <button
                   disabled={action.isPending || !message.trim()}
                   onClick={() =>
@@ -415,7 +480,7 @@ export default function BookingRequestsPage() {
                   Yêu cầu bổ sung
                 </button>
               )}
-              {!["CONFIRMED", "DECLINED", "CANCELLED"].includes(
+              {!["CONFIRMED", "DECLINED", "CANCELLED", "EXPIRED"].includes(
                 selected.status,
               ) && (
                 <button

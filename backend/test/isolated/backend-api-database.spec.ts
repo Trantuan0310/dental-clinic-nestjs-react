@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { BillingService } from '../../src/billing/billing.service';
 import { JwtService } from '@nestjs/jwt';
 import { createTestApp } from '../helpers/create-test-app';
+import { clinicDateOnly } from '../../src/common/date-range.util';
 
 describe('Real HTTP and PostgreSQL regression', () => {
   let app: INestApplication;
@@ -279,6 +280,39 @@ describe('Real HTTP and PostgreSQL regression', () => {
   });
   it('blocks another dentist from accessing the encounter', async () => {
     await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);
+  });
+  it('lets a dentist booked with the patient read, but not write, the encounter', async () => {
+    const booked = await db.appointment.create({
+      data: { patientId, dentistId: users.other, ...slot(), status: 'SCHEDULED' },
+    });
+    try {
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(200);
+      await api('get', `/patients/${patientId}`, 'other').expect(200);
+      await api('put', `/medical-records/encounters/${encounterId}/clinical-note`, 'other')
+        .send({ diagnosis: 'Not mine' })
+        .expect(404);
+      // An upcoming booking reads the history but may not edit it.
+      await api('patch', `/patients/${patientId}/medical-history`, 'other')
+        .send({ allergies: ['Latex'] })
+        .expect(403);
+      // Upcoming bookings count only within the next 7 days.
+      const far = Date.now() + 10 * 86400000;
+      await db.appointment.update({
+        where: { id: booked.id },
+        data: { startAt: new Date(far), endAt: new Date(far + 15 * 60000) },
+      });
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);
+      await db.appointment.update({
+        where: { id: booked.id },
+        data: { startAt: booked.startAt, endAt: booked.endAt },
+      });
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(200);
+      // A cancelled booking grants nothing.
+      await db.appointment.update({ where: { id: booked.id }, data: { status: 'CANCELLED' } });
+      await api('get', `/medical-records/encounters/${encounterId}`, 'other').expect(404);
+    } finally {
+      await db.appointment.delete({ where: { id: booked.id } });
+    }
   });
   it('writes a clinical note', async () => {
     await api('put', `/medical-records/encounters/${encounterId}/clinical-note`, 'dentist')
@@ -822,6 +856,73 @@ describe('Real HTTP and PostgreSQL regression', () => {
     await api('post', `/medical-records/encounters/${id}/treatments`, 'dentist')
       .send({ procedure: 'Blocked treatment', unitPrice: 1000 })
       .expect(409);
+  });
+  it('cancelling an encounter started by mistake returns the appointment to CHECKED_IN and allows a restart', async () => {
+    const id = await fixtureEncounter();
+    const { appointmentId: apptId } = await db.encounter.findUniqueOrThrow({ where: { id } });
+    // The queue entry the start closed (the fixture books straight into CHECKED_IN).
+    const now = new Date();
+    await db.queueEntry.create({
+      data: {
+        appointmentId: apptId,
+        dentistId: users.dentist,
+        queueDate: new Date(clinicDateOnly()),
+        status: 'CALLED',
+        priority: 'ON_TIME',
+        checkedInAt: now,
+        doneAt: now,
+        closeReason: 'STARTED',
+      },
+    });
+    await api('post', `/medical-records/encounters/${id}/cancel`)
+      .send({ reason: 'Nhầm' })
+      .expect(400);
+    await api('post', `/medical-records/encounters/${id}/cancel`)
+      .send({ reason: 'Bắt đầu nhầm phiên khám' })
+      .expect(200);
+    expect((await db.appointment.findUniqueOrThrow({ where: { id: apptId } })).status).toBe(
+      'CHECKED_IN',
+    );
+    const queued = await db.queueEntry.findUniqueOrThrow({ where: { appointmentId: apptId } });
+    expect(queued.status).toBe('WAITING');
+    expect(queued.doneAt).toBeNull();
+    const restarted = await api('post', '/medical-records/encounters/start', 'dentist')
+      .send({ appointmentId: apptId })
+      .expect(200);
+    expect(restarted.body.data.encounterId).toBe(id);
+    expect((await db.encounter.findUniqueOrThrow({ where: { id } })).status).toBe('IN_PROGRESS');
+    expect(await db.encounterAudit.count({ where: { encounterId: id, action: 'REOPENED' } })).toBe(
+      1,
+    );
+  });
+  it('re-issues a deleted prescription and replaces lines when the version is echoed', async () => {
+    const id = await fixtureEncounter();
+    const body = (drugName: string) => ({
+      lines: [{ drugName, dosage: '500 mg', frequency: 'Twice daily', durationDays: 3 }],
+    });
+    const first = await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send(body('Paracetamol'))
+      .expect(201);
+    await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send(body('Paracetamol'))
+      .expect(409);
+    await api('delete', `/medical-records/prescriptions/${first.body.data.id}`, 'dentist').expect(
+      204,
+    );
+    let read = await api('get', `/medical-records/encounters/${id}`, 'dentist').expect(200);
+    expect(read.body.data.prescriptions).toEqual([]);
+    await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send(body('Ibuprofen'))
+      .expect(201);
+    read = await api('get', `/medical-records/encounters/${id}`, 'dentist').expect(200);
+    const [rx] = read.body.data.prescriptions;
+    await api('post', `/medical-records/encounters/${id}/prescription`, 'dentist')
+      .send({ ...body('Chlorhexidine 0.12%'), version: rx.version })
+      .expect(201);
+    read = await api('get', `/medical-records/encounters/${id}`, 'dentist').expect(200);
+    expect(
+      read.body.data.prescriptions[0].items.map((l: { drugName: string }) => l.drugName),
+    ).toEqual(['Chlorhexidine 0.12%']);
   });
   it('rejects overlapping payroll periods and reversed date ranges', async () => {
     await api('post', '/payroll/periods')

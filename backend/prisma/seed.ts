@@ -108,6 +108,13 @@ const PERMISSIONS = [
     action: 'identifier.manage',
     description: 'Quản lý giấy tờ định danh',
   },
+  // Clinic admin only (every PERMISSIONS code goes to clinic_admin); migration 030
+  {
+    code: 'patient.dob.override',
+    resource: 'patient',
+    action: 'dob.override',
+    description: 'Sửa ngày sinh bệnh nhân đã có phiên khám (có lý do)',
+  },
 
   // Appointment permissions
   {

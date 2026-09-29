@@ -4,9 +4,9 @@ import { clinicDateOnly } from '../../common/date-range.util';
 /**
  * The dispatch queue (ADR-0009 D5): who a dentist sees next, before the
  * exam. The rules are pure so the ordering is covered by a decision table
- * (queue.spec.ts); the two writers below are the only way entries open and
+ * (queue.spec.ts); the writers below are the only way entries open and
  * close, and every path that checks a patient in, starts the exam, cancels
- * or marks LEFT goes through them.
+ * the exam, cancels the visit or marks LEFT goes through them.
  */
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -77,14 +77,30 @@ export async function enqueue(
   });
 }
 
+/**
+ * Puts a patient whose exam was started and then cancelled (encounter
+ * created by mistake) back in line, keeping their priority and check-in time.
+ * Only today's (clinic date) entries closed by STARTED reopen; LEFT/CANCELLED
+ * and past days' entries stay closed.
+ */
+export async function reopenStartedQueueEntry(db: Db, appointmentId: string, actorId: string) {
+  await db.queueEntry.updateMany({
+    where: { appointmentId, closeReason: 'STARTED', queueDate: new Date(clinicDateOnly()) },
+    data: { status: QueueStatus.WAITING, doneAt: null, closeReason: null, updatedBy: actorId },
+  });
+}
+
 export type CloseReason = 'STARTED' | 'CANCELLED' | 'LEFT';
 
-/** Closes the open entry, if any (no-op for appointments that never queued). */
+/**
+ * Closes the open entry, if any (no-op for appointments that never queued).
+ * `actorId` is null when the system closes it (end-of-day job).
+ */
 export async function closeQueueEntry(
   db: Db,
   appointmentId: string,
   reason: CloseReason,
-  actorId: string,
+  actorId: string | null,
 ) {
   await db.queueEntry.updateMany({
     where: { appointmentId, doneAt: null },

@@ -170,6 +170,8 @@ export const medicalRecordsApi = {
   },
 
   // Prescriptions — one prescription per encounter (POST /encounters/:id/prescription).
+  // Sending the current `version` replaces it (header + all lines) while the
+  // encounter is in progress.
   // The FE sends all four patient-facing context fields so the printed sheet
   // contains diagnosis, general instructions, follow-up note and a free-form
   // note. The legacy `note` alias is forwarded for older callers.
@@ -188,6 +190,8 @@ export const medicalRecordsApi = {
         unit: item.unit,
         instructions: item.instructions,
       })),
+      version: payload.version,
+      allergyOverrideReason: payload.allergyOverrideReason,
     };
     const { data } = await api.post<{ data: Prescription }>(
       `${BASE}/encounters/${payload.encounterId}/prescription`,

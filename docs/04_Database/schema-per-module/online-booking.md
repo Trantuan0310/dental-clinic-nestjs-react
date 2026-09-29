@@ -22,7 +22,7 @@ a one-time lookup code.
 | `preferred_dentist_id` → `users` | The dentist asked for. |
 | `requested_start_at` | The time asked for. |
 | `proposed_dentist_id`, `proposed_start_at` | Front desk's counter-offer. |
-| `status` | `PENDING_REVIEW` → (`NEEDS_INFORMATION` ↔ `PENDING_REVIEW`) → (`PROPOSED` → `PATIENT_ACCEPTED`) → `CONFIRMED`. `DECLINED` and `CANCELLED` (patient withdrew) end the request. |
+| `status` | `PENDING_REVIEW` → (`NEEDS_INFORMATION` ↔ `PENDING_REVIEW`) → (`PROPOSED` → `PATIENT_ACCEPTED`) → `CONFIRMED`. `DECLINED`, `CANCELLED` (patient withdrew) and `EXPIRED` (migration 028: its time passed unconfirmed) end the request. |
 | `appointment_id` | Unique. Set on confirm, in the same transaction that creates the visit. |
 
 ## Rules
@@ -47,6 +47,31 @@ a one-time lookup code.
 
   The visit is created `CONFIRMED`, and the request is linked in the same
   transaction. If someone else handled the request first, the visit rolls back.
+  A request whose time has passed cannot be confirmed (checked before any
+  patient record is matched or created); if booking the visit fails, a patient
+  record created for it a moment earlier is archived (soft delete, audited).
+- **Effective time.** The proposed time for `PROPOSED` / `PATIENT_ACCEPTED`
+  (when set), otherwise the requested time.
+- **Expiry.** `BookingCron` runs every 5 minutes and moves open requests
+  (`PENDING_REVIEW`, `NEEDS_INFORMATION`, `PROPOSED`, `PATIENT_ACCEPTED`)
+  with no visit and an effective time in the past to `EXPIRED`, with a
+  message telling the patient to book again or call. One conditional update,
+  then one `BOOKING_REQUEST_EXPIRED` audit row per expired request. Until it
+  runs (the public API also returns `overdue`, by the server clock):
+  - the sidebar badge already leaves overdue requests out;
+  - the patient cannot accept a passed proposed time or send details;
+  - the front desk cannot confirm or ask for details, but may propose a new
+    time (rescuing the request) or decline;
+  - the public status page shows the request as expired.
+- **Inbox order.** Open requests first, nearest effective time first (overdue
+  on top, marked "Quá giờ"; under 2 hours marked "Sắp đến giờ"), then the
+  others newest first.
+- **Minimum notice.** Online requests (public slots and `createPublic`) must
+  be at least `BOOKING_MIN_LEAD_MIN` minutes ahead (default 120). Front desk
+  bookings are not limited.
+- **Duplicates.** A phone with an open request for the same time cannot send
+  another one for that time. The check and the insert run in one transaction
+  under a per-phone advisory lock, so a double submit cannot slip through.
 - **Rate limits (per IP).**
   - Sending a request: 5 per minute.
   - Status lookups: 15 per minute.

@@ -31,3 +31,14 @@ export interface EncounterClosedEvent {
   }>;
   inventoryUsages: InventoryUsageSnapshot[];
 }
+
+/**
+ * Something the AI patient summary is built from changed (medical history,
+ * clinical note/treatments, encounter opened/cancelled). Encounter close is
+ * covered by ENCOUNTER_CLOSED_EVENT. Listeners must not throw.
+ */
+export const PATIENT_CLINICAL_DATA_CHANGED_EVENT = 'patient.clinical_data.changed';
+
+export interface PatientClinicalDataChangedEvent {
+  patientId: string;
+}

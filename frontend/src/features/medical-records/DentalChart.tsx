@@ -2,9 +2,11 @@ import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { cn } from '@/lib/cn';
 import {
   ADULT_TEETH,
+  PRIMARY_TEETH,
   TOOTH_STATUS_LABEL,
   TOOTH_STATUSES,
   toothStatusColor,
+  type DentalChartPatientType,
   type ToothDescriptor,
   type ToothEntry,
   type ToothStatus,
@@ -32,6 +34,8 @@ interface DentalChartProps {
   filterEnabled?: Set<ToothStatus>;
   registerToothRef?: (fdi: string, el: HTMLButtonElement | null) => void;
   onSearchSubmit?: (fdi: string) => void;
+  /** CHILD renders a mixed-dentition chart (primary 51–85 + permanent rows). */
+  patientType?: DentalChartPatientType;
 }
 
 const SIZE: Record<NonNullable<DentalChartProps['size']>, { cell: string; label: string }> = {
@@ -50,11 +54,15 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
     dimFdis,
     filterEnabled,
     registerToothRef,
+    patientType = 'ADULT',
   },
   ref,
 ) {
   const upper = useMemo(() => ADULT_TEETH.filter((t) => t.arch === 'upper'), []);
   const lower = useMemo(() => ADULT_TEETH.filter((t) => t.arch === 'lower'), []);
+  const primaryUpper = useMemo(() => PRIMARY_TEETH.filter((t) => t.arch === 'upper'), []);
+  const primaryLower = useMemo(() => PRIMARY_TEETH.filter((t) => t.arch === 'lower'), []);
+  const isChild = patientType === 'CHILD';
   const highlightSet = useMemo(() => new Set(highlightToothNumbers ?? []), [highlightToothNumbers]);
   const dim = SIZE[size];
   const internalRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -117,6 +125,10 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
     </div>
   );
 
+  const renderSubLabel = (text: string) => (
+    <div className="my-1 text-center text-[10px] uppercase tracking-wider text-gray-400">{text}</div>
+  );
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
@@ -138,13 +150,19 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
             <div className={cn('mb-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
               Hàm trên
             </div>
+            {isChild && renderSubLabel('Răng vĩnh viễn')}
             {renderArch(upper)}
+            {isChild && renderSubLabel('Răng sữa')}
+            {isChild && renderArch(primaryUpper)}
           </div>
 
-          <div className="mx-auto h-px w-3/4 bg-gray-300" aria-hidden="true" />
+          <div className="mx-auto my-1 h-px w-3/4 bg-gray-300" aria-hidden="true" />
 
           <div>
+            {isChild && renderArch(primaryLower)}
+            {isChild && renderSubLabel('Răng sữa')}
             {renderArch(lower)}
+            {isChild && renderSubLabel('Răng vĩnh viễn')}
             <div className={cn('mt-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
               Hàm dưới
             </div>
@@ -159,4 +177,4 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
       )}
     </div>
   );
-});
+});

@@ -23,6 +23,7 @@ import { MedicalRecordsService } from './medical-records.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   AddAddendumDto,
+  CancelEncounterDto,
   CloseEncounterDto,
   CreatePrescriptionDto,
   CreateTreatmentDto,
@@ -94,12 +95,16 @@ export class MedicalRecordsController {
   @Post('encounters/:id/cancel')
   @RequirePermissions('encounter.cancel')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Cancel an IN_PROGRESS encounter (reason ≥ 10 chars); its appointment returns to CHECKED_IN',
+  })
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('reason') reason: string,
+    @Body() dto: CancelEncounterDto,
     @User() actor: JwtPayload,
   ) {
-    await this.mr.cancelEncounter(id, reason, actor);
+    await this.mr.cancelEncounter(id, dto.reason, actor);
     return { data: { cancelled: true } };
   }
 
@@ -165,6 +170,9 @@ export class MedicalRecordsController {
 
   // ------- Prescription -------
 
+  // Create, or replace header + all lines when `version` is echoed back.
+  // Screens the lines against the patient's recorded allergies (409
+  // PRESCRIPTION_ALLERGY_CONFLICT unless allergyOverrideReason is given).
   @Post('encounters/:id/prescription')
   @RequirePermissions('prescription.write')
   @HttpCode(HttpStatus.CREATED)
@@ -212,8 +220,11 @@ export class MedicalRecordsController {
 
   @Get('patients/:patientId/dental-chart/latest')
   @RequirePermissions('dental_chart.read')
-  async getLatestChart(@Param('patientId', ParseUUIDPipe) patientId: string) {
-    const chart = await this.mr.getLatestDentalChartForPatient(patientId);
+  async getLatestChart(
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @User() actor: JwtPayload,
+  ) {
+    const chart = await this.mr.getLatestDentalChartForPatient(patientId, actor);
     return { data: chart };
   }
 }

@@ -5,15 +5,24 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { endOfDayInclusive } from '../common/date-range.util';
-import { ENCOUNTER_CLOSED_EVENT, EncounterClosedEvent } from '../common/events/domain-events';
+import {
+  ENCOUNTER_CLOSED_EVENT,
+  EncounterClosedEvent,
+  PATIENT_CLINICAL_DATA_CHANGED_EVENT,
+  PatientClinicalDataChangedEvent,
+} from '../common/events/domain-events';
 import {
   EncounterNotClosableException,
   EncounterNotFoundException,
   InsufficientStockException,
   PrescriptionAlreadyExistsException,
+  PrescriptionAllergyConflictException,
+  PrescriptionVersionConflictException,
   TreatmentNotInEncounterException,
   DentalChartPatientMismatchException,
+  DentalChartInvalidToothException,
 } from './domain/exceptions';
+import { isValidFdiToothNumber } from './domain/tooth-numbers';
 import {
   CloseEncounterDto,
   CreatePrescriptionDto,
@@ -24,9 +33,12 @@ import {
   UpdatePrescriptionDto,
   UpdateTreatmentDto,
 } from './dto/medical-record.dto';
-import { isMinor } from '../patients/domain/patient-rules';
+import { isMinor, readJsonStringArray } from '../patients/domain/patient-rules';
+import { findAllergyConflicts } from './domain/allergy-check';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
-import { closeQueueEntry } from '../appointments/domain/queue';
+import { closeQueueEntry, reopenStartedQueueEntry } from '../appointments/domain/queue';
+import { reopenCancelledEncounter } from './domain/reopen-encounter';
+import { dentistCanReadPatient } from '../common/dentist-patient-access';
 
 /**
  * MedicalRecordsService — owns:
@@ -67,8 +79,9 @@ export class MedicalRecordsService {
    * other dentist's encounter, not just their own (live-verified gap
    * flagged by the whole-system audit; per
    * docs/03_Specification/MedicalRecords/SPEC.md §7.1, every one of
-   * these is documented 🔒 (own) for dentist except dental_chart.read,
-   * which is deliberately ✅ unrestricted — see getLatestDentalChartForPatient).
+   * these is documented 🔒 (own) for dentist. Reads are wider: a dentist
+   * may read (never write) the whole record of a patient they treated or
+   * are booked with — see common/dentist-patient-access.ts).
    *
    * Deliberately NOT used by startEncounterForAppointment or
    * listEncounters, whose row-scope checks need the extra
@@ -102,12 +115,20 @@ export class MedicalRecordsService {
     await tx.$queryRaw`SELECT id FROM encounters WHERE id = ${encounterId}::uuid FOR UPDATE`;
   }
 
+  /** After commit: lets cached derivatives (AI summary) drop stale data. */
+  private emitClinicalDataChanged(patientId: string | undefined): void {
+    if (!patientId) return;
+    const payload: PatientClinicalDataChangedEvent = { patientId };
+    this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
+  }
+
   private async withEditableEncounter<T>(
     encounterId: string,
     actor: JwtPayload,
     write: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
-    return this.prisma.$transaction(async tx => {
+    let patientId: string | undefined;
+    const result = await this.prisma.$transaction(async tx => {
       // All clinical writes and close share this lock, including first-note creation.
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
@@ -117,8 +138,11 @@ export class MedicalRecordsService {
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
         throw new EncounterNotClosableException('Only IN_PROGRESS encounters can be edited');
       }
+      patientId = encounter.patientId;
       return write(tx);
     });
+    this.emitClinicalDataChanged(patientId);
+    return result;
   }
 
   // ==========================================================================
@@ -160,7 +184,8 @@ export class MedicalRecordsService {
       );
     }
 
-    return this.prisma.$transaction(async tx => {
+    let opened = false;
+    const result = await this.prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
       const current = await tx.appointment.findUnique({ where: { id: appointmentId } });
       if (!current || current.deletedAt) throw new EncounterNotFoundException(appointmentId);
@@ -173,16 +198,8 @@ export class MedicalRecordsService {
         where: { appointmentId },
         select: { id: true, status: true },
       });
-      if (existing) {
-        if (existing.status === EncounterStatus.COMPLETED) {
-          throw new EncounterNotClosableException('Encounter already completed');
-        }
-        // CANCELLED → re-open not allowed; throw.
-        if (existing.status === EncounterStatus.CANCELLED) {
-          throw new EncounterNotClosableException(
-            'Encounter is cancelled; create a new appointment instead',
-          );
-        }
+      if (existing?.status === EncounterStatus.COMPLETED) {
+        throw new EncounterNotClosableException('Encounter already completed');
       }
       await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       if (current.status === 'CHECKED_IN') {
@@ -190,6 +207,14 @@ export class MedicalRecordsService {
           where: { id: appointmentId },
           data: { status: 'IN_PROGRESS', updatedBy: actor.sub },
         });
+      }
+      // A cancelled encounter whose patient is back at CHECKED_IN (see
+      // cancelEncounter) is restarted on the same row — appointment_id is
+      // unique. Anything recorded before the cancel stays visible and
+      // editable; the cancel/reopen pair is kept in encounter_audits.
+      if (existing?.status === EncounterStatus.CANCELLED) {
+        await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
+        opened = true;
       }
       if (!existing) {
         const created = await tx.encounter.create({
@@ -201,10 +226,13 @@ export class MedicalRecordsService {
             startedAt: new Date(),
           },
         });
+        opened = true;
         return { encounterId: created.id };
       }
       return { encounterId: existing.id };
     });
+    if (opened) this.emitClinicalDataChanged(appt.patientId);
+    return result;
   }
 
   async getEncounter(id: string, actor: JwtPayload) {
@@ -224,7 +252,8 @@ export class MedicalRecordsService {
         },
         prescription: {
           include: {
-            lines: { orderBy: { sequence: 'asc' } },
+            // Replaced lines are soft-deleted (upsertPrescription).
+            lines: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } },
             creator: { select: { fullName: true } },
           },
         },
@@ -232,16 +261,21 @@ export class MedicalRecordsService {
         patient: { select: { id: true, code: true, fullName: true, dob: true, deletedAt: true } },
         dentist: { select: { id: true, fullName: true } },
         appointment: { select: { startAt: true, endAt: true, status: true } },
+        // Only whether it was ever reopened after a cancel (formatEncounter).
+        audits: { where: { action: 'REOPENED' }, select: { id: true }, take: 1 },
       },
     });
     if (!e) throw new EncounterNotFoundException(id);
     // Row-level: a caller without encounter.read.any (i.e. only
-    // encounter.read.own) may only read encounters they authored. 404
-    // rather than 403 so out-of-scope ids can't be enumerated — this
-    // route previously had no row-level check at all, letting any dentist
-    // read any other dentist's clinical records by guessing/observing a
-    // UUID.
-    if (this.isRowScopedDentist(actor) && e.dentistId !== actor.sub) {
+    // encounter.read.own) may read their own encounters, plus — read-only —
+    // any encounter of a patient they have treated or are booked with
+    // (dentistCanReadPatient). 404 rather than 403 so out-of-scope ids
+    // can't be enumerated.
+    if (
+      this.isRowScopedDentist(actor) &&
+      e.dentistId !== actor.sub &&
+      !(await dentistCanReadPatient(this.prisma, e.patientId, actor.sub))
+    ) {
       throw new EncounterNotFoundException(id);
     }
     return this.formatEncounter(e);
@@ -254,8 +288,23 @@ export class MedicalRecordsService {
   // Prisma column names (`procedure`/`unitPrice`/`toothNumbers`) to the
   // names the tabs read (`treatmentName`/`priceCents`/`toothNumber`, etc).
   private formatEncounter(e: Record<string, any>) {
+    // A to-one include can't filter, so drop a soft-deleted prescription here
+    // (it used to be returned and printed as if still valid).
+    const prescription = e.prescription && !e.prescription.deletedAt ? e.prescription : null;
+    const { audits, ...rest } = e;
+    const treatments = e.treatments ?? [];
+    // Reopened after a cancel (reopenCancelledEncounter) with data recorded
+    // before the cancel still attached: the UI asks the dentist to review it
+    // before closing, since those treatments would be invoiced.
+    const reopenedFromCancel =
+      e.status === EncounterStatus.IN_PROGRESS &&
+      Array.isArray(audits) &&
+      audits.length > 0 &&
+      (treatments.length > 0 || !!prescription || !!e.clinicalNote);
     return {
-      ...e,
+      ...rest,
+      prescription,
+      reopenedFromCancel,
       patientId: e.patient?.id ?? e.patientId,
       patientCode: e.patient?.code ?? '',
       patientName: e.patient?.fullName ?? '',
@@ -263,8 +312,13 @@ export class MedicalRecordsService {
       dentistName: e.dentist?.fullName ?? '',
       status: String(e.status).toLowerCase(),
       treatments: (e.treatments ?? []).map((t: Record<string, any>) => this.formatTreatment(t)),
-      prescriptions: e.prescription ? [this.formatPrescription(e.prescription)] : [],
+      prescriptions: prescription ? [this.formatPrescription(prescription)] : [],
       notes: this.formatClinicalNoteList(e.clinicalNote),
+      // BR-MR-012: the chart type snapshotDentalChart will accept, so the
+      // UI never has to re-derive the age band on its own clock.
+      ...(e.patient?.dob && {
+        dentalChartPatientType: isMinor(new Date(e.patient.dob)) ? 'CHILD' : 'ADULT',
+      }),
     };
   }
 
@@ -313,6 +367,7 @@ export class MedicalRecordsService {
       notes: p.notes,
       instructions: p.instructions,
       followUpNote: p.followUpNote,
+      version: p.version,
       issuedAt: p.createdAt,
       prescribedAt: p.createdAt,
       prescribedByUserId: p.createdBy,
@@ -364,9 +419,14 @@ export class MedicalRecordsService {
       }),
     };
 
-    // BR-MR-019: dentist row-level
+    // BR-MR-019: dentist row-level — own encounters only, except a single
+    // patient's history, which is readable in full once the dentist has
+    // treated or is booked with that patient (same rule as getEncounter).
     if (this.isRowScopedDentistExceptFrontDesk(query.actor)) {
-      where.dentistId = query.actor.sub;
+      const wholePatientHistory =
+        !!query.patientId &&
+        (await dentistCanReadPatient(this.prisma, query.patientId, query.actor.sub));
+      if (!wholePatientHistory) where.dentistId = query.actor.sub;
     }
 
     const rows = await this.prisma.encounter.findMany({
@@ -603,9 +663,25 @@ export class MedicalRecordsService {
    * encounter.read.any may only cancel their own encounter (404 otherwise,
    * so other dentists' encounter ids can't be probed). encounter.cancel is
    * admin-only in the seeded roles, but a custom role may be granted it.
+   *
+   * The patient is still in the clinic, so in the same transaction the
+   * appointment goes back to CHECKED_IN and its queue entry reopens; the
+   * exam can then be started again (startEncounterForAppointment reopens
+   * this encounter row — appointment_id is unique). Previously the
+   * appointment was left IN_PROGRESS with no open encounter: it could be
+   * neither restarted, completed nor cancelled.
    */
   async cancelEncounter(encounterId: string, reason: string, actor: JwtPayload) {
-    return this.prisma.$transaction(async tx => {
+    const trimmed = reason?.trim() ?? '';
+    if (trimmed.length < 10) {
+      throw new BusinessRuleException(
+        'Lý do hủy phiên khám phải có ít nhất 10 ký tự',
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        'ENCOUNTER_CANCEL_REASON_REQUIRED',
+      );
+    }
+    const patientId = await this.prisma.$transaction(async tx => {
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
       if (!encounter || (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub)) {
@@ -622,18 +698,45 @@ export class MedicalRecordsService {
           status: EncounterStatus.CANCELLED,
           cancelledAt: new Date(),
           cancelledBy: actor.sub,
-          cancelledReason: reason,
+          cancelledReason: trimmed,
         },
       });
+      const appointment = await tx.appointment.updateMany({
+        where: { id: encounter.appointmentId, status: 'IN_PROGRESS' },
+        data: { status: 'CHECKED_IN', updatedBy: actor.sub },
+      });
+      if (appointment.count > 0) {
+        await reopenStartedQueueEntry(tx, encounter.appointmentId, actor.sub);
+      }
       await tx.encounterAudit.create({
         data: {
           encounterId,
           action: 'CANCELLED',
           actorId: actor.sub,
-          after: { status: 'CANCELLED' },
+          before: { status: encounter.status },
+          after: {
+            status: 'CANCELLED',
+            reason: trimmed,
+            appointmentStatus: appointment.count > 0 ? 'CHECKED_IN' : 'unchanged',
+          },
         },
       });
+      await this.audit.log({
+        action: 'ENCOUNTER_CANCELLED',
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'encounter',
+        targetId: encounterId,
+        metadata: {
+          appointmentId: encounter.appointmentId,
+          patientId: encounter.patientId,
+          reason: trimmed,
+          appointmentReturnedToCheckIn: appointment.count > 0,
+        },
+      });
+      return encounter.patientId;
     });
+    this.emitClinicalDataChanged(patientId);
   }
 
   // ==========================================================================
@@ -756,6 +859,7 @@ export class MedicalRecordsService {
       targetId: encounterId,
       metadata: { addendumId: addendum.id },
     });
+    this.emitClinicalDataChanged(encounter.patientId);
 
     return addendum;
   }
@@ -896,6 +1000,19 @@ export class MedicalRecordsService {
   // Prescription
   // ==========================================================================
 
+  /**
+   * Create the encounter's prescription, or replace it (header + every line)
+   * while the encounter is IN_PROGRESS.
+   *   - no row: create.
+   *   - soft-deleted row (encounter_id is unique, so a new row can't be
+   *     inserted): reuse it — this is a fresh prescription, so it gets the
+   *     new author and lines.
+   *   - active row: replace only when the caller echoes its `version`
+   *     (the edit form); a plain create still gets 409 so a stale page can't
+   *     silently overwrite a prescription it never saw.
+   * Old lines are soft-deleted, never removed (BR-MR-006).
+   * Every save is screened against the patient's recorded allergies.
+   */
   async upsertPrescription(encounterId: string, dto: CreatePrescriptionDto, actor: JwtPayload) {
     return this.withEditableEncounter(encounterId, actor, async tx => {
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
@@ -905,42 +1022,67 @@ export class MedicalRecordsService {
       }
 
       const existing = await tx.prescription.findUnique({ where: { encounterId } });
-      if (existing) {
-        throw new PrescriptionAlreadyExistsException();
+      const active = existing && !existing.deletedAt ? existing : null;
+      if (active) {
+        if (dto.version === undefined) throw new PrescriptionAlreadyExistsException();
+        if (dto.version !== active.version) throw new PrescriptionVersionConflictException();
       }
 
-      const prescription = await (async () => {
-        const p = await tx.prescription.create({
+      const patient = await tx.patient.findUnique({
+        where: { id: encounter.patientId },
+        select: { allergies: true },
+      });
+      const conflicts = findAllergyConflicts(dto.lines, readJsonStringArray(patient?.allergies));
+      const overrideReason = dto.allergyOverrideReason?.trim() ?? '';
+      if (conflicts.length > 0 && overrideReason.length < 10) {
+        throw new PrescriptionAllergyConflictException(conflicts, overrideReason.length > 0);
+      }
+
+      const header = {
+        diagnosis: dto.diagnosis ?? null,
+        instructions: dto.instructions ?? null,
+        followUpNote: dto.followUpNote ?? null,
+        notes: dto.notes ?? null,
+      };
+      let prescription;
+      if (existing) {
+        await tx.prescriptionLine.updateMany({
+          where: { prescriptionId: existing.id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        prescription = await tx.prescription.update({
+          where: { id: existing.id },
           data: {
-            encounterId,
-            diagnosis: dto.diagnosis ?? null,
-            instructions: dto.instructions ?? null,
-            followUpNote: dto.followUpNote ?? null,
-            notes: dto.notes ?? null,
-            createdBy: actor.sub,
+            ...header,
+            // createdAt keeps the original issue time (audit trail).
+            ...(!active && { deletedAt: null, createdBy: actor.sub }),
+            version: { increment: 1 },
           },
         });
-        for (let i = 0; i < dto.lines.length; i++) {
-          const line = dto.lines[i];
-          await tx.prescriptionLine.create({
-            data: {
-              prescriptionId: p.id,
-              sequence: i,
-              drugName: line.drugName,
-              dosage: line.dosage ?? '',
-              frequency: line.frequency ?? '',
-              duration: line.durationDays ? String(line.durationDays) : '',
-              quantity: line.quantity ?? null,
-              unit: line.unit ?? null,
-              instructions: line.instructions ?? null,
-            },
-          });
-        }
-        return p;
-      })();
+      } else {
+        prescription = await tx.prescription.create({
+          data: { encounterId, ...header, createdBy: actor.sub },
+        });
+      }
+      for (let i = 0; i < dto.lines.length; i++) {
+        const line = dto.lines[i];
+        await tx.prescriptionLine.create({
+          data: {
+            prescriptionId: prescription.id,
+            sequence: i,
+            drugName: line.drugName,
+            dosage: line.dosage ?? '',
+            frequency: line.frequency ?? '',
+            duration: line.durationDays ? String(line.durationDays) : '',
+            quantity: line.quantity ?? null,
+            unit: line.unit ?? null,
+            instructions: line.instructions ?? null,
+          },
+        });
+      }
 
       await this.audit.log({
-        action: 'PRESCRIPTION_CREATED',
+        action: active ? 'PRESCRIPTION_REPLACED' : 'PRESCRIPTION_CREATED',
         actorUserId: actor.sub,
         targetType: 'encounter',
         targetId: encounterId,
@@ -950,8 +1092,25 @@ export class MedicalRecordsService {
           hasDiagnosis: !!dto.diagnosis,
           hasInstructions: !!dto.instructions,
           hasFollowUpNote: !!dto.followUpNote,
+          ...(existing && !active && { reusedDeletedPrescription: true }),
         },
       });
+
+      if (conflicts.length > 0) {
+        await this.audit.log({
+          action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: {
+            prescriptionId: prescription.id,
+            patientId: encounter.patientId,
+            reason: overrideReason,
+            conflicts,
+          },
+        });
+      }
 
       return prescription;
     });
@@ -961,7 +1120,7 @@ export class MedicalRecordsService {
    * Partial update of a prescription (PATCH semantics).
    *
    * Lines themselves are not edited here — callers replace the whole
-   * prescription via the POST upsert path. This method updates the
+   * prescription via the POST upsert path (with `version`). This method updates the
    * header-level fields (diagnosis, instructions, followUpNote, notes)
    * and bumps `version` for optimistic concurrency.
    */
@@ -1049,7 +1208,7 @@ export class MedicalRecordsService {
       });
       if (!encounter) throw new EncounterNotFoundException(encounterId);
       // dental_chart.update is 🔒 (own, khi in_progress) per SPEC §7.1 —
-      // unlike dental_chart.read (deliberately unrestricted, see
+      // unlike dental_chart.read (any patient the dentist may read, see
       // getLatestDentalChartForPatient), only the treating dentist may write
       // a snapshot for their own encounter.
       if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
@@ -1064,6 +1223,16 @@ export class MedicalRecordsService {
       const expected = minor ? 'CHILD' : 'ADULT';
       if (dto.patientType !== expected) {
         throw new DentalChartPatientMismatchException();
+      }
+      // Keys are FDI numbers. CHILD = mixed dentition (primary 51–85 plus
+      // permanent 11–48); ADULT = permanent only.
+      const invalidTeeth = Object.keys(dto.teeth ?? {}).filter(key => {
+        const n = /^\d{2}$/.test(key) ? Number(key) : NaN;
+        if (!isValidFdiToothNumber(n)) return true;
+        return dto.patientType === 'ADULT' && n >= 50;
+      });
+      if (invalidTeeth.length > 0) {
+        throw new DentalChartInvalidToothException(invalidTeeth, dto.patientType);
       }
 
       const existing = await tx.dentalChartSnapshot.findUnique({
@@ -1095,9 +1264,16 @@ export class MedicalRecordsService {
 
   /**
    * Read the latest dental chart snapshot for a patient (across encounters).
-   * Used by the Patients proxy controller too.
+   * A row-scoped dentist gets it only for a patient they may read
+   * (dentistCanReadPatient) — same scope as the encounter history.
    */
-  async getLatestDentalChartForPatient(patientId: string) {
+  async getLatestDentalChartForPatient(patientId: string, actor: JwtPayload) {
+    if (
+      this.isRowScopedDentist(actor) &&
+      !(await dentistCanReadPatient(this.prisma, patientId, actor.sub))
+    ) {
+      throw new BusinessRuleException('Không tìm thấy bệnh nhân', HttpStatus.NOT_FOUND);
+    }
     const lastEncounter = await this.prisma.encounter.findFirst({
       where: { patientId, dentalChart: { isNot: null } },
       orderBy: { startedAt: 'desc' },

@@ -1,13 +1,14 @@
 # Phân quyền theo vai trò
 
-Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiều vai trò cùng lúc: ví dụ chủ phòng khám vừa quản lý vừa khám bệnh thì gán cả **Quản trị viên** và **Bác sĩ**. Bảng dưới đây là cấu hình từ migration `027_role_permission_tuning` (`backend/prisma/seed.ts` giữ cùng danh sách).
+Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiều vai trò cùng lúc: ví dụ chủ phòng khám vừa quản lý vừa khám bệnh thì gán cả **Quản trị viên** và **Bác sĩ**. Bảng dưới đây là cấu hình từ migration `027_role_permission_tuning` (và `030_patient_dob_override_permission`) (`backend/prisma/seed.ts` giữ cùng danh sách).
 
 | Việc | Quản trị viên | Bác sĩ | Lễ tân |
 |---|:---:|:---:|:---:|
 | **Bệnh nhân**: tạo, sửa thông tin, giấy tờ | ✔ | — | ✔ |
-| Xem hồ sơ bệnh nhân | ✔ tất cả | ✔ bệnh nhân mình đã khám | ✔ tất cả |
-| Sửa dị ứng, bệnh nền, thuốc đang dùng | ✔ | ✔ bệnh nhân mình đã khám | ✔ |
+| Xem hồ sơ bệnh nhân | ✔ tất cả | ✔ bệnh nhân mình đã khám, hoặc có lịch với mình đã check-in/đang khám/đã xong, hoặc lịch sắp tới trong 7 ngày (không tính lịch hủy/vắng) — xem (chỉ đọc) toàn bộ bệnh án, sơ đồ răng, các phiên khám của mọi bác sĩ | ✔ tất cả |
+| Sửa dị ứng, bệnh nền, thuốc đang dùng | ✔ | ✔ bệnh nhân mình đã khám, hoặc đã check-in/đang khám với mình hôm nay (lịch sắp tới chỉ được xem) | ✔ |
 | Gộp, xóa, khôi phục hồ sơ | ✔ | — | — |
+| Sửa ngày sinh khi bệnh nhân đã có phiên khám (bắt buộc lý do) | ✔ | — | — |
 | **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Đặt lịch tái khám vào lịch của mình, cho bệnh nhân mình đã khám | ✔ |
 | Điều phối hàng chờ, yêu cầu đặt lịch online | ✔ | — | ✔ |
 | **Khám bệnh**: bắt đầu, ghi bệnh án, điều trị, kê đơn, sơ đồ răng, đóng phiên khám | — (chỉ xem) | ✔ | — |

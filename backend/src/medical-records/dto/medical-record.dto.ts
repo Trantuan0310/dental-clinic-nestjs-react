@@ -15,10 +15,12 @@ import {
   MaxLength,
   ArrayMinSize,
   ValidateNested,
+  IsIn,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PatientType } from '@prisma/client';
+import { FDI_TOOTH_NUMBERS } from '../domain/tooth-numbers';
 
 // ---------------------------------------------------------------------------
 // Clinical note
@@ -94,12 +96,15 @@ export class CreateTreatmentDto {
   @Max(600)
   durationMinutes?: number;
 
+  // FDI: permanent 11–48 and primary (deciduous) 51–85 — see tooth-numbers.ts.
   @ApiPropertyOptional({ type: [Number], example: [16, 17] })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
-  @Min(11, { each: true })
-  @Max(48, { each: true })
+  @IsIn(FDI_TOOTH_NUMBERS as number[], {
+    each: true,
+    message: 'Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa)',
+  })
   toothNumbers?: number[];
 
   @ApiPropertyOptional({
@@ -228,6 +233,27 @@ export class CreatePrescriptionDto {
   @ValidateNested({ each: true })
   @Type(() => PrescriptionLineInputDto)
   lines!: PrescriptionLineInputDto[];
+
+  /**
+   * Echo of the current prescription's `version` to replace it (header and
+   * all lines) while the encounter is IN_PROGRESS. Omitted = create; a
+   * create against an existing prescription is rejected with 409.
+   */
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  version?: number;
+
+  /**
+   * Required (≥ 10 chars) to save a prescription whose drugs match the
+   * patient's recorded allergies (PRESCRIPTION_ALLERGY_CONFLICT otherwise).
+   */
+  @ApiPropertyOptional({ minLength: 10, maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  allergyOverrideReason?: string;
 }
 
 export class PrescriptionLineInputDto {
@@ -305,6 +331,15 @@ export class CloseEncounterDto {
   @IsOptional()
   @IsBoolean()
   forceStockOut?: boolean = false;
+}
+
+export class CancelEncounterDto {
+  @ApiProperty({ minLength: 10, maxLength: 1000 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(10, { message: 'Lý do hủy phiên khám phải có ít nhất 10 ký tự' })
+  @MaxLength(1000)
+  reason!: string;
 }
 
 // ---------------------------------------------------------------------------
