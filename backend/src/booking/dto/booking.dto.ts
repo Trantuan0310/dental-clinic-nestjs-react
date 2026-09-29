@@ -128,7 +128,12 @@ export class UpdatePublicBookingDetailsDto {
 }
 /** The proposal the patient is looking at; refused if the clinic changed it meanwhile. */
 export class AcceptBookingProposalDto {
-  @ApiPropertyOptional() @IsOptional() @IsDateString() proposedStartAt?: string;
+  // An absolute instant (Z or ±hh:mm), compared as such; a zone-less time is ambiguous.
+  @ApiPropertyOptional({ example: '2026-10-02T03:00:00.000Z' })
+  @IsOptional()
+  @IsDateString()
+  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, { message: 'proposedStartAt phải có múi giờ (Z hoặc ±hh:mm)' })
+  proposedStartAt?: string;
 }
 export class PublicSlotsQueryDto {
   @ApiProperty() @IsUUID() serviceId!: string;

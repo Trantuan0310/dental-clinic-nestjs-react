@@ -1,6 +1,10 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { CreatePublicBookingRequestDto, UpdatePublicBookingDetailsDto } from './booking.dto';
+import {
+  AcceptBookingProposalDto,
+  CreatePublicBookingRequestDto,
+  UpdatePublicBookingDetailsDto,
+} from './booking.dto';
 
 const base = {
   fullName: 'Nguyen An',
@@ -65,5 +69,18 @@ describe('UpdatePublicBookingDetailsDto', () => {
       'email',
       'gender',
     ]);
+  });
+});
+
+describe('AcceptBookingProposalDto', () => {
+  const errors = (value: Record<string, unknown>) =>
+    validateSync(plainToInstance(AcceptBookingProposalDto, value)).map(e => e.property);
+
+  it('needs an absolute instant (Z or an offset)', () => {
+    expect(errors({ proposedStartAt: '2026-10-02T03:00:00.000Z' })).toEqual([]);
+    expect(errors({ proposedStartAt: '2026-10-02T10:00:00+07:00' })).toEqual([]);
+    expect(errors({ proposedStartAt: '2026-10-02T10:00:00' })).toEqual(['proposedStartAt']);
+    expect(errors({ proposedStartAt: '2026-10-02' })).toEqual(['proposedStartAt']);
+    expect(errors({})).toEqual([]);
   });
 });
