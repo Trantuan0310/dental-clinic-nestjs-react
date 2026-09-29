@@ -335,6 +335,8 @@ export class MedicalRecordsService {
   private formatTreatment(t: Record<string, any>) {
     const toothNumbers: unknown[] = Array.isArray(t.toothNumbers) ? t.toothNumbers : [];
     const unitPrice = Number(t.unitPrice);
+    const quantity = Number(t.quantity ?? 1);
+    const lineTotal = unitPrice * quantity;
     return {
       id: t.id,
       encounterId: t.encounterId,
@@ -345,9 +347,9 @@ export class MedicalRecordsService {
       notes: t.description,
       priceCents: unitPrice,
       unitPrice,
-      quantity: 1,
-      lineTotalCents: unitPrice,
-      total: unitPrice,
+      quantity,
+      lineTotalCents: lineTotal,
+      total: lineTotal,
       createdAt: t.createdAt,
       inventoryItemsUsed: (t.inventoryUsages ?? []).map((u: Record<string, any>) => ({
         inventoryItemId: u.inventoryItemId,
@@ -495,6 +497,7 @@ export class MedicalRecordsService {
       procedure: string;
       description: string | null;
       unitPrice: number;
+      quantity: number;
     }>;
   }> {
     return this.prisma
@@ -665,6 +668,7 @@ export class MedicalRecordsService {
             procedure: t.procedure,
             description: t.description,
             unitPrice: Number(t.unitPrice),
+            quantity: t.quantity,
           })),
           inventoryUsages: encounter.treatments.flatMap(t =>
             t.inventoryUsages.map(u => ({
@@ -1025,6 +1029,7 @@ export class MedicalRecordsService {
             procedure: dto.procedure,
             description: dto.description ?? null,
             unitPrice: dto.unitPrice,
+            quantity: dto.quantity ?? 1,
             durationMinutes: dto.durationMinutes ?? null,
             toothNumbers: (dto.toothNumbers ?? []) as unknown as Prisma.InputJsonValue,
             sequence,
@@ -1079,6 +1084,7 @@ export class MedicalRecordsService {
           ...(dto.procedure !== undefined && { procedure: dto.procedure }),
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
+          ...(dto.quantity !== undefined && { quantity: dto.quantity }),
           ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
           ...(dto.toothNumbers !== undefined && {
             toothNumbers: dto.toothNumbers as unknown as Prisma.InputJsonValue,

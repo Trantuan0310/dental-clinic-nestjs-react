@@ -30,6 +30,7 @@ interface PrismaTreatmentRow {
   procedure: string;
   description?: string | null;
   unitPrice: number | string;
+  quantity?: number;
   createdAt: string;
 }
 
@@ -40,6 +41,7 @@ function toCreateTreatmentBody(payload: CreateTreatmentPayload) {
     procedure: payload.treatmentName || payload.treatmentCode || '',
     description: payload.description ?? payload.notes,
     unitPrice: payload.priceCents,
+    quantity: payload.quantity && payload.quantity > 0 ? payload.quantity : undefined,
     toothNumbers:
       payload.toothNumber !== undefined && payload.toothNumber !== ''
         ? [Number(payload.toothNumber)]
@@ -64,8 +66,8 @@ function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
       description: payload.description ?? payload.notes,
     }),
     ...(payload.priceCents !== undefined && { unitPrice: payload.priceCents }),
+    ...(payload.quantity !== undefined && payload.quantity > 0 && { quantity: payload.quantity }),
     // Tooth edits were silently dropped before UpdateTreatmentDto accepted them.
-    // Quantity is not sent: treatments have no quantity column (billed as 1).
     ...(payload.toothNumber !== undefined && {
       toothNumbers: payload.toothNumber !== '' ? [Number(payload.toothNumber)] : [],
     }),
@@ -75,6 +77,7 @@ function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
 function transformTreatment(raw: PrismaTreatmentRow): Treatment {
   const toothNumbers = Array.isArray(raw.toothNumbers) ? raw.toothNumbers : [];
   const unitPrice = Number(raw.unitPrice);
+  const quantity = raw.quantity ?? 1;
   return {
     id: raw.id,
     encounterId: raw.encounterId,
@@ -86,9 +89,9 @@ function transformTreatment(raw: PrismaTreatmentRow): Treatment {
     notes: raw.description,
     priceCents: unitPrice,
     unitPrice,
-    quantity: 1,
-    lineTotalCents: unitPrice,
-    total: unitPrice,
+    quantity,
+    lineTotalCents: unitPrice * quantity,
+    total: unitPrice * quantity,
     createdAt: raw.createdAt,
   };
 }

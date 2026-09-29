@@ -655,6 +655,8 @@ model Treatment {
   procedure       String
   description     String?
   unitPrice       Decimal   @map("unit_price") @db.Decimal(12, 2)
+  /// Units at unitPrice (e.g. 3 fillings); the invoice line is quantity × unitPrice.
+  quantity        Int       @default(1)
   durationMinutes Int?      @map("duration_minutes")
   /// ADR-0009 D6: set when the treatment was picked from the catalogue.
   serviceId       String?   @map("service_id") @db.Uuid

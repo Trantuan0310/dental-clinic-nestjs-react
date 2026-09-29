@@ -92,6 +92,8 @@ export class BillingService {
       procedure: string;
       description: string | null;
       unitPrice: number;
+      /** Defaults to 1 for events queued before treatments had a quantity. */
+      quantity?: number;
     }>,
   ) {
     const existing = await this.prisma.invoice.findUnique({ where: { encounterId } });
@@ -103,7 +105,9 @@ export class BillingService {
     if (!encounter) return null;
 
     const code = await this.generateInvoiceCode();
-    const subtotal = treatments.reduce((acc, t) => acc + t.unitPrice, 0);
+    const lineTotal = (t: { unitPrice: number; quantity?: number }) =>
+      t.unitPrice * (t.quantity ?? 1);
+    const subtotal = treatments.reduce((acc, t) => acc + lineTotal(t), 0);
 
     return this.prisma.$transaction(
       async tx => {
@@ -128,9 +132,9 @@ export class BillingService {
               treatmentId: t.treatmentId,
               sequence: seq++,
               description: `${t.procedure}${t.description ? ' — ' + t.description : ''}`,
-              quantity: new Prisma.Decimal(1),
+              quantity: new Prisma.Decimal(t.quantity ?? 1),
               unitPrice: new Prisma.Decimal(t.unitPrice),
-              lineTotal: new Prisma.Decimal(t.unitPrice),
+              lineTotal: new Prisma.Decimal(lineTotal(t)),
             },
           });
         }

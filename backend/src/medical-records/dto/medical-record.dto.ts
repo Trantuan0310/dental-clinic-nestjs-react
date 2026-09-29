@@ -101,6 +101,13 @@ export class CreateTreatmentDto {
   @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice!: number;
 
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100, { message: 'Số lượng tối đa 100' })
+  quantity?: number;
+
   @ApiPropertyOptional({ minimum: 1, maximum: 600 })
   @IsOptional()
   @IsInt()
@@ -172,6 +179,13 @@ export class UpdateTreatmentDto {
   @Min(0)
   @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100, { message: 'Số lượng tối đa 100' })
+  quantity?: number;
 
   // Same FDI rule as create; lets "Sửa điều trị" move the treatment to another tooth.
   @ApiPropertyOptional({ type: [Number], example: [16] })

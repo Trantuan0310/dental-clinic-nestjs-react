@@ -595,7 +595,7 @@ export class PayrollService {
       let encRevenue = 0;
       const treatmentBreakdown: Array<{ id: string; revenue: number }> = [];
       for (const t of enc.treatments) {
-        const rev = Number(t.unitPrice);
+        const rev = Number(t.unitPrice) * (t.quantity ?? 1);
         encRevenue += rev;
         treatmentBreakdown.push({ id: t.id, revenue: rev });
       }
