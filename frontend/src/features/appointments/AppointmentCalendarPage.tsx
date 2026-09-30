@@ -1,18 +1,36 @@
 import { useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import {
+  format,
+  addDays,
+  addMonths,
+  addWeeks,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+} from 'date-fns';
 import { clinicParts, clinicWallClock } from '@/lib/clinicTime';
 import { vi } from 'date-fns/locale';
-import { Plus, ChevronLeft, ChevronRight, UserRoundPlus } from 'lucide-react';
+import { AlertCircle, Plus, ChevronLeft, ChevronRight, UserRoundPlus } from 'lucide-react';
+import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
-import { LIST_ALL_LIMIT } from './appointmentApi';
-import { Alert, Button, Card } from '@/components/ui';
+import { LIST_ALL_LIMIT, useDentistOptions } from './appointmentApi';
+import { Alert, Button, Card, Checkbox, EmptyState, Select, Skeleton } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
-import type { Appointment, AppointmentFilters, AppointmentStatus } from '@/types/appointment';
+import type {
+  Appointment,
+  AppointmentFilters,
+  AppointmentStatus,
+  ClockInterval,
+} from '@/types/appointment';
+import type { ClinicClosure } from '@/types/schedule';
 import { MonthView } from './MonthView';
 import { DayView, WeekView } from './CalendarViews';
+import { closedDaysInRange, visibleHourRange } from './calendarLayout';
 import { liveAppointmentQuery, OVERDUE_DOT_CLASS, OVERDUE_LABEL } from './liveStatus';
 
 // Heavy modals — only loaded when user opens create/edit dialog.
@@ -27,6 +45,8 @@ const AppointmentDetailDrawer = lazy(() =>
 );
 
 const VIEW_MODES = ['day', 'week', 'month'] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
+
 const STATUS_DOT: Record<AppointmentStatus, string> = {
   scheduled: 'bg-gray-400',
   confirmed: 'bg-blue-500',
@@ -38,13 +58,33 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
   left: 'bg-orange-400',
 };
 
-export default function AppointmentCalendarPage() {
+const STATUS_LEGEND: { status: AppointmentStatus; label: string }[] = [
+  { status: 'scheduled', label: 'Đã đặt' },
+  { status: 'confirmed', label: 'Đã xác nhận' },
+  { status: 'checked_in', label: 'Đã check-in' },
+  { status: 'in_progress', label: 'Đang khám' },
+  { status: 'completed', label: 'Hoàn thành' },
+  { status: 'cancelled', label: 'Đã hủy' },
+  { status: 'no_show', label: 'Vắng mặt' },
+  { status: 'left', label: 'Đã về' },
+];
+
+/** Hidden unless "Hiện lịch đã hủy/vắng" is on or the status filter asks for them. */
+const HIDDEN_BY_DEFAULT = new Set<AppointmentStatus>(['cancelled', 'no_show']);
+
+interface AppointmentCalendarPageProps {
+  /** "Lịch của tôi": locked to the signed-in dentist. */
+  mine?: boolean;
+}
+
+export default function AppointmentCalendarPage({ mine = false }: AppointmentCalendarPageProps) {
   const [searchParams] = useSearchParams();
-  // Dentist holds appointment.read/.read.own but not .create — front desk
-  // books appointments, not clinicians. The calendar's create modal + every
-  // per-slot "+" quick-create affordance used to render regardless, so a
-  // dentist saw a working-looking button that 403'd on submit.
+  // Dentists hold appointment.create too (follow-ups on their own calendar,
+  // see PHAN_QUYEN.md); a role without it gets no create modal and no
+  // per-slot "+" quick-create, instead of a button that 403s on submit.
   const canCreate = useAuthStore((s) => s.hasPermission('appointment.create'));
+  const canReadSchedule = useAuthStore((s) => s.hasPermission('schedule.read'));
+  const userId = useAuthStore((s) => s.user?.id);
   // Arriving from a patient's profile with ?patientId= opens the create
   // modal pre-filled with that patient, instead of landing on a plain calendar.
   const prefilledPatientId = searchParams.get('patientId') ?? undefined;
@@ -54,8 +94,16 @@ export default function AppointmentCalendarPage() {
 
   // Clinic dates, whatever the browser's time zone (see clinicWallClock).
   const [currentDate, setCurrentDate] = useState(() => clinicWallClock());
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(searchParams.get('view') as 'day' | 'week' | 'month' || 'day');
-  const [selectedDentistId] = useState<string>('');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const v = searchParams.get('view');
+    return VIEW_MODES.includes(v as ViewMode) ? (v as ViewMode) : 'day';
+  });
+  const [selectedDentistId, setSelectedDentistId] = useState<string>(
+    () => searchParams.get('dentistId') ?? '',
+  );
+  const dentistId = mine ? (userId ?? '') : selectedDentistId;
+  const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all');
+  const [showCancelled, setShowCancelled] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(!!prefilledPatientId || wantsCreateModal);
   const [showWalkIn, setShowWalkIn] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
@@ -66,6 +114,9 @@ export default function AppointmentCalendarPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
+  // Dentists with bookings to show, including suspended / on-leave ones.
+  const { data: dentists } = useDentistOptions('schedule');
+
   // Calculate date range based on view mode
   const dateRange = useMemo(() => {
     if (viewMode === 'day') {
@@ -75,27 +126,95 @@ export default function AppointmentCalendarPage() {
       const end = endOfWeek(currentDate, { weekStartsOn: 1 });
       return { start, end };
     } else {
-      const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-      return { start, end };
+      return { start: startOfMonth(currentDate), end: endOfMonth(currentDate) };
     }
   }, [currentDate, viewMode]);
 
   const filters: AppointmentFilters = {
     from: format(dateRange.start, 'yyyy-MM-dd'),
     to: format(dateRange.end, 'yyyy-MM-dd'),
-    dentistId: selectedDentistId || undefined,
+    dentistId: dentistId || undefined,
   };
 
   // Every booking of the week/month (the old single page of 100 cut a busy
   // month silently); the notice below covers the safety cap.
-  const { data } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['appointments', 'all', filters],
     queryFn: () => appointmentsApi.listAll(filters),
     ...liveAppointmentQuery(filters),
   });
 
   const appointments = useMemo(() => data?.data ?? [], [data]);
+
+  // Status filter + "hide cancelled/no-show" switch, applied on the client
+  // so switching them does not refetch.
+  const visibleAppointments = useMemo(
+    () =>
+      appointments.filter((a) =>
+        statusFilter !== 'all'
+          ? a.status === statusFilter
+          : showCancelled || !HIDDEN_BY_DEFAULT.has(a.status),
+      ),
+    [appointments, statusFilter, showCancelled],
+  );
+  const hiddenCancelledCount =
+    statusFilter === 'all' && !showCancelled
+      ? appointments.filter((a) => HIDDEN_BY_DEFAULT.has(a.status)).length
+      : 0;
+
+  const daysToShow = useMemo(
+    () =>
+      viewMode === 'day'
+        ? [currentDate]
+        : eachDayOfInterval({ start: dateRange.start, end: dateRange.end }),
+    [viewMode, currentDate, dateRange],
+  );
+  const dayKeys = useMemo(() => daysToShow.map((d) => format(d, 'yyyy-MM-dd')), [daysToShow]);
+
+  // Clinic-wide closed days (Tết, holidays) in view. Keyed under
+  // ['schedule', 'clinic-closures'] so editing a closure refreshes it.
+  const { data: closures } = useQuery({
+    queryKey: ['schedule', 'clinic-closures', { from: filters.from }],
+    queryFn: async () => {
+      const { data: body } = await api.get<AuthEnvelope<ClinicClosure[]>>(
+        '/appointments/clinic-closures',
+        { params: { from: filters.from } },
+      );
+      return unwrap(body);
+    },
+    enabled: canReadSchedule,
+    staleTime: 5 * 60_000,
+  });
+  const closedDays = useMemo(
+    () => closedDaysInRange(closures ?? [], filters.from!, filters.to!),
+    [closures, filters.from, filters.to],
+  );
+
+  // Working hours of the filtered dentist, one availability read per day of
+  // the day/week grid (under ['appointments', 'availability'] so schedule
+  // edits refresh it).
+  const showWindows = !!dentistId && viewMode !== 'month';
+  const windowQueries = useQueries({
+    queries: (showWindows ? dayKeys : []).map((date) => ({
+      queryKey: ['appointments', 'availability', 'calendar', dentistId, date],
+      queryFn: async () => {
+        const { data: body } = await api.get<AuthEnvelope<{ windows?: ClockInterval[] }>>(
+          '/appointments/availability',
+          { params: { dentistId, date } },
+        );
+        return unwrap(body).windows ?? [];
+      },
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const workingWindows: Record<string, ClockInterval[]> | undefined = showWindows
+    ? Object.fromEntries(
+        dayKeys.flatMap((d, i) => {
+          const w = windowQueries[i]?.data;
+          return w ? [[d, w] as const] : [];
+        }),
+      )
+    : undefined;
 
   const handleDateChange = useCallback((direction: 'prev' | 'next' | 'today') => {
     if (direction === 'today') {
@@ -105,13 +224,10 @@ export default function AppointmentCalendarPage() {
       if (viewMode === 'day') {
         setCurrentDate(d => addDays(d, delta));
       } else if (viewMode === 'week') {
-        setCurrentDate(d => addDays(d, delta * 7));
+        setCurrentDate(d => addWeeks(d, delta));
       } else {
-        setCurrentDate(d => {
-          const newDate = new Date(d);
-          newDate.setMonth(newDate.getMonth() + delta);
-          return newDate;
-        });
+        // addMonths clamps 31/01 to 28/02; setMonth rolled it over to 03/03.
+        setCurrentDate(d => addMonths(d, delta));
       }
     }
   }, [viewMode]);
@@ -131,7 +247,7 @@ export default function AppointmentCalendarPage() {
   // Group appointments by date for display
   const appointmentsByDate = useMemo(() => {
     const grouped: Record<string, Appointment[]> = {};
-    appointments.forEach(apt => {
+    visibleAppointments.forEach(apt => {
       const dateKey = clinicParts(apt.startsAt).date;
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
@@ -139,27 +255,28 @@ export default function AppointmentCalendarPage() {
       grouped[dateKey].push(apt);
     });
     return grouped;
-  }, [appointments]);
+  }, [visibleAppointments]);
 
-  const daysToShow = viewMode === 'day'
-    ? [currentDate]
-    : viewMode === 'week'
-    ? eachDayOfInterval({ start: startOfWeek(currentDate, { weekStartsOn: 1 }), end: endOfWeek(currentDate, { weekStartsOn: 1 }) })
-    : eachDayOfInterval({
-        start: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
-        end: new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0),
-      });
+  // Day/week grid: 07–19h, widened to fit every booking and working window in view.
+  const { hourStart, hourEnd } = visibleHourRange(
+    dayKeys.flatMap((d) => appointmentsByDate[d] ?? []),
+    workingWindows ? Object.values(workingWindows).flat() : [],
+  );
+
+  const dentistName = dentists?.find((d) => d.id === dentistId)?.fullName;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Lịch hẹn — dạng lịch</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold text-gray-900">
+            {mine ? 'Lịch của tôi' : 'Lịch hẹn — dạng lịch'}
+          </h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            Xem lịch hẹn theo ngày/tuần/tháng
+            {mine ? 'Lịch hẹn của bạn theo ngày/tuần/tháng' : 'Xem lịch hẹn theo ngày/tuần/tháng'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link to="/appointments/list">
             <Button variant="outline">Xem dạng bảng</Button>
           </Link>
@@ -184,10 +301,24 @@ export default function AppointmentCalendarPage() {
         </Alert>
       )}
 
+      {isError && data && (
+        <Alert type="warning">
+          <span>Không cập nhật được lịch hẹn, đang hiện dữ liệu cũ. </span>
+          <button
+            type="button"
+            className="font-medium underline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            Thử lại
+          </button>
+        </Alert>
+      )}
+
       <Card noPadding>
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" aria-label="Kỳ trước" onClick={() => handleDateChange('prev')}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -204,7 +335,41 @@ export default function AppointmentCalendarPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {!mine && (
+              <Select
+                aria-label="Lọc theo bác sĩ"
+                value={selectedDentistId}
+                onChange={(e) => setSelectedDentistId(e.target.value)}
+                options={[
+                  { value: '', label: 'Tất cả bác sĩ' },
+                  ...(dentists ?? []).map((d) => ({ value: d.id, label: d.fullName })),
+                ]}
+                className="min-w-[160px] py-1.5"
+              />
+            )}
+            <Select
+              aria-label="Lọc theo trạng thái"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | 'all')}
+              options={[
+                { value: 'all', label: 'Tất cả trạng thái' },
+                ...STATUS_LEGEND.map((s) => ({ value: s.status, label: s.label })),
+              ]}
+              className="min-w-[150px] py-1.5"
+            />
+            {statusFilter === 'all' && (
+              <Checkbox
+                checked={showCancelled}
+                onChange={setShowCancelled}
+                label={
+                  <span className="whitespace-nowrap text-gray-700">
+                    Hiện lịch đã hủy/vắng
+                    {hiddenCancelledCount > 0 && ` (${hiddenCancelledCount})`}
+                  </span>
+                }
+              />
+            )}
             <div className="flex rounded-lg bg-gray-100 p-1">
               {VIEW_MODES.map((mode) => (
                 <button
@@ -225,34 +390,62 @@ export default function AppointmentCalendarPage() {
 
         {/* Calendar Grid */}
         <div className="overflow-x-auto">
-          {viewMode === 'day' && (
-            <DayView
-              date={currentDate}
-              appointments={appointmentsByDate[format(currentDate, 'yyyy-MM-dd')] || []}
-              onSlotClick={canCreate ? handleSlotClick : undefined}
-              onAppointmentClick={handleAppointmentClick}
+          {isLoading ? (
+            <div className="space-y-2 p-4" aria-busy="true">
+              <span className="sr-only">Đang tải lịch hẹn…</span>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : isError && !data ? (
+            // An error must not look like an empty calendar.
+            <EmptyState
+              icon={<AlertCircle className="h-10 w-10 text-red-400" />}
+              title="Không thể tải lịch hẹn"
+              description="Đã có lỗi khi tải dữ liệu. Vui lòng thử lại."
+              action={{ label: 'Thử lại', onClick: () => refetch() }}
             />
-          )}
-          {viewMode === 'week' && (
-            <WeekView
-              days={daysToShow}
-              appointmentsByDate={appointmentsByDate}
-              onSlotClick={canCreate ? handleSlotClick : undefined}
-              onAppointmentClick={handleAppointmentClick}
-            />
-          )}
-          {viewMode === 'month' && (
-            <MonthView
-              date={currentDate}
-              days={daysToShow}
-              appointmentsByDate={appointmentsByDate}
-              onDayClick={(d) => {
-                setCurrentDate(d);
-                setViewMode('day');
-              }}
-              onAppointmentClick={handleAppointmentClick}
-              onCreateAtSlot={canCreate ? (d, time) => handleSlotClick(d, time) : undefined}
-            />
+          ) : (
+            <>
+              {viewMode === 'day' && (
+                <DayView
+                  date={currentDate}
+                  appointments={appointmentsByDate[format(currentDate, 'yyyy-MM-dd')] || []}
+                  hourStart={hourStart}
+                  hourEnd={hourEnd}
+                  closedDays={closedDays}
+                  workingWindows={workingWindows}
+                  onSlotClick={canCreate ? handleSlotClick : undefined}
+                  onAppointmentClick={handleAppointmentClick}
+                />
+              )}
+              {viewMode === 'week' && (
+                <WeekView
+                  days={daysToShow}
+                  appointmentsByDate={appointmentsByDate}
+                  hourStart={hourStart}
+                  hourEnd={hourEnd}
+                  closedDays={closedDays}
+                  workingWindows={workingWindows}
+                  onSlotClick={canCreate ? handleSlotClick : undefined}
+                  onAppointmentClick={handleAppointmentClick}
+                />
+              )}
+              {viewMode === 'month' && (
+                <MonthView
+                  date={currentDate}
+                  days={daysToShow}
+                  appointmentsByDate={appointmentsByDate}
+                  closedDays={closedDays}
+                  onDayClick={(d) => {
+                    setCurrentDate(d);
+                    setViewMode('day');
+                  }}
+                  onAppointmentClick={handleAppointmentClick}
+                  onCreateAtSlot={canCreate ? (d, time) => handleSlotClick(d, time) : undefined}
+                />
+              )}
+            </>
           )}
         </div>
       </Card>
@@ -260,16 +453,7 @@ export default function AppointmentCalendarPage() {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs">
         <span className="font-semibold text-gray-500">Trạng thái:</span>
-        {([
-          { status: 'scheduled', label: 'Đã đặt' },
-          { status: 'confirmed', label: 'Đã xác nhận' },
-          { status: 'checked_in', label: 'Đã check-in' },
-          { status: 'in_progress', label: 'Đang khám' },
-          { status: 'completed', label: 'Hoàn thành' },
-          { status: 'cancelled', label: 'Đã hủy' },
-          { status: 'no_show', label: 'Vắng mặt' },
-          { status: 'left', label: 'Đã về' },
-        ] as { status: AppointmentStatus; label: string }[]).map((s) => (
+        {STATUS_LEGEND.map((s) => (
           <div key={s.status} className="inline-flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[s.status]}`} />
             <span className="text-gray-700">{s.label}</span>
@@ -279,6 +463,18 @@ export default function AppointmentCalendarPage() {
           <span className={`h-2.5 w-2.5 rounded-full ${OVERDUE_DOT_CLASS}`} />
           <span className="text-gray-700">{OVERDUE_LABEL} (quá 15 phút)</span>
         </div>
+        {workingWindows && (
+          <div className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-4 rounded-sm border border-emerald-200 bg-emerald-50" />
+            <span className="text-gray-700">Giờ làm{dentistName ? ` của ${dentistName}` : ''}</span>
+          </div>
+        )}
+        {Object.keys(closedDays).length > 0 && (
+          <div className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-4 rounded-sm bg-gray-200" />
+            <span className="text-gray-700">Phòng khám nghỉ</span>
+          </div>
+        )}
       </div>
 
       {/* Create modal — AppointmentFormModal renders its own <Modal> wrapper
@@ -294,6 +490,7 @@ export default function AppointmentCalendarPage() {
             }}
             defaultDate={selectedSlot?.date}
             defaultStartTime={selectedSlot?.time}
+            defaultDentistId={dentistId || undefined}
             defaultPatientId={prefilledPatientId}
           />
         </Suspense>

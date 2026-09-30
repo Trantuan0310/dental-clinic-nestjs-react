@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
 import { useTodayAppointments } from '@/features/appointments/appointmentApi';
 import { useAuthStore } from '@/stores/authStore';
+import { formatTimeOnly } from '@/lib/format';
 import { resolveRange, type TimeRange } from './dashboard/types';
 import { DashboardHeader } from './dashboard/DashboardHeader';
 import { AiSummaryCard } from './dashboard/AiSummaryCard';
@@ -107,7 +108,8 @@ export default function DashboardPage() {
     isError: appointmentsByDayError,
     refetch: refetchAppointmentsByDay,
   } = useQuery({
-    queryKey: ['dashboard-appointments-by-day', dateRange],
+    // Under the ['appointments'] prefix so every booking mutation refreshes it.
+    queryKey: ['appointments', 'dashboard-by-day', dateRange],
     queryFn: () => dashboardApi.appointmentsByDay(commonParams),
     enabled: canSeeAppointmentsByDay,
   });
@@ -146,7 +148,7 @@ export default function DashboardPage() {
   const aiPatientOptions = (todayAppointments?.data ?? [])
     .map((a) => ({
       id: a.patientId,
-      label: a.patientName ? `${a.patientName} (${a.startsAt ? new Date(a.startsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''})` : 'Bệnh nhân',
+      label: a.patientName ? `${a.patientName} (${a.startsAt ? formatTimeOnly(a.startsAt) : ''})` : 'Bệnh nhân',
     }))
     .filter((opt) => {
       if (!opt.id || seenPatientIds.has(opt.id)) return false;
