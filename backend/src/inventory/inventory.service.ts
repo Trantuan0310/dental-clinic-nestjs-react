@@ -212,17 +212,20 @@ export class InventoryService {
         },
       });
 
-      await this.audit.log({
-        action: 'INVENTORY_STOCK_IN',
-        actorUserId: actor.sub,
-        targetType: 'inventory_item',
-        targetId: itemId,
-        metadata: {
-          quantity: requested,
-          before: item.quantityOnHand,
-          after: updated?.quantityOnHand ?? 0,
+      await this.audit.log(
+        {
+          action: 'INVENTORY_STOCK_IN',
+          actorUserId: actor.sub,
+          targetType: 'inventory_item',
+          targetId: itemId,
+          metadata: {
+            quantity: requested,
+            before: item.quantityOnHand,
+            after: updated?.quantityOnHand ?? 0,
+          },
         },
-      });
+        tx,
+      );
 
       return { ...item, quantityOnHand: updated?.quantityOnHand ?? 0 };
     });
@@ -268,17 +271,20 @@ export class InventoryService {
         },
       });
 
-      await this.audit.log({
-        action: 'INVENTORY_STOCK_OUT',
-        actorUserId: actor.sub,
-        targetType: 'inventory_item',
-        targetId: itemId,
-        metadata: {
-          quantity: requested,
-          before: item.quantityOnHand,
-          after: updated.quantityOnHand,
+      await this.audit.log(
+        {
+          action: 'INVENTORY_STOCK_OUT',
+          actorUserId: actor.sub,
+          targetType: 'inventory_item',
+          targetId: itemId,
+          metadata: {
+            quantity: requested,
+            before: item.quantityOnHand,
+            after: updated.quantityOnHand,
+          },
         },
-      });
+        tx,
+      );
 
       return updated;
     });
@@ -333,13 +339,16 @@ export class InventoryService {
           },
         });
 
-        await this.audit.log({
-          action: 'INVENTORY_ADJUSTMENT',
-          actorUserId: actor.sub,
-          targetType: 'inventory_item',
-          targetId: itemId,
-          metadata: { before, after, diff, reason: dto.reason },
-        });
+        await this.audit.log(
+          {
+            action: 'INVENTORY_ADJUSTMENT',
+            actorUserId: actor.sub,
+            targetType: 'inventory_item',
+            targetId: itemId,
+            metadata: { before, after, diff, reason: dto.reason },
+          },
+          tx,
+        );
 
         // BR-INV-005: low-stock notification
         if (after <= Number(item.minStockLevel) && before > Number(item.minStockLevel)) {

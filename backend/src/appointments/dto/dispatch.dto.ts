@@ -1,5 +1,6 @@
-import { IsDateString, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
 export class QueueListQueryDto {
   @ApiPropertyOptional()
@@ -9,7 +10,7 @@ export class QueueListQueryDto {
 
   @ApiPropertyOptional({ description: 'Clinic date YYYY-MM-DD, defaults to today' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   date?: string;
 }
 
@@ -51,7 +52,7 @@ export class ReassignDayDto {
   toDentistId!: string;
 
   @ApiProperty({ example: '2026-10-01' })
-  @IsDateString()
+  @IsCalendarDate()
   date!: string;
 
   @ApiProperty({ example: 'BS An nghỉ ốm' })

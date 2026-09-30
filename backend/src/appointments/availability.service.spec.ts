@@ -60,6 +60,15 @@ describe('AvailabilityService slot grid', () => {
     jest.clearAllMocks();
   });
 
+  it('treats the visit being rescheduled as free (excludeAppointmentId)', async () => {
+    day([['08:00', '09:00']], [['08:00', '08:30']]);
+    const without = await service.dayAvailability('dentist-1', DATE, 30);
+    expect(without.availableSlots).toEqual(['08:30']);
+    const moving = await service.dayAvailability('dentist-1', DATE, 30, {}, 'b0');
+    expect(moving.availableSlots).toEqual(['08:00', '08:15', '08:30']);
+    expect(moving.busy).toEqual([]);
+  });
+
   it('steps 15 minutes whatever the visit length: a 90-minute visit can start at 10:30', async () => {
     day([['08:00', '12:00']]);
     expect(await online()).toEqual([

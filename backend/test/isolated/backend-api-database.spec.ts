@@ -227,7 +227,9 @@ describe('Real HTTP and PostgreSQL regression', () => {
       .expect(400);
   });
   it('creates a near-term appointment through the real API', async () => {
-    const start = new Date(Date.now() + 3 * 60000);
+    // Whole minutes (the API refuses seconds). run-isolated.cjs keeps the
+    // run clear of clinic midnight, so the visit ends on the same day.
+    const start = new Date(Math.ceil(Date.now() / 60000) * 60000 + 3 * 60000);
     const r = await api('post', '/appointments', 'reception')
       .send({
         patientId,

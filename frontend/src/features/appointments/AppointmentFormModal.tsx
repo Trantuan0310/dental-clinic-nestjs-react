@@ -180,6 +180,14 @@ export function AppointmentFormModal({
   const servicesTotal = chosenServices.reduce((sum, sv) => sum + sv.durationMin, 0);
   const bufferBeforeMin = Math.max(0, ...chosenServices.map((sv) => sv.bufferBeforeMin));
   const bufferAfterMin = Math.max(0, ...chosenServices.map((sv) => sv.bufferAfterMin));
+  // Another dentist or day can change the services' durations (the dentist's
+  // own override, BR-SVC-006): the length follows the new total, as the API
+  // re-plans it. A manual length stays until the total changes.
+  useEffect(() => {
+    if (isEdit || servicesTotal <= 0) return;
+    setDuration(String(servicesTotal));
+    setDurationOverrideReason('');
+  }, [isEdit, dentistId, date, servicesTotal]);
   const durationMin = Number(duration) || 30;
   // BR-APPT-031: a length other than the services' total needs a reason.
   const durationOverridden = chosenServices.length > 0 && durationMin !== servicesTotal;

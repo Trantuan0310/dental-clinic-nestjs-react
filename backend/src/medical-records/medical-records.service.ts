@@ -624,22 +624,25 @@ export class MedicalRecordsService {
           },
         });
 
-        await this.audit.log({
-          action: 'ENCOUNTER_CLOSED',
-          actorUserId: actor.sub,
-          actorEmail: actor.email,
-          targetType: 'encounter',
-          targetId: encounterId,
-          metadata: {
-            patientId: encounter.patientId,
-            appointmentId: encounter.appointmentId,
-            treatmentCount: encounter.treatments.length,
-            inventoryUsagesCount: encounter.treatments.reduce(
-              (acc, t) => acc + t.inventoryUsages.length,
-              0,
-            ),
+        await this.audit.log(
+          {
+            action: 'ENCOUNTER_CLOSED',
+            actorUserId: actor.sub,
+            actorEmail: actor.email,
+            targetType: 'encounter',
+            targetId: encounterId,
+            metadata: {
+              patientId: encounter.patientId,
+              appointmentId: encounter.appointmentId,
+              treatmentCount: encounter.treatments.length,
+              inventoryUsagesCount: encounter.treatments.reduce(
+                (acc, t) => acc + t.inventoryUsages.length,
+                0,
+              ),
+            },
           },
-        });
+          tx,
+        );
 
         if (allergyOverride) {
           // In the transaction: a close that fails later must not leave an
@@ -797,20 +800,23 @@ export class MedicalRecordsService {
           },
         },
       });
-      await this.audit.log({
-        action: 'ENCOUNTER_CANCELLED',
-        actorUserId: actor.sub,
-        actorEmail: actor.email,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: {
-          appointmentId: encounter.appointmentId,
-          patientId: encounter.patientId,
-          reason: trimmed,
-          appointmentReturnedToCheckIn: appointmentStatus === 'CHECKED_IN',
-          ...(appointmentStatus === 'LEFT' ? { appointmentClosedAsLeft: true } : {}),
+      await this.audit.log(
+        {
+          action: 'ENCOUNTER_CANCELLED',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: {
+            appointmentId: encounter.appointmentId,
+            patientId: encounter.patientId,
+            reason: trimmed,
+            appointmentReturnedToCheckIn: appointmentStatus === 'CHECKED_IN',
+            ...(appointmentStatus === 'LEFT' ? { appointmentClosedAsLeft: true } : {}),
+          },
         },
-      });
+        tx,
+      );
       return encounter.patientId;
     });
     this.emitClinicalDataChanged(patientId);

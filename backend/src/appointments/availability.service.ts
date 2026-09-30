@@ -232,8 +232,13 @@ export class AvailabilityService {
     date: string,
     slotDuration?: number,
     buffers: Buffers = {},
+    excludeAppointmentId?: string,
   ) {
-    const cal = await this.loadDay(dentistId, date);
+    const loaded = await this.loadDay(dentistId, date);
+    // Rescheduling: the visit being moved does not block its own new time.
+    const cal = excludeAppointmentId
+      ? { ...loaded, bookings: loaded.bookings.filter(b => b.id !== excludeAppointmentId) }
+      : loaded;
     const dayOfWeek = new Date(date).getUTCDay();
     if (cal.windows.length === 0) {
       // A day off is a normal answer for a slot picker, not a 404.

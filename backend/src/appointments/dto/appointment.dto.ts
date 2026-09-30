@@ -1,7 +1,6 @@
 import {
   IsString,
   IsOptional,
-  IsDateString,
   IsUUID,
   IsEnum,
   IsInt,
@@ -14,6 +13,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsBoolean,
+  IsIn,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
@@ -30,6 +30,7 @@ import {
 } from '@prisma/client';
 import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 import { IsClinicTime } from '../../common/validators/is-clinic-time';
+import { IsAppointmentInstant, MAX_VISIT_MINUTES } from './is-appointment-instant';
 
 export class CreateAppointmentDto {
   @ApiProperty()
@@ -40,13 +41,13 @@ export class CreateAppointmentDto {
   @IsUUID()
   dentistId!: string;
 
-  @ApiProperty()
-  @IsCalendarDate()
+  @ApiProperty({ example: '2026-10-22T09:00:00+07:00' })
+  @IsAppointmentInstant()
   startAt!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsCalendarDate()
+  @IsAppointmentInstant()
   endAt?: string;
 
   @ApiPropertyOptional()
@@ -116,7 +117,7 @@ export class CreateWalkInDto {
   @IsOptional()
   @IsInt()
   @Min(5)
-  @Max(480)
+  @Max(MAX_VISIT_MINUTES)
   durationMin?: number;
 
   @ApiPropertyOptional()
@@ -166,10 +167,26 @@ export class UpdateAppointmentDto {
 }
 
 export class CancelAppointmentDto {
-  @ApiPropertyOptional()
+  @ApiProperty({ description: 'Why the visit is cancelled (≥ 5 characters)' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Vui lòng nhập lý do hủy lịch' })
+  @MinLength(5, { message: 'Lý do hủy lịch cần ít nhất 5 ký tự' })
+  @MaxLength(500, { message: 'Lý do hủy lịch tối đa 500 ký tự' })
+  reason!: string;
+
+  // Optimistic guard: the values the client last saw. A visit moved or
+  // edited since is a 409 instead of cancelling the wrong booking; older
+  // clients that send neither skip the check.
+  @ApiPropertyOptional({ description: 'rescheduleCount the client last saw' })
   @IsOptional()
-  @IsString()
-  reason?: string;
+  @IsInt()
+  @Min(0)
+  rescheduleCount?: number;
+
+  @ApiPropertyOptional({ description: 'updatedAt the client last saw (ISO)' })
+  @IsOptional()
+  @IsCalendarDate()
+  updatedAt?: string;
 }
 
 export class NoShowDto {
@@ -191,12 +208,12 @@ export class CheckInAppointmentDto {
 }
 
 export class RescheduleAppointmentDto {
-  @ApiProperty()
-  @IsDateString()
+  @ApiProperty({ example: '2026-10-22T09:00:00+07:00' })
+  @IsAppointmentInstant()
   newStartsAt!: string;
 
   @ApiProperty()
-  @IsDateString()
+  @IsAppointmentInstant()
   newEndsAt!: string;
 
   @ApiPropertyOptional()
@@ -208,6 +225,14 @@ export class RescheduleAppointmentDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({
+    description: 'Required when the new length differs from the services total (BR-APPT-031)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  durationOverrideReason?: string;
 }
 
 export class ListAppointmentsQueryDto {
@@ -271,6 +296,15 @@ export class ListAppointmentsQueryDto {
   @IsOptional()
   @IsUUID()
   cursor?: string;
+
+  @ApiPropertyOptional({
+    enum: ['asc', 'desc'],
+    description:
+      'By start time. Default: newest first for one patient without `from`, else oldest first',
+  })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sort?: 'asc' | 'desc';
 }
 
 export class AvailabilityQueryDto {
@@ -288,7 +322,7 @@ export class AvailabilityQueryDto {
   @IsOptional()
   @IsInt()
   @Min(5)
-  @Max(480)
+  @Max(MAX_VISIT_MINUTES)
   slotDuration?: number;
 
   @ApiPropertyOptional({ description: 'Prep time before each visit (D4)' })
@@ -304,6 +338,11 @@ export class AvailabilityQueryDto {
   @Min(0)
   @Max(60)
   bufferAfterMin?: number;
+
+  @ApiPropertyOptional({ description: 'A visit being rescheduled: its own time counts as free' })
+  @IsOptional()
+  @IsUUID()
+  excludeAppointmentId?: string;
 }
 
 export class AvailabilitySearchQueryDto {
@@ -321,7 +360,7 @@ export class AvailabilitySearchQueryDto {
   @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
   @IsInt()
   @Min(5)
-  @Max(480)
+  @Max(MAX_VISIT_MINUTES)
   durationMin?: number;
 }
 
@@ -333,7 +372,7 @@ export class WaitingQueueQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsCalendarDate()
   date?: string;
 
   @ApiPropertyOptional()
@@ -627,7 +666,7 @@ export class CreateShiftRegistrationDto {
   dentistId!: string;
 
   @ApiProperty()
-  @IsString()
+  @IsCalendarDate()
   date!: string;
 
   @ApiProperty({ example: '08:00' })

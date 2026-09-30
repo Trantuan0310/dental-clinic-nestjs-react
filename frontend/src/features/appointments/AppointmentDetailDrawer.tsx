@@ -24,13 +24,14 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Textarea';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { Select, type SelectOption } from '@/components/ui/Select';
 import { Spinner } from '@/components/ui/Loading';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import {
   useAppointment,
   useAppointmentHistory,
   useAvailability,
+  useBookableServices,
   useCancelAppointment,
   useCheckInAppointment,
   useConfirmAppointment,
@@ -179,7 +180,11 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const chosenDentist = rescheduleDentist || appointment?.dentistId || '';
   const rescheduleDentistIncapable =
     !!capableDentistIds && !!chosenDentist && !capableDentistIds.includes(chosenDentist);
-  const rescheduleDentistOptions = (dentists ?? [])
+  // BR-STAFF-006: a dentist on leave, suspended or locked out is missing from
+  // the booking list; the current one stays shown but cannot be chosen.
+  const isBookable = (id: string) => !dentists || dentists.some((d) => d.id === id);
+  const chosenDentistBlocked = !!chosenDentist && !isBookable(chosenDentist);
+  const rescheduleDentistOptions: SelectOption[] = (dentists ?? [])
     .filter((d) =>
       rowScopedDentist
         ? d.id === appointment?.dentistId // a dentist keeps their own calendar
@@ -193,21 +198,58 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           : d.fullName,
     }));
   if (chosenDentist && !rescheduleDentistOptions.some((o) => o.value === chosenDentist)) {
+    const name =
+      chosenDentist === appointment?.dentistId && appointment?.dentistName
+        ? appointment.dentistName
+        : 'Bác sĩ hiện tại';
     rescheduleDentistOptions.unshift({
       value: chosenDentist,
-      label:
-        chosenDentist === appointment?.dentistId && appointment?.dentistName
-          ? appointment.dentistName
-          : 'Bác sĩ hiện tại',
+      label: chosenDentistBlocked ? `${name} (không nhận lịch)` : name,
+      disabled: chosenDentistBlocked,
     });
   }
+
+  // BR-APPT-030/031: a new dentist or day re-plans the visit with that
+  // dentist's service durations and buffers, as the API does.
+  const originalDate = appointment ? clinicParts(appointment.startsAt).date : '';
+  const replans =
+    actionModal === 'reschedule' &&
+    serviceIds.length > 0 &&
+    !!appointment &&
+    !!rescheduleDate &&
+    (chosenDentist !== appointment.dentistId || rescheduleDate !== originalDate);
+  const { data: replanServices, isFetching: isReplanning } = useBookableServices(
+    replans && !chosenDentistBlocked ? chosenDentist : undefined,
+    replans ? rescheduleDate : undefined,
+  );
+  const newPlan = useMemo(() => {
+    if (!replans || !replanServices) return null;
+    const found = serviceIds.map((id) => replanServices.find((sv) => sv.serviceId === id));
+    if (found.some((sv) => !sv)) return null; // e.g. a withdrawn service: the API decides
+    const chosen = found as NonNullable<(typeof found)[number]>[];
+    return {
+      durationMin: chosen.reduce((sum, sv) => sum + sv.durationMin, 0),
+      bufferBeforeMin: Math.max(0, ...chosen.map((sv) => sv.bufferBeforeMin)),
+      bufferAfterMin: Math.max(0, ...chosen.map((sv) => sv.bufferAfterMin)),
+    };
+  }, [replans, replanServices, serviceIds]);
+  // The same services' total keeps the visit's own length (and its override);
+  // a new total replaces it.
+  const currentMinutes = appointment?.durationMinutes ?? 30;
+  const rescheduleMinutes =
+    newPlan &&
+    newPlan.durationMin !== (appointment?.calculatedDurationMin ?? currentMinutes)
+      ? newPlan.durationMin
+      : currentMinutes;
   const { data: availability, isLoading: isAvailabilityLoading } = useAvailability(
     rescheduleTargetDentist,
     actionModal === 'reschedule' ? rescheduleDate : undefined,
     {
-      slotDuration: appointment?.durationMinutes,
-      bufferBeforeMin: appointment?.bufferBeforeMin,
-      bufferAfterMin: appointment?.bufferAfterMin,
+      slotDuration: rescheduleMinutes,
+      bufferBeforeMin: newPlan?.bufferBeforeMin ?? appointment?.bufferBeforeMin,
+      bufferAfterMin: newPlan?.bufferAfterMin ?? appointment?.bufferAfterMin,
+      // The visit's own slot counts as free when moving it.
+      excludeAppointmentId: appointment?.id,
     },
   );
 
@@ -309,21 +351,22 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
   const handleCancel = async () => {
     if (!appointment) return;
-    if (!reason.trim()) {
-      setError('Vui lòng nhập lý do hủy.');
-      return;
-    }
-    if (
-      appointment.status === 'checked_in' &&
-      Date.now() >= new Date(appointment.startsAt).getTime() &&
-      reason.trim().length < OVERRIDE_REASON_MIN_LENGTH
-    ) {
-      setError(`Vui lòng nhập lý do (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
+    // The API requires ≥ 5 characters for every cancellation.
+    if (reason.trim().length < OVERRIDE_REASON_MIN_LENGTH) {
+      setError(`Vui lòng nhập lý do hủy (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
       return;
     }
     setError(null);
     try {
-      await cancel.mutateAsync({ id: appointment.id, payload: { reason } });
+      await cancel.mutateAsync({
+        id: appointment.id,
+        payload: {
+          reason: reason.trim(),
+          // A visit moved or edited since this copy was loaded is a 409.
+          rescheduleCount: appointment.rescheduleCount,
+          updatedAt: appointment.updatedAt,
+        },
+      });
       notify.success('Đã hủy lịch hẹn');
       closeAction();
       onClose();
@@ -372,10 +415,14 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       setError('Vui lòng chọn ngày/giờ mới.');
       return;
     }
+    if (chosenDentistBlocked) {
+      setError('Bác sĩ này hiện không nhận lịch — hãy chọn bác sĩ khác.');
+      return;
+    }
     setError(null);
     try {
       const start = new Date(clinicIso(rescheduleDate, rescheduleTime));
-      const end = new Date(start.getTime() + appointment.durationMinutes * 60_000);
+      const end = new Date(start.getTime() + rescheduleMinutes * 60_000);
       await reschedule.mutateAsync({
         id: appointment.id,
         payload: {
@@ -774,7 +821,9 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                 )}
 
                 {canReschedule(appointment.status) &&
-                  (appointment.rescheduleCount ?? 0) < MAX_RESCHEDULES && (
+                  (appointment.rescheduleCount ?? 0) < MAX_RESCHEDULES &&
+                  // BR-APPT-009: a dentist moves their own visit only ≥ 24 h ahead.
+                  (!rowScopedDentist || startMs - now >= 24 * 60 * 60_000) && (
                   <PermissionGuard permission="appointment.update">
                     <Button
                       size="sm"
@@ -879,7 +928,11 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
             <Button variant="outline" onClick={closeAction} disabled={reschedule.isPending}>
               Hủy
             </Button>
-            <Button onClick={handleReschedule} isLoading={reschedule.isPending}>
+            <Button
+              onClick={handleReschedule}
+              isLoading={reschedule.isPending}
+              disabled={replans && isReplanning}
+            >
               Xác nhận đổi lịch
             </Button>
           </>
@@ -894,6 +947,17 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
             options={rescheduleDentistOptions}
             disabled={rowScopedDentist}
           />
+          {chosenDentistBlocked && (
+            <p className="text-xs text-amber-700">
+              Bác sĩ này hiện không nhận lịch (nghỉ, tạm ngưng hoặc bị khóa) — hãy chọn bác sĩ khác.
+            </p>
+          )}
+          {rescheduleMinutes !== currentMinutes && (
+            <p className="text-xs text-gray-600">
+              Thời lượng tính lại theo dịch vụ của bác sĩ/ngày mới: {rescheduleMinutes} phút (trước:{' '}
+              {currentMinutes} phút).
+            </p>
+          )}
           {rescheduleDentistIncapable && (
             <p className="text-xs text-amber-700">
               Bác sĩ này không làm được dịch vụ của lịch hẹn vào ngày đã chọn — hãy chọn bác sĩ khác.
@@ -919,7 +983,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
             <p className="mb-1.5 text-xs font-medium text-gray-600">
               Khung giờ trống gợi ý
               <span className="ml-1 font-normal text-gray-400">
-                ({(appointment?.durationMinutes ?? 30)} phút)
+                ({rescheduleMinutes} phút)
               </span>
             </p>
             {!rescheduleDate ? (
