@@ -127,13 +127,13 @@ export class RescheduleLimitReachedException extends HttpException {
 }
 
 export class ScheduleOverlapException extends HttpException {
-  constructor() {
+  constructor(message?: string) {
     super(
       {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'SCHEDULE_OVERLAP',
-        message: 'Schedule overlaps with an existing schedule',
+        message: message ?? 'Lịch làm việc trùng giờ với một lịch đã có của bác sĩ',
       },
       HttpStatus.CONFLICT,
     );

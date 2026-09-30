@@ -737,7 +737,12 @@ export class PayrollService {
       },
       select: { date: true, startTime: true, endTime: true },
     });
-    const approvedByDate = new Map(approvedShifts.map(s => [s.date.toISOString().slice(0, 10), s]));
+    // A date may have several approved registrations (morning + evening).
+    const approvedByDate = new Map<string, typeof approvedShifts>();
+    for (const s of approvedShifts) {
+      const key = s.date.toISOString().slice(0, 10);
+      approvedByDate.set(key, [...(approvedByDate.get(key) ?? []), s]);
+    }
 
     let workedShifts = 0;
     let totalMinutes = 0;
@@ -748,19 +753,21 @@ export class PayrollService {
       const dateKey = d.toISOString().slice(0, 10);
 
       const approved = approvedByDate.get(dateKey);
-      if (approved) {
-        workedShifts++;
-        const minutes =
-          this.timeToMinutes(approved.endTime) - this.timeToMinutes(approved.startTime);
-        if (minutes > 0) totalMinutes += minutes;
-        continue;
-      }
-
-      const schedule = workingSchedules.find(s => s.dayOfWeek === d.getUTCDay());
-      if (schedule) {
-        workedShifts++;
-        const minutes =
-          this.timeToMinutes(schedule.endTime) - this.timeToMinutes(schedule.startTime);
+      // Every block of the day counts (e.g. 08:00-12:00 + 13:30-19:00), but
+      // only the weekly rows valid on that very date (a schedule edited "from
+      // day X" leaves an old row ending X-1 and a new one starting X).
+      const blocks = approved?.length
+        ? approved
+        : workingSchedules.filter(
+            s =>
+              s.dayOfWeek === d.getUTCDay() &&
+              (!s.validFrom || s.validFrom.getTime() <= d.getTime()) &&
+              (!s.validTo || s.validTo.getTime() >= d.getTime()),
+          );
+      if (blocks.length === 0) continue;
+      workedShifts++;
+      for (const b of blocks) {
+        const minutes = this.timeToMinutes(b.endTime) - this.timeToMinutes(b.startTime);
         if (minutes > 0) totalMinutes += minutes;
       }
     }

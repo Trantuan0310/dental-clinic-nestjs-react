@@ -41,6 +41,8 @@ export interface DayInputs {
   }>;
   /** APPROVED time-off overlapping the day. */
   timeOffs: Array<{ startAt: Date; endAt: Date }>;
+  /** Clinic-wide closures (Tết, holidays) covering the day (migration 035). */
+  clinicClosures?: Array<{ reason: string }>;
   /** Appointments holding a slot (not CANCELLED/NO_SHOW/LEFT, not deleted). */
   bookings: Array<{
     id: string;
@@ -61,6 +63,8 @@ export interface DayCalendar {
   bookings: Array<Interval & { id: string }>;
   closedAllDay: boolean;
   closedReason: string | null;
+  /** Closed because the whole clinic is (closedReason says why). */
+  clinicClosed: boolean;
   changedHours: boolean;
   /** Slot length of the first weekly schedule, else 30. */
   defaultSlotMin: number;
@@ -98,20 +102,46 @@ export function occupied(visit: Interval, buffers: Buffers = {}): Interval {
   };
 }
 
-export function buildDayCalendar(i: DayInputs): DayCalendar {
-  const closedAll = i.overrides.find(o => o.kind === 'CLOSED' && !o.startTime);
-  const changed = i.overrides.find(o => o.kind === 'CHANGED_HOURS' && o.startTime && o.endTime);
+/**
+ * Sorted windows with overlapping or touching ones joined: 08:00-12:00 plus an
+ * approved 12:00-13:30 shift is one 08:00-13:30 window, so an 11:30-12:30
+ * visit fits.
+ */
+export function mergeWindows(windows: Interval[]): Interval[] {
+  const sorted = [...windows].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const merged: Interval[] = [];
+  for (const w of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && w.start.getTime() <= last.end.getTime()) {
+      if (w.end > last.end) last.end = w.end;
+    } else {
+      merged.push({ start: w.start, end: w.end });
+    }
+  }
+  return merged;
+}
 
-  // BR-SCH-004: changed hours replace the weekly schedule; approved shifts
-  // still add hours (ADR-0009 D3). BR-SCH-003: a closed day has none.
-  const weekly = changed
-    ? [{ start: timeOfDay(changed.startTime!), end: timeOfDay(changed.endTime!) }]
+export function buildDayCalendar(i: DayInputs): DayCalendar {
+  const clinicClosure = i.clinicClosures?.[0];
+  const closedAll = i.overrides.find(o => o.kind === 'CLOSED' && !o.startTime);
+  const changed = i.overrides.filter(o => o.kind === 'CHANGED_HOURS' && o.startTime && o.endTime);
+
+  // BR-SCH-004: changed hours (one or more blocks, e.g. to keep a lunch
+  // break) replace the weekly schedule; approved shifts still add hours
+  // (ADR-0009 D3). BR-SCH-003: a closed day has none, nor has a day the
+  // whole clinic is closed.
+  const weekly = changed.length
+    ? changed.map(c => ({ start: timeOfDay(c.startTime!), end: timeOfDay(c.endTime!) }))
     : i.schedules.map(s => ({ start: timeOfDay(s.startTime), end: timeOfDay(s.endTime) }));
-  const windows = closedAll
-    ? []
-    : [...weekly, ...i.shifts.map(s => ({ start: s.startTime, end: s.endTime }))]
-        .map(w => ({ start: atClinicTime(i.date, w.start), end: atClinicTime(i.date, w.end) }))
-        .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const windows =
+    closedAll || clinicClosure
+      ? []
+      : mergeWindows(
+          [...weekly, ...i.shifts.map(s => ({ start: s.startTime, end: s.endTime }))].map(w => ({
+            start: atClinicTime(i.date, w.start),
+            end: atClinicTime(i.date, w.end),
+          })),
+        );
 
   const blocked = [
     ...i.overrides
@@ -135,9 +165,12 @@ export function buildDayCalendar(i: DayInputs): DayCalendar {
         { beforeMin: b.bufferBeforeMin ?? 0, afterMin: b.bufferAfterMin ?? 0 },
       ),
     })),
-    closedAllDay: Boolean(closedAll),
-    closedReason: closedAll?.reason ?? null,
-    changedHours: Boolean(changed),
+    closedAllDay: Boolean(closedAll || clinicClosure),
+    closedReason: clinicClosure
+      ? `Phòng khám nghỉ: ${clinicClosure.reason}`
+      : (closedAll?.reason ?? null),
+    clinicClosed: Boolean(clinicClosure),
+    changedHours: changed.length > 0,
     defaultSlotMin: i.schedules[0]?.slotDurationMin ?? 30,
   };
 }
@@ -157,7 +190,12 @@ export function intervalProblem(
   opts: { excludeBookingId?: string; ignoreBookings?: boolean; buffers?: Buffers } = {},
 ): SlotProblem | null {
   if (cal.closedAllDay) {
-    return { kind: 'CLOSED', message: `Lịch của bác sĩ đóng cả ngày ${cal.date}` };
+    return {
+      kind: 'CLOSED',
+      message: cal.clinicClosed
+        ? `${cal.closedReason} (ngày ${cal.date})`
+        : `Lịch của bác sĩ đóng cả ngày ${cal.date}`,
+    };
   }
   // BR-APPT-003/027: the whole visit fits in one working window (a gap such
   // as lunch between two windows is not bookable).

@@ -326,6 +326,14 @@ const PERMISSIONS = [
     description: 'Xem lịch làm việc & time-off',
   },
 
+  // Clinic-wide closed days (migration 035): clinic_admin only
+  {
+    code: 'clinic_closure.manage',
+    resource: 'clinic_closure',
+    action: 'manage',
+    description: 'Tạo/sửa/xóa ngày nghỉ toàn phòng khám (Tết, lễ)',
+  },
+
   // Shift Registration permissions (controllers use shift_registration.*)
   {
     code: 'shift_registration.write',

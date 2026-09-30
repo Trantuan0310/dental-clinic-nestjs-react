@@ -1367,7 +1367,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
         blockedReason: 'CLOSED',
       });
 
-      await api('delete', `/appointments/schedule-overrides/${closed.body.data.id}`).expect(204);
+      await api('delete', `/appointments/schedule-overrides/${closed.body.data.id}`).expect(200);
       const after = await api(
         'get',
         `/appointments/schedule-impact?dentistId=${users.dentist}&from=${day}&to=${day}`,

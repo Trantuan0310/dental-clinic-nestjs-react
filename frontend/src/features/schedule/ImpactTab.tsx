@@ -10,7 +10,7 @@ import type { ImpactedAppointment } from '@/types/schedule';
 
 const REASON_LABEL: Record<ImpactedAppointment['reason'], string> = {
   TIME_OFF: 'Bác sĩ nghỉ phép',
-  CLOSED: 'Lịch đã đóng',
+  CLOSED: 'Lịch đã đóng / phòng khám nghỉ',
   OUTSIDE_WORKING_HOURS: 'Ngoài giờ làm',
 };
 
@@ -72,6 +72,7 @@ export function ImpactTab() {
                     <td>{r.dentistName}</td>
                     <td>
                       <Badge variant="warning">{REASON_LABEL[r.reason]}</Badge>
+                      <p className="mt-1 text-xs text-gray-500">{r.message}</p>
                     </td>
                   </tr>
                 ))}

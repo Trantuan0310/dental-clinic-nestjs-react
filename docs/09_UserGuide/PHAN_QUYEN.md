@@ -24,6 +24,7 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | **Nhân sự**: hồ sơ nhân viên, tài khoản | ✔ | — | — |
 | Hồ sơ bác sĩ | ✔ | Sửa hồ sơ của mình | Xem |
 | Lịch làm việc, ngày nghỉ bác sĩ | ✔ sửa, duyệt | Sửa lịch của mình | Xem |
+| Ngày nghỉ toàn phòng khám (Tết, lễ) | ✔ (`clinic_closure.manage`, migration 035) | Xem | Xem |
 | Ca làm việc (đăng ký, duyệt) | Duyệt | Đăng ký ca của mình | — |
 | Lương: cấu hình, tính, duyệt, trả | ✔ | Xem lương của mình | — |
 | Danh mục dịch vụ, giá | ✔ | Xem | Xem |

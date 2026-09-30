@@ -38,7 +38,7 @@ export class AvailabilityService {
     const day = new Date(date);
     const dayStart = startOfClinicDay(date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
-    const [schedules, shifts, overrides, timeOffs, bookings] = await Promise.all([
+    const [schedules, shifts, overrides, timeOffs, bookings, clinicClosures] = await Promise.all([
       db.workingSchedule.findMany({
         where: {
           dentistId,
@@ -86,6 +86,11 @@ export class AvailabilityService {
           bufferAfterMin: true,
         },
       }),
+      // Migration 035: Tết/holidays close every dentist's day.
+      db.clinicClosure.findMany({
+        where: { startDate: { lte: day }, endDate: { gte: day }, deletedAt: null },
+        select: { reason: true },
+      }),
     ]);
     return buildDayCalendar({
       date,
@@ -94,6 +99,7 @@ export class AvailabilityService {
       overrides: overrides ?? [],
       timeOffs: timeOffs ?? [],
       bookings: bookings ?? [],
+      clinicClosures: clinicClosures ?? [],
     });
   }
 
