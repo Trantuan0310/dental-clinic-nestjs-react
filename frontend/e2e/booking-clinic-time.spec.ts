@@ -22,7 +22,8 @@ test('a front desk PC set to UTC still books clinic wall-clock time', async ({ b
     // login is throttled, wait out the window once and try again.
     await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password).catch(
       async () => {
-        await expect(page.getByText(/too many requests/i)).toBeVisible();
+        // 429 message from the API error filter (Vietnamese since audit round 2).
+        await expect(page.getByText(/thao tác quá nhanh|too many requests/i)).toBeVisible();
         await page.waitForTimeout(61_000);
         await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password);
       },
