@@ -113,6 +113,8 @@ export interface DentistReadiness {
   acceptsNewPatients: boolean;
   hasCurrentSchedule: boolean;
   activeServiceCount: number;
+  /** Of those, services offered online (Dịch vụ › "Cho đặt lịch online"). */
+  onlineServiceCount: number;
   hasPhoto: boolean;
   /** Name is still the seed's "Quản trị viên". */
   placeholderName: boolean;

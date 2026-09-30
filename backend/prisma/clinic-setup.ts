@@ -180,6 +180,7 @@ async function seedCatalog() {
         bufferBeforeMin: s.before,
         bufferAfterMin: s.after,
         basePrice: s.price,
+        isFree: s.price === 0,
         requiredSpecialty: s.specialty,
       },
     });

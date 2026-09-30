@@ -197,6 +197,7 @@ describe('DentistsService', () => {
         acceptsNewPatients: true,
         hasCurrentSchedule: false,
         activeServiceCount: 0,
+        onlineServiceCount: 0,
         hasPhoto: false,
         placeholderName: true,
       });
@@ -215,7 +216,7 @@ describe('DentistsService', () => {
         },
       ]);
       prisma.appointment.findMany.mockResolvedValue([]);
-      prisma.dentistService.count.mockResolvedValue(3);
+      prisma.dentistService.count.mockResolvedValueOnce(3).mockResolvedValueOnce(2);
       (prisma.mediaAsset.count as jest.Mock).mockResolvedValue(1);
 
       const { readiness } = await service.overview('user-9');
@@ -223,12 +224,19 @@ describe('DentistsService', () => {
       expect(readiness).toMatchObject({
         hasCurrentSchedule: true,
         activeServiceCount: 3,
+        onlineServiceCount: 2,
         hasPhoto: true,
         placeholderName: false,
       });
       expect(prisma.dentistService.count.mock.calls[0][0].where).toMatchObject({
         dentistId: 'user-9',
         service: { isActive: true },
+      });
+      // Only services offered online count for the online booking page.
+      expect(prisma.dentistService.count.mock.calls[1][0].where.service).toEqual({
+        isActive: true,
+        bookableOnline: true,
+        category: { isActive: true },
       });
     });
   });

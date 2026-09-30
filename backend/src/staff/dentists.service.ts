@@ -229,6 +229,17 @@ export class DentistsService {
       }),
       this.prisma.mediaAsset.count({ where: { purpose: 'DENTIST_PHOTO', dentistId: userId } }),
     ]);
+    // Of those, the ones patients may request online (migration 038).
+    const onlineServiceCount = activeServiceCount
+      ? await this.prisma.dentistService.count({
+          where: {
+            dentistId: userId,
+            effectiveFrom: { lte: today },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+            service: { isActive: true, bookableOnline: true, category: { isActive: true } },
+          },
+        })
+      : 0;
     const hhmm = (d: Date) => d.toISOString().slice(11, 16);
     return {
       profile,
@@ -240,6 +251,7 @@ export class DentistsService {
         acceptsNewPatients: row.acceptsNewPatients,
         hasCurrentSchedule: schedules.some(s => s.validFrom <= today),
         activeServiceCount,
+        onlineServiceCount,
         hasPhoto: photoCount > 0,
         placeholderName: [row.employee.fullName, row.user.fullName].some(
           n => n.trim() === PLACEHOLDER_ADMIN_NAME,

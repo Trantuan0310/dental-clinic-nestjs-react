@@ -373,6 +373,8 @@ describe('BookingService public request security and validation', () => {
     ).rejects.toThrow('không nhận đặt lịch');
     const where = prisma.dentistService.findFirst.mock.calls[0][0].where;
     expect(where.dentist.dentistProfile.is.acceptsOnlineBooking).toBe(true);
+    // The service itself must be offered online too.
+    expect(where.service).toEqual({ isActive: true, bookableOnline: true });
     // Online booking also needs a dentist taking new patients and not on
     // leave; a PENDING_SETUP account still qualifies.
     expect(where.dentist.dentistProfile.is.acceptsNewPatients).toBe(true);
@@ -426,6 +428,11 @@ describe('BookingService public request security and validation', () => {
       expect.objectContaining({ sub: 'staff-1' }),
       { id: 'request-1', expectedStatuses: ['PENDING_REVIEW'], plan },
     );
+    // A request already received is still handled if the service was taken
+    // offline since.
+    expect(prisma.dentistService.findFirst.mock.calls[0][0].where.service).toEqual({
+      isActive: true,
+    });
   });
 
   describe('requests whose time has passed', () => {
@@ -1250,6 +1257,84 @@ describe('BookingService public request security and validation', () => {
       expect(sent.text).toContain('02/10/2026 10:00');
       expect(sent.text).toContain('BS. Trần Thị Bình');
       expect(sent.text).toContain('Mời đến giờ này');
+    });
+  });
+  describe('services offered online and the public price list', () => {
+    const row = (overrides: Record<string, unknown> = {}) => ({
+      id: 'svc-1',
+      code: 'CAO_VOI',
+      name: 'Cạo vôi',
+      description: null,
+      category: { name: 'Dự phòng' },
+      defaultDurationMin: 30,
+      basePrice: 400000,
+      isFree: false,
+      bookableOnline: true,
+      dentistServices: [],
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      prisma.service = { findMany: jest.fn().mockResolvedValue([]) };
+    });
+
+    it('lists only services offered online', async () => {
+      await service.options();
+      expect(prisma.service.findMany.mock.calls[0][0].where).toMatchObject({
+        isActive: true,
+        bookableOnline: true,
+      });
+    });
+
+    it('checks that the service is offered online for slots', async () => {
+      prisma.dentistService.findFirst.mockResolvedValue(null);
+      await expect(
+        service.slots({ serviceId: 'svc-1', dentistId: 'dentist-1', date: futureSlot().date }),
+      ).rejects.toThrow('không nhận đặt lịch');
+      expect(prisma.dentistService.findFirst.mock.calls[0][0].where.service).toEqual({
+        isActive: true,
+        bookableOnline: true,
+      });
+    });
+
+    it('lists shown services whether or not they can be booked online', async () => {
+      await service.priceList();
+      const where = prisma.service.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({ isActive: true, showPublicPrice: true });
+      expect(where.bookableOnline).toBeUndefined();
+      // Prices of dentists bookable at the desk (not on leave, not suspended).
+      const dentist =
+        prisma.service.findMany.mock.calls[0][0].include.dentistServices.where.dentist;
+      expect(dentist.status).toEqual({ not: 'DEACTIVATED' });
+      expect(dentist.userRoles).toEqual({ some: { role: { code: 'dentist' } } });
+      expect(dentist.dentistProfile.is).toMatchObject({
+        practiceStatus: 'ACTIVE',
+        employee: { employmentStatus: 'ACTIVE' },
+      });
+    });
+
+    it('gives the lowest price a dentist charges, "from" when they differ', async () => {
+      prisma.service.findMany.mockResolvedValue([
+        row({ dentistServices: [{ price: null }, { price: 350000 }] }),
+        row({ id: 'svc-2', dentistServices: [{ price: 500000 }] }),
+        row({ id: 'svc-3' }),
+      ]);
+      const [mixed, single, none] = await service.priceList();
+      expect(mixed).toMatchObject({ price: 350000, priceFrom: true, isFree: false });
+      // Every dentist charges the same own price: that price, no "from".
+      expect(single).toMatchObject({ price: 500000, priceFrom: false });
+      // Nobody assigned: the list price.
+      expect(none).toMatchObject({ price: 400000, priceFrom: false });
+    });
+
+    it('says free only for a service marked free; 0 otherwise means "ask"', async () => {
+      prisma.service.findMany.mockResolvedValue([
+        row({ basePrice: 0, isFree: true, dentistServices: [{ price: null }] }),
+        row({ id: 'svc-2', basePrice: 0, isFree: false, dentistServices: [{ price: null }] }),
+      ]);
+      const [free, unset] = await service.priceList();
+      expect(free).toMatchObject({ isFree: true, price: 0, priceFrom: false });
+      expect(unset).toMatchObject({ isFree: false, price: null, priceFrom: false });
     });
   });
 

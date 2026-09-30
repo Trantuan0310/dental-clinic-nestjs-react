@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AppointmentStatus, BookingRequestStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { clinicToday, toDateOnly } from '../staff/staff-rules';
+import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 import {
   AssignServiceDto,
+  ChangeAssignmentDto,
   CreateCategoryDto,
   CreateServiceDto,
   ListServicesQueryDto,
@@ -41,6 +43,7 @@ const ASSIGNMENT_INCLUDE = {
       bufferBeforeMin: true,
       bufferAfterMin: true,
       isActive: true,
+      isFree: true,
       category: { select: { name: true } },
     },
   },
@@ -49,6 +52,47 @@ const ASSIGNMENT_INCLUDE = {
 type AssignmentRow = Prisma.DentistServiceGetPayload<{ include: typeof ASSIGNMENT_INCLUDE }>;
 
 const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+const DAY_MS = 86_400_000;
+const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
+const vnDay = (d: Date) => d.toISOString().slice(0, 10).split('-').reverse().join('/');
+
+/** Visits still to come that a deactivation would leave without the service. */
+const UPCOMING_VISIT: AppointmentStatus[] = ['SCHEDULED', 'CONFIRMED'];
+/** Online requests not yet turned into a visit (booking.service ACTIVE). */
+const OPEN_REQUEST: BookingRequestStatus[] = [
+  'PENDING_REVIEW',
+  'NEEDS_INFORMATION',
+  'PROPOSED',
+  'PATIENT_ACCEPTED',
+];
+
+/**
+ * What a deactivation did to the assignments, kept in its audit entry so
+ * reactivating can offer to put them back: running periods it ended (with
+ * their previous end) and not-yet-started ones it removed.
+ */
+type RestorePlan = {
+  day: string;
+  ended: { id: string; effectiveTo: string | null }[];
+  removed: {
+    dentistId: string;
+    durationMin: number | null;
+    price: number | null;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+  }[];
+};
+
+type RestoreAction =
+  | { kind: 'reopen'; id: string; dentistId: string; effectiveTo: Date | null }
+  | {
+      kind: 'create';
+      dentistId: string;
+      durationMin: number | null;
+      price: number | null;
+      effectiveFrom: Date;
+      effectiveTo: Date | null;
+    };
 
 /** "Active on date" for an assignment period (inclusive both ends). */
 export const activeOn = (date: Date): Prisma.DentistServiceWhereInput => ({
@@ -77,7 +121,7 @@ export class CatalogService {
       throw new CatalogCodeTakenException(dto.code);
     }
     const created = await this.prisma.serviceCategory.create({
-      data: { code: dto.code, name: dto.name.trim(), sortOrder: dto.sortOrder ?? 0 },
+      data: { code: dto.code, name: this.cleanName(dto.name), sortOrder: dto.sortOrder ?? 0 },
     });
     await this.log('SERVICE_CATEGORY_CREATED', actor, 'service_category', created.id, {
       code: created.code,
@@ -91,14 +135,14 @@ export class CatalogService {
       const active = await this.prisma.service.count({ where: { categoryId: id, isActive: true } });
       if (active > 0) {
         throw new CatalogValidationException(
-          `Category still has ${active} active service(s); deactivate or move them first`,
+          `Nhóm còn ${active} dịch vụ đang hoạt động; hãy ngừng hoặc chuyển chúng sang nhóm khác trước`,
         );
       }
     }
     const updated = await this.prisma.serviceCategory.update({
       where: { id },
       data: {
-        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.name !== undefined ? { name: this.cleanName(dto.name) } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
@@ -127,30 +171,43 @@ export class CatalogService {
       include: SERVICE_INCLUDE,
       orderBy: [{ category: { sortOrder: 'asc' } }, { name: 'asc' }],
     });
-    return rows.map(r => this.formatService(r));
+    const paid = await this.paidAssignments(rows);
+    return rows.map(r => this.formatService(r, paid.get(r.id)));
   }
 
   async getService(id: string) {
-    return this.formatService(await this.findService(id));
+    const row = await this.findService(id);
+    const paid = await this.paidAssignments([row]);
+    return this.formatService(row, paid.get(row.id));
   }
 
   async createService(dto: CreateServiceDto, actor: JwtPayload) {
     this.validateDuration(dto.defaultDurationMin);
+    const name = this.cleanName(dto.name);
     const category = await this.findCategory(dto.categoryId);
-    if (!category.isActive) throw new CatalogValidationException('Category is inactive');
+    if (!category.isActive) throw new CatalogValidationException('Nhóm dịch vụ đã ngừng');
     if (await this.prisma.service.findUnique({ where: { code: dto.code } })) {
       throw new CatalogCodeTakenException(dto.code);
     }
+    // A price of 0 is advertised as free, so it must be a choice, not a
+    // missing field.
+    if (dto.basePrice === undefined && !dto.isFree) {
+      throw new CatalogValidationException('Nhập giá niêm yết, hoặc chọn "Dịch vụ miễn phí"');
+    }
+    const pricing = this.pricing(dto.basePrice ?? 0, !!dto.isFree);
     const created = await this.prisma.service.create({
       data: {
         code: dto.code,
         categoryId: dto.categoryId,
-        name: dto.name.trim(),
+        name,
         description: dto.description ?? null,
         defaultDurationMin: dto.defaultDurationMin,
         bufferBeforeMin: dto.bufferBeforeMin ?? 0,
         bufferAfterMin: dto.bufferAfterMin ?? 0,
-        basePrice: dto.basePrice ?? 0,
+        basePrice: pricing.basePrice,
+        isFree: pricing.isFree,
+        bookableOnline: dto.bookableOnline ?? true,
+        showPublicPrice: dto.showPublicPrice ?? true,
         requiredSpecialty: dto.requiredSpecialty ?? null,
         createdBy: actor.sub,
         updatedBy: actor.sub,
@@ -164,18 +221,28 @@ export class CatalogService {
   async updateService(id: string, dto: UpdateServiceDto, actor: JwtPayload) {
     const current = await this.findService(id);
     if (dto.defaultDurationMin !== undefined) this.validateDuration(dto.defaultDurationMin);
+    const name = dto.name !== undefined ? this.cleanName(dto.name) : undefined;
     if (dto.categoryId && dto.categoryId !== current.categoryId) {
       const category = await this.findCategory(dto.categoryId);
-      if (!category.isActive) throw new CatalogValidationException('Category is inactive');
+      if (!category.isActive) throw new CatalogValidationException('Nhóm dịch vụ đã ngừng');
     }
     const data: Prisma.ServiceUncheckedUpdateInput = { updatedBy: actor.sub };
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId;
-    if (dto.name !== undefined) data.name = dto.name.trim();
+    if (name !== undefined) data.name = name;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.defaultDurationMin !== undefined) data.defaultDurationMin = dto.defaultDurationMin;
     if (dto.bufferBeforeMin !== undefined) data.bufferBeforeMin = dto.bufferBeforeMin;
     if (dto.bufferAfterMin !== undefined) data.bufferAfterMin = dto.bufferAfterMin;
-    if (dto.basePrice !== undefined) data.basePrice = dto.basePrice;
+    if (dto.basePrice !== undefined || dto.isFree !== undefined) {
+      // Ticking "free" sets the price to 0; typing a price above 0 on a free
+      // service without touching the box makes it a paid one again.
+      const isFree =
+        dto.isFree ?? (current.isFree && !(dto.basePrice !== undefined && dto.basePrice > 0));
+      const price = dto.basePrice ?? (isFree ? 0 : Number(current.basePrice));
+      Object.assign(data, this.pricing(price, isFree));
+    }
+    if (dto.bookableOnline !== undefined) data.bookableOnline = dto.bookableOnline;
+    if (dto.showPublicPrice !== undefined) data.showPublicPrice = dto.showPublicPrice;
     if (dto.requiredSpecialty !== undefined) data.requiredSpecialty = dto.requiredSpecialty;
 
     const updated = await this.prisma.service.update({
@@ -185,47 +252,122 @@ export class CatalogService {
     });
     await this.log('SERVICE_UPDATED', actor, 'service', id, {
       changes: Object.keys(dto),
-      ...(dto.basePrice !== undefined
-        ? { basePrice: { from: Number(current.basePrice), to: dto.basePrice } }
+      ...(data.basePrice !== undefined
+        ? { basePrice: { from: Number(current.basePrice), to: Number(data.basePrice) } }
         : {}),
     });
     return this.formatService(updated);
   }
 
-  /** BR-SVC-003: deactivate instead of delete; open assignments end today. */
-  async setServiceActive(id: string, isActive: boolean, actor: JwtPayload) {
+  /**
+   * What turning a service off/on would touch, for the confirmation dialog:
+   * visits still to come and open online requests that use it, and the
+   * assignments it would end; or, for an inactive service, how many of the
+   * assignments its deactivation ended could be restored.
+   */
+  async serviceImpact(id: string) {
+    const service = await this.findService(id);
+    const today = clinicToday();
+    if (!service.isActive) {
+      const actions = await this.restoreActions(this.prisma, service, today);
+      return { isActive: false, restorableAssignments: actions.length };
+    }
+    const [upcomingAppointments, pendingBookingRequests, openAssignments] = await Promise.all([
+      this.prisma.appointment.count({
+        where: {
+          deletedAt: null,
+          status: { in: UPCOMING_VISIT },
+          startAt: { gte: new Date() },
+          services: { some: { serviceId: id } },
+        },
+      }),
+      this.prisma.bookingRequest.count({
+        where: { serviceId: id, status: { in: OPEN_REQUEST }, appointmentId: null },
+      }),
+      this.prisma.dentistService.count({
+        where: { serviceId: id, OR: [{ effectiveTo: null }, { effectiveTo: { gt: today } }] },
+      }),
+    ]);
+    return { isActive: true, upcomingAppointments, pendingBookingRequests, openAssignments };
+  }
+
+  /**
+   * BR-SVC-003: deactivate instead of delete; open assignments end today.
+   * Reactivating may put back what the last deactivation ended or removed
+   * (`restoreAssignments`), for dentists who may still perform it.
+   */
+  async setServiceActive(
+    id: string,
+    isActive: boolean,
+    actor: JwtPayload,
+    options: { restoreAssignments?: boolean } = {},
+  ) {
     const current = await this.findService(id);
     if (current.isActive === isActive) {
       throw new CatalogValidationException(
-        `Service is already ${isActive ? 'active' : 'inactive'}`,
+        isActive ? 'Dịch vụ đang hoạt động' : 'Dịch vụ đã ngừng từ trước',
       );
     }
     const today = clinicToday();
-    const { updated, ended } = await this.prisma.$transaction(async tx => {
-      let endedCount = 0;
+    const { updated, ended, restore, restored } = await this.prisma.$transaction(async tx => {
+      let plan: RestorePlan | null = null;
+      let restoredCount = 0;
       if (!isActive) {
         // Assignments starting in the future are simply removed from the plan;
         // running ones end today.
-        const future = await tx.dentistService.deleteMany({
-          where: { serviceId: id, effectiveFrom: { gt: today } },
-        });
-        const running = await tx.dentistService.updateMany({
-          where: { serviceId: id, OR: [{ effectiveTo: null }, { effectiveTo: { gt: today } }] },
-          data: { effectiveTo: today, updatedBy: actor.sub },
-        });
-        endedCount = future.count + running.count;
+        const [future, running] = await Promise.all([
+          tx.dentistService.findMany({ where: { serviceId: id, effectiveFrom: { gt: today } } }),
+          tx.dentistService.findMany({
+            where: {
+              serviceId: id,
+              effectiveFrom: { lte: today },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gt: today } }],
+            },
+          }),
+        ]);
+        plan = {
+          day: day(today)!,
+          ended: running.map(r => ({ id: r.id, effectiveTo: day(r.effectiveTo) })),
+          removed: future.map(r => ({
+            dentistId: r.dentistId,
+            durationMin: r.durationMin,
+            price: r.price === null ? null : Number(r.price),
+            effectiveFrom: day(r.effectiveFrom)!,
+            effectiveTo: day(r.effectiveTo),
+          })),
+        };
+        if (future.length > 0) {
+          await tx.dentistService.deleteMany({ where: { id: { in: future.map(r => r.id) } } });
+        }
+        if (running.length > 0) {
+          await tx.dentistService.updateMany({
+            where: { id: { in: running.map(r => r.id) } },
+            data: { effectiveTo: today, updatedBy: actor.sub },
+          });
+        }
+      } else if (options.restoreAssignments) {
+        restoredCount = await this.restoreAssignments(tx, current, today, actor);
       }
       const row = await tx.service.update({
         where: { id },
         data: { isActive, updatedBy: actor.sub },
         include: SERVICE_INCLUDE,
       });
-      return { updated: row, ended: endedCount };
+      return {
+        updated: row,
+        ended: plan ? plan.ended.length + plan.removed.length : 0,
+        restore: plan,
+        restored: restoredCount,
+      };
     });
     await this.log(isActive ? 'SERVICE_ACTIVATED' : 'SERVICE_DEACTIVATED', actor, 'service', id, {
-      endedAssignments: ended,
+      ...(isActive ? { restoredAssignments: restored } : { endedAssignments: ended, restore }),
     });
-    return this.formatService(updated);
+    return {
+      ...this.formatService(updated),
+      endedAssignments: ended,
+      restoredAssignments: restored,
+    };
   }
 
   // ── Dentist ↔ service ─────────────────────────────────────────────────────
@@ -274,7 +416,7 @@ export class CatalogService {
     const today = clinicToday();
     const from = dto.effectiveFrom ? toDateOnly(dto.effectiveFrom) : today;
     if (from < today) {
-      throw new CatalogValidationException('An assignment cannot start in the past');
+      throw new CatalogValidationException('Ngày bắt đầu phân công không được ở quá khứ');
     }
     if (dto.durationMin != null) this.validateDuration(dto.durationMin);
 
@@ -283,16 +425,14 @@ export class CatalogService {
       this.findService(dto.serviceId),
     ]);
     if (!profile || profile.practiceStatus !== 'ACTIVE') {
-      throw new AssignmentNotAllowedException(
-        'Only a dentist with an active practice profile can be assigned services',
-      );
+      throw new AssignmentNotAllowedException('Chỉ phân công dịch vụ cho bác sĩ đang hành nghề');
     }
     if (!service.isActive) {
-      throw new AssignmentNotAllowedException('Service is inactive');
+      throw new AssignmentNotAllowedException('Dịch vụ đã ngừng');
     }
     if (service.requiredSpecialty && !profile.specialties.includes(service.requiredSpecialty)) {
       throw new AssignmentNotAllowedException(
-        `Service requires specialty ${service.requiredSpecialty}`,
+        `Dịch vụ yêu cầu chuyên môn ${service.requiredSpecialty}`,
         'SPECIALTY_REQUIRED',
       );
     }
@@ -345,11 +485,13 @@ export class CatalogService {
       where: { id: assignmentId, dentistId },
       include: ASSIGNMENT_INCLUDE,
     });
-    if (!row) throw new CatalogNotFoundException('Assignment', assignmentId);
-    if (row.effectiveTo) throw new CatalogValidationException('Assignment has already ended');
+    if (!row) throw new CatalogNotFoundException('phân công', assignmentId);
+    if (row.effectiveTo) throw new CatalogValidationException('Phân công đã có ngày kết thúc');
     const today = clinicToday();
     const effectiveTo = to ? toDateOnly(to) : today;
-    if (effectiveTo < today) throw new CatalogValidationException('End date is in the past');
+    if (effectiveTo < today) {
+      throw new CatalogValidationException('Ngày kết thúc không được ở quá khứ');
+    }
 
     if (row.effectiveFrom > today) {
       await this.prisma.dentistService.delete({ where: { id: assignmentId } });
@@ -360,7 +502,7 @@ export class CatalogService {
       return { ...this.formatAssignment(row, today), removed: true };
     }
     if (effectiveTo < row.effectiveFrom) {
-      throw new CatalogValidationException('End date is before the start date');
+      throw new CatalogValidationException('Ngày kết thúc trước ngày bắt đầu phân công');
     }
     const updated = await this.prisma.dentistService.update({
       where: { id: assignmentId },
@@ -375,27 +517,309 @@ export class CatalogService {
     return { ...this.formatAssignment(updated, today), removed: false };
   }
 
+  /**
+   * New duration/price for a dentist's service from `effectiveFrom` on
+   * (today or later): the running period ends the day before and a new one
+   * starts that day, so bookings keep the terms of their own day. A period
+   * that starts on that day is simply updated.
+   */
+  async changeAssignment(
+    dentistId: string,
+    assignmentId: string,
+    dto: ChangeAssignmentDto,
+    actor: JwtPayload,
+  ) {
+    const today = clinicToday();
+    const from = toDateOnly(dto.effectiveFrom);
+    if (from < today) {
+      throw new CatalogValidationException('Ngày áp dụng không được ở quá khứ');
+    }
+    if (dto.durationMin != null) this.validateDuration(dto.durationMin);
+
+    const { row, result } = await this.prisma.$transaction(async tx => {
+      await lockDentistCalendar(tx, dentistId);
+      const row = await tx.dentistService.findFirst({
+        where: { id: assignmentId, dentistId },
+        include: ASSIGNMENT_INCLUDE,
+      });
+      if (!row) throw new CatalogNotFoundException('phân công', assignmentId);
+      if (!row.service.isActive) throw new AssignmentNotAllowedException('Dịch vụ đã ngừng');
+      if (row.effectiveTo && row.effectiveTo < from) {
+        throw new CatalogValidationException(
+          `Phân công kết thúc ngày ${vnDay(row.effectiveTo)}, trước ngày áp dụng`,
+        );
+      }
+      if (from < row.effectiveFrom) {
+        throw new CatalogValidationException(
+          `Phân công bắt đầu từ ${vnDay(row.effectiveFrom)}; chọn ngày áp dụng từ ngày đó`,
+        );
+      }
+      const oldPrice = row.price === null ? null : Number(row.price);
+      const durationMin = dto.durationMin === undefined ? row.durationMin : dto.durationMin;
+      const price = dto.price === undefined ? oldPrice : dto.price;
+      if (durationMin === row.durationMin && price === oldPrice) {
+        throw new CatalogValidationException('Thời lượng và giá không thay đổi');
+      }
+      if (from.getTime() === row.effectiveFrom.getTime()) {
+        const result = await tx.dentistService.update({
+          where: { id: row.id },
+          data: { durationMin, price, updatedBy: actor.sub },
+          include: ASSIGNMENT_INCLUDE,
+        });
+        return { row, result };
+      }
+      // Close first: only one open period per dentist and service (020).
+      await tx.dentistService.update({
+        where: { id: row.id },
+        data: { effectiveTo: addDays(from, -1), updatedBy: actor.sub },
+      });
+      const result = await tx.dentistService.create({
+        data: {
+          dentistId,
+          serviceId: row.serviceId,
+          durationMin,
+          price,
+          effectiveFrom: from,
+          effectiveTo: row.effectiveTo,
+          createdBy: actor.sub,
+          updatedBy: actor.sub,
+        },
+        include: ASSIGNMENT_INCLUDE,
+      });
+      return { row, result };
+    });
+    // Visits already booked from that day on keep the price and length
+    // frozen at booking (appointment_services); the front desk is told how
+    // many, so it can adjust them if the clinic wants the new terms applied.
+    const affectedAppointments = await this.prisma.appointment.count({
+      where: {
+        dentistId,
+        deletedAt: null,
+        status: { in: UPCOMING_VISIT },
+        startAt: {
+          gte: new Date(Math.max(Date.now(), from.getTime() - CLINIC_UTC_OFFSET_MS)),
+          ...(result.effectiveTo
+            ? { lt: new Date(addDays(result.effectiveTo, 1).getTime() - CLINIC_UTC_OFFSET_MS) }
+            : {}),
+        },
+        services: { some: { serviceId: row.serviceId } },
+      },
+    });
+    await this.log('DENTIST_SERVICE_CHANGED', actor, 'dentist_service', result.id, {
+      dentistId,
+      serviceId: row.serviceId,
+      previousId: row.id,
+      effectiveFrom: day(from),
+      durationMin: { from: row.durationMin, to: result.durationMin },
+      price: {
+        from: row.price === null ? null : Number(row.price),
+        to: result.price === null ? null : Number(result.price),
+      },
+      affectedAppointments,
+    });
+    return { ...this.formatAssignment(result, today), affectedAppointments };
+  }
+
   // ── helpers ───────────────────────────────────────────────────────────────
 
   private validateDuration(minutes: number) {
     if (minutes % 5 !== 0) {
-      throw new CatalogValidationException('Duration must be a multiple of 5 minutes');
+      throw new CatalogValidationException('Thời lượng phải là bội số của 5 phút');
     }
+  }
+
+  /** Names are trimmed; blank or one-letter names are refused. */
+  private cleanName(value: string) {
+    const name = value.trim();
+    if (name.length < 2) throw new CatalogValidationException('Tên phải có ít nhất 2 ký tự');
+    return name;
+  }
+
+  /** A free service costs 0; anything else keeps its price. */
+  private pricing(basePrice: number, isFree: boolean) {
+    if (isFree && basePrice > 0) {
+      throw new CatalogValidationException('Dịch vụ miễn phí phải có giá 0 đ');
+    }
+    return { basePrice, isFree };
+  }
+
+  /**
+   * The restorable part of the last deactivation's plan (see RestorePlan):
+   * periods still ending where it left them, not already over, for dentists
+   * who still practise (with the required specialty), and not overlapping
+   * anything assigned since.
+   */
+  private async restoreActions(
+    client: Prisma.TransactionClient,
+    service: ServiceRow,
+    today: Date,
+    /** Called with the dentists involved before anything is checked (locks). */
+    beforeCheck?: (dentistIds: string[]) => Promise<void>,
+  ): Promise<RestoreAction[]> {
+    const entry = await client.auditLog.findFirst({
+      where: { action: 'SERVICE_DEACTIVATED', targetType: 'service', targetId: service.id },
+      orderBy: { occurredAt: 'desc' },
+      select: { metadata: true },
+    });
+    const plan = (entry?.metadata as { restore?: RestorePlan } | null | undefined)?.restore;
+    if (!plan || !Array.isArray(plan.ended) || !Array.isArray(plan.removed)) return [];
+
+    const endedOn = toDateOnly(plan.day).getTime();
+    const rows = plan.ended.length
+      ? await client.dentistService.findMany({
+          where: { id: { in: plan.ended.map(e => e.id) }, serviceId: service.id },
+        })
+      : [];
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const candidates: RestoreAction[] = [];
+    for (const e of plan.ended) {
+      const row = byId.get(e.id);
+      if (!row?.effectiveTo || row.effectiveTo.getTime() !== endedOn) continue;
+      const to = e.effectiveTo ? toDateOnly(e.effectiveTo) : null;
+      if (to && to < today) continue;
+      // Turned back on the same day: the period simply goes on; later, a
+      // new one starts today (the days it was off stay off).
+      candidates.push(
+        row.effectiveTo >= today
+          ? { kind: 'reopen', id: row.id, dentistId: row.dentistId, effectiveTo: to }
+          : {
+              kind: 'create',
+              dentistId: row.dentistId,
+              durationMin: row.durationMin,
+              price: row.price === null ? null : Number(row.price),
+              effectiveFrom: today,
+              effectiveTo: to,
+            },
+      );
+    }
+    for (const r of plan.removed) {
+      const start = toDateOnly(r.effectiveFrom);
+      const from = start > today ? start : today;
+      const to = r.effectiveTo ? toDateOnly(r.effectiveTo) : null;
+      if (to && to < from) continue;
+      candidates.push({
+        kind: 'create',
+        dentistId: r.dentistId,
+        durationMin: r.durationMin,
+        price: r.price,
+        effectiveFrom: from,
+        effectiveTo: to,
+      });
+    }
+    if (candidates.length === 0) return [];
+    const dentistIds = [...new Set(candidates.map(c => c.dentistId))].sort();
+    await beforeCheck?.(dentistIds);
+
+    const profiles = await client.dentistProfile.findMany({
+      where: {
+        userId: { in: dentistIds },
+        deletedAt: null,
+        practiceStatus: 'ACTIVE',
+      },
+      select: { userId: true, specialties: true },
+    });
+    const required = service.requiredSpecialty;
+    const allowed = new Set(
+      profiles.filter(p => !required || p.specialties.includes(required)).map(p => p.userId),
+    );
+    const result: RestoreAction[] = [];
+    const span = (c: RestoreAction) => ({
+      from: (c.kind === 'reopen' ? today : c.effectiveFrom).getTime(),
+      to: c.effectiveTo ? c.effectiveTo.getTime() : Infinity,
+    });
+    for (const c of candidates) {
+      if (!allowed.has(c.dentistId)) continue;
+      // Nor with another period restored for the same dentist.
+      const mine = span(c);
+      const overlapsKept = result.some(k => {
+        if (k.dentistId !== c.dentistId) return false;
+        const other = span(k);
+        return other.from <= mine.to && mine.from <= other.to;
+      });
+      if (overlapsKept) continue;
+      const from = c.kind === 'reopen' ? today : c.effectiveFrom;
+      const clash = await client.dentistService.findFirst({
+        where: {
+          dentistId: c.dentistId,
+          serviceId: service.id,
+          ...(c.kind === 'reopen' ? { id: { not: c.id } } : {}),
+          ...(c.effectiveTo ? { effectiveFrom: { lte: c.effectiveTo } } : {}),
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: from } }],
+        },
+        select: { id: true },
+      });
+      if (!clash) result.push(c);
+    }
+    return result;
+  }
+
+  private async restoreAssignments(
+    tx: Prisma.TransactionClient,
+    service: ServiceRow,
+    today: Date,
+    actor: JwtPayload,
+  ) {
+    // Same lock as assign(), taken in id order, before the overlap checks.
+    const actions = await this.restoreActions(tx, service, today, async ids => {
+      for (const id of ids) await lockDentistCalendar(tx, id);
+    });
+    for (const a of actions) {
+      if (a.kind === 'reopen') {
+        await tx.dentistService.update({
+          where: { id: a.id },
+          data: { effectiveTo: a.effectiveTo, updatedBy: actor.sub },
+        });
+      } else {
+        await tx.dentistService.create({
+          data: {
+            dentistId: a.dentistId,
+            serviceId: service.id,
+            durationMin: a.durationMin,
+            price: a.price,
+            effectiveFrom: a.effectiveFrom,
+            effectiveTo: a.effectiveTo,
+            createdBy: actor.sub,
+            updatedBy: actor.sub,
+          },
+        });
+      }
+    }
+    return actions.length;
   }
 
   private async findCategory(id: string) {
     const row = await this.prisma.serviceCategory.findUnique({ where: { id } });
-    if (!row) throw new CatalogNotFoundException('Category', id);
+    if (!row) throw new CatalogNotFoundException('nhóm dịch vụ', id);
     return row;
   }
 
   private async findService(id: string): Promise<ServiceRow> {
     const row = await this.prisma.service.findUnique({ where: { id }, include: SERVICE_INCLUDE });
-    if (!row) throw new CatalogNotFoundException('Service', id);
+    if (!row) throw new CatalogNotFoundException('dịch vụ', id);
     return row;
   }
 
-  private formatService(r: ServiceRow) {
+  /**
+   * Free services a dentist still charges for (own price > 0, current or
+   * planned): the public list then shows that price, so the page warns.
+   */
+  private async paidAssignments(rows: ServiceRow[]) {
+    const free = rows.filter(r => r.isFree).map(r => r.id);
+    const counts = new Map<string, number>();
+    if (free.length === 0) return counts;
+    const paid = await this.prisma.dentistService.findMany({
+      where: {
+        serviceId: { in: free },
+        price: { gt: 0 },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: clinicToday() } }],
+      },
+      select: { serviceId: true },
+    });
+    for (const p of paid) counts.set(p.serviceId, (counts.get(p.serviceId) ?? 0) + 1);
+    return counts;
+  }
+
+  private formatService(r: ServiceRow, paidAssignments = 0) {
     return {
       id: r.id,
       code: r.code,
@@ -406,6 +830,10 @@ export class CatalogService {
       bufferBeforeMin: r.bufferBeforeMin,
       bufferAfterMin: r.bufferAfterMin,
       basePrice: Number(r.basePrice),
+      isFree: r.isFree,
+      paidAssignments,
+      bookableOnline: r.bookableOnline,
+      showPublicPrice: r.showPublicPrice,
       requiredSpecialty: r.requiredSpecialty,
       isActive: r.isActive,
       assignedDentists: r._count.dentistServices,
@@ -427,6 +855,7 @@ export class CatalogService {
         isActive: r.service.isActive,
         bufferBeforeMin: r.service.bufferBeforeMin,
         bufferAfterMin: r.service.bufferAfterMin,
+        isFree: r.service.isFree,
       },
       durationMin: r.durationMin,
       price: r.price === null ? null : Number(r.price),

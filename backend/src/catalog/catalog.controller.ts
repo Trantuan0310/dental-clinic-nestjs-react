@@ -18,7 +18,9 @@ import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { CatalogService } from './catalog.service';
 import {
+  ActivateServiceDto,
   AssignServiceDto,
+  ChangeAssignmentDto,
   CreateCategoryDto,
   CreateServiceDto,
   EndAssignmentDto,
@@ -88,6 +90,17 @@ export class CatalogController {
     return { data: await this.catalog.updateService(id, dto, actor) };
   }
 
+  @Get('services/:id/impact')
+  @RequirePermissions('service.manage')
+  @ApiOperation({
+    summary:
+      'Before deactivating: upcoming visits, open online requests, assignments to end; ' +
+      'before reactivating: assignments that can be restored',
+  })
+  async impact(@Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.catalog.serviceImpact(id) };
+  }
+
   @Post('services/:id/deactivate')
   @RequirePermissions('service.manage')
   @HttpCode(HttpStatus.OK)
@@ -99,8 +112,16 @@ export class CatalogController {
   @Post('services/:id/activate')
   @RequirePermissions('service.manage')
   @HttpCode(HttpStatus.OK)
-  async activate(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    return { data: await this.catalog.setServiceActive(id, true, actor) };
+  async activate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ActivateServiceDto,
+    @User() actor: JwtPayload,
+  ) {
+    return {
+      data: await this.catalog.setServiceActive(id, true, actor, {
+        restoreAssignments: dto.restoreAssignments,
+      }),
+    };
   }
 
   @Get('services/:id/dentists')
@@ -142,5 +163,18 @@ export class CatalogController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.catalog.endAssignment(userId, assignmentId, dto.effectiveTo, actor) };
+  }
+
+  @Post('dentists/:userId/services/:assignmentId/change')
+  @RequirePermissions('dentist.assign_service')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'New duration/price from a date on (ends the period the day before)' })
+  async change(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('assignmentId', ParseUUIDPipe) assignmentId: string,
+    @Body() dto: ChangeAssignmentDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.catalog.changeAssignment(userId, assignmentId, dto, actor) };
   }
 }

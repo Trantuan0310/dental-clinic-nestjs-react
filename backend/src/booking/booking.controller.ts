@@ -41,6 +41,11 @@ export class PublicBookingController {
   async options() {
     return { data: await this.booking.options() };
   }
+  @Get('prices')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async prices() {
+    return { data: await this.booking.priceList() };
+  }
   @Get('slots')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async slots(@Query() q: PublicSlotsQueryDto) {

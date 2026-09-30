@@ -25,9 +25,10 @@ import { SPECIALTY_LABEL } from '@/features/staff/labels';
 import { mediaUrl, useSiteMedia, type SiteMedia } from '@/features/media/mediaApi';
 
 /**
- * Public home page for patients (gensmile.online/). Services, prices and
- * dentists come from the same public endpoint as the booking form, so the
- * page always shows what can actually be booked; contact details come from
+ * Public home page for patients (gensmile.online/). The price list comes from
+ * /public/booking/prices (every service the clinic chose to show); dentists
+ * and the "Đặt" links from the same endpoint as the booking form, so they
+ * only offer what can actually be booked online. Contact details come from
  * the build-time clinic config.
  */
 
@@ -39,6 +40,16 @@ type PublicService = {
   durationMinutes: number;
   basePrice: string | number;
   dentists: PublicDentist[];
+};
+/** A price-list row: `price` null = ask the clinic; `priceFrom` = "từ …". */
+type PublicPrice = {
+  id: string;
+  name: string;
+  category: string;
+  durationMinutes: number;
+  isFree: boolean;
+  price: number | null;
+  priceFrom: boolean;
 };
 
 const NAV = [
@@ -109,10 +120,12 @@ const FAQ = [
 ];
 
 const money = new Intl.NumberFormat('vi-VN');
-const formatPrice = (value: string | number) => {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return '';
-  return amount === 0 ? 'Miễn phí' : `${money.format(amount)} đ`;
+// "Miễn phí" only for a service the clinic marked free: a 0 left unset
+// reads "Liên hệ", not a promise.
+const formatPrice = (p: PublicPrice) => {
+  if (p.isFree) return 'Miễn phí';
+  if (p.price === null || !Number.isFinite(p.price)) return 'Liên hệ';
+  return `${p.priceFrom ? 'từ ' : ''}${money.format(p.price)} đ`;
 };
 
 const initials = (fullName: string) =>
@@ -129,6 +142,15 @@ function useBookingOptions() {
     queryKey: ['public-booking-options'],
     queryFn: async () =>
       (await api.get<{ data: PublicService[] }>('/public/booking/options')).data.data,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+}
+
+function usePriceList() {
+  return useQuery({
+    queryKey: ['public-price-list'],
+    queryFn: async () => (await api.get<{ data: PublicPrice[] }>('/public/booking/prices')).data.data,
     staleTime: 5 * 60_000,
     retry: 1,
   });
@@ -311,7 +333,18 @@ function Highlights() {
   );
 }
 
-function Services({ services, isLoading, isError }: { services: PublicService[]; isLoading: boolean; isError: boolean }) {
+function Services({
+  services,
+  bookable,
+  isLoading,
+  isError,
+}: {
+  services: PublicPrice[];
+  /** Ids of the services that can be booked online now. */
+  bookable: Set<string>;
+  isLoading: boolean;
+  isError: boolean;
+}) {
   const categories = useMemo(() => [...new Set(services.map((s) => s.category))], [services]);
   const [active, setActive] = useState('');
   const current = categories.includes(active) ? active : categories[0] ?? '';
@@ -373,14 +406,26 @@ function Services({ services, isLoading, isError }: { services: PublicService[];
                     <p className="mt-0.5 text-sm text-gray-500">khoảng {s.durationMinutes} phút</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className="font-semibold text-brand-600">{formatPrice(s.basePrice)}</span>
-                    <Link
-                      to={`/booking?service=${encodeURIComponent(s.id)}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
-                      aria-label={`Đặt lịch ${s.name}`}
-                    >
-                      Đặt <ArrowRight className="h-4 w-4" aria-hidden />
-                    </Link>
+                    <span className="font-semibold text-brand-600">{formatPrice(s)}</span>
+                    {bookable.has(s.id) ? (
+                      <Link
+                        to={`/booking?service=${encodeURIComponent(s.id)}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
+                        aria-label={`Đặt lịch ${s.name}`}
+                      >
+                        Đặt <ArrowRight className="h-4 w-4" aria-hidden />
+                      </Link>
+                    ) : (
+                      clinic.phone && (
+                        <a
+                          href={`tel:${clinic.phoneHref}`}
+                          className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                          aria-label={`Gọi phòng khám để đặt ${s.name}`}
+                        >
+                          <Phone className="h-4 w-4" aria-hidden /> Gọi
+                        </a>
+                      )
+                    )}
                   </div>
                 </li>
               ))}
@@ -655,7 +700,9 @@ function SiteFooter() {
 }
 
 export default function LandingPage() {
-  const { data: services = [], isLoading, isError } = useBookingOptions();
+  const { data: services = [] } = useBookingOptions();
+  const { data: prices = [], isLoading, isError } = usePriceList();
+  const bookable = useMemo(() => new Set(services.map((s) => s.id)), [services]);
   const { data: media } = useSiteMedia();
 
   useEffect(() => {
@@ -672,7 +719,7 @@ export default function LandingPage() {
       <main>
         <Hero media={media} />
         <Highlights />
-        <Services services={services} isLoading={isLoading} isError={isError} />
+        <Services services={prices} bookable={bookable} isLoading={isLoading} isError={isError} />
         <Dentists services={services} photos={media?.dentists ?? {}} />
         <Gallery items={media?.gallery ?? []} />
         <Steps />

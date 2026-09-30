@@ -1397,6 +1397,11 @@ model Service {
   basePrice          Decimal  @default(0) @map("base_price") @db.Decimal(15, 0)
   requiredSpecialty  String?  @map("required_specialty") @db.VarChar(30)
   isActive           Boolean  @default(true) @map("is_active")
+  // Migration 038: patients may request it online / it is on the public
+  // price list / a price of 0 really means free (not "not set yet").
+  bookableOnline     Boolean  @default(true) @map("bookable_online")
+  showPublicPrice    Boolean  @default(true) @map("show_public_price")
+  isFree             Boolean  @default(false) @map("is_free")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy          String?  @map("created_by") @db.Uuid

@@ -184,13 +184,18 @@ export class BookingService {
    * Services that at least one dentist takes online bookings for today, with
    * only the dentists who have working hours in the bookable range (a weekly
    * schedule valid then, or an approved extra shift): a dentist with none
-   * could only ever show "no free time".
+   * could only ever show "no free time". Only services the clinic offers
+   * online (the front desk lists dentists per request instead).
    */
   async options() {
     const todayDate = clinicDateOnly();
     const today = new Date(todayDate);
     const rows = await this.prisma.service.findMany({
-      where: { isActive: true, category: { isActive: true } },
+      where: {
+        isActive: true,
+        category: { isActive: true },
+        bookableOnline: true,
+      },
       orderBy: [{ category: { sortOrder: 'asc' } }, { name: 'asc' }],
       include: {
         category: { select: { name: true } },
@@ -233,6 +238,55 @@ export class BookingService {
           })),
       }))
       .filter(s => s.dentists.length > 0);
+  }
+
+  /**
+   * The public price list: active services the clinic chose to show, bookable
+   * online or not. `price` is the lowest price any dentist performing it
+   * today charges (their own price, else the list price) and `priceFrom`
+   * says the others charge more; null means "ask the clinic" (0 without the
+   * service being marked free). Whether it can be booked online is what
+   * options() lists.
+   */
+  async priceList() {
+    const today = new Date(clinicDateOnly());
+    const rows = await this.prisma.service.findMany({
+      where: { isActive: true, showPublicPrice: true, category: { isActive: true } },
+      orderBy: [{ category: { sortOrder: 'asc' } }, { name: 'asc' }],
+      include: {
+        category: { select: { name: true } },
+        dentistServices: {
+          where: {
+            effectiveFrom: { lte: today },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+            // Dentists who can be booked at the desk (as options(), without
+            // the online-only conditions).
+            dentist: {
+              ...SCHEDULABLE_ACCOUNT_WHERE,
+              userRoles: { some: { role: { code: 'dentist' } } },
+              dentistProfile: { is: dentistProfileFilter('booking') },
+            },
+          },
+          select: { price: true },
+        },
+      },
+    });
+    return rows.map(s => {
+      const base = Number(s.basePrice);
+      const prices = s.dentistServices.map(a => Number(a.price ?? s.basePrice));
+      const paid = (prices.length ? prices : [base]).filter(p => p > 0);
+      const allFree = s.isFree && prices.every(p => p === 0);
+      const price = allFree ? 0 : paid.length ? Math.min(...paid) : null;
+      return {
+        id: s.id,
+        name: s.name,
+        category: s.category.name,
+        durationMinutes: s.defaultDurationMin,
+        isFree: allFree,
+        price,
+        priceFrom: price !== null && !allFree && paid.some(p => p !== price),
+      };
+    });
   }
 
   /** Of `ids`, the dentists with working hours at some point in [from, to]. */
@@ -281,7 +335,7 @@ export class BookingService {
     }
     const lastDate = lastBookableDate();
     if (q.date > lastDate) throw new BadRequestException(tooFarMessage());
-    const { plan, until } = await this.eligibility(q.serviceId, q.dentistId, q.date);
+    const { plan, until } = await this.eligibility(q.serviceId, q.dentistId, q.date, true);
     const day = await this.publicDay(q.dentistId, q.date, plan);
     const nextAvailableDate =
       q.next && !day.availableSlots.length
@@ -396,7 +450,12 @@ export class BookingService {
     if (clinicDateOnly(startAt) > lastBookableDate()) {
       throw new BadRequestException(tooFarMessage());
     }
-    const plan = await this.requireEligible(dto.serviceId, dto.dentistId, clinicDateOnly(startAt));
+    const plan = await this.requireEligible(
+      dto.serviceId,
+      dto.dentistId,
+      clinicDateOnly(startAt),
+      true,
+    );
     await this.assertSlot(dto.dentistId, startAt, plan);
     const token = randomBytes(32).toString('base64url');
     const ref = 'GS-' + randomBytes(5).toString('hex').toUpperCase();
@@ -1287,20 +1346,26 @@ export class BookingService {
   /**
    * The dentist takes online bookings and performs this active service on
    * that clinic date; returns its length and buffers (the dentist's own
-   * duration first, as the booking form does).
+   * duration first, as the booking form does). `online`: a patient's own
+   * request, so the service must also be offered online.
    */
-  private async requireEligible(serviceId: string, dentistId: string, date: string) {
-    return (await this.eligibility(serviceId, dentistId, date)).plan;
+  private async requireEligible(
+    serviceId: string,
+    dentistId: string,
+    date: string,
+    online = false,
+  ) {
+    return (await this.eligibility(serviceId, dentistId, date, online)).plan;
   }
 
   /** requireEligible, plus the assignment's last day ("YYYY-MM-DD", null = open). */
-  private async eligibility(serviceId: string, dentistId: string, date: string) {
+  private async eligibility(serviceId: string, dentistId: string, date: string, online = false) {
     const eligible = await this.prisma.dentistService.findFirst({
       where: {
         ...this.currentAssignment(new Date(date)),
         dentistId,
         serviceId,
-        service: { isActive: true },
+        service: { isActive: true, ...(online ? { bookableOnline: true } : {}) },
       },
       select: { id: true, effectiveTo: true },
     });

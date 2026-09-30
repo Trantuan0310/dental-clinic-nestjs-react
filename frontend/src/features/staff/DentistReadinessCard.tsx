@@ -94,6 +94,12 @@ export function DentistReadinessCard({
       text: 'Không nhận bệnh nhân mới: ẩn khỏi trang đặt lịch online.',
       action: edit('Sửa hồ sơ'),
     });
+  } else if (r.activeServiceCount > 0 && r.onlineServiceCount === 0) {
+    items.push({
+      level: 'warn',
+      text: 'Không dịch vụ nào được phân công cho phép đặt online: không xuất hiện trên trang đặt lịch.',
+      action: to('/services', 'Trang Dịch vụ', 'service.read'),
+    });
   } else {
     items.push({ level: 'ok', text: 'Đặt lịch online: đang bật.' });
   }
