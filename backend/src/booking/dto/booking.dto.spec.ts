@@ -2,6 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import {
   AcceptBookingProposalDto,
+  PublicBookingNoteDto,
   CreatePublicBookingRequestDto,
   UpdatePublicBookingDetailsDto,
 } from './booking.dto';
@@ -82,5 +83,49 @@ describe('AcceptBookingProposalDto', () => {
     expect(errors({ proposedStartAt: '2026-10-02T10:00:00' })).toEqual(['proposedStartAt']);
     expect(errors({ proposedStartAt: '2026-10-02' })).toEqual(['proposedStartAt']);
     expect(errors({})).toEqual([]);
+  });
+});
+
+describe('public DTO messages', () => {
+  const messages = (value: Record<string, unknown>) =>
+    validateSync(plainToInstance(CreatePublicBookingRequestDto, { ...base, ...value })).flatMap(e =>
+      Object.values(e.constraints ?? {}),
+    );
+
+  it('says what is wrong in Vietnamese, never "phone must be longer than…"', () => {
+    const all = [
+      ...messages({ phone: '123' }),
+      ...messages({ fullName: 'A' }),
+      ...messages({ email: 'bad' }),
+      ...messages({ gender: 'X' }),
+      ...messages({ serviceId: 'x' }),
+      ...messages({ consent: 'yes' }),
+    ];
+    expect(all).toEqual([
+      'Số điện thoại không hợp lệ',
+      'Họ và tên cần ít nhất 2 ký tự',
+      'Email không hợp lệ',
+      'Giới tính không hợp lệ',
+      'Vui lòng chọn dịch vụ',
+      'Cần đồng ý để phòng khám sử dụng thông tin nhằm xử lý yêu cầu đặt lịch',
+    ]);
+    expect(all.join(' ')).not.toMatch(/must|should|longer|shorter/);
+  });
+
+  it('needs the time zone on the requested start (a bare time would be read as UTC)', () => {
+    expect(messages({ startAt: '2026-10-28T09:00:00' })).toEqual([
+      'Giờ khám không hợp lệ (thiếu múi giờ). Vui lòng tải lại trang và chọn lại giờ.',
+    ]);
+    expect(messages({ startAt: '2026-10-28T09:00:00+07:00' })).toEqual([]);
+  });
+
+  it('keeps notes short and free of NUL characters', () => {
+    const errors = (value: Record<string, unknown>) =>
+      validateSync(plainToInstance(PublicBookingNoteDto, value)).flatMap(e =>
+        Object.values(e.constraints ?? {}),
+      );
+    expect(errors({})).toEqual([]);
+    expect(errors({ message: 'x'.repeat(1001) })).toEqual(['Lời nhắn tối đa 1000 ký tự']);
+    expect(errors({ message: 'a\u0000' })).toEqual(['Lời nhắn chứa ký tự không hợp lệ']);
   });
 });

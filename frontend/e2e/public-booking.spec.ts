@@ -67,7 +67,10 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await lookup.getByLabel('Số điện thoại').fill(phone.replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3'));
   await lookup.getByRole('button', { name: 'Xem lịch hẹn' }).click();
   await expect(lookup.getByText('Đang chờ lễ tân xem xét')).toBeVisible();
-  await expect(lookup.getByText(reference, { exact: true })).toBeVisible();
+  // The phone alone shows the status only: no reference code, no changes.
+  await expect(lookup.getByText(reference, { exact: true })).toHaveCount(0);
+  await expect(lookup.getByText(/Trang này chỉ xem được tình trạng/)).toBeVisible();
+  await expect(lookup.getByText('Tôi muốn hủy yêu cầu này')).toHaveCount(0);
 
   // Front desk (the admin session holds booking_request.manage). The sidebar
   // counts requests waiting on them, including this one.
@@ -87,12 +90,16 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   else await expect(pendingBadge).toBeHidden();
 
   // The patient's status page now shows the confirmed visit, with a way to
-  // put it in their calendar; the lookup device remembers the booking too.
+  // put it in their calendar; on another device the code from the email and
+  // the phone open it too (view only).
   await pub.reload();
   await expect(pub.getByText('Lịch hẹn đã được xác nhận')).toBeVisible();
   await expect(pub.getByRole('link', { name: 'Thêm vào Google Calendar' })).toBeVisible();
   await lookup.goto('/booking/status?ref=' + reference);
+  await lookup.getByLabel('Số điện thoại').fill(phone);
+  await lookup.getByRole('button', { name: 'Xem lịch hẹn' }).click();
   await expect(lookup.getByText('Lịch hẹn đã được xác nhận')).toBeVisible();
+  await expect(lookup.getByText(reference, { exact: true })).toBeVisible();
   await other.close();
   await guest.close();
 });

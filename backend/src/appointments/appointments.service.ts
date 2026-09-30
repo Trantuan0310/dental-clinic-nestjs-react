@@ -28,6 +28,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppointmentCancelledEvent,
   APPOINTMENT_CANCELLED_EVENT,
+  APPOINTMENT_RESCHEDULED_EVENT,
+  AppointmentRescheduledEvent,
   PATIENT_CLINICAL_DATA_CHANGED_EVENT,
   PatientClinicalDataChangedEvent,
 } from '../common/events/domain-events';
@@ -188,7 +190,8 @@ export class AppointmentsService {
    * visit is born CONFIRMED (the patient asked for this exact time) and the
    * request is linked in the same transaction, so two staff confirming the
    * same request can't both create a visit. Its `plan` (BookingService)
-   * may keep a service withdrawn after the patient sent the request.
+   * may keep a service withdrawn after the patient sent the request;
+   * `match` narrows the attach to the request as the caller read it.
    */
   async create(
     dto: CreateAppointmentDto,
@@ -197,6 +200,7 @@ export class AppointmentsService {
       id: string;
       expectedStatuses: BookingRequestStatus[];
       plan?: VisitPlan;
+      match?: Prisma.BookingRequestWhereInput;
     },
   ) {
     const startAt = new Date(dto.startAt);
@@ -279,6 +283,7 @@ export class AppointmentsService {
       if (fromBookingRequest) {
         const attached = await tx.bookingRequest.updateMany({
           where: {
+            ...fromBookingRequest.match,
             id: fromBookingRequest.id,
             status: { in: fromBookingRequest.expectedStatuses },
             appointmentId: null,
@@ -961,6 +966,13 @@ export class AppointmentsService {
         rescheduleCount: result.rescheduleCount,
       },
     });
+    this.events.emit(APPOINTMENT_RESCHEDULED_EVENT, {
+      appointmentId,
+      oldStartAt: appt.startAt,
+      newStartAt: newStart,
+      oldDentistId: appt.dentistId,
+      newDentistId,
+    } satisfies AppointmentRescheduledEvent);
 
     return result;
   }
