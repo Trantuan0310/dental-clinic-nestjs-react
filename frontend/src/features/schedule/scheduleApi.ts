@@ -3,6 +3,13 @@ import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import type {
   WorkingSchedule,
   CreateWorkingSchedulePayload,
+  BulkCreateWorkingSchedulesPayload,
+  UpdateWorkingSchedulePayload,
+  UpdateWorkingScheduleResult,
+  ScheduleChangeImpact,
+  ClinicClosure,
+  ClinicClosurePayload,
+  ClinicClosureResult,
   TimeOff,
   CreateTimeOffPayload,
   CreateTimeOffResult,
@@ -23,12 +30,23 @@ const post = async <T>(url: string, body?: unknown) => {
   return unwrap(data);
 };
 
+const patch = async <T>(url: string, body?: unknown) => {
+  const { data } = await api.patch<AuthEnvelope<T>>(url, body);
+  return unwrap(data);
+};
+
+const del = async <T>(url: string) => {
+  const { data } = await api.delete<AuthEnvelope<T>>(url);
+  return unwrap(data);
+};
+
 export const scheduleKeys = {
   workingSchedules: (dentistId?: string) => ['schedule', 'working', dentistId ?? 'all'] as const,
   timeOffs: (dentistId?: string, status?: TimeOffStatus) =>
     ['schedule', 'time-off', dentistId ?? 'all', status ?? 'all'] as const,
   overrides: (dentistId?: string) => ['schedule', 'overrides', dentistId ?? 'all'] as const,
   impact: (dentistId?: string) => ['schedule', 'impact', dentistId ?? 'all'] as const,
+  closures: () => ['schedule', 'clinic-closures'] as const,
 };
 
 /** Anything that changes a dentist's calendar changes bookable slots and the impact list. */
@@ -79,6 +97,64 @@ export function useCreateWorkingSchedule() {
   });
 }
 
+/** Several weekdays × blocks saved in one transaction (all or nothing). */
+export function useBulkCreateWorkingSchedules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BulkCreateWorkingSchedulesPayload) =>
+      post<{ created: RawWorkingSchedule[] }>('/appointments/schedules/bulk', payload).then((r) =>
+        r.created.map(mapWorkingSchedule),
+      ),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useUpdateWorkingSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: UpdateWorkingSchedulePayload & { id: string }) =>
+      patch<UpdateWorkingScheduleResult>(`/appointments/schedules/${id}`, payload),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+/** Only a schedule that has not started yet can be deleted; a running one is ended. */
+export function useDeleteWorkingSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => del<ScheduleChangeImpact>(`/appointments/schedules/${id}`),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useClinicClosures() {
+  return useQuery({
+    queryKey: scheduleKeys.closures(),
+    queryFn: () => get<ClinicClosure[]>('/appointments/clinic-closures'),
+  });
+}
+
+export function useSaveClinicClosure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: ClinicClosurePayload & { id?: string }) =>
+      id
+        ? patch<ClinicClosureResult>(`/appointments/clinic-closures/${id}`, payload)
+        : post<ClinicClosureResult>('/appointments/clinic-closures', payload),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+export function useDeleteClinicClosure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/appointments/clinic-closures/${id}`);
+    },
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
 export function useTimeOffs(dentistId?: string, status?: TimeOffStatus) {
   return useQuery({
     queryKey: scheduleKeys.timeOffs(dentistId, status),
@@ -125,12 +201,11 @@ export function useCreateScheduleOverride() {
   });
 }
 
+/** Returns the bookings the weekly hours no longer allow once the override is gone. */
 export function useDeleteScheduleOverride() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`/appointments/schedule-overrides/${id}`);
-    },
+    mutationFn: (id: string) => del<ScheduleChangeImpact>(`/appointments/schedule-overrides/${id}`),
     onSuccess: () => invalidateCalendar(qc),
   });
 }

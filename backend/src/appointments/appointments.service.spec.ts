@@ -1514,7 +1514,8 @@ describe('AppointmentsService', () => {
         { startTime: '09:10', endTime: '09:55' },
         { startTime: '11:00', endTime: '24:00' },
       ]);
-      expect(result.availableSlots).toEqual(['08:00', '08:30', '10:00', '10:30']);
+      // One 15-minute grid (SLOT_STEP_MIN), whatever the visit's length.
+      expect(result.availableSlots).toEqual(['08:00', '08:15', '08:30', '10:00', '10:15', '10:30']);
     });
 
     it("drops today's slots that have already started", async () => {
@@ -1540,7 +1541,7 @@ describe('AppointmentsService', () => {
           date: '2099-09-16',
         });
 
-        expect(result.availableSlots).toEqual(['10:00', '10:30']);
+        expect(result.availableSlots).toEqual(['10:00', '10:15', '10:30']);
       } finally {
         jest.useRealTimers();
       }
@@ -1780,7 +1781,7 @@ describe('AppointmentsService', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(activeDentist);
       (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
 
-      await expect(service.createTimeOff(timeOffDto, approver)).rejects.toThrow(/checked-in/);
+      await expect(service.createTimeOff(timeOffDto, approver)).rejects.toThrow(/đã check-in/);
       expect(prisma.appointment.count).toHaveBeenCalledWith({
         where: expect.objectContaining({
           startAt: { lt: new Date(timeOffDto.endAt) },
@@ -2060,7 +2061,19 @@ describe('AppointmentsService', () => {
 
       const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
 
-      expect(result.availableSlots).toEqual(['08:00', '08:30', '09:00', '09:30', '10:00', '10:30']);
+      expect(result.availableSlots).toEqual([
+        '08:00',
+        '08:15',
+        '08:30',
+        '08:45',
+        '09:00',
+        '09:15',
+        '09:30',
+        '09:45',
+        '10:00',
+        '10:15',
+        '10:30',
+      ]);
     });
   });
 
@@ -2142,7 +2155,7 @@ describe('AppointmentsService', () => {
     releaseBooked([]);
 
     await expect(pending).resolves.toEqual(
-      expect.objectContaining({ availableSlots: ['08:00', '08:30'] }),
+      expect.objectContaining({ availableSlots: ['08:00', '08:15', '08:30'] }),
     );
   });
 
@@ -2211,7 +2224,7 @@ describe('AppointmentsService', () => {
     });
 
     it('rejecting needs a reason', async () => {
-      await expect(service.rejectTimeOff('to-1', { note: '' }, approver)).rejects.toThrow(/reason/);
+      await expect(service.rejectTimeOff('to-1', { note: '' }, approver)).rejects.toThrow(/lý do/);
     });
 
     it("a dentist cannot cancel a colleague's time-off", async () => {
@@ -2313,17 +2326,23 @@ describe('AppointmentsService', () => {
       });
     });
 
-    it('overrides are front desk/admin only', async () => {
+    it('overrides are clinic management only', async () => {
       await expect(
         service.createScheduleOverride(
           { dentistId: 'dentist-self', date: '2099-01-05', kind: 'CLOSED', reason: 'Nghỉ' } as any,
           dentistPayload('dentist-self'),
         ),
-      ).rejects.toThrow(/lễ tân/);
+      ).rejects.toThrow(/Chỉ quản trị phòng khám/);
     });
 
-    it('a day can have only one changed-hours override', async () => {
-      (prisma.scheduleOverride.findFirst as jest.Mock).mockResolvedValue({ id: 'ov-1' });
+    it('changed hours may not overlap a block the day already has', async () => {
+      (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'ov-1',
+          startTime: new Date('1970-01-01T14:00:00Z'),
+          endTime: new Date('1970-01-01T18:00:00Z'),
+        },
+      ]);
       const error = await service
         .createScheduleOverride(
           {

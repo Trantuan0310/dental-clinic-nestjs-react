@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { CalendarX2, Plus, Trash2 } from 'lucide-react';
-import { Badge, Button, Card, DatePicker, EmptyState, Input, Modal, Select, Textarea } from '@/components/ui';
+import { Alert, Badge, Button, Card, DatePicker, EmptyState, Input, Modal, Select, Textarea } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -10,17 +10,21 @@ import { useAuthStore } from '@/stores/authStore';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import { useCreateScheduleOverride, useDeleteScheduleOverride, useScheduleOverrides } from './scheduleApi';
 import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
-import type { ScheduleOverrideKind, TimeOffAffectedAppointment } from '@/types/schedule';
+import { TimeBlocksEditor } from './TimeBlocksEditor';
+import { blockError, defaultBlocks } from './scheduleBlocks';
+import { hasImpact } from './format';
+import type { ScheduleChangeImpact, ScheduleOverrideKind, TimeBlock } from '@/types/schedule';
 
 /**
  * Per-day exceptions to the weekly schedule (BR-SCH-003/004): close a whole
- * day or a range, or change one day's hours. Extra hours are registered as
- * shifts instead (ADR-0009 D3). Front desk/admin only.
+ * day or a range, or change one day's hours (one or more blocks, so a lunch
+ * break can be kept). Extra hours are registered as shifts instead
+ * (ADR-0009 D3). Clinic management only.
  */
 export function OverridesTab() {
   const [dentistFilter, setDentistFilter] = useState('');
   const [creating, setCreating] = useState(false);
-  const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
+  const [affected, setAffected] = useState<ScheduleChangeImpact | null>(null);
   const { data: dentists = [] } = useDentistOptions();
   const { data: overrides = [], isLoading } = useScheduleOverrides(dentistFilter || undefined);
   const remove = useDeleteScheduleOverride();
@@ -94,7 +98,10 @@ export function OverridesTab() {
                           aria-label={`Xóa ngoại lệ ngày ${formatDate(o.date)}`}
                           onClick={() =>
                             remove.mutate(o.id, {
-                              onSuccess: () => notify.success('Đã xóa ngoại lệ; lịch trở lại như tuần'),
+                              onSuccess: (result) => {
+                                notify.success('Đã xóa ngoại lệ; lịch trở lại như tuần');
+                                if (hasImpact(result)) setAffected(result);
+                              },
                               onError: (e) => notify.error(getApiErrorMessage(e, 'Không xóa được')),
                             })
                           }
@@ -114,11 +121,12 @@ export function OverridesTab() {
       <CreateOverrideModal
         open={creating}
         onClose={() => setCreating(false)}
-        onAffected={(list) => setAffected(list)}
+        onAffected={(impact) => setAffected(impact)}
       />
       <AffectedAppointmentsModal
         open={affected !== null}
-        appointments={affected ?? []}
+        appointments={affected?.affectedAppointments ?? []}
+        bookingRequests={affected?.affectedBookingRequests ?? []}
         onClose={() => setAffected(null)}
       />
     </div>
@@ -132,7 +140,7 @@ function CreateOverrideModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAffected: (list: TimeOffAffectedAppointment[]) => void;
+  onAffected: (impact: ScheduleChangeImpact) => void;
 }) {
   const { data: dentists = [] } = useDentistOptions();
   const create = useCreateScheduleOverride();
@@ -146,7 +154,10 @@ function CreateOverrideModal({
     endTime: '12:00',
     reason: '',
   });
-  const withTimes = form.kind === 'CHANGED_HOURS' || !form.wholeDay;
+  const [ranges, setRanges] = useState<TimeBlock[]>(defaultBlocks);
+  const changed = form.kind === 'CHANGED_HOURS';
+  const withTimes = !changed && !form.wholeDay;
+  const rangeError = changed ? blockError(ranges) : null;
 
   return (
     <Modal open={open} onClose={onClose} title="Thêm ngoại lệ lịch làm việc" size="sm">
@@ -160,13 +171,14 @@ function CreateOverrideModal({
               date: form.date,
               kind: form.kind,
               ...(withTimes ? { startTime: form.startTime, endTime: form.endTime } : {}),
+              ...(changed ? { ranges } : {}),
               reason: form.reason.trim(),
             },
             {
               onSuccess: (result) => {
                 notify.success('Đã lưu ngoại lệ lịch làm việc');
                 onClose();
-                if (result.affectedAppointments.length > 0) onAffected(result.affectedAppointments);
+                if (hasImpact(result)) onAffected(result);
               },
               onError: (err) => notify.error(getApiErrorMessage(err, 'Không lưu được ngoại lệ')),
             },
@@ -208,10 +220,21 @@ function CreateOverrideModal({
             ]}
           />
         )}
+        {changed && (
+          <div className="space-y-2">
+            <Alert variant="info">
+              Các khung dưới đây <strong>thay toàn bộ</strong> lịch tuần của ngày này. Muốn giữ nghỉ trưa, nhập hai
+              khung (VD 09:00–12:00 và 13:30–17:00). Ngày đã có khung đổi giờ thì khung mới được cộng thêm, không được
+              chồng lên khung cũ.
+            </Alert>
+            <TimeBlocksEditor blocks={ranges} onChange={setRanges} startLabel="Làm từ" />
+            {rangeError && <p className="text-xs text-red-600">{rangeError}</p>}
+          </div>
+        )}
         {withTimes && (
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label={form.kind === 'CHANGED_HOURS' ? 'Làm từ' : 'Đóng từ'}
+              label="Đóng từ"
               type="time"
               required
               value={form.startTime}
@@ -243,7 +266,7 @@ function CreateOverrideModal({
           <Button
             type="submit"
             isLoading={create.isPending}
-            disabled={!form.dentistId || (withTimes && form.endTime <= form.startTime)}
+            disabled={!form.dentistId || (withTimes && form.endTime <= form.startTime) || Boolean(rangeError)}
           >
             Lưu
           </Button>

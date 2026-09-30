@@ -25,6 +25,7 @@ import {
   ConfirmBookingRequestDto,
   CreatePublicBookingRequestDto,
   ListBookingRequestsDto,
+  PendingInRangeQueryDto,
   ProposeBookingTimeDto,
   PublicSlotsQueryDto,
   UpdatePublicBookingDetailsDto,
@@ -37,8 +38,8 @@ export class PublicBookingController {
   constructor(private readonly booking: BookingService) {}
   @Get('options')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async options(@Query('includeOffline') includeOffline?: string) {
-    return { data: await this.booking.options(includeOffline === 'true') };
+  async options() {
+    return { data: await this.booking.options() };
   }
   @Get('prices')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
@@ -122,6 +123,18 @@ export class BookingRequestsController {
   @RequirePermissions('booking_request.read')
   async pendingCount() {
     return { data: await this.booking.pendingCount() };
+  }
+  // Open requests on a dentist's days, each saying whether it can still be
+  // confirmed as it stands (for the schedule-change impact lists).
+  @Get('pending-in-range')
+  @RequirePermissions('booking_request.read')
+  async pendingInRange(@Query() q: PendingInRangeQueryDto) {
+    return { data: await this.booking.pendingInRange(q) };
+  }
+  @Get(':id/dentists')
+  @RequirePermissions('booking_request.read')
+  async dentists(@Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.booking.dentistOptions(id) };
   }
   @Get(':id/patient-matches')
   @RequirePermissions('booking_request.read')

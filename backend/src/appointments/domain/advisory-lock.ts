@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 // so a dentist id and a patient id can never hash onto the same lock.
 const LOCK_NS_DENTIST = 1;
 const LOCK_NS_PATIENT = 2;
+const LOCK_NS_CLINIC = 3;
 
 async function advisoryLock(
   tx: Prisma.TransactionClient,
@@ -37,4 +38,9 @@ export function lockDentistCalendar(tx: Prisma.TransactionClient, dentistId: str
  */
 export function lockPatientCalendar(tx: Prisma.TransactionClient, patientId: string) {
   return advisoryLock(tx, LOCK_NS_PATIENT, patientId);
+}
+
+/** Serialize changes to clinic-wide closed days (overlap check + insert). */
+export function lockClinicClosures(tx: Prisma.TransactionClient) {
+  return advisoryLock(tx, LOCK_NS_CLINIC, 'clinic_closures');
 }

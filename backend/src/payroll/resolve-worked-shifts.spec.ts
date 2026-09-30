@@ -140,4 +140,89 @@ describe('PayrollService — resolveWorkedShifts (BR-PAY-011)', () => {
     expect(result.totalHours).toBe(0);
     expect(result.overtimeHours).toBe(0);
   });
+  it('counts every weekly block of the day, not only the first (morning + afternoon)', async () => {
+    const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+    const prismaMock: any = {
+      // Saturdays: 08:00-12:00 and 13:30-19:00 = 9.5h
+      workingSchedule: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            dayOfWeek: 6,
+            startTime: t('08:00'),
+            endTime: t('12:00'),
+            validFrom: new Date('2026-01-01'),
+            validTo: null,
+          },
+          {
+            dayOfWeek: 6,
+            startTime: t('13:30'),
+            endTime: t('19:00'),
+            validFrom: new Date('2026-01-01'),
+            validTo: null,
+          },
+        ]),
+      },
+      shiftRegistration: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new PayrollService(prismaMock as any, { log: jest.fn() } as any);
+    const result = await (service as any).resolveWorkedShifts(prismaMock, 'dentist-1', {
+      start: new Date('2026-08-01'),
+      end: new Date('2026-08-01'),
+    });
+    expect(result.workedShifts).toBe(1);
+    expect(result.totalHours).toBe(9.5);
+  });
+
+  it('uses only the weekly rows valid on each date (schedule changed from a given day)', async () => {
+    const t = (hhmm: string) => new Date(`1970-01-01T${hhmm}:00Z`);
+    const prismaMock: any = {
+      // Saturdays were 8h until 2026-08-07, then 4h from 2026-08-08.
+      workingSchedule: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            dayOfWeek: 6,
+            startTime: t('08:00'),
+            endTime: t('16:00'),
+            validFrom: new Date('2026-01-01'),
+            validTo: new Date('2026-08-07'),
+          },
+          {
+            dayOfWeek: 6,
+            startTime: t('08:00'),
+            endTime: t('12:00'),
+            validFrom: new Date('2026-08-08'),
+            validTo: null,
+          },
+        ]),
+      },
+      shiftRegistration: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new PayrollService(prismaMock as any, { log: jest.fn() } as any);
+    const result = await (service as any).resolveWorkedShifts(prismaMock, 'dentist-1', {
+      start: new Date('2026-08-01'),
+      end: new Date('2026-08-15'),
+    });
+    // Sat 08-01 = 8h, Sat 08-08 = 4h, Sat 08-15 = 4h
+    expect(result.workedShifts).toBe(3);
+    expect(result.totalHours).toBe(16);
+  });
+
+  it('adds up several approved registrations on the same date', async () => {
+    const prismaMock: any = {
+      workingSchedule: { findMany: jest.fn().mockResolvedValue([]) },
+      shiftRegistration: {
+        findMany: jest.fn().mockResolvedValue([
+          { date: new Date('2026-08-01'), startTime: '08:00', endTime: '12:00' },
+          { date: new Date('2026-08-01'), startTime: '17:00', endTime: '20:00' },
+        ]),
+      },
+    };
+    const service = new PayrollService(prismaMock as any, { log: jest.fn() } as any);
+    const result = await (service as any).resolveWorkedShifts(prismaMock, 'dentist-1', {
+      start: new Date('2026-08-01'),
+      end: new Date('2026-08-01'),
+    });
+    expect(result.workedShifts).toBe(1);
+    expect(result.totalHours).toBe(7);
+  });
 });

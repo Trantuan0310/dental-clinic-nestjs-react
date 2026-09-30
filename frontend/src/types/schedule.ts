@@ -5,8 +5,9 @@
 //
 // Both features live in the Appointments module, not Payroll — there's no
 // dedicated schedule/time-off controller. Time-off has an approval flow and
-// days can be overridden (ADR-0009 phase 3); working schedules are still
-// create + list only.
+// days can be overridden (ADR-0009 phase 3). Working schedules can be edited,
+// ended or (before they start) deleted; the whole clinic can be closed for
+// days (migration 035).
 // =============================================================================
 
 export type ShiftType = 'MORNING' | 'AFTERNOON' | 'FULL_DAY' | 'NIGHT';
@@ -62,6 +63,35 @@ export interface TimeOff {
   createdAt: string;
 }
 
+/** One block of a working day, "HH:mm". */
+export interface TimeBlock {
+  startTime: string;
+  endTime: string;
+}
+
+/** POST /appointments/schedules/bulk — several weekdays × blocks in one save. */
+export interface BulkCreateWorkingSchedulesPayload {
+  dentistId: string;
+  daysOfWeek: number[];
+  blocks: Array<TimeBlock & { shiftType?: ShiftType }>;
+  slotDurationMin?: number;
+  validFrom: string;
+  validTo?: string;
+  isPaidShift?: boolean;
+}
+
+/**
+ * PATCH /appointments/schedules/:id. New hours of a running schedule apply
+ * from `effectiveFrom` (default today); `validTo` alone ends it.
+ */
+export interface UpdateWorkingSchedulePayload {
+  dayOfWeek?: number;
+  startTime?: string;
+  endTime?: string;
+  validTo?: string | null;
+  effectiveFrom?: string;
+}
+
 // Appointments still SCHEDULED/CONFIRMED inside a newly created time-off —
 // returned by POST /appointments/time-offs so front desk can move them.
 export interface TimeOffAffectedAppointment {
@@ -69,8 +99,51 @@ export interface TimeOffAffectedAppointment {
   startAt: string;
   endAt: string;
   status: string;
+  /** Present when the change spans several dentists (clinic closure). */
+  dentistName?: string | null;
   patient: { id: string; code: string; fullName: string; primaryPhone: string | null };
 }
+
+/** An online booking request still open at a time the change no longer allows. */
+export interface AffectedBookingRequest {
+  id: string;
+  referenceCode: string;
+  fullName: string;
+  phone: string;
+  status: string;
+  startAt: string;
+}
+
+/** What a calendar change leaves to handle by hand (never cancelled automatically). */
+export interface ScheduleChangeImpact {
+  affectedAppointments: TimeOffAffectedAppointment[];
+  affectedBookingRequests?: AffectedBookingRequest[];
+}
+
+export interface UpdateWorkingScheduleResult extends ScheduleChangeImpact {
+  schedule: WorkingSchedule;
+  /** The old row, ended the day before the new hours start (null when edited in place). */
+  endedSchedule: WorkingSchedule | null;
+}
+
+/** Whole clinic closed from startDate to endDate (inclusive, clinic dates). */
+export interface ClinicClosure {
+  id: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  createdBy: string;
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export interface ClinicClosurePayload {
+  startDate: string;
+  endDate: string;
+  reason: string;
+}
+
+export interface ClinicClosureResult extends ClinicClosure, ScheduleChangeImpact {}
 
 export interface CreateTimeOffResult extends TimeOff {
   affectedAppointments: TimeOffAffectedAppointment[];
@@ -104,11 +177,13 @@ export interface CreateScheduleOverridePayload {
   kind: ScheduleOverrideKind;
   startTime?: string;
   endTime?: string;
+  /** CHANGED_HOURS: several blocks (e.g. keep a lunch break). */
+  ranges?: TimeBlock[];
   reason: string;
 }
 
-export interface CreateScheduleOverrideResult extends ScheduleOverride {
-  affectedAppointments: TimeOffAffectedAppointment[];
+export interface CreateScheduleOverrideResult extends ScheduleOverride, ScheduleChangeImpact {
+  overrides?: ScheduleOverride[];
 }
 
 /** GET /appointments/schedule-impact row (BR-SCH-005). */
