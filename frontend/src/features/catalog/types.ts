@@ -18,6 +18,8 @@ export interface CatalogService {
   basePrice: number;
   /** Explicitly free: the public price list says "Miễn phí". */
   isFree: boolean;
+  /** Free, yet dentists still charging an own price > 0 (list/detail only). */
+  paidAssignments?: number;
   /** Patients may request it on the public booking page. */
   bookableOnline: boolean;
   /** Listed on the public price list. */
@@ -63,6 +65,7 @@ export interface DentistServiceAssignment {
     isActive: boolean;
     bufferBeforeMin: number;
     bufferAfterMin: number;
+    isFree: boolean;
   };
   durationMin: number | null;
   price: number | null;

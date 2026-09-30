@@ -447,6 +447,11 @@ export default function ServicesPage() {
                               </Badge>
                             )}
                             {!s.bookableOnline && <Badge>Không đặt online</Badge>}
+                          {s.isFree && !!s.paidAssignments && (
+                            <Badge variant="warning">
+                              {s.paidAssignments} phân công có giá riêng &gt; 0: trang chủ sẽ hiện giá đó
+                            </Badge>
+                          )}
                             {!s.showPublicPrice && <Badge>Ẩn trên bảng giá</Badge>}
                           </div>
                           {s.description && <p className="text-xs text-gray-500">{s.description}</p>}

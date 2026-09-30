@@ -1299,6 +1299,15 @@ describe('BookingService public request security and validation', () => {
       const where = prisma.service.findMany.mock.calls[0][0].where;
       expect(where).toMatchObject({ isActive: true, showPublicPrice: true });
       expect(where.bookableOnline).toBeUndefined();
+      // Prices of dentists bookable at the desk (not on leave, not suspended).
+      const dentist =
+        prisma.service.findMany.mock.calls[0][0].include.dentistServices.where.dentist;
+      expect(dentist.status).toEqual({ not: 'DEACTIVATED' });
+      expect(dentist.userRoles).toEqual({ some: { role: { code: 'dentist' } } });
+      expect(dentist.dentistProfile.is).toMatchObject({
+        practiceStatus: 'ACTIVE',
+        employee: { employmentStatus: 'ACTIVE' },
+      });
     });
 
     it('gives the lowest price a dentist charges, "from" when they differ', async () => {

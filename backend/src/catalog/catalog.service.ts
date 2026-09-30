@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { clinicToday, toDateOnly } from '../staff/staff-rules';
+import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 import {
   AssignServiceDto,
   ChangeAssignmentDto,
@@ -42,6 +43,7 @@ const ASSIGNMENT_INCLUDE = {
       bufferBeforeMin: true,
       bufferAfterMin: true,
       isActive: true,
+      isFree: true,
       category: { select: { name: true } },
     },
   },
@@ -169,11 +171,14 @@ export class CatalogService {
       include: SERVICE_INCLUDE,
       orderBy: [{ category: { sortOrder: 'asc' } }, { name: 'asc' }],
     });
-    return rows.map(r => this.formatService(r));
+    const paid = await this.paidAssignments(rows);
+    return rows.map(r => this.formatService(r, paid.get(r.id)));
   }
 
   async getService(id: string) {
-    return this.formatService(await this.findService(id));
+    const row = await this.findService(id);
+    const paid = await this.paidAssignments([row]);
+    return this.formatService(row, paid.get(row.id));
   }
 
   async createService(dto: CreateServiceDto, actor: JwtPayload) {
@@ -583,6 +588,23 @@ export class CatalogService {
       });
       return { row, result };
     });
+    // Visits already booked from that day on keep the price and length
+    // frozen at booking (appointment_services); the front desk is told how
+    // many, so it can adjust them if the clinic wants the new terms applied.
+    const affectedAppointments = await this.prisma.appointment.count({
+      where: {
+        dentistId,
+        deletedAt: null,
+        status: { in: UPCOMING_VISIT },
+        startAt: {
+          gte: new Date(Math.max(Date.now(), from.getTime() - CLINIC_UTC_OFFSET_MS)),
+          ...(result.effectiveTo
+            ? { lt: new Date(addDays(result.effectiveTo, 1).getTime() - CLINIC_UTC_OFFSET_MS) }
+            : {}),
+        },
+        services: { some: { serviceId: row.serviceId } },
+      },
+    });
     await this.log('DENTIST_SERVICE_CHANGED', actor, 'dentist_service', result.id, {
       dentistId,
       serviceId: row.serviceId,
@@ -593,8 +615,9 @@ export class CatalogService {
         from: row.price === null ? null : Number(row.price),
         to: result.price === null ? null : Number(result.price),
       },
+      affectedAppointments,
     });
-    return this.formatAssignment(result, today);
+    return { ...this.formatAssignment(result, today), affectedAppointments };
   }
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -630,6 +653,8 @@ export class CatalogService {
     client: Prisma.TransactionClient,
     service: ServiceRow,
     today: Date,
+    /** Called with the dentists involved before anything is checked (locks). */
+    beforeCheck?: (dentistIds: string[]) => Promise<void>,
   ): Promise<RestoreAction[]> {
     const entry = await client.auditLog.findFirst({
       where: { action: 'SERVICE_DEACTIVATED', targetType: 'service', targetId: service.id },
@@ -682,10 +707,12 @@ export class CatalogService {
       });
     }
     if (candidates.length === 0) return [];
+    const dentistIds = [...new Set(candidates.map(c => c.dentistId))].sort();
+    await beforeCheck?.(dentistIds);
 
     const profiles = await client.dentistProfile.findMany({
       where: {
-        userId: { in: [...new Set(candidates.map(c => c.dentistId))] },
+        userId: { in: dentistIds },
         deletedAt: null,
         practiceStatus: 'ACTIVE',
       },
@@ -696,8 +723,20 @@ export class CatalogService {
       profiles.filter(p => !required || p.specialties.includes(required)).map(p => p.userId),
     );
     const result: RestoreAction[] = [];
+    const span = (c: RestoreAction) => ({
+      from: (c.kind === 'reopen' ? today : c.effectiveFrom).getTime(),
+      to: c.effectiveTo ? c.effectiveTo.getTime() : Infinity,
+    });
     for (const c of candidates) {
       if (!allowed.has(c.dentistId)) continue;
+      // Nor with another period restored for the same dentist.
+      const mine = span(c);
+      const overlapsKept = result.some(k => {
+        if (k.dentistId !== c.dentistId) return false;
+        const other = span(k);
+        return other.from <= mine.to && mine.from <= other.to;
+      });
+      if (overlapsKept) continue;
       const from = c.kind === 'reopen' ? today : c.effectiveFrom;
       const clash = await client.dentistService.findFirst({
         where: {
@@ -720,7 +759,10 @@ export class CatalogService {
     today: Date,
     actor: JwtPayload,
   ) {
-    const actions = await this.restoreActions(tx, service, today);
+    // Same lock as assign(), taken in id order, before the overlap checks.
+    const actions = await this.restoreActions(tx, service, today, async ids => {
+      for (const id of ids) await lockDentistCalendar(tx, id);
+    });
     for (const a of actions) {
       if (a.kind === 'reopen') {
         await tx.dentistService.update({
@@ -757,7 +799,27 @@ export class CatalogService {
     return row;
   }
 
-  private formatService(r: ServiceRow) {
+  /**
+   * Free services a dentist still charges for (own price > 0, current or
+   * planned): the public list then shows that price, so the page warns.
+   */
+  private async paidAssignments(rows: ServiceRow[]) {
+    const free = rows.filter(r => r.isFree).map(r => r.id);
+    const counts = new Map<string, number>();
+    if (free.length === 0) return counts;
+    const paid = await this.prisma.dentistService.findMany({
+      where: {
+        serviceId: { in: free },
+        price: { gt: 0 },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: clinicToday() } }],
+      },
+      select: { serviceId: true },
+    });
+    for (const p of paid) counts.set(p.serviceId, (counts.get(p.serviceId) ?? 0) + 1);
+    return counts;
+  }
+
+  private formatService(r: ServiceRow, paidAssignments = 0) {
     return {
       id: r.id,
       code: r.code,
@@ -769,6 +831,7 @@ export class CatalogService {
       bufferAfterMin: r.bufferAfterMin,
       basePrice: Number(r.basePrice),
       isFree: r.isFree,
+      paidAssignments,
       bookableOnline: r.bookableOnline,
       showPublicPrice: r.showPublicPrice,
       requiredSpecialty: r.requiredSpecialty,
@@ -792,6 +855,7 @@ export class CatalogService {
         isActive: r.service.isActive,
         bufferBeforeMin: r.service.bufferBeforeMin,
         bufferAfterMin: r.service.bufferAfterMin,
+        isFree: r.service.isFree,
       },
       durationMin: r.durationMin,
       price: r.price === null ? null : Number(r.price),

@@ -77,6 +77,8 @@ export function DentistServicesCard({
   const earliestStart = (serviceId: string) =>
     rows.some((r) => r.service.id === serviceId && r.effectiveTo === today) ? tomorrow : today;
   const assignMin = form.serviceId ? earliestStart(form.serviceId) : today;
+  const FREE_PRICE_WARNING = 'Dịch vụ này đánh dấu miễn phí; giá riêng > 0 sẽ hiện trên bảng giá trang chủ';
+  const assignFree = services.find((s) => s.id === form.serviceId)?.isFree ?? false;
 
   const openAssign = () => {
     setForm({ serviceId: '', effectiveFrom: today, durationMin: '', price: '' });
@@ -110,7 +112,9 @@ export function DentistServicesCard({
                 <p className="text-xs text-gray-500">
                   {r.effectiveDurationMin} phút{r.durationMin !== null && ' (riêng)'} ·{' '}
                   {formatCurrency(r.effectivePrice)}
-                  {r.price !== null && ' (riêng)'} · từ {formatDate(r.effectiveFrom)}
+                  {r.price !== null && ' (riêng)'}
+                  {r.service.isFree && r.effectivePrice > 0 && ' (dịch vụ đánh dấu miễn phí!)'} · từ{' '}
+                  {formatDate(r.effectiveFrom)}
                   {r.effectiveTo && ` đến ${formatDate(r.effectiveTo)}`}
                 </p>
               </div>
@@ -227,7 +231,7 @@ export function DentistServicesCard({
               min={0}
               max={999_999_999_999_999}
               step={1000}
-              hint="Để trống: giá niêm yết"
+              hint={assignFree && Number(form.price) > 0 ? FREE_PRICE_WARNING : 'Để trống: giá niêm yết'}
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
@@ -261,8 +265,14 @@ export function DentistServicesCard({
                   price: changing.price ? Number(changing.price) : null,
                 },
                 {
-                  onSuccess: () => {
+                  onSuccess: (res) => {
                     notify.success(`Đã đổi, áp dụng từ ${formatDate(changing.effectiveFrom)}`);
+                    // Booked visits froze their price and length at booking.
+                    if (res.affectedAppointments > 0)
+                      notify.warning(
+                        `${res.affectedAppointments} lịch hẹn đã đặt từ ngày này vẫn giữ giá và thời lượng lúc đặt; ` +
+                          'kiểm tra lại nếu cần áp dụng mức mới.',
+                      );
                     setChanging(null);
                   },
                   onError: (err) => notify.error(catalogErrorMessage(err, 'Không đổi được')),
@@ -299,7 +309,11 @@ export function DentistServicesCard({
                 min={0}
                 max={999_999_999_999_999}
                 step={1000}
-                hint="Để trống: giá niêm yết"
+                hint={
+                  changing.row.service.isFree && Number(changing.price) > 0
+                    ? FREE_PRICE_WARNING
+                    : 'Để trống: giá niêm yết'
+                }
                 value={changing.price}
                 onChange={(e) => setChanging({ ...changing, price: e.target.value })}
               />

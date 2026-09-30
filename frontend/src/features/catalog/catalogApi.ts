@@ -83,8 +83,10 @@ export const catalogApi = {
     dentistId: string,
     assignmentId: string,
     payload: { effectiveFrom: string; durationMin: number | null; price: number | null },
-  ): Promise<DentistServiceAssignment> {
-    const { data } = await api.post<{ data: DentistServiceAssignment }>(
+  ) {
+    const { data } = await api.post<{
+      data: DentistServiceAssignment & { affectedAppointments: number };
+    }>(
       `/dentists/${dentistId}/services/${assignmentId}/change`,
       payload,
     );

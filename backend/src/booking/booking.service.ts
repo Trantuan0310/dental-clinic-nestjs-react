@@ -270,10 +270,12 @@ export class BookingService {
           where: {
             effectiveFrom: { lte: today },
             OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+            // Dentists who can be booked at the desk (as options(), without
+            // the online-only conditions).
             dentist: {
-              status: 'ACTIVE',
-              deletedAt: null,
-              dentistProfile: { is: { practiceStatus: 'ACTIVE', deletedAt: null } },
+              ...SCHEDULABLE_ACCOUNT_WHERE,
+              userRoles: { some: { role: { code: 'dentist' } } },
+              dentistProfile: { is: dentistProfileFilter('booking') },
             },
           },
           select: { price: true },

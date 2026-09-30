@@ -170,6 +170,21 @@ describe('CatalogService', () => {
         expect((await validate(assign)).map(e => e.property)).toEqual(['price']);
       });
 
+      it('flags a free service that a dentist still charges for', async () => {
+        prisma.service.findMany.mockResolvedValue([
+          svc({ basePrice: 0, isFree: true }),
+          svc({ id: 'svc-2' }),
+        ]);
+        prisma.dentistService.findMany.mockResolvedValue([{ serviceId: 'svc-1' }]);
+        const [free, paid] = await service.listServices({});
+        expect(free.paidAssignments).toBe(1);
+        expect(paid.paidAssignments).toBe(0);
+        expect(prisma.dentistService.findMany.mock.calls[0][0].where).toMatchObject({
+          serviceId: { in: ['svc-1'] },
+          price: { gt: 0 },
+        });
+      });
+
       it('makes a free service paid again when a price is typed', async () => {
         prisma.service.findUnique.mockResolvedValue(svc({ basePrice: 0, isFree: true }));
         prisma.service.update.mockImplementation(
@@ -369,6 +384,49 @@ describe('CatalogService', () => {
       expect(prisma.dentistService.create).not.toHaveBeenCalled();
     });
 
+    it('locks each dentist and never restores two overlapping periods', async () => {
+      const soon = new Date(today.getTime() + 3 * DAY);
+      prisma.auditLog.findFirst.mockResolvedValue(
+        plan({
+          day: iso(today),
+          ended: [{ id: 'as-1', effectiveTo: null }],
+          removed: [
+            // Recorded by an older, inconsistent plan: overlaps as-1 reopened.
+            {
+              dentistId: 'dentist-1',
+              durationMin: null,
+              price: null,
+              effectiveFrom: iso(soon),
+              effectiveTo: null,
+            },
+            {
+              dentistId: 'dentist-2',
+              durationMin: null,
+              price: null,
+              effectiveFrom: iso(soon),
+              effectiveTo: null,
+            },
+          ],
+        }),
+      );
+      prisma.dentistService.findMany.mockResolvedValue([assignment({ effectiveTo: today })]);
+
+      const result = await service.setServiceActive('svc-1', true, actor, {
+        restoreAssignments: true,
+      });
+
+      expect(result.restoredAssignments).toBe(2);
+      expect(prisma.dentistService.update).toHaveBeenCalledTimes(1);
+      expect(prisma.dentistService.create).toHaveBeenCalledTimes(1);
+      expect(prisma.dentistService.create.mock.calls[0][0].data.dentistId).toBe('dentist-2');
+      const locks = prisma.$executeRawUnsafe.mock.calls.map((c: [string]) => c[0]);
+      expect(locks.filter((sql: string) => sql.includes('pg_advisory_xact_lock'))).toHaveLength(2);
+      // Locks come before the overlap checks.
+      expect(prisma.$executeRawUnsafe.mock.invocationCallOrder[1]).toBeLessThan(
+        prisma.dentistService.findFirst.mock.invocationCallOrder[0],
+      );
+    });
+
     it('restores nothing unless asked', async () => {
       await service.setServiceActive('svc-1', true, actor);
       expect(prisma.auditLog.findFirst).not.toHaveBeenCalled();
@@ -539,6 +597,27 @@ describe('CatalogService', () => {
       expect(await validate(dto)).toEqual([]);
       expect(dto.price).toBeNull();
       expect(dto.durationMin).toBeUndefined();
+    });
+
+    it('counts the visits already booked from that day on (they keep their price)', async () => {
+      prisma.appointment.count.mockResolvedValue(2);
+      const from = new Date(today.getTime() + 7 * DAY);
+      const result = await service.changeAssignment(
+        'dentist-1',
+        'as-1',
+        { effectiveFrom: iso(from), price: 450000 },
+        actor,
+      );
+      expect(result.affectedAppointments).toBe(2);
+      const where = prisma.appointment.count.mock.calls[0][0].where;
+      expect(where).toMatchObject({
+        dentistId: 'dentist-1',
+        deletedAt: null,
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        services: { some: { serviceId: 'svc-1' } },
+      });
+      // From clinic midnight (UTC+7) of that day; no end for an open period.
+      expect(where.startAt).toEqual({ gte: new Date(from.getTime() - 7 * 3600_000) });
     });
 
     it('updates a period that starts on that very day in place', async () => {
