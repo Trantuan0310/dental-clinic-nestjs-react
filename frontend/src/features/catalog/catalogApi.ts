@@ -6,6 +6,7 @@ import type {
   CatalogService,
   DentistServiceAssignment,
   ServiceCategory,
+  ServiceImpact,
   ServicePayload,
 } from './types';
 
@@ -27,6 +28,13 @@ export const catalogApi = {
     const { data } = await api.post<{ data: ServiceCategory }>('/service-categories', payload);
     return unwrap(data);
   },
+  async updateCategory(
+    id: string,
+    payload: { name?: string; sortOrder?: number; isActive?: boolean },
+  ) {
+    const { data } = await api.patch<{ data: ServiceCategory }>(`/service-categories/${id}`, payload);
+    return unwrap(data);
+  },
   async services(includeInactive: boolean): Promise<CatalogService[]> {
     const { data } = await api.get<{ data: CatalogService[] }>('/services', {
       params: includeInactive ? { includeInactive: true } : undefined,
@@ -41,10 +49,16 @@ export const catalogApi = {
     const { data } = await api.patch<{ data: CatalogService }>(`/services/${id}`, payload);
     return unwrap(data);
   },
-  async setActive(id: string, active: boolean): Promise<CatalogService> {
-    const { data } = await api.post<{ data: CatalogService }>(
+  async impact(id: string): Promise<ServiceImpact> {
+    const { data } = await api.get<{ data: ServiceImpact }>(`/services/${id}/impact`);
+    return unwrap(data);
+  },
+  async setActive(id: string, active: boolean, restoreAssignments = false) {
+    const { data } = await api.post<{
+      data: CatalogService & { endedAssignments: number; restoredAssignments: number };
+    }>(
       `/services/${id}/${active ? 'activate' : 'deactivate'}`,
-      {},
+      active && restoreAssignments ? { restoreAssignments: true } : {},
     );
     return unwrap(data);
   },
@@ -60,6 +74,18 @@ export const catalogApi = {
   ): Promise<DentistServiceAssignment> {
     const { data } = await api.post<{ data: DentistServiceAssignment }>(
       `/dentists/${dentistId}/services`,
+      payload,
+    );
+    return unwrap(data);
+  },
+  /** New duration/price from a date on; null = back to the service default. */
+  async changeAssignment(
+    dentistId: string,
+    assignmentId: string,
+    payload: { effectiveFrom: string; durationMin: number | null; price: number | null },
+  ): Promise<DentistServiceAssignment> {
+    const { data } = await api.post<{ data: DentistServiceAssignment }>(
+      `/dentists/${dentistId}/services/${assignmentId}/change`,
       payload,
     );
     return unwrap(data);
@@ -100,11 +126,11 @@ export function useCatalogMutation<TVars, TResult>(mutationFn: (vars: TVars) => 
   });
 }
 
+// CATALOG_VALIDATION and ASSIGNMENT_NOT_ALLOWED carry a specific Vietnamese
+// message from the backend, shown as is.
 const CODE_MESSAGE: Record<string, string> = {
   CATALOG_CODE_TAKEN: 'Mã này đã được dùng.',
   CATALOG_NOT_FOUND: 'Không tìm thấy dữ liệu.',
-  ASSIGNMENT_NOT_ALLOWED:
-    'Chỉ phân công dịch vụ đang hoạt động cho bác sĩ đang hành nghề.',
   SPECIALTY_REQUIRED: 'Bác sĩ chưa có chuyên môn mà dịch vụ này yêu cầu.',
   ASSIGNMENT_OVERLAP: 'Bác sĩ đã được phân công dịch vụ này trong khoảng thời gian trùng.',
 };

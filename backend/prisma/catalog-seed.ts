@@ -81,6 +81,7 @@ export async function seedServiceCatalog(prisma: PrismaClient): Promise<void> {
         bufferBeforeMin: before,
         bufferAfterMin: after,
         basePrice: price,
+        isFree: price === 0,
         requiredSpecialty: specialty,
       },
     });

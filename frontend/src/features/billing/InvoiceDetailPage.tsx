@@ -17,6 +17,7 @@ import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { ClinicPrintHeading } from '@/components/brand/ClinicPrintHeading';
 
 export default function InvoiceDetailPage() {
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ export default function InvoiceDetailPage() {
   return (
     <div className="print-document space-y-3">
       <div className="hidden text-center print:block">
-        <p className="text-lg font-bold">NHA KHOA GENSMILE</p>
+        <ClinicPrintHeading />
         <p>HÓA ĐƠN DỊCH VỤ</p>
       </div>
       {/* Header */}

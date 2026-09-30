@@ -1187,6 +1187,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
           categoryId,
           name: 'Implant thử',
           defaultDurationMin: 90,
+          basePrice: 20000000,
           requiredSpecialty: 'IMPLANT',
         })
         .expect(201);

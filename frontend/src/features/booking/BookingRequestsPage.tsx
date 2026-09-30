@@ -152,11 +152,15 @@ export default function BookingRequestsPage() {
     // New online requests show up without a manual refresh.
     refetchInterval: 60_000,
   });
+  // Every service, also those taken offline since the request came in.
   const options = useQuery({
-    queryKey: ["public-booking-options"],
+    queryKey: ["public-booking-options", "include-offline"],
     queryFn: async () =>
-      (await api.get<{ data: ServiceOption[] }>("/public/booking/options")).data
-        .data,
+      (
+        await api.get<{ data: ServiceOption[] }>("/public/booking/options", {
+          params: { includeOffline: true },
+        })
+      ).data.data,
   });
   const dentists = useMemo(
     () =>

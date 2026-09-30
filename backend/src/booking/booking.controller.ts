@@ -37,8 +37,13 @@ export class PublicBookingController {
   constructor(private readonly booking: BookingService) {}
   @Get('options')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async options() {
-    return { data: await this.booking.options() };
+  async options(@Query('includeOffline') includeOffline?: string) {
+    return { data: await this.booking.options(includeOffline === 'true') };
+  }
+  @Get('prices')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async prices() {
+    return { data: await this.booking.priceList() };
   }
   @Get('slots')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
