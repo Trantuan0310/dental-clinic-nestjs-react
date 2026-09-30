@@ -16,7 +16,7 @@ test('front desk menu and reports stop at outstanding balances', async ({ browse
   const menu = page.locator('aside nav');
   await expect(menu.getByRole('link', { name: /Bệnh nhân/ }).first()).toBeVisible();
   await expect(menu.getByRole('link', { name: /Hóa đơn/ })).toBeVisible();
-  for (const hidden of ['Nhân sự', 'Ca của tôi', 'Hàng chờ của tôi', 'Bệnh nhân của tôi']) {
+  for (const hidden of ['Nhân sự', 'Ca của tôi', 'Hàng chờ của tôi', 'Lịch của tôi', 'Bệnh nhân của tôi']) {
     await expect(menu.getByRole('link', { name: hidden, exact: true })).toHaveCount(0);
   }
 

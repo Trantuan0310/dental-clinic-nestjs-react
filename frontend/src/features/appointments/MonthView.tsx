@@ -8,7 +8,7 @@ import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
 import { formatTimeOnly, getWeekdayLabel } from '@/lib/format';
-import { clinicWallClock } from '@/lib/clinicTime';
+import { clinicToday, clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
 import { isOverdueNotArrived, OVERDUE_DOT_CLASS, OVERDUE_LABEL, useNow } from './liveStatus';
 
@@ -19,6 +19,8 @@ interface MonthViewProps {
   onDayClick: (date: Date) => void;
   onAppointmentClick: (appointment: Appointment) => void;
   onCreateAtSlot?: (date: Date, time: string) => void;
+  /** Clinic-wide closed days ("yyyy-MM-dd" → reason): marked, no quick-create. */
+  closedDays?: Record<string, string>;
 }
 
 const STATUS_DOT_COLORS: Record<AppointmentStatus, string> = {
@@ -53,6 +55,7 @@ export function MonthView({
   onDayClick,
   onAppointmentClick,
   onCreateAtSlot,
+  closedDays,
 }: MonthViewProps) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const now = useNow();
@@ -80,6 +83,9 @@ export function MonthView({
   }, [date, days]);
 
   const today = clinicWallClock();
+  const todayKey = clinicToday();
+  // No quick-create on past days or days the whole clinic is closed.
+  const canCreateOn = (dateKey: string) => dateKey >= todayKey && closedDays?.[dateKey] === undefined;
   const selectedDayKey = selectedDay ? format(selectedDay, 'yyyy-MM-dd') : null;
   const selectedDayAppointments = useMemo(() => {
     if (!selectedDayKey) return [];
@@ -112,6 +118,7 @@ export function MonthView({
           const isWeekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
           const visible = dayAppointments.slice(0, MAX_VISIBLE_PER_DAY);
           const overflow = dayAppointments.length - visible.length;
+          const closedReason = closedDays?.[dateKey];
 
           return (
             <div
@@ -120,6 +127,7 @@ export function MonthView({
                 'group relative min-h-[112px] border-b border-r border-gray-100 p-1.5 transition-colors last:border-r-0',
                 !cell.inMonth && 'bg-gray-50/60',
                 cell.inMonth && isWeekend && 'bg-gray-50/40',
+                cell.inMonth && closedReason !== undefined && 'bg-gray-100',
                 cell.inMonth && 'hover:bg-brand-50/30',
                 isToday && 'ring-1 ring-inset ring-brand-400',
               )}
@@ -142,7 +150,16 @@ export function MonthView({
                   {format(cell.date, 'd')}
                 </button>
 
-                {cell.inMonth && onCreateAtSlot && dayAppointments.length === 0 && (
+                {cell.inMonth && closedReason !== undefined && (
+                  <span
+                    className="truncate rounded bg-gray-200 px-1 text-[10px] font-medium text-gray-600"
+                    title={`Phòng khám nghỉ: ${closedReason}`}
+                  >
+                    Nghỉ
+                  </span>
+                )}
+
+                {cell.inMonth && onCreateAtSlot && dayAppointments.length === 0 && canCreateOn(dateKey) && (
                   <button
                     type="button"
                     onClick={() => onCreateAtSlot(cell.date, '09:00')}
@@ -213,7 +230,7 @@ export function MonthView({
               setSelectedDay(null);
             }}
             onCreateAtSlot={
-              onCreateAtSlot
+              onCreateAtSlot && canCreateOn(format(selectedDay, 'yyyy-MM-dd'))
                 ? () => {
                     onCreateAtSlot(selectedDay, '09:00');
                     setSelectedDay(null);

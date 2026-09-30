@@ -57,12 +57,17 @@ export default function PatientDetailPage() {
   // Tabs below only need a handful of the patient's own rows — not a link
   // pointing at the unfiltered global list (that was the actual bug: these
   // tabs never fetched anything of their own, they just redirected).
+  // Under the ['appointments'] prefix so create/reschedule/cancel refresh it.
+  // Newest first comes from the API's default order when no `from` is sent;
+  // the client sort only keeps the display order stable.
   const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
-    queryKey: ['patient-appointments', id],
+    queryKey: ['appointments', 'patient-recent', id],
     queryFn: () => appointmentsApi.list({ patientId: id!, pageSize: 5 }),
     enabled: !!id,
   });
-  const recentAppointments = appointmentsData?.data ?? [];
+  const recentAppointments = [...(appointmentsData?.data ?? [])].sort(
+    (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
+  );
 
   const { data: invoicesData, isLoading: invoicesLoading } = useQuery({
     queryKey: ['patient-invoices', id],

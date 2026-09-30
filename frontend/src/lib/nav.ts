@@ -104,6 +104,13 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
         ...(isDentist(roles)
           ? [
               { to: '/my-queue', labelKey: 'MyQueue', icon: ListChecks, permission: 'appointment.read' },
+              // Calendar pre-filtered to the signed-in dentist (their own bookings).
+              {
+                to: '/my-appointments',
+                labelKey: 'MyAppointments',
+                icon: CalendarDays,
+                permission: 'appointment.read',
+              },
               // Route guard actually requires encounter.read.own (see
               // AppRoutes.tsx) — patient.read used to be granted here too,
               // which would show this link to a role that could click it

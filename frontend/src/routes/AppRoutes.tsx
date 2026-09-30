@@ -179,6 +179,17 @@ const router = createBrowserRouter(createRoutesFromElements(
                 }
               />
               <Route
+                path="my-appointments"
+                element={
+                  <ProtectedRoute permission="appointment.read">
+                    <ErrorBoundary componentName="AppointmentCalendarPage">
+                      {/* key: a separate page state from /appointments */}
+                      <AppointmentCalendarPage key="mine" mine />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="booking-requests"
                 element={
                   <ProtectedRoute permission="booking_request.read">

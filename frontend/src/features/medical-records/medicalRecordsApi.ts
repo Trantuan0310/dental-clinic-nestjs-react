@@ -358,30 +358,6 @@ export function useSaveDentalChart(encounterId: string) {
   });
 }
 
-// ----- Patient appointment queue (cross-module lookup used by Today/MyQueue) -----
-
-export interface AppointmentListItem {
-  id: string;
-  patientId: string;
-  patientCode: string;
-  patientName: string;
-  dentistId: string;
-  dentistName: string;
-  startAt: string;
-  endAt: string;
-  status: 'scheduled' | 'confirmed' | 'checked_in' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
-  reason?: string | null;
-  checkInAt?: string | null;
-  hasAllergyWarning?: boolean;
-}
-
-export function useAppointmentList(filters?: { dentistId?: string; date?: string; status?: string; pageSize?: number }) {
-  return useQuery({
-    queryKey: ['appointments', 'list', filters ?? {}],
-    queryFn: () => get<AppointmentListItem[]>('/appointments', { params: filters }),
-  });
-}
-
 // ----- Patient encounters (cross-module helper from patients page) -----
 
 export function usePatientEncounters(patientId: string | undefined) {
