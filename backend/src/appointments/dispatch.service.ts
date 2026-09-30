@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppointmentStatus, Prisma, QueuePriority, QueueStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -9,6 +10,10 @@ import { AppointmentsService, STALE_APPOINTMENT_MSG } from './appointments.servi
 import { LOCKING_TX_OPTIONS, lockDentistCalendar } from './domain/advisory-lock';
 import { compareQueue } from './domain/queue';
 import { AppointmentNotFoundException } from './domain/exceptions';
+import {
+  APPOINTMENT_RESCHEDULED_EVENT,
+  AppointmentRescheduledEvent,
+} from '../common/events/domain-events';
 
 const OPEN_STATUSES: QueueStatus[] = [QueueStatus.WAITING, QueueStatus.CALLED, QueueStatus.SKIPPED];
 
@@ -48,6 +53,7 @@ export class DispatchService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly appointments: AppointmentsService,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** GET /queue — open entries for a clinic date, in dispatch order per dentist. */
@@ -408,6 +414,14 @@ export class DispatchService {
           toDentistId: dto.toDentistId,
           reason,
         });
+        // The patient is told of the new dentist (booking notices).
+        this.events?.emit(APPOINTMENT_RESCHEDULED_EVENT, {
+          appointmentId: appt.id,
+          oldStartAt: appt.startAt,
+          newStartAt: appt.startAt,
+          oldDentistId: dto.fromDentistId,
+          newDentistId: dto.toDentistId,
+        } satisfies AppointmentRescheduledEvent);
         moved.push({
           appointmentId: appt.id,
           startAt: appt.startAt,

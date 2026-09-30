@@ -8,13 +8,21 @@ import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
 
-type Dentist = { id: string; fullName: string; specialties: string[]; bio?: string | null };
+type Dentist = {
+  id: string;
+  fullName: string;
+  specialties: string[];
+  bio?: string | null;
+  /** This dentist's own visit length for the service. */
+  durationMinutes?: number;
+};
 type Service = {
   id: string;
   name: string;
   category: string;
   durationMinutes: number;
-  basePrice: string | number;
+  /** Left out when the clinic does not publish the price. */
+  basePrice?: string | number;
   dentists: Dentist[];
 };
 type BookingResult = {
@@ -59,6 +67,8 @@ const emptyReasonText = (
       return "Bác sĩ không làm việc ngày này.";
     case "TIME_OFF":
       return "Bác sĩ nghỉ ngày này.";
+    case "DAY_OVER":
+      return "Đã hết giờ làm việc trong ngày này.";
     case "TOO_SOON":
       return (
         "Các giờ còn lại trong ngày quá gần: cần đặt trước ít nhất " +
@@ -174,14 +184,19 @@ export default function PublicBookingPage() {
         { ...form, serviceId, dentistId, startAt },
       );
       const result = response.data.data;
-      // Remember it on this device so the status page opens without typing.
+      // The status page gets the token in the URL fragment (never sent to
+      // the server, removed from the address bar on arrival); this device's
+      // copy is only a fallback (storage may be unavailable).
       saveBooking({
         ref: result.referenceCode,
         token: result.accessToken,
         phone: form.phone.trim(),
       });
       navigate(
-        "/booking/status?new=1&ref=" + encodeURIComponent(result.referenceCode),
+        "/booking/status?new=1&ref=" +
+          encodeURIComponent(result.referenceCode) +
+          "#token=" +
+          encodeURIComponent(result.accessToken),
       );
     } catch (e: unknown) {
       setError(bookingErrorMessage(e, "Chưa gửi được yêu cầu. Khung giờ có thể vừa được người khác chọn."));
@@ -242,7 +257,7 @@ export default function PublicBookingPage() {
                       <option value="">Chọn dịch vụ</option>
                       {services.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} · {s.durationMinutes} phút
+                          {s.name}
                         </option>
                       ))}
                     </select>
@@ -275,6 +290,15 @@ export default function PublicBookingPage() {
                         </option>
                       ))}
                     </select>
+                    {/* The length depends on the dentist (their own duration first). */}
+                    {(() => {
+                      const minutes = service?.dentists.find((d) => d.id === dentistId)?.durationMinutes;
+                      return minutes ? (
+                        <span className="mt-1 block text-xs font-normal text-gray-500">
+                          Thời gian khám dự kiến khoảng {minutes} phút.
+                        </span>
+                      ) : null;
+                    })()}
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Ngày

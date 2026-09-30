@@ -5,11 +5,12 @@ import { AppointmentsModule } from '../appointments/appointments.module';
 import { PatientsModule } from '../patients/patients.module';
 import { BookingService } from './booking.service';
 import { BookingCron } from './booking.cron';
+import { AppointmentNoticesService } from './appointment-notices.service';
 import { BookingRequestsController, PublicBookingController } from './booking.controller';
 
 @Module({
   imports: [PrismaModule, AuditModule, AppointmentsModule, PatientsModule],
   controllers: [PublicBookingController, BookingRequestsController],
-  providers: [BookingService, BookingCron],
+  providers: [BookingService, BookingCron, AppointmentNoticesService],
 })
 export class BookingModule {}

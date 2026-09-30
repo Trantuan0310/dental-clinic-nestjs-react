@@ -473,6 +473,8 @@ model Appointment {
   leftAt                 DateTime? @map("left_at") @db.Timestamptz()
   leftReason             String?   @map("left_reason")
   lastRescheduleAt  DateTime?           @map("last_reschedule_at") @db.Timestamptz()
+  // Migration 041: the day-before email reminder went out (reset on a move).
+  reminderSentAt    DateTime?           @map("reminder_sent_at") @db.Timestamptz()
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy         String?             @map("created_by") @db.Uuid
@@ -1593,6 +1595,8 @@ model BookingRequest {
   reason             String?              @db.VarChar(1000)
   status             BookingRequestStatus @default(PENDING_REVIEW)
   responseMessage    String?              @map("response_message") @db.VarChar(1000)
+  /// Migration 041: the requester's own note (withdrawal, declined proposal).
+  patientMessage     String?              @map("patient_message") @db.VarChar(1000)
   receptionistNote   String?              @map("receptionist_note") @db.VarChar(2000)
   consentedAt        DateTime             @map("consented_at") @db.Timestamptz()
   patientId          String?              @map("patient_id") @db.Uuid

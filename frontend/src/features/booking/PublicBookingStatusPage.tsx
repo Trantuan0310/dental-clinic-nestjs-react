@@ -26,7 +26,10 @@ import {
 } from "./savedBookings";
 
 type Status = {
-  referenceCode: string;
+  /** Left out of a lookup by phone alone (it would open the request). */
+  referenceCode?: string;
+  /** Changes need the token from the confirmation link; the phone only shows the status. */
+  canManage?: boolean;
   status: string;
   requestedStartAt: string;
   service?: { name: string | null; durationMinutes?: number | null };
@@ -62,7 +65,7 @@ const STATE: Record<string, { title: string; text: string; tone: Tone; step: num
   },
   PROPOSED: {
     title: "Phòng khám đề xuất giờ khác",
-    text: "Giờ bạn chọn không còn phù hợp. Bấm “Đồng ý giờ mới” để giữ giờ phòng khám đề xuất, hoặc gọi lễ tân để chọn giờ khác.",
+    text: "Giờ bạn chọn không còn phù hợp. Bấm “Đồng ý giờ mới” để giữ giờ phòng khám đề xuất, hoặc “Không đồng ý giờ này” để lễ tân chọn giờ khác.",
     tone: "action",
     step: 2,
   },
@@ -187,7 +190,9 @@ const googleCalendarUrl = (status: Status) => {
     action: "TEMPLATE",
     text: `${status.service?.name ?? "Lịch khám"} — ${clinic.name}`,
     dates: `${stamp(start)}/${stamp(end)}`,
-    details: `Mã đặt lịch ${status.referenceCode}. Tra cứu: ${window.location.origin}/booking/status?ref=${status.referenceCode}`,
+    details: status.referenceCode
+      ? `Mã đặt lịch ${status.referenceCode}. Tra cứu: ${window.location.origin}/booking/status?ref=${status.referenceCode}`
+      : `Tra cứu: ${window.location.origin}/booking/status`,
   });
   if (clinic.address) params.set("location", clinic.address);
   return "https://calendar.google.com/calendar/render?" + params.toString();
@@ -201,7 +206,7 @@ const headers = (a: Access) => ({
 const inputClass =
   "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
 
-function CopyCode({ code }: { code: string }) {
+function CopyCode({ code, label = "Sao chép" }: { code: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -218,7 +223,7 @@ function CopyCode({ code }: { code: string }) {
       className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
-      {copied ? "Đã chép" : "Sao chép"}
+      {copied ? "Đã chép" : label}
     </button>
   );
 }
@@ -288,14 +293,12 @@ function DetailsForm({
   onSubmit: (details: Record<string, string>) => void;
 }) {
   // The status page never shows the details sent earlier, so nothing is
-  // prefilled (not even the phone used to look up: it may be the
-  // guardian's); a field left empty keeps its old value.
+  // prefilled; a field left empty keeps its old value. The phone and email
+  // are changed only by calling the clinic.
   const [d, setD] = useState({
     fullName: "",
     dob: "",
     gender: "",
-    phone: "",
-    email: "",
     contactPersonName: "",
     contactPersonPhone: "",
     reason: "",
@@ -318,6 +321,7 @@ function DetailsForm({
       <h3 className="font-semibold text-gray-900">Bổ sung thông tin</h3>
       <p className="text-sm text-gray-600">
         Chỉ điền những thông tin phòng khám cần hoặc cần sửa. Ô để trống sẽ giữ nguyên thông tin bạn đã gửi.
+        Muốn đổi số điện thoại hoặc email, vui lòng gọi phòng khám.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm font-medium text-gray-700 sm:col-span-2">
@@ -343,14 +347,6 @@ function DetailsForm({
             <option value="MALE">Nam</option>
             <option value="OTHER">Khác</option>
           </select>
-        </label>
-        <label className="text-sm font-medium text-gray-700">
-          Số điện thoại
-          <input type="tel" inputMode="tel" value={d.phone} onChange={set("phone")} className={inputClass} />
-        </label>
-        <label className="text-sm font-medium text-gray-700">
-          Email (không bắt buộc)
-          <input type="email" value={d.email} onChange={set("email")} className={inputClass} />
         </label>
         <label className="text-sm font-medium text-gray-700">
           Người giám hộ (nếu khám cho trẻ)
@@ -387,6 +383,9 @@ export default function PublicBookingStatusPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [declining, setDeclining] = useState(false);
+  // The requester's optional note (withdrawing, turning a proposal down).
+  const [note, setNote] = useState("");
 
   const open = useCallback(async (ref: string, a: Access, quiet = false) => {
     setBusy(true);
@@ -399,7 +398,7 @@ export default function PublicBookingStatusPage() {
       const data = response.data.data;
       setStatus(data);
       setAccess(a);
-      saveBooking({ ref: data.referenceCode, ...a });
+      saveBooking({ ref: data.referenceCode ?? ref, ...a });
       return true;
     } catch (e: unknown) {
       if (!quiet) setError(bookingErrorMessage(e, "Mã đặt lịch hoặc số điện thoại không đúng."));
@@ -410,6 +409,8 @@ export default function PublicBookingStatusPage() {
   }, []);
 
   // Open straight away when this device (or the email link) already knows how.
+  // The token comes in the URL fragment (never sent to the server) and is
+  // removed from the address bar at once; this device's copy is a fallback.
   useEffect(() => {
     const ref = normalizeReference(params.get("ref") ?? "");
     const fragment = new URLSearchParams(window.location.hash.slice(1)).get("token");
@@ -426,17 +427,20 @@ export default function PublicBookingStatusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const choose = (item: Status, byPhone: string) => {
+  // A lookup by phone alone only shows the status (no code, no changes).
+  const choose = (item: Status) => {
     setStatus(item);
-    setAccess({ phone: byPhone });
+    setAccess(null);
     setError("");
-    saveBooking({ ref: item.referenceCode, phone: byPhone });
-    setParams({ ref: item.referenceCode }, { replace: true });
   };
 
   const lookup = async (e: React.FormEvent) => {
     e.preventDefault();
     const byPhone = phone.trim();
+    // An email link without the token (?ref=…): the code and the phone open
+    // that request (still view only).
+    const wanted = normalizeReference(params.get("ref") ?? "");
+    if (wanted && (await open(wanted, { phone: byPhone }, true))) return;
     setBusy(true);
     setError("");
     setResults(null);
@@ -452,10 +456,8 @@ export default function PublicBookingStatusPage() {
         return;
       }
       setResults(list);
-      // One request, or the one an email link pointed at: open it directly.
-      const wanted = normalizeReference(params.get("ref") ?? "");
-      const pick = list.length === 1 ? list[0] : list.find((x) => x.referenceCode === wanted);
-      if (pick) choose(pick, byPhone);
+      // One request: show it directly.
+      if (list.length === 1) choose(list[0]);
     } catch (e: unknown) {
       setError(bookingErrorMessage(e, "Không tra cứu được. Vui lòng kiểm tra số điện thoại và thử lại."));
     } finally {
@@ -474,10 +476,22 @@ export default function PublicBookingStatusPage() {
     } finally {
       setBusy(false);
       setConfirmCancel(false);
+      setDeclining(false);
+      setNote("");
     }
   };
   const path = (suffix: string) =>
-    "/public/booking/requests/" + encodeURIComponent(status!.referenceCode) + suffix;
+    "/public/booking/requests/" + encodeURIComponent(status!.referenceCode ?? "") + suffix;
+  // Changes need the link token; a status shown by phone is read only.
+  const canManage = !!status?.canManage && !!access?.token;
+  const manageLink =
+    status?.referenceCode && access?.token
+      ? window.location.origin +
+        "/booking/status?ref=" +
+        encodeURIComponent(status.referenceCode) +
+        "#token=" +
+        encodeURIComponent(access.token)
+      : "";
 
   const reset = () => {
     setStatus(null);
@@ -525,9 +539,15 @@ export default function PublicBookingStatusPage() {
                 <h1 className="text-lg font-semibold">Đã gửi yêu cầu đặt lịch</h1>
                 <p className="mt-1 text-sm">
                   Mã đặt lịch của bạn là <strong className="font-mono">{status.referenceCode}</strong>.
-                  Để xem lại tình trạng bất cứ lúc nào, vào mục “Tra cứu lịch hẹn” và nhập số điện
-                  thoại bạn vừa dùng. Lễ tân sẽ liên hệ để xác nhận.
+                  Lễ tân sẽ liên hệ để xác nhận. Để thay đổi hoặc hủy yêu cầu sau này, hãy dùng đường
+                  link trong email xác nhận (nếu bạn có nhập email) hoặc lưu đường link bên dưới; tra
+                  cứu bằng số điện thoại chỉ xem được tình trạng.
                 </p>
+                {manageLink && (
+                  <div className="mt-2">
+                    <CopyCode code={manageLink} label="Sao chép đường link quản lý" />
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -541,7 +561,7 @@ export default function PublicBookingStatusPage() {
               lịch. Chọn một lịch để xem chi tiết.
             </p>
             <ul className="mt-6 space-y-3">
-              {results.map((item) => {
+              {results.map((item, index) => {
                 const itemState = stateOf(item).state;
                 const itemTime =
                   item.appointment?.startAt ??
@@ -549,10 +569,10 @@ export default function PublicBookingStatusPage() {
                     ? item.proposedStartAt
                     : item.requestedStartAt);
                 return (
-                  <li key={item.referenceCode}>
+                  <li key={item.referenceCode ?? index}>
                     <button
                       type="button"
-                      onClick={() => choose(item, phone.trim())}
+                      onClick={() => choose(item)}
                       className="w-full rounded-xl border border-gray-200 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -570,7 +590,6 @@ export default function PublicBookingStatusPage() {
                         {item.service?.name ?? "—"}
                         {item.dentist?.fullName ? " · " + item.dentist.fullName : ""}
                       </p>
-                      <p className="mt-1 font-mono text-xs text-gray-400">{item.referenceCode}</p>
                     </button>
                   </li>
                 );
@@ -621,23 +640,25 @@ export default function PublicBookingStatusPage() {
         ) : (
           <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
             {!justBooked && <h1 className="sr-only">Tình trạng lịch hẹn</h1>}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-gray-500">
-                Mã đặt lịch{" "}
-                <span className="font-mono text-base font-semibold text-gray-900">{status.referenceCode}</span>
-              </p>
-              <div className="flex items-center gap-2">
-                <CopyCode code={status.referenceCode} />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => access && void open(status.referenceCode, access)}
-                  className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                >
-                  <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} aria-hidden /> Cập nhật
-                </button>
+            {status.referenceCode && access && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-gray-500">
+                  Mã đặt lịch{" "}
+                  <span className="font-mono text-base font-semibold text-gray-900">{status.referenceCode}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <CopyCode code={status.referenceCode} />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void open(status.referenceCode!, access)}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} aria-hidden /> Cập nhật
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className={"mt-4 rounded-xl border p-4 " + tone.box} role="status">
               <div className="flex items-start gap-3">
@@ -696,8 +717,15 @@ export default function PublicBookingStatusPage() {
               </p>
             )}
 
+            {ACTIVE.includes(current) && !canManage && (
+              <p className="mt-4 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+                Trang này chỉ xem được tình trạng. Để thay đổi (đồng ý hoặc không đồng ý giờ mới, bổ
+                sung thông tin, hủy yêu cầu), mở đường link trong email xác nhận hoặc gọi phòng khám.
+              </p>
+            )}
+
             <div className="mt-6 flex flex-col gap-3 empty:hidden sm:flex-row sm:flex-wrap">
-              {current === "PROPOSED" && (
+              {current === "PROPOSED" && canManage && (
                 <button
                   disabled={busy}
                   onClick={() =>
@@ -715,6 +743,16 @@ export default function PublicBookingStatusPage() {
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
                 >
                   <CalendarCheck className="h-5 w-5" aria-hidden /> Đồng ý giờ mới
+                </button>
+              )}
+              {current === "PROPOSED" && canManage && !declining && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setDeclining(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Không đồng ý giờ này, nhờ lễ tân chọn giờ khác
                 </button>
               )}
               {visitStands && (
@@ -737,22 +775,60 @@ export default function PublicBookingStatusPage() {
               ) : null}
             </div>
 
-            {current === "NEEDS_INFORMATION" && (
+            {current === "PROPOSED" && canManage && declining && (
+              <div className="mt-4 rounded-xl border border-gray-200 bg-slate-50 p-4 text-sm">
+                <label className="block font-medium text-gray-700">
+                  Giờ nào phù hợp với bạn? (không bắt buộc)
+                  <textarea
+                    rows={2}
+                    maxLength={900}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Ví dụ: tôi chỉ rảnh buổi chiều các ngày trong tuần"
+                    className={inputClass}
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(
+                        () =>
+                          api.post(
+                            path("/decline-proposal"),
+                            {
+                              proposedStartAt: status.proposedStartAt ?? undefined,
+                              message: note.trim() || undefined,
+                            },
+                            { headers: headers(access!) },
+                          ),
+                        "Không gửi được yêu cầu chọn giờ khác.",
+                      )
+                    }
+                    className="rounded-full bg-brand-500 px-4 py-2 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+                  >
+                    Gửi cho lễ tân
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeclining(false)}
+                    className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                  >
+                    Quay lại
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {current === "NEEDS_INFORMATION" && canManage && (
               <DetailsForm
                 busy={busy}
                 onSubmit={(details) =>
-                  void act(async () => {
-                    const result = await api.put<{ data: Status }>(path("/details"), details, {
-                      headers: headers(access!),
-                    });
-                    // The phone may have changed; keep the new one for later lookups.
-                    if (access?.phone && details.phone) {
-                      const next = { ...access, phone: details.phone };
-                      setAccess(next);
-                      saveBooking({ ref: status.referenceCode, ...next });
-                    }
-                    return result;
-                  }, "Không cập nhật được thông tin.")
+                  void act(
+                    () => api.put<{ data: Status }>(path("/details"), details, { headers: headers(access!) }),
+                    "Không cập nhật được thông tin.",
+                  )
                 }
               />
             )}
@@ -764,7 +840,7 @@ export default function PublicBookingStatusPage() {
               </div>
             </div>
 
-            {ACTIVE.includes(current) && (
+            {ACTIVE.includes(current) && canManage && (
               <div className="mt-6 text-sm">
                 {!confirmCancel ? (
                   <button
@@ -778,13 +854,28 @@ export default function PublicBookingStatusPage() {
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                     <p className="font-medium text-red-800">Hủy yêu cầu đặt lịch {status.referenceCode}?</p>
                     <p className="mt-1 text-red-700">Sau khi hủy, bạn cần đặt lịch mới nếu muốn khám.</p>
+                    <label className="mt-3 block text-red-800">
+                      Lý do (không bắt buộc)
+                      <textarea
+                        rows={2}
+                        maxLength={1000}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        className={inputClass}
+                      />
+                    </label>
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() =>
                           void act(
-                            () => api.post(path("/withdraw"), undefined, { headers: headers(access!) }),
+                            () =>
+                              api.post(
+                                path("/withdraw"),
+                                { message: note.trim() || undefined },
+                                { headers: headers(access!) },
+                              ),
                             "Không hủy được yêu cầu.",
                           )
                         }
