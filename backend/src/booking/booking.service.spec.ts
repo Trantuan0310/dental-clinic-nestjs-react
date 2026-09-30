@@ -372,6 +372,11 @@ describe('BookingService public request security and validation', () => {
     expect(where.dentist.dentistProfile.is.acceptsOnlineBooking).toBe(true);
     // The service itself must be offered online too.
     expect(where.service).toEqual({ isActive: true, bookableOnline: true });
+    // Online booking also needs a dentist taking new patients and not on
+    // leave; a PENDING_SETUP account still qualifies.
+    expect(where.dentist.dentistProfile.is.acceptsNewPatients).toBe(true);
+    expect(where.dentist.dentistProfile.is.employee).toEqual({ employmentStatus: 'ACTIVE' });
+    expect(where.dentist.status).toEqual({ not: 'DEACTIVATED' });
     expect(prisma.bookingRequest.create).not.toHaveBeenCalled();
   });
 

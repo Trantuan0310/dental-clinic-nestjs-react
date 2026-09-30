@@ -32,7 +32,7 @@ import { mediaUrl, useSiteMedia, type SiteMedia } from '@/features/media/mediaAp
  * the build-time clinic config.
  */
 
-type PublicDentist = { id: string; fullName: string; specialties: string[] };
+type PublicDentist = { id: string; fullName: string; specialties: string[]; bio?: string | null };
 type PublicService = {
   id: string;
   name: string;
@@ -469,6 +469,7 @@ function Dentists({ services, photos }: { services: PublicService[]; photos: Rec
               </span>
             )}
             <h3 className="mt-4 font-semibold text-gray-900">{d.fullName}</h3>
+            {d.bio && <p className="mt-2 line-clamp-4 text-sm text-gray-600">{d.bio}</p>}
             {d.specialties.length > 0 && (
               <ul className="mt-3 flex flex-wrap justify-center gap-1.5">
                 {d.specialties.map((code) => (

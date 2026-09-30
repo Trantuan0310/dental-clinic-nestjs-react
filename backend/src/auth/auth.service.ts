@@ -16,6 +16,7 @@ import {
 } from '../common/exceptions/auth.exception';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/services/email.service';
+import { normalizeEmail } from '../common/email.util';
 
 export interface LoginResponse {
   accessToken: string;
@@ -223,7 +224,10 @@ export class AuthService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<LoginResponse> {
-    const { email, password } = loginDto;
+    const { password } = loginDto;
+    // Login emails are stored lowercase (migration 037); normalise here too
+    // for callers that bypass the DTO transform.
+    const email = normalizeEmail(loginDto.email);
 
     // email is no longer a schema-level @@unique (see migration
     // 013_soft_delete_partial_unique) — findFirst scoped to the same
@@ -467,7 +471,12 @@ export class AuthService {
     await this.prisma.$transaction(async tx => {
       await tx.user.update({
         where: { id: userId },
-        data: { passwordHash: newPasswordHash },
+        // Choosing a password finishes account setup, as the reset link
+        // does — e.g. after signing in with a temporary password.
+        data: {
+          passwordHash: newPasswordHash,
+          ...(user.status === 'PENDING_SETUP' ? { status: 'ACTIVE' as const } : {}),
+        },
       });
 
       await tx.refreshToken.updateMany({
@@ -493,7 +502,7 @@ export class AuthService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<void> {
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = normalizeEmail(email);
     // Same active-row scoping as login() — without it, a deactivated user
     // whose email was reused by a new active account could receive the
     // reset token meant for that new account instead (or vice versa),
@@ -527,7 +536,7 @@ export class AuthService {
       this.logger.warn(`[EMAIL] Password reset URL for ${email}: ${resetUrl}`);
     }
 
-    await this.emailService.sendPasswordResetEmail(email, resetUrl, expiresInMinutes);
+    await this.emailService.sendPasswordResetEmail(user.email, resetUrl, expiresInMinutes);
 
     await this.auditService.log({
       action: 'PASSWORD_RESET_REQUESTED',

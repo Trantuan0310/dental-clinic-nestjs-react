@@ -26,6 +26,25 @@ export interface Employee {
   } | null;
 }
 
+/** PATCH /employees/:id: going ON_LEAVE lists the dentist's bookings still ahead. */
+export interface UpdatedEmployee extends Employee {
+  futureAppointments?: BlockingAppointment[];
+}
+
+/** POST /employees/:id/account: inviteSent=false when the setup email was not sent. */
+export interface LinkedEmployee extends Employee {
+  inviteSent: boolean | null;
+}
+
+/** GET /employees/linkable-accounts. */
+export interface LinkableAccount {
+  id: string;
+  email: string;
+  fullName: string;
+  status: 'ACTIVE' | 'PENDING_SETUP' | 'DEACTIVATED';
+  roles: string[];
+}
+
 export interface EmployeeListResponse {
   data: Employee[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
@@ -61,6 +80,7 @@ export interface DentistProfile {
   phone: string | null;
   email: string | null;
   loginEmail: string;
+  accountStatus: 'ACTIVE' | 'PENDING_SETUP' | 'DEACTIVATED';
   employmentStatus: EmploymentStatus;
   licenseNumber: string | null;
   licenseIssuedAt: string | null;
@@ -84,8 +104,23 @@ export interface DentistProfilePayload {
   bio?: string | null;
 }
 
+/** What still keeps a dentist out of the booking screens / public site. */
+export interface DentistReadiness {
+  accountStatus: 'ACTIVE' | 'PENDING_SETUP' | 'DEACTIVATED';
+  practiceStatus: PracticeStatus;
+  employmentStatus: EmploymentStatus;
+  acceptsOnlineBooking: boolean;
+  acceptsNewPatients: boolean;
+  hasCurrentSchedule: boolean;
+  activeServiceCount: number;
+  hasPhoto: boolean;
+  /** Name is still the seed's "Quản trị viên". */
+  placeholderName: boolean;
+}
+
 export interface DentistOverview {
   profile: DentistProfile;
+  readiness: DentistReadiness;
   schedules: Array<{
     id: string;
     dayOfWeek: number;

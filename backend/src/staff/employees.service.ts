@@ -10,6 +10,7 @@ import {
   CreateEmployeeDto,
   LinkAccountDto,
   ListEmployeesQueryDto,
+  ReinstateEmployeeDto,
   TerminateEmployeeDto,
   UpdateEmployeeDto,
 } from './dto/staff.dto';
@@ -24,9 +25,12 @@ import {
 import {
   clinicToday,
   assertDentistHasNoOpenWork,
+  futureActiveAppointments,
   nextCalendarColor,
   toDateOnly,
 } from './staff-rules';
+import { EmailAlreadyExistsException } from '../common/exceptions/business-rule.exception';
+import { normalizeEmail } from '../common/email.util';
 
 /** Default role for an account created from the HR screen, by employee type. */
 const ROLE_FOR_TYPE: Partial<Record<EmployeeType, string>> = {
@@ -166,6 +170,15 @@ export class EmployeesService {
     });
 
     await this.log('EMPLOYEE_UPDATED', actor, id, meta, { changes: Object.keys(dto) });
+
+    // A dentist going on leave stops taking new bookings (validateDentist),
+    // but existing ones are left alone — list them so the desk can move them.
+    const goingOnLeave =
+      dto.employmentStatus === 'ON_LEAVE' && current.employmentStatus !== 'ON_LEAVE';
+    if (goingOnLeave && current.dentistProfile && current.userId) {
+      const futureAppointments = await futureActiveAppointments(this.prisma, current.userId);
+      return { ...this.format(updated), futureAppointments };
+    }
     return this.format(updated);
   }
 
@@ -242,9 +255,15 @@ export class EmployeesService {
     }
 
     let userId = dto.userId;
+    let inviteSent: boolean | null = null;
     if (userId) {
       const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
       if (!user) throw new EmployeeValidationException(`User ${userId} not found`);
+      if (user.deactivatedAt) {
+        throw new EmployeeValidationException(
+          'Tài khoản này đã bị vô hiệu hóa; kích hoạt lại ở trang Người dùng trước khi gắn',
+        );
+      }
       await this.assertAccountFree(userId);
     } else {
       const roleCode = ROLE_FOR_TYPE[current.employeeType];
@@ -264,17 +283,114 @@ export class EmployeesService {
         meta.userAgent,
       );
       userId = created.id;
+      inviteSent = created.inviteSent;
     }
 
-    const updated = await this.prisma.employee.update({
-      where: { id },
-      data: { userId, updatedBy: actor.sub },
-      include: EMPLOYEE_INCLUDE,
+    const updated = await this.prisma.$transaction(async tx => {
+      const row = await tx.employee.update({
+        where: { id },
+        data: { userId, updatedBy: actor.sub },
+        include: EMPLOYEE_INCLUDE,
+      });
+      // One display name: an existing account (e.g. the bootstrap admin
+      // "Quản trị viên") takes the employee's name, as update() keeps it.
+      if (dto.userId) {
+        await tx.user.update({
+          where: { id: dto.userId },
+          data: { fullName: row.fullName, updatedBy: actor.sub },
+        });
+      }
+      return row;
     });
     await this.log('EMPLOYEE_ACCOUNT_LINKED', actor, id, meta, {
       userId,
       created: !dto.userId,
+      ...(inviteSent !== null ? { inviteSent } : {}),
     });
+    // inviteSent: null for an existing account (no invite), false when the
+    // setup email could not be sent — the UI then offers a temporary password.
+    return { ...this.format(updated), inviteSent };
+  }
+
+  /** Accounts that can be linked to an employee: not deactivated, not linked yet. */
+  async linkableAccounts() {
+    const rows = await this.prisma.user.findMany({
+      where: { deletedAt: null, deactivatedAt: null, employees: { none: { deletedAt: null } } },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        status: true,
+        userRoles: { select: { role: { select: { code: true } } } },
+      },
+      orderBy: { fullName: 'asc' },
+      take: 200,
+    });
+    return rows.map(({ userRoles, ...u }) => ({ ...u, roles: userRoles.map(ur => ur.role.code) }));
+  }
+
+  /**
+   * Take back a terminated employee (a dentist returning to the clinic).
+   * The login account is reactivated unless asked not to; a dentist profile
+   * stays INACTIVE until "Cho hành nghề lại" on the dentist page, so their
+   * schedule and services are reviewed before bookings resume.
+   */
+  async reinstate(id: string, dto: ReinstateEmployeeDto, actor: JwtPayload, meta: RequestMeta) {
+    const current = await this.findOrThrow(id);
+    if (current.employmentStatus !== 'TERMINATED') {
+      throw new EmployeeValidationException('Chỉ khôi phục được nhân viên đã nghỉ việc');
+    }
+    const userId = current.userId;
+    const reactivateAccount = dto.reactivateAccount !== false && Boolean(userId);
+
+    let accountReactivated = false;
+    const updated = await this.prisma.$transaction(async tx => {
+      if (reactivateAccount && userId) {
+        const user = await tx.user.findFirst({ where: { id: userId, deletedAt: null } });
+        if (user?.deactivatedAt) {
+          // The unique index only covers active accounts, so the email may
+          // have gone to someone else meanwhile.
+          const taken = await tx.user.findFirst({
+            where: {
+              email: normalizeEmail(user.email),
+              id: { not: userId },
+              deactivatedAt: null,
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
+          if (taken) throw new EmailAlreadyExistsException(user.email);
+          await tx.user.update({
+            where: { id: userId },
+            data: { deactivatedAt: null, status: 'ACTIVE', updatedBy: actor.sub },
+          });
+          accountReactivated = true;
+        }
+      }
+      return tx.employee.update({
+        where: { id },
+        data: { employmentStatus: 'ACTIVE', terminationDate: null, updatedBy: actor.sub },
+        include: EMPLOYEE_INCLUDE,
+      });
+    });
+
+    await this.log('EMPLOYEE_REINSTATED', actor, id, meta, {
+      reason: dto.reason,
+      previousTerminationDate: current.terminationDate?.toISOString().slice(0, 10) ?? null,
+      accountReactivated,
+    });
+    if (accountReactivated) {
+      await this.audit.log({
+        action: 'USER_REACTIVATED',
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'user',
+        targetId: userId!,
+        metadata: { via: 'employee_reinstated', employeeId: id },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+    }
     return this.format(updated);
   }
 

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AppointmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
+import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
 import {
   DayCalendar,
   SlotProblem,
@@ -226,20 +227,16 @@ export class AvailabilityService {
    * GET /appointments/availability/search — who can take a visit on a date.
    * With `serviceId`, only active dentists assigned that service that day
    * (dentist_services), and the visit length is the dentist's duration
-   * override or the service's; without it, every active dentist.
+   * override or the service's; without it, every dentist taking bookings
+   * (listDentistOptions' `booking` scope).
    */
   async search(q: { date: string; serviceId?: string; durationMin?: number }) {
     const day = new Date(q.date);
     const dentists = await this.prisma.user.findMany({
       where: {
-        status: 'ACTIVE',
-        deactivatedAt: null,
-        deletedAt: null,
+        ...SCHEDULABLE_ACCOUNT_WHERE,
         userRoles: { some: { role: { code: 'dentist', deletedAt: null } } },
-        OR: [
-          { dentistProfile: null },
-          { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
-        ],
+        OR: [{ dentistProfile: null }, { dentistProfile: dentistProfileFilter('booking') }],
         ...(q.serviceId
           ? {
               dentistServices: {

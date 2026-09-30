@@ -115,14 +115,13 @@ describe('AppointmentsService', () => {
   });
 
   describe('listDentistOptions', () => {
-    it('returns active dentists with their calendar colour, skipping inactive profiles', async () => {
+    it('returns dentists taking bookings with their calendar colour', async () => {
       (prisma.user.findMany as jest.Mock).mockResolvedValue([
         {
           id: 'dentist-1',
           fullName: 'Bác sĩ Nguyễn An',
           dentistProfile: { calendarColor: '#2563EB', practiceStatus: 'ACTIVE' },
         },
-        { id: 'dentist-2', fullName: 'Bác sĩ Trần Bình', dentistProfile: null },
       ]);
 
       const result = await service.listDentistOptions();
@@ -134,16 +133,12 @@ describe('AppointmentsService', () => {
           calendarColor: '#2563EB',
           practiceStatus: 'ACTIVE',
         },
-        {
-          id: 'dentist-2',
-          fullName: 'Bác sĩ Trần Bình',
-          calendarColor: null,
-          practiceStatus: null,
-        },
       ]);
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         where: {
-          status: 'ACTIVE',
+          // PENDING_SETUP accounts (new dentist, owner who also practises)
+          // are bookable; only deactivated ones are left out.
+          status: { not: 'DEACTIVATED' },
           deactivatedAt: null,
           deletedAt: null,
           userRoles: {
@@ -155,8 +150,15 @@ describe('AppointmentsService', () => {
             },
           },
           OR: [
+            // A bare dentist role (no profile yet) stays bookable, as before.
             { dentistProfile: null },
-            { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
+            {
+              dentistProfile: {
+                deletedAt: null,
+                practiceStatus: 'ACTIVE',
+                employee: { employmentStatus: 'ACTIVE' },
+              },
+            },
           ],
         },
         select: {
@@ -168,6 +170,68 @@ describe('AppointmentsService', () => {
           fullName: 'asc',
         },
       });
+    });
+
+    it('also lists suspended and on-leave dentists for schedule management', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.listDentistOptions('schedule');
+
+      expect(
+        (prisma.user.findMany as jest.Mock).mock.calls[0][0].where.OR[1].dentistProfile,
+      ).toEqual({
+        deletedAt: null,
+        practiceStatus: { in: ['ACTIVE', 'SUSPENDED'] },
+        employee: { employmentStatus: { not: 'TERMINATED' } },
+      });
+    });
+  });
+
+  describe('validateDentist (account and employment status)', () => {
+    const dentist = (overrides: Record<string, unknown> = {}) => ({
+      id: 'dentist-1',
+      status: 'ACTIVE',
+      deactivatedAt: null,
+      deletedAt: null,
+      userRoles: [{ role: { code: 'dentist' } }],
+      dentistProfile: {
+        practiceStatus: 'ACTIVE',
+        deletedAt: null,
+        employee: { employmentStatus: 'ACTIVE' },
+      },
+      ...overrides,
+    });
+
+    it('accepts a PENDING_SETUP account for bookings', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(dentist({ status: 'PENDING_SETUP' }));
+      await expect(service.validateDentist('dentist-1')).resolves.toMatchObject({
+        id: 'dentist-1',
+      });
+    });
+
+    it('rejects a deactivated account', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        dentist({ status: 'DEACTIVATED', deactivatedAt: new Date() }),
+      );
+      await expect(service.validateDentist('dentist-1')).rejects.toThrow(/không còn hoạt động/);
+      await expect(service.validateDentist('dentist-1', { forBooking: false })).rejects.toThrow(
+        /không còn hoạt động/,
+      );
+    });
+
+    it('refuses new bookings for a dentist on leave but lets their schedule be managed', async () => {
+      const onLeave = dentist({
+        dentistProfile: {
+          practiceStatus: 'ACTIVE',
+          deletedAt: null,
+          employee: { employmentStatus: 'ON_LEAVE' },
+        },
+      });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(onLeave);
+      await expect(service.validateDentist('dentist-1')).rejects.toThrow(/tạm nghỉ/);
+      await expect(service.validateDentist('dentist-1', { forBooking: false })).resolves.toBe(
+        onLeave,
+      );
     });
   });
 

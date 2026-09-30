@@ -190,6 +190,205 @@ describe('EmployeesService', () => {
         expect.objectContaining({ data: { userId: 'user-new', updatedBy: 'admin-1' } }),
       );
     });
+
+    it('passes on that the invite email was not sent', async () => {
+      prisma.employee.findFirst.mockResolvedValue(employee({ employeeType: 'DENTIST' }));
+      prisma.role.findFirst.mockResolvedValue({ id: 'role-dentist' });
+      users.create.mockResolvedValue({ id: 'user-new', inviteSent: false });
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-new' }));
+
+      const result = await service.linkAccount(
+        'emp-1',
+        { loginEmail: 'bs@clinic.local' },
+        actor,
+        meta,
+      );
+
+      expect(result.inviteSent).toBe(false);
+    });
+
+    it('links an existing account and gives it the employee name', async () => {
+      prisma.employee.findFirst
+        .mockResolvedValueOnce(employee({ fullName: 'BS. Nguyễn An' }))
+        .mockResolvedValueOnce(null);
+      prisma.user.findFirst.mockResolvedValue({ id: 'admin-1', deactivatedAt: null });
+      prisma.employee.update.mockResolvedValue(
+        employee({ userId: 'admin-1', fullName: 'BS. Nguyễn An' }),
+      );
+
+      const result = await service.linkAccount('emp-1', { userId: 'admin-1' }, actor, meta);
+
+      expect(users.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'admin-1' },
+        data: { fullName: 'BS. Nguyễn An', updatedBy: 'admin-1' },
+      });
+      expect(result.inviteSent).toBeNull();
+    });
+
+    it('refuses a deactivated account', async () => {
+      prisma.employee.findFirst.mockResolvedValue(employee());
+      prisma.user.findFirst.mockResolvedValue({ id: 'user-9', deactivatedAt: new Date() });
+
+      await expect(
+        service.linkAccount('emp-1', { userId: 'user-9' }, actor, meta),
+      ).rejects.toBeInstanceOf(EmployeeValidationException);
+      expect(prisma.employee.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('linkableAccounts', () => {
+    it('lists active accounts without an employee record', async () => {
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'admin-1',
+          email: 'admin@clinic.local',
+          fullName: 'Quản trị viên',
+          status: 'PENDING_SETUP',
+          userRoles: [{ role: { code: 'clinic_admin' } }],
+        },
+      ]);
+
+      const rows = await service.linkableAccounts();
+
+      expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({
+        deletedAt: null,
+        deactivatedAt: null,
+        employees: { none: { deletedAt: null } },
+      });
+      expect(rows).toEqual([
+        {
+          id: 'admin-1',
+          email: 'admin@clinic.local',
+          fullName: 'Quản trị viên',
+          status: 'PENDING_SETUP',
+          roles: ['clinic_admin'],
+        },
+      ]);
+    });
+  });
+
+  describe('update — going on leave (ON_LEAVE)', () => {
+    it('returns the dentist bookings still ahead, without cancelling them', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', employeeType: 'DENTIST', dentistProfile: { id: 'dp-1' } }),
+      );
+      prisma.employee.update.mockResolvedValue(
+        employee({ userId: 'user-9', employmentStatus: 'ON_LEAVE' }),
+      );
+      prisma.appointment.findMany.mockResolvedValue([
+        {
+          id: 'appt-1',
+          startAt: new Date('2099-01-01T02:00:00Z'),
+          endAt: new Date('2099-01-01T02:30:00Z'),
+          status: 'CONFIRMED',
+          patient: { fullName: 'BN 1' },
+        },
+      ]);
+
+      const result = await service.update(
+        'emp-1',
+        { employmentStatus: 'ON_LEAVE' as never },
+        actor,
+        meta,
+      );
+
+      expect(result).toMatchObject({
+        employmentStatus: 'ON_LEAVE',
+        futureAppointments: [{ id: 'appt-1', patientName: 'BN 1' }],
+      });
+      expect(prisma.appointment.update).not.toHaveBeenCalled();
+      expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not look up bookings for other edits', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', dentistProfile: { id: 'dp-1' } }),
+      );
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-9' }));
+
+      const result = await service.update('emp-1', { notes: 'x' }, actor, meta);
+
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      expect(result).not.toHaveProperty('futureAppointments');
+    });
+  });
+
+  describe('reinstate', () => {
+    const terminated = (overrides: Record<string, unknown> = {}) =>
+      employee({
+        userId: 'user-9',
+        employmentStatus: 'TERMINATED',
+        terminationDate: new Date('2026-05-01T00:00:00Z'),
+        ...overrides,
+      });
+
+    it('refuses an employee who is not terminated', async () => {
+      prisma.employee.findFirst.mockResolvedValue(employee());
+      await expect(service.reinstate('emp-1', {}, actor, meta)).rejects.toBeInstanceOf(
+        EmployeeValidationException,
+      );
+    });
+
+    it('brings the employee back and reactivates the login account', async () => {
+      prisma.employee.findFirst.mockResolvedValue(terminated());
+      prisma.user.findFirst
+        .mockResolvedValueOnce({
+          id: 'user-9',
+          email: 'bs@clinic.local',
+          deactivatedAt: new Date(),
+        })
+        .mockResolvedValueOnce(null);
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-9' }));
+      const audit = (service as any).audit.log as jest.Mock;
+
+      const result = await service.reinstate('emp-1', { reason: 'Quay lại làm' }, actor, meta);
+
+      expect(prisma.employee.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { employmentStatus: 'ACTIVE', terminationDate: null, updatedBy: 'admin-1' },
+        }),
+      );
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-9' },
+        data: { deactivatedAt: null, status: 'ACTIVE', updatedBy: 'admin-1' },
+      });
+      expect(audit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'EMPLOYEE_REINSTATED',
+          metadata: expect.objectContaining({
+            accountReactivated: true,
+            previousTerminationDate: '2026-05-01',
+          }),
+        }),
+      );
+      expect(result.employmentStatus).toBe('ACTIVE');
+    });
+
+    it('keeps the account deactivated when asked to', async () => {
+      prisma.employee.findFirst.mockResolvedValue(terminated());
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-9' }));
+
+      await service.reinstate('emp-1', { reactivateAccount: false }, actor, meta);
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the old login email now belongs to another active account', async () => {
+      prisma.employee.findFirst.mockResolvedValue(terminated());
+      prisma.user.findFirst
+        .mockResolvedValueOnce({
+          id: 'user-9',
+          email: 'bs@clinic.local',
+          deactivatedAt: new Date(),
+        })
+        .mockResolvedValueOnce({ id: 'user-other' });
+
+      await expect(service.reinstate('emp-1', {}, actor, meta)).rejects.toThrow(
+        /already registered/,
+      );
+      expect(prisma.employee.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('terminate (BR-STAFF-004/005)', () => {

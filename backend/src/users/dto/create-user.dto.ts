@@ -1,10 +1,21 @@
-import { IsString, IsEmail, IsOptional, IsArray, IsEnum, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  IsBoolean,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserStatus } from '@prisma/client';
+import { NormalizeEmail } from '../../common/email.util';
 
 export class CreateUserDto {
   @ApiProperty()
+  @NormalizeEmail()
   @IsEmail()
+  @MaxLength(255)
   email: string;
 
   @ApiPropertyOptional()
