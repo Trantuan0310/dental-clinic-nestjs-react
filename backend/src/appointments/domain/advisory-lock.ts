@@ -11,10 +11,7 @@ const LOCK_NS_PATIENT = 2;
 const LOCK_NS_BOOKING_PHONE = 3;
 const LOCK_NS_CLINIC = 4;
 
-/**
- * How long a transaction waits for a lock (this one and any later lock in the
- * same transaction) before giving up with CALENDAR_BUSY (409).
- */
+/** How long a transaction waits for one of these locks before CALENDAR_BUSY (409). */
 export const LOCK_TIMEOUT_MS = 5_000;
 
 /**
@@ -34,7 +31,11 @@ function isLockTimeout(err: unknown): boolean {
   );
 }
 
-/** Bounds the lock wait (set_config local: this transaction only); its timeout is a 409. */
+/**
+ * Bounds the lock wait (set_config local: this transaction only); its timeout
+ * is a 409. Once granted the bound is lifted again, so a later row lock or
+ * unique-index wait in the same transaction is not cut short into a 500.
+ */
 async function withLockTimeout(tx: Prisma.TransactionClient, lock: () => Promise<unknown>) {
   await tx.$executeRaw`SELECT set_config('lock_timeout', ${String(LOCK_TIMEOUT_MS)}::text, true)`;
   try {
@@ -43,6 +44,7 @@ async function withLockTimeout(tx: Prisma.TransactionClient, lock: () => Promise
     if (isLockTimeout(err)) throw new CalendarBusyException();
     throw err;
   }
+  await tx.$executeRaw`SELECT set_config('lock_timeout', '0', true)`;
 }
 
 async function advisoryLock(

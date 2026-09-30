@@ -359,7 +359,7 @@ export class CatalogService {
         restore: plan,
         restored: restoredCount,
       };
-    });
+    }, LOCKING_TX_OPTIONS); // restoreAssignments() locks dentist calendars
     await this.log(isActive ? 'SERVICE_ACTIVATED' : 'SERVICE_DEACTIVATED', actor, 'service', id, {
       ...(isActive ? { restoredAssignments: restored } : { endedAssignments: ended, restore }),
     });

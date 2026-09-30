@@ -863,6 +863,7 @@ describe('BookingService public request security and validation', () => {
         expect(order).toEqual([
           "lock:SELECT set_config('lock_timeout', ?::text, true):5000",
           'lock:SELECT pg_advisory_xact_lock(?::int4, hashtext(?)):3,0901234567',
+          "lock:SELECT set_config('lock_timeout', '0', true):",
           'findFirst',
           'create',
         ]);

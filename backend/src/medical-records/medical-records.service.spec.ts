@@ -784,6 +784,7 @@ describe('MedicalRecordsService', () => {
       expect(result).toBeDefined();
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'CLINICAL_NOTE_UPSERTED' }),
+        expect.anything(),
       );
     });
 
@@ -1367,6 +1368,7 @@ describe('MedicalRecordsService', () => {
       });
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PRESCRIPTION_REPLACED' }),
+        expect.anything(),
       );
     });
 
@@ -1412,6 +1414,7 @@ describe('MedicalRecordsService', () => {
           action: 'PRESCRIPTION_CREATED',
           metadata: expect.objectContaining({ reusedDeletedPrescription: true }),
         }),
+        expect.anything(),
       );
     });
   });
@@ -1490,6 +1493,7 @@ describe('MedicalRecordsService', () => {
             conflicts: [expect.objectContaining({ drugName: 'Augmentin 625mg' })],
           }),
         }),
+        expect.anything(),
       );
     });
 

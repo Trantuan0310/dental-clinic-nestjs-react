@@ -956,14 +956,17 @@ export class MedicalRecordsService {
         note = await tx.clinicalNote.findUniqueOrThrow({ where: { encounterId } });
       }
 
-      await this.audit.log({
-        action: 'CLINICAL_NOTE_UPSERTED',
-        actorUserId: actor.sub,
-        actorEmail: actor.email,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: { noteId: note.id },
-      });
+      await this.audit.log(
+        {
+          action: 'CLINICAL_NOTE_UPSERTED',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: { noteId: note.id },
+        },
+        tx,
+      );
 
       return note;
     });
@@ -1120,13 +1123,16 @@ export class MedicalRecordsService {
         return t;
       })();
 
-      await this.audit.log({
-        action: 'TREATMENT_CREATED',
-        actorUserId: actor.sub,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: { treatmentId: treatment.id, procedure: dto.procedure },
-      });
+      await this.audit.log(
+        {
+          action: 'TREATMENT_CREATED',
+          actorUserId: actor.sub,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: { treatmentId: treatment.id, procedure: dto.procedure },
+        },
+        tx,
+      );
 
       return treatment;
     });
@@ -1181,13 +1187,16 @@ export class MedicalRecordsService {
         where: { id: treatmentId },
         data: { deletedAt: new Date() },
       });
-      await this.audit.log({
-        action: 'TREATMENT_DELETED',
-        actorUserId: actor.sub,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: { treatmentId },
-      });
+      await this.audit.log(
+        {
+          action: 'TREATMENT_DELETED',
+          actorUserId: actor.sub,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: { treatmentId },
+        },
+        tx,
+      );
     });
   }
 
@@ -1276,38 +1285,44 @@ export class MedicalRecordsService {
         });
       }
 
-      await this.audit.log({
-        action: active ? 'PRESCRIPTION_REPLACED' : 'PRESCRIPTION_CREATED',
-        actorUserId: actor.sub,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: {
-          prescriptionId: prescription.id,
-          lineCount: dto.lines.length,
-          hasDiagnosis: !!dto.diagnosis,
-          hasInstructions: !!dto.instructions,
-          hasFollowUpNote: !!dto.followUpNote,
-          ...(existing && !active && { reusedDeletedPrescription: true }),
-        },
-      });
-
-      if (conflicts.length > 0) {
-        await this.audit.log({
-          action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+      await this.audit.log(
+        {
+          action: active ? 'PRESCRIPTION_REPLACED' : 'PRESCRIPTION_CREATED',
           actorUserId: actor.sub,
-          actorEmail: actor.email,
           targetType: 'encounter',
           targetId: encounterId,
           metadata: {
             prescriptionId: prescription.id,
-            // The override covers these lines only: close accepts it for
-            // this exact version (a re-issued/reused row gets a new one).
-            prescriptionVersion: prescription.version,
-            patientId: encounter.patientId,
-            reason: overrideReason,
-            conflicts,
+            lineCount: dto.lines.length,
+            hasDiagnosis: !!dto.diagnosis,
+            hasInstructions: !!dto.instructions,
+            hasFollowUpNote: !!dto.followUpNote,
+            ...(existing && !active && { reusedDeletedPrescription: true }),
           },
-        });
+        },
+        tx,
+      );
+
+      if (conflicts.length > 0) {
+        await this.audit.log(
+          {
+            action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+            actorUserId: actor.sub,
+            actorEmail: actor.email,
+            targetType: 'encounter',
+            targetId: encounterId,
+            metadata: {
+              prescriptionId: prescription.id,
+              // The override covers these lines only: close accepts it for
+              // this exact version (a re-issued/reused row gets a new one).
+              prescriptionVersion: prescription.version,
+              patientId: encounter.patientId,
+              reason: overrideReason,
+              conflicts,
+            },
+          },
+          tx,
+        );
       }
 
       return prescription;
@@ -1429,16 +1444,19 @@ export class MedicalRecordsService {
         },
       });
 
-      await this.audit.log({
-        action: 'PRESCRIPTION_UPDATED',
-        actorUserId: actor.sub,
-        targetType: 'prescription',
-        targetId: prescriptionId,
-        metadata: {
-          encounterId: existing.encounterId,
-          fields: Object.keys(dto).filter(k => k !== 'version'),
+      await this.audit.log(
+        {
+          action: 'PRESCRIPTION_UPDATED',
+          actorUserId: actor.sub,
+          targetType: 'prescription',
+          targetId: prescriptionId,
+          metadata: {
+            encounterId: existing.encounterId,
+            fields: Object.keys(dto).filter(k => k !== 'version'),
+          },
         },
-      });
+        tx,
+      );
 
       return updated;
     });
@@ -1468,13 +1486,16 @@ export class MedicalRecordsService {
         where: { id: prescriptionId },
         data: { deletedAt: new Date() },
       });
-      await this.audit.log({
-        action: 'PRESCRIPTION_DELETED',
-        actorUserId: actor.sub,
-        targetType: 'prescription',
-        targetId: prescriptionId,
-        metadata: { encounterId: existing.encounterId },
-      });
+      await this.audit.log(
+        {
+          action: 'PRESCRIPTION_DELETED',
+          actorUserId: actor.sub,
+          targetType: 'prescription',
+          targetId: prescriptionId,
+          metadata: { encounterId: existing.encounterId },
+        },
+        tx,
+      );
     });
   }
 
