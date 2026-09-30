@@ -43,7 +43,7 @@ export function TimeOffTab() {
   const [rejectNote, setRejectNote] = useState('');
   const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
 
-  const { data: dentists = [] } = useDentistOptions();
+  const { data: dentists = [] } = useDentistOptions('schedule');
   const { data: timeOffs, isLoading } = useTimeOffs(dentistFilter || undefined, statusFilter || undefined);
   const decide = useDecideTimeOff();
   const hasPermission = useAuthStore((s) => s.hasPermission);

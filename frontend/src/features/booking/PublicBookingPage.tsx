@@ -8,7 +8,7 @@ import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
 
-type Dentist = { id: string; fullName: string; specialties: string[] };
+type Dentist = { id: string; fullName: string; specialties: string[]; bio?: string | null };
 type Service = {
   id: string;
   name: string;
@@ -234,6 +234,12 @@ export default function PublicBookingPage() {
                         </option>
                       ))}
                     </select>
+                    {(() => {
+                      const bio = service?.dentists.find((d) => d.id === dentistId)?.bio;
+                      return bio ? (
+                        <span className="mt-1 block text-xs font-normal text-gray-500">{bio}</span>
+                      ) : null;
+                    })()}
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Bác sĩ

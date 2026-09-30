@@ -9,6 +9,7 @@ import type {
   AdminUser,
   AdminUserListResponse,
   CreateAdminUserPayload,
+  CreatedAdminUser,
   UpdateAdminUserPayload,
   AdminRole,
   AdminRoleListResponse,
@@ -86,8 +87,8 @@ export function useUser(id: string) {
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: CreateAdminUserPayload): Promise<AdminUser> =>
-      post<AdminUser>('/admin/users', payload),
+    mutationFn: async (payload: CreateAdminUserPayload): Promise<CreatedAdminUser> =>
+      post<CreatedAdminUser>('/admin/users', payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   });
 }
@@ -118,6 +119,43 @@ export function useReactivateUser() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => postVoid(`/admin/users/${id}/reactivate`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
+  });
+}
+
+/**
+ * Replaces the user's roles (PUT /admin/users/:id/roles). The API refuses to
+ * drop your own admin role or the last admin, and dropping the dentist role
+ * while bookings still need the dentist.
+ */
+export function useUpdateUserRoles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, roleIds }: { id: string; roleIds: string[] }) =>
+      (await api.put<{ data: AdminUser }>(`/admin/users/${id}/roles`, { roleIds })).data.data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'users'] });
+      // A dentist role change adds/removes the account from dentist pickers.
+      qc.invalidateQueries({ queryKey: ['dentists'] });
+    },
+  });
+}
+
+/**
+ * Issues a temporary password shown once to the admin (no email). The
+ * account goes back to "Chờ thiết lập" and its sessions end; choosing a new
+ * password in "Tài khoản của tôi" activates it.
+ */
+export function useIssueTemporaryPassword() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      (
+        await api.post<{ data: { temporaryPassword?: string } }>(
+          `/admin/users/${id}/reset-password`,
+          { sendEmail: false },
+        )
+      ).data.data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'users'] }),
   });
 }

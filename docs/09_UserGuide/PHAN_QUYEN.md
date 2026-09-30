@@ -21,20 +21,29 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | **Kho**: xem | ✔ | ✔ | ✔ |
 | Nhập, xuất kho | ✔ | — | ✔ |
 | Thêm, sửa vật tư | ✔ | — | — |
-| **Nhân sự**: hồ sơ nhân viên, tài khoản | ✔ | — | — |
+| **Nhân sự**: hồ sơ nhân viên, tài khoản (tạo mới hoặc gắn tài khoản có sẵn), khôi phục nhân viên đã nghỉ việc | ✔ | — | — |
 | Hồ sơ bác sĩ | ✔ | Sửa hồ sơ của mình | Xem |
 | Lịch làm việc, ngày nghỉ bác sĩ | ✔ sửa, duyệt | Sửa lịch của mình | Xem |
 | Ngày nghỉ toàn phòng khám (Tết, lễ) | ✔ (`clinic_closure.manage`, migration 035) | Xem | Xem |
 | Ca làm việc (đăng ký, duyệt) | Duyệt | Đăng ký ca của mình | — |
 | Lương: cấu hình, tính, duyệt, trả | ✔ | Xem lương của mình | — |
 | Danh mục dịch vụ, giá | ✔ | Xem | Xem |
-| Ảnh trang chủ, người dùng, vai trò, nhật ký | ✔ | — | — |
+| Ảnh trang chủ, người dùng (sửa email đăng nhập, vai trò, cấp mật khẩu tạm), vai trò, nhật ký | ✔ | — | — |
 
 ## Menu theo vai trò
 
 - **Lễ tân:** Dashboard (lịch hẹn, công nợ), Bệnh nhân, Lịch hẹn, Điều phối, Yêu cầu đặt lịch, Hôm nay, Hóa đơn, Kho vật tư, Bác sĩ, Dịch vụ, Lịch làm việc, Báo cáo (chỉ công nợ).
 - **Bác sĩ:** Dashboard, Hôm nay, Hàng chờ của tôi, Bệnh nhân của tôi, Hóa đơn, Kho vật tư, Bác sĩ, Dịch vụ, Lương của tôi, Ca của tôi, Lịch làm việc.
 - **Quản trị viên:** toàn bộ menu quản lý. Không có "Hàng chờ của tôi" và "Bệnh nhân của tôi", trừ khi tài khoản có thêm vai trò Bác sĩ.
+
+## Tài khoản và bác sĩ
+
+- Email đăng nhập không phân biệt chữ hoa, chữ thường (lưu dạng chữ thường, migration `037_user_email_lowercase`).
+- Tài khoản **Chờ thiết lập** vẫn được đặt lịch và xếp lịch làm việc; chỉ tài khoản **đã vô hiệu hóa** bị loại. Đặt mật khẩu qua link hoặc đổi mật khẩu tạm ở "Tài khoản của tôi" sẽ chuyển tài khoản sang **Hoạt động**.
+- Khi máy chủ chưa gửi được email mời, trang Người dùng / Nhân sự báo "Chưa gửi được email" và cho **Cấp mật khẩu tạm** (quyền `user.reset_password`, chỉ Quản trị viên). Mật khẩu tạm hiện một lần.
+- Quản trị viên không tự gỡ được vai trò Quản trị của chính mình, và không gỡ được vai trò đó của quản trị viên cuối cùng. Gỡ vai trò Bác sĩ bị chặn khi bác sĩ còn lịch hẹn sắp tới hoặc phiên khám đang mở.
+- Bác sĩ **Tạm nghỉ** (Nhân sự) hoặc **Tạm đình chỉ** (trang bác sĩ) không nhận lịch hẹn mới, nhưng lịch làm việc và ngày nghỉ vẫn sửa được. Bác sĩ tắt "Nhận bệnh nhân mới" hoặc "Nhận đặt lịch online" bị ẩn khỏi trang đặt lịch online.
+- Các thao tác mới dùng quyền có sẵn: gắn tài khoản có sẵn / danh sách tài khoản chưa gắn (`employee.update`), khôi phục nhân viên (`employee.deactivate`), sửa email và vai trò (`user.update`). Không thêm mã quyền mới.
 
 ## Trong màn khám bệnh
 

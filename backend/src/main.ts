@@ -10,6 +10,7 @@ import helmet from 'helmet';
 const compression = require('compression') as () => express.RequestHandler;
 import type express from 'express';
 import { AppModule } from './app.module';
+import { emailConfigProblem } from './common/services/email.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -75,6 +76,9 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document);
   }
+
+  const emailProblem = emailConfigProblem();
+  if (emailProblem) new Logger('Email').warn(emailProblem);
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

@@ -69,7 +69,7 @@ export function WorkingScheduleTab() {
   const [deleting, setDeleting] = useState<WorkingSchedule | null>(null);
   const [impact, setImpact] = useState<ScheduleChangeImpact | null>(null);
 
-  const { data: dentists = [] } = useDentistOptions();
+  const { data: dentists = [] } = useDentistOptions('schedule');
   const { data: schedules, isLoading } = useWorkingSchedules(dentistFilter || undefined);
   const remove = useDeleteWorkingSchedule();
   const hasPermission = useAuthStore((s) => s.hasPermission);
