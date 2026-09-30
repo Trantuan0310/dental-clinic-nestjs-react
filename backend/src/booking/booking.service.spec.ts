@@ -770,6 +770,7 @@ describe('BookingService public request security and validation', () => {
         await submit(new Date('2026-10-01T07:00:00Z'));
         expect(prisma.$transaction).toHaveBeenCalledTimes(1);
         expect(order).toEqual([
+          "lock:SELECT set_config('lock_timeout', ?::text, true):5000",
           'lock:SELECT pg_advisory_xact_lock(?::int4, hashtext(?)):3,0901234567',
           'findFirst',
           'create',

@@ -420,18 +420,21 @@ export class BillingService {
           },
         });
 
-        await this.audit.log({
-          action: 'INVOICE_PAYMENT_RECORDED',
-          actorUserId: actor.sub,
-          targetType: 'invoice',
-          targetId: invoiceId,
-          metadata: {
-            amount: requested,
-            method: dto.method,
-            newStatus,
-            paymentId: payment.id,
+        await this.audit.log(
+          {
+            action: 'INVOICE_PAYMENT_RECORDED',
+            actorUserId: actor.sub,
+            targetType: 'invoice',
+            targetId: invoiceId,
+            metadata: {
+              amount: requested,
+              method: dto.method,
+              newStatus,
+              paymentId: payment.id,
+            },
           },
-        });
+          tx,
+        );
 
         return updated;
       },
@@ -600,13 +603,16 @@ export class BillingService {
             after: { status: 'VOIDED' },
           },
         });
-        await this.audit.log({
-          action: 'INVOICE_VOIDED',
-          actorUserId: actor.sub,
-          targetType: 'invoice',
-          targetId: invoiceId,
-          metadata: { reason: dto.reason },
-        });
+        await this.audit.log(
+          {
+            action: 'INVOICE_VOIDED',
+            actorUserId: actor.sub,
+            targetType: 'invoice',
+            targetId: invoiceId,
+            metadata: { reason: dto.reason },
+          },
+          tx,
+        );
         return updated;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

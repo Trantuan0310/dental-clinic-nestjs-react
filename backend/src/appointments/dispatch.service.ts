@@ -6,7 +6,7 @@ import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import { AppointmentsService, STALE_APPOINTMENT_MSG } from './appointments.service';
-import { lockDentistCalendar } from './domain/advisory-lock';
+import { LOCKING_TX_OPTIONS, lockDentistCalendar } from './domain/advisory-lock';
 import { compareQueue } from './domain/queue';
 import { AppointmentNotFoundException } from './domain/exceptions';
 
@@ -289,7 +289,7 @@ export class DispatchService {
           updatedBy: actor.sub,
         },
       });
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.log('APPOINTMENT_TRANSFERRED', actor, appt.id, {
       fromDentistId: entry.dentistId,
       toDentistId: dto.dentistId,
@@ -388,7 +388,7 @@ export class DispatchService {
               changedBy: actor.sub,
             },
           });
-        });
+        }, LOCKING_TX_OPTIONS);
         await this.log('APPOINTMENT_REASSIGNED', actor, appt.id, {
           fromDentistId: dto.fromDentistId,
           toDentistId: dto.toDentistId,

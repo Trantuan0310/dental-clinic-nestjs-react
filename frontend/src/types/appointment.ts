@@ -190,7 +190,11 @@ export interface UpdateAppointmentPayload {
 }
 
 export interface CancelAppointmentPayload {
+  /** At least 5 characters (API rule). */
   reason: string;
+  /** What the client last saw: a visit moved or edited since is a 409. */
+  rescheduleCount?: number;
+  updatedAt?: string;
 }
 
 export interface RescheduleAppointmentPayload {
@@ -198,6 +202,8 @@ export interface RescheduleAppointmentPayload {
   newStartsAt: string;
   newEndsAt: string;
   reason: string;
+  /** Required when the length differs from the services' total (BR-APPT-031). */
+  durationOverrideReason?: string;
 }
 
 export interface CheckInPayload {

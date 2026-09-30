@@ -454,8 +454,10 @@ describe('MedicalRecordsService', () => {
         where: { appointmentId: 'appt-1', closeReason: 'STARTED', queueDate: expect.any(Date) },
         data: expect.objectContaining({ status: 'WAITING', doneAt: null, closeReason: null }),
       });
+      // Written through the same transaction (rolls back with it).
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ENCOUNTER_CANCELLED' }),
+        expect.anything(),
       );
     });
 

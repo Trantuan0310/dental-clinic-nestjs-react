@@ -14,7 +14,7 @@ import {
   shiftHasBookingsMessage,
   shiftInstants,
 } from '../appointments/domain/shift-bookings';
-import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
+import { LOCKING_TX_OPTIONS, lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { CLINIC_UTC_OFFSET_MS, clinicDateOnly } from '../common/date-range.util';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
@@ -319,7 +319,7 @@ export class ShiftRegistrationService {
         );
       }
       return tx.shiftRegistration.findUniqueOrThrow({ where: { id } });
-    });
+    }, LOCKING_TX_OPTIONS);
 
     const auditMetadata: Record<string, unknown> = {
       byAdmin: isAdmin,

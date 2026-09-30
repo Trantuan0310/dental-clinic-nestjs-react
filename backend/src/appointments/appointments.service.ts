@@ -45,6 +45,7 @@ import {
   SlotConflictException,
 } from './domain/exceptions';
 import {
+  LOCKING_TX_OPTIONS,
   lockClinicClosures,
   lockDentistCalendar,
   lockPatientCalendar,
@@ -80,6 +81,7 @@ import {
   ListTimeOffsQueryDto,
   ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
+import { MAX_VISIT_MINUTES } from './dto/is-appointment-instant';
 import { closeQueueEntry, enqueue } from './domain/queue';
 import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
 import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
@@ -99,6 +101,8 @@ export const END_OF_DAY_LEFT_REASON = 'Hệ thống đóng cuối ngày';
 
 // Front desk reads these messages as-is, so they are in Vietnamese.
 export const STALE_APPOINTMENT_MSG = 'Lịch vừa được thay đổi, tải lại rồi thử lại';
+/** The client's copy (rescheduleCount / updatedAt) is older than the row. */
+export const CHANGED_SINCE_READ_MSG = 'Lịch vừa được thay đổi, vui lòng tải lại';
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
   SCHEDULED: 'đã đặt',
   CONFIRMED: 'đã xác nhận',
@@ -224,6 +228,7 @@ export class AppointmentsService {
     if (endAt.getTime() <= startAt.getTime()) {
       throw new BackDatedAppointmentException();
     }
+    this.assertVisitLength(startAt, endAt);
     const overrideReason = this.checkDurationOverride(
       plan,
       startAt,
@@ -260,21 +265,24 @@ export class AppointmentsService {
         },
       });
 
-      await this.audit.log({
-        action: 'APPOINTMENT_CREATED',
-        actorUserId: actor.sub,
-        actorEmail: actor.email,
-        targetType: 'appointment',
-        targetId: created.id,
-        metadata: {
-          dentistId: dto.dentistId,
-          patientId: dto.patientId,
-          startAt: dto.startAt,
-          ...(plan ? { serviceCodes: plan.services.map(sv => sv.serviceCode) } : {}),
-          ...(overrideReason ? { durationOverrideReason: overrideReason } : {}),
-          ...(fromBookingRequest ? { bookingRequestId: fromBookingRequest.id } : {}),
+      await this.audit.log(
+        {
+          action: 'APPOINTMENT_CREATED',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'appointment',
+          targetId: created.id,
+          metadata: {
+            dentistId: dto.dentistId,
+            patientId: dto.patientId,
+            startAt: dto.startAt,
+            ...(plan ? { serviceCodes: plan.services.map(sv => sv.serviceCode) } : {}),
+            ...(overrideReason ? { durationOverrideReason: overrideReason } : {}),
+            ...(fromBookingRequest ? { bookingRequestId: fromBookingRequest.id } : {}),
+          },
         },
-      });
+        tx,
+      );
 
       if (fromBookingRequest) {
         const attached = await tx.bookingRequest.updateMany({
@@ -298,7 +306,7 @@ export class AppointmentsService {
       }
 
       return created;
-    });
+    }, LOCKING_TX_OPTIONS);
   }
 
   // See domain/advisory-lock.ts.
@@ -535,6 +543,14 @@ export class AppointmentsService {
 
   async cancel(appointmentId: string, dto: CancelAppointmentDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
+    // The client saw an older version (moved or edited since): reload first.
+    if (
+      (dto.rescheduleCount !== undefined && dto.rescheduleCount !== appt.rescheduleCount) ||
+      (dto.updatedAt !== undefined &&
+        new Date(dto.updatedAt).getTime() !== appt.updatedAt.getTime())
+    ) {
+      throw new InvalidAppointmentStateException(CHANGED_SINCE_READ_MSG);
+    }
 
     if (
       appt.status === AppointmentStatus.CANCELLED ||
@@ -591,9 +607,10 @@ export class AppointmentsService {
     }
 
     const updated = await this.prisma.$transaction(async tx => {
-      // See checkIn() above — same guarded-write race protection.
+      // See checkIn() above — same guarded-write race protection; a visit
+      // moved between the read and this write is not cancelled blindly.
       const cancelResult = await tx.appointment.updateMany({
-        where: { id: appointmentId, status: appt.status },
+        where: this.unchangedSince(appt),
         data: {
           status: AppointmentStatus.CANCELLED,
           cancelledAt: new Date(),
@@ -873,36 +890,76 @@ export class AppointmentsService {
     if (newStart.getTime() <= Date.now() + 60_000) {
       throw new BackDatedAppointmentException();
     }
+    this.assertVisitLength(newStart, newEnd);
     const newDentistId = dto.newDentistId ?? appt.dentistId;
-    // A dentist moves their own bookings only within their own calendar.
-    if (this.isRowScopedDentist(actor) && newDentistId !== actor.sub) {
-      throw new ForbiddenException('Bác sĩ chỉ đổi lịch trong lịch làm việc của chính mình');
+    if (this.isRowScopedDentist(actor)) {
+      // A dentist moves their own bookings only within their own calendar.
+      if (newDentistId !== actor.sub) {
+        throw new ForbiddenException('Bác sĩ chỉ đổi lịch trong lịch làm việc của chính mình');
+      }
+      // BR-APPT-009, as for cancelling: at least 24 h ahead. Front desk and
+      // admin are not limited.
+      if (appt.startAt.getTime() - Date.now() < DAY_MS) {
+        throw new InvalidAppointmentStateException(
+          'Bác sĩ chỉ được đổi lịch trước giờ hẹn ít nhất 24 giờ — hãy nhờ lễ tân đổi',
+        );
+      }
     }
-    if (newDentistId !== appt.dentistId) {
-      await this.validateDentist(newDentistId);
-    }
-    // BR-APPT-030, as on create/transfer/reassign: the (new) dentist must
-    // perform every booked service on the (new) day.
+    // Also when the dentist stays: one now on leave, suspended or locked out
+    // takes no bookings (BR-STAFF-006).
+    await this.validateDentist(newDentistId);
+
+    // BR-APPT-030/031, as on create: a new dentist or day re-plans the visit
+    // (that dentist must perform every booked service that day; their own
+    // durations and the buffers apply). Booked prices stay (ADR-0009 D6).
     const newDay = clinicDateOnly(newStart);
-    if (
-      appt.services.length > 0 &&
+    const serviceIds = appt.services.map(sv => sv.serviceId);
+    const replanned =
+      serviceIds.length > 0 &&
       (newDentistId !== appt.dentistId || newDay !== clinicDateOnly(appt.startAt))
-    ) {
-      await this.planVisit(
-        newDentistId,
-        appt.services.map(sv => sv.serviceId),
-        newDay,
-        { activeServicesOnly: false },
+        ? await this.planVisit(newDentistId, serviceIds, newDay, { activeServicesOnly: false })
+        : null;
+    const minutesOf = (from: Date, to: Date) =>
+      Math.round((to.getTime() - from.getTime()) / 60_000);
+    let planData: Prisma.AppointmentUpdateManyMutationInput = {};
+    if (serviceIds.length > 0) {
+      const planned = replanned?.durationMin ?? appt.calculatedDurationMin;
+      const expected = planned ?? minutesOf(appt.startAt, appt.endAt);
+      // A length already overridden carries its reason while neither the
+      // length nor the services' total changes.
+      const keepsOverride =
+        planned === appt.calculatedDurationMin &&
+        minutesOf(newStart, newEnd) === minutesOf(appt.startAt, appt.endAt);
+      const overrideReason = this.checkDurationOverride(
+        { durationMin: expected },
+        newStart,
+        newEnd,
+        dto.durationOverrideReason ??
+          (keepsOverride ? (appt.durationOverrideReason ?? undefined) : undefined),
       );
+      planData = {
+        calculatedDurationMin: expected,
+        durationOverrideReason: overrideReason,
+        ...(replanned
+          ? {
+              bufferBeforeMin: replanned.bufferBeforeMin,
+              bufferAfterMin: replanned.bufferAfterMin,
+            }
+          : {}),
+      };
     }
+    const buffers = replanned ?? {
+      bufferBeforeMin: appt.bufferBeforeMin ?? 0,
+      bufferAfterMin: appt.bufferAfterMin ?? 0,
+    };
 
     // Single tx under advisory lock to serialize overlap checks (R2-7).
     const result = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, newDentistId);
       await this.lockPatient(tx, appt.patientId);
       await this.ensureSlotAvailable(newDentistId, newStart, newEnd, actor, appt.id, tx, {
-        bufferBeforeMin: appt.bufferBeforeMin ?? 0,
-        bufferAfterMin: appt.bufferAfterMin ?? 0,
+        bufferBeforeMin: buffers.bufferBeforeMin,
+        bufferAfterMin: buffers.bufferAfterMin,
       });
       await this.ensurePatientFree(appt.patientId, newStart, newEnd, appt.id, tx);
 
@@ -918,6 +975,7 @@ export class AppointmentsService {
           dentistId: newDentistId,
           startAt: newStart,
           endAt: newEnd,
+          ...planData,
           rescheduleCount: { increment: 1 },
           lastRescheduleAt: new Date(),
           // A confirmation was for the old time — the new one needs its own.
@@ -947,7 +1005,7 @@ export class AppointmentsService {
       });
 
       return updated;
-    });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       action: 'APPOINTMENT_RESCHEDULED',
@@ -959,6 +1017,9 @@ export class AppointmentsService {
         oldStart: appt.startAt,
         newStart,
         rescheduleCount: result.rescheduleCount,
+        ...(result.durationOverrideReason
+          ? { durationOverrideReason: result.durationOverrideReason }
+          : {}),
       },
     });
 
@@ -970,10 +1031,13 @@ export class AppointmentsService {
   // ==========================================================================
 
   async getAvailability(q: AvailabilityQueryDto) {
-    return this.availability.dayAvailability(q.dentistId, q.date, q.slotDuration, {
-      beforeMin: q.bufferBeforeMin,
-      afterMin: q.bufferAfterMin,
-    });
+    return this.availability.dayAvailability(
+      q.dentistId,
+      q.date,
+      q.slotDuration,
+      { beforeMin: q.bufferBeforeMin, afterMin: q.bufferAfterMin },
+      q.excludeAppointmentId,
+    );
   }
 
   async getWaitingQueue(
@@ -1171,13 +1235,17 @@ export class AppointmentsService {
       ...(q.q
         ? {
             OR: [
-              { patient: { fullName: { contains: q.q } } },
+              { patient: { fullName: { contains: q.q, mode: 'insensitive' } } },
+              { patient: { code: { contains: q.q, mode: 'insensitive' } } },
               { patient: { primaryPhone: { contains: q.q } } },
-              { notes: { contains: q.q } },
+              { notes: { contains: q.q, mode: 'insensitive' } },
             ],
           }
         : {}),
     };
+    // One patient's visits without a start date ("recent appointments"):
+    // newest first, so the first page is the latest visits, not the oldest.
+    const order = q.sort ?? (q.patientId && !q.from ? 'desc' : 'asc');
     const pageSize = q.pageSize ?? 50;
     // Cursor paging is not a snapshot: a booking moved or added between two
     // page reads may be skipped or seen twice (the client de-duplicates ids).
@@ -1185,7 +1253,7 @@ export class AppointmentsService {
       where,
       // id breaks ties so cursor paging neither repeats nor skips rows
       // booked at the same time (the list/calendar pages read every page).
-      orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+      orderBy: [{ startAt: order }, { id: order }],
       take: pageSize + 1,
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
       include: {
@@ -1312,7 +1380,7 @@ export class AppointmentsService {
         }
       }
       return rows;
-    });
+    }, LOCKING_TX_OPTIONS);
 
     for (const row of created) {
       await this.audit.log({
@@ -1471,7 +1539,7 @@ export class AppointmentsService {
             })
           : { affectedAppointments: [], affectedBookingRequests: [] };
       return { schedule, endedSchedule, ...impact };
-    });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       action: 'WORKING_SCHEDULE_UPDATED',
@@ -1511,7 +1579,7 @@ export class AppointmentsService {
         data: { deletedAt: new Date() },
       });
       return this.affectedInRange(tx, row.dentistId, row.dayOfWeek, row.validFrom, row.validTo);
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'WORKING_SCHEDULE_DELETED',
       actorUserId: actor.sub,
@@ -1699,7 +1767,7 @@ export class AppointmentsService {
         },
       });
       return { created, affectedAppointments };
-    });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       action: autoApprove ? 'TIME_OFF_CREATED' : 'TIME_OFF_REQUESTED',
@@ -1800,7 +1868,7 @@ export class AppointmentsService {
         },
       });
       return { updated, affectedAppointments };
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'TIME_OFF_APPROVED',
       actorUserId: actor.sub,
@@ -2007,7 +2075,7 @@ export class AppointmentsService {
         // Bookings of that day that the new calendar no longer allows.
         const impact = await this.affectedInRange(tx, dto.dentistId, null, date, date);
         return { created: rows, ...impact };
-      });
+      }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'SCHEDULE_OVERRIDE_CREATED',
       actorUserId: actor.sub,
@@ -2045,20 +2113,30 @@ export class AppointmentsService {
   /**
    * Removing an override brings the weekly schedule back for that day, which
    * can leave bookings made inside changed hours outside working time: those
-   * are returned (never cancelled).
+   * are returned (never cancelled). The blocks of one "changed hours" day
+   * replace the weekly schedule together, so removing one removes them all
+   * (deleting only 08:00–12:00 used to leave 13:30–17:00 as the whole day).
    */
   async deleteScheduleOverride(id: string, actor: JwtPayload) {
     this.assertStaff(actor);
     const row = await this.prisma.scheduleOverride.findFirst({ where: { id, deletedAt: null } });
     if (!row) throw new AppointmentNotFoundException(id, 'Không tìm thấy ngoại lệ lịch');
-    const impact = await this.prisma.$transaction(async tx => {
+    const scope: Prisma.ScheduleOverrideWhereInput =
+      row.kind === 'CHANGED_HOURS'
+        ? { dentistId: row.dentistId, date: row.date, kind: 'CHANGED_HOURS', deletedAt: null }
+        : { id, deletedAt: null };
+    const { deletedIds, ...impact } = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, row.dentistId);
-      await tx.scheduleOverride.update({
-        where: { id },
+      const rows = await tx.scheduleOverride.findMany({ where: scope, select: { id: true } });
+      await tx.scheduleOverride.updateMany({
+        where: { id: { in: rows.map(r => r.id) } },
         data: { deletedAt: new Date(), deletedBy: actor.sub },
       });
-      return this.affectedInRange(tx, row.dentistId, null, row.date, row.date);
-    });
+      return {
+        deletedIds: rows.map(r => r.id),
+        ...(await this.affectedInRange(tx, row.dentistId, null, row.date, row.date)),
+      };
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'SCHEDULE_OVERRIDE_DELETED',
       actorUserId: actor.sub,
@@ -2069,10 +2147,11 @@ export class AppointmentsService {
         dentistId: row.dentistId,
         date: row.date.toISOString().slice(0, 10),
         kind: row.kind,
+        overrideIds: deletedIds,
         affectedAppointmentIds: impact.affectedAppointments.map(a => a.id),
       },
     });
-    return impact;
+    return { ...impact, deletedIds };
   }
 
   private formatOverride(r: {
@@ -2136,7 +2215,7 @@ export class AppointmentsService {
         data: { startDate, endDate, reason: dto.reason.trim(), createdBy: actor.sub },
       });
       return { created, ...(await this.closureAffected(tx, startDate, endDate)) };
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'CLINIC_CLOSURE_CREATED',
       actorUserId: actor.sub,
@@ -2171,7 +2250,7 @@ export class AppointmentsService {
         data: { startDate, endDate, reason: dto.reason.trim() },
       });
       return { updated, ...(await this.closureAffected(tx, startDate, endDate)) };
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'CLINIC_CLOSURE_UPDATED',
       actorUserId: actor.sub,
@@ -2877,9 +2956,18 @@ export class AppointmentsService {
     };
   }
 
+  /** One visit is at most MAX_VISIT_MINUTES long, as a walk-in (an 8-hour booking is a typo). */
+  private assertVisitLength(startAt: Date, endAt: Date) {
+    if (endAt.getTime() - startAt.getTime() > MAX_VISIT_MINUTES * 60_000) {
+      throw new BadRequestException(
+        `Một lịch hẹn dài tối đa ${MAX_VISIT_MINUTES} phút (${MAX_VISIT_MINUTES / 60} giờ)`,
+      );
+    }
+  }
+
   /** BR-APPT-031: a length different from the services' total needs a reason. */
   private checkDurationOverride(
-    plan: VisitPlan | null,
+    plan: Pick<VisitPlan, 'durationMin'> | null,
     startAt: Date,
     endAt: Date,
     reason: string | undefined,
@@ -2890,7 +2978,7 @@ export class AppointmentsService {
     const trimmed = reason?.trim() ?? '';
     if (trimmed.length < 5) {
       throw new InvalidAppointmentStateException(
-        `The services add up to ${plan.durationMin} minutes; a different length (${minutes}) needs a reason (≥ 5 characters)`,
+        `Các dịch vụ cần ${plan.durationMin} phút; đặt ${minutes} phút cần lý do (ít nhất 5 ký tự)`,
       );
     }
     return trimmed;
@@ -2920,6 +3008,7 @@ export class AppointmentsService {
     const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt));
     const minutes = plan?.durationMin ?? dto.durationMin ?? this.defaultSlotMinutes(dentist);
     const endAt = new Date(startAt.getTime() + minutes * 60_000);
+    this.assertVisitLength(startAt, endAt);
 
     const created = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, dto.dentistId);
@@ -2948,7 +3037,7 @@ export class AppointmentsService {
       });
       await enqueue(tx, walkIn, walkIn.checkedInAt ?? startAt, actor.sub);
       return walkIn;
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'APPOINTMENT_WALK_IN',
       actorUserId: actor.sub,

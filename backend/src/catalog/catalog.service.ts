@@ -3,7 +3,7 @@ import { AppointmentStatus, BookingRequestStatus, Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
+import { LOCKING_TX_OPTIONS, lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { clinicToday, toDateOnly } from '../staff/staff-rules';
 import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 import {
@@ -465,7 +465,7 @@ export class CatalogService {
         },
         include: ASSIGNMENT_INCLUDE,
       });
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.log('DENTIST_SERVICE_ASSIGNED', actor, 'dentist_service', created.id, {
       dentistId,
       serviceId: dto.serviceId,
@@ -587,7 +587,7 @@ export class CatalogService {
         include: ASSIGNMENT_INCLUDE,
       });
       return { row, result };
-    });
+    }, LOCKING_TX_OPTIONS);
     // Visits already booked from that day on keep the price and length
     // frozen at booking (appointment_services); the front desk is told how
     // many, so it can adjust them if the clinic wants the new terms applied.

@@ -103,6 +103,34 @@ describe('AppointmentsService', () => {
       );
     });
 
+    it('searches case-insensitively, by patient code too', async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.list({ q: 'bn-0001' }, actor);
+
+      const where = (prisma.appointment.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(where.OR).toEqual(
+        expect.arrayContaining([
+          { patient: { fullName: { contains: 'bn-0001', mode: 'insensitive' } } },
+          { patient: { code: { contains: 'bn-0001', mode: 'insensitive' } } },
+        ]),
+      );
+    });
+
+    it("lists one patient's visits newest first when no start date is given", async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.list({ patientId: 'patient-1', pageSize: 5 }, actor);
+      expect(prisma.appointment.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({ orderBy: [{ startAt: 'desc' }, { id: 'desc' }] }),
+      );
+
+      await service.list({ patientId: 'patient-1', from: '2026-10-01' }, actor);
+      expect(prisma.appointment.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({ orderBy: [{ startAt: 'asc' }, { id: 'asc' }] }),
+      );
+    });
+
     it('handles empty result set', async () => {
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
@@ -373,6 +401,52 @@ describe('AppointmentsService', () => {
 
       expect(result.status).toBe(AppointmentStatus.CANCELLED);
       expect(audit.log).toHaveBeenCalled();
+    });
+
+    it('refuses with 409 when the visit was moved or edited since the client loaded it', async () => {
+      const existing = {
+        id: 'appt-1',
+        status: AppointmentStatus.SCHEDULED,
+        startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        endAt: new Date(Date.now() + 25 * 60 * 60 * 1000),
+        rescheduleCount: 1,
+        updatedAt: new Date('2026-09-30T01:02:03.456Z'),
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(existing);
+
+      await expect(
+        service.cancel('appt-1', { reason: 'Bệnh nhân bận', rescheduleCount: 0 } as any, actor),
+      ).rejects.toMatchObject({ status: 409, message: 'Lịch vừa được thay đổi, vui lòng tải lại' });
+      await expect(
+        service.cancel(
+          'appt-1',
+          { reason: 'Bệnh nhân bận', updatedAt: '2026-09-30T01:02:00.000Z' } as any,
+          actor,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+
+      // The same version (or an old client sending neither) goes through.
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...existing,
+        status: AppointmentStatus.CANCELLED,
+      });
+      await service.cancel(
+        'appt-1',
+        {
+          reason: 'Bệnh nhân bận',
+          rescheduleCount: 1,
+          updatedAt: existing.updatedAt.toISOString(),
+        } as any,
+        actor,
+      );
+      // Guarded on the version read, so a move in between is not cancelled blindly.
+      expect(prisma.appointment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'appt-1', rescheduleCount: 1 }),
+        }),
+      );
     });
   });
 
@@ -1155,6 +1229,13 @@ describe('AppointmentsService', () => {
         },
       ]);
       (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue(null);
+      // The (kept) dentist is re-validated on every reschedule.
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+        dentistProfile: null,
+      });
     });
 
     it.each([AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS])(
@@ -1329,11 +1410,135 @@ describe('AppointmentsService', () => {
         'appt-1',
         {
           newStartsAt: sameDay.toISOString(),
-          newEndsAt: new Date(sameDay.getTime() + 30 * 60_000).toISOString(),
+          // The visit's own length (60 min), so no override reason is needed.
+          newEndsAt: new Date(sameDay.getTime() + 60 * 60_000).toISOString(),
         } as any,
         actor,
       );
       expect(prisma.dentistService.findMany).not.toHaveBeenCalled();
+    });
+
+    it('re-validates the kept dentist: one now on leave takes no bookings', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(base);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+        dentistProfile: { practiceStatus: 'ACTIVE', employee: { employmentStatus: 'ON_LEAVE' } },
+      });
+
+      await expect(service.reschedule('appt-1', future as any, actor)).rejects.toThrow(/tạm nghỉ/);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('lets a dentist move their own visit only 24 h or more ahead (BR-APPT-009)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        ...base,
+        startAt: new Date(Date.now() + 20 * 60 * 60 * 1000),
+        endAt: new Date(Date.now() + 21 * 60 * 60 * 1000),
+      });
+
+      await expect(
+        service.reschedule('appt-1', future as any, dentistPayload('dentist-1')),
+      ).rejects.toThrow(/trước giờ hẹn ít nhất 24 giờ/);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('refuses a visit longer than 480 minutes', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(base);
+
+      await expect(
+        service.reschedule(
+          'appt-1',
+          { newStartsAt: '2099-01-05T01:00:00Z', newEndsAt: '2099-01-05T09:05:00Z' } as any,
+          actor,
+        ),
+      ).rejects.toThrow(/tối đa 480 phút/);
+    });
+
+    describe('re-planning on a new dentist or day (BR-APPT-030/031)', () => {
+      const withServices = {
+        ...base,
+        services: [{ serviceId: 'svc-1' }],
+        calculatedDurationMin: 60,
+        durationOverrideReason: null,
+        bufferBeforeMin: 0,
+        bufferAfterMin: 0,
+      };
+      beforeEach(() => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(withServices);
+        // The dentist's own duration for the service that day: 45 min, 10' clean-up.
+        (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([
+          {
+            serviceId: 'svc-1',
+            price: null,
+            durationMin: 45,
+            service: {
+              code: 'SVC',
+              name: 'Dịch vụ',
+              basePrice: 100_000,
+              defaultDurationMin: 60,
+              bufferBeforeMin: 0,
+              bufferAfterMin: 10,
+            },
+          },
+        ]);
+        (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+        (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+          ...withServices,
+          rescheduleCount: 1,
+        });
+      });
+
+      it('needs a reason when the length sent differs from the new total', async () => {
+        await expect(
+          service.reschedule(
+            'appt-1',
+            { newStartsAt: '2099-01-05T02:00:00Z', newEndsAt: '2099-01-05T03:00:00Z' } as any,
+            actor,
+          ),
+        ).rejects.toThrow(/cần 45 phút; đặt 60 phút cần lý do/);
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("stores the new plan's length and buffers, keeping the booked prices", async () => {
+        await service.reschedule(
+          'appt-1',
+          { newStartsAt: '2099-01-05T02:00:00Z', newEndsAt: '2099-01-05T02:45:00Z' } as any,
+          actor,
+        );
+        expect(prisma.appointment.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              calculatedDurationMin: 45,
+              durationOverrideReason: null,
+              bufferBeforeMin: 0,
+              bufferAfterMin: 10,
+            }),
+          }),
+        );
+        expect(prisma.appointmentService.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('stores an override reason for a different length', async () => {
+        await service.reschedule(
+          'appt-1',
+          {
+            newStartsAt: '2099-01-05T02:00:00Z',
+            newEndsAt: '2099-01-05T03:00:00Z',
+            durationOverrideReason: '  Cần thêm thời gian  ',
+          } as any,
+          actor,
+        );
+        expect(prisma.appointment.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              calculatedDurationMin: 45,
+              durationOverrideReason: 'Cần thêm thời gian',
+            }),
+          }),
+        );
+      });
     });
 
     it("forbids a dentist moving their own booking onto a colleague's calendar", async () => {
@@ -1379,7 +1584,7 @@ describe('AppointmentsService', () => {
       expect(result.status).toBe(AppointmentStatus.CANCELLED);
       expect(prisma.appointment.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'appt-1', status: AppointmentStatus.CHECKED_IN },
+          where: expect.objectContaining({ id: 'appt-1', status: AppointmentStatus.CHECKED_IN }),
         }),
       );
       expect(audit.log).toHaveBeenCalledWith(
@@ -1711,6 +1916,12 @@ describe('AppointmentsService', () => {
         },
       ]);
       (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+        dentistProfile: null,
+      });
     });
 
     it('drops a CONFIRMED appointment back to SCHEDULED (the confirmation was for the old time)', async () => {
@@ -2517,7 +2728,7 @@ describe('AppointmentsService', () => {
 
     it('BR-APPT-031: a different length needs a reason, which is stored', async () => {
       const shorter = { ...dto, endAt: '2027-03-15T03:00:00Z' };
-      await expect(service.create(shorter, actor)).rejects.toThrow(/needs a reason/);
+      await expect(service.create(shorter, actor)).rejects.toThrow(/cần lý do/);
       await service.create(
         { ...shorter, durationOverrideReason: 'Bệnh nhân tái khám nhanh' },
         actor,

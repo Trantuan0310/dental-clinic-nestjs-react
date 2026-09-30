@@ -3,6 +3,9 @@ import { validateSync } from 'class-validator';
 import {
   AvailabilityQueryDto,
   BulkCreateWorkingSchedulesDto,
+  CancelAppointmentDto,
+  CreateAppointmentDto,
+  RescheduleAppointmentDto,
   ClinicClosureDto,
   CreateScheduleOverrideDto,
   CreateShiftRegistrationDto,
@@ -132,5 +135,68 @@ describe('schedule times ("HH:mm", 5-minute grid)', () => {
         .map(e => e.property)
         .sort(),
     ).toEqual(['reason', 'startDate']);
+  });
+});
+
+describe('appointment times (create / reschedule)', () => {
+  const uuid = '01900000-0000-7000-8000-000000000000';
+  const createErrors = (startAt: string) =>
+    validateSync(
+      plainToInstance(CreateAppointmentDto, { patientId: uuid, dentistId: uuid, startAt }),
+    ).flatMap(e => Object.values(e.constraints ?? {}));
+  const rescheduleErrors = (newStartsAt: string) =>
+    validateSync(
+      plainToInstance(RescheduleAppointmentDto, {
+        newStartsAt,
+        newEndsAt: '2026-10-22T09:30:00+07:00',
+      }),
+    ).map(e => e.property);
+
+  it('accepts an instant with Z or an offset on a whole minute', () => {
+    expect(createErrors('2026-10-22T09:00:00+07:00')).toEqual([]);
+    expect(createErrors('2026-10-22T02:00:00.000Z')).toEqual([]);
+    expect(createErrors('2026-10-22T09:00+0700')).toEqual([]);
+  });
+
+  it('refuses a zone-less time (it was read as UTC: 09:00 became 16:00)', () => {
+    expect(createErrors('2026-10-22T09:00:00')).toEqual([
+      'startAt phải có múi giờ (Z hoặc ±hh:mm)',
+    ]);
+  });
+
+  it('refuses seconds, as online requests do', () => {
+    expect(createErrors('2026-10-22T10:07:30+07:00')).toEqual([
+      'startAt phải tròn phút (không có giây)',
+    ]);
+    expect(createErrors('2026-10-22T10:07:00.500Z')).toHaveLength(1);
+  });
+
+  it('refuses a day that does not exist instead of rolling it over (2026-02-30)', () => {
+    expect(rescheduleErrors('2026-02-30T09:00:00+07:00')).toEqual(['newStartsAt']);
+    expect(rescheduleErrors('2026-10-22T09:00:00+07:00')).toEqual([]);
+  });
+});
+
+describe('CancelAppointmentDto', () => {
+  const errors = (body: Record<string, unknown>) =>
+    validateSync(plainToInstance(CancelAppointmentDto, body)).flatMap(e =>
+      Object.values(e.constraints ?? {}),
+    );
+
+  it('requires a reason of at least 5 characters (trimmed)', () => {
+    expect(errors({})).toContain('Lý do hủy lịch cần ít nhất 5 ký tự');
+    expect(errors({ reason: '  ok  ' })).toEqual(['Lý do hủy lịch cần ít nhất 5 ký tự']);
+    expect(errors({ reason: 'Bệnh nhân bận' })).toEqual([]);
+  });
+
+  it('accepts the optional version guard', () => {
+    expect(
+      errors({
+        reason: 'Bệnh nhân bận',
+        rescheduleCount: 1,
+        updatedAt: '2026-09-30T01:02:03.456Z',
+      }),
+    ).toEqual([]);
+    expect(errors({ reason: 'Bệnh nhân bận', updatedAt: '2026-02-30T00:00:00Z' })).toHaveLength(1);
   });
 });

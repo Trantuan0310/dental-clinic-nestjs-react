@@ -13,7 +13,12 @@ import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { TimeBlocksEditor } from './TimeBlocksEditor';
 import { blockError, defaultBlocks } from './scheduleBlocks';
 import { hasImpact } from './format';
-import type { ScheduleChangeImpact, ScheduleOverrideKind, TimeBlock } from '@/types/schedule';
+import type {
+  ScheduleChangeImpact,
+  ScheduleOverride,
+  ScheduleOverrideKind,
+  TimeBlock,
+} from '@/types/schedule';
 
 /**
  * Per-day exceptions to the weekly schedule (BR-SCH-003/004): close a whole
@@ -32,6 +37,25 @@ export function OverridesTab() {
   const isStaff = hasPermission('schedule.write') && hasPermission('appointment.read.any');
 
   const nameById = useMemo(() => new Map(dentists.map((d) => [d.id, d.fullName])), [dentists]);
+  // The blocks of one changed-hours day replace the weekly hours together:
+  // one row, and deleting it removes every block (the API deletes the group).
+  const rows = useMemo(() => {
+    const out: Array<ScheduleOverride & { times: string[] }> = [];
+    const changedDay = new Map<string, ScheduleOverride & { times: string[] }>();
+    for (const o of overrides) {
+      const time = o.startTime ? `${o.startTime}–${o.endTime}` : 'Cả ngày';
+      const key = `${o.dentistId}|${o.date}`;
+      const group = o.kind === 'CHANGED_HOURS' ? changedDay.get(key) : undefined;
+      if (group) {
+        group.times.push(time);
+        continue;
+      }
+      const row = { ...o, times: [time] };
+      if (o.kind === 'CHANGED_HOURS') changedDay.set(key, row);
+      out.push(row);
+    }
+    return out;
+  }, [overrides]);
 
   return (
     <div className="space-y-4">
@@ -77,7 +101,7 @@ export function OverridesTab() {
                 </tr>
               </thead>
               <tbody>
-                {overrides.map((o) => (
+                {rows.map((o) => (
                   <tr key={o.id}>
                     <td className="whitespace-nowrap">{formatDate(o.date)}</td>
                     <td className="font-medium text-gray-900">{nameById.get(o.dentistId) ?? '—'}</td>
@@ -86,9 +110,7 @@ export function OverridesTab() {
                         {o.kind === 'CLOSED' ? 'Đóng lịch' : 'Đổi giờ làm'}
                       </Badge>
                     </td>
-                    <td className="whitespace-nowrap">
-                      {o.startTime ? `${o.startTime}–${o.endTime}` : 'Cả ngày'}
-                    </td>
+                    <td className="whitespace-nowrap">{o.times.join(', ')}</td>
                     <td className="text-gray-500">{o.reason}</td>
                     <td className="text-right">
                       {isStaff && (

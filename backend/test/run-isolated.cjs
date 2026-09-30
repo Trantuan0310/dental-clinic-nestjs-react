@@ -54,6 +54,30 @@ async function snapshot() {
     payments: await source.payment.count(),
   };
 }
+// The API tests book, check in and queue visits around the real "now" (from
+// 20 min before to ~20 min after it), and a clinic day ends at midnight
+// Vietnam time: a visit then lands on the next day's calendar or queue and
+// the chained tests fail (runs after 23:42 did). A run reaching the tests
+// between 23:35 and 00:25 clinic time waits until 00:25; any other run
+// starts at once (so CI waits in ~3% of runs, never more than 50 min).
+const CLINIC_OFFSET_MS = 7 * 3600000;
+const MIDNIGHT_MARGIN_MS = 25 * 60000;
+async function clearOfClinicMidnight() {
+  const dayMs = 86400000;
+  const timeOfDay = (Date.now() + CLINIC_OFFSET_MS) % dayMs;
+  const wait =
+    timeOfDay >= dayMs - MIDNIGHT_MARGIN_MS
+      ? dayMs - timeOfDay + MIDNIGHT_MARGIN_MS
+      : timeOfDay < MIDNIGHT_MARGIN_MS
+        ? MIDNIGHT_MARGIN_MS - timeOfDay
+        : 0;
+  if (!wait) return;
+  console.log(
+    `[backend-tests] Clinic midnight is near; waiting ${Math.ceil(wait / 60000)} min so time-based tests stay on one clinic day`,
+  );
+  summary.waitedForClinicMidnightMs = wait;
+  await new Promise(resolve => setTimeout(resolve, wait));
+}
 async function main() {
   if (
     process.env.NODE_ENV === 'production' ||
@@ -71,6 +95,7 @@ async function main() {
   run('scripts/release.cjs', [], 'migrations-repeat.log');
   summary.checks.repeatMigrations = true;
   run('node_modules/ts-node/dist/bin.js', ['--transpile-only', 'prisma/seed.ts'], 'seed.log');
+  await clearOfClinicMidnight();
   run(
     'node_modules/jest/bin/jest.js',
     [
