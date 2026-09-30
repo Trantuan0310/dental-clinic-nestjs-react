@@ -1755,7 +1755,7 @@ describe('BookingService public request security and validation', () => {
           dentistId: 'dentist-1',
           date: '2026-10-05',
         });
-        expect(res.emptyReason).toBe('CLOSED');
+        expect(res.emptyReason).toBe('CLINIC_CLOSED');
         expect(res.closedReason).toBe('Phòng khám nghỉ: Nghỉ Tết');
       });
 
