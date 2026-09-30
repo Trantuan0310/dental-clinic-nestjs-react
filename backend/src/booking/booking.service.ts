@@ -1122,7 +1122,6 @@ export class BookingService {
       proposedStartAt: startAt,
       responseMessage: dto.message.trim(),
       handledBy: actor.sub,
-      ...(access ? { accessTokenHash: access.hash } : {}),
     });
     await this.auditAction('BOOKING_REQUEST_TIME_PROPOSED', id, actor);
     const data = await this.getForStaff(id);
@@ -1144,6 +1143,7 @@ export class BookingService {
           true,
         )
       : false;
+    await this.adoptAccess(id, access, sent);
     return { data, notificationSent: sent };
   }
 
@@ -1160,7 +1160,6 @@ export class BookingService {
       status: 'NEEDS_INFORMATION',
       responseMessage: dto.message.trim(),
       handledBy: actor.sub,
-      ...(access ? { accessTokenHash: access.hash } : {}),
     });
     await this.auditAction('BOOKING_REQUEST_INFORMATION_REQUESTED', id, actor);
     const sent = row.email
@@ -1174,6 +1173,7 @@ export class BookingService {
           true,
         )
       : false;
+    await this.adoptAccess(id, access, sent);
     return { data: await this.getForStaff(id), notificationSent: sent };
   }
 
@@ -1765,6 +1765,19 @@ export class BookingService {
    * email the patient must answer (a proposal, a request for details), so a
    * lost or forwarded older link stops working.
    */
+  /**
+   * The emailed link's token replaces the stored one only once the email
+   * went out: an undelivered link must not break the links the patient
+   * already has.
+   */
+  private async adoptAccess(id: string, access: { hash: string } | null, sent: boolean) {
+    if (!access || !sent) return;
+    await this.prisma.bookingRequest.update({
+      where: { id },
+      data: { accessTokenHash: access.hash },
+    });
+  }
+
   private newAccess() {
     const token = randomBytes(32).toString('base64url');
     return { token, hash: this.hash(token) };

@@ -2305,7 +2305,12 @@ describe('BookingService public request security and validation', () => {
           },
           actorStaff,
         );
-        const { data } = prisma.bookingRequest.updateMany.mock.calls[0][0];
+        // The status change keeps the old link; the new one is stored once
+        // the email carrying it went out.
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).not.toHaveProperty(
+          'accessTokenHash',
+        );
+        const { data } = prisma.bookingRequest.update.mock.calls[0][0];
         const sent = email.send.mock.calls[0][0];
         const token = decodeURIComponent(/#token=([^\s"]+)/.exec(sent.text)![1]);
         expect(data.accessTokenHash).toBe(createHash('sha256').update(token).digest('hex'));
@@ -2317,20 +2322,37 @@ describe('BookingService public request security and validation', () => {
       it('issues a new link when asking for details, and none without an email', async () => {
         prisma.bookingRequest.findUnique.mockResolvedValue(request());
         await service.requestInformation('request-1', { message: 'Cần ảnh CCCD' }, actorStaff);
-        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data.accessTokenHash).toEqual(
+        expect(prisma.bookingRequest.update.mock.calls[0][0].data.accessTokenHash).toEqual(
           expect.any(String),
         );
         expect(email.send.mock.calls[0][0].text).toContain('#token=');
 
-        prisma.bookingRequest.updateMany.mockClear();
+        prisma.bookingRequest.update.mockClear();
         email.send.mockClear();
         prisma.bookingRequest.findUnique.mockResolvedValue(request({ email: null }));
         await service.requestInformation('request-1', { message: 'Cần ảnh CCCD' }, actorStaff);
         // No email: the patient's current link keeps working.
+        expect(prisma.bookingRequest.update).not.toHaveBeenCalled();
+        expect(email.send).not.toHaveBeenCalled();
+      });
+
+      it('keeps the old link when the email with the new one was not delivered', async () => {
+        email.send.mockResolvedValue(false);
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        const res = await service.propose(
+          'request-1',
+          {
+            dentistId: 'dentist-1',
+            startAt: '2026-10-02T03:00:00.000Z',
+            message: 'Mời đến giờ này',
+          },
+          actorStaff,
+        );
+        expect(res.notificationSent).toBe(false);
         expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).not.toHaveProperty(
           'accessTokenHash',
         );
-        expect(email.send).not.toHaveBeenCalled();
+        expect(prisma.bookingRequest.update).not.toHaveBeenCalled();
       });
 
       it('sends a plain notice (a decline) without a link token', async () => {

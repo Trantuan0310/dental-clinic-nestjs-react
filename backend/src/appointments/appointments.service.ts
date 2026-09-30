@@ -230,11 +230,14 @@ export class AppointmentsService {
     if (startAt.getTime() <= Date.now() + 60_000) {
       throw new BackDatedAppointmentException();
     }
-    await this.assertDentistMayBook(dto.dentistId, dto.patientId, actor);
+    // Inside a caller's transaction every read uses its connection, so a
+    // burst of confirmations cannot wait on each other for pool slots.
+    const db = fromBookingRequest?.tx ?? this.prisma;
+    await this.assertDentistMayBook(dto.dentistId, dto.patientId, actor, db);
 
-    const dentist = await this.validateDentist(dto.dentistId);
+    const dentist = await this.validateDentist(dto.dentistId, { db });
     // The caller's transaction may have just created the patient.
-    await this.validateActivePatient(dto.patientId, fromBookingRequest?.tx);
+    await this.validateActivePatient(dto.patientId, db);
     const plan =
       fromBookingRequest?.plan ??
       (await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt)));
@@ -3464,13 +3467,18 @@ export class AppointmentsService {
    * on their own calendar, for patients they have already treated. Front
    * desk and admin book for anyone.
    */
-  private async assertDentistMayBook(dentistId: string, patientId: string, actor: JwtPayload) {
+  private async assertDentistMayBook(
+    dentistId: string,
+    patientId: string,
+    actor: JwtPayload,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
     if (!this.isRowScopedDentist(actor)) return;
     if (dentistId !== actor.sub) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch vào lịch làm việc của chính mình');
     }
     // Follow-ups need a real (non-cancelled) visit, not just a booking.
-    if (!(await dentistHasTreatedPatient(this.prisma, patientId, actor.sub))) {
+    if (!(await dentistHasTreatedPatient(db, patientId, actor.sub))) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch tái khám cho bệnh nhân mình đã khám');
     }
   }
@@ -3491,8 +3499,14 @@ export class AppointmentsService {
    * Accounts without a profile (created before migration 019 or by an old
    * seed) are accepted by role alone until PR-7 removes that fallback.
    */
-  async validateDentist(dentistId: string, { forBooking = true } = {}) {
-    const u = await this.prisma.user.findUnique({
+  async validateDentist(
+    dentistId: string,
+    {
+      forBooking = true,
+      db = this.prisma,
+    }: { forBooking?: boolean; db?: Prisma.TransactionClient } = {},
+  ) {
+    const u = await db.user.findUnique({
       where: { id: dentistId },
       include: {
         userRoles: { include: { role: true } },

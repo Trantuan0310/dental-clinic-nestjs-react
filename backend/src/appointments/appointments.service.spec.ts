@@ -2256,6 +2256,30 @@ describe('AppointmentsService', () => {
       });
     });
 
+    it("create() in a caller's transaction reads the dentist and patient on that connection", async () => {
+      (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      // Same models as the root client, with the reads under test observed.
+      const tx = Object.create(prisma);
+      tx.user = { findUnique: jest.fn((args: any) => prisma.user.findUnique(args)) };
+      tx.patient = { findUnique: jest.fn((args: any) => prisma.patient.findUnique(args)) };
+      (prisma.user.findUnique as jest.Mock).mockClear();
+
+      await service.create(
+        {
+          dentistId: 'dentist-1',
+          patientId: 'patient-1',
+          startAt: '2099-03-15T02:00:00Z',
+          source: 'ONLINE',
+        } as any,
+        actor,
+        { id: 'request-1', expectedStatuses: ['PENDING_REVIEW'] as any, tx },
+      );
+
+      expect(tx.user.findUnique).toHaveBeenCalledTimes(1);
+      expect(tx.patient.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('create() from a booking request someone else already handled fails (the visit rolls back)', async () => {
       (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 

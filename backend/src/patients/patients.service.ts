@@ -84,9 +84,9 @@ export class PatientsService {
   // Code generator (BR-PT-001)
   // ============================================================================
 
-  private async generatePatientCode(): Promise<string> {
+  private async generatePatientCode(db: Prisma.TransactionClient = this.prisma): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const rows = await this.prisma.$queryRaw<Array<{ nextval: bigint }>>`
+    const rows = await db.$queryRaw<Array<{ nextval: bigint }>>`
       SELECT nextval('patient_code_seq')
     `;
     const next = rows[0].nextval;
@@ -126,7 +126,9 @@ export class PatientsService {
       }
     }
 
-    const code = await this.generatePatientCode();
+    // On the caller's connection when inside its transaction (one connection
+    // per online confirmation).
+    const code = await this.generatePatientCode(outerTx);
 
     const write = async (tx: Prisma.TransactionClient) => {
       const patient = await tx.patient.create({
