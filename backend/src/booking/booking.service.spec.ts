@@ -2,6 +2,7 @@ import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Gender } from '@prisma/client';
 import { BookingService, EXPIRED_MESSAGE } from './booking.service';
+import { AvailabilityService } from '../appointments/availability.service';
 
 const plan = {
   services: [],
@@ -57,10 +58,12 @@ describe('BookingService public request security and validation', () => {
     patients = { create: jest.fn(), softDelete: jest.fn().mockResolvedValue(undefined) };
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     email = { send: jest.fn().mockResolvedValue(false) };
-    availability = {
+    // The real request-plan/issue rules (shared with schedule changes), over
+    // a stubbed calendar.
+    availability = Object.assign(new AvailabilityService(prisma), {
       checkSlot: jest.fn().mockResolvedValue(null),
       loadDay: jest.fn().mockResolvedValue(openDay),
-    };
+    });
     service = new BookingService(prisma, appointments, patients, audit, email, availability);
   });
 
@@ -1571,6 +1574,22 @@ describe('BookingService public request security and validation', () => {
         expect(res.emptyReason).toBe('CLOSED');
         expect(res.closedReason).toBeUndefined();
         expect(res.nextAvailableDate).toBe('2026-10-07');
+      });
+
+      it('shows the reason of a clinic-wide closure (Tết) to the patient', async () => {
+        appointments.getAvailability.mockResolvedValue({
+          availableSlots: [],
+          blockedReason: 'CLOSED',
+          closedReason: 'Phòng khám nghỉ: Nghỉ Tết',
+          clinicClosed: true,
+        });
+        const res = await service.slots({
+          serviceId: 'service-1',
+          dentistId: 'dentist-1',
+          date: '2026-10-05',
+        });
+        expect(res.emptyReason).toBe('CLOSED');
+        expect(res.closedReason).toBe('Phòng khám nghỉ: Nghỉ Tết');
       });
 
       it('tells a full day from one whose remaining times are too soon', async () => {

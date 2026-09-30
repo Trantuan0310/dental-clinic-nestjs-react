@@ -193,7 +193,8 @@ function ClosureModal({
           />
         </div>
         <Textarea
-          label="Lý do"
+          label="Lý do (hiển thị cho khách)"
+          hint="Bệnh nhân đặt lịch online thấy: “Phòng khám nghỉ: {lý do}”."
           required
           minLength={3}
           maxLength={500}

@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { AppointmentStatus, Prisma } from '@prisma/client';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
+import { AppointmentStatus, BookingRequestStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
@@ -12,8 +12,72 @@ import {
   freeSlots,
   intervalProblem,
 } from './domain/day-calendar';
+import type { VisitPlan } from './appointments.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
+
+/** Online requests still waiting on the clinic or the patient. */
+export const OPEN_BOOKING_STATUSES: BookingRequestStatus[] = [
+  'PENDING_REVIEW',
+  'NEEDS_INFORMATION',
+  'PROPOSED',
+  'PATIENT_ACCEPTED',
+];
+/** While a proposal stands, its time and dentist are the request's. */
+export const PROPOSAL_BOOKING_STATUSES: BookingRequestStatus[] = ['PROPOSED', 'PATIENT_ACCEPTED'];
+
+/**
+ * The time a request is about: the proposed one while a proposal is on the
+ * table, otherwise the one the patient asked for.
+ */
+export function effectiveStartAt(row: {
+  status: BookingRequestStatus | string;
+  requestedStartAt: Date;
+  proposedStartAt?: Date | null;
+}): Date {
+  return PROPOSAL_BOOKING_STATUSES.includes(row.status as BookingRequestStatus)
+    ? (row.proposedStartAt ?? row.requestedStartAt)
+    : row.requestedStartAt;
+}
+
+/** The dentist a request is about: the proposed one while a proposal stands. */
+export function effectiveDentistId(row: {
+  status: BookingRequestStatus;
+  preferredDentistId: string;
+  proposedDentistId?: string | null;
+}): string {
+  return PROPOSAL_BOOKING_STATUSES.includes(row.status)
+    ? (row.proposedDentistId ?? row.preferredDentistId)
+    : row.preferredDentistId;
+}
+
+/** Why an open request can no longer be booked as it stands. */
+export interface RequestIssue {
+  kind: string;
+  message: string;
+}
+
+/** An open online request, as far as its bookability is concerned. */
+export interface OpenRequestRow {
+  id: string;
+  status: BookingRequestStatus;
+  appointmentId: string | null;
+  serviceId: string;
+  createdAt: Date;
+  preferredDentistId: string;
+  proposedDentistId: string | null;
+  requestedStartAt: Date;
+  proposedStartAt: Date | null;
+}
+
+/**
+ * The AppointmentsService rules a request plan needs, passed in by the caller
+ * (AvailabilityService cannot depend on AppointmentsService, which uses it).
+ */
+export interface RequestPlanRules {
+  validateDentist(dentistId: string): Promise<unknown>;
+  planVisit(dentistId: string, serviceIds: string[], date: string): Promise<VisitPlan | null>;
+}
 
 /** Statuses that no longer hold a slot (same as idx_appointments_slot_active). */
 export const SLOT_RELEASING_STATUSES: AppointmentStatus[] = [
@@ -183,7 +247,9 @@ export class AvailabilityService {
         slotDuration: slotDuration ?? 30,
         availableSlots: [],
         blockedReason: cal.closedAllDay ? 'CLOSED' : 'NO_SCHEDULE',
-        ...(cal.closedAllDay ? { closedReason: cal.closedReason } : {}),
+        ...(cal.closedAllDay
+          ? { closedReason: cal.closedReason, clinicClosed: cal.clinicClosed }
+          : {}),
       };
     }
     const slotMin = slotDuration ?? cal.defaultSlotMin;
@@ -294,5 +360,124 @@ export class AvailabilityService {
       }),
     );
     return results.filter(r => r.availableSlots.length > 0);
+  }
+
+  /**
+   * The visit an online request stands for on `date` with `dentistId`: the
+   * dentist still sees patients (online booking or not) and performs the
+   * service then — its own duration and the service's buffers. When the
+   * service was withdrawn, or the dentist's assignment to it ended, after the
+   * patient sent the request, the assignment that stood then still counts
+   * (as a booked visit keeps a withdrawn service on reschedule), so the
+   * request can be confirmed or moved instead of being stranded.
+   */
+  async requestPlan(
+    rules: RequestPlanRules,
+    row: { serviceId: string; createdAt: Date },
+    dentistId: string,
+    date: string,
+  ): Promise<VisitPlan> {
+    await rules.validateDentist(dentistId);
+    const day = new Date(date);
+    const current = await this.prisma.dentistService.findFirst({
+      where: {
+        dentistId,
+        serviceId: row.serviceId,
+        effectiveFrom: { lte: day },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
+        service: { isActive: true },
+      },
+      select: { id: true },
+    });
+    if (current) return (await rules.planVisit(dentistId, [row.serviceId], date))!;
+    const sent = new Date(clinicDateOnly(row.createdAt));
+    const earlier = await this.prisma.dentistService.findFirst({
+      where: {
+        dentistId,
+        serviceId: row.serviceId,
+        effectiveFrom: { lte: sent },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: sent } }],
+      },
+      include: { service: true },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+    if (!earlier) {
+      throw new BadRequestException(
+        'Bác sĩ này không thực hiện dịch vụ của yêu cầu vào ngày đã chọn',
+      );
+    }
+    const durationMin = earlier.durationMin ?? earlier.service.defaultDurationMin;
+    return {
+      services: [
+        {
+          serviceId: row.serviceId,
+          serviceCode: earlier.service.code,
+          serviceName: earlier.service.name,
+          price: Number(earlier.price ?? earlier.service.basePrice),
+          durationMin,
+          bufferBeforeMin: earlier.service.bufferBeforeMin,
+          bufferAfterMin: earlier.service.bufferAfterMin,
+          sortOrder: 0,
+        },
+      ],
+      durationMin,
+      bufferBeforeMin: earlier.service.bufferBeforeMin,
+      bufferAfterMin: earlier.service.bufferAfterMin,
+    };
+  }
+
+  /**
+   * Why each open, unbooked request whose time is still ahead can no longer
+   * be confirmed as it stands (closed day, clinic closure, time-off, no
+   * schedule, suspended dentist, service no longer offered, time taken), or
+   * null. Shared by the booking-request list (`slotIssue`) and the impact
+   * of a schedule change (`affectedBookingRequests`). Days and plans are
+   * loaded once per dentist and date; `db` lets a caller read its own
+   * uncommitted change.
+   */
+  async requestIssues(
+    rules: RequestPlanRules,
+    rows: OpenRequestRow[],
+    db: Db = this.prisma,
+  ): Promise<Map<string, RequestIssue | null>> {
+    const days = new Map<string, Promise<DayCalendar>>();
+    const plans = new Map<string, Promise<VisitPlan | RequestIssue>>();
+    const now = Date.now();
+    const out = new Map<string, RequestIssue | null>();
+    await Promise.all(
+      rows
+        .filter(r => OPEN_BOOKING_STATUSES.includes(r.status) && !r.appointmentId)
+        .filter(r => effectiveStartAt(r).getTime() > now)
+        .map(async r => {
+          const dentistId = effectiveDentistId(r);
+          const startAt = effectiveStartAt(r);
+          const date = clinicDateOnly(startAt);
+          const planKey = [dentistId, r.serviceId, date, clinicDateOnly(r.createdAt)].join('|');
+          if (!plans.has(planKey)) {
+            plans.set(
+              planKey,
+              this.requestPlan(rules, r, dentistId, date).catch(error => {
+                if (error instanceof HttpException)
+                  return { kind: 'NOT_BOOKABLE', message: error.message };
+                throw error;
+              }),
+            );
+          }
+          const plan = await plans.get(planKey)!;
+          if ('kind' in plan) {
+            out.set(r.id, plan);
+            return;
+          }
+          const dayKey = dentistId + '|' + date;
+          if (!days.has(dayKey)) days.set(dayKey, this.loadDay(dentistId, date, db));
+          const problem = intervalProblem(
+            await days.get(dayKey)!,
+            { start: startAt, end: new Date(startAt.getTime() + plan.durationMin * 60_000) },
+            { buffers: { beforeMin: plan.bufferBeforeMin, afterMin: plan.bufferAfterMin } },
+          );
+          out.set(r.id, problem ? { kind: problem.kind, message: problem.message } : null);
+        }),
+    );
+    return out;
   }
 }

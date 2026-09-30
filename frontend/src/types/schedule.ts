@@ -112,6 +112,24 @@ export interface AffectedBookingRequest {
   phone: string;
   status: string;
   startAt: string;
+  slotIssue?: { kind: string; message: string } | null;
+}
+
+/**
+ * GET /booking-requests/pending-in-range row (only the fields the schedule
+ * pages use). `slotIssue` is the same server check as the change results'.
+ */
+export interface PendingBookingRequest {
+  id: string;
+  referenceCode: string;
+  fullName: string;
+  phone: string;
+  status: string;
+  requestedStartAt: string;
+  proposedStartAt?: string | null;
+  preferredDentist: { id: string; fullName: string };
+  proposedDentist?: { id: string; fullName: string } | null;
+  slotIssue: { kind: string; message: string } | null;
 }
 
 /** What a calendar change leaves to handle by hand (never cancelled automatically). */

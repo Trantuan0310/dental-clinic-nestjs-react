@@ -474,6 +474,13 @@ function EditWorkingScheduleModal({
               Lịch đang áp dụng: các ngày trước {viDate(effectiveFrom || today)} giữ giờ cũ (dùng để tính lương);
               từ ngày này hệ thống tạo lịch mới với giờ mới.
             </Alert>
+            {effectiveFrom === today && (
+              <Alert variant="warning">
+                Áp dụng từ <strong>hôm nay</strong>: giờ mới có hiệu lực ngay, kể cả với các lịch hẹn hôm nay đã qua giờ
+                bắt đầu hoặc bệnh nhân đã check-in/đang khám — chúng sẽ được liệt kê nếu nằm ngoài giờ mới. Nếu không
+                gấp, hãy chọn từ ngày mai.
+              </Alert>
+            )}
           </>
         )}
         <Input
@@ -536,6 +543,12 @@ function EndWorkingScheduleModal({
           hint="Chọn hôm qua để dừng ngay từ hôm nay. Các ngày đã qua được giữ nguyên để tính lương."
           required
         />
+        {lastDay < today && (
+          <Alert variant="warning">
+            Lịch dừng từ <strong>hôm nay</strong>: các lịch hẹn hôm nay theo lịch này (kể cả đã check-in/đang khám) sẽ
+            nằm ngoài giờ làm và được liệt kê để xử lý.
+          </Alert>
+        )}
         <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
           <Button variant="outline" onClick={onClose}>
             Hủy

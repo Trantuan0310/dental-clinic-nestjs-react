@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
+import { clinicToday } from '@/lib/clinicTime';
 import type {
   WorkingSchedule,
   CreateWorkingSchedulePayload,
@@ -10,6 +11,7 @@ import type {
   ClinicClosure,
   ClinicClosurePayload,
   ClinicClosureResult,
+  PendingBookingRequest,
   TimeOff,
   CreateTimeOffPayload,
   CreateTimeOffResult,
@@ -47,6 +49,7 @@ export const scheduleKeys = {
   overrides: (dentistId?: string) => ['schedule', 'overrides', dentistId ?? 'all'] as const,
   impact: (dentistId?: string) => ['schedule', 'impact', dentistId ?? 'all'] as const,
   closures: () => ['schedule', 'clinic-closures'] as const,
+  requestIssues: (dentistId?: string) => ['schedule', 'request-issues', dentistId ?? 'all'] as const,
 };
 
 /** Anything that changes a dentist's calendar changes bookable slots and the impact list. */
@@ -207,6 +210,26 @@ export function useDeleteScheduleOverride() {
   return useMutation({
     mutationFn: (id: string) => del<ScheduleChangeImpact>(`/appointments/schedule-overrides/${id}`),
     onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+/**
+ * Open online requests in the next 60 days that can no longer be confirmed
+ * as they stand (schedule change, closure, time-off…), from the booking
+ * module's own check. Needs booking_request.read.
+ */
+export function useBookingRequestIssues(dentistId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: scheduleKeys.requestIssues(dentistId),
+    enabled,
+    queryFn: async () => {
+      const from = clinicToday();
+      const to = new Date(new Date(from).getTime() + 60 * 86_400_000).toISOString().slice(0, 10);
+      const rows = await get<PendingBookingRequest[]>('/booking-requests/pending-in-range', {
+        params: { from, to, ...(dentistId ? { dentistId } : {}) },
+      });
+      return rows.filter((r) => r.slotIssue);
+    },
   });
 }
 

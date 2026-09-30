@@ -1,5 +1,6 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { mergeWindows } from '../appointments/domain/day-calendar';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { PayrollCycle, PayrollPeriodStatus, PayrollAdjustmentType, Prisma } from '@prisma/client';
@@ -693,9 +694,10 @@ export class PayrollService {
 
   /**
    * BR-PAY-011: worked shifts + hours, both resolved from the same duty
-   * schedule data — an approved ShiftRegistration for a given date
-   * overrides the recurring WorkingSchedule for that date (not additive
-   * with it), rather than clinical Encounter duration. Previously
+   * schedule data — the recurring WorkingSchedule blocks valid that date
+   * joined with the approved ShiftRegistrations of that date (overlaps
+   * counted once, the hours the booking calendar opens), rather than
+   * clinical Encounter duration. Previously
    * overtimeHours came from Encounter startedAt/closedAt, so a forgotten
    * "close encounter" or a data-entry mistake there fed straight into
    * pay with no relation to actually-approved duty time; workedShifts
@@ -752,23 +754,29 @@ export class PayrollService {
       d.setUTCDate(d.getUTCDate() + i);
       const dateKey = d.toISOString().slice(0, 10);
 
-      const approved = approvedByDate.get(dateKey);
-      // Every block of the day counts (e.g. 08:00-12:00 + 13:30-19:00), but
-      // only the weekly rows valid on that very date (a schedule edited "from
-      // day X" leaves an old row ending X-1 and a new one starting X).
-      const blocks = approved?.length
-        ? approved
-        : workingSchedules.filter(
-            s =>
-              s.dayOfWeek === d.getUTCDay() &&
-              (!s.validFrom || s.validFrom.getTime() <= d.getTime()) &&
-              (!s.validTo || s.validTo.getTime() >= d.getTime()),
-          );
+      // Same hours as the booking calendar (AvailabilityService.loadDay):
+      // every weekly block valid on that very date (a schedule edited "from
+      // day X" leaves an old row ending X-1 and a new one starting X) plus the
+      // approved extra shifts, overlapping or touching ones joined so no
+      // minute is paid twice.
+      const blocks = [
+        ...workingSchedules.filter(
+          s =>
+            s.dayOfWeek === d.getUTCDay() &&
+            (!s.validFrom || s.validFrom.getTime() <= d.getTime()) &&
+            (!s.validTo || s.validTo.getTime() >= d.getTime()),
+        ),
+        ...(approvedByDate.get(dateKey) ?? []),
+      ]
+        .map(b => ({
+          start: new Date(this.timeToMinutes(b.startTime) * 60_000),
+          end: new Date(this.timeToMinutes(b.endTime) * 60_000),
+        }))
+        .filter(b => b.end > b.start);
       if (blocks.length === 0) continue;
       workedShifts++;
-      for (const b of blocks) {
-        const minutes = this.timeToMinutes(b.endTime) - this.timeToMinutes(b.startTime);
-        if (minutes > 0) totalMinutes += minutes;
+      for (const w of mergeWindows(blocks)) {
+        totalMinutes += (w.end.getTime() - w.start.getTime()) / 60_000;
       }
     }
 

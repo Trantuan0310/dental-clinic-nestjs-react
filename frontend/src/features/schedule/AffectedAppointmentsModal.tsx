@@ -58,6 +58,7 @@ export function AffectedAppointmentsModal({
                   <p className="text-gray-600 dark:text-surface-300">
                     {formatDateTime(r.startAt)} • {r.phone}
                   </p>
+                  {r.slotIssue && <p className="text-xs text-amber-700">{r.slotIssue.message}</p>}
                 </li>
               ))}
             </ul>

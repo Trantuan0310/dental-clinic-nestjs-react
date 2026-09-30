@@ -56,6 +56,41 @@ describe('AppointmentsService — schedule management', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  /** The dentist performs svc-1 in `durationMin` (their own override). */
+  const assignService = (durationMin: number) => {
+    (prisma.dentistService.findFirst as jest.Mock).mockResolvedValue({ id: 'ds-1' });
+    (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([
+      {
+        serviceId: 'svc-1',
+        durationMin,
+        price: null,
+        service: {
+          code: 'SVC1',
+          name: 'Cạo vôi',
+          basePrice: 300000,
+          defaultDurationMin: 30,
+          bufferBeforeMin: 0,
+          bufferAfterMin: 0,
+        },
+      },
+    ]);
+  };
+  const request = (id: string, startAt: Date, over: Record<string, unknown> = {}) => ({
+    id,
+    referenceCode: `GS-${id}`,
+    fullName: 'Nguyễn Văn A',
+    phone: '0900000000',
+    status: 'PENDING_REVIEW',
+    appointmentId: null,
+    serviceId: 'svc-1',
+    createdAt: new Date(),
+    preferredDentistId: 'dentist-1',
+    proposedDentistId: null,
+    requestedStartAt: startAt,
+    proposedStartAt: null,
+    ...over,
+  });
+
   describe('bulk create (several weekdays × blocks)', () => {
     const dto = {
       dentistId: 'dentist-1',
@@ -218,6 +253,35 @@ describe('AppointmentsService — schedule management', () => {
       );
     });
 
+    it("a change from today also lists today's visits already started or checked in", async () => {
+      jest.useFakeTimers({ now: at(today, '20:00'), doNotFake: ['nextTick', 'setImmediate'] });
+      try {
+        (prisma.workingSchedule.findMany as jest.Mock).mockImplementation(async ({ where }: any) =>
+          where.id ? [] : [{ startTime: t('08:00'), endTime: t('11:00'), slotDurationMin: 30 }],
+        );
+        (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+          {
+            id: 'in-chair',
+            status: 'CHECKED_IN',
+            startAt: at(today, '12:00'),
+            endAt: at(today, '12:30'),
+          },
+        ]);
+        const result = await service.updateWorkingSchedule('ws-1', { endTime: '11:00' }, admin);
+        const where = (prisma.appointment.findMany as jest.Mock).mock.calls[0][0].where;
+        expect(where.OR[1].status.in).toEqual(
+          expect.arrayContaining(['CHECKED_IN', 'IN_PROGRESS']),
+        );
+        expect(where.OR[1].startAt).toEqual({
+          gte: new Date(`${today}T00:00:00+07:00`),
+          lt: at(today, '20:00'),
+        });
+        expect(result.affectedAppointments.map((a: any) => a.id)).toEqual(['in-chair']);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('edits a schedule that has not started yet in place', async () => {
       (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue({
         ...running,
@@ -301,26 +365,25 @@ describe('AppointmentsService — schedule management', () => {
       expect(result).toEqual({ affectedAppointments: [], affectedBookingRequests: [] });
     });
 
-    it('lists open online requests the change leaves outside working hours', async () => {
+    it("lists open online requests the change leaves outside working hours, with the dentist's own duration", async () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockImplementation(async ({ where }: any) =>
         where.id ? [] : [{ startTime: t('08:00'), endTime: t('11:00'), slotDurationMin: 30 }],
       );
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      assignService(60);
       (prisma.bookingRequest.findMany as jest.Mock).mockResolvedValue([
-        {
-          id: 'br-1',
-          referenceCode: 'GS-1',
-          fullName: 'Nguyễn Văn A',
-          phone: '0900000000',
-          status: 'PENDING_REVIEW',
-          requestedStartAt: at(day, '15:00'),
-          proposedStartAt: null,
-          service: { defaultDurationMin: 30 },
-        },
+        request('fits', at(day, '09:00')),
+        // 60 min from 10:30 runs past 11:00 (30 min, the service default, would fit).
+        request('late', at(day, '10:30')),
       ]);
       const result = await service.updateWorkingSchedule('ws-1', { endTime: '11:00' }, admin);
       expect(result.affectedBookingRequests).toEqual([
-        expect.objectContaining({ id: 'br-1', referenceCode: 'GS-1', startAt: at(day, '15:00') }),
+        expect.objectContaining({
+          id: 'late',
+          referenceCode: 'GS-late',
+          startAt: at(day, '10:30'),
+          slotIssue: expect.objectContaining({ kind: 'OUTSIDE_WORKING_HOURS' }),
+        }),
       ]);
       const where = (prisma.bookingRequest.findMany as jest.Mock).mock.calls[0][0].where;
       // A proposal's time counts only while it stands (same rule as BookingService).
@@ -458,16 +521,15 @@ describe('AppointmentsService — schedule management', () => {
           patient: { id: 'p', code: 'BN1', fullName: 'Trần B', primaryPhone: null },
         },
       ]);
+      assignService(30);
+      (prisma.clinicClosure.findMany as jest.Mock).mockResolvedValue([
+        { reason: 'Nghỉ Tết Nguyên đán' },
+      ]);
       (prisma.bookingRequest.findMany as jest.Mock).mockResolvedValue([
-        {
-          id: 'br-1',
-          referenceCode: 'GS-1',
-          fullName: 'Lê C',
-          phone: '0900',
+        request('br-1', at(start, '08:00'), {
           status: 'PROPOSED',
-          requestedStartAt: at(start, '08:00'),
           proposedStartAt: at(start, '10:00'),
-        },
+        }),
       ]);
       const result = await service.createClinicClosure(dto, admin);
       expect(result).toMatchObject({ id: 'cc-1', startDate: start, endDate: end });
@@ -475,7 +537,14 @@ describe('AppointmentsService — schedule management', () => {
         expect.objectContaining({ id: 'a1', dentistName: 'BS An' }),
       ]);
       expect(result.affectedBookingRequests).toEqual([
-        expect.objectContaining({ id: 'br-1', startAt: at(start, '10:00') }),
+        expect.objectContaining({
+          id: 'br-1',
+          startAt: at(start, '10:00'),
+          slotIssue: {
+            kind: 'CLOSED',
+            message: `Phòng khám nghỉ: Nghỉ Tết Nguyên đán (ngày ${start})`,
+          },
+        }),
       ]);
       expect(prisma.appointment.update).not.toHaveBeenCalled();
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(

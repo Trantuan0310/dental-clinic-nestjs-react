@@ -50,7 +50,14 @@ import {
   lockPatientCalendar,
 } from './domain/advisory-lock';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
-import { AvailabilityService } from './availability.service';
+import {
+  AvailabilityService,
+  effectiveStartAt,
+  OPEN_BOOKING_STATUSES,
+  PROPOSAL_BOOKING_STATUSES,
+  RequestIssue,
+  RequestPlanRules,
+} from './availability.service';
 import {
   AvailabilityQueryDto,
   BulkCreateWorkingSchedulesDto,
@@ -116,26 +123,6 @@ const DAY_MS = 24 * 60 * 60_000;
 const DAY_LABELS = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 /** Longest clinic-wide closure accepted in one entry. */
 const MAX_CLOSURE_DAYS = 60;
-/** Online requests still waiting on the clinic or the patient. */
-const OPEN_BOOKING_STATUSES: BookingRequestStatus[] = [
-  BookingRequestStatus.PENDING_REVIEW,
-  BookingRequestStatus.NEEDS_INFORMATION,
-  BookingRequestStatus.PROPOSED,
-  BookingRequestStatus.PATIENT_ACCEPTED,
-];
-/** While a proposal stands, its time and dentist are the request's (BookingService). */
-const PROPOSAL_BOOKING_STATUSES: BookingRequestStatus[] = [
-  BookingRequestStatus.PROPOSED,
-  BookingRequestStatus.PATIENT_ACCEPTED,
-];
-const bookingRequestStartAt = (r: {
-  status: BookingRequestStatus;
-  requestedStartAt: Date;
-  proposedStartAt: Date | null;
-}) =>
-  PROPOSAL_BOOKING_STATUSES.includes(r.status)
-    ? (r.proposedStartAt ?? r.requestedStartAt)
-    : r.requestedStartAt;
 /** Columns of a booking listed as affected by a calendar change. */
 const AFFECTED_APPOINTMENT_SELECT = {
   id: true,
@@ -1479,7 +1466,9 @@ export class AppointmentsService {
       const checkTo = this.laterEnd(row.validTo, validTo);
       const impact =
         checkFrom && (!checkTo || checkFrom <= checkTo)
-          ? await this.affectedInRange(tx, row.dentistId, row.dayOfWeek, checkFrom, checkTo)
+          ? await this.affectedInRange(tx, row.dentistId, row.dayOfWeek, checkFrom, checkTo, {
+              wholeFirstDay: checkFrom.getTime() === today.getTime(),
+            })
           : { affectedAppointments: [], affectedBookingRequests: [] };
       return { schedule, endedSchedule, ...impact };
     });
@@ -2130,6 +2119,12 @@ export class AppointmentsService {
    * Every dentist is closed all day from startDate to endDate. Bookings
    * already on those days are returned for the front desk to move — the
    * system never cancels them (same as time-off and overrides).
+   *
+   * Known gap: only closures are serialized here (lockClinicClosures), not
+   * every dentist's calendar, so a booking committed while this transaction
+   * runs may be missing from `affectedAppointments`. It is still refused
+   * from then on and listed by the schedule-impact report (BR-SCH-005),
+   * which reads the calendar as it stands.
    */
   async createClinicClosure(dto: ClinicClosureDto, actor: JwtPayload) {
     const { startDate, endDate } = this.closureDates(dto);
@@ -2314,13 +2309,12 @@ export class AppointmentsService {
         take: 1000,
         select: { ...AFFECTED_APPOINTMENT_SELECT, dentist: { select: { fullName: true } } },
       })) ?? [];
-    const requests = await this.openBookingRequests(tx, null, start, end);
     return {
       affectedAppointments: affectedAppointments.map(({ dentist, ...a }) => ({
         ...a,
         dentistName: dentist?.fullName ?? null,
       })),
-      affectedBookingRequests: requests.map(r => this.formatBookingRequest(r)),
+      affectedBookingRequests: await this.requestsWithIssues(tx, null, null, start, end),
     };
   }
 
@@ -2360,18 +2354,38 @@ export class AppointmentsService {
     dayOfWeek: number | null,
     from: Date,
     to: Date | null,
+    { wholeFirstDay = false } = {},
   ) {
-    const start = new Date(Math.max(startOfClinicDay(this.isoDate(from)).getTime(), Date.now()));
+    const dayStart = startOfClinicDay(this.isoDate(from));
+    const start = new Date(Math.max(dayStart.getTime(), Date.now()));
     const end = to ? this.endOfDate(to) : null;
     const onDay = (at: Date) =>
       dayOfWeek === null || new Date(clinicDateOnly(at)).getUTCDay() === dayOfWeek;
+    const upcoming = {
+      startAt: { gte: start, ...(end ? { lt: end } : {}) },
+      status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+    };
+    // A change taking effect today also reaches today's visits that have
+    // already started or whose patient is checked in / in the chair.
+    const today = {
+      startAt: { gte: dayStart, lt: start },
+      status: {
+        in: [
+          AppointmentStatus.SCHEDULED,
+          AppointmentStatus.CONFIRMED,
+          AppointmentStatus.CHECKED_IN,
+          AppointmentStatus.IN_PROGRESS,
+        ],
+      },
+    };
     const rows =
       (await tx.appointment.findMany({
         where: {
           dentistId,
-          startAt: { gte: start, ...(end ? { lt: end } : {}) },
           deletedAt: null,
-          status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+          ...(wholeFirstDay && dayStart.getTime() < start.getTime()
+            ? { OR: [upcoming, today] }
+            : upcoming),
         },
         orderBy: { startAt: 'asc' },
         take: 1000,
@@ -2383,15 +2397,47 @@ export class AppointmentsService {
         affectedAppointments.push(a);
       }
     }
-    const affectedBookingRequests = [];
-    for (const r of await this.openBookingRequests(tx, dentistId, start, end)) {
-      const at = bookingRequestStartAt(r);
-      const until = new Date(at.getTime() + (r.service?.defaultDurationMin ?? 30) * 60_000);
-      if (onDay(at) && (await this.calendarProblem(dentistId, at, until, tx))) {
-        affectedBookingRequests.push(this.formatBookingRequest(r));
-      }
-    }
+    const affectedBookingRequests = await this.requestsWithIssues(
+      tx,
+      dentistId,
+      dayOfWeek,
+      start,
+      end,
+    );
     return { affectedAppointments, affectedBookingRequests };
+  }
+
+  /**
+   * Open online requests in [start, end) (for one dentist, on one weekday
+   * when given) that can no longer be confirmed as they stand — the same
+   * check as the booking-request list's `slotIssue`
+   * (AvailabilityService.requestIssues), read inside `tx`.
+   */
+  private async requestsWithIssues(
+    tx: Prisma.TransactionClient,
+    dentistId: string | null,
+    dayOfWeek: number | null,
+    start: Date,
+    end: Date | null,
+  ) {
+    const rows = (await this.openBookingRequests(tx, dentistId, start, end)).filter(
+      r =>
+        dayOfWeek === null ||
+        new Date(clinicDateOnly(effectiveStartAt(r))).getUTCDay() === dayOfWeek,
+    );
+    const issues = await this.availability.requestIssues(this.requestPlanRules(), rows, tx);
+    return rows.flatMap(r => {
+      const issue = issues.get(r.id);
+      return issue ? [this.formatBookingRequest(r, issue)] : [];
+    });
+  }
+
+  /** What AvailabilityService.requestPlan needs from this service. */
+  requestPlanRules(): RequestPlanRules {
+    return {
+      validateDentist: id => this.validateDentist(id),
+      planVisit: (dentistId, serviceIds, date) => this.planVisit(dentistId, serviceIds, date),
+    };
   }
 
   /**
@@ -2449,30 +2495,38 @@ export class AppointmentsService {
           fullName: true,
           phone: true,
           status: true,
+          appointmentId: true,
+          serviceId: true,
+          createdAt: true,
+          preferredDentistId: true,
+          proposedDentistId: true,
           requestedStartAt: true,
           proposedStartAt: true,
-          service: { select: { defaultDurationMin: true } },
         },
       })) ?? []
     );
   }
 
-  private formatBookingRequest(r: {
-    id: string;
-    referenceCode: string;
-    fullName: string;
-    phone: string;
-    status: BookingRequestStatus;
-    requestedStartAt: Date;
-    proposedStartAt: Date | null;
-  }) {
+  private formatBookingRequest(
+    r: {
+      id: string;
+      referenceCode: string;
+      fullName: string;
+      phone: string;
+      status: BookingRequestStatus;
+      requestedStartAt: Date;
+      proposedStartAt: Date | null;
+    },
+    issue: RequestIssue,
+  ) {
     return {
       id: r.id,
       referenceCode: r.referenceCode,
       fullName: r.fullName,
       phone: r.phone,
       status: r.status,
-      startAt: bookingRequestStartAt(r),
+      startAt: effectiveStartAt(r),
+      slotIssue: issue,
     };
   }
 
