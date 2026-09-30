@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,7 +22,20 @@ describe('EmployeesService', () => {
   const actor = createMockJwtPayload({
     sub: 'admin-1',
     email: 'admin@clinic.local',
-    permissions: ['employee.create', 'employee.update', 'employee.deactivate', 'dentist.create'],
+    permissions: [
+      'employee.create',
+      'employee.update',
+      'employee.deactivate',
+      'dentist.create',
+      'user.update',
+      'user.deactivate',
+    ],
+  });
+  // HR-only role: may manage employees but not login accounts.
+  const hr = createMockJwtPayload({
+    sub: 'hr-1',
+    email: 'hr@clinic.local',
+    permissions: ['employee.read', 'employee.update', 'employee.deactivate'],
   });
   const meta = { ipAddress: null, userAgent: null };
 
@@ -249,7 +263,7 @@ describe('EmployeesService', () => {
         },
       ]);
 
-      const rows = await service.linkableAccounts();
+      const rows = await service.linkableAccounts(actor);
 
       expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({
         deletedAt: null,
@@ -265,6 +279,52 @@ describe('EmployeesService', () => {
           roles: ['clinic_admin'],
         },
       ]);
+    });
+  });
+
+  describe('admin accounts and HR-only callers', () => {
+    it('hides admin / user-manager accounts from an HR-only caller', async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+
+      await service.linkableAccounts(hr);
+
+      const where = prisma.user.findMany.mock.calls[0][0].where;
+      expect(where.NOT.userRoles.some.role.OR[0]).toEqual({ code: 'clinic_admin' });
+    });
+
+    it('refuses an HR-only caller linking an admin account', async () => {
+      prisma.employee.findFirst.mockResolvedValue(employee());
+      prisma.user.findFirst.mockResolvedValue({ id: 'admin-1', deactivatedAt: null });
+      prisma.user.count.mockResolvedValue(1);
+
+      await expect(
+        service.linkAccount('emp-1', { userId: 'admin-1' }, hr, meta),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.employee.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses to reopen the login account without user.deactivate', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', employmentStatus: 'TERMINATED' }),
+      );
+
+      await expect(service.reinstate('emp-1', {}, hr, meta)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.employee.update).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('lets an HR-only caller reinstate the employee record alone', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', employmentStatus: 'TERMINATED' }),
+      );
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-9' }));
+
+      await service.reinstate('emp-1', { reactivateAccount: false }, hr, meta);
+
+      expect(prisma.employee.update).toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 

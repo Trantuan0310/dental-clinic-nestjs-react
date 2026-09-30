@@ -18,6 +18,7 @@ import {
 import { PageHeader } from '@/components/ui/PageHeader';
 import { notify } from '@/components/ui/Toast';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/lib/format';
 import { staffApi, useEmployees, useLinkableAccounts, useStaffMutation } from './staffApi';
 import { TemporaryPasswordDialog } from '@/features/admin/TemporaryPasswordDialog';
@@ -367,13 +368,15 @@ function ReinstateForm({
   onSubmit: (payload: { reason?: string; reactivateAccount: boolean }) => void;
 }) {
   const [reason, setReason] = useState('');
-  const [reactivateAccount, setReactivateAccount] = useState(true);
+  // Reopening a login (old password, old roles) is a user-management right.
+  const canReactivate = useAuthStore((s) => s.hasPermission('user.deactivate'));
+  const [reactivateAccount, setReactivateAccount] = useState(canReactivate);
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ reason: reason.trim() || undefined, reactivateAccount });
+        onSubmit({ reason: reason.trim() || undefined, reactivateAccount: canReactivate && reactivateAccount });
       }}
     >
       <p className="text-sm text-gray-600 dark:text-surface-300">
@@ -381,13 +384,19 @@ function ReinstateForm({
         {employee.dentistProfile &&
           ' Hồ sơ bác sĩ vẫn “Ngừng hành nghề” cho đến khi bấm “Cho hành nghề lại” ở trang bác sĩ (kiểm tra lịch làm việc và dịch vụ trước).'}
       </p>
-      {employee.account && (
-        <Checkbox
-          checked={reactivateAccount}
-          onChange={setReactivateAccount}
-          label={`Kích hoạt lại tài khoản đăng nhập ${employee.account.email}`}
-        />
-      )}
+      {employee.account &&
+        (canReactivate ? (
+          <Checkbox
+            checked={reactivateAccount}
+            onChange={setReactivateAccount}
+            label={`Kích hoạt lại tài khoản đăng nhập ${employee.account.email}`}
+          />
+        ) : (
+          <p className="text-sm text-amber-700">
+            Tài khoản {employee.account.email} vẫn bị vô hiệu hóa; nhờ quản trị viên kích hoạt lại ở
+            trang Người dùng.
+          </p>
+        ))}
       <Textarea
         label="Lý do (không bắt buộc)"
         maxLength={500}

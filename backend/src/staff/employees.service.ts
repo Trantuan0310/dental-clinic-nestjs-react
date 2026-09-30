@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { EmployeeType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -31,6 +31,32 @@ import {
 } from './staff-rules';
 import { EmailAlreadyExistsException } from '../common/exceptions/business-rule.exception';
 import { normalizeEmail } from '../common/email.util';
+
+/**
+ * Accounts only a user manager may link from the HR screen: clinic admins and
+ * anyone who can manage users or roles (linking renames the account).
+ */
+const PRIVILEGED_ACCOUNT: Prisma.UserWhereInput = {
+  userRoles: {
+    some: {
+      role: {
+        OR: [
+          { code: 'clinic_admin' },
+          {
+            rolePermissions: {
+              some: {
+                permission: {
+                  OR: [{ code: { startsWith: 'user.' } }, { code: { startsWith: 'role.' } }],
+                  NOT: { code: { endsWith: '.read' } },
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  },
+};
 
 /** Default role for an account created from the HR screen, by employee type. */
 const ROLE_FOR_TYPE: Partial<Record<EmployeeType, string>> = {
@@ -264,6 +290,14 @@ export class EmployeesService {
           'Tài khoản này đã bị vô hiệu hóa; kích hoạt lại ở trang Người dùng trước khi gắn',
         );
       }
+      if (
+        !actor.permissions.includes('user.update') &&
+        (await this.prisma.user.count({ where: { id: userId, ...PRIVILEGED_ACCOUNT } })) > 0
+      ) {
+        throw new ForbiddenException(
+          'Tài khoản quản trị chỉ gắn được bởi người có quyền quản lý người dùng',
+        );
+      }
       await this.assertAccountFree(userId);
     } else {
       const roleCode = ROLE_FOR_TYPE[current.employeeType];
@@ -313,9 +347,15 @@ export class EmployeesService {
   }
 
   /** Accounts that can be linked to an employee: not deactivated, not linked yet. */
-  async linkableAccounts() {
+  async linkableAccounts(actor: JwtPayload) {
     const rows = await this.prisma.user.findMany({
-      where: { deletedAt: null, deactivatedAt: null, employees: { none: { deletedAt: null } } },
+      where: {
+        deletedAt: null,
+        deactivatedAt: null,
+        employees: { none: { deletedAt: null } },
+        // Admin accounts are for user managers to link (linkAccount checks too).
+        ...(actor.permissions.includes('user.update') ? {} : { NOT: PRIVILEGED_ACCOUNT }),
+      },
       select: {
         id: true,
         email: true,
@@ -342,6 +382,15 @@ export class EmployeesService {
     }
     const userId = current.userId;
     const reactivateAccount = dto.reactivateAccount !== false && Boolean(userId);
+    // Reopening the login brings back its old password and roles (possibly
+    // admin): that is a user-management act, not an HR one. Refuse outright
+    // rather than silently reinstating only half.
+    if (reactivateAccount && !actor.permissions.includes('user.deactivate')) {
+      throw new ForbiddenException(
+        'Kích hoạt lại tài khoản đăng nhập cần quyền quản lý người dùng (user.deactivate). ' +
+          'Bỏ chọn "Kích hoạt lại tài khoản" để chỉ khôi phục hồ sơ nhân viên.',
+      );
+    }
 
     let accountReactivated = false;
     const updated = await this.prisma.$transaction(async tx => {
@@ -352,7 +401,7 @@ export class EmployeesService {
           // have gone to someone else meanwhile.
           const taken = await tx.user.findFirst({
             where: {
-              email: normalizeEmail(user.email),
+              email: { equals: normalizeEmail(user.email), mode: 'insensitive' },
               id: { not: userId },
               deactivatedAt: null,
               deletedAt: null,

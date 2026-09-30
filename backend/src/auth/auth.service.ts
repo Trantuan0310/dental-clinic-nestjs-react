@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -16,7 +17,7 @@ import {
 } from '../common/exceptions/auth.exception';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../common/services/email.service';
-import { normalizeEmail } from '../common/email.util';
+import { findActiveUserByEmail, normalizeEmail } from '../common/email.util';
 
 export interface LoginResponse {
   accessToken: string;
@@ -235,22 +236,24 @@ export class AuthService {
     // deletedAt both null), so a deactivated user's freed-up email can't
     // shadow the new active account that reused it (findFirst with no
     // orderBy gives no guarantee which row comes back otherwise).
-    const user = await this.prisma.user.findFirst({
-      where: { email, deactivatedAt: null, deletedAt: null },
-      include: {
-        userRoles: {
-          include: {
-            role: {
-              include: {
-                rolePermissions: {
-                  include: { permission: true },
-                },
+    const include = {
+      userRoles: {
+        include: {
+          role: {
+            include: {
+              rolePermissions: {
+                include: { permission: true },
               },
             },
           },
         },
       },
-    });
+    } satisfies Prisma.UserInclude;
+    const user = await findActiveUserByEmail(
+      email,
+      where => this.prisma.user.findFirst({ where, include }),
+      where => this.prisma.user.findMany({ where, include, take: 5 }),
+    );
 
     if (!user) {
       // Run a dummy argon2 verify so this branch takes roughly the same time
@@ -507,9 +510,11 @@ export class AuthService {
     // whose email was reused by a new active account could receive the
     // reset token meant for that new account instead (or vice versa),
     // depending on which row findFirst happens to return.
-    const user = await this.prisma.user.findFirst({
-      where: { email: normalizedEmail, deactivatedAt: null, deletedAt: null },
-    });
+    const user = await findActiveUserByEmail(
+      normalizedEmail,
+      where => this.prisma.user.findFirst({ where }),
+      where => this.prisma.user.findMany({ where, take: 5 }),
+    );
 
     if (!user) {
       this.logger.debug(`Forgot password requested for non-existent email: ${email}`);

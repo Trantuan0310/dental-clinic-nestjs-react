@@ -121,6 +121,44 @@ describe('AuthService', () => {
       );
     });
 
+    it('falls back to a single case-insensitive match (mixed-case row left by migration 037)', async () => {
+      const user = buildUserWithRoles({ email: 'BS.An@clinic.vn' });
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([user]);
+      (prisma.user.update as jest.Mock).mockResolvedValue(user);
+      (prisma.refreshToken.create as jest.Mock).mockResolvedValue(validRefreshToken());
+
+      const result = await service.login(
+        { email: 'bs.an@clinic.vn', password: 'GoodPass123!' },
+        null,
+        null,
+      );
+
+      expect(result.user.id).toBe(user.id);
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            email: { equals: 'bs.an@clinic.vn', mode: 'insensitive' },
+            deactivatedAt: null,
+            deletedAt: null,
+          },
+        }),
+      );
+    });
+
+    it('treats two case-insensitive matches as unknown (generic error, nothing leaked)', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        buildUserWithRoles({ id: 'a', email: 'BS.An@clinic.vn' }),
+        buildUserWithRoles({ id: 'b', email: 'bs.AN@clinic.vn' }),
+      ]);
+
+      await expect(
+        service.login({ email: 'bs.an@clinic.vn', password: 'x' }, null, null),
+      ).rejects.toThrow(InvalidCredentialsException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
     it('throws InvalidCredentialsException when user not found', async () => {
       (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 

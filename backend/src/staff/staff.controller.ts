@@ -55,8 +55,8 @@ export class EmployeesController {
   @Get('linkable-accounts')
   @RequirePermissions('employee.update')
   @ApiOperation({ summary: 'Accounts not linked to any employee yet (for linking)' })
-  async linkableAccounts() {
-    return { data: await this.employees.linkableAccounts() };
+  async linkableAccounts(@User() actor: JwtPayload) {
+    return { data: await this.employees.linkableAccounts(actor) };
   }
 
   @Post()
