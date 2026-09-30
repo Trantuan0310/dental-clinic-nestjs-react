@@ -266,7 +266,14 @@ export class DispatchService {
       );
       const moved = await tx.appointment.updateMany({
         where: { id: appt.id, status: AppointmentStatus.CHECKED_IN, dentistId: entry.dentistId },
-        data: { dentistId: dto.dentistId, startAt: start, endAt: end, updatedBy: actor.sub },
+        // A new reminder only matters for a later visit; cleared like a reschedule.
+        data: {
+          dentistId: dto.dentistId,
+          startAt: start,
+          endAt: end,
+          reminderSentAt: null,
+          updatedBy: actor.sub,
+        },
       });
       if (moved.count === 0) {
         throw queueError(STALE_APPOINTMENT_MSG, 'QUEUE_STALE');
@@ -392,7 +399,8 @@ export class DispatchService {
               endAt: appt.endAt,
               rescheduleCount: appt.rescheduleCount,
             },
-            data: { dentistId: dto.toDentistId, updatedBy: actor.sub },
+            // The reminder names the dentist: the new one gets its own.
+            data: { dentistId: dto.toDentistId, reminderSentAt: null, updatedBy: actor.sub },
           });
           if (res.count === 0) throw new Error(STALE_APPOINTMENT_MSG);
           await tx.appointmentRescheduleLog.create({

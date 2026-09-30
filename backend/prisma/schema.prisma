@@ -474,6 +474,9 @@ model Appointment {
   leftReason             String?   @map("left_reason")
   lastRescheduleAt  DateTime?           @map("last_reschedule_at") @db.Timestamptz()
   // Migration 041: the day-before email reminder went out (reset on a move).
+  // Partial index appointments_reminder_due_idx (start_at WHERE
+  // reminder_sent_at IS NULL, not deleted, SCHEDULED/CONFIRMED) is managed
+  // by migration 041 only.
   reminderSentAt    DateTime?           @map("reminder_sent_at") @db.Timestamptz()
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()

@@ -125,6 +125,8 @@ const money = new Intl.NumberFormat('vi-VN');
 const formatPrice = (p: PublicPrice) => {
   if (p.isFree) return 'Miễn phí';
   if (p.price === null || !Number.isFinite(p.price)) return 'Liên hệ';
+  // Free with some dentists, paid with others (price 0, "from").
+  if (p.price === 0 && p.priceFrom) return 'Miễn phí (tùy bác sĩ)';
   return `${p.priceFrom ? 'từ ' : ''}${money.format(p.price)} đ`;
 };
 

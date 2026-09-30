@@ -54,7 +54,8 @@ describe('DispatchService.reassignDay — guarded move (race with a reschedule)'
         endAt: booking.endAt,
         rescheduleCount: 2,
       },
-      data: expect.objectContaining({ dentistId: 'dentist-2' }),
+      // The reminder names the dentist: the new one gets its own.
+      data: expect.objectContaining({ dentistId: 'dentist-2', reminderSentAt: null }),
     });
     expect(res.moved.map(m => m.appointmentId)).toEqual(['appt-1']);
   });

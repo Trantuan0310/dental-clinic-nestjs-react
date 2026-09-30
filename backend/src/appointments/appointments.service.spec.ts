@@ -2015,6 +2015,8 @@ describe('AppointmentsService', () => {
             status: AppointmentStatus.SCHEDULED,
             confirmedAt: null,
             confirmedBy: null,
+            // The day-before reminder was for the old time.
+            reminderSentAt: null,
           }),
         }),
       );

@@ -33,6 +33,8 @@ type RequestRow = {
   } | null;
   /** Why an open request can no longer be confirmed as it stands (server check). */
   slotIssue?: { kind: string; message: string } | null;
+  /** Open requests made with this phone (the public form refuses it at 3). */
+  openFromPhone?: number;
 };
 type PatientMatch = {
   id: string;
@@ -108,6 +110,23 @@ function SlotIssueBadge({ issue }: { issue?: RequestRow["slotIssue"] }) {
       {issue.kind === "SLOT_CONFLICT"
         ? "Giờ này đã có lịch khác"
         : "Bác sĩ/khung giờ không còn nhận lịch"}
+    </span>
+  );
+}
+/** Open requests at which the public form refuses a phone (backend MAX_OPEN_PER_PHONE). */
+const MAX_OPEN_PER_PHONE = 3;
+/**
+ * A phone at the online limit: its owner cannot book online until some of
+ * these are handled; possibly someone else used the number to block it.
+ */
+function PhoneLimitBadge({ count, phone }: { count?: number; phone: string }) {
+  if (!count || count < MAX_OPEN_PER_PHONE) return null;
+  return (
+    <span
+      title={`SĐT ${phone} đang có ${count} yêu cầu mở nên không đặt thêm trực tuyến được. Nếu khách không gửi các yêu cầu này, hãy từ chối những yêu cầu lạ.`}
+      className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800"
+    >
+      SĐT có {count} yêu cầu mở
     </span>
   );
 }
@@ -379,6 +398,7 @@ export default function BookingRequestsPage() {
                     {stateLabel[row.status] ?? row.status}
                     <UrgencyBadge kind={urgency(row, now)} />
                     <SlotIssueBadge issue={row.slotIssue} />
+                    <PhoneLimitBadge count={row.openFromPhone} phone={row.phone} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button

@@ -12,3 +12,9 @@ CREATE INDEX IF NOT EXISTS appointments_reminder_due_idx
   ON appointments (start_at)
   WHERE reminder_sent_at IS NULL AND deleted_at IS NULL
     AND status IN ('SCHEDULED', 'CONFIRMED');
+
+-- First deploy: visits already booked count as reminded, so the first
+-- hourly run does not email a backlog. Reminders start with visits booked
+-- (or moved) from now on.
+UPDATE appointments SET reminder_sent_at = now()
+ WHERE reminder_sent_at IS NULL AND start_at > now();

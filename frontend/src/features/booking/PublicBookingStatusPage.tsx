@@ -154,6 +154,8 @@ const stateOf = (s: Status) => {
   return { visit, state };
 };
 const ACTIVE = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
+/** Requests that can no longer change (confirmed, declined, withdrawn, expired). */
+const CLOSED = ["CONFIRMED", "DECLINED", "CANCELLED", "EXPIRED"];
 /**
  * An open request whose time has passed (the server says so, by its clock)
  * is shown as EXPIRED straight away; the server closes it within minutes.
@@ -396,11 +398,16 @@ export default function PublicBookingStatusPage() {
         { headers: headers(a) },
       );
       const data = response.data.data;
+      // A closed request cannot be changed any more: its token is not kept
+      // on this device (the phone still shows the status).
+      const kept = CLOSED.includes(data.status) ? { phone: a.phone, token: undefined } : a;
       setStatus(data);
       setAccess(a);
-      saveBooking({ ref: data.referenceCode ?? ref, ...a });
+      saveBooking({ ref: data.referenceCode ?? ref, ...kept });
       return true;
     } catch (e: unknown) {
+      // A link replaced by a newer email: still show the status by phone.
+      if (a.token && a.phone) return open(ref, { phone: a.phone }, quiet);
       if (!quiet) setError(bookingErrorMessage(e, "Mã đặt lịch hoặc số điện thoại không đúng."));
       return false;
     } finally {
@@ -471,6 +478,10 @@ export default function PublicBookingStatusPage() {
     try {
       const result = await request();
       setStatus((old) => ({ ...old, ...result.data.data }) as Status);
+      // Withdrawn: nothing left to change, so the token is not kept.
+      const ref = result.data.data.referenceCode ?? status?.referenceCode;
+      if (ref && CLOSED.includes(result.data.data.status))
+        saveBooking({ ref, phone: access?.phone, token: undefined });
     } catch (e: unknown) {
       setError(bookingErrorMessage(e, fallback));
     } finally {
