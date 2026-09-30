@@ -106,6 +106,30 @@ export class MedicalRecordsService {
   }
 
   /**
+   * An entry in the appointment's own history (BR-APPT-034), which front
+   * desk reads too: no clinical content, only ids. Written in `tx` so it
+   * rolls back with the change it records.
+   */
+  private appointmentHistory(
+    tx: Prisma.TransactionClient,
+    actor: JwtPayload,
+    appointmentId: string,
+    action: string,
+    metadata: Prisma.InputJsonObject,
+  ) {
+    return tx.auditLog.create({
+      data: {
+        action,
+        actorUserId: actor.sub,
+        actorEmailAtTime: actor.email ?? null,
+        targetType: 'appointment',
+        targetId: appointmentId,
+        metadata,
+      },
+    });
+  }
+
+  /**
    * The front-desk variant used by startEncounterForAppointment and
    * listEncounters (see above): only a caller who holds encounter.read.own
    * and not .any is limited to their own encounters, so a role with neither
@@ -227,20 +251,28 @@ export class MedicalRecordsService {
         await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
         opened = true;
       }
-      if (!existing) {
-        const created = await tx.encounter.create({
-          data: {
-            appointmentId: appt.id,
-            patientId: appt.patientId,
-            dentistId: appt.dentistId,
-            status: EncounterStatus.IN_PROGRESS,
-            startedAt: new Date(),
-          },
+      const encounterId =
+        existing?.id ??
+        (
+          await tx.encounter.create({
+            data: {
+              appointmentId: appt.id,
+              patientId: appt.patientId,
+              dentistId: appt.dentistId,
+              status: EncounterStatus.IN_PROGRESS,
+              startedAt: new Date(),
+            },
+          })
+        ).id;
+      if (!existing) opened = true;
+      // BR-APPT-034: the exam start is part of the visit's history.
+      if (current.status === 'CHECKED_IN') {
+        await this.appointmentHistory(tx, actor, appointmentId, 'APPOINTMENT_EXAM_STARTED', {
+          encounterId,
+          ...(existing?.status === EncounterStatus.CANCELLED ? { restarted: true } : {}),
         });
-        opened = true;
-        return { encounterId: created.id };
       }
-      return { encounterId: existing.id };
+      return { encounterId };
     });
     if (opened) this.emitClinicalDataChanged(appt.patientId);
     return result;
@@ -612,6 +644,9 @@ export class MedicalRecordsService {
           where: { id: encounter.appointmentId },
           data: { status: 'COMPLETED', updatedBy: actor.sub },
         });
+        await this.appointmentHistory(tx, actor, encounter.appointmentId, 'APPOINTMENT_COMPLETED', {
+          encounterId,
+        });
 
         // Encounter audit row
         await tx.encounterAudit.create({
@@ -765,6 +800,15 @@ export class MedicalRecordsService {
       if (backToQueue.count > 0) {
         appointmentStatus = 'CHECKED_IN';
         await reopenStartedQueueEntry(tx, encounter.appointmentId, actor.sub);
+        // The cancel reason stays on the encounter (clinical); the visit's
+        // history, read by front desk, only says it went back to the queue.
+        await this.appointmentHistory(
+          tx,
+          actor,
+          encounter.appointmentId,
+          'APPOINTMENT_RETURNED_TO_QUEUE',
+          { encounterId },
+        );
       } else {
         const left = await tx.appointment.updateMany({
           where: {
@@ -782,6 +826,10 @@ export class MedicalRecordsService {
         if (left.count > 0) {
           appointmentStatus = 'LEFT';
           await closeQueueEntry(tx, encounter.appointmentId, 'LEFT', actor.sub);
+          await this.appointmentHistory(tx, actor, encounter.appointmentId, 'APPOINTMENT_LEFT', {
+            reason: PAST_DAY_ENCOUNTER_CANCELLED_REASON,
+            encounterId,
+          });
         }
       }
       await tx.encounterAudit.create({

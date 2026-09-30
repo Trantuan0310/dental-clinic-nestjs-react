@@ -76,23 +76,31 @@ import {
   CreateWalkInDto,
   DecideTimeOffDto,
   MarkLeftDto,
+  StatusReasonDto,
   ListScheduleOverridesQueryDto,
   ListTimeOffsQueryDto,
   ScheduleImpactQueryDto,
 } from './dto/appointment.dto';
-import { closeQueueEntry, enqueue } from './domain/queue';
+import { closeQueueEntry, enqueue, LATE_AFTER_MIN } from './domain/queue';
 import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
 import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
 import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
-// Auto no-show (BR-APPT-012) fires only once BOTH the check-in window has
-// closed AND the booked slot has ended: a patient arriving inside the window
-// (e.g. +20 min) checks in normally, and one arriving later but while their
-// slot is still running can be force-checked-in with a reason (BR-APPT-007)
-// instead of already being NO_SHOW.
-const NO_SHOW_GRACE_MIN = CHECKIN_WINDOW_AFTER_MIN;
+/**
+ * Auto no-show (BR-APPT-012) waits this long after BOTH the check-in window
+ * has closed and the booked slot has ended, i.e. it fires at
+ * max(startAt + 30', endAt) + this. A 9:00–9:30 visit is marked at 10:30, so
+ * a patient arriving at 9:35 is still SCHEDULED and is checked in late
+ * (with a reason). Even once marked, a late check-in or an undo is still
+ * possible the same clinic day. Override with APPT_AUTO_NO_SHOW_GRACE_MIN.
+ */
+export const AUTO_NO_SHOW_GRACE_MIN = positiveIntEnv('APPT_AUTO_NO_SHOW_GRACE_MIN', 60);
+/** Manual no-show opens with the "Quá giờ" label (queue LATE_AFTER_MIN). */
+const MANUAL_NO_SHOW_AFTER_MIN = LATE_AFTER_MIN;
+/** Minimum length of the reason for a late check-in or an undo. */
+const STATUS_REASON_MIN_LENGTH = 5;
 const LATE_CANCEL_REASON_MIN_LENGTH = 5;
 /** Reason recorded when the end-of-day job closes a check-in left open. */
 export const END_OF_DAY_LEFT_REASON = 'Hệ thống đóng cuối ngày';
@@ -111,6 +119,14 @@ const STATUS_LABEL: Record<AppointmentStatus, string> = {
 };
 
 const blankToNull = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
+
+function positiveIntEnv(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+/** Audit action of an undone no-show; the cron then waits for the day's end. */
+export const NO_SHOW_REVERTED_ACTION = 'APPOINTMENT_NO_SHOW_REVERTED';
 
 /** Statuses that still hold a slot on the calendar. */
 const ACTIVE_APPOINTMENT_EXCLUDED_STATUSES: AppointmentStatus[] = [
@@ -364,6 +380,12 @@ export class AppointmentsService {
     return updated;
   }
 
+  /**
+   * BR-APPT-007. Inside the window (-15'..+30') a plain check-in; after it,
+   * the same clinic day, a late check-in with a reason — also from NO_SHOW
+   * (marked by the cron or by hand), provided the slot is still free since
+   * a no-show released it. A later day can no longer be checked in.
+   */
   async checkIn(
     appointmentId: string,
     override: boolean,
@@ -371,6 +393,10 @@ export class AppointmentsService {
     actor: JwtPayload,
   ) {
     const appt = await this.requireAppointment(appointmentId);
+    // Row-level, as confirm/markNoShow: a dentist acts on their own calendar only.
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
 
     const now = Date.now();
     const start = appt.startAt.getTime();
@@ -378,9 +404,11 @@ export class AppointmentsService {
     const windowEnd = start + CHECKIN_WINDOW_AFTER_MIN * 60_000;
 
     if (appt.status === AppointmentStatus.CHECKED_IN) return appt;
+    const fromNoShow = appt.status === AppointmentStatus.NO_SHOW;
     if (
       appt.status !== AppointmentStatus.SCHEDULED &&
-      appt.status !== AppointmentStatus.CONFIRMED
+      appt.status !== AppointmentStatus.CONFIRMED &&
+      !fromNoShow
     ) {
       throw new InvalidAppointmentStateException(
         `Không thể check-in lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
@@ -392,18 +420,31 @@ export class AppointmentsService {
         `Chưa đến giờ check-in — mở từ ${this.toClinicTimeString(new Date(windowStart))} ngày ${clinicDateOnly(new Date(windowStart))}`,
       );
     }
-    if (now > windowEnd && !override) {
+    const late = fromNoShow || now > windowEnd;
+    if (late && !this.isClinicToday(appt.startAt, now)) {
       throw new CheckInExpiredException(
-        `Now is ${new Date(now).toISOString()}, slot started at ${appt.startAt.toISOString()}`,
+        `Lịch hẹn ngày ${this.viDate(new Date(clinicDateOnly(appt.startAt)))} đã qua — không thể check-in. Hãy đặt lịch mới cho bệnh nhân.`,
+        [],
+      );
+    }
+    if (late && !override) {
+      // Only exits that will be accepted: cancel is refused after the start
+      // (BR-APPT-010), and a NO_SHOW visit is already marked absent.
+      throw new CheckInExpiredException(
+        fromNoShow
+          ? 'Lịch đã bị đánh vắng mặt — check-in muộn cần lý do'
+          : `Đã quá ${CHECKIN_WINDOW_AFTER_MIN} phút sau giờ hẹn — check-in muộn cần lý do`,
         [
-          { code: 'no_show', label: 'Mark no-show' },
-          { code: 'still_check_in', label: 'Force check-in (reason required)' },
-          { code: 'cancel', label: 'Cancel appointment' },
+          { code: 'still_check_in', label: 'Check-in muộn (cần lý do)' },
+          ...(fromNoShow ? [] : [{ code: 'no_show', label: 'Đánh vắng mặt' }]),
         ],
       );
     }
-    if (override && (!overrideReason || overrideReason.length < 5)) {
-      throw new CheckInWindowException('Check-in muộn cần lý do (ít nhất 5 ký tự)');
+    const reason = overrideReason?.trim() ?? '';
+    if (override && reason.length < STATUS_REASON_MIN_LENGTH) {
+      throw new CheckInWindowException(
+        `Check-in muộn cần lý do (ít nhất ${STATUS_REASON_MIN_LENGTH} ký tự)`,
+      );
     }
 
     // BR-APPT-008: active patient
@@ -421,15 +462,20 @@ export class AppointmentsService {
     // physically in the waiting room). Same guarded-updateMany pattern as
     // inventory stock writes and shift-registration approve/reject/cancel.
     const updated = await this.prisma.$transaction(async tx => {
-      const checkInResult = await tx.appointment.updateMany({
-        where: this.unchangedSince(appt),
-        data: {
-          status: AppointmentStatus.CHECKED_IN,
-          checkedInAt: new Date(now),
-          checkedInBy: actor.sub,
-          updatedBy: actor.sub,
-        },
-      });
+      if (fromNoShow) await this.assertSlotStillFree(tx, appt, actor);
+      const checkInResult = await this.slotSafe(() =>
+        tx.appointment.updateMany({
+          where: this.unchangedSince(appt),
+          data: {
+            status: AppointmentStatus.CHECKED_IN,
+            checkedInAt: new Date(now),
+            checkedInBy: actor.sub,
+            updatedBy: actor.sub,
+            // The no-show reason lives on in the audit trail.
+            ...(fromNoShow ? { noShowAt: null, cancelledReason: null } : {}),
+          },
+        }),
+      );
       if (checkInResult.count === 0) {
         throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
@@ -446,10 +492,76 @@ export class AppointmentsService {
       actorEmail: actor.email,
       targetType: 'appointment',
       targetId: appointmentId,
-      metadata: override ? { override: true, overrideReason } : undefined,
+      metadata: override
+        ? {
+            override: true,
+            overrideReason: reason,
+            ...(fromNoShow
+              ? { fromStatus: AppointmentStatus.NO_SHOW, noShowReason: appt.cancelledReason }
+              : {}),
+          }
+        : undefined,
     });
 
     return updated;
+  }
+
+  /**
+   * Undo a check-in made by mistake (wrong patient, too early): back to
+   * SCHEDULED/CONFIRMED as before, its queue entry closed. Only on the
+   * visit's clinic day, for a booked visit whose exam never started (no
+   * encounter); a patient who walked out is "Đã về" (markLeft), not an undo.
+   */
+  async undoCheckIn(appointmentId: string, dto: StatusReasonDto, actor: JwtPayload) {
+    const appt = await this.requireAppointment(appointmentId);
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
+    const reason = this.statusReason(dto.reason, 'Hoàn tác check-in');
+    if (appt.status !== AppointmentStatus.CHECKED_IN) {
+      throw new InvalidAppointmentStateException(
+        appt.status === AppointmentStatus.IN_PROGRESS
+          ? 'Bệnh nhân đã vào khám — không thể hoàn tác check-in'
+          : `Chỉ hoàn tác được lịch đã check-in (lịch đang ở trạng thái "${STATUS_LABEL[appt.status]}")`,
+      );
+    }
+    if (appt.visitKind === 'WALK_IN') {
+      throw new InvalidAppointmentStateException(
+        'Khách vãng lai không có lịch hẹn trước để quay về — nếu khách rời đi, hãy ghi nhận "Đã về"',
+      );
+    }
+    if (!this.isClinicToday(appt.startAt)) {
+      throw new InvalidAppointmentStateException('Chỉ hoàn tác check-in trong ngày hẹn');
+    }
+    const restored = this.bookedStatus(appt);
+
+    return this.prisma.$transaction(async tx => {
+      // Serialises with startEncounter, which locks the same row first.
+      await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
+      const encounter = await tx.encounter.findUnique({
+        where: { appointmentId },
+        select: { id: true },
+      });
+      if (encounter) {
+        throw new InvalidAppointmentStateException(
+          'Lượt khám đã từng được mở — không thể hoàn tác check-in; nếu bệnh nhân về, hãy ghi nhận "Đã về"',
+        );
+      }
+      const res = await tx.appointment.updateMany({
+        where: this.unchangedSince(appt),
+        data: { status: restored, checkedInAt: null, checkedInBy: null, updatedBy: actor.sub },
+      });
+      if (res.count === 0) {
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
+      }
+      await closeQueueEntry(tx, appointmentId, 'CANCELLED', actor.sub);
+      await this.auditInTx(tx, actor, appointmentId, 'APPOINTMENT_CHECKIN_UNDONE', {
+        reason,
+        restoredStatus: restored,
+        checkedInAt: appt.checkedInAt?.toISOString() ?? null,
+      });
+      return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+    });
   }
 
   /** Transition the appointment and create its encounter atomically (BR-MR-001). */
@@ -506,6 +618,13 @@ export class AppointmentsService {
           },
         }));
       if (!existing) openedFor = appt.patientId;
+      // BR-APPT-034: the exam start is part of the visit's history.
+      if (appt.status === AppointmentStatus.CHECKED_IN) {
+        await this.auditInTx(tx, actor, appointmentId, 'APPOINTMENT_EXAM_STARTED', {
+          encounterId: encounter.id,
+          ...(existing?.status === EncounterStatus.CANCELLED ? { restarted: true } : {}),
+        });
+      }
 
       return { ...updated, encounter: { id: encounter.id } };
     });
@@ -677,11 +796,18 @@ export class AppointmentsService {
         'Chưa đến giờ hẹn, hãy dùng Hủy lịch nếu khách báo không đến',
       );
     }
+    // Not before the visit shows "Quá giờ" (+15'): the patient may be on the way.
+    const latestStart = new Date(now.getTime() - MANUAL_NO_SHOW_AFTER_MIN * 60_000);
+    if (appt.startAt > latestStart) {
+      throw new InvalidAppointmentStateException(
+        `Chỉ đánh vắng mặt khi đã quá giờ hẹn ${MANUAL_NO_SHOW_AFTER_MIN} phút — bệnh nhân có thể đang đến`,
+      );
+    }
 
     // See checkIn() above — same guarded-write race protection; the time
     // filter also covers a concurrent reschedule to a later start.
     const noShowResult = await this.prisma.appointment.updateMany({
-      where: { id: appointmentId, status: appt.status, startAt: { lte: now } },
+      where: { id: appointmentId, status: appt.status, startAt: { lte: latestStart } },
       data: {
         status: AppointmentStatus.NO_SHOW,
         noShowAt: new Date(),
@@ -709,25 +835,90 @@ export class AppointmentsService {
   }
 
   /**
-   * Cron-driven bulk auto-no-show (BR-APPT-012). Idempotent.
+   * Undo a no-show (marked by hand or by the cron) on the visit's clinic
+   * day: the patient called or turned up. Back to SCHEDULED/CONFIRMED as
+   * before, provided the slot the no-show released is still free. The cron
+   * then leaves the visit alone until the day is over (autoMarkNoShow).
+   */
+  async undoNoShow(appointmentId: string, dto: StatusReasonDto, actor: JwtPayload) {
+    const appt = await this.requireAppointment(appointmentId);
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
+    const reason = this.statusReason(dto.reason, 'Hoàn tác vắng mặt');
+    if (appt.status !== AppointmentStatus.NO_SHOW) {
+      throw new InvalidAppointmentStateException(
+        `Chỉ hoàn tác được lịch đang vắng mặt (lịch đang ở trạng thái "${STATUS_LABEL[appt.status]}")`,
+      );
+    }
+    if (!this.isClinicToday(appt.startAt)) {
+      throw new InvalidAppointmentStateException('Chỉ hoàn tác vắng mặt trong ngày hẹn');
+    }
+    const restored = this.bookedStatus(appt);
+
+    return this.prisma.$transaction(async tx => {
+      await this.assertSlotStillFree(tx, appt, actor);
+      const res = await this.slotSafe(() =>
+        tx.appointment.updateMany({
+          where: this.unchangedSince(appt),
+          data: { status: restored, noShowAt: null, cancelledReason: null, updatedBy: actor.sub },
+        }),
+      );
+      if (res.count === 0) {
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
+      }
+      await this.auditInTx(tx, actor, appointmentId, NO_SHOW_REVERTED_ACTION, {
+        reason,
+        restoredStatus: restored,
+        noShowReason: appt.cancelledReason,
+        noShowAt: appt.noShowAt?.toISOString() ?? null,
+      });
+      return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+    });
+  }
+
+  /**
+   * Cron-driven bulk auto-no-show (BR-APPT-012). Idempotent. Due once
+   * now > max(startAt + check-in window, endAt) + AUTO_NO_SHOW_GRACE_MIN; a
+   * visit whose no-show was undone waits until its clinic day is over.
    */
   async autoMarkNoShow() {
     const now = new Date();
-    const cutoff = new Date(now.getTime() - NO_SHOW_GRACE_MIN * 60_000);
+    const graceMs = AUTO_NO_SHOW_GRACE_MIN * 60_000;
+    const cutoff = new Date(now.getTime() - CHECKIN_WINDOW_AFTER_MIN * 60_000 - graceMs);
+    const endCutoff = new Date(now.getTime() - graceMs);
 
     const due: Prisma.AppointmentWhereInput = {
       status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-      // now > max(startAt + grace, endAt)
+      // now > max(startAt + window, endAt) + grace
       startAt: { lt: cutoff },
-      endAt: { lt: now },
+      endAt: { lt: endCutoff },
       deletedAt: null,
     };
     // The ids are read first so each appointment gets its own history entry
     // (BR-APPT-034). The write re-states the whole filter, so a check-in that
     // lands between the two queries is not overwritten with NO_SHOW.
-    const candidates = await this.prisma.appointment.findMany({ where: due, select: { id: true } });
+    const candidates = await this.prisma.appointment.findMany({
+      where: due,
+      select: { id: true, startAt: true },
+    });
     if (candidates.length === 0) return { updated: 0 };
-    const ids = candidates.map(a => a.id);
+    const reverted = new Set(
+      (
+        await this.prisma.auditLog.findMany({
+          where: {
+            action: NO_SHOW_REVERTED_ACTION,
+            targetId: { in: candidates.map(a => a.id) },
+          },
+          select: { targetId: true },
+        })
+      ).map(r => r.targetId),
+    );
+    const todayStart = startOfClinicDay(clinicDateOnly(now));
+    const ids = candidates
+      .filter(a => !reverted.has(a.id) || a.startAt < todayStart)
+      .map(a => a.id);
+    if (ids.length === 0) return { updated: 0 };
     const updated = await this.prisma.appointment.updateMany({
       where: { ...due, id: { in: ids } },
       data: {
@@ -755,7 +946,7 @@ export class AppointmentsService {
         actorUserId: null,
         targetType: 'appointment',
         targetId: id,
-        metadata: { cutoff: cutoff.toISOString() },
+        metadata: { cutoff: cutoff.toISOString(), graceMin: AUTO_NO_SHOW_GRACE_MIN },
       })),
     });
 
@@ -1088,7 +1279,7 @@ export class AppointmentsService {
 
     await this.audit.log({
       action: 'APPOINTMENT_UPDATED',
-      targetType: 'Appointment',
+      targetType: 'appointment',
       targetId: id,
       actorUserId: actor.sub,
       actorEmail: actor.email,
@@ -2971,6 +3162,9 @@ export class AppointmentsService {
    */
   async markLeft(appointmentId: string, dto: MarkLeftDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
     if (appt.status !== AppointmentStatus.CHECKED_IN) {
       throw new InvalidAppointmentStateException(
         `Chỉ ghi nhận "đã về" cho bệnh nhân đã check-in (lịch đang ở trạng thái "${STATUS_LABEL[appt.status]}")`,
@@ -3008,7 +3202,11 @@ export class AppointmentsService {
     await this.getById(appointmentId, actor); // 404 + row-level scope
     const [events, reschedules] = await Promise.all([
       this.prisma.auditLog.findMany({
-        where: { targetType: 'appointment', targetId: appointmentId },
+        // Case-insensitive: update() used to write 'Appointment' (rows kept on VPS).
+        where: {
+          targetType: { equals: 'appointment', mode: 'insensitive' },
+          targetId: appointmentId,
+        },
         orderBy: { occurredAt: 'asc' },
         select: { action: true, occurredAt: true, actorEmailAtTime: true, metadata: true },
       }),
@@ -3042,6 +3240,83 @@ export class AppointmentsService {
       dentistId: appt.dentistId,
       rescheduleCount: appt.rescheduleCount,
     };
+  }
+
+  /** True when `at` falls on the clinic day of `now`. */
+  private isClinicToday(at: Date, now = Date.now()): boolean {
+    return clinicDateOnly(at) === clinicDateOnly(new Date(now));
+  }
+
+  /** The booked status an undo returns to: confirmedAt is cleared on reschedule. */
+  private bookedStatus(appt: Appointment): AppointmentStatus {
+    return appt.confirmedAt ? AppointmentStatus.CONFIRMED : AppointmentStatus.SCHEDULED;
+  }
+
+  /** Trimmed reason, required for an undo. */
+  private statusReason(value: string | undefined, what: string): string {
+    const reason = value?.trim() ?? '';
+    if (reason.length < STATUS_REASON_MIN_LENGTH) {
+      throw new BadRequestException(
+        `${what} cần lý do (ít nhất ${STATUS_REASON_MIN_LENGTH} ký tự)`,
+      );
+    }
+    return reason;
+  }
+
+  /**
+   * A NO_SHOW visit gave its slot back; before it holds the slot again the
+   * dentist and the patient must still be free then (same locks and checks
+   * as a booking).
+   */
+  private async assertSlotStillFree(
+    tx: Prisma.TransactionClient,
+    appt: Appointment,
+    actor: JwtPayload,
+  ) {
+    await this.lockDentist(tx, appt.dentistId);
+    await this.lockPatient(tx, appt.patientId);
+    await this.ensureSlotAvailable(
+      appt.dentistId,
+      appt.startAt,
+      appt.endAt,
+      actor,
+      appt.id,
+      tx,
+      appt,
+    );
+    await this.ensurePatientFree(appt.patientId, appt.startAt, appt.endAt, appt.id, tx);
+  }
+
+  /** idx_appointments_slot_active (migration 017) as a slot conflict, not a 500. */
+  private async slotSafe<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new SlotConflictException();
+      }
+      throw e;
+    }
+  }
+
+  /** History entry written with the change it records (rolls back with it). */
+  private auditInTx(
+    tx: Prisma.TransactionClient,
+    actor: JwtPayload,
+    appointmentId: string,
+    action: string,
+    metadata: Prisma.InputJsonObject,
+  ) {
+    return tx.auditLog.create({
+      data: {
+        action,
+        actorUserId: actor.sub,
+        actorEmailAtTime: actor.email ?? null,
+        targetType: 'appointment',
+        targetId: appointmentId,
+        metadata,
+      },
+    });
   }
 
   private async requireAppointment(id: string) {

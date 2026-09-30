@@ -118,6 +118,15 @@ describe('MedicalRecordsService', () => {
 
       const result = await service.startEncounterForAppointment('appt-1', receptionist);
       expect(result.encounterId).toBe('enc-new');
+      // BR-APPT-034: the start is in the visit's history, in the same transaction.
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'APPOINTMENT_EXAM_STARTED',
+          targetType: 'appointment',
+          targetId: 'appt-1',
+          metadata: { encounterId: 'enc-new' },
+        }),
+      });
     });
 
     it('returns existing encounter if IN_PROGRESS (idempotent)', async () => {
@@ -457,6 +466,16 @@ describe('MedicalRecordsService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ENCOUNTER_CANCELLED' }),
       );
+      // The visit's history says it went back to the queue — without the
+      // (clinical) cancel reason, since front desk reads it.
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'APPOINTMENT_RETURNED_TO_QUEUE',
+          targetType: 'appointment',
+          targetId: 'appt-1',
+          metadata: { encounterId: 'enc-1' },
+        }),
+      });
     });
 
     it("closes an earlier day's appointment as LEFT instead of an orphan CHECKED_IN", async () => {
@@ -487,6 +506,13 @@ describe('MedicalRecordsService', () => {
           after: expect.objectContaining({ appointmentStatus: 'LEFT' }),
         }),
       });
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'APPOINTMENT_LEFT',
+          targetId: 'appt-1',
+          metadata: { reason: 'Hủy phiên khám của ngày trước', encounterId: 'enc-1' },
+        }),
+      });
     });
 
     it('leaves the queue alone when the appointment was not IN_PROGRESS', async () => {
@@ -494,6 +520,7 @@ describe('MedicalRecordsService', () => {
       await service.cancelEncounter('enc-1', 'Bắt đầu nhầm phiên khám', admin);
       expect(prisma.encounter.update).toHaveBeenCalled();
       expect(prisma.queueEntry.updateMany).not.toHaveBeenCalled();
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
     });
 
     it.each([undefined, '', 'ngắn', '   quá ngắn   '])(
@@ -548,6 +575,12 @@ describe('MedicalRecordsService', () => {
       });
       expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ action: 'REOPENED', encounterId: 'enc-1' }),
+      });
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'APPOINTMENT_EXAM_STARTED',
+          metadata: { encounterId: 'enc-1', restarted: true },
+        }),
       });
       // The AI summary's open-encounter count changed.
       expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
@@ -947,6 +980,15 @@ describe('MedicalRecordsService', () => {
         expect.stringContaining('encounter.closed'),
         expect.objectContaining({ encounterId: 'enc-1' }),
       );
+      // BR-APPT-034: completion is in the visit's history.
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'APPOINTMENT_COMPLETED',
+          targetType: 'appointment',
+          targetId: 'appt-1',
+          metadata: { encounterId: 'enc-1' },
+        }),
+      });
     });
 
     it('throws InsufficientStockException when stock updateMany returns count=0', async () => {
@@ -1072,7 +1114,12 @@ describe('MedicalRecordsService', () => {
         await service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor);
 
         expect(prisma.encounter.update).toHaveBeenCalled();
-        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+        // No new override entry; only the visit's history line.
+        expect(prisma.auditLog.create).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ action: 'PRESCRIPTION_ALLERGY_OVERRIDE' }),
+          }),
+        );
       });
 
       it('ignores an override recorded for another version of the same row (re-issued after soft delete, legacy rows without version)', async () => {

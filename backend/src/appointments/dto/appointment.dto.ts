@@ -143,6 +143,15 @@ export class MarkLeftDto {
   reason!: string;
 }
 
+/** Undo of a check-in or a no-show: the reason is kept in the history. */
+export class StatusReasonDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  reason!: string;
+}
+
 export class UpdateAppointmentDto {
   @ApiPropertyOptional()
   @IsOptional()

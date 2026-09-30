@@ -44,6 +44,7 @@ import {
   CreateScheduleOverrideDto,
   CreateWalkInDto,
   MarkLeftDto,
+  StatusReasonDto,
   DecideTimeOffDto,
   ListScheduleOverridesQueryDto,
   ListTimeOffsQueryDto,
@@ -443,6 +444,18 @@ export class AppointmentsController {
     };
   }
 
+  @Post(':id/undo-check-in')
+  @RequirePermissions('appointment.check_in')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Undo a check-in made by mistake, before the exam starts' })
+  async undoCheckIn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StatusReasonDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.undoCheckIn(id, dto, actor) };
+  }
+
   @Post(':id/start-encounter')
   // Starting (or restarting) the exam is the dentist's step (migration 027):
   // front desk checks the patient in, but appointment.check_in alone must
@@ -475,6 +488,18 @@ export class AppointmentsController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.appointments.markNoShow(id, dto, actor) };
+  }
+
+  @Post(':id/undo-no-show')
+  @RequirePermissions('appointment.no_show')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Undo a no-show on the visit day (back to scheduled/confirmed)' })
+  async undoNoShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StatusReasonDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.undoNoShow(id, dto, actor) };
   }
 
   @Post(':id/left')

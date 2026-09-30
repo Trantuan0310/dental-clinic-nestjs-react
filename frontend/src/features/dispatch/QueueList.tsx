@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import { AlertTriangle, ArrowRightLeft, BellRing, Clock, DoorOpen, Play, SkipForward } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, BellRing, Clock, DoorOpen, Play, SkipForward, Undo2 } from 'lucide-react';
 import { Badge, Button, Modal, Select, Textarea } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { useDentistOptions, useMarkLeft } from '@/features/appointments/appointmentApi';
+import {
+  useDentistOptions,
+  useMarkLeft,
+  useUndoAppointmentStatus,
+} from '@/features/appointments/appointmentApi';
 import {
   PRIORITY_LABEL,
   STATUS_LABEL,
@@ -24,7 +28,7 @@ const PRIORITY_VARIANT: Record<QueuePriority, 'danger' | 'success' | 'warning' |
 };
 
 type Dialog =
-  | { kind: 'skip' | 'emergency' | 'left'; entry: QueueEntry }
+  | { kind: 'skip' | 'emergency' | 'left' | 'undo'; entry: QueueEntry }
   | { kind: 'transfer'; entry: QueueEntry };
 
 const DIALOG_TEXT = {
@@ -48,6 +52,14 @@ const DIALOG_TEXT = {
     min: 5,
     confirm: 'Xác nhận đã về',
     placeholder: 'VD: Chờ lâu, xin về',
+  },
+  undo: {
+    title: 'Hoàn tác check-in',
+    description:
+      'Check-in nhầm: lịch quay về trạng thái trước khi check-in và rời hàng đợi. Nếu bệnh nhân bỏ về, hãy dùng "Đã về".',
+    min: 5,
+    confirm: 'Hoàn tác',
+    placeholder: 'VD: Check-in nhầm bệnh nhân',
   },
   transfer: {
     title: 'Chuyển sang bác sĩ khác',
@@ -83,6 +95,7 @@ export function QueueList({
   const emergency = useMarkEmergency();
   const transfer = useTransferPatient();
   const markLeft = useMarkLeft();
+  const undoCheckIn = useUndoAppointmentStatus();
   const { data: dentists = [] } = useDentistOptions();
 
   const open = (d: Dialog) => {
@@ -120,6 +133,12 @@ export function QueueList({
         `${name} đã về, chưa khám`,
         'Không ghi nhận được',
       );
+    } else if (dialog.kind === 'undo') {
+      void run(
+        () => undoCheckIn.mutateAsync({ id: entry.appointmentId, what: 'check-in', reason: r }),
+        `Đã hoàn tác check-in cho ${name}`,
+        'Không hoàn tác được',
+      );
     } else {
       void run(
         () => transfer.mutateAsync({ id: entry.id, dentistId: targetDentist, reason: r }),
@@ -130,7 +149,8 @@ export function QueueList({
   };
 
   const text = dialog ? DIALOG_TEXT[dialog.kind] : null;
-  const pending = skip.isPending || emergency.isPending || markLeft.isPending || transfer.isPending;
+  const pending =
+    skip.isPending || emergency.isPending || markLeft.isPending || transfer.isPending || undoCheckIn.isPending;
 
   return (
     <>
@@ -264,6 +284,19 @@ export function QueueList({
                           Đã về
                         </Button>
                       </PermissionGuard>
+                      {/* A walk-in has no booking to go back to. */}
+                      {e.appointment.visitKind !== 'WALK_IN' && (
+                        <PermissionGuard permission="appointment.check_in">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            leftIcon={<Undo2 className="h-3.5 w-3.5" />}
+                            onClick={() => open({ kind: 'undo', entry: e })}
+                          >
+                            Hoàn tác check-in
+                          </Button>
+                        </PermissionGuard>
+                      )}
                     </>
                   )}
                 </div>
