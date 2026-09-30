@@ -2,9 +2,10 @@ import { Prisma } from '@prisma/client';
 
 // Advisory-lock namespaces (first int4 of pg_advisory_xact_lock(int4, int4)),
 // so a dentist id and a patient id can never hash onto the same lock.
+// 3 is the online-booking phone lock (booking/booking.service.ts).
 const LOCK_NS_DENTIST = 1;
 const LOCK_NS_PATIENT = 2;
-const LOCK_NS_CLINIC = 3;
+const LOCK_NS_CLINIC = 4;
 
 async function advisoryLock(
   tx: Prisma.TransactionClient,

@@ -122,6 +122,19 @@ const OPEN_BOOKING_STATUSES: BookingRequestStatus[] = [
   BookingRequestStatus.PROPOSED,
   BookingRequestStatus.PATIENT_ACCEPTED,
 ];
+/** While a proposal stands, its time and dentist are the request's (BookingService). */
+const PROPOSAL_BOOKING_STATUSES: BookingRequestStatus[] = [
+  BookingRequestStatus.PROPOSED,
+  BookingRequestStatus.PATIENT_ACCEPTED,
+];
+const bookingRequestStartAt = (r: {
+  status: BookingRequestStatus;
+  requestedStartAt: Date;
+  proposedStartAt: Date | null;
+}) =>
+  PROPOSAL_BOOKING_STATUSES.includes(r.status)
+    ? (r.proposedStartAt ?? r.requestedStartAt)
+    : r.requestedStartAt;
 /** Columns of a booking listed as affected by a calendar change. */
 const AFFECTED_APPOINTMENT_SELECT = {
   id: true,
@@ -2362,7 +2375,7 @@ export class AppointmentsService {
     }
     const affectedBookingRequests = [];
     for (const r of await this.openBookingRequests(tx, dentistId, start, end)) {
-      const at = r.proposedStartAt ?? r.requestedStartAt;
+      const at = bookingRequestStartAt(r);
       const until = new Date(at.getTime() + (r.service?.defaultDurationMin ?? 30) * 60_000);
       if (onDay(at) && (await this.calendarProblem(dentistId, at, until, tx))) {
         affectedBookingRequests.push(this.formatBookingRequest(r));
@@ -2386,24 +2399,35 @@ export class AppointmentsService {
     return (
       (await tx.bookingRequest.findMany({
         where: {
-          status: { in: OPEN_BOOKING_STATUSES },
           appointmentId: null,
           OR: [
             {
-              proposedStartAt: null,
+              status: {
+                in: OPEN_BOOKING_STATUSES.filter(s => !PROPOSAL_BOOKING_STATUSES.includes(s)),
+              },
               requestedStartAt: range,
               ...(dentistId ? { preferredDentistId: dentistId } : {}),
             },
             {
-              proposedStartAt: range,
-              ...(dentistId
-                ? {
-                    OR: [
-                      { proposedDentistId: dentistId },
-                      { proposedDentistId: null, preferredDentistId: dentistId },
-                    ],
-                  }
-                : {}),
+              status: { in: PROPOSAL_BOOKING_STATUSES },
+              AND: [
+                {
+                  OR: [
+                    { proposedStartAt: range },
+                    { proposedStartAt: null, requestedStartAt: range },
+                  ],
+                },
+                ...(dentistId
+                  ? [
+                      {
+                        OR: [
+                          { proposedDentistId: dentistId },
+                          { proposedDentistId: null, preferredDentistId: dentistId },
+                        ],
+                      },
+                    ]
+                  : []),
+              ],
             },
           ],
         },
@@ -2438,7 +2462,7 @@ export class AppointmentsService {
       fullName: r.fullName,
       phone: r.phone,
       status: r.status,
-      startAt: r.proposedStartAt ?? r.requestedStartAt,
+      startAt: bookingRequestStartAt(r),
     };
   }
 

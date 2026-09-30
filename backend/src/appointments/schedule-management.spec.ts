@@ -323,11 +323,10 @@ describe('AppointmentsService — schedule management', () => {
         expect.objectContaining({ id: 'br-1', referenceCode: 'GS-1', startAt: at(day, '15:00') }),
       ]);
       const where = (prisma.bookingRequest.findMany as jest.Mock).mock.calls[0][0].where;
-      expect(where.status.in).toEqual([
-        'PENDING_REVIEW',
-        'NEEDS_INFORMATION',
-        'PROPOSED',
-        'PATIENT_ACCEPTED',
+      // A proposal's time counts only while it stands (same rule as BookingService).
+      expect(where.OR.map((c: any) => c.status.in)).toEqual([
+        ['PENDING_REVIEW', 'NEEDS_INFORMATION'],
+        ['PROPOSED', 'PATIENT_ACCEPTED'],
       ]);
     });
   });
@@ -480,7 +479,7 @@ describe('AppointmentsService — schedule management', () => {
       ]);
       expect(prisma.appointment.update).not.toHaveBeenCalled();
       expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringMatching(/^SELECT pg_advisory_xact_lock\(3, /),
+        expect.stringMatching(/^SELECT pg_advisory_xact_lock\(4, /),
       );
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'CLINIC_CLOSURE_CREATED' }),
