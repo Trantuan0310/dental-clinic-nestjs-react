@@ -145,12 +145,17 @@ export class AppointmentsService {
    * `fromBookingRequest`: an online request the front desk accepted. The
    * visit is born CONFIRMED (the patient asked for this exact time) and the
    * request is linked in the same transaction, so two staff confirming the
-   * same request can't both create a visit.
+   * same request can't both create a visit. Its `plan` (BookingService)
+   * may keep a service withdrawn after the patient sent the request.
    */
   async create(
     dto: CreateAppointmentDto,
     actor: JwtPayload,
-    fromBookingRequest?: { id: string; expectedStatuses: BookingRequestStatus[] },
+    fromBookingRequest?: {
+      id: string;
+      expectedStatuses: BookingRequestStatus[];
+      plan?: VisitPlan;
+    },
   ) {
     const startAt = new Date(dto.startAt);
     if (startAt.getTime() <= Date.now() + 60_000) {
@@ -160,7 +165,9 @@ export class AppointmentsService {
 
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
-    const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt));
+    const plan =
+      fromBookingRequest?.plan ??
+      (await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt)));
 
     // Honor a client-provided endAt (e.g. a chosen duration) instead of
     // always defaulting — this DTO field has always been accepted and

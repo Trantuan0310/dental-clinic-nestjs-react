@@ -106,8 +106,25 @@ a one-time lookup code.
   on top, marked "Quá giờ"; under 2 hours marked "Sắp đến giờ"), then the
   others newest first.
 - **Minimum notice.** Online requests (public slots and `createPublic`) must
-  be at least `BOOKING_MIN_LEAD_MIN` minutes ahead (default 120). Front desk
-  bookings are not limited.
+  be at least `BOOKING_MIN_LEAD_MIN` minutes ahead (default 120) and at most
+  `BOOKING_MAX_DAYS_AHEAD` days ahead (default 60). Front desk bookings are
+  not limited.
+- **Slot grid.** Every slot list steps `SLOT_STEP_MIN` minutes (default 15)
+  on round clock times, whatever the visit's length, so online booking, the
+  booking form, rescheduling and the search offer the same times. A time is
+  checked by the interval rules (working hours, closed ranges, time-off,
+  bookings with buffers), so an off-grid time the front desk proposes is fine.
+- **Empty days.** Public slots say why a day has none (`emptyReason`:
+  `CLOSED`, `NO_SCHEDULE`, `TIME_OFF`, `FULL`, `TOO_SOON`) and name the next
+  day with a free time within 14 days (`nextAvailableDate`). The options list
+  only dentists with working hours in the bookable range.
+- **Stranded requests.** For the front desk (propose, confirm) the dentist
+  need not take online bookings, and a service withdrawn (or an assignment
+  ended) after the request was sent still counts. The inbox marks open
+  requests the schedule no longer allows (`slotIssue`);
+  `GET /booking-requests/pending-in-range?dentistId&from&to` lists open
+  requests on a dentist's days with the same flag, and
+  `GET /booking-requests/:id/dentists` the dentists a proposal may move to.
 - **Duplicates.** A phone with an open request for the same time cannot send
   another one for that time. The check and the insert run in one transaction
   under a per-phone advisory lock, so a double submit cannot slip through.

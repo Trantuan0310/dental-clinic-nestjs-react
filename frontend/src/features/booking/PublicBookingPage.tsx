@@ -27,6 +27,42 @@ type BookingResult = {
 // another zone) must not be offered yesterday or refused today.
 const today = () => clinicToday();
 const SLOT_ERROR = "Không tải được giờ trống. Chọn ngày khác hoặc liên hệ lễ tân.";
+/** "YYYY-MM-DD" `days` after `date`. */
+const addDays = (date: string, days: number) => {
+  const d = new Date(date + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+/** "dd/MM/yyyy" of a "YYYY-MM-DD". */
+const showDate = (date: string) => date.split("-").reverse().join("/");
+type SlotsResponse = {
+  availableSlots: string[];
+  minLeadMinutes?: number;
+  emptyReason?: string | null;
+  nextAvailableDate?: string | null;
+  lastDate?: string;
+};
+/** Why the chosen day has no time left, in the patient's words. */
+const emptyReasonText = (reason: string | null | undefined, minLead: number) => {
+  switch (reason) {
+    case "CLOSED":
+      return "Bác sĩ không nhận lịch ngày này (phòng khám đóng lịch).";
+    case "NO_SCHEDULE":
+      return "Bác sĩ không làm việc ngày này.";
+    case "TIME_OFF":
+      return "Bác sĩ nghỉ ngày này.";
+    case "TOO_SOON":
+      return (
+        "Các giờ còn lại trong ngày quá gần: cần đặt trước ít nhất " +
+        (minLead % 60 === 0 ? minLead / 60 + " giờ" : minLead + " phút") +
+        "."
+      );
+    case "FULL":
+      return "Ngày này đã kín lịch.";
+    default:
+      return "";
+  }
+};
 
 export default function PublicBookingPage() {
   const navigate = useNavigate();
@@ -42,6 +78,11 @@ export default function PublicBookingPage() {
   const [dentistId, setDentistId] = useState("");
   const [date, setDate] = useState(today());
   const [slots, setSlots] = useState<string[]>([]);
+  const [emptyReason, setEmptyReason] = useState<string | null>(null);
+  const [nextDate, setNextDate] = useState<string | null>(null);
+  const [slotError, setSlotError] = useState("");
+  // Online requests are taken this far ahead (the slots API reports it).
+  const [lastDate, setLastDate] = useState(() => addDays(today(), 60));
   // Minimum notice for online requests; the slots API reports the setting.
   const [minLead, setMinLead] = useState(120);
   const [time, setTime] = useState("");
@@ -81,21 +122,26 @@ export default function PublicBookingPage() {
   useEffect(() => {
     setSlots([]);
     setTime("");
+    setEmptyReason(null);
+    setNextDate(null);
+    setSlotError("");
     if (!serviceId || !dentistId || !date) return;
     setSlotLoading(true);
     api
-      .get<{ data: { availableSlots: string[]; minLeadMinutes?: number } }>(
-        "/public/booking/slots",
-        { params: { serviceId, dentistId, date } },
-      )
-      .then((r) => {
-        setSlots(r.data.data.availableSlots);
-        // A later load worked: drop the earlier slot error (not other errors).
-        setError((old) => (old === SLOT_ERROR ? "" : old));
-        if (typeof r.data.data.minLeadMinutes === "number")
-          setMinLead(r.data.data.minLeadMinutes);
+      .get<{ data: SlotsResponse }>("/public/booking/slots", {
+        params: { serviceId, dentistId, date },
       })
-      .catch(() => setError(SLOT_ERROR))
+      .then((r) => {
+        const data = r.data.data;
+        setSlots(data.availableSlots);
+        setEmptyReason(data.emptyReason ?? null);
+        setNextDate(data.nextAvailableDate ?? null);
+        if (data.lastDate) setLastDate(data.lastDate);
+        if (typeof data.minLeadMinutes === "number")
+          setMinLead(data.minLeadMinutes);
+      })
+      // The server says what is wrong (a day too far ahead, for one).
+      .catch((e: unknown) => setSlotError(bookingErrorMessage(e, SLOT_ERROR)))
       .finally(() => setSlotLoading(false));
   }, [serviceId, dentistId, date]);
 
@@ -217,11 +263,15 @@ export default function PublicBookingPage() {
                     <input
                       type="date"
                       min={today()}
+                      max={lastDate}
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       required
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
                     />
+                    <span className="mt-1 block text-xs font-normal text-gray-500">
+                      Nhận đặt trực tuyến đến ngày {showDate(lastDate)}.
+                    </span>
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Giờ còn trống
@@ -267,6 +317,34 @@ export default function PublicBookingPage() {
                       </span>
                     )}
                   </label>
+                  {(slotError || (!slotLoading && dentistId && slots.length === 0)) && (
+                    <div className="text-sm sm:col-span-2">
+                      {slotError && (
+                        <span
+                          role="alert"
+                          className="mt-1 block text-xs font-normal text-red-700"
+                        >
+                          {slotError}
+                        </span>
+                      )}
+                      {!slotLoading && !slotError && dentistId && slots.length === 0 && (
+                        <span className="mt-1 block text-xs font-normal text-amber-800">
+                          {emptyReasonText(emptyReason, minLead)}{" "}
+                          {nextDate ? (
+                            <button
+                              type="button"
+                              onClick={() => setDate(nextDate)}
+                              className="font-medium text-brand-600 underline"
+                            >
+                              Ngày gần nhất còn giờ trống: {showDate(nextDate)}
+                            </button>
+                          ) : (
+                            "Chưa thấy giờ trống trong 2 tuần tới, vui lòng chọn bác sĩ khác hoặc gọi phòng khám."
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div>

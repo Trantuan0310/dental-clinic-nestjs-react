@@ -176,3 +176,13 @@ export class ListBookingRequestsDto {
   @IsEnum(BookingRequestStatus)
   status?: BookingRequestStatus;
 }
+
+/** Open requests for a dentist (or all) whose time falls in [from, to] (clinic dates). */
+export class PendingInRangeQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  dentistId?: string;
+  @ApiProperty({ example: '2026-10-01' }) @IsCalendarDate() from!: string;
+  @ApiProperty({ example: '2026-10-31' }) @IsCalendarDate() to!: string;
+}

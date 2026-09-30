@@ -23,6 +23,40 @@ export const SLOT_RELEASING_STATUSES: AppointmentStatus[] = [
 
 /** Same lead time create() enforces: a start must be at least a minute ahead. */
 const LEAD_MS = 60_000;
+const DEFAULT_SLOT_STEP_MIN = 15;
+
+/**
+ * Minutes between suggested start times (SLOT_STEP_MIN, default 15). One
+ * grid for every slot list (online booking, the booking form, rescheduling,
+ * the cross-dentist search), whatever the visit's length: a 90-minute visit
+ * in 08:00-12:00 can start at 10:30, not only at 08:00 and 09:30. A booking
+ * is checked by the interval rules, so an off-grid time stays valid.
+ */
+export function slotStepMinutes(): number {
+  const raw = process.env.SLOT_STEP_MIN?.trim();
+  const value = raw ? Number(raw) : NaN;
+  return Number.isInteger(value) && value >= 5 && value <= 60 ? value : DEFAULT_SLOT_STEP_MIN;
+}
+
+/**
+ * Why a day with working hours still has no time: every window lies inside
+ * time-off or closed ranges ('TIME_OFF' when any of it is time-off), else null.
+ */
+export function blockedAllDay(cal: DayCalendar): 'TIME_OFF' | 'CLOSED' | null {
+  if (cal.windows.length === 0) return null;
+  const used = new Set<'TIME_OFF' | 'CLOSED'>();
+  for (const w of cal.windows) {
+    let reached = w.start.getTime();
+    for (const b of [...cal.blocked].sort((x, y) => x.start.getTime() - y.start.getTime())) {
+      if (b.end.getTime() <= reached || b.start.getTime() > reached) continue;
+      used.add(b.kind);
+      reached = b.end.getTime();
+      if (reached >= w.end.getTime()) break;
+    }
+    if (reached < w.end.getTime()) return null;
+  }
+  return used.has('TIME_OFF') ? 'TIME_OFF' : 'CLOSED';
+}
 
 /**
  * The single source of "when can this dentist see a patient" (ADR-0009
@@ -146,6 +180,13 @@ export class AvailabilityService {
       };
     }
     const slotMin = slotDuration ?? cal.defaultSlotMin;
+    const availableSlots = freeSlots(
+      cal,
+      slotMin,
+      slotStepMinutes(),
+      new Date(Date.now() + LEAD_MS),
+      buffers,
+    );
     const dayStart = startOfClinicDay(date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
     return {
@@ -169,8 +210,9 @@ export class AvailabilityService {
         }))
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
       slotDuration: slotMin,
-      availableSlots: freeSlots(cal, slotMin, slotMin, new Date(Date.now() + LEAD_MS), buffers),
-      blockedReason: null,
+      availableSlots,
+      // Working hours, but all of them on time-off / closed ranges.
+      blockedReason: availableSlots.length ? null : blockedAllDay(cal),
     };
   }
 
@@ -180,7 +222,7 @@ export class AvailabilityService {
    * (dentist_services), and the visit length is the dentist's duration
    * override or the service's; without it, every active dentist.
    */
-  async search(q: { date: string; serviceId?: string; durationMin?: number; stepMin?: number }) {
+  async search(q: { date: string; serviceId?: string; durationMin?: number }) {
     const day = new Date(q.date);
     const dentists = await this.prisma.user.findMany({
       where: {
@@ -208,8 +250,10 @@ export class AvailabilityService {
       select: { id: true, fullName: true, dentistProfile: { select: { calendarColor: true } } },
       orderBy: { fullName: 'asc' },
     });
-    // BR-SVC-006: the dentist's duration override, else the service default.
+    // BR-SVC-006: the dentist's duration override, else the service default;
+    // the service's buffers too, as the booking form and online booking use.
     const durations = new Map<string, number>();
+    const buffers: Buffers = {};
     if (q.serviceId) {
       const assignments = await this.prisma.dentistService.findMany({
         where: {
@@ -221,11 +265,15 @@ export class AvailabilityService {
         select: {
           dentistId: true,
           durationMin: true,
-          service: { select: { defaultDurationMin: true } },
+          service: {
+            select: { defaultDurationMin: true, bufferBeforeMin: true, bufferAfterMin: true },
+          },
         },
       });
       for (const a of assignments) {
         durations.set(a.dentistId, a.durationMin ?? a.service.defaultDurationMin);
+        buffers.beforeMin = a.service.bufferBeforeMin;
+        buffers.afterMin = a.service.bufferAfterMin;
       }
     }
     const notBefore = new Date(Date.now() + LEAD_MS);
@@ -238,7 +286,7 @@ export class AvailabilityService {
           fullName: d.fullName,
           calendarColor: d.dentistProfile?.calendarColor ?? null,
           durationMin,
-          availableSlots: freeSlots(cal, durationMin, q.stepMin ?? 15, notBefore),
+          availableSlots: freeSlots(cal, durationMin, slotStepMinutes(), notBefore, buffers),
         };
       }),
     );
