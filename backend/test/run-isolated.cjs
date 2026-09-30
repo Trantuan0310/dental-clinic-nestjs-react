@@ -54,22 +54,24 @@ async function snapshot() {
     payments: await source.payment.count(),
   };
 }
-// The API tests book, check in and queue visits around the real "now" (from
-// 20 min before to ~20 min after it), and a clinic day ends at midnight
-// Vietnam time: a visit then lands on the next day's calendar or queue and
-// the chained tests fail (runs after 23:42 did). A run reaching the tests
-// between 23:35 and 00:25 clinic time waits until 00:25; any other run
-// starts at once (so CI waits in ~3% of runs, never more than 50 min).
+// A few API tests act at the real "now", and a clinic day ends at midnight
+// Vietnam time. Bookings are made on safe days and moved to now in the
+// database, so only two things still depend on the hour: walk-ins (5 min
+// from now, inside a schedule ending 23:59) and the dispatch test's patient
+// checked in 20 min late (the queue is per clinic day). A run reaching the
+// tests between 23:52 and 00:22 clinic time waits until 00:22; any other
+// run starts at once (CI waits in ~2% of runs, at most 30 min).
 const CLINIC_OFFSET_MS = 7 * 3600000;
-const MIDNIGHT_MARGIN_MS = 25 * 60000;
+const BEFORE_MIDNIGHT_MS = 8 * 60000;
+const AFTER_MIDNIGHT_MS = 22 * 60000;
 async function clearOfClinicMidnight() {
   const dayMs = 86400000;
   const timeOfDay = (Date.now() + CLINIC_OFFSET_MS) % dayMs;
   const wait =
-    timeOfDay >= dayMs - MIDNIGHT_MARGIN_MS
-      ? dayMs - timeOfDay + MIDNIGHT_MARGIN_MS
-      : timeOfDay < MIDNIGHT_MARGIN_MS
-        ? MIDNIGHT_MARGIN_MS - timeOfDay
+    timeOfDay >= dayMs - BEFORE_MIDNIGHT_MS
+      ? dayMs - timeOfDay + AFTER_MIDNIGHT_MS
+      : timeOfDay < AFTER_MIDNIGHT_MS
+        ? AFTER_MIDNIGHT_MS - timeOfDay
         : 0;
   if (!wait) return;
   console.log(

@@ -13,6 +13,9 @@ jobs:
   postgres-api:
     name: Release migrations and PostgreSQL API tests
     runs-on: ubuntu-latest
+    # Normally a few minutes; run-isolated.cjs waits up to 30 min when a run
+    # reaches the API tests between 23:52 and 00:22 clinic time.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16-alpine

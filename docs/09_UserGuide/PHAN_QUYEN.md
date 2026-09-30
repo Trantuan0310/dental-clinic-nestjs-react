@@ -9,7 +9,7 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Sửa dị ứng, bệnh nền, thuốc đang dùng | ✔ | ✔ bệnh nhân mình đã khám, hoặc đã check-in/đang khám với mình hôm nay (lịch sắp tới chỉ được xem) | ✔ |
 | Gộp, xóa, khôi phục hồ sơ | ✔ | — | — |
 | Sửa ngày sinh khi bệnh nhân đã có phiên khám (bắt buộc lý do) | ✔ | — | — |
-| **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Chỉ lịch hẹn của mình: đặt lịch tái khám cho bệnh nhân mình đã khám; sửa, dời (trong lịch của mình), xác nhận, đánh vắng mặt; hủy khi còn ít nhất 24 giờ trước giờ hẹn (muộn hơn thì nhờ lễ tân). Không check-in | ✔ |
+| **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Chỉ lịch hẹn của mình: đặt lịch tái khám cho bệnh nhân mình đã khám; sửa, xác nhận, đánh vắng mặt; dời (trong lịch của mình) và hủy chỉ khi còn ít nhất 24 giờ trước giờ hẹn, kể cả lịch tái khám mình vừa đặt (gấp hơn thì nhờ lễ tân). Không check-in | ✔ |
 | Xem lịch hẹn | ✔ tất cả | Chỉ lịch của mình (menu "Lịch của tôi") | ✔ tất cả |
 | Điều phối hàng chờ, yêu cầu đặt lịch online | ✔ | — | ✔ |
 | **Khám bệnh**: bắt đầu, ghi bệnh án, điều trị, kê đơn, sơ đồ răng, đóng phiên khám | — (chỉ xem) | ✔ | — |

@@ -24,6 +24,8 @@ describe('advisory locks', () => {
     await lockDentistCalendar(tx as never, 'dentist-1');
     expect(calls[0]).toBe("SELECT set_config('lock_timeout', ?::text, true)|5000");
     expect(calls[1]).toMatch(/^SELECT pg_advisory_xact_lock\(1, -?\d+\)$/);
+    // Lifted once granted: later row locks in the transaction wait as usual.
+    expect(calls[2]).toBe("SELECT set_config('lock_timeout', '0', true)|");
   });
 
   it('turns a lock timeout into a Vietnamese 409 instead of a 500', async () => {

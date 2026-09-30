@@ -862,6 +862,7 @@ describe('BookingService public request security and validation', () => {
         expect(order).toEqual([
           "lock:SELECT set_config('lock_timeout', ?::text, true):5000",
           'lock:SELECT pg_advisory_xact_lock(?::int4, hashtext(?)):3,0901234567',
+          "lock:SELECT set_config('lock_timeout', '0', true):",
           'findFirst',
           'create',
         ]);
@@ -2183,11 +2184,12 @@ describe('BookingService public request security and validation', () => {
           appointment: null,
         });
         await service.confirm('request-1', actor);
-        const lock = prisma.$executeRaw.mock.invocationCallOrder[0];
+        // [0] bounds the lock wait (lock_timeout), [1] is the lock itself.
+        const lock = prisma.$executeRaw.mock.invocationCallOrder[1];
         expect(lock).toBeLessThan(prisma.$queryRaw.mock.invocationCallOrder[0]);
         expect(lock).toBeLessThan(patients.create.mock.invocationCallOrder[0]);
         // The phone lock (namespace 3), keyed by the normalized phone.
-        expect(prisma.$executeRaw.mock.calls[0].slice(1)).toEqual([3, '0901234567']);
+        expect(prisma.$executeRaw.mock.calls[1].slice(1)).toEqual([3, '0901234567']);
       });
 
       it('retries archiving the new record when a serialization failure aborts it', async () => {
