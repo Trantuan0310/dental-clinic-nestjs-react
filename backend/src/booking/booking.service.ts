@@ -575,7 +575,7 @@ export class BookingService {
     if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
     const phones = this.requestPhones(row);
     const found = await this.prisma.patient.findMany({
-      where: this.patientsByPhone(phones),
+      where: await this.patientsByPhone(phones),
       select: {
         id: true,
         code: true,
@@ -832,7 +832,7 @@ export class BookingService {
     }
     if (!choice.createNewPatient) {
       const matches = await this.prisma.patient.findMany({
-        where: this.patientsByPhone(phones),
+        where: await this.patientsByPhone(phones),
         select: { id: true, fullName: true, dob: true, primaryPhone: true },
         take: 20,
       });
@@ -876,13 +876,24 @@ export class BookingService {
     return [...set];
   }
 
-  /** Live records whose own or guardian phone is one of `phones` (0xxx or +84xxx). */
-  private patientsByPhone(phones: string[]): Prisma.PatientWhereInput {
-    const variants = phones.flatMap(p => [p, this.altPhone(p)]);
-    return {
-      deletedAt: null,
-      OR: [{ primaryPhone: { in: variants } }, { contactPersonPhone: { in: variants } }],
-    };
+  /**
+   * Live records whose own or guardian phone is one of `phones` (normalized
+   * 0xxx). Patient phones are stored as typed ("090 123 4567", "+84…"), so the
+   * stored value is normalized in SQL the same way `normalize` does.
+   */
+  private async patientsByPhone(phones: string[]): Promise<Prisma.PatientWhereInput> {
+    if (phones.length === 0) return { id: { in: [] } };
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM patients
+      WHERE deleted_at IS NULL
+        AND (
+          regexp_replace(regexp_replace(COALESCE(primary_phone, ''), '[[:space:]()-]', '', 'g'), '^[+]84', '0')
+            = ANY(${phones}::text[])
+          OR regexp_replace(regexp_replace(COALESCE(contact_person_phone, ''), '[[:space:]()-]', '', 'g'), '^[+]84', '0')
+            = ANY(${phones}::text[])
+        )
+      LIMIT 50`;
+    return { deletedAt: null, id: { in: rows.map(r => r.id) } };
   }
 
   private sameNameAndDob(p: { fullName: string; dob: Date }, row: { fullName: string; dob: Date }) {
@@ -1137,9 +1148,6 @@ export class BookingService {
   private normalize(value: string) {
     const clean = value.replace(/[\s()-]/g, '');
     return clean.startsWith('+84') ? '0' + clean.slice(3) : clean;
-  }
-  private altPhone(value: string) {
-    return value.startsWith('0') ? '+84' + value.slice(1) : value;
   }
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');

@@ -22,6 +22,8 @@ describe('BookingService public request security and validation', () => {
     prisma = {
       dentistService: { findFirst: jest.fn() },
       patient: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn() },
+      // patientsByPhone: ids of records whose stored phone normalizes to a match.
+      $queryRaw: jest.fn().mockResolvedValue([]),
       bookingRequest: {
         create: jest.fn(),
         update: jest.fn(),
@@ -793,12 +795,15 @@ describe('BookingService public request security and validation', () => {
         prisma.patient.findMany.mockResolvedValue([
           { id: 'mother', fullName: 'Trần Thị Mẹ', dob: new Date('1990-01-01') },
         ]);
+        prisma.$queryRaw.mockResolvedValue([{ id: 'mother' }]);
         await expect(service.confirm('request-1', actor)).rejects.toThrow('chọn tạo hồ sơ mới');
-        const where = prisma.patient.findMany.mock.calls[0][0].where;
-        const phones = ['0901234567', '+84901234567', '0987654321', '+84987654321'];
-        expect(where).toEqual({
+        // Both the request's and the guardian's phone, normalized to 0xxx; the
+        // SQL normalizes the stored values ("090 123 4567", "+84…") the same way.
+        const sqlArgs = prisma.$queryRaw.mock.calls[0].slice(1);
+        expect(sqlArgs).toContainEqual(['0901234567', '0987654321']);
+        expect(prisma.patient.findMany.mock.calls[0][0].where).toEqual({
           deletedAt: null,
-          OR: [{ primaryPhone: { in: phones } }, { contactPersonPhone: { in: phones } }],
+          id: { in: ['mother'] },
         });
         expect(patients.create).not.toHaveBeenCalled();
       });

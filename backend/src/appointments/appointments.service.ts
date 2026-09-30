@@ -2011,6 +2011,21 @@ export class AppointmentsService {
       include: { service: true },
     });
     const byService = new Map(assignments.map(a => [a.serviceId, a]));
+    if (!activeServicesOnly) {
+      // Deactivating a service ends its assignments on that day
+      // (CatalogService.setServiceActive), so a visit booked before then could
+      // never move to a later date. For a withdrawn service, the dentist's
+      // latest assignment to it still counts.
+      const withdrawn = serviceIds.filter(id => !byService.has(id));
+      if (withdrawn.length > 0) {
+        const past = await this.prisma.dentistService.findMany({
+          where: { dentistId, serviceId: { in: withdrawn }, service: { isActive: false } },
+          include: { service: true },
+          orderBy: { effectiveFrom: 'desc' },
+        });
+        for (const a of past) if (!byService.has(a.serviceId)) byService.set(a.serviceId, a);
+      }
+    }
     const missing = serviceIds.filter(id => !byService.has(id));
     if (missing.length > 0) {
       throw new BusinessRuleException(

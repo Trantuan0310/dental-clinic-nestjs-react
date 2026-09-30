@@ -1176,6 +1176,45 @@ describe('AppointmentsService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
+    it("moves a visit for a withdrawn service to a later day on the dentist's last assignment", async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        ...base,
+        services: [{ serviceId: 'svc-old' }],
+      });
+      // Deactivation ended the assignment, so the dated lookup finds nothing…
+      (prisma.dentistService.findMany as jest.Mock)
+        .mockResolvedValueOnce([])
+        // …and the dentist's latest assignment to the withdrawn service counts.
+        .mockResolvedValueOnce([
+          {
+            serviceId: 'svc-old',
+            price: null,
+            durationMin: null,
+            service: {
+              code: 'OLD',
+              name: 'Dịch vụ đã ngừng',
+              basePrice: 100_000,
+              defaultDurationMin: 30,
+              bufferBeforeMin: 0,
+              bufferAfterMin: 0,
+            },
+          },
+        ]);
+      (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...base,
+        rescheduleCount: 1,
+      });
+
+      await expect(service.reschedule('appt-1', future as any, actor)).resolves.toBeDefined();
+      const fallback = (prisma.dentistService.findMany as jest.Mock).mock.calls[1][0].where;
+      expect(fallback).toEqual({
+        dentistId: 'dentist-1',
+        serviceId: { in: ['svc-old'] },
+        service: { isActive: false },
+      });
+    });
+
     it('checks the booked services against a new dentist on the same day', async () => {
       const sameDay = new Date(base.startAt.getTime() + 60 * 60_000);
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
