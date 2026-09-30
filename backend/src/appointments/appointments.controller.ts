@@ -106,9 +106,16 @@ export class AppointmentsController {
 
   @Get('dentists')
   @RequirePermissions('appointment.create', 'appointment.read.any', 'appointment.read.own')
-  @ApiOperation({ summary: 'List active dentists for appointment forms' })
-  async dentistOptions() {
-    return { data: await this.appointments.listDentistOptions() };
+  @ApiOperation({
+    summary:
+      'List dentists for appointment forms; scope=schedule also lists suspended/on-leave dentists',
+  })
+  async dentistOptions(@Query('scope') scope?: string) {
+    return {
+      data: await this.appointments.listDentistOptions(
+        scope === 'schedule' ? 'schedule' : 'booking',
+      ),
+    };
   }
 
   // ==========================================================================

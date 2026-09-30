@@ -536,14 +536,20 @@ export function usePatientMini(id: string | undefined) {
   });
 }
 
-export function useDentistOptions() {
+/**
+ * Dentist picker. Default: dentists taking new bookings. `schedule`: also
+ * suspended dentists and dentists on leave, whose working hours and time
+ * off stay manageable.
+ */
+export function useDentistOptions(scope?: 'schedule') {
   return useQuery({
-    queryKey: appointmentKeys.dentists,
+    queryKey: scope ? ([...appointmentKeys.dentists, scope] as const) : appointmentKeys.dentists,
     queryFn: async (): Promise<DentistMini[]> => {
       // Appointment users need a small dentist lookup, not access to the
       // admin-only user-management API.
       const data = await get<Array<{ id: string; fullName: string; calendarColor?: string | null }>>(
         '/appointments/dentists',
+        scope ? { params: { scope } } : undefined,
       );
       return data.map((dentist) => ({
         id: dentist.id,

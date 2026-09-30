@@ -12,6 +12,8 @@ export interface AdminUser {
   // see users.service.ts. Not a typo; keep this lowercase to match reality.
   status: 'active' | 'pending_setup' | 'deactivated';
   roles: string[];
+  /** List only: false for a dentist-role account with no dentist profile yet. */
+  hasDentistProfile?: boolean;
   lastLoginAt?: string | null;
   createdAt: string;
   updatedAt?: string;
@@ -35,7 +37,17 @@ export interface CreateAdminUserPayload {
 
 export interface UpdateAdminUserPayload {
   fullName?: string;
-  roleIds?: string[];
+  /** Login email; the API lowercases it and refuses one already in use. */
+  email?: string;
+}
+
+/** POST /admin/users result: inviteSent=false means no setup email went out. */
+export interface CreatedAdminUser {
+  id: string;
+  email: string;
+  status: string;
+  createdAt: string;
+  inviteSent: boolean;
 }
 
 export interface AdminRole {

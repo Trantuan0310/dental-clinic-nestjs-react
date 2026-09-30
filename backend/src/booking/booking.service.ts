@@ -22,6 +22,7 @@ import {
   isValidVnPhone,
 } from '../patients/domain/patient-rules';
 import { AuditService } from '../audit/audit.service';
+import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
 import { EmailService } from '../common/services/email.service';
 import {
   AcceptBookingProposalDto,
@@ -164,7 +165,7 @@ export class BookingService {
               select: {
                 id: true,
                 fullName: true,
-                dentistProfile: { select: { specialties: true } },
+                dentistProfile: { select: { specialties: true, bio: true } },
               },
             },
           },
@@ -184,6 +185,7 @@ export class BookingService {
           id: a.dentist.id,
           fullName: a.dentist.fullName,
           specialties: a.dentist.dentistProfile?.specialties ?? [],
+          bio: a.dentist.dentistProfile?.bio ?? null,
           durationMinutes: a.durationMin ?? s.defaultDurationMin,
         })),
       }))
@@ -999,12 +1001,18 @@ export class BookingService {
     return {
       effectiveFrom: { lte: day },
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
+      // Same dentists as the staff booking form (PENDING_SETUP accounts
+      // included, on-leave employees excluded), narrowed to those who take
+      // online bookings from new patients.
       dentist: {
-        status: 'ACTIVE',
-        deletedAt: null,
+        ...SCHEDULABLE_ACCOUNT_WHERE,
         userRoles: { some: { role: { code: 'dentist' } } },
         dentistProfile: {
-          is: { acceptsOnlineBooking: true, practiceStatus: 'ACTIVE', deletedAt: null },
+          is: {
+            ...dentistProfileFilter('booking'),
+            acceptsOnlineBooking: true,
+            acceptsNewPatients: true,
+          },
         },
       },
     };

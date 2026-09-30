@@ -23,7 +23,7 @@ export function WorkingScheduleTab() {
   const [dentistFilter, setDentistFilter] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const { data: dentists = [] } = useDentistOptions();
+  const { data: dentists = [] } = useDentistOptions('schedule');
   const { data: schedules, isLoading } = useWorkingSchedules(dentistFilter || undefined);
 
   const dentistNameById = useMemo(() => {

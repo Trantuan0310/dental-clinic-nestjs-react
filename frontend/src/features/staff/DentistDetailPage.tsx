@@ -9,6 +9,7 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import { staffApi, useDentistOverview, useStaffMutation } from './staffApi';
 import { DentistProfileForm } from './DentistProfileForm';
 import { BlockingAppointmentsList } from './BlockingAppointmentsList';
+import { DentistReadinessCard } from './DentistReadinessCard';
 import { DentistServicesCard } from '@/features/catalog/DentistServicesCard';
 import { DentistPhotoCard } from '@/features/media/DentistPhotoCard';
 import {
@@ -64,7 +65,7 @@ export default function DentistDetailPage() {
       </p>
     );
   }
-  const { profile, schedules, upcomingAppointments } = data;
+  const { profile, readiness, schedules, upcomingAppointments } = data;
   const closeStatus = () => {
     setStatusDialog(false);
     setBlocking(null);
@@ -117,6 +118,12 @@ export default function DentistDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">
+          {readiness && (
+            <DentistReadinessCard
+              readiness={readiness}
+              onEditProfile={canEditAll ? () => setEditing(true) : undefined}
+            />
+          )}
           <Card title="Hồ sơ hành nghề">
             <dl className="space-y-3">
               <Field label="Trạng thái">
@@ -142,14 +149,18 @@ export default function DentistDetailPage() {
               {profile.bio && <Field label="Giới thiệu">{profile.bio}</Field>}
             </dl>
           </Card>
-          <DentistPhotoCard dentistId={profile.userId} canEdit={canEditAll || canEditOwn} />
+          <div id="dentist-photo" className="scroll-mt-20">
+            <DentistPhotoCard dentistId={profile.userId} canEdit={canEditAll || canEditOwn} />
+          </div>
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          <DentistServicesCard
-            dentistId={profile.userId}
-            canAssign={profile.practiceStatus === 'ACTIVE'}
-          />
+          <div id="dentist-services" className="scroll-mt-20">
+            <DentistServicesCard
+              dentistId={profile.userId}
+              canAssign={profile.practiceStatus === 'ACTIVE'}
+            />
+          </div>
           <Card title="Lịch làm việc cố định">
             {schedules.length === 0 ? (
               <p className="text-sm text-gray-500">Chưa có lịch làm việc.</p>
@@ -230,7 +241,7 @@ export default function DentistDetailPage() {
         >
           <p className="text-sm text-gray-600 dark:text-surface-300">
             Bác sĩ sẽ không còn trong danh sách chọn khi đặt lịch. Lịch làm việc và nghỉ phép vẫn
-            quản lý được.
+            quản lý được ở trang Lịch làm việc.
           </p>
           {blocking && <BlockingAppointmentsList appointments={blocking} />}
           <Select

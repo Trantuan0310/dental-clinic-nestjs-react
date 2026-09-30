@@ -19,6 +19,7 @@ export interface UserListItem {
   fullName: string;
   status: string;
   roles: string[];
+  hasDentistProfile: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
   deactivatedAt: Date | null;

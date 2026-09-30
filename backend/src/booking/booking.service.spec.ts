@@ -347,6 +347,11 @@ describe('BookingService public request security and validation', () => {
     ).rejects.toThrow('không nhận đặt lịch');
     const where = prisma.dentistService.findFirst.mock.calls[0][0].where;
     expect(where.dentist.dentistProfile.is.acceptsOnlineBooking).toBe(true);
+    // Online booking also needs a dentist taking new patients and not on
+    // leave; a PENDING_SETUP account still qualifies.
+    expect(where.dentist.dentistProfile.is.acceptsNewPatients).toBe(true);
+    expect(where.dentist.dentistProfile.is.employee).toEqual({ employmentStatus: 'ACTIVE' });
+    expect(where.dentist.status).toEqual({ not: 'DEACTIVATED' });
     expect(prisma.bookingRequest.create).not.toHaveBeenCalled();
   });
 

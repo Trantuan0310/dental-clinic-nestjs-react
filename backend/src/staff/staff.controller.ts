@@ -27,6 +27,7 @@ import {
   LinkAccountDto,
   ListDentistsQueryDto,
   ListEmployeesQueryDto,
+  ReinstateEmployeeDto,
   TerminateEmployeeDto,
   UpdateDentistProfileDto,
   UpdateEmployeeDto,
@@ -49,6 +50,13 @@ export class EmployeesController {
   @ApiOperation({ summary: 'List employees' })
   async list(@Query() query: ListEmployeesQueryDto) {
     return this.employees.list(query);
+  }
+
+  @Get('linkable-accounts')
+  @RequirePermissions('employee.update')
+  @ApiOperation({ summary: 'Accounts not linked to any employee yet (for linking)' })
+  async linkableAccounts() {
+    return { data: await this.employees.linkableAccounts() };
   }
 
   @Post()
@@ -87,6 +95,19 @@ export class EmployeesController {
     @Req() req: Request,
   ) {
     return { data: await this.employees.terminate(id, dto, actor, requestMeta(req)) };
+  }
+
+  @Post(':id/reinstate')
+  @RequirePermissions('employee.deactivate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Take back a terminated employee (and reactivate the account)' })
+  async reinstate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReinstateEmployeeDto,
+    @User() actor: JwtPayload,
+    @Req() req: Request,
+  ) {
+    return { data: await this.employees.reinstate(id, dto, actor, requestMeta(req)) };
   }
 
   @Post(':id/account')
