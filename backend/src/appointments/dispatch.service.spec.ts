@@ -59,6 +59,20 @@ describe('DispatchService.reassignDay — guarded move (race with a reschedule)'
     expect(res.moved.map(m => m.appointmentId)).toEqual(['appt-1']);
   });
 
+  it('moves a visit whose service was withdrawn since it was booked (as a reschedule does)', async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      { ...booking, services: [{ serviceId: 'svc-withdrawn' }] },
+    ]);
+    prisma.appointment.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await service.reassignDay(dto, adminPayload());
+
+    expect(appointments.planVisit).toHaveBeenCalledWith('dentist-2', ['svc-withdrawn'], dto.date, {
+      activeServicesOnly: false,
+    });
+    expect(res.moved.map(m => m.appointmentId)).toEqual(['appt-1']);
+  });
+
   it('lists a booking changed meanwhile as not moved', async () => {
     prisma.appointment.updateMany.mockResolvedValue({ count: 0 });
 

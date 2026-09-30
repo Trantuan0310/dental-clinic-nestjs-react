@@ -278,6 +278,20 @@ describe('day calendar decision table', () => {
       expect(freeSlots(buildDayCalendar(inputs), 60, 15, notBefore)).toEqual(['08:00']);
     });
 
+    it('steps the grid, not the visit length, from round clock times', () => {
+      const inputs = base();
+      inputs.schedules = [{ startTime: t('08:00'), endTime: t('12:00'), slotDurationMin: 30 }];
+      const cal = buildDayCalendar(inputs);
+      // A 90-minute visit: 10:30 fits (it used to step 90 and stop at 09:30).
+      expect(freeSlots(cal, 90, 15, notBefore).slice(-3)).toEqual(['10:00', '10:15', '10:30']);
+      inputs.schedules = [{ startTime: t('08:10'), endTime: t('09:10'), slotDurationMin: 30 }];
+      expect(freeSlots(buildDayCalendar(inputs), 30, 15, notBefore)).toEqual([
+        '08:10',
+        '08:15',
+        '08:30',
+      ]);
+    });
+
     it('lists a start only once when a shift overlaps the schedule', () => {
       const inputs = base();
       inputs.schedules = [{ startTime: t('08:00'), endTime: t('09:00'), slotDurationMin: 30 }];

@@ -29,11 +29,8 @@ type RequestRow = {
     startAt: string;
     dentist?: { id: string; fullName: string } | null;
   } | null;
-};
-type ServiceOption = {
-  id: string;
-  name: string;
-  dentists: Array<{ id: string; fullName: string }>;
+  /** Why an open request can no longer be confirmed as it stands (server check). */
+  slotIssue?: { kind: string; message: string } | null;
 };
 type PatientMatch = {
   id: string;
@@ -98,6 +95,20 @@ const urgency = (row: RequestRow, now: number) => {
   const left = new Date(effectiveAt(row)).getTime() - now;
   return left <= 0 ? "overdue" : left < SOON_MS ? "soon" : null;
 };
+/** An open request whose dentist, day or time no longer takes it. */
+function SlotIssueBadge({ issue }: { issue?: RequestRow["slotIssue"] }) {
+  if (!issue) return null;
+  return (
+    <span
+      title={issue.message}
+      className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800"
+    >
+      {issue.kind === "SLOT_CONFLICT"
+        ? "Giờ này đã có lịch khác"
+        : "Bác sĩ/khung giờ không còn nhận lịch"}
+    </span>
+  );
+}
 function UrgencyBadge({ kind }: { kind: "overdue" | "soon" | null }) {
   if (!kind) return null;
   return kind === "overdue" ? (
@@ -152,17 +163,25 @@ export default function BookingRequestsPage() {
     // New online requests show up without a manual refresh.
     refetchInterval: 60_000,
   });
-  const options = useQuery({
-    queryKey: ["public-booking-options"],
+  // Dentists this request may be moved to (online booking or not).
+  const dentistOptions = useQuery({
+    queryKey: ["booking-requests", selected?.id, "dentists"],
+    enabled: !!selected,
     queryFn: async () =>
-      (await api.get<{ data: ServiceOption[] }>("/public/booking/options")).data
-        .data,
+      (
+        await api.get<{ data: Array<{ id: string; fullName: string }> }>(
+          "/booking-requests/" + selected!.id + "/dentists",
+        )
+      ).data.data,
   });
-  const dentists = useMemo(
-    () =>
-      options.data?.find((x) => x.id === selected?.service.id)?.dentists ?? [],
-    [options.data, selected],
-  );
+  const dentists = useMemo(() => dentistOptions.data ?? [], [dentistOptions.data]);
+  // The requested dentist may no longer be offered (suspended, service
+  // stopped): make the front desk pick one instead of sending a stale id.
+  useEffect(() => {
+    const list = dentistOptions.data;
+    if (list && proposeDentist && !list.some((d) => d.id === proposeDentist))
+      setProposeDentist("");
+  }, [dentistOptions.data, proposeDentist]);
   useEffect(() => {
     setMatches([]);
     setPatientId("");
@@ -215,11 +234,12 @@ export default function BookingRequestsPage() {
     );
   }, [query.data]);
   const overdue = selected ? urgency(selected, now) === "overdue" : false;
-  // Any overdue open request can be rescued with a new time.
+  // Any overdue open request, or one the schedule no longer allows, can be
+  // rescued with a new time or dentist.
   const canPropose =
     !!selected &&
     (["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(selected.status) ||
-      (overdue && OPEN.includes(selected.status)));
+      ((overdue || !!selected.slotIssue) && OPEN.includes(selected.status)));
 
   return (
     <div className="space-y-5">
@@ -299,6 +319,7 @@ export default function BookingRequestsPage() {
                   <td className="px-4 py-3">
                     {stateLabel[row.status] ?? row.status}
                     <UrgencyBadge kind={urgency(row, now)} />
+                    <SlotIssueBadge issue={row.slotIssue} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -407,6 +428,12 @@ export default function BookingRequestsPage() {
                 hạn”.
               </p>
             )}
+            {selected.slotIssue && !overdue && (
+              <p className="mt-4 rounded bg-orange-50 p-3 text-sm text-orange-900">
+                Không thể xác nhận như yêu cầu hiện tại: {selected.slotIssue.message}.
+                Hãy đề xuất giờ hoặc bác sĩ khác, hoặc từ chối yêu cầu.
+              </p>
+            )}
             {selected.status === "EXPIRED" && (
               <p className="mt-4 rounded bg-slate-100 p-3 text-sm text-gray-700">
                 Yêu cầu đã quá giờ mà chưa được xác nhận. Khách được hướng dẫn
@@ -457,6 +484,9 @@ export default function BookingRequestsPage() {
                       onChange={(e) => setProposeDentist(e.target.value)}
                       className="mt-1 w-full rounded-md border bg-white px-3 py-2"
                     >
+                      <option value="">
+                        {dentistOptions.isLoading ? "Đang tải…" : "Chọn bác sĩ"}
+                      </option>
                       {dentists.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.fullName}
