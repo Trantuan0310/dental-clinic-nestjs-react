@@ -12,12 +12,22 @@ import {
   BarChart3,
   ListChecks,
   CalendarPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
-import { Alert, Button, Card, StatusBadge } from '@/components/ui';
+import { Alert, Button, Card, Modal, StatusBadge, Textarea } from '@/components/ui';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from '@/lib/errors';
+import type { PrescriptionAllergyConflict } from '@/types/medical-records';
 import { PatientHistoryCard } from './PatientHistoryCard';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/authStore';
+import { useIsOwnEncounterScope } from './encounterUtils';
+
+/** Close failures (thiếu kho, thiếu giá…) carry a Vietnamese server message. */
+function notifyCloseError(err: unknown) {
+  notify.error(getApiErrorMessage(err, 'Không thể đóng phiên khám'));
+}
 
 // Tabs are heavy (rich-text editor, dental chart canvas, etc.) — only the
 // tab the user has actually opened is fetched. Switching to a new tab triggers
@@ -46,6 +56,8 @@ const SummaryTab = lazy(() =>
   import('./SummaryTab').then((m) => ({ default: m.SummaryTab })),
 );
 
+const MIN_OVERRIDE_REASON = 10;
+
 const TabFallback = (
   <div className="flex items-center justify-center py-8 text-sm text-gray-500">
     <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
@@ -66,6 +78,11 @@ export default function EncounterDetailPage() {
   const canEditChart = useAuthStore((s) => s.hasPermission('dental_chart.write'));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
   const [booking, setBooking] = useState(false);
+  // 409 PRESCRIPTION_ALLERGY_CONFLICT on close: an allergy recorded after the
+  // prescription was saved. Non-null keeps the dialog open.
+  const [closeConflicts, setCloseConflicts] = useState<PrescriptionAllergyConflict[] | null>(null);
+  const [closeSummary, setCloseSummary] = useState('');
+  const [closeOverrideReason, setCloseOverrideReason] = useState('');
 
   const { data: encounter, isLoading } = useQuery({
     queryKey: ['encounter', id],
@@ -74,11 +91,29 @@ export default function EncounterDetailPage() {
   });
 
   const closeMutation = useMutation({
-    mutationFn: (summary: string) => medicalRecordsApi.closeEncounter(id!, summary),
+    mutationFn: ({ summary, allergyOverrideReason }: { summary: string; allergyOverrideReason?: string }) =>
+      medicalRecordsApi.closeEncounter(id!, summary, allergyOverrideReason),
     onSuccess: () => {
+      setCloseConflicts(null);
+      setCloseOverrideReason('');
       queryClient.invalidateQueries({ queryKey: ['encounter', id] });
     },
+    onError: (err, vars) => {
+      if (getApiErrorCode(err) === 'PRESCRIPTION_ALLERGY_CONFLICT') {
+        const details = getApiErrorDetails<{ conflicts?: PrescriptionAllergyConflict[] }>(err);
+        setCloseSummary(vars.summary);
+        setCloseConflicts(details?.conflicts ?? []);
+        return;
+      }
+      notifyCloseError(err);
+    },
   });
+  const dismissCloseConflicts = () => {
+    setCloseConflicts(null);
+    setCloseOverrideReason('');
+  };
+  // A colleague's encounter (dentist row scope) is read-only here.
+  const ownScope = useIsOwnEncounterScope(encounter);
 
   // When navigating from the dental chart panel to add a treatment, switch tabs and pass the tooth.
   useEffect(() => {
@@ -106,7 +141,7 @@ export default function EncounterDetailPage() {
   }
 
   // Chart edits and closing the visit are the treating dentist's steps.
-  const isEditable = encounter.status === 'in_progress' && canCloseEncounter;
+  const isEditable = encounter.status === 'in_progress' && canCloseEncounter && ownScope;
   const elapsedMinutes = Math.floor(
     (Date.now() - new Date(encounter.startedAt).getTime()) / 60000,
   );
@@ -252,7 +287,7 @@ export default function EncounterDetailPage() {
             <Suspense fallback={TabFallback}>
               <DentalChartPanel
                 encounter={encounter}
-                isLocked={encounter.status !== 'in_progress' || !canEditChart}
+                isLocked={encounter.status !== 'in_progress' || !canEditChart || !ownScope}
                 highlightToothNumbers={treatmentToothNumbers}
                 focusToothNumber={focusTooth}
                 onSwitchToTreatmentTab={(tooth) => setInitialTreatmentTooth(tooth)}
@@ -266,7 +301,7 @@ export default function EncounterDetailPage() {
               <Suspense fallback={TabFallback}>
                 <SummaryTab
                   encounter={encounter}
-                  onClose={(summary) => closeMutation.mutate(summary)}
+                  onClose={(summary) => closeMutation.mutate({ summary })}
                   isClosing={closeMutation.isPending}
                 />
               </Suspense>
@@ -309,6 +344,67 @@ export default function EncounterDetailPage() {
           />
         </Suspense>
       )}
+
+      {/* Allergy conflict found at close (409 PRESCRIPTION_ALLERGY_CONFLICT) */}
+      <Modal
+        isOpen={closeConflicts !== null}
+        onClose={dismissCloseConflicts}
+        title={
+          <span className="flex items-center gap-2 text-red-700">
+            <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+            Cảnh báo dị ứng thuốc
+          </span>
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <p className="font-medium">
+              Dị ứng ghi nhận sau khi kê đơn trùng với thuốc trong đơn hiện tại:
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {(closeConflicts ?? []).map((c, i) => (
+                <li key={`${c.lineIndex}-${c.allergy}-${i}`}>
+                  <strong>{c.drugName}</strong> — dị ứng: <strong>{c.allergy}</strong>
+                  {c.drugClass ? ` (${c.drugClass})` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <Textarea
+            label="Lý do vẫn giữ đơn thuốc"
+            value={closeOverrideReason}
+            onChange={(e) => setCloseOverrideReason(e.target.value)}
+            placeholder="VD: Đã hỏi lại bệnh nhân, từng dùng thuốc này không phản ứng"
+            rows={3}
+            hint={`Tối thiểu ${MIN_OVERRIDE_REASON} ký tự. Lý do được ghi vào nhật ký kiểm toán.`}
+          />
+          <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                dismissCloseConflicts();
+                setActiveTab('prescriptions');
+              }}
+            >
+              Sửa đơn thuốc
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() =>
+                closeMutation.mutate({
+                  summary: closeSummary,
+                  allergyOverrideReason: closeOverrideReason.trim(),
+                })
+              }
+              isLoading={closeMutation.isPending}
+              disabled={closeOverrideReason.trim().length < MIN_OVERRIDE_REASON}
+            >
+              Vẫn đóng phiên
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Tooth Detail Drawer (page-level so it survives tab switches) */}
       <Suspense fallback={null}>

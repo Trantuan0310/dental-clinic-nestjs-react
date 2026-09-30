@@ -5,7 +5,6 @@ import {
   IsBoolean,
   IsEnum,
   IsUUID,
-  IsDateString,
   IsArray,
   IsObject,
   IsNumber,
@@ -21,10 +20,19 @@ import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PatientType } from '@prisma/client';
 import { FDI_TOOTH_NUMBERS } from '../domain/tooth-numbers';
+import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
 // ---------------------------------------------------------------------------
 // Clinical note
 // ---------------------------------------------------------------------------
+
+export const CLINICAL_NOTE_FIELDS = [
+  'chiefComplaint',
+  'diagnosis',
+  'treatmentPlan',
+  'notes',
+] as const;
+export type ClinicalNoteField = (typeof CLINICAL_NOTE_FIELDS)[number];
 
 export class UpsertClinicalNoteDto {
   @ApiPropertyOptional()
@@ -50,6 +58,22 @@ export class UpsertClinicalNoteDto {
   @IsString()
   @MaxLength(8000)
   notes?: string;
+
+  /**
+   * Text appended server-side to the `appendTo` section (default `notes`)
+   * with a time + author stamp — never overwrites what is already there.
+   */
+  @ApiPropertyOptional({ maxLength: 2000 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  appendNote?: string;
+
+  @ApiPropertyOptional({ enum: CLINICAL_NOTE_FIELDS, default: 'notes' })
+  @IsOptional()
+  @IsIn(CLINICAL_NOTE_FIELDS as unknown as string[])
+  appendTo?: ClinicalNoteField;
 }
 
 export class AddAddendumDto {
@@ -63,6 +87,9 @@ export class AddAddendumDto {
 // ---------------------------------------------------------------------------
 // Treatment
 // ---------------------------------------------------------------------------
+
+/** treatments.unit_price is numeric(12,2). */
+export const MAX_UNIT_PRICE = 9_999_999_999.99;
 
 export class CreateTreatmentDto {
   @ApiPropertyOptional({
@@ -84,10 +111,18 @@ export class CreateTreatmentDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiProperty({ example: 12, minimum: 0 })
+  @ApiProperty({ example: 12, minimum: 0, maximum: MAX_UNIT_PRICE })
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice!: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100, { message: 'Số lượng tối đa 100' })
+  quantity?: number;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 600 })
   @IsOptional()
@@ -154,11 +189,30 @@ export class UpdateTreatmentDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maximum: MAX_UNIT_PRICE })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100, { message: 'Số lượng tối đa 100' })
+  quantity?: number;
+
+  // Same FDI rule as create; lets "Sửa điều trị" move the treatment to another tooth.
+  @ApiPropertyOptional({ type: [Number], example: [16] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @IsIn(FDI_TOOTH_NUMBERS as number[], {
+    each: true,
+    message: 'Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa)',
+  })
+  toothNumbers?: number[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -200,6 +254,12 @@ export class UpdatePrescriptionDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  /** Echo of the prescription's current `version`; a stale value → 409. */
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  version!: number;
 }
 
 export class CreatePrescriptionDto {
@@ -263,16 +323,17 @@ export class PrescriptionLineInputDto {
   @MaxLength(255)
   drugName!: string;
 
-  @ApiPropertyOptional()
+  // prescription_lines.dosage / frequency are VARCHAR(100).
+  @ApiPropertyOptional({ maxLength: 100 })
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(100)
   dosage?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 100 })
   @IsOptional()
   @IsString()
-  @MaxLength(255)
+  @MaxLength(100)
   frequency?: string;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 365 })
@@ -282,10 +343,11 @@ export class PrescriptionLineInputDto {
   @Max(365)
   durationDays?: number;
 
-  @ApiPropertyOptional({ minimum: 1 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 10000 })
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(10000)
   quantity?: number;
 
   @ApiPropertyOptional({ example: 'viên' })
@@ -331,6 +393,17 @@ export class CloseEncounterDto {
   @IsOptional()
   @IsBoolean()
   forceStockOut?: boolean = false;
+
+  /**
+   * Required (≥ 10 chars) to close when the current prescription matches an
+   * allergy recorded after it was saved and that drug/allergy pair was never
+   * overridden (PRESCRIPTION_ALLERGY_CONFLICT otherwise).
+   */
+  @ApiPropertyOptional({ minLength: 10, maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  allergyOverrideReason?: string;
 }
 
 export class CancelEncounterDto {
@@ -370,11 +443,11 @@ export class ListEncountersQueryDto {
 
   @ApiPropertyOptional({ example: '2026-07-01' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   from?: string;
 
   @ApiPropertyOptional({ example: '2026-07-31' })
   @IsOptional()
-  @IsDateString()
+  @IsCalendarDate()
   to?: string;
 }

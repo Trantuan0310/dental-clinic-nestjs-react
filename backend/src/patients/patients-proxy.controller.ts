@@ -123,7 +123,8 @@ export class PatientsProxyController {
     }
 
     const lastEncounter = await this.prisma.encounter.findFirst({
-      where: { patientId: id, dentalChart: { isNot: null } },
+      // A cancelled visit's chart is not the patient's current state.
+      where: { patientId: id, status: { not: 'CANCELLED' }, dentalChart: { isNot: null } },
       orderBy: { startedAt: 'desc' },
       include: { dentalChart: true },
     });

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { clinicIso, clinicParts } from "@/lib/clinicTime";
 import { bookingErrorMessage } from "./errorMessage";
+import { notify } from "@/components/ui/Toast";
 
 type RequestRow = {
   id: string;
@@ -22,7 +23,12 @@ type RequestRow = {
   service: { id: string; name: string; durationMinutes: number };
   preferredDentist: { id: string; fullName: string };
   proposedDentist?: { id: string; fullName: string } | null;
-  appointment?: { id: string; status: string; startAt: string } | null;
+  appointment?: {
+    id: string;
+    status: string;
+    startAt: string;
+    dentist?: { id: string; fullName: string } | null;
+  } | null;
 };
 type ServiceOption = {
   id: string;
@@ -35,7 +41,28 @@ type PatientMatch = {
   fullName: string;
   dob: string;
   primaryPhone: string | null;
+  contactPersonName?: string | null;
+  contactPersonPhone?: string | null;
+  /** Which of the record's phones is one of the request's phones. */
+  matchedBy?: Array<"primaryPhone" | "contactPersonPhone">;
+  sameNameAndDob?: boolean;
 };
+/** Patient choice value meaning "create a new record for this request". */
+const NEW_PATIENT = "__new__";
+const matchLabel = (p: PatientMatch) =>
+  [
+    p.code,
+    p.fullName,
+    String(p.dob).slice(0, 10),
+    p.matchedBy?.includes("contactPersonPhone")
+      ? "khớp SĐT người giám hộ " +
+        p.contactPersonPhone +
+        (p.contactPersonName ? " (" + p.contactPersonName + ")" : "")
+      : "khớp SĐT " + (p.primaryPhone ?? ""),
+    p.sameNameAndDob ? "trùng tên và ngày sinh" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 const stateLabel: Record<string, string> = {
   PENDING_REVIEW: "Chờ xử lý",
   NEEDS_INFORMATION: "Chờ bổ sung",
@@ -47,12 +74,24 @@ const stateLabel: Record<string, string> = {
   EXPIRED: "Quá hạn",
 };
 const OPEN = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
+const CONFIRMABLE = ["PENDING_REVIEW", "PATIENT_ACCEPTED"];
+const PROPOSAL = ["PROPOSED", "PATIENT_ACCEPTED"];
 const SOON_MS = 2 * 60 * 60_000;
-/** The time the request is about: the proposed one while a proposal stands. */
+/**
+ * The time the request is about: the booked visit's (it may have been
+ * moved), else the proposed one while a proposal stands.
+ */
 const effectiveAt = (row: RequestRow) =>
-  ["PROPOSED", "PATIENT_ACCEPTED"].includes(row.status) && row.proposedStartAt
+  row.appointment?.startAt ??
+  (PROPOSAL.includes(row.status) && row.proposedStartAt
     ? row.proposedStartAt
-    : row.requestedStartAt;
+    : row.requestedStartAt);
+/** Same idea for the dentist. */
+const effectiveDentist = (row: RequestRow) =>
+  row.appointment?.dentist?.fullName ??
+  (PROPOSAL.includes(row.status) && row.proposedDentist
+    ? row.proposedDentist.fullName
+    : row.preferredDentist.fullName);
 /** Open requests past their time (the server expires them within minutes) or close to it. */
 const urgency = (row: RequestRow, now: number) => {
   if (!OPEN.includes(row.status) || row.appointment) return null;
@@ -154,7 +193,19 @@ export default function BookingRequestsPage() {
       await query.refetch();
       setSelected(null);
     },
-    onError: (e: unknown) => setError(bookingErrorMessage(e, "Không thực hiện được thao tác.")),
+    onError: async (e: unknown) => {
+      const text = bookingErrorMessage(e, "Không thực hiện được thao tác.");
+      setError(text);
+      // 409: the request changed or its time passed meanwhile. Say so and
+      // reload, so the dialog shows its current state and actions.
+      if ((e as { response?: { status?: number } })?.response?.status === 409) {
+        notify.error(text);
+        const fresh = await query.refetch();
+        const row = fresh.data?.find((r) => r.id === selected?.id);
+        if (row) setSelected(row);
+        setNow(Date.now());
+      }
+    },
   });
   const counts = useMemo(() => {
     const rows = query.data ?? [];
@@ -238,10 +289,10 @@ export default function BookingRequestsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">{row.service.name}</td>
-                  <td className="px-4 py-3">{row.preferredDentist.fullName}</td>
+                  <td className="px-4 py-3">{effectiveDentist(row)}</td>
                   <td className="px-4 py-3">
                     {format(effectiveAt(row))}
-                    {effectiveAt(row) !== row.requestedStartAt && (
+                    {!row.appointment && effectiveAt(row) !== row.requestedStartAt && (
                       <div className="text-xs text-gray-500">Giờ đề xuất</div>
                     )}
                   </td>
@@ -320,6 +371,14 @@ export default function BookingRequestsPage() {
                 <dt className="text-gray-500">Bác sĩ mong muốn</dt>
                 <dd>{selected.preferredDentist.fullName}</dd>
               </div>
+              {PROPOSAL.includes(selected.status) && selected.proposedStartAt && (
+                <div>
+                  <dt className="text-gray-500">Bác sĩ đề xuất</dt>
+                  <dd>
+                    {(selected.proposedDentist ?? selected.preferredDentist).fullName}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-gray-500">Người giám hộ</dt>
                 <dd>
@@ -334,8 +393,11 @@ export default function BookingRequestsPage() {
             </dl>
             {selected.appointment && (
               <p className="mt-4 rounded bg-emerald-50 p-3 text-sm text-emerald-800">
-                Lịch đã tạo: {format(selected.appointment.startAt)} (
-                {selected.appointment.status})
+                Lịch đã tạo: {format(selected.appointment.startAt)}
+                {selected.appointment.dentist
+                  ? " · " + selected.appointment.dentist.fullName
+                  : ""}{" "}
+                ({selected.appointment.status})
               </p>
             )}
             {overdue && (
@@ -351,10 +413,10 @@ export default function BookingRequestsPage() {
                 đặt lịch mới hoặc gọi phòng khám.
               </p>
             )}
-            {selected.status === "PATIENT_ACCEPTED" && (
+            {CONFIRMABLE.includes(selected.status) && (
               <div className="mt-5">
                 <label className="block text-sm font-medium">
-                  Ghép hồ sơ bệnh nhân nếu đã tồn tại
+                  Hồ sơ bệnh nhân cho lịch này
                   <select
                     value={patientId}
                     onChange={(e) => setPatientId(e.target.value)}
@@ -363,18 +425,23 @@ export default function BookingRequestsPage() {
                     <option value="">
                       Tự tạo hoặc ghép theo số điện thoại, tên và ngày sinh
                     </option>
+                    <option value={NEW_PATIENT}>
+                      Tạo hồ sơ mới cho {selected.fullName}
+                    </option>
                     {matches.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.code} · {p.fullName} · {String(p.dob).slice(0, 10)} ·{" "}
-                        {p.primaryPhone}
+                        {matchLabel(p)}
                       </option>
                     ))}
                   </select>
                 </label>
                 {matches.length > 0 && (
                   <p className="mt-1 text-xs text-amber-700">
-                    Nếu chọn hồ sơ sai, lịch khám sẽ gắn nhầm bệnh nhân. Hãy đối
-                    chiếu tên và ngày sinh.
+                    Có {matches.length} hồ sơ dùng số điện thoại của yêu cầu (kể
+                    cả SĐT người giám hộ). Nếu chọn hồ sơ sai, lịch khám sẽ gắn
+                    nhầm bệnh nhân. Hãy đối chiếu tên và ngày sinh; khám cho
+                    người khác (ví dụ con dùng số của mẹ) thì chọn “Tạo hồ sơ
+                    mới”.
                   </p>
                 )}
               </div>
@@ -408,13 +475,23 @@ export default function BookingRequestsPage() {
                     />
                   </label>
                 </div>
-                <input
+              </div>
+            )}
+            {OPEN.includes(selected.status) && (
+              <label className="mt-4 block text-sm font-medium">
+                Lời nhắn cho khách
+                <textarea
+                  rows={2}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Lời nhắn giải thích giờ thay thế"
-                  className="mt-3 w-full rounded-md border px-3 py-2 text-sm"
+                  placeholder={
+                    canPropose
+                      ? "Giải thích giờ thay thế, thông tin cần bổ sung hoặc lý do từ chối"
+                      : "Ghi chú (không bắt buộc khi ghi nhận trả lời qua điện thoại); bắt buộc khi từ chối"
+                  }
+                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm font-normal"
                 />
-              </div>
+              </label>
             )}
             {error && (
               <p
@@ -425,15 +502,18 @@ export default function BookingRequestsPage() {
               </p>
             )}
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t pt-4">
-              {["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(
-                selected.status,
-              ) && !overdue && (
+              {CONFIRMABLE.includes(selected.status) && !overdue && (
                 <button
                   disabled={action.isPending}
                   onClick={() =>
                     action.mutate({
                       path: "confirm",
-                      body: patientId ? { patientId } : {},
+                      body:
+                        patientId === NEW_PATIENT
+                          ? { createNewPatient: true }
+                          : patientId
+                            ? { patientId }
+                            : {},
                     })
                   }
                   className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
@@ -464,9 +544,37 @@ export default function BookingRequestsPage() {
                   Đề xuất giờ khác
                 </button>
               )}
-              {["PENDING_REVIEW", "PROPOSED", "PATIENT_ACCEPTED"].includes(
-                selected.status,
-              ) && !overdue && (
+              {/* The patient answered by phone. */}
+              {selected.status === "NEEDS_INFORMATION" && !overdue && (
+                <button
+                  disabled={action.isPending}
+                  onClick={() =>
+                    action.mutate({
+                      path: "information-received",
+                      body: message.trim() ? { note: message.trim() } : {},
+                    })
+                  }
+                  className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  Đã nhận đủ thông tin
+                </button>
+              )}
+              {selected.status === "PROPOSED" && !overdue && (
+                <button
+                  disabled={action.isPending}
+                  onClick={() =>
+                    action.mutate({
+                      path: "accepted-by-phone",
+                      body: message.trim() ? { note: message.trim() } : {},
+                    })
+                  }
+                  className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  Khách đồng ý qua điện thoại
+                </button>
+              )}
+              {/* Not while a proposal stands: it would drop the agreed time. */}
+              {selected.status === "PENDING_REVIEW" && !overdue && (
                 <button
                   disabled={action.isPending || !message.trim()}
                   onClick={() =>

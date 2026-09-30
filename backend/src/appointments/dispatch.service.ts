@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
-import { AppointmentsService } from './appointments.service';
+import { AppointmentsService, STALE_APPOINTMENT_MSG } from './appointments.service';
 import { lockDentistCalendar } from './domain/advisory-lock';
 import { compareQueue } from './domain/queue';
 import { AppointmentNotFoundException } from './domain/exceptions';
@@ -116,7 +116,7 @@ export class DispatchService {
       entry.doneAt ||
       (this.appointments.isRowScopedDentist(actor) && entry.dentistId !== actor.sub)
     ) {
-      throw new AppointmentNotFoundException(`Queue entry ${id}`);
+      throw new AppointmentNotFoundException(id, 'Không tìm thấy lượt chờ');
     }
     return entry;
   }
@@ -261,10 +261,7 @@ export class DispatchService {
         data: { dentistId: dto.dentistId, startAt: start, endAt: end, updatedBy: actor.sub },
       });
       if (moved.count === 0) {
-        throw queueError(
-          'Lịch hẹn vừa được người khác thay đổi — tải lại rồi thử lại',
-          'QUEUE_STALE',
-        );
+        throw queueError(STALE_APPOINTMENT_MSG, 'QUEUE_STALE');
       }
       await tx.appointmentRescheduleLog.create({
         data: {
@@ -361,11 +358,20 @@ export class DispatchService {
             tx,
             appt,
           );
+          // The slot was checked for the time read above: a booking moved
+          // meanwhile must not be carried over at its new time unchecked.
           const res = await tx.appointment.updateMany({
-            where: { id: appt.id, dentistId: dto.fromDentistId, status: appt.status },
+            where: {
+              id: appt.id,
+              dentistId: dto.fromDentistId,
+              status: appt.status,
+              startAt: appt.startAt,
+              endAt: appt.endAt,
+              rescheduleCount: appt.rescheduleCount,
+            },
             data: { dentistId: dto.toDentistId, updatedBy: actor.sub },
           });
-          if (res.count === 0) throw new Error('Lịch hẹn vừa được người khác thay đổi');
+          if (res.count === 0) throw new Error(STALE_APPOINTMENT_MSG);
           await tx.appointmentRescheduleLog.create({
             data: {
               appointmentId: appt.id,

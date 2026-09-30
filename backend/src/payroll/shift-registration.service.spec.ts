@@ -434,6 +434,55 @@ describe('ShiftRegistrationService', () => {
     });
   });
 
+  describe('clinic day boundary (00:00–07:00 Vietnam time is already the new day)', () => {
+    // now = 2099-01-07 01:30 Vietnam time, still 2099-01-06 in UTC
+    beforeEach(() =>
+      jest.useFakeTimers({
+        now: new Date('2099-01-06T18:30:00Z'),
+        doNotFake: ['nextTick', 'setImmediate'],
+      }),
+    );
+    afterEach(() => jest.useRealTimers());
+
+    it('create rejects yesterday (clinic date) even though it is still that day in UTC', async () => {
+      await expect(
+        service.create(
+          { date: '2099-01-06', startTime: '18:00', endTime: '21:00' },
+          'dentist-1',
+          false,
+        ),
+      ).rejects.toThrow(ShiftPastDateException);
+      expect(prisma.shiftRegistration.create).not.toHaveBeenCalled();
+    });
+
+    it('approve rejects yesterday (clinic date)', async () => {
+      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+        ...mockShiftPending,
+        date: new Date('2099-01-06'),
+      });
+      await expect(service.approve('shift-1', 'admin-1')).rejects.toThrow(ShiftPastDateException);
+      expect(prisma.shiftRegistration.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('auto-cancel compares against the clinic date and clock, and only PENDING rows', async () => {
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([{ id: 's1' }]);
+      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.autoCancelPastPending();
+
+      const where = (prisma.shiftRegistration.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { date: { lt: new Date('2099-01-07') } },
+        { date: new Date('2099-01-07'), startTime: { lt: '01:30' } },
+      ]);
+      expect(prisma.shiftRegistration.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: { in: ['s1'] }, status: ShiftRegistrationStatus.PENDING },
+        }),
+      );
+    });
+  });
+
   describe('autoCancelPastPending', () => {
     it('returns count of auto-cancelled shifts', async () => {
       (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([

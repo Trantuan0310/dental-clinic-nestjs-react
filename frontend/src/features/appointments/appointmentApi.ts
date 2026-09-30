@@ -47,6 +47,49 @@ const getList = async <T>(url: string, config?: Parameters<typeof api.get>[1]): 
   return data;
 };
 
+/** Largest page the API serves (ListAppointmentsQueryDto.pageSize ≤ 200). */
+const LIST_ALL_PAGE_SIZE = 200;
+/** Safety cap of fetchAllAppointments(): more in one view means "narrow the filter". */
+export const LIST_ALL_LIMIT = 1000;
+
+/**
+ * Every appointment matching the filter, read page by page through the
+ * cursor. Stops at LIST_ALL_LIMIT rows; `pagination.hasMore` then tells the
+ * page to ask for a narrower filter instead of silently showing a cut list
+ * (the default page of 50 used to be all the list page ever showed).
+ * Pages are read one after another, not as a snapshot: a booking moved
+ * meanwhile can be missed until the next refetch (repeats are dropped by id).
+ */
+export async function fetchAllAppointments(
+  params?: Record<string, unknown>,
+): Promise<AppointmentListResponse> {
+  const rows: Appointment[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  let hasMore = false;
+  do {
+    const page = await getList<{
+      data: PrismaAppointmentRow[];
+      pagination?: { pageSize: number; nextCursor: string | null; hasMore: boolean };
+    }>('/appointments', {
+      params: { ...params, pageSize: LIST_ALL_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+    });
+    for (const row of transformAppointmentList(page.data)) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        rows.push(row);
+      }
+    }
+    hasMore = page.pagination?.hasMore ?? false;
+    cursor = page.pagination?.nextCursor ?? undefined;
+  } while (hasMore && cursor && rows.length < LIST_ALL_LIMIT);
+  return {
+    data: rows,
+    pagination: { pageSize: rows.length, nextCursor: hasMore ? (cursor ?? null) : null, hasMore },
+    total: rows.length,
+  };
+}
+
 const post = async <T>(url: string, body?: unknown) => {
   const { data } = await api.post<AuthEnvelope<T>>(url, body);
   return unwrap(data);
@@ -269,17 +312,9 @@ function buildRescheduleBody(
 export function useAppointments(filters?: AppointmentFilters) {
   return useQuery({
     queryKey: appointmentKeys.list(filters),
-    queryFn: async (): Promise<AppointmentListResponse> => {
-      const { data, pagination } = await getList<{
-        data: PrismaAppointmentRow[];
-        pagination?: { pageSize: number; nextCursor: string | null; hasMore: boolean };
-      }>('/appointments', { params: toListParams(filters) });
-      return {
-        data: transformAppointmentList(data),
-        pagination,
-        total: data.length,
-      };
-    },
+    // The list page counts and paginates on the client, so it needs every
+    // row of the range, not the API's first page.
+    queryFn: () => fetchAllAppointments(toListParams(filters)),
     ...liveAppointmentQuery({ from: filters?.from, to: filters?.to }),
   });
 }
@@ -740,6 +775,30 @@ export function useStartEncounter() {
 // ---------------------------------------------------------------------------
 // ADR-0009 phase 5 — services, walk-in, LEFT, history
 // ---------------------------------------------------------------------------
+
+/**
+ * Ids of the dentists who perform every one of `serviceIds` on `date`
+ * (GET /services/:id/dentists per service, intersected) — the reschedule
+ * dentist picker, so it offers only dentists the API will accept
+ * (BR-APPT-030). Disabled when the visit has no services.
+ */
+export function useDentistsForServices(serviceIds: string[], date: string | undefined) {
+  return useQuery({
+    enabled: serviceIds.length > 0 && !!date,
+    queryKey: ['appointments', 'service-dentists', [...serviceIds].sort(), date ?? ''] as const,
+    queryFn: async (): Promise<string[]> => {
+      const lists = await Promise.all(
+        serviceIds.map((id) =>
+          get<Array<{ dentist: { id: string } }>>(`/services/${id}/dentists`, {
+            params: { date },
+          }),
+        ),
+      );
+      const [first = [], ...rest] = lists.map((rows) => rows.map((r) => r.dentist.id));
+      return first.filter((id) => rest.every((ids) => ids.includes(id)));
+    },
+  });
+}
 
 /**
  * Services the dentist performs on `date` (GET /dentists/:id/services, only

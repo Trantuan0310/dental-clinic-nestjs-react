@@ -4,7 +4,7 @@
 // =============================================================================
 
 export type EncounterStatus = 'in_progress' | 'completed' | 'cancelled';
-export type NoteType = 'chief_complaint' | 'diagnosis' | 'progress_note' | 'other';
+export type NoteType = 'chief_complaint' | 'diagnosis' | 'treatment_plan' | 'progress_note' | 'other';
 export type ToothSurface =
   | 'normal'
   | 'caries'
@@ -441,9 +441,10 @@ export function wireToSnapshotMap(
   for (const r of records ?? []) {
     const n = typeof r.number === 'string' ? Number(r.number) : r.number;
     if (typeof n !== 'number' || Number.isNaN(n)) continue;
-    // Drop teeth the current chart cannot show (e.g. primary teeth carried
-    // over from a childhood snapshot once the patient is charted as ADULT).
-    if (!shown.has(n)) continue;
+    // Drop teeth the current chart cannot show — except primary teeth already
+    // recorded: mixed dentition outlasts the CHILD band, so an ADULT chart
+    // keeps them (the backend accepts ones present in earlier data).
+    if (!shown.has(n) && !(n >= 51 && isValidFdiToothNumber(n))) continue;
     const status = (r.status ?? r.surface ?? 'healthy') as ToothStatus;
     map[String(n)] = {
       status: TOOTH_STATUSES.includes(status) ? status : 'healthy',
@@ -541,6 +542,8 @@ export interface UpdatePrescriptionPayload {
   instructions?: string | null;
   followUpNote?: string | null;
   notes?: string | null;
+  /** Echo of the prescription's current `version` (409 if stale). */
+  version: number;
 }
 
 export interface EncounterClosePayload {

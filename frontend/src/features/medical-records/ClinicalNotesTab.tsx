@@ -11,21 +11,39 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { AddendumModal } from './AddendumModal';
 import type { Encounter, ClinicalNote, NoteType } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
+import { useIsOwnEncounterScope } from './encounterUtils';
 
 interface ClinicalNotesTabProps {
   encounter: Encounter;
 }
 
-// Map the legacy "note type" selector to the field on the upsert
-// clinical-note payload. The backend treats the note as a single
-// resource with chiefComplaint / diagnosis / treatmentPlan / notes
-// sections rather than a list of typed entries.
-const NOTE_TYPE_TO_FIELD: Record<NoteType, 'chiefComplaint' | 'diagnosis' | 'treatmentPlan' | 'notes'> = {
+// Map the "note type" selector to the field on the upsert clinical-note
+// payload. The backend treats the note as a single resource with
+// chiefComplaint / diagnosis / treatmentPlan / notes sections rather than a
+// list of typed entries; each section is written back to its own column.
+type NoteField = 'chiefComplaint' | 'diagnosis' | 'treatmentPlan' | 'notes';
+const NOTE_TYPE_TO_FIELD: Record<NoteType, NoteField> = {
   chief_complaint: 'chiefComplaint',
   diagnosis: 'diagnosis',
+  treatment_plan: 'treatmentPlan',
   progress_note: 'notes',
   other: 'notes',
 };
+
+const NOTE_TYPE_LABEL: Partial<Record<NoteType, string>> = {
+  treatment_plan: 'Kế hoạch điều trị',
+  progress_note: 'Ghi chú tiến triển',
+};
+
+// "Thêm" never replaces what is already written: the server appends the text
+// to that section with a time + author stamp (under the encounter lock, so
+// two quick saves both survive). "Sửa" edits one section, pre-filled with its
+// full current value, and only sends that section.
+function buildNotePayload(type: NoteType, content: string, mode: 'add' | 'edit') {
+  const field = NOTE_TYPE_TO_FIELD[type];
+  if (mode === 'edit') return { [field]: content };
+  return { appendNote: content, appendTo: field };
+}
 
 export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   const queryClient = useQueryClient();
@@ -39,29 +57,11 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   // selected section and preserve the other sections from the encounter
   // snapshot.
   const upsertMutation = useMutation({
-    mutationFn: (payload: { type: NoteType; content: string }) => {
-      const field = NOTE_TYPE_TO_FIELD[payload.type];
-      const existing = encounter.clinicalNote ?? null;
-      return medicalRecordsApi.upsertClinicalNote(encounter.id, {
-        // Backend fields: chiefComplaint, diagnosis, treatmentPlan, notes.
-        chiefComplaint:
-          field === 'chiefComplaint'
-            ? payload.content
-            : (existing?.chiefComplaint ?? undefined),
-        diagnosis:
-          field === 'diagnosis'
-            ? payload.content
-            : (existing?.diagnosis ?? undefined),
-        treatmentPlan:
-          field === 'treatmentPlan'
-            ? payload.content
-            : (existing?.treatmentPlan ?? undefined),
-        notes:
-          field === 'notes'
-            ? payload.content
-            : (existing?.notes ?? undefined),
-      });
-    },
+    mutationFn: (payload: { type: NoteType; content: string; mode: 'add' | 'edit' }) =>
+      medicalRecordsApi.upsertClinicalNote(
+        encounter.id,
+        buildNotePayload(payload.type, payload.content, payload.mode),
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
       queryClient.invalidateQueries({ queryKey: ['medical-records'] });
@@ -86,12 +86,12 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   const otherNotes = notes.filter((n) => n.type !== 'chief_complaint' && n.type !== 'diagnosis');
 
   const handleAddNote = () => {
-    upsertMutation.mutate({ type: noteType, content: noteContent });
+    upsertMutation.mutate({ type: noteType, content: noteContent.trim(), mode: 'add' });
   };
 
   const handleEditNote = () => {
     if (editingNote) {
-      upsertMutation.mutate({ type: editingNote.type, content: noteContent });
+      upsertMutation.mutate({ type: editingNote.type, content: noteContent, mode: 'edit' });
     }
   };
 
@@ -105,8 +105,9 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   // front desk reading it gets no edit controls instead of a 403 on save.
   const canWrite = useAuthStore((s) => s.hasPermission('clinical_note.write'));
   const canAddendum = useAuthStore((s) => s.hasPermission('clinical_note.addendum'));
-  const isCompleted = encounter.status === 'completed' && canAddendum;
-  const isEditable = encounter.status === 'in_progress' && canWrite;
+  const ownScope = useIsOwnEncounterScope(encounter);
+  const isCompleted = encounter.status === 'completed' && canAddendum && ownScope;
+  const isEditable = encounter.status === 'in_progress' && canWrite && ownScope;
 
   return (
     <div className="space-y-4">
@@ -115,7 +116,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
         <div>
           <h4 className="mb-2 text-sm font-medium text-gray-700">Lý do khám</h4>
           <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <p className="text-sm text-gray-900">{chiefComplaintNotes[0].content}</p>
+            <p className="whitespace-pre-wrap text-sm text-gray-900">{chiefComplaintNotes[0].content}</p>
             <p className="mt-2 text-xs text-gray-500">
               {format(new Date(chiefComplaintNotes[0].createdAt), 'HH:mm', { locale: vi })} •{' '}
               {chiefComplaintNotes[0].createdByUserName}
@@ -133,7 +134,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
               key={note.id}
               className="mb-2 rounded-lg border border-gray-100 bg-white p-4"
             >
-              <p className="text-sm text-gray-900">{note.content}</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-900">{note.content}</p>
               <p className="mt-2 text-xs text-gray-500">
                 {format(new Date(note.createdAt), 'HH:mm', { locale: vi })} •{' '}
                 {note.createdByUserName}
@@ -162,7 +163,10 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
               key={note.id}
               className="mb-2 rounded-lg border border-gray-100 bg-white p-4"
             >
-              <p className="text-sm text-gray-900">{note.content}</p>
+              {NOTE_TYPE_LABEL[note.type] && (
+                <p className="mb-1 text-xs font-medium text-gray-500">{NOTE_TYPE_LABEL[note.type]}</p>
+              )}
+              <p className="whitespace-pre-wrap text-sm text-gray-900">{note.content}</p>
               <p className="mt-2 text-xs text-gray-500">
                 {format(new Date(note.createdAt), 'HH:mm', { locale: vi })} •{' '}
                 {note.createdByUserName}
@@ -199,8 +203,8 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
             options={[
               { value: 'chief_complaint', label: 'Lý do khám' },
               { value: 'diagnosis', label: 'Chẩn đoán' },
+              { value: 'treatment_plan', label: 'Kế hoạch điều trị' },
               { value: 'progress_note', label: 'Ghi chú tiến triển' },
-              { value: 'other', label: 'Khác' },
             ]}
             value={noteType}
             onChange={(e) => setNoteType(e.target.value as NoteType)}

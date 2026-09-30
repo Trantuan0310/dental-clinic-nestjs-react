@@ -20,6 +20,7 @@ import {
   PatientCannotDeleteException,
   PatientMergeInvalidException,
   IdentifierAlreadyExistsException,
+  PatientVersionConflictException,
 } from './domain/exceptions';
 
 describe('PatientsService', () => {
@@ -199,6 +200,50 @@ describe('PatientsService', () => {
 
       expect(prisma.patientPhoneHistory.create).not.toHaveBeenCalled();
     });
+
+    it('with expectedUpdatedAt, writes only if the row is unchanged since the form loaded', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.patient.findUniqueOrThrow as jest.Mock).mockResolvedValue(validPatient());
+
+      await service.update(
+        'p1',
+        { fullName: 'Nguyễn Văn A', expectedUpdatedAt: '2026-09-01T02:03:04.567Z' },
+        actor,
+      );
+
+      const call = (prisma.patient.updateMany as jest.Mock).mock.calls[0][0];
+      expect(call.where).toEqual({
+        id: 'p1',
+        updatedAt: {
+          gte: new Date('2026-09-01T02:03:04.567Z'),
+          lt: new Date('2026-09-01T02:03:04.568Z'),
+        },
+      });
+      expect(call.data).toEqual({ fullName: 'Nguyễn Văn A', updatedBy: actor.sub });
+      expect(call.data).not.toHaveProperty('allergies');
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+      expect(audit.log.mock.calls[0][0].metadata.fields).toEqual(['fullName']);
+    });
+
+    it('409s PATIENT_VERSION_CONFLICT when the patient changed after the form loaded', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+      const err = await service
+        .update('p1', { allergies: [], expectedUpdatedAt: '2026-09-01T02:03:04.567Z' }, actor)
+        .catch(e => e);
+
+      expect(err).toBeInstanceOf(PatientVersionConflictException);
+      expect(err.getStatus()).toBe(409);
+      expect(err.getResponse()).toEqual(
+        expect.objectContaining({
+          code: 'PATIENT_VERSION_CONFLICT',
+          message: 'Hồ sơ vừa được cập nhật ở nơi khác, tải lại rồi thử lại',
+        }),
+      );
+      expect(audit.log).not.toHaveBeenCalled();
+    });
   });
 
   describe('overrideDob', () => {
@@ -370,6 +415,8 @@ describe('PatientsService', () => {
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 3 });
       (prisma.encounter.updateMany as jest.Mock).mockResolvedValue({ count: 5 });
       (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.patientPhoneHistory.updateMany as jest.Mock).mockResolvedValue({ count: 4 });
       (prisma.patientIdentifier.findMany as jest.Mock).mockResolvedValue([]);
 
       await service.merge(
@@ -388,6 +435,15 @@ describe('PatientsService', () => {
         }),
       );
       expect(prisma.patientMergeLog.create).toHaveBeenCalled();
+      // Booking requests and the phone trail used to stay on the deleted source.
+      expect(prisma.bookingRequest.updateMany).toHaveBeenCalledWith({
+        where: { patientId: 'p1' },
+        data: { patientId: 'p2' },
+      });
+      expect(prisma.patientPhoneHistory.updateMany).toHaveBeenCalledWith({
+        where: { patientId: 'p1' },
+        data: { patientId: 'p2' },
+      });
       expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'PATIENT_MERGED' }));
       // Both AI summaries are stale once history/encounters move.
       expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
@@ -429,6 +485,8 @@ describe('PatientsService', () => {
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.encounter.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.patientPhoneHistory.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.patientIdentifier.findMany as jest.Mock).mockImplementation(({ where }: any) =>
         Promise.resolve(
           where.patientId === 'p1'
@@ -502,6 +560,139 @@ describe('PatientsService', () => {
         service.merge({ sourcePatientId: 'p1', targetPatientId: 'p1' } as any, actor),
       ).rejects.toThrow(PatientMergeInvalidException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('audit round 2 — input rules', () => {
+    beforeEach(() => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+    });
+
+    it('update refuses to clear the only contact numbers of a child (merged record)', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({
+          dob: new Date(Date.now() - 5 * 365 * 86400000),
+          primaryPhone: null,
+          contactPersonName: 'Mẹ',
+          contactPersonPhone: '0901234567',
+        }),
+      );
+      await expect(
+        service.update('p1', { contactPersonPhone: null } as any, actor),
+      ).rejects.toThrow(/người liên hệ|số liên lạc/);
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
+
+    it('update refuses turning an adult with only a primary phone into a child', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({
+          primaryPhone: '0901234567',
+          contactPersonName: null,
+          contactPersonPhone: null,
+        }),
+      );
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      const childDob = new Date(Date.now() - 5 * 365 * 86400000).toISOString().slice(0, 10);
+      await expect(service.update('p1', { dob: childDob } as any, actor)).rejects.toThrow(
+        /nhỏ hơn 12 tuổi/,
+      );
+    });
+
+    it('a legacy child without a contact person can still be edited when contacts are resent unchanged', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({
+          dob: new Date(Date.now() - 5 * 365 * 86400000),
+          primaryPhone: '0901234567',
+          contactPersonName: null,
+          contactPersonPhone: null,
+        }),
+      );
+      (prisma.patient.update as jest.Mock).mockResolvedValue(validPatient());
+      await expect(
+        service.update(
+          'p1',
+          { address: 'Hà Nội', primaryPhone: '0901234567', contactPersonName: '' } as any,
+          actor,
+        ),
+      ).resolves.toBeDefined();
+      // Changing a contact field applies the rule and says what is missing.
+      await expect(
+        service.update('p1', { primaryPhone: '0907654321' } as any, actor),
+      ).rejects.toThrow(/cần bổ sung họ tên và số điện thoại người liên hệ/);
+    });
+
+    it('update touching unrelated fields does not re-check contact rules', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({ primaryPhone: null, contactPersonName: null, contactPersonPhone: null }),
+      );
+      (prisma.patient.update as jest.Mock).mockResolvedValue(validPatient());
+      await expect(
+        service.update('p1', { address: 'Hà Nội' } as any, actor),
+      ).resolves.toBeDefined();
+    });
+
+    it('softDelete also blocks on a patient in the chair (IN_PROGRESS encounter)', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
+      await expect(service.softDelete('p1', {} as any, actor)).rejects.toThrow(
+        /phiên khám đang mở/,
+      );
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+    });
+
+    it('softDelete counts CHECKED_IN / IN_PROGRESS visits regardless of their start time', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient());
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
+      await expect(service.softDelete('p1', {} as any, actor)).rejects.toThrow(
+        PatientCannotDeleteException,
+      );
+      expect((prisma.appointment.count as jest.Mock).mock.calls[0][0].where.OR).toContainEqual({
+        status: { in: ['CHECKED_IN', 'IN_PROGRESS'] },
+      });
+    });
+
+    it('addIdentifier: the same paper twice on one patient is a 409, not a P2002 500', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(validPatient({ id: 'p1' }));
+      (prisma.patientIdentifier.findFirst as jest.Mock).mockResolvedValue({
+        id: 'i',
+        patientId: 'p1',
+      });
+      await expect(
+        service.addIdentifier('p1', { type: IdentifierType.CCCD, value: '079123456789' }, actor),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(prisma.patientIdentifier.create).not.toHaveBeenCalled();
+    });
+
+    it('merge keeps the source phone on a target that has none', async () => {
+      const same = { fullName: 'A', dob: new Date('1990-01-15') };
+      (prisma.patient.findUnique as jest.Mock)
+        .mockResolvedValueOnce(validPatient({ ...same, id: 'p1', primaryPhone: '0901111111' }))
+        .mockResolvedValueOnce(validPatient({ ...same, id: 'p2', primaryPhone: null }));
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
+      for (const m of [
+        prisma.appointment,
+        prisma.encounter,
+        prisma.invoice,
+        prisma.bookingRequest,
+        prisma.patientPhoneHistory,
+      ]) {
+        (m.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      }
+      (prisma.patientIdentifier.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.merge({ sourcePatientId: 'p1', targetPatientId: 'p2' } as any, actor);
+
+      expect(prisma.patient.update).toHaveBeenCalledWith({
+        where: { id: 'p2' },
+        data: expect.objectContaining({ primaryPhone: '0901111111' }),
+      });
+      expect(prisma.patientPhoneHistory.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ patientId: 'p2', newPhone: '0901111111' }),
+      });
     });
   });
 
@@ -607,6 +798,47 @@ describe('PatientsService', () => {
       expect(prisma.encounter.count).not.toHaveBeenCalled();
       expect(prisma.patient.update).toHaveBeenCalled();
     });
+
+    it('guards the write on expectedUpdatedAt and returns the new updatedAt', async () => {
+      const updatedAt = new Date('2026-09-02T00:00:00.000Z');
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.patient.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        id: 'p1',
+        allergies: ['Latex'],
+        chronicDiseases: [],
+        currentMedications: [],
+        updatedAt,
+      });
+
+      const result = await service.updateMedicalHistory(
+        'p1',
+        { allergies: ['Latex'], expectedUpdatedAt: '2026-09-01T00:00:00.000Z' },
+        userPayloadWithPermissions(['patient.update']),
+      );
+
+      expect((prisma.patient.updateMany as jest.Mock).mock.calls[0][0].where).toEqual({
+        id: 'p1',
+        updatedAt: {
+          gte: new Date('2026-09-01T00:00:00.000Z'),
+          lt: new Date('2026-09-01T00:00:00.001Z'),
+        },
+      });
+      expect(prisma.patient.update).not.toHaveBeenCalled();
+      expect(result).toEqual(expect.objectContaining({ allergies: ['Latex'], updatedAt }));
+    });
+
+    it('409s when the history changed after the card loaded, writing nothing', async () => {
+      (prisma.patient.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await expect(
+        service.updateMedicalHistory(
+          'p1',
+          { allergies: [], expectedUpdatedAt: '2026-09-01T00:00:00.000Z' },
+          userPayloadWithPermissions(['patient.update']),
+        ),
+      ).rejects.toBeInstanceOf(PatientVersionConflictException);
+      expect(audit.log).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe('getDetailWithSummary (BR-PT-021 financial masking, BR-PT-014 dentist row-level)', () => {
@@ -626,6 +858,22 @@ describe('PatientsService', () => {
       notes: null,
       identifiers: [],
       encounters: [],
+    });
+
+    // PatientForm / PatientHistoryCard echo it as expectedUpdatedAt.
+    it.each([
+      ['receptionist', receptionistPayload()],
+      ['dentist', dentistPayload()],
+      ['admin', adminPayload()],
+    ])('returns updatedAt to the %s', async (_role, who) => {
+      const updatedAt = new Date('2026-09-01T02:03:04.567Z');
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({ ...patientRow(), updatedAt });
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(2); // dentist has treated them
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getDetailWithSummary('p1', who);
+
+      expect(result.updatedAt).toEqual(updatedAt);
     });
 
     it('masks all financial fields for receptionist (spec §8.5) even though she holds invoice.read.any', async () => {

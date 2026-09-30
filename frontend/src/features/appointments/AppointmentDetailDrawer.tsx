@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -35,6 +35,7 @@ import {
   useCheckInAppointment,
   useConfirmAppointment,
   useDentistOptions,
+  useDentistsForServices,
   useMarkLeft,
   useMarkNoShow,
   useRescheduleAppointment,
@@ -156,6 +157,10 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const reschedule = useRescheduleAppointment();
   const start = useStartEncounter();
   const { data: dentists } = useDentistOptions();
+  const serviceIds = useMemo(
+    () => (appointment?.services ?? []).map((sv) => sv.serviceId),
+    [appointment?.services],
+  );
 
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
@@ -165,6 +170,37 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   // the user has typed a date + dentist so the list isn't empty at first.
   const rescheduleTargetDentist =
     actionModal === 'reschedule' ? rescheduleDentist || appointment?.dentistId : undefined;
+  // BR-APPT-030: only dentists who perform the booked services that day.
+  const { data: capableDentistIds } = useDentistsForServices(
+    actionModal === 'reschedule' && !rowScopedDentist ? serviceIds : [],
+    rescheduleDate || undefined,
+  );
+  // The dentist the reschedule sends: shown and checked, even when filtered out.
+  const chosenDentist = rescheduleDentist || appointment?.dentistId || '';
+  const rescheduleDentistIncapable =
+    !!capableDentistIds && !!chosenDentist && !capableDentistIds.includes(chosenDentist);
+  const rescheduleDentistOptions = (dentists ?? [])
+    .filter((d) =>
+      rowScopedDentist
+        ? d.id === appointment?.dentistId // a dentist keeps their own calendar
+        : !capableDentistIds || capableDentistIds.includes(d.id) || d.id === chosenDentist,
+    )
+    .map((d) => ({
+      value: d.id,
+      label:
+        d.id === chosenDentist && rescheduleDentistIncapable
+          ? `${d.fullName} (không làm được dịch vụ)`
+          : d.fullName,
+    }));
+  if (chosenDentist && !rescheduleDentistOptions.some((o) => o.value === chosenDentist)) {
+    rescheduleDentistOptions.unshift({
+      value: chosenDentist,
+      label:
+        chosenDentist === appointment?.dentistId && appointment?.dentistName
+          ? appointment.dentistName
+          : 'Bác sĩ hiện tại',
+    });
+  }
   const { data: availability, isLoading: isAvailabilityLoading } = useAvailability(
     rescheduleTargetDentist,
     actionModal === 'reschedule' ? rescheduleDate : undefined,
@@ -343,7 +379,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       await reschedule.mutateAsync({
         id: appointment.id,
         payload: {
-          newDentistId: rescheduleDentist || undefined,
+          newDentistId: chosenDentist || undefined,
           newStartsAt: start.toISOString(),
           newEndsAt: end.toISOString(),
           reason: reason || 'Đổi lịch',
@@ -737,7 +773,8 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   </PermissionGuard>
                 )}
 
-                {canReschedule(appointment.status) && (
+                {canReschedule(appointment.status) &&
+                  (appointment.rescheduleCount ?? 0) < MAX_RESCHEDULES && (
                   <PermissionGuard permission="appointment.update">
                     <Button
                       size="sm"
@@ -750,19 +787,21 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   </PermissionGuard>
                 )}
 
-                <PermissionGuard permission="appointment.update">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    leftIcon={<Edit3 className="h-4 w-4" />}
-                    onClick={() => {
-                      onEdit?.(appointment);
-                      onClose();
-                    }}
-                  >
-                    Sửa
-                  </Button>
-                </PermissionGuard>
+                {canEdit(appointment.status) && (
+                  <PermissionGuard permission="appointment.update">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      leftIcon={<Edit3 className="h-4 w-4" />}
+                      onClick={() => {
+                        onEdit?.(appointment);
+                        onClose();
+                      }}
+                    >
+                      Sửa
+                    </Button>
+                  </PermissionGuard>
+                )}
               </div>
             </div>
           </div>
@@ -850,10 +889,16 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           {error && <AlertInline message={error} />}
           <Select
             label="Bác sĩ mới"
-            value={rescheduleDentist}
+            value={chosenDentist}
             onChange={(e) => setRescheduleDentist(e.target.value)}
-            options={(dentists ?? []).map((d) => ({ value: d.id, label: d.fullName }))}
+            options={rescheduleDentistOptions}
+            disabled={rowScopedDentist}
           />
+          {rescheduleDentistIncapable && (
+            <p className="text-xs text-amber-700">
+              Bác sĩ này không làm được dịch vụ của lịch hẹn vào ngày đã chọn — hãy chọn bác sĩ khác.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Input
               type="date"
@@ -1054,6 +1099,14 @@ function canCancel(status: AppointmentStatus): boolean {
 
 function canReschedule(status: AppointmentStatus): boolean {
   return status === 'scheduled' || status === 'confirmed';
+}
+
+/** BR-APPT-013: a visit moves at most this many times (backend RescheduleLimitReached). */
+const MAX_RESCHEDULES = 3;
+
+/** Reason/notes edits, as the backend's update() accepts. */
+function canEdit(status: AppointmentStatus): boolean {
+  return status === 'scheduled' || status === 'confirmed' || status === 'checked_in';
 }
 
 function canNoShow(status: AppointmentStatus): boolean {

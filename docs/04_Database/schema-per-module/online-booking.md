@@ -22,7 +22,7 @@ a one-time lookup code.
 | `preferred_dentist_id` → `users` | The dentist asked for. |
 | `requested_start_at` | The time asked for. |
 | `proposed_dentist_id`, `proposed_start_at` | Front desk's counter-offer. |
-| `status` | `PENDING_REVIEW` → (`NEEDS_INFORMATION` ↔ `PENDING_REVIEW`) → (`PROPOSED` → `PATIENT_ACCEPTED`) → `CONFIRMED`. `DECLINED`, `CANCELLED` (patient withdrew) and `EXPIRED` (migration 028: its time passed unconfirmed) end the request. |
+| `status` | `PENDING_REVIEW` → (`NEEDS_INFORMATION` ↔ `PENDING_REVIEW`) → (`PROPOSED` → `PATIENT_ACCEPTED`) → `CONFIRMED`. `DECLINED`, `CANCELLED` (patient withdrew) and `EXPIRED` (migration 028: its time passed unconfirmed) end the request. `NEEDS_INFORMATION` can only be asked from `PENDING_REVIEW`: from `PROPOSED` / `PATIENT_ACCEPTED` it would drop the offered time. |
 | `appointment_id` | Unique. Set on confirm, in the same transaction that creates the visit. |
 
 ## Rules
@@ -50,6 +50,45 @@ a one-time lookup code.
   A request whose time has passed cannot be confirmed (checked before any
   patient record is matched or created); if booking the visit fails, a patient
   record created for it a moment earlier is archived (soft delete, audited).
+- **Patient record on confirm.** Candidates are live patients whose
+  `primary_phone` **or** `contact_person_phone` is one of the request's
+  phones (`phone`, `contact_person_phone`), in `0xxx` or `+84xxx` form: a
+  child is often on file only under a parent's number. The inbox lists them
+  (`GET /booking-requests/:id/patient-matches`) with the phone that matched
+  (`matchedBy`) and whether name and date of birth match
+  (`sameNameAndDob`). The front desk picks one (`patientId`), picks
+  "Tạo hồ sơ mới" (`createNewPatient: true`, no matching), or leaves it to
+  the server: the one candidate with the same name (NFC, collapsed spaces,
+  any case) and date of birth is used only if its own `primary_phone` is the
+  request's `phone` (a match through a guardian phone, typed by whoever
+  filled in the form, always needs a person); no candidate creates a record;
+  anything else is a 409 asking them to choose. This works from
+  `PENDING_REVIEW` as well as `PATIENT_ACCEPTED`.
+- **Answers taken by phone.** `POST /booking-requests/:id/information-received`
+  (`NEEDS_INFORMATION` → `PENDING_REVIEW`) and
+  `POST /booking-requests/:id/accepted-by-phone` (`PROPOSED` →
+  `PATIENT_ACCEPTED`), with an optional `note`; both audited, both refused
+  once the effective time has passed.
+- **Accepting a proposal.** The status page sends the `proposedStartAt` it
+  shows; the write is conditional on it, so a proposal changed meanwhile is a
+  409 ("Phòng khám vừa đổi giờ đề xuất…"). The proposal email states the
+  time (clinic time, `dd/MM/yyyy HH:mm`) and dentist, then the note.
+- **Details sent by the patient.** Every field of `PUT …/details` is
+  optional: a field left out keeps its value (the public API never returns
+  the stored details, so the form prefills nothing, not even the lookup
+  phone). Only values that differ from the stored ones after normalizing
+  count; none is a 400. The merged details are checked like a new request.
+  `proposedStartAt` sent when accepting must carry Z or an offset.
+- **Validation (public).** Name trimmed before the length check; no NUL
+  characters; `dob` must be a real `YYYY-MM-DD` day; the guardian phone
+  must be a valid Vietnamese number.
+- **After confirming.** The public page and the inbox show the visit's
+  dentist and time (`appointment.dentist`, `appointment.startAt`), which
+  the clinic may have changed. The public page also reports a cancelled,
+  missed (`NO_SHOW`), left (`LEFT`), completed, in-clinic
+  (`CHECKED_IN` / `IN_PROGRESS`) or moved visit (`rescheduled`: a
+  reschedule count or any reschedule-log row, e.g. a dentist transfer), and offers "Thêm vào Google Calendar" only while
+  the visit still stands.
 - **Effective time.** The proposed time for `PROPOSED` / `PATIENT_ACCEPTED`
   (when set), otherwise the requested time.
 - **Expiry.** `BookingCron` runs every 5 minutes and moves open requests

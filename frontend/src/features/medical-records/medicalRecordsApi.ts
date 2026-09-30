@@ -310,7 +310,7 @@ export function useUpdatePrescription(_encounterId: string) {
   return useMutation({
     // PATCH /medical-records/prescriptions/:id — partial update of header
     // fields. Lines cannot be edited here; callers re-issue via POST.
-    mutationFn: ({ id, payload }: { id: string; payload: { note?: string; diagnosis?: string | null; instructions?: string | null; followUpNote?: string | null; idempotencyKey: string } }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: { note?: string; diagnosis?: string | null; instructions?: string | null; followUpNote?: string | null; version: number; idempotencyKey: string } }) =>
       patch<Prescription>(`${MR_BASE}/prescriptions/${id}`, payload, {
         headers: { 'Idempotency-Key': payload.idempotencyKey },
       }),

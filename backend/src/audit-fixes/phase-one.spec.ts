@@ -228,7 +228,7 @@ describe('Phase one audit regressions', () => {
     [
       'edit prescription',
       (s: MedicalRecordsService, actor: typeof dentist) =>
-        s.updatePrescription('p', { notes: 'edit' }, actor),
+        s.updatePrescription('p', { notes: 'edit', version: 0 }, actor),
     ],
     [
       'delete prescription',

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -22,6 +23,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import {
+  LIST_ALL_LIMIT,
   useAppointments,
   useDentistOptions,
 } from './appointmentApi';
@@ -463,6 +465,12 @@ export default function AppointmentsListPage() {
             />
           </div>
         </div>
+
+        {data?.pagination?.hasMore && (
+          <Alert type="warning">
+            Còn lịch chưa hiển thị (chỉ tải {LIST_ALL_LIMIT} lịch đầu), hãy thu hẹp bộ lọc.
+          </Alert>
+        )}
 
         {/* Table */}
         {isLoading ? (

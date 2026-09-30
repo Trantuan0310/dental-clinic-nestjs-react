@@ -91,6 +91,34 @@ describe('BillingService', () => {
       expect(result).toBeDefined();
       expect(prisma.invoiceItem.create).toHaveBeenCalled();
     });
+
+    it('bills quantity × unit price per treatment line', async () => {
+      (prisma.invoice.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ patientId: 'patient-1', dentistId: 'dentist-1' }),
+      );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.invoice.create as jest.Mock).mockResolvedValue(validInvoice());
+
+      await service.createDraftFromEncounter('enc-1', [
+        {
+          treatmentId: 'tr-1',
+          procedure: 'Hàn composite',
+          description: null,
+          unitPrice: 300_000,
+          quantity: 3,
+        },
+        { treatmentId: 'tr-2', procedure: 'Cạo vôi', description: null, unitPrice: 200_000 },
+      ]);
+
+      const invoiceData = (prisma.invoice.create as jest.Mock).mock.calls[0][0].data;
+      expect(Number(invoiceData.total)).toBe(1_100_000);
+      const items = (prisma.invoiceItem.create as jest.Mock).mock.calls.map(c => c[0].data);
+      expect(Number(items[0].quantity)).toBe(3);
+      expect(Number(items[0].lineTotal)).toBe(900_000);
+      expect(Number(items[1].quantity)).toBe(1);
+      expect(Number(items[1].lineTotal)).toBe(200_000);
+    });
   });
 
   describe('listInvoices (BR-BILL-003 row-level)', () => {

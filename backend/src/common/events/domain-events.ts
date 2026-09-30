@@ -28,6 +28,8 @@ export interface EncounterClosedEvent {
     procedure: string;
     description: string | null;
     unitPrice: number;
+    /** Units billed at unitPrice (treatments.quantity, 1 for older rows). */
+    quantity: number;
   }>;
   inventoryUsages: InventoryUsageSnapshot[];
 }

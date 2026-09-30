@@ -1,4 +1,5 @@
 import { TOOTH_STATUS_LABEL, type Encounter } from '@/types/medical-records';
+import { useAuthStore } from '@/stores/authStore';
 
 export type CloseBlocker = string;
 
@@ -26,6 +27,19 @@ export function validateClose(enc: Encounter): CloseBlocker[] {
 
 export function canCloseEncounter(enc: Encounter): boolean {
   return validateClose(enc).length === 0;
+}
+
+/**
+ * Mirrors the backend row scope (isRowScopedDentist): without
+ * encounter.read.any, only the encounter's own dentist may write to it, so a
+ * colleague opening it (history read) gets a read-only view.
+ */
+export function useIsOwnEncounterScope(encounter: Pick<Encounter, 'dentistId'> | undefined): boolean {
+  return useAuthStore(
+    (s) =>
+      s.hasPermission('encounter.read.any') ||
+      (!!encounter && !!s.user && s.user.id === encounter.dentistId),
+  );
 }
 
 export { TOOTH_STATUS_LABEL };

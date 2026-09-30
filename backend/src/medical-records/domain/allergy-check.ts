@@ -23,6 +23,11 @@ export interface AllergyConflict {
 interface DrugClass {
   label: string;
   names: string[];
+  /**
+   * Word prefixes that also name a member ("amoxi" → Amoxicillin, Amoxi,
+   * Amoxiclav). Only for stems no unrelated word starts with.
+   */
+  prefixes?: string[];
   /** Covered by a generic "dị ứng kháng sinh" / "antibiotic" allergy. */
   antibiotic?: boolean;
 }
@@ -44,11 +49,18 @@ const DRUG_CLASSES: DrugClass[] = [
       'augmentin',
       'klamentin',
       'curam',
+      'hagimox',
+      'clamoxyl',
+      'ofmantine',
+      'ospamox',
+      'moxilen',
+      'amoxiclav',
       'cloxacillin',
       'dicloxacillin',
       'oxacillin',
       'piperacillin',
     ],
+    prefixes: ['amoxi'],
   },
   {
     label: 'nhóm Cephalosporin',
@@ -68,7 +80,11 @@ const DRUG_CLASSES: DrugClass[] = [
       'cefdinir',
       'cefpodoxime',
       'ceftriaxone',
+      'zinnat',
+      'keflex',
+      'hapenxin',
     ],
+    prefixes: ['cef', 'ceph'],
   },
   {
     label: 'nhóm NSAID (kháng viêm không steroid)',
@@ -91,6 +107,13 @@ const DRUG_CLASSES: DrugClass[] = [
       'nimesulide',
       'indomethacin',
       'alaxan',
+      'voltaren',
+      'mobic',
+      'celebrex',
+      'arcoxia',
+      'brufen',
+      'nurofen',
+      'feldene',
     ],
   },
   {
@@ -104,12 +127,22 @@ const DRUG_CLASSES: DrugClass[] = [
       'clarithromycin',
       'spiramycin',
       'rodogyl',
+      'dorogyne',
+      'zithromax',
     ],
   },
   {
     label: 'nhóm Nitroimidazole (Metronidazole)',
     antibiotic: true,
-    names: ['nitroimidazole', 'metronidazole', 'metronidazol', 'flagyl', 'tinidazole', 'rodogyl'],
+    names: [
+      'nitroimidazole',
+      'metronidazole',
+      'metronidazol',
+      'flagyl',
+      'tinidazole',
+      'rodogyl',
+      'dorogyne',
+    ],
   },
   {
     label: 'nhóm Tetracycline',
@@ -123,7 +156,16 @@ const DRUG_CLASSES: DrugClass[] = [
   },
   {
     label: 'Paracetamol',
-    names: ['paracetamol', 'acetaminophen', 'efferalgan', 'panadol', 'hapacol'],
+    names: [
+      'paracetamol',
+      'acetaminophen',
+      'efferalgan',
+      'panadol',
+      'hapacol',
+      'tylenol',
+      'partamol',
+      'alaxan',
+    ],
   },
   {
     label: 'nhóm thuốc tê Amide',
@@ -143,6 +185,10 @@ const DRUG_CLASSES: DrugClass[] = [
 /** Generic allergy wording that covers every antibiotic class. */
 const ANTIBIOTIC_TERMS = ['khang sinh', 'antibiotic', 'antibiotics', 'antibiotique'];
 
+/** Generic "painkiller" allergy wording: warns on NSAIDs and Paracetamol. */
+const ANALGESIC_TERMS = ['giam dau', 'painkiller', 'painkillers', 'analgesic', 'analgesics'];
+const ANALGESIC_CLASSES = ['nhóm NSAID (kháng viêm không steroid)', 'Paracetamol'];
+
 /**
  * Classes with known cross-reactivity (both directions): a penicillin allergy
  * still warns on a cephalosporin and vice versa.
@@ -152,15 +198,69 @@ const CROSS_REACTIVE: Array<[string, string]> = [
 ];
 
 /**
- * Entries that negate rather than name an allergen ("Không dị ứng", "Không
- * có", "Chưa ghi nhận", "NKDA"). "Không dung nạp …" (intolerance) is kept —
- * it names a real reaction.
+ * A clause that only says "no allergy" and names nothing ("Không", "Không có
+ * tiền sử dị ứng", "Chưa ghi nhận", "NKDA"). Anything longer is screened:
+ * "Không chịu được Penicillin", "Không dùng được X", "No penicillin" name a
+ * real allergen.
  */
-const NEGATION_PREFIXES = ['khong', 'chua', 'none', 'no', 'n a', 'na', 'nka', 'nkda'];
+const PURE_NEGATION = [
+  /^(khong|chua)( co)?( ghi nhan| phat hien| ro| biet)?( co)?( tien su)?( di ung)?( voi)?( thuoc| thuc an| thuc pham| thuoc va thuc an| thuoc hay thuc an)?( gi| nao)?$/,
+  /^(none|nil|no|nkda|nka|n a|na|unknown)$/,
+  /^no( known)?( drug)? allerg(y|ies)$/,
+];
 
-function isNegation(normalized: string): boolean {
-  if (normalized.startsWith('khong dung nap')) return false;
-  return NEGATION_PREFIXES.some(p => normalized === p || normalized.startsWith(`${p} `));
+function isPureNegation(clause: string): boolean {
+  return PURE_NEGATION.some(re => re.test(clause));
+}
+
+/**
+ * One recorded entry can hold several statements ("Không dị ứng thức ăn; dị
+ * ứng Penicillin", "Không rõ, nghi dị ứng Amoxicillin"), so each is screened
+ * on its own — a leading negation must not hide the allergen after it.
+ */
+/**
+ * Words that name no substance. A clause made only of these ("thuốc",
+ * "thức ăn" left over from "Không dị ứng thức ăn, thuốc") must not match a
+ * drug whose name merely contains "thuốc".
+ */
+const GENERIC_WORDS = new Set([
+  'thuoc',
+  'tay',
+  'thuc',
+  'an',
+  'pham',
+  'di',
+  'ung',
+  'cac',
+  'loai',
+  'va',
+  'hay',
+  'hoac',
+  'voi',
+  'gi',
+  'nao',
+  'khac',
+  'co',
+  'khong',
+  'chua',
+  'ro',
+  'drug',
+  'drugs',
+  'food',
+  'medicine',
+  'allergy',
+  'allergies',
+]);
+
+function isGenericOnly(clause: string): boolean {
+  return clause.split(' ').every(w => GENERIC_WORDS.has(w));
+}
+
+function allergyClauses(raw: string): string[] {
+  return raw
+    .split(/[;,.\n/+]+|\s(?:nhưng|nhung|tuy nhiên|tuy nhien|ngoài ra|ngoai ra|but|however)\s/i)
+    .map(part => normalizeTerm(part))
+    .filter(norm => norm.length >= 3 && !isPureNegation(norm) && !isGenericOnly(norm));
 }
 
 /** Drug-name words that describe the form, not the substance. */
@@ -220,7 +320,12 @@ function containsPhrase(haystack: string, needle: string): boolean {
 }
 
 function classesMentioned(normalized: string) {
-  return DRUG_CLASSES.filter(c => c.names.some(n => containsPhrase(normalized, n)));
+  const words = normalized.split(' ');
+  return DRUG_CLASSES.filter(
+    c =>
+      c.names.some(n => containsPhrase(normalized, n)) ||
+      (c.prefixes ?? []).some(p => words.some(w => w.startsWith(p))),
+  );
 }
 
 /** Label of the class-level link between an allergy and a drug, if any. */
@@ -231,6 +336,10 @@ function classLink(allergyNorm: string, drugClasses: DrugClass[]): string | unde
   if (ANTIBIOTIC_TERMS.some(t => containsPhrase(allergyNorm, t))) {
     const antibiotic = drugClasses.find(c => c.antibiotic);
     if (antibiotic) return `kháng sinh — ${antibiotic.label}`;
+  }
+  if (ANALGESIC_TERMS.some(t => containsPhrase(allergyNorm, t))) {
+    const analgesic = drugClasses.find(c => ANALGESIC_CLASSES.includes(c.label));
+    if (analgesic) return `thuốc giảm đau — ${analgesic.label}`;
   }
   for (const [a, b] of CROSS_REACTIVE) {
     for (const [from, to] of [
@@ -251,16 +360,17 @@ function classLink(allergyNorm: string, drugClasses: DrugClass[]): string | unde
  * 500mg" / "amoxicillin"), the allergy text names a substance word of the
  * drug (e.g. "Dị ứng amoxicillin" / "Amoxicillin"), both fall in the same
  * drug class (e.g. "Penicillin" / "Augmentin 625mg"), the allergy is a generic
- * "kháng sinh" and the drug is an antibiotic, or the classes cross-react
- * (penicillin ↔ cephalosporin).
+ * "kháng sinh" / "giảm đau" and the drug is an antibiotic / analgesic, or
+ * the classes cross-react (penicillin ↔ cephalosporin). Each entry is split
+ * into clauses and only pure "no allergy" clauses are skipped.
  */
 export function findAllergyConflicts(
   lines: Array<{ drugName: string }>,
   allergies: string[],
 ): AllergyConflict[] {
   const recorded = allergies
-    .map(raw => ({ raw: raw.trim(), norm: normalizeTerm(raw) }))
-    .filter(a => a.norm.length >= 3 && !isNegation(a.norm));
+    .map(raw => ({ raw: (raw ?? '').trim(), clauses: allergyClauses(raw ?? '') }))
+    .filter(a => a.clauses.length > 0);
   if (recorded.length === 0) return [];
 
   const conflicts: AllergyConflict[] = [];
@@ -273,16 +383,20 @@ export function findAllergyConflicts(
     const drugClasses = classesMentioned(drug);
 
     for (const allergy of recorded) {
-      const allergyWords = new Set(allergy.norm.split(' '));
-      const direct = containsPhrase(drug, allergy.norm) || drugWords.some(w => allergyWords.has(w));
-      const link = direct ? undefined : classLink(allergy.norm, drugClasses);
-      if (direct || link) {
-        conflicts.push({
-          lineIndex,
-          drugName: line.drugName,
-          allergy: allergy.raw,
-          ...(link && { drugClass: link }),
-        });
+      // One conflict per line/entry: the first clause that links them.
+      for (const clause of allergy.clauses) {
+        const clauseWords = new Set(clause.split(' '));
+        const direct = containsPhrase(drug, clause) || drugWords.some(w => clauseWords.has(w));
+        const link = direct ? undefined : classLink(clause, drugClasses);
+        if (direct || link) {
+          conflicts.push({
+            lineIndex,
+            drugName: line.drugName,
+            allergy: allergy.raw,
+            ...(link && { drugClass: link }),
+          });
+          break;
+        }
       }
     }
   });

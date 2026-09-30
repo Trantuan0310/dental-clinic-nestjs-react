@@ -15,6 +15,7 @@ import {
   shiftInstants,
 } from '../appointments/domain/shift-bookings';
 import { lockDentistCalendar } from '../appointments/domain/advisory-lock';
+import { CLINIC_UTC_OFFSET_MS, clinicDateOnly } from '../common/date-range.util';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
 @Injectable()
@@ -80,8 +81,9 @@ export class ShiftRegistrationService {
 
     // Date validation
     const date = new Date(dto.date);
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    // `date` is a DATE column; "today" is the clinic's (as in the auto-cancel
+    // cron), so 00:00–07:00 VN already counts as the new day.
+    const today = new Date(clinicDateOnly());
     if (date < today) {
       throw new ShiftPastDateException('Cannot register shift for past date');
     }
@@ -172,9 +174,8 @@ export class ShiftRegistrationService {
       throw new ShiftConflictException(`Cannot approve shift in status ${shift.status}`);
     }
 
-    // BR-APPT-029: cannot approve past date
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    // BR-APPT-029: cannot approve past date (clinic day, see create())
+    const today = new Date(clinicDateOnly());
     if (shift.date < today) {
       throw new ShiftPastDateException('Cannot approve shift for past date');
     }
@@ -353,9 +354,9 @@ export class ShiftRegistrationService {
   async autoCancelPastPending() {
     const now = new Date();
 
-    // Find PENDING candidates: date < today OR (date = today AND startTime < now's HH:mm)
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    // Find PENDING candidates: date < today OR (date = today AND startTime < now's HH:mm),
+    // both in clinic time — startTime is a clinic wall-clock time.
+    const today = new Date(clinicDateOnly(now));
 
     const candidates = await this.prisma.shiftRegistration.findMany({
       where: {
@@ -378,7 +379,8 @@ export class ShiftRegistrationService {
 
     const ids = candidates.map(c => c.id);
     const result = await this.prisma.shiftRegistration.updateMany({
-      where: { id: { in: ids } },
+      // Still PENDING: one approved since the read above stays approved.
+      where: { id: { in: ids }, status: ShiftRegistrationStatus.PENDING },
       data: {
         status: ShiftRegistrationStatus.CANCELLED,
         cancelledAt: new Date(),
@@ -399,8 +401,9 @@ export class ShiftRegistrationService {
     return result.count;
   }
 
+  /** Clinic wall-clock HH:mm of an instant. */
   private hhmmOnly(d: Date): string {
-    return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+    return new Date(d.getTime() + CLINIC_UTC_OFFSET_MS).toISOString().slice(11, 16);
   }
 
   /**

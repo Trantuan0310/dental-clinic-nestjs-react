@@ -1334,7 +1334,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
           source: 'PHONE',
         })
         .expect(400);
-      expect(refused.body.message).toMatch(/time-off/);
+      expect(refused.body.message).toMatch(/nghỉ phép/);
       await api('post', `/appointments/${inside.body.data.id}/cancel`)
         .send({ reason: 'Bác sĩ nghỉ phép' })
         .expect(200);
@@ -1637,8 +1637,19 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect((await queueOf(d2)).map(e => [e.appointmentId, e.priority])).toEqual([[late, 'LATE']]);
       expect(await db.appointmentRescheduleLog.count({ where: { appointmentId: late } })).toBe(1);
 
-      // Starting the exam and LEFT close entries (D5).
-      await api('post', `/appointments/${onTime}/start-encounter`).expect(200);
+      // Starting the exam and LEFT close entries (D5). Starting is the
+      // dentist's step (migration 027): the admin token is refused.
+      await api('post', `/appointments/${onTime}/start-encounter`).expect(403);
+      const dentistRole = await db.role.findFirstOrThrow({
+        where: { code: 'dentist' },
+        include: { rolePermissions: { include: { permission: true } } },
+      });
+      tokens.queueD1 = app.get(JwtService).sign({
+        sub: d1,
+        email: 'queue-d1@test.local',
+        permissions: dentistRole.rolePermissions.map(rp => rp.permission.code),
+      });
+      await api('post', `/appointments/${onTime}/start-encounter`, 'queueD1').expect(200);
       await api('post', `/appointments/${walkIn}/left`)
         .send({ reason: 'Chờ lâu, xin về' })
         .expect(200);

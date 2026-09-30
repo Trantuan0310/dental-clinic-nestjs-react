@@ -15,6 +15,7 @@ import { PaginatedResult } from '../common/dto/pagination.dto';
 import { EmailService } from '../common/services/email.service';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
+import { assertDentistHasNoOpenWork } from '../staff/staff-rules';
 
 @Injectable()
 export class UsersService {
@@ -263,6 +264,11 @@ export class UsersService {
         // "demote the last two admins" requests can each read
         // adminCount=2, both pass, and leave zero admins.
         await this.checkLastAdminGuard(tx, userId, updateRolesDto.roleIds);
+        // BR-STAFF-004: dropping the dentist role orphans their bookings and
+        // open encounters just like suspending the dentist would.
+        if (!roles.some(r => r.code === 'dentist')) {
+          await this.assertNoOpenDentistWork(tx, userId);
+        }
 
         await tx.userRole.deleteMany({
           where: { userId },
@@ -315,6 +321,7 @@ export class UsersService {
         // See updateRoles() — same Serializable-transaction fix for the
         // last-admin race.
         await this.checkLastAdminGuardForDeactivation(tx, userId);
+        await this.assertNoOpenDentistWork(tx, userId);
 
         await tx.user.update({
           where: { id: userId },
@@ -552,6 +559,15 @@ export class UsersService {
         },
       },
     });
+  }
+
+  /** Same BR-STAFF-004 rule as suspending a dentist in the staff module. */
+  private async assertNoOpenDentistWork(tx: Prisma.TransactionClient, userId: string) {
+    const isDentist = await tx.userRole.findFirst({
+      where: { userId, role: { code: 'dentist' } },
+      select: { userId: true },
+    });
+    if (isDentist) await assertDentistHasNoOpenWork(tx, userId);
   }
 
   private async checkLastAdminGuard(
