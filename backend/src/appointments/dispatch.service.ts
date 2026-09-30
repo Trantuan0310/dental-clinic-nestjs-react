@@ -278,8 +278,15 @@ export class DispatchService {
           changedBy: actor.sub,
         },
       });
-      await tx.queueEntry.update({
-        where: { id },
+      // Guarded like guardedUpdate: an entry called (or closed) since the read
+      // above must not be reset to WAITING under the new dentist.
+      const requeued = await tx.queueEntry.updateMany({
+        where: {
+          id,
+          doneAt: null,
+          dentistId: entry.dentistId,
+          status: { in: [QueueStatus.WAITING, QueueStatus.SKIPPED] },
+        },
         data: {
           dentistId: dto.dentistId,
           queueDate: new Date(clinicDateOnly(start)),
@@ -289,6 +296,13 @@ export class DispatchService {
           updatedBy: actor.sub,
         },
       });
+      if (requeued.count === 0) {
+        // Rolls back the appointment move above too.
+        throw queueError(
+          'Bệnh nhân vừa được gọi hoặc đã rời hàng đợi — tải lại rồi thử lại',
+          'QUEUE_STALE',
+        );
+      }
     }, LOCKING_TX_OPTIONS);
     await this.log('APPOINTMENT_TRANSFERRED', actor, appt.id, {
       fromDentistId: entry.dentistId,

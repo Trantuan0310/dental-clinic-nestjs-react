@@ -891,6 +891,33 @@ export function useMarkLeft() {
   });
 }
 
+/**
+ * POST /appointments/:id/undo-check-in or /undo-no-show — back to
+ * scheduled/confirmed, the same clinic day, with a reason.
+ */
+export function useUndoAppointmentStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      what,
+      reason,
+    }: {
+      id: string;
+      what: 'check-in' | 'no-show';
+      reason: string;
+    }): Promise<Appointment> => {
+      const row = await post<PrismaAppointmentRow>(`/appointments/${id}/undo-${what}`, {
+        reason: reason.trim(),
+      });
+      return transformAppointment(row);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
 /** GET /appointments/:id/history — audit trail + reschedules (BR-APPT-034). */
 export function useAppointmentHistory(id: string | undefined) {
   return useQuery({

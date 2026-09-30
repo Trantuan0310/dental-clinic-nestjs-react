@@ -12,6 +12,34 @@ describe('AppointmentsController — start-encounter permission (migration 027)'
   });
 });
 
+describe('AppointmentsController — undo routes', () => {
+  it('undoing a check-in needs check-in rights; undoing a no-show needs no-show rights', () => {
+    const required = (handler: unknown) =>
+      Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, handler as object);
+    expect(required(AppointmentsController.prototype.undoCheckIn)).toEqual([
+      'appointment.check_in',
+    ]);
+    expect(required(AppointmentsController.prototype.undoNoShow)).toEqual(['appointment.no_show']);
+  });
+
+  it('delegates with the body and the caller', async () => {
+    const appointments = {
+      undoCheckIn: jest.fn().mockResolvedValue({ id: 'a-1', status: 'SCHEDULED' }),
+      undoNoShow: jest.fn().mockResolvedValue({ id: 'a-1', status: 'CONFIRMED' }),
+    };
+    const controller = new AppointmentsController(appointments as any, {} as any, {} as any);
+    const actor = adminPayload();
+    const dto = { reason: 'Check-in nhầm' };
+
+    await expect(controller.undoCheckIn('a-1', dto, actor)).resolves.toEqual({
+      data: { id: 'a-1', status: 'SCHEDULED' },
+    });
+    await controller.undoNoShow('a-1', dto, actor);
+    expect(appointments.undoCheckIn).toHaveBeenCalledWith('a-1', dto, actor);
+    expect(appointments.undoNoShow).toHaveBeenCalledWith('a-1', dto, actor);
+  });
+});
+
 describe('AppointmentsController — legacy shift-registration cancel route (APPT-FU-07)', () => {
   const shiftRegistrations = { cancel: jest.fn().mockResolvedValue({ id: 'shift-1' }) };
   const controller = new AppointmentsController({} as any, shiftRegistrations as any, {} as any);

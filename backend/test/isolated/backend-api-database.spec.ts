@@ -1901,7 +1901,13 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect(await actions(serviceId)).toContain('SERVICE_CREATED');
       const history = await as('desk', 'get', `/appointments/${appointmentId}/history`).expect(200);
       expect(history.body.data.events.map((e: { action: string }) => e.action)).toEqual(
-        expect.arrayContaining(['APPOINTMENT_CREATED', 'APPOINTMENT_CHECKED_IN', 'QUEUE_CALLED']),
+        expect.arrayContaining([
+          'APPOINTMENT_CREATED',
+          'APPOINTMENT_CHECKED_IN',
+          'QUEUE_CALLED',
+          'APPOINTMENT_EXAM_STARTED',
+          'APPOINTMENT_COMPLETED',
+        ]),
       );
     });
 
