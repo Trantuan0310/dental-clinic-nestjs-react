@@ -184,6 +184,8 @@ export class AvailabilityService {
         availableSlots: [],
         blockedReason: cal.closedAllDay ? 'CLOSED' : 'NO_SCHEDULE',
         ...(cal.closedAllDay ? { closedReason: cal.closedReason } : {}),
+        // The whole clinic is closed (its reason is meant for patients too).
+        clinicClosed: cal.clinicClosed,
       };
     }
     const slotMin = slotDuration ?? cal.defaultSlotMin;
@@ -256,7 +258,7 @@ export class AvailabilityService {
     // BR-SVC-006: the dentist's duration override, else the service default;
     // the service's buffers too, as the booking form and online booking use.
     const durations = new Map<string, number>();
-    const buffers: Buffers = {};
+    let buffers: Buffers = {};
     if (q.serviceId) {
       const assignments = await this.prisma.dentistService.findMany({
         where: {
@@ -275,9 +277,10 @@ export class AvailabilityService {
       });
       for (const a of assignments) {
         durations.set(a.dentistId, a.durationMin ?? a.service.defaultDurationMin);
-        buffers.beforeMin = a.service.bufferBeforeMin;
-        buffers.afterMin = a.service.bufferAfterMin;
       }
+      // One service, so one set of buffers (they belong to the service).
+      const svc = assignments[0]?.service;
+      if (svc) buffers = { beforeMin: svc.bufferBeforeMin, afterMin: svc.bufferAfterMin };
     }
     const notBefore = new Date(Date.now() + LEAD_MS);
     const results = await Promise.all(

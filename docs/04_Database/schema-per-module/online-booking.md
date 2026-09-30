@@ -115,8 +115,10 @@ a one-time lookup code.
   checked by the interval rules (working hours, closed ranges, time-off,
   bookings with buffers), so an off-grid time the front desk proposes is fine.
 - **Empty days.** Public slots say why a day has none (`emptyReason`:
-  `CLOSED`, `NO_SCHEDULE`, `TIME_OFF`, `FULL`, `TOO_SOON`) and name the next
-  day with a free time within 14 days (`nextAvailableDate`). The options list
+  `CLINIC_CLOSED` with the clinic closure's reason, `CLOSED`, `NO_SCHEDULE`,
+  `TIME_OFF`, `FULL`, `TOO_SOON`; a dentist's own closed-day note stays
+  internal) and, with `next=1`, name the next day with a free time within 14
+  days (`nextAvailableDate`; only days with working hours are loaded). The options list
   only dentists with working hours in the bookable range.
 - **Stranded requests.** For the front desk (propose, confirm) the dentist
   need not take online bookings, and a service withdrawn (or an assignment

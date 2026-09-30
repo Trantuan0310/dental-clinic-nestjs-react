@@ -39,12 +39,20 @@ type SlotsResponse = {
   availableSlots: string[];
   minLeadMinutes?: number;
   emptyReason?: string | null;
+  /** Set only for a clinic-wide closure (its reason is written for patients). */
+  closedReason?: string | null;
   nextAvailableDate?: string | null;
   lastDate?: string;
 };
 /** Why the chosen day has no time left, in the patient's words. */
-const emptyReasonText = (reason: string | null | undefined, minLead: number) => {
+const emptyReasonText = (
+  reason: string | null | undefined,
+  minLead: number,
+  closedReason?: string | null,
+) => {
   switch (reason) {
+    case "CLINIC_CLOSED":
+      return (closedReason || "Phòng khám nghỉ ngày này") + ".";
     case "CLOSED":
       return "Bác sĩ không nhận lịch ngày này (phòng khám đóng lịch).";
     case "NO_SCHEDULE":
@@ -79,6 +87,7 @@ export default function PublicBookingPage() {
   const [date, setDate] = useState(today());
   const [slots, setSlots] = useState<string[]>([]);
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
+  const [closedReason, setClosedReason] = useState<string | null>(null);
   const [nextDate, setNextDate] = useState<string | null>(null);
   const [slotError, setSlotError] = useState("");
   // Online requests are taken this far ahead (the slots API reports it).
@@ -123,18 +132,21 @@ export default function PublicBookingPage() {
     setSlots([]);
     setTime("");
     setEmptyReason(null);
+    setClosedReason(null);
     setNextDate(null);
     setSlotError("");
     if (!serviceId || !dentistId || !date) return;
     setSlotLoading(true);
     api
       .get<{ data: SlotsResponse }>("/public/booking/slots", {
-        params: { serviceId, dentistId, date },
+        // next=1: on an empty day, also name the next day with a free time.
+        params: { serviceId, dentistId, date, next: 1 },
       })
       .then((r) => {
         const data = r.data.data;
         setSlots(data.availableSlots);
         setEmptyReason(data.emptyReason ?? null);
+        setClosedReason(data.closedReason ?? null);
         setNextDate(data.nextAvailableDate ?? null);
         if (data.lastDate) setLastDate(data.lastDate);
         if (typeof data.minLeadMinutes === "number")
@@ -335,7 +347,7 @@ export default function PublicBookingPage() {
                       )}
                       {!slotLoading && !slotError && dentistId && slots.length === 0 && (
                         <span className="mt-1 block text-xs font-normal text-amber-800">
-                          {emptyReasonText(emptyReason, minLead)}{" "}
+                          {emptyReasonText(emptyReason, minLead, closedReason)}{" "}
                           {nextDate ? (
                             <button
                               type="button"

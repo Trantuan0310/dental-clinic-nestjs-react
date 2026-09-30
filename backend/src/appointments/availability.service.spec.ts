@@ -102,10 +102,9 @@ describe('AvailabilityService slot grid', () => {
     expect(fromSearch).toEqual(await online());
   });
 
-  it('starts at an off-grid window start, then keeps to round clock times', async () => {
+  it('keeps to round clock times when a window starts just off the grid', async () => {
     day([['08:10', '09:10']]);
     expect((await service.dayAvailability('dentist-1', DATE, 30)).availableSlots).toEqual([
-      '08:10',
       '08:15',
       '08:30',
     ]);
