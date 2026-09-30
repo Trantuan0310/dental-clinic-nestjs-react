@@ -1312,7 +1312,9 @@ describe('AppointmentsService', () => {
     });
 
     it('does not re-check services when neither the dentist nor the day changes', async () => {
-      const sameDay = new Date(base.startAt.getTime() + 60 * 60_000);
+      // 10:00 on the visit's own clinic day (whatever time the suite runs).
+      const vnDay = new Date(base.startAt.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+      const sameDay = new Date(`${vnDay}T03:00:00Z`);
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         ...base,
         services: [{ serviceId: 'svc-1' }],
@@ -2539,20 +2541,29 @@ describe('AppointmentsService', () => {
     });
 
     it('BR-APPT-032: a walk-in starts now and is checked in at once', async () => {
-      (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([]);
-      const before = Date.now();
-      await service.createWalkIn(
-        { dentistId: 'dentist-1', patientId: 'patient-1', durationMin: 20 } as any,
-        actor,
-      );
-      const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
-      expect(data).toMatchObject({
-        visitKind: 'WALK_IN',
-        source: 'WALK_IN',
-        status: AppointmentStatus.CHECKED_IN,
+      // Mid-morning in Vietnam, so the 20-minute visit never crosses midnight.
+      jest.useFakeTimers({
+        now: new Date('2026-09-30T03:00:00Z'),
+        doNotFake: ['nextTick', 'setImmediate'],
       });
-      expect(data.startAt.getTime()).toBeLessThanOrEqual(before);
-      expect(data.endAt.getTime() - data.startAt.getTime()).toBe(20 * 60_000);
+      try {
+        (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([]);
+        const before = Date.now();
+        await service.createWalkIn(
+          { dentistId: 'dentist-1', patientId: 'patient-1', durationMin: 20 } as any,
+          actor,
+        );
+        const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+        expect(data).toMatchObject({
+          visitKind: 'WALK_IN',
+          source: 'WALK_IN',
+          status: AppointmentStatus.CHECKED_IN,
+        });
+        expect(data.startAt.getTime()).toBeLessThanOrEqual(before);
+        expect(data.endAt.getTime() - data.startAt.getTime()).toBe(20 * 60_000);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('BR-APPT-033: only a checked-in patient can be marked LEFT', async () => {

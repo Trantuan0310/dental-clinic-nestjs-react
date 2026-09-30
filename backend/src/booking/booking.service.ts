@@ -814,14 +814,11 @@ export class BookingService {
             OR: [{ effectiveTo: null }, { effectiveTo: { gte: sent } }],
           },
         ],
+        // Same dentists validateDentist accepts when the proposal is sent.
         dentist: {
-          status: 'ACTIVE',
-          deletedAt: null,
+          ...SCHEDULABLE_ACCOUNT_WHERE,
           userRoles: { some: { role: { code: 'dentist' } } },
-          OR: [
-            { dentistProfile: null },
-            { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
-          ],
+          dentistProfile: { is: dentistProfileFilter('booking') },
         },
       },
       select: { dentist: { select: { id: true, fullName: true } } },

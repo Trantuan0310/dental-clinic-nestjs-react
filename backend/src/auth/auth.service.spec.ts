@@ -159,6 +159,20 @@ describe('AuthService', () => {
       expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
+    it('treats an exact match as unknown when a mixed-case look-alike is also active', async () => {
+      const lower = buildUserWithRoles({ id: 'a', email: 'bs.an@clinic.vn' });
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(lower);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        lower,
+        buildUserWithRoles({ id: 'b', email: 'BS.An@clinic.vn' }),
+      ]);
+
+      await expect(
+        service.login({ email: 'bs.an@clinic.vn', password: 'x' }, null, null),
+      ).rejects.toThrow(InvalidCredentialsException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
     it('throws InvalidCredentialsException when user not found', async () => {
       (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 

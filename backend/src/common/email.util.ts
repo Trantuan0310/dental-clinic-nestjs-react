@@ -9,10 +9,10 @@ export function normalizeEmail(email: string): string {
 }
 
 /**
- * Active-account lookup by login email: exact (lowercase) match first, then a
- * case-insensitive one for rows migration 037 had to leave in mixed case.
- * The fallback only counts when exactly one account matches; several means
- * "not found", so a login never picks one of two look-alike accounts.
+ * Active-account lookup by login email. Migration 037 leaves look-alike rows
+ * (User@x / user@x) in place when it cannot add the lower(email) index, so
+ * every case-insensitive match is counted: exactly one account is returned,
+ * several mean "not found", so a login never picks one of two look-alikes.
  */
 export async function findActiveUserByEmail<T extends { email: string }>(
   email: string,
@@ -22,12 +22,12 @@ export async function findActiveUserByEmail<T extends { email: string }>(
   const normalized = normalizeEmail(email);
   const base = { deactivatedAt: null, deletedAt: null } as const;
   const exact = await findOne({ ...base, email: normalized });
-  if (exact) return exact;
   // Filter again in JS: only true case-insensitive matches count.
   const loose = (
     (await findMany({ ...base, email: { equals: normalized, mode: 'insensitive' } })) ?? []
   ).filter(u => normalizeEmail(u.email) === normalized);
-  return loose.length === 1 ? loose[0] : null;
+  if (loose.length > 1) return null;
+  return exact ?? loose[0] ?? null;
 }
 
 type ActiveEmailWhere<E> = { email: E; deactivatedAt: null; deletedAt: null };
