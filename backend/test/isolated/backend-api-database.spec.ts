@@ -1187,6 +1187,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
           categoryId,
           name: 'Implant thử',
           defaultDurationMin: 90,
+          basePrice: 20000000,
           requiredSpecialty: 'IMPLANT',
         })
         .expect(201);
@@ -1367,7 +1368,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
         blockedReason: 'CLOSED',
       });
 
-      await api('delete', `/appointments/schedule-overrides/${closed.body.data.id}`).expect(204);
+      await api('delete', `/appointments/schedule-overrides/${closed.body.data.id}`).expect(200);
       const after = await api(
         'get',
         `/appointments/schedule-impact?dentistId=${users.dentist}&from=${day}&to=${day}`,

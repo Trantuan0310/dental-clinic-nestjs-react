@@ -2,14 +2,15 @@ import { HttpStatus } from '@nestjs/common';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 
 export class CatalogNotFoundException extends BusinessRuleException {
+  /** `what` is the Vietnamese noun, e.g. "dịch vụ". */
   constructor(what: string, id: string) {
-    super(`${what} ${id} not found`, HttpStatus.NOT_FOUND, undefined, 'CATALOG_NOT_FOUND');
+    super(`Không tìm thấy ${what} ${id}`, HttpStatus.NOT_FOUND, undefined, 'CATALOG_NOT_FOUND');
   }
 }
 
 export class CatalogCodeTakenException extends BusinessRuleException {
   constructor(code: string) {
-    super(`Code ${code} is already used`, HttpStatus.CONFLICT, undefined, 'CATALOG_CODE_TAKEN');
+    super(`Mã ${code} đã được dùng`, HttpStatus.CONFLICT, undefined, 'CATALOG_CODE_TAKEN');
   }
 }
 
@@ -30,7 +31,7 @@ export class AssignmentNotAllowedException extends BusinessRuleException {
 export class AssignmentOverlapException extends BusinessRuleException {
   constructor(existing: { id: string; effectiveFrom: string; effectiveTo: string | null }) {
     super(
-      'The dentist already performs this service in an overlapping period',
+      'Bác sĩ đã được phân công dịch vụ này trong khoảng thời gian trùng',
       HttpStatus.CONFLICT,
       { existing },
       'ASSIGNMENT_OVERLAP',

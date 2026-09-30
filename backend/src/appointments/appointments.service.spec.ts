@@ -115,14 +115,13 @@ describe('AppointmentsService', () => {
   });
 
   describe('listDentistOptions', () => {
-    it('returns active dentists with their calendar colour, skipping inactive profiles', async () => {
+    it('returns dentists taking bookings with their calendar colour', async () => {
       (prisma.user.findMany as jest.Mock).mockResolvedValue([
         {
           id: 'dentist-1',
           fullName: 'Bác sĩ Nguyễn An',
           dentistProfile: { calendarColor: '#2563EB', practiceStatus: 'ACTIVE' },
         },
-        { id: 'dentist-2', fullName: 'Bác sĩ Trần Bình', dentistProfile: null },
       ]);
 
       const result = await service.listDentistOptions();
@@ -134,16 +133,12 @@ describe('AppointmentsService', () => {
           calendarColor: '#2563EB',
           practiceStatus: 'ACTIVE',
         },
-        {
-          id: 'dentist-2',
-          fullName: 'Bác sĩ Trần Bình',
-          calendarColor: null,
-          practiceStatus: null,
-        },
       ]);
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         where: {
-          status: 'ACTIVE',
+          // PENDING_SETUP accounts (new dentist, owner who also practises)
+          // are bookable; only deactivated ones are left out.
+          status: { not: 'DEACTIVATED' },
           deactivatedAt: null,
           deletedAt: null,
           userRoles: {
@@ -155,8 +150,15 @@ describe('AppointmentsService', () => {
             },
           },
           OR: [
+            // A bare dentist role (no profile yet) stays bookable, as before.
             { dentistProfile: null },
-            { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
+            {
+              dentistProfile: {
+                deletedAt: null,
+                practiceStatus: 'ACTIVE',
+                employee: { employmentStatus: 'ACTIVE' },
+              },
+            },
           ],
         },
         select: {
@@ -168,6 +170,68 @@ describe('AppointmentsService', () => {
           fullName: 'asc',
         },
       });
+    });
+
+    it('also lists suspended and on-leave dentists for schedule management', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.listDentistOptions('schedule');
+
+      expect(
+        (prisma.user.findMany as jest.Mock).mock.calls[0][0].where.OR[1].dentistProfile,
+      ).toEqual({
+        deletedAt: null,
+        practiceStatus: { in: ['ACTIVE', 'SUSPENDED'] },
+        employee: { employmentStatus: { not: 'TERMINATED' } },
+      });
+    });
+  });
+
+  describe('validateDentist (account and employment status)', () => {
+    const dentist = (overrides: Record<string, unknown> = {}) => ({
+      id: 'dentist-1',
+      status: 'ACTIVE',
+      deactivatedAt: null,
+      deletedAt: null,
+      userRoles: [{ role: { code: 'dentist' } }],
+      dentistProfile: {
+        practiceStatus: 'ACTIVE',
+        deletedAt: null,
+        employee: { employmentStatus: 'ACTIVE' },
+      },
+      ...overrides,
+    });
+
+    it('accepts a PENDING_SETUP account for bookings', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(dentist({ status: 'PENDING_SETUP' }));
+      await expect(service.validateDentist('dentist-1')).resolves.toMatchObject({
+        id: 'dentist-1',
+      });
+    });
+
+    it('rejects a deactivated account', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        dentist({ status: 'DEACTIVATED', deactivatedAt: new Date() }),
+      );
+      await expect(service.validateDentist('dentist-1')).rejects.toThrow(/không còn hoạt động/);
+      await expect(service.validateDentist('dentist-1', { forBooking: false })).rejects.toThrow(
+        /không còn hoạt động/,
+      );
+    });
+
+    it('refuses new bookings for a dentist on leave but lets their schedule be managed', async () => {
+      const onLeave = dentist({
+        dentistProfile: {
+          practiceStatus: 'ACTIVE',
+          deletedAt: null,
+          employee: { employmentStatus: 'ON_LEAVE' },
+        },
+      });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(onLeave);
+      await expect(service.validateDentist('dentist-1')).rejects.toThrow(/tạm nghỉ/);
+      await expect(service.validateDentist('dentist-1', { forBooking: false })).resolves.toBe(
+        onLeave,
+      );
     });
   });
 
@@ -1248,7 +1312,9 @@ describe('AppointmentsService', () => {
     });
 
     it('does not re-check services when neither the dentist nor the day changes', async () => {
-      const sameDay = new Date(base.startAt.getTime() + 60 * 60_000);
+      // 10:00 on the visit's own clinic day (whatever time the suite runs).
+      const vnDay = new Date(base.startAt.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+      const sameDay = new Date(`${vnDay}T03:00:00Z`);
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         ...base,
         services: [{ serviceId: 'svc-1' }],
@@ -1514,7 +1580,8 @@ describe('AppointmentsService', () => {
         { startTime: '09:10', endTime: '09:55' },
         { startTime: '11:00', endTime: '24:00' },
       ]);
-      expect(result.availableSlots).toEqual(['08:00', '08:30', '10:00', '10:30']);
+      // One 15-minute grid (SLOT_STEP_MIN), whatever the visit's length.
+      expect(result.availableSlots).toEqual(['08:00', '08:15', '08:30', '10:00', '10:15', '10:30']);
     });
 
     it("drops today's slots that have already started", async () => {
@@ -1540,7 +1607,7 @@ describe('AppointmentsService', () => {
           date: '2099-09-16',
         });
 
-        expect(result.availableSlots).toEqual(['10:00', '10:30']);
+        expect(result.availableSlots).toEqual(['10:00', '10:15', '10:30']);
       } finally {
         jest.useRealTimers();
       }
@@ -1780,7 +1847,7 @@ describe('AppointmentsService', () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(activeDentist);
       (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
 
-      await expect(service.createTimeOff(timeOffDto, approver)).rejects.toThrow(/checked-in/);
+      await expect(service.createTimeOff(timeOffDto, approver)).rejects.toThrow(/đã check-in/);
       expect(prisma.appointment.count).toHaveBeenCalledWith({
         where: expect.objectContaining({
           startAt: { lt: new Date(timeOffDto.endAt) },
@@ -2060,7 +2127,19 @@ describe('AppointmentsService', () => {
 
       const result = await service.getAvailability({ dentistId: 'dentist-1', date: '2099-09-16' });
 
-      expect(result.availableSlots).toEqual(['08:00', '08:30', '09:00', '09:30', '10:00', '10:30']);
+      expect(result.availableSlots).toEqual([
+        '08:00',
+        '08:15',
+        '08:30',
+        '08:45',
+        '09:00',
+        '09:15',
+        '09:30',
+        '09:45',
+        '10:00',
+        '10:15',
+        '10:30',
+      ]);
     });
   });
 
@@ -2142,7 +2221,7 @@ describe('AppointmentsService', () => {
     releaseBooked([]);
 
     await expect(pending).resolves.toEqual(
-      expect.objectContaining({ availableSlots: ['08:00', '08:30'] }),
+      expect.objectContaining({ availableSlots: ['08:00', '08:15', '08:30'] }),
     );
   });
 
@@ -2211,7 +2290,7 @@ describe('AppointmentsService', () => {
     });
 
     it('rejecting needs a reason', async () => {
-      await expect(service.rejectTimeOff('to-1', { note: '' }, approver)).rejects.toThrow(/reason/);
+      await expect(service.rejectTimeOff('to-1', { note: '' }, approver)).rejects.toThrow(/lý do/);
     });
 
     it("a dentist cannot cancel a colleague's time-off", async () => {
@@ -2313,17 +2392,23 @@ describe('AppointmentsService', () => {
       });
     });
 
-    it('overrides are front desk/admin only', async () => {
+    it('overrides are clinic management only', async () => {
       await expect(
         service.createScheduleOverride(
           { dentistId: 'dentist-self', date: '2099-01-05', kind: 'CLOSED', reason: 'Nghỉ' } as any,
           dentistPayload('dentist-self'),
         ),
-      ).rejects.toThrow(/lễ tân/);
+      ).rejects.toThrow(/Chỉ quản trị phòng khám/);
     });
 
-    it('a day can have only one changed-hours override', async () => {
-      (prisma.scheduleOverride.findFirst as jest.Mock).mockResolvedValue({ id: 'ov-1' });
+    it('changed hours may not overlap a block the day already has', async () => {
+      (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'ov-1',
+          startTime: new Date('1970-01-01T14:00:00Z'),
+          endTime: new Date('1970-01-01T18:00:00Z'),
+        },
+      ]);
       const error = await service
         .createScheduleOverride(
           {
@@ -2456,20 +2541,29 @@ describe('AppointmentsService', () => {
     });
 
     it('BR-APPT-032: a walk-in starts now and is checked in at once', async () => {
-      (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([]);
-      const before = Date.now();
-      await service.createWalkIn(
-        { dentistId: 'dentist-1', patientId: 'patient-1', durationMin: 20 } as any,
-        actor,
-      );
-      const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
-      expect(data).toMatchObject({
-        visitKind: 'WALK_IN',
-        source: 'WALK_IN',
-        status: AppointmentStatus.CHECKED_IN,
+      // Mid-morning in Vietnam, so the 20-minute visit never crosses midnight.
+      jest.useFakeTimers({
+        now: new Date('2026-09-30T03:00:00Z'),
+        doNotFake: ['nextTick', 'setImmediate'],
       });
-      expect(data.startAt.getTime()).toBeLessThanOrEqual(before);
-      expect(data.endAt.getTime() - data.startAt.getTime()).toBe(20 * 60_000);
+      try {
+        (prisma.dentistService.findMany as jest.Mock).mockResolvedValue([]);
+        const before = Date.now();
+        await service.createWalkIn(
+          { dentistId: 'dentist-1', patientId: 'patient-1', durationMin: 20 } as any,
+          actor,
+        );
+        const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+        expect(data).toMatchObject({
+          visitKind: 'WALK_IN',
+          source: 'WALK_IN',
+          status: AppointmentStatus.CHECKED_IN,
+        });
+        expect(data.startAt.getTime()).toBeLessThanOrEqual(before);
+        expect(data.endAt.getTime() - data.startAt.getTime()).toBe(20 * 60_000);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('BR-APPT-033: only a checked-in patient can be marked LEFT', async () => {

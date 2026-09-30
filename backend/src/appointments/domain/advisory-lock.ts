@@ -1,9 +1,14 @@
 import { Prisma } from '@prisma/client';
 
-// Advisory-lock namespaces (first int4 of pg_advisory_xact_lock(int4, int4)),
-// so a dentist id and a patient id can never hash onto the same lock.
+// Every advisory-lock namespace of the app (first int4 of
+// pg_advisory_xact_lock(int4, int4)), kept in this one place so two kinds of
+// key can never hash onto the same lock:
+//   1 dentist calendar · 2 patient calendar · 3 online-booking phone ·
+//   4 clinic-wide closures
 const LOCK_NS_DENTIST = 1;
 const LOCK_NS_PATIENT = 2;
+const LOCK_NS_BOOKING_PHONE = 3;
+const LOCK_NS_CLINIC = 4;
 
 async function advisoryLock(
   tx: Prisma.TransactionClient,
@@ -37,4 +42,17 @@ export function lockDentistCalendar(tx: Prisma.TransactionClient, dentistId: str
  */
 export function lockPatientCalendar(tx: Prisma.TransactionClient, patientId: string) {
   return advisoryLock(tx, LOCK_NS_PATIENT, patientId);
+}
+
+/** Serialize changes to clinic-wide closed days (overlap check + insert). */
+export function lockClinicClosures(tx: Prisma.TransactionClient) {
+  return advisoryLock(tx, LOCK_NS_CLINIC, 'clinic_closures');
+}
+
+/**
+ * Serialize online submissions from one phone, so the duplicate check and the
+ * insert of a booking request are atomic (a double submit, a second tab).
+ */
+export async function lockBookingPhone(tx: Prisma.TransactionClient, phone: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NS_BOOKING_PHONE}::int4, hashtext(${phone}))`;
 }

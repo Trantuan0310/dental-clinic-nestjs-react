@@ -4,13 +4,14 @@ import { CheckCircle2 } from 'lucide-react';
 import { Badge, Card, EmptyState, Select } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
-import { useScheduleImpact } from './scheduleApi';
+import { useAuthStore } from '@/stores/authStore';
+import { useBookingRequestIssues, useScheduleImpact } from './scheduleApi';
 import { formatDateTime } from './format';
 import type { ImpactedAppointment } from '@/types/schedule';
 
 const REASON_LABEL: Record<ImpactedAppointment['reason'], string> = {
   TIME_OFF: 'Bác sĩ nghỉ phép',
-  CLOSED: 'Lịch đã đóng',
+  CLOSED: 'Lịch đã đóng / phòng khám nghỉ',
   OUTSIDE_WORKING_HOURS: 'Ngoài giờ làm',
 };
 
@@ -22,6 +23,8 @@ export function ImpactTab() {
   const [dentistFilter, setDentistFilter] = useState('');
   const { data: dentists = [] } = useDentistOptions();
   const { data: rows = [], isLoading } = useScheduleImpact(dentistFilter || undefined);
+  const canReadRequests = useAuthStore((s) => s.hasPermission('booking_request.read'));
+  const { data: requests = [] } = useBookingRequestIssues(dentistFilter || undefined, canReadRequests);
 
   return (
     <div className="space-y-4">
@@ -72,9 +75,48 @@ export function ImpactTab() {
                     <td>{r.dentistName}</td>
                     <td>
                       <Badge variant="warning">{REASON_LABEL[r.reason]}</Badge>
+                      <p className="mt-1 text-xs text-gray-500">{r.message}</p>
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+      {requests.length > 0 && (
+        <Card title="Yêu cầu đặt lịch online không còn xác nhận được" noPadding>
+          <div className="overflow-x-auto">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Giờ yêu cầu</th>
+                  <th>Người đặt</th>
+                  <th>Bác sĩ</th>
+                  <th>Lý do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((r) => {
+                  const proposal = ['PROPOSED', 'PATIENT_ACCEPTED'].includes(r.status);
+                  return (
+                    <tr key={r.id}>
+                      <td className="whitespace-nowrap">
+                        {formatDateTime(proposal && r.proposedStartAt ? r.proposedStartAt : r.requestedStartAt)}
+                      </td>
+                      <td>
+                        <Link to="/booking-requests" className="font-medium hover:underline">
+                          {r.fullName}
+                        </Link>
+                        <p className="text-xs text-gray-500">
+                          {r.referenceCode} · {r.phone}
+                        </p>
+                      </td>
+                      <td>{(proposal && r.proposedDentist?.fullName) || r.preferredDentist.fullName}</td>
+                      <td className="text-xs text-gray-600">{r.slotIssue?.message}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

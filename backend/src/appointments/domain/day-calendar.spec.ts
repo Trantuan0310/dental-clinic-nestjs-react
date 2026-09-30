@@ -5,6 +5,7 @@ import {
   buildDayCalendar,
   freeSlots,
   intervalProblem,
+  mergeWindows,
 } from './day-calendar';
 
 /**
@@ -277,6 +278,28 @@ describe('day calendar decision table', () => {
       expect(freeSlots(buildDayCalendar(inputs), 60, 15, notBefore)).toEqual(['08:00']);
     });
 
+    it('steps the grid, not the visit length, from round clock times', () => {
+      const inputs = base();
+      inputs.schedules = [{ startTime: t('08:00'), endTime: t('12:00'), slotDurationMin: 30 }];
+      const cal = buildDayCalendar(inputs);
+      // A 90-minute visit: 10:30 fits (it used to step 90 and stop at 09:30).
+      expect(freeSlots(cal, 90, 15, notBefore).slice(-3)).toEqual(['10:00', '10:15', '10:30']);
+    });
+
+    it('offers an off-grid window start only half a step or more before the grid', () => {
+      const inputs = base();
+      const slotsFor = (from: string, to: string, minutes = 30) => {
+        inputs.schedules = [{ startTime: t(from), endTime: t(to), slotDurationMin: 30 }];
+        return freeSlots(buildDayCalendar(inputs), minutes, 15, notBefore);
+      };
+      // 08:10 is 5' before 08:15: not both.
+      expect(slotsFor('08:10', '09:10')).toEqual(['08:15', '08:30']);
+      // 08:05 is 10' before 08:15 (at least half of 15).
+      expect(slotsFor('08:05', '09:05')).toEqual(['08:05', '08:15', '08:30']);
+      // No grid time fits a 30' visit in 08:10-08:40: the window start does.
+      expect(slotsFor('08:10', '08:40')).toEqual(['08:10']);
+    });
+
     it('lists a start only once when a shift overlaps the schedule', () => {
       const inputs = base();
       inputs.schedules = [{ startTime: t('08:00'), endTime: t('09:00'), slotDurationMin: 30 }];
@@ -294,6 +317,77 @@ describe('day calendar decision table', () => {
       const cal = buildDayCalendar(inputs);
       expect(cal).toMatchObject({ closedAllDay: true, closedReason: 'x', windows: [] });
       expect(freeSlots(cal, 30, 30, notBefore)).toEqual([]);
+    });
+  });
+  describe('changed hours with several blocks (BR-SCH-004)', () => {
+    const changedDay = () => {
+      const inputs = base();
+      inputs.overrides = [
+        { kind: 'CHANGED_HOURS', startTime: t('09:00'), endTime: t('11:00'), reason: 'x' },
+        { kind: 'CHANGED_HOURS', startTime: t('14:00'), endTime: t('16:00'), reason: 'x' },
+      ];
+      return buildDayCalendar(inputs);
+    };
+
+    it('keeps the break between the blocks and replaces the weekly hours', () => {
+      const cal = changedDay();
+      expect(cal.changedHours).toBe(true);
+      expect(intervalProblem(cal, { start: at('09:00'), end: at('09:30') })).toBeNull();
+      expect(intervalProblem(cal, { start: at('14:30'), end: at('15:00') })).toBeNull();
+      // Lunch stays closed; weekly 08:00 and 16:30 are gone.
+      expect(intervalProblem(cal, { start: at('12:00'), end: at('12:30') })?.kind).toBe(
+        'OUTSIDE_WORKING_HOURS',
+      );
+      expect(intervalProblem(cal, { start: at('08:00'), end: at('08:30') })?.kind).toBe(
+        'OUTSIDE_WORKING_HOURS',
+      );
+      expect(intervalProblem(cal, { start: at('16:30'), end: at('17:00') })?.message).toMatch(
+        /09:00-11:00, 14:00-16:00 \(giờ đã điều chỉnh\)/,
+      );
+    });
+  });
+
+  describe('touching windows are merged', () => {
+    it('a visit may run from the weekly schedule into an adjacent approved shift', () => {
+      const inputs = base();
+      inputs.shifts = [{ startTime: '12:00', endTime: '13:30' }];
+      const cal = buildDayCalendar(inputs);
+      expect(cal.windows).toEqual([{ start: at('08:00'), end: at('17:00') }]);
+      expect(intervalProblem(cal, { start: at('11:30'), end: at('12:30') })).toBeNull();
+    });
+
+    it('mergeWindows joins overlapping and touching intervals, keeps gaps', () => {
+      expect(
+        mergeWindows([
+          { start: at('13:30'), end: at('17:00') },
+          { start: at('08:00'), end: at('10:00') },
+          { start: at('09:00'), end: at('12:00') },
+        ]),
+      ).toEqual([
+        { start: at('08:00'), end: at('12:00') },
+        { start: at('13:30'), end: at('17:00') },
+      ]);
+    });
+  });
+
+  describe('clinic closures (migration 035)', () => {
+    it('closes the whole day for the dentist with the clinic reason', () => {
+      const inputs = base();
+      inputs.shifts = [{ startTime: '18:00', endTime: '20:00' }];
+      inputs.clinicClosures = [{ reason: 'Tết Nguyên đán' }];
+      const cal = buildDayCalendar(inputs);
+      expect(cal).toMatchObject({
+        closedAllDay: true,
+        clinicClosed: true,
+        closedReason: 'Phòng khám nghỉ: Tết Nguyên đán',
+        windows: [],
+      });
+      const problem = intervalProblem(cal, { start: at('09:00'), end: at('09:30') });
+      expect(problem).toEqual({
+        kind: 'CLOSED',
+        message: `Phòng khám nghỉ: Tết Nguyên đán (ngày ${DATE})`,
+      });
+      expect(freeSlots(cal, 30, 30, new Date('2000-01-01'))).toEqual([]);
     });
   });
 });

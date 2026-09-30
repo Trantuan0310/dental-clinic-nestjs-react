@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { NormalizeEmail } from '../../common/email.util';
 import { EmployeeType, EmploymentStatus, Gender, PracticeStatus } from '@prisma/client';
 
 /** Fixed specialty codes for dentist_profiles.specialties (staff.md §3). */
@@ -193,6 +194,19 @@ export class TerminateEmployeeDto {
   reason: string;
 }
 
+export class ReinstateEmployeeDto {
+  @ApiPropertyOptional({ description: 'Why the employee is back' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+
+  @ApiPropertyOptional({ default: true, description: 'Also reactivate the login account' })
+  @IsOptional()
+  @IsBoolean()
+  reactivateAccount?: boolean;
+}
+
 export class LinkAccountDto {
   @ApiPropertyOptional({ description: 'Link an existing account' })
   @IsOptional()
@@ -201,6 +215,7 @@ export class LinkAccountDto {
 
   @ApiPropertyOptional({ description: 'Or create a new account with this login email' })
   @IsOptional()
+  @NormalizeEmail()
   @IsEmail()
   @MaxLength(255)
   loginEmail?: string;

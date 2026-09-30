@@ -9,7 +9,10 @@ import type {
   EmployeeFilters,
   EmployeeListResponse,
   EmployeePayload,
+  LinkableAccount,
+  LinkedEmployee,
   PracticeStatus,
+  UpdatedEmployee,
 } from './types';
 
 export const staffKeys = {
@@ -18,6 +21,7 @@ export const staffKeys = {
   dentists: ['dentists'] as const,
   dentistList: (status?: PracticeStatus) => ['dentists', 'list', status ?? 'all'] as const,
   dentistOverview: (userId: string) => ['dentists', 'overview', userId] as const,
+  linkableAccounts: ['employees', 'linkable-accounts'] as const,
 };
 
 export const staffApi = {
@@ -29,8 +33,19 @@ export const staffApi = {
     const { data } = await api.post<{ data: Employee }>('/employees', payload);
     return unwrap(data);
   },
-  async updateEmployee(id: string, payload: Partial<EmployeePayload>): Promise<Employee> {
-    const { data } = await api.patch<{ data: Employee }>(`/employees/${id}`, payload);
+  async updateEmployee(id: string, payload: Partial<EmployeePayload>): Promise<UpdatedEmployee> {
+    const { data } = await api.patch<{ data: UpdatedEmployee }>(`/employees/${id}`, payload);
+    return unwrap(data);
+  },
+  async reinstateEmployee(
+    id: string,
+    payload: { reason?: string; reactivateAccount?: boolean },
+  ): Promise<Employee> {
+    const { data } = await api.post<{ data: Employee }>(`/employees/${id}/reinstate`, payload);
+    return unwrap(data);
+  },
+  async linkableAccounts(): Promise<LinkableAccount[]> {
+    const { data } = await api.get<{ data: LinkableAccount[] }>('/employees/linkable-accounts');
     return unwrap(data);
   },
   async terminateEmployee(
@@ -40,8 +55,11 @@ export const staffApi = {
     const { data } = await api.post<{ data: Employee }>(`/employees/${id}/terminate`, payload);
     return unwrap(data);
   },
-  async linkAccount(id: string, payload: { userId?: string; loginEmail?: string }): Promise<Employee> {
-    const { data } = await api.post<{ data: Employee }>(`/employees/${id}/account`, payload);
+  async linkAccount(
+    id: string,
+    payload: { userId?: string; loginEmail?: string },
+  ): Promise<LinkedEmployee> {
+    const { data } = await api.post<{ data: LinkedEmployee }>(`/employees/${id}/account`, payload);
     return unwrap(data);
   },
   async createDentistProfile(id: string, payload: DentistProfilePayload): Promise<unknown> {
@@ -80,6 +98,15 @@ export function useEmployees(filters: EmployeeFilters) {
     queryKey: staffKeys.employeeList(filters),
     queryFn: () => staffApi.listEmployees(filters),
     placeholderData: (previous) => previous,
+  });
+}
+
+/** Accounts not linked to an employee yet (the "Gắn tài khoản có sẵn" picker). */
+export function useLinkableAccounts(enabled: boolean) {
+  return useQuery({
+    queryKey: staffKeys.linkableAccounts,
+    queryFn: () => staffApi.linkableAccounts(),
+    enabled,
   });
 }
 

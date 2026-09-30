@@ -16,6 +16,7 @@ import { EmailService } from '../common/services/email.service';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { assertDentistHasNoOpenWork } from '../staff/staff-rules';
+import { normalizeEmail } from '../common/email.util';
 
 @Injectable()
 export class UsersService {
@@ -81,6 +82,7 @@ export class UsersService {
         userRoles: {
           include: { role: true },
         },
+        dentistProfile: { select: { deletedAt: true } },
       },
     });
 
@@ -94,6 +96,9 @@ export class UsersService {
         fullName: user.fullName,
         status: user.status.toLowerCase(),
         roles: user.userRoles.map(ur => ur.role.code),
+        // A dentist role without a profile gets no colour, services or
+        // online booking; the Users page asks for one to be created.
+        hasDentistProfile: Boolean(user.dentistProfile && !user.dentistProfile.deletedAt),
         lastLoginAt: user.lastLoginAt,
         createdAt: user.createdAt,
         deactivatedAt: user.deactivatedAt,
@@ -119,18 +124,30 @@ export class UsersService {
     actorEmail: string,
     ipAddress: string | null,
     userAgent: string | null,
-  ): Promise<{ id: string; email: string; status: string; createdAt: Date }> {
+  ): Promise<{
+    id: string;
+    email: string;
+    status: string;
+    createdAt: Date;
+    /** False when no invite went out (opted out, or the email could not be sent). */
+    inviteSent: boolean;
+  }> {
+    const email = normalizeEmail(createUserDto.email);
     // `email` uniqueness is enforced at the DB layer by a partial unique
     // index scoped to active rows only (deactivated_at IS NULL AND
     // deleted_at IS NULL — see migration 013_soft_delete_partial_unique).
     // Mirror that scope here so a deactivated user's old email is free to
     // reuse instead of throwing on a constraint the DB no longer enforces.
     const existingUser = await this.prisma.user.findFirst({
-      where: { email: createUserDto.email, deactivatedAt: null, deletedAt: null },
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        deactivatedAt: null,
+        deletedAt: null,
+      },
     });
 
     if (existingUser) {
-      throw new EmailAlreadyExistsException(createUserDto.email);
+      throw new EmailAlreadyExistsException(email);
     }
 
     const roleIds = createUserDto.roleIds ?? [];
@@ -147,7 +164,7 @@ export class UsersService {
 
     const user = await this.prisma.user.create({
       data: {
-        email: createUserDto.email,
+        email,
         fullName: createUserDto.fullName,
         passwordHash,
         status: 'PENDING_SETUP',
@@ -179,8 +196,12 @@ export class UsersService {
     // Not sending an invite would leave the account stuck: the temp password
     // above is random and never surfaced anywhere, so the setup link is the
     // only way in. Default to sending unless the caller opts out explicitly.
-    if (createUserDto.sendInvite !== false) {
-      await this.issuePasswordLink(user, 'setup');
+    // The result is reported back so the UI can offer a temporary password
+    // instead of claiming an invite that never left the server.
+    const inviteSent =
+      createUserDto.sendInvite !== false && (await this.issuePasswordLink(user, 'setup'));
+    if (createUserDto.sendInvite !== false && !inviteSent) {
+      this.logger.warn(`Account setup email for ${user.email} was not sent`);
     }
 
     return {
@@ -188,6 +209,7 @@ export class UsersService {
       email: user.email,
       status: user.status.toLowerCase(),
       createdAt: user.createdAt,
+      inviteSent,
     };
   }
 
@@ -208,20 +230,65 @@ export class UsersService {
     // while the UI shows them as active again.
     const reactivating = updateUserDto.status === 'ACTIVE' && user.deactivatedAt !== null;
 
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        fullName: updateUserDto.fullName ?? user.fullName,
-        status: updateUserDto.status ?? user.status,
-        deactivatedAt: reactivating ? null : user.deactivatedAt,
-        updatedBy: actorUserId,
-      },
-      include: {
-        userRoles: {
-          include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+    // Changing the login email: same active-row, case-insensitive
+    // uniqueness as create() (and migration 037's lower(email) index).
+    const newEmail =
+      updateUserDto.email !== undefined ? normalizeEmail(updateUserDto.email) : undefined;
+    const emailChanged = newEmail !== undefined && newEmail !== user.email;
+    if (emailChanged) {
+      const taken = await this.prisma.user.findFirst({
+        where: {
+          email: { equals: newEmail, mode: 'insensitive' },
+          id: { not: userId },
+          deactivatedAt: null,
+          deletedAt: null,
         },
-      },
-    });
+      });
+      if (taken) throw new EmailAlreadyExistsException(newEmail);
+    }
+    const nameChanged =
+      updateUserDto.fullName !== undefined && updateUserDto.fullName !== user.fullName;
+
+    const updated = await this.prisma
+      .$transaction(async tx => {
+        const row = await tx.user.update({
+          where: { id: userId },
+          data: {
+            fullName: updateUserDto.fullName ?? user.fullName,
+            ...(emailChanged ? { email: newEmail } : {}),
+            status: updateUserDto.status ?? user.status,
+            deactivatedAt: reactivating ? null : user.deactivatedAt,
+            updatedBy: actorUserId,
+          },
+          include: {
+            userRoles: {
+              include: {
+                role: { include: { rolePermissions: { include: { permission: true } } } },
+              },
+            },
+          },
+        });
+        // One display name: the linked employee record follows the account
+        // (EmployeesService.update syncs the other way).
+        if (nameChanged) {
+          await tx.employee.updateMany({
+            where: { userId, deletedAt: null },
+            data: { fullName: row.fullName, updatedBy: actorUserId },
+          });
+        }
+        return row;
+      })
+      .catch(error => {
+        // Lost a race with another account taking the same email.
+        if (
+          emailChanged &&
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          throw new EmailAlreadyExistsException(newEmail!);
+        }
+        throw error;
+      });
 
     await this.auditService.log({
       action: 'USER_UPDATED',
@@ -229,7 +296,11 @@ export class UsersService {
       actorEmail,
       targetType: 'user',
       targetId: userId,
-      metadata: { changes: updateUserDto, reactivated: reactivating },
+      metadata: {
+        changes: updateUserDto,
+        reactivated: reactivating,
+        ...(emailChanged ? { emailFrom: user.email, emailTo: newEmail } : {}),
+      },
       ipAddress,
       userAgent,
     });
@@ -264,6 +335,9 @@ export class UsersService {
         // "demote the last two admins" requests can each read
         // adminCount=2, both pass, and leave zero admins.
         await this.checkLastAdminGuard(tx, userId, updateRolesDto.roleIds);
+        if (userId === actorUserId) {
+          await this.checkSelfAdminRemoval(tx, userId, updateRolesDto.roleIds);
+        }
         // BR-STAFF-004: dropping the dentist role orphans their bookings and
         // open encounters just like suspending the dentist would.
         if (!roles.some(r => r.code === 'dentist')) {
@@ -282,6 +356,8 @@ export class UsersService {
           })),
         });
 
+        // Sign the user out (their own admin included) so a dropped role
+        // stops working at once instead of surviving the next refresh.
         await tx.refreshToken.updateMany({
           where: { userId, revokedAt: null },
           data: { revokedAt: new Date() },
@@ -359,9 +435,10 @@ export class UsersService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<void> {
-    await this.prisma.user.findUniqueOrThrow({
+    const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
+    await this.assertEmailFreeForReactivation(user);
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -390,7 +467,7 @@ export class UsersService {
     actorEmail: string,
     ipAddress: string | null,
     userAgent: string | null,
-  ): Promise<{ temporaryPassword?: string }> {
+  ): Promise<{ temporaryPassword?: string; emailSent?: boolean }> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
@@ -430,8 +507,7 @@ export class UsersService {
     // inbox; send a link to choose a new one instead (the account is now
     // PENDING_SETUP, so it gets the setup email).
     if (sendEmail) {
-      await this.issuePasswordLink(user, 'setup');
-      return {};
+      return { emailSent: await this.issuePasswordLink(user, 'setup') };
     }
 
     return { temporaryPassword: tempPassword };
@@ -559,6 +635,42 @@ export class UsersService {
         },
       },
     });
+  }
+
+  /**
+   * A deactivated account's email may have been reused by a new account
+   * meanwhile (the unique index only covers active rows) — say so instead
+   * of failing on the index.
+   */
+  async assertEmailFreeForReactivation(
+    user: { id: string; email: string },
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<void> {
+    const taken = await db.user.findFirst({
+      where: {
+        email: { equals: normalizeEmail(user.email), mode: 'insensitive' },
+        id: { not: user.id },
+        deactivatedAt: null,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (taken) throw new EmailAlreadyExistsException(user.email);
+  }
+
+  /** An admin cannot drop their own clinic_admin role (they would lock themselves out). */
+  private async checkSelfAdminRemoval(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    newRoleIds: string[],
+  ): Promise<void> {
+    const current = await tx.userRole.findFirst({
+      where: { userId, role: { code: 'clinic_admin' } },
+      select: { roleId: true },
+    });
+    if (current && !newRoleIds.includes(current.roleId)) {
+      throw new BadRequestException('Không thể tự gỡ vai trò Quản trị của chính mình');
+    }
   }
 
   /** Same BR-STAFF-004 rule as suspending a dentist in the staff module. */

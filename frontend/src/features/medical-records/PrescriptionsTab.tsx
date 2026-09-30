@@ -14,6 +14,7 @@ import type {
 } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
 import { useIsOwnEncounterScope } from './encounterUtils';
+import { ClinicPrintHeading } from '@/components/brand/ClinicPrintHeading';
 
 const MIN_OVERRIDE_REASON = 10;
 
@@ -144,7 +145,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
         prescriptions.map((prescription) => (
           <div key={prescription.id} className="print-document rounded-lg border border-gray-200 p-4">
             <div className="mb-4 hidden border-b border-gray-300 pb-3 text-center print:block">
-              <p className="text-lg font-bold">NHA KHOA GENSMILE</p>
+              <ClinicPrintHeading />
               <p className="text-sm">ĐƠN THUỐC</p>
               <p className="mt-2 text-left text-sm">
                 Bệnh nhân: <strong>{encounter.patientName}</strong> ({encounter.patientCode})

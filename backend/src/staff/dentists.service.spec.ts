@@ -46,12 +46,12 @@ describe('DentistsService', () => {
       email: null,
       employmentStatus: 'ACTIVE',
     },
-    user: { email: 'a@clinic.local', status: 'ACTIVE' },
+    user: { email: 'a@clinic.local', status: 'ACTIVE', fullName: 'BS. A' },
     ...overrides,
   });
 
   beforeEach(async () => {
-    prisma = createPrismaMock();
+    prisma = createPrismaMock({ mediaAsset: { count: jest.fn().mockResolvedValue(0) } });
     asTransaction(prisma);
     const module = await Test.createTestingModule({
       providers: [
@@ -172,6 +172,72 @@ describe('DentistsService', () => {
         meta,
       );
       expect(result.practiceStatus).toBe('SUSPENDED');
+    });
+  });
+
+  describe('overview — readiness checklist', () => {
+    it('reports what keeps a new dentist out of the booking screens', async () => {
+      prisma.dentistProfile.findFirst.mockResolvedValue(
+        profile({
+          user: { email: 'admin@clinic.local', status: 'PENDING_SETUP', fullName: 'Quản trị viên' },
+        }),
+      );
+      prisma.workingSchedule.findMany.mockResolvedValue([]);
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.dentistService.count.mockResolvedValue(0);
+
+      const { readiness, profile: p } = await service.overview('user-9');
+
+      expect(p.accountStatus).toBe('PENDING_SETUP');
+      expect(readiness).toEqual({
+        accountStatus: 'PENDING_SETUP',
+        practiceStatus: 'ACTIVE',
+        employmentStatus: 'ACTIVE',
+        acceptsOnlineBooking: false,
+        acceptsNewPatients: true,
+        hasCurrentSchedule: false,
+        activeServiceCount: 0,
+        onlineServiceCount: 0,
+        hasPhoto: false,
+        placeholderName: true,
+      });
+    });
+
+    it('counts a schedule already in force, current services and the photo', async () => {
+      prisma.workingSchedule.findMany.mockResolvedValue([
+        {
+          id: 'ws-1',
+          dayOfWeek: 1,
+          startTime: new Date('1970-01-01T08:00:00Z'),
+          endTime: new Date('1970-01-01T12:00:00Z'),
+          validFrom: new Date('2020-01-01T00:00:00Z'),
+          validTo: null,
+          slotDurationMin: 30,
+        },
+      ]);
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.dentistService.count.mockResolvedValueOnce(3).mockResolvedValueOnce(2);
+      (prisma.mediaAsset.count as jest.Mock).mockResolvedValue(1);
+
+      const { readiness } = await service.overview('user-9');
+
+      expect(readiness).toMatchObject({
+        hasCurrentSchedule: true,
+        activeServiceCount: 3,
+        onlineServiceCount: 2,
+        hasPhoto: true,
+        placeholderName: false,
+      });
+      expect(prisma.dentistService.count.mock.calls[0][0].where).toMatchObject({
+        dentistId: 'user-9',
+        service: { isActive: true },
+      });
+      // Only services offered online count for the online booking page.
+      expect(prisma.dentistService.count.mock.calls[1][0].where.service).toEqual({
+        isActive: true,
+        bookableOnline: true,
+        category: { isActive: true },
+      });
     });
   });
 });

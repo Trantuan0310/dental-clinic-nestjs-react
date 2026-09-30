@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Plus, Pencil, KeyRound, Stethoscope, UserX } from 'lucide-react';
+import { Plus, Pencil, KeyRound, Stethoscope, UserX, RotateCcw } from 'lucide-react';
 import {
+  Alert,
   Badge,
   Button,
   Card,
+  Checkbox,
   DatePicker,
   Input,
   Modal,
@@ -16,8 +18,10 @@ import {
 import { PageHeader } from '@/components/ui/PageHeader';
 import { notify } from '@/components/ui/Toast';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/lib/format';
-import { staffApi, useEmployees, useStaffMutation } from './staffApi';
+import { staffApi, useEmployees, useLinkableAccounts, useStaffMutation } from './staffApi';
+import { TemporaryPasswordDialog } from '@/features/admin/TemporaryPasswordDialog';
 import { DentistProfileForm } from './DentistProfileForm';
 import { BlockingAppointmentsList } from './BlockingAppointmentsList';
 import {
@@ -47,7 +51,16 @@ type Dialog =
   | { kind: 'edit'; employee: Employee }
   | { kind: 'account'; employee: Employee }
   | { kind: 'dentist'; employee: Employee }
-  | { kind: 'terminate'; employee: Employee };
+  | { kind: 'terminate'; employee: Employee }
+  | { kind: 'reinstate'; employee: Employee }
+  | { kind: 'onLeave'; employee: Employee; appointments: BlockingAppointment[] };
+
+type LinkPayload = { userId: string } | { loginEmail: string };
+
+const ACCOUNT_STATUS_HINT: Record<string, string> = {
+  PENDING_SETUP: 'Chờ thiết lập',
+  DEACTIVATED: 'Đã vô hiệu',
+};
 
 function EmployeeForm({
   employee,
@@ -192,9 +205,12 @@ function LinkAccountForm({
   employee: Employee;
   submitting: boolean;
   onCancel: () => void;
-  onSubmit: (loginEmail: string) => void;
+  onSubmit: (payload: LinkPayload) => void;
 }) {
+  const [mode, setMode] = useState<'create' | 'existing'>('create');
   const [loginEmail, setLoginEmail] = useState(employee.email ?? '');
+  const [userId, setUserId] = useState('');
+  const { data: accounts = [], isLoading: loadingAccounts } = useLinkableAccounts(mode === 'existing');
   const role =
     employee.employeeType === 'DENTIST'
       ? 'Bác sĩ'
@@ -206,28 +222,76 @@ function LinkAccountForm({
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(loginEmail.trim());
+        onSubmit(
+          mode === 'create' ? { loginEmail: loginEmail.trim().toLowerCase() } : { userId },
+        );
       }}
     >
-      <Input
-        label="Email đăng nhập"
-        type="email"
-        required
-        value={loginEmail}
-        onChange={(e) => setLoginEmail(e.target.value)}
-      />
-      <p className="text-sm text-gray-500 dark:text-surface-400">
-        Hệ thống tạo tài khoản ở trạng thái chờ kích hoạt và gửi lời mời.{' '}
-        {role
-          ? `Tài khoản được gán vai trò ${role}.`
-          : 'Tài khoản chưa có vai trò; gán vai trò ở trang Người dùng.'}
-      </p>
+      <div className="flex gap-2" role="group" aria-label="Cách gắn tài khoản">
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === 'create' ? 'primary' : 'outline'}
+          aria-pressed={mode === 'create'}
+          onClick={() => setMode('create')}
+        >
+          Tạo tài khoản mới
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={mode === 'existing' ? 'primary' : 'outline'}
+          aria-pressed={mode === 'existing'}
+          onClick={() => setMode('existing')}
+        >
+          Gắn tài khoản có sẵn
+        </Button>
+      </div>
+      {mode === 'create' ? (
+        <>
+          <Input
+            label="Email đăng nhập"
+            type="email"
+            required
+            value={loginEmail}
+            onChange={(e) => setLoginEmail(e.target.value)}
+          />
+          <p className="text-sm text-gray-500 dark:text-surface-400">
+            Hệ thống tạo tài khoản ở trạng thái chờ kích hoạt và gửi lời mời.{' '}
+            {role
+              ? `Tài khoản được gán vai trò ${role}.`
+              : 'Tài khoản chưa có vai trò; gán vai trò ở trang Người dùng.'}
+          </p>
+        </>
+      ) : (
+        <>
+          <Select
+            label="Tài khoản"
+            required
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            placeholder={loadingAccounts ? 'Đang tải…' : '-- Chọn tài khoản chưa gắn nhân viên --'}
+            options={accounts.map((a) => ({
+              value: a.id,
+              label: `${a.fullName} · ${a.email}${a.status === 'PENDING_SETUP' ? ' (chờ thiết lập)' : ''}`,
+            }))}
+          />
+          <p className="text-sm text-gray-500 dark:text-surface-400">
+            Chỉ liệt kê tài khoản đang hoạt động chưa gắn với nhân viên nào (ví dụ tài khoản quản
+            trị của chủ phòng khám). Tên hiển thị của tài khoản đổi theo tên nhân viên; vai trò giữ
+            nguyên.
+          </p>
+          {!loadingAccounts && accounts.length === 0 && (
+            <p className="text-sm text-amber-700">Không có tài khoản nào chưa gắn nhân viên.</p>
+          )}
+        </>
+      )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
           Hủy
         </Button>
-        <Button type="submit" isLoading={submitting}>
-          Tạo tài khoản
+        <Button type="submit" isLoading={submitting} disabled={mode === 'existing' && !userId}>
+          {mode === 'create' ? 'Tạo tài khoản' : 'Gắn tài khoản'}
         </Button>
       </div>
     </form>
@@ -292,11 +356,72 @@ function TerminateForm({
   );
 }
 
+function ReinstateForm({
+  employee,
+  submitting,
+  onCancel,
+  onSubmit,
+}: {
+  employee: Employee;
+  submitting: boolean;
+  onCancel: () => void;
+  onSubmit: (payload: { reason?: string; reactivateAccount: boolean }) => void;
+}) {
+  const [reason, setReason] = useState('');
+  // Reopening a login (old password, old roles) is a user-management right.
+  const canReactivate = useAuthStore((s) => s.hasPermission('user.deactivate'));
+  const [reactivateAccount, setReactivateAccount] = useState(canReactivate);
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({ reason: reason.trim() || undefined, reactivateAccount: canReactivate && reactivateAccount });
+      }}
+    >
+      <p className="text-sm text-gray-600 dark:text-surface-300">
+        Nhân viên trở lại trạng thái “Đang làm”, ngày nghỉ việc được xóa.
+        {employee.dentistProfile &&
+          ' Hồ sơ bác sĩ vẫn “Ngừng hành nghề” cho đến khi bấm “Cho hành nghề lại” ở trang bác sĩ (kiểm tra lịch làm việc và dịch vụ trước).'}
+      </p>
+      {employee.account &&
+        (canReactivate ? (
+          <Checkbox
+            checked={reactivateAccount}
+            onChange={setReactivateAccount}
+            label={`Kích hoạt lại tài khoản đăng nhập ${employee.account.email}`}
+          />
+        ) : (
+          <p className="text-sm text-amber-700">
+            Tài khoản {employee.account.email} vẫn bị vô hiệu hóa; nhờ quản trị viên kích hoạt lại ở
+            trang Người dùng.
+          </p>
+        ))}
+      <Textarea
+        label="Lý do (không bắt buộc)"
+        maxLength={500}
+        rows={2}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Hủy
+        </Button>
+        <Button type="submit" isLoading={submitting}>
+          Khôi phục
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function EmployeesPage() {
   const [filters, setFilters] = useState<EmployeeFilters>({ page: 1, pageSize: 20 });
   const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [blocking, setBlocking] = useState<BlockingAppointment[] | null>(null);
+  const [tempPasswordFor, setTempPasswordFor] = useState<{ id: string; email: string } | null>(null);
   const { data, isLoading, isError, refetch } = useEmployees(filters);
 
   const close = () => {
@@ -313,8 +438,12 @@ export default function EmployeesPage() {
   const update = useStaffMutation((v: { id: string; payload: EmployeePayload }) =>
     staffApi.updateEmployee(v.id, v.payload),
   );
-  const link = useStaffMutation((v: { id: string; loginEmail: string }) =>
-    staffApi.linkAccount(v.id, { loginEmail: v.loginEmail }),
+  const link = useStaffMutation((v: { id: string; payload: LinkPayload }) =>
+    staffApi.linkAccount(v.id, v.payload),
+  );
+  const reinstate = useStaffMutation(
+    (v: { id: string; payload: { reason?: string; reactivateAccount: boolean } }) =>
+      staffApi.reinstateEmployee(v.id, v.payload),
   );
   const makeDentist = useStaffMutation(
     (v: { id: string; payload: Parameters<typeof staffApi.createDentistProfile>[1] }) =>
@@ -454,7 +583,12 @@ export default function EmployeesPage() {
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {e.account ? (
-                          <span className="text-gray-700 dark:text-surface-200">{e.account.email}</span>
+                          <>
+                            <span className="text-gray-700 dark:text-surface-200">{e.account.email}</span>
+                            {ACCOUNT_STATUS_HINT[e.account.status] && (
+                              <div className="text-amber-700">{ACCOUNT_STATUS_HINT[e.account.status]}</div>
+                            )}
+                          </>
                         ) : (
                           <span className="text-gray-400">Chưa có</span>
                         )}
@@ -465,6 +599,21 @@ export default function EmployeesPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
+                        {terminated && (
+                          <div className="flex justify-end">
+                            <PermissionGuard permission="employee.deactivate" mode="hide">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                aria-label={`Khôi phục ${e.fullName}`}
+                                title="Khôi phục (quay lại làm việc)"
+                                onClick={() => setDialog({ kind: 'reinstate', employee: e })}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            </PermissionGuard>
+                          </div>
+                        )}
                         {!terminated && (
                           <div className="flex justify-end gap-1">
                             <PermissionGuard permission="employee.update" mode="hide">
@@ -548,9 +697,17 @@ export default function EmployeesPage() {
                 ? update.mutate(
                     { id: dialog.employee.id, payload },
                     {
-                      onSuccess: () => {
+                      onSuccess: (updated) => {
                         notify.success('Đã cập nhật nhân viên');
                         close();
+                        // Going on leave keeps existing bookings: show them.
+                        if (updated.futureAppointments?.length) {
+                          setDialog({
+                            kind: 'onLeave',
+                            employee: updated,
+                            appointments: updated.futureAppointments,
+                          });
+                        }
                       },
                       onError: onError('Không cập nhật được nhân viên'),
                     },
@@ -570,26 +727,91 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'account'}
         onClose={close}
-        title={dialog?.kind === 'account' ? `Tạo tài khoản cho ${dialog.employee.fullName}` : ''}
+        title={dialog?.kind === 'account' ? `Tài khoản đăng nhập cho ${dialog.employee.fullName}` : ''}
       >
         {dialog?.kind === 'account' && (
           <LinkAccountForm
             employee={dialog.employee}
             submitting={link.isPending}
             onCancel={close}
-            onSubmit={(loginEmail) =>
+            onSubmit={(payload) =>
               link.mutate(
-                { id: dialog.employee.id, loginEmail },
+                { id: dialog.employee.id, payload },
                 {
-                  onSuccess: () => {
-                    notify.success('Đã tạo tài khoản đăng nhập');
+                  onSuccess: (linked) => {
                     close();
+                    if (linked.inviteSent === false && linked.account) {
+                      // Never claim an invite that did not leave the server.
+                      notify.warning('Đã tạo tài khoản. Chưa gửi được email — dùng Cấp mật khẩu tạm.');
+                      setTempPasswordFor({ id: linked.account.id, email: linked.account.email });
+                    } else {
+                      notify.success(
+                        'userId' in payload
+                          ? 'Đã gắn tài khoản có sẵn'
+                          : 'Đã tạo tài khoản đăng nhập và gửi lời mời',
+                      );
+                    }
                   },
-                  onError: onError('Không tạo được tài khoản'),
+                  onError: onError('Không gắn được tài khoản'),
                 },
               )
             }
           />
+        )}
+      </Modal>
+
+      <TemporaryPasswordDialog
+        user={tempPasswordFor}
+        emailFailed
+        onClose={() => setTempPasswordFor(null)}
+      />
+
+      <Modal
+        open={dialog?.kind === 'reinstate'}
+        onClose={close}
+        title={dialog?.kind === 'reinstate' ? `Khôi phục ${dialog.employee.fullName}` : ''}
+      >
+        {dialog?.kind === 'reinstate' && (
+          <ReinstateForm
+            employee={dialog.employee}
+            submitting={reinstate.isPending}
+            onCancel={close}
+            onSubmit={(payload) =>
+              reinstate.mutate(
+                { id: dialog.employee.id, payload },
+                {
+                  onSuccess: () => {
+                    notify.success(
+                      dialog.employee.dentistProfile
+                        ? 'Đã khôi phục nhân viên. Vào trang bác sĩ để cho hành nghề lại.'
+                        : 'Đã khôi phục nhân viên',
+                    );
+                    close();
+                  },
+                  onError: onError('Không khôi phục được nhân viên'),
+                },
+              )
+            }
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={dialog?.kind === 'onLeave'}
+        onClose={close}
+        title={dialog?.kind === 'onLeave' ? `${dialog.employee.fullName} tạm nghỉ` : ''}
+      >
+        {dialog?.kind === 'onLeave' && (
+          <div className="space-y-4">
+            <Alert type="info">
+              Bác sĩ không còn nhận lịch hẹn mới (đặt tại quầy và đặt online). Các lịch đã đặt dưới
+              đây vẫn giữ nguyên — hãy chuyển sang bác sĩ khác hoặc báo bệnh nhân.
+            </Alert>
+            <BlockingAppointmentsList appointments={dialog.appointments} />
+            <div className="flex justify-end">
+              <Button onClick={close}>Đã hiểu</Button>
+            </div>
+          </div>
         )}
       </Modal>
 

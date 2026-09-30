@@ -24,6 +24,10 @@ import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   ApproveShiftRegistrationDto,
   AvailabilityQueryDto,
+  BulkCreateWorkingSchedulesDto,
+  ClinicClosureDto,
+  ListClinicClosuresQueryDto,
+  UpdateWorkingScheduleDto,
   CancelAppointmentDto,
   CheckInAppointmentDto,
   CreateAppointmentDto,
@@ -106,9 +110,16 @@ export class AppointmentsController {
 
   @Get('dentists')
   @RequirePermissions('appointment.create', 'appointment.read.any', 'appointment.read.own')
-  @ApiOperation({ summary: 'List active dentists for appointment forms' })
-  async dentistOptions() {
-    return { data: await this.appointments.listDentistOptions() };
+  @ApiOperation({
+    summary:
+      'List dentists for appointment forms; scope=schedule also lists suspended/on-leave dentists',
+  })
+  async dentistOptions(@Query('scope') scope?: string) {
+    return {
+      data: await this.appointments.listDentistOptions(
+        scope === 'schedule' ? 'schedule' : 'booking',
+      ),
+    };
   }
 
   // ==========================================================================
@@ -122,6 +133,14 @@ export class AppointmentsController {
     return { data: await this.appointments.createWorkingSchedule(dto, actor) };
   }
 
+  @Post('schedules/bulk')
+  @RequirePermissions('schedule.write')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Several weekdays × blocks in one transaction' })
+  async bulkCreateSchedules(@Body() dto: BulkCreateWorkingSchedulesDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.bulkCreateWorkingSchedules(dto, actor) };
+  }
+
   @Get('schedules')
   @RequirePermissions('schedule.read')
   async listSchedules(
@@ -129,6 +148,63 @@ export class AppointmentsController {
     @User() actor: JwtPayload,
   ) {
     return wrapAsPaginated(await this.appointments.listWorkingSchedules(dentistId, actor));
+  }
+
+  @Patch('schedules/:id')
+  @RequirePermissions('schedule.write')
+  @ApiOperation({
+    summary:
+      'Edit hours/day/end of a weekly schedule; a running one changes from effectiveFrom. Returns affected bookings',
+  })
+  async updateSchedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateWorkingScheduleDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.updateWorkingSchedule(id, dto, actor) };
+  }
+
+  @Delete('schedules/:id')
+  @RequirePermissions('schedule.write')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a schedule not started yet (end a running one instead)' })
+  async deleteSchedule(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.deleteWorkingSchedule(id, actor) };
+  }
+
+  // ==========================================================================
+  // Clinic-wide closed days (migration 035)
+  // ==========================================================================
+
+  @Get('clinic-closures')
+  @RequirePermissions('schedule.read')
+  async listClinicClosures(@Query() query: ListClinicClosuresQueryDto) {
+    return { data: await this.appointments.listClinicClosures(query) };
+  }
+
+  @Post('clinic-closures')
+  @RequirePermissions('clinic_closure.manage')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Close the whole clinic for days (Tết); returns bookings to move' })
+  async createClinicClosure(@Body() dto: ClinicClosureDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.createClinicClosure(dto, actor) };
+  }
+
+  @Patch('clinic-closures/:id')
+  @RequirePermissions('clinic_closure.manage')
+  async updateClinicClosure(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ClinicClosureDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.updateClinicClosure(id, dto, actor) };
+  }
+
+  @Delete('clinic-closures/:id')
+  @RequirePermissions('clinic_closure.manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteClinicClosure(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    await this.appointments.deleteClinicClosure(id, actor);
   }
 
   // ==========================================================================
@@ -198,9 +274,12 @@ export class AppointmentsController {
 
   @Delete('schedule-overrides/:id')
   @RequirePermissions('schedule.write')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Remove an override; returns bookings the weekly hours no longer allow',
+  })
   async deleteOverride(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    await this.appointments.deleteScheduleOverride(id, actor);
+    return { data: await this.appointments.deleteScheduleOverride(id, actor) };
   }
 
   @Get('schedule-impact')

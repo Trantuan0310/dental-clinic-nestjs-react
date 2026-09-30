@@ -5,9 +5,10 @@ import { WorkingScheduleTab } from './WorkingScheduleTab';
 import { TimeOffTab } from './TimeOffTab';
 import { OverridesTab } from './OverridesTab';
 import { ImpactTab } from './ImpactTab';
+import { ClinicClosuresTab } from './ClinicClosuresTab';
 import { useScheduleImpact, useTimeOffs } from './scheduleApi';
 
-type Tab = 'schedule' | 'time-off' | 'overrides' | 'impact';
+type Tab = 'schedule' | 'time-off' | 'overrides' | 'closures' | 'impact';
 
 export default function SchedulePage() {
   const [tab, setTab] = useState<Tab>('schedule');
@@ -18,7 +19,7 @@ export default function SchedulePage() {
     <div className="space-y-4">
       <PageHeader
         title="Lịch làm việc & Nghỉ phép"
-        description="Lịch làm việc cố định, nghỉ phép, ngoại lệ theo ngày và các lịch hẹn cần điều phối lại"
+        description="Lịch làm việc cố định, nghỉ phép, ngoại lệ theo ngày, ngày nghỉ của phòng khám và các lịch hẹn cần điều phối lại"
       />
 
       <Tabs
@@ -27,6 +28,7 @@ export default function SchedulePage() {
           { id: 'schedule', label: 'Lịch làm việc cố định' },
           { id: 'time-off', label: pending.length ? `Nghỉ phép (${pending.length} chờ duyệt)` : 'Nghỉ phép' },
           { id: 'overrides', label: 'Ngoại lệ theo ngày' },
+          { id: 'closures', label: 'Ngày nghỉ phòng khám' },
           { id: 'impact', label: impact.length ? `Lịch hẹn bị ảnh hưởng (${impact.length})` : 'Lịch hẹn bị ảnh hưởng' },
         ]}
         value={tab}
@@ -36,6 +38,7 @@ export default function SchedulePage() {
       {tab === 'schedule' && <WorkingScheduleTab />}
       {tab === 'time-off' && <TimeOffTab />}
       {tab === 'overrides' && <OverridesTab />}
+      {tab === 'closures' && <ClinicClosuresTab />}
       {tab === 'impact' && <ImpactTab />}
     </div>
   );

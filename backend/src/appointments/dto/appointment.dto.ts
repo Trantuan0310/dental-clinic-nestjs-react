@@ -8,13 +8,16 @@ import {
   IsArray,
   Min,
   Max,
-  Matches,
   MinLength,
   MaxLength,
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
+  IsBoolean,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AppointmentStatus,
@@ -26,6 +29,7 @@ import {
   TimeOffType,
 } from '@prisma/client';
 import { IsCalendarDate } from '../../common/validators/is-calendar-date';
+import { IsClinicTime } from '../../common/validators/is-clinic-time';
 
 export class CreateAppointmentDto {
   @ApiProperty()
@@ -353,11 +357,11 @@ export class CreateWorkingScheduleDto {
   dayOfWeek!: number;
 
   @ApiProperty({ example: '08:00' })
-  @IsString()
+  @IsClinicTime()
   startTime!: string;
 
-  @ApiProperty({ example: '17:00' })
-  @IsString()
+  @ApiProperty({ example: '12:00' })
+  @IsClinicTime()
   endTime!: string;
 
   @ApiPropertyOptional()
@@ -384,6 +388,122 @@ export class CreateWorkingScheduleDto {
   @IsOptional()
   @IsEnum(ShiftType)
   shiftType?: ShiftType;
+}
+
+/** One working block of a day ("HH:mm", clinic time). */
+export class TimeBlockDto {
+  @ApiProperty({ example: '08:00' })
+  @IsClinicTime()
+  startTime!: string;
+
+  @ApiProperty({ example: '12:00' })
+  @IsClinicTime()
+  endTime!: string;
+}
+
+export class ScheduleBlockDto extends TimeBlockDto {
+  @ApiPropertyOptional({ enum: ShiftType })
+  @IsOptional()
+  @IsEnum(ShiftType)
+  shiftType?: ShiftType;
+}
+
+/** Several weekdays × several blocks in one save (one transaction). */
+export class BulkCreateWorkingSchedulesDto {
+  @ApiProperty()
+  @IsUUID()
+  dentistId!: string;
+
+  @ApiProperty({ type: [Number], example: [1, 2, 3, 4, 5, 6] })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Chọn ít nhất một thứ trong tuần' })
+  @ArrayMaxSize(7)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  daysOfWeek!: number[];
+
+  @ApiProperty({ type: [ScheduleBlockDto] })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Thêm ít nhất một khung giờ' })
+  @ArrayMaxSize(6)
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleBlockDto)
+  blocks!: ScheduleBlockDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(120)
+  slotDurationMin?: number;
+
+  @ApiProperty()
+  @IsCalendarDate()
+  validFrom!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsCalendarDate()
+  validTo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPaidShift?: boolean;
+}
+
+/**
+ * PATCH /appointments/schedules/:id. Changing the hours/day of a schedule
+ * already in effect applies "from effectiveFrom" (default today): the old row
+ * ends the day before and a new row starts that day, so past days (payroll)
+ * keep the hours they had. `validTo` alone ends (or extends) the schedule.
+ */
+export class UpdateWorkingScheduleDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  dayOfWeek?: number;
+
+  @ApiPropertyOptional({ example: '08:00' })
+  @IsOptional()
+  @IsClinicTime()
+  startTime?: string;
+
+  @ApiPropertyOptional({ example: '12:00' })
+  @IsOptional()
+  @IsClinicTime()
+  endTime?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(120)
+  slotDurationMin?: number;
+
+  @ApiPropertyOptional({ enum: ShiftType })
+  @IsOptional()
+  @IsEnum(ShiftType)
+  shiftType?: ShiftType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isPaidShift?: boolean;
+
+  @ApiPropertyOptional({ description: 'Last working day (inclusive); null = open-ended' })
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsCalendarDate()
+  validTo?: string | null;
+
+  @ApiPropertyOptional({ description: 'Clinic date the new hours start from; default today' })
+  @IsOptional()
+  @IsCalendarDate()
+  effectiveFrom?: string;
 }
 
 export class CreateTimeOffDto {
@@ -429,8 +549,6 @@ export class DecideTimeOffDto {
   note?: string;
 }
 
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
-
 export class CreateScheduleOverrideDto {
   @ApiProperty()
   @IsUUID()
@@ -446,13 +564,26 @@ export class CreateScheduleOverrideDto {
 
   @ApiPropertyOptional({ description: 'HH:mm; with endTime. CLOSED without times = whole day' })
   @IsOptional()
-  @Matches(HHMM)
+  @IsClinicTime()
   startTime?: string;
 
   @ApiPropertyOptional({ description: 'HH:mm' })
   @IsOptional()
-  @Matches(HHMM)
+  @IsClinicTime()
   endTime?: string;
+
+  @ApiPropertyOptional({
+    type: [TimeBlockDto],
+    description:
+      'CHANGED_HOURS only: several blocks for the day (e.g. keep a lunch break); replaces startTime/endTime',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(6)
+  @ValidateNested({ each: true })
+  @Type(() => TimeBlockDto)
+  ranges?: TimeBlockDto[];
 
   @ApiProperty()
   @IsString()
@@ -500,11 +631,11 @@ export class CreateShiftRegistrationDto {
   date!: string;
 
   @ApiProperty({ example: '08:00' })
-  @IsString()
+  @IsClinicTime()
   startTime!: string;
 
   @ApiProperty({ example: '17:00' })
-  @IsString()
+  @IsClinicTime()
   endTime!: string;
 
   @ApiPropertyOptional()
@@ -530,4 +661,27 @@ export class RejectShiftRegistrationDto {
   @ApiProperty()
   @IsString()
   reason!: string;
+}
+
+export class ClinicClosureDto {
+  @ApiProperty({ description: 'First closed clinic date YYYY-MM-DD' })
+  @IsCalendarDate()
+  startDate!: string;
+
+  @ApiProperty({ description: 'Last closed clinic date YYYY-MM-DD (inclusive)' })
+  @IsCalendarDate()
+  endDate!: string;
+
+  @ApiProperty({ example: 'Nghỉ Tết Nguyên đán' })
+  @IsString()
+  @MinLength(3, { message: 'Lý do tối thiểu 3 ký tự' })
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class ListClinicClosuresQueryDto {
+  @ApiPropertyOptional({ description: 'Closures ending on/after this date; defaults to today' })
+  @IsOptional()
+  @IsCalendarDate()
+  from?: string;
 }

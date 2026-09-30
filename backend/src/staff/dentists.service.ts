@@ -14,7 +14,7 @@ import {
   EmployeeValidationException,
   LicenseNumberTakenException,
 } from './staff.exceptions';
-import { assertDentistHasNoOpenWork, toDateOnly } from './staff-rules';
+import { assertDentistHasNoOpenWork, clinicToday, toDateOnly } from './staff-rules';
 import type { RequestMeta } from './employees.service';
 
 const PROFILE_INCLUDE = {
@@ -28,8 +28,11 @@ const PROFILE_INCLUDE = {
       employmentStatus: true,
     },
   },
-  user: { select: { email: true, status: true } },
+  user: { select: { email: true, status: true, fullName: true } },
 } satisfies Prisma.DentistProfileInclude;
+
+/** Name the seed gives the bootstrap admin; a practising owner should replace it. */
+const PLACEHOLDER_ADMIN_NAME = 'Quản trị viên';
 
 type ProfileRow = Prisma.DentistProfileGetPayload<{ include: typeof PROFILE_INCLUDE }>;
 
@@ -172,11 +175,17 @@ export class DentistsService {
     return this.format(updated);
   }
 
-  /** Profile + weekly schedule + next bookings, for the dentist detail page. */
+  /**
+   * Profile + weekly schedule + next bookings, for the dentist detail page,
+   * plus a readiness checklist: what still keeps this dentist out of the
+   * booking screens or the public site.
+   */
   async overview(userId: string) {
-    const profile = this.format(await this.findOrThrow(userId));
+    const row = await this.findOrThrow(userId);
+    const profile = this.format(row);
     const now = new Date();
-    const [schedules, upcoming] = await Promise.all([
+    const today = clinicToday(now);
+    const [schedules, upcoming, activeServiceCount, photoCount] = await Promise.all([
       this.prisma.workingSchedule.findMany({
         where: {
           dentistId: userId,
@@ -210,10 +219,44 @@ export class DentistsService {
           patient: { select: { id: true, fullName: true, code: true } },
         },
       }),
+      this.prisma.dentistService.count({
+        where: {
+          dentistId: userId,
+          effectiveFrom: { lte: today },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+          service: { isActive: true },
+        },
+      }),
+      this.prisma.mediaAsset.count({ where: { purpose: 'DENTIST_PHOTO', dentistId: userId } }),
     ]);
+    // Of those, the ones patients may request online (migration 038).
+    const onlineServiceCount = activeServiceCount
+      ? await this.prisma.dentistService.count({
+          where: {
+            dentistId: userId,
+            effectiveFrom: { lte: today },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+            service: { isActive: true, bookableOnline: true, category: { isActive: true } },
+          },
+        })
+      : 0;
     const hhmm = (d: Date) => d.toISOString().slice(11, 16);
     return {
       profile,
+      readiness: {
+        accountStatus: row.user.status,
+        practiceStatus: row.practiceStatus,
+        employmentStatus: row.employee.employmentStatus,
+        acceptsOnlineBooking: row.acceptsOnlineBooking,
+        acceptsNewPatients: row.acceptsNewPatients,
+        hasCurrentSchedule: schedules.some(s => s.validFrom <= today),
+        activeServiceCount,
+        onlineServiceCount,
+        hasPhoto: photoCount > 0,
+        placeholderName: [row.employee.fullName, row.user.fullName].some(
+          n => n.trim() === PLACEHOLDER_ADMIN_NAME,
+        ),
+      },
       schedules: schedules.map(s => ({
         ...s,
         startTime: hhmm(s.startTime),
@@ -263,6 +306,7 @@ export class DentistsService {
       phone: row.employee.phone,
       email: row.employee.email,
       loginEmail: row.user.email,
+      accountStatus: row.user.status,
       employmentStatus: row.employee.employmentStatus,
       licenseNumber: row.licenseNumber,
       licenseIssuedAt: row.licenseIssuedAt ? row.licenseIssuedAt.toISOString().slice(0, 10) : null,

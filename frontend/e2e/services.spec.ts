@@ -2,8 +2,8 @@ import { test, expect } from './fixtures';
 
 /**
  * Service catalogue (ADR-0009 phase 2): admin creates a service, assigns it
- * to a seeded dentist with a duration override, ends the assignment, then
- * retires the service.
+ * to a seeded dentist with a duration override, changes its price, ends the
+ * assignment, then retires the service.
  */
 test('admin manages a service and its assignment to a dentist', async ({ page }) => {
   test.setTimeout(90_000);
@@ -39,13 +39,27 @@ test('admin manages a service and its assignment to a dentist', async ({ page })
   const assignment = page.locator('li', { hasText: name });
   await expect(assignment).toContainText('60 phút (riêng)');
 
-  // ---- End it (started today, so it ends today and stays listed) ----
+  // ---- Change its price from today (it started today: updated in place) ----
+  await assignment.getByRole('button', { name: `Đổi giá/thời lượng ${name}` }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Giá riêng (VND)').fill('400000');
+  await dialog.getByRole('button', { name: 'Lưu thay đổi' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(assignment).toContainText('400.000');
+
+  // ---- End it today (the last day is asked; it stays listed until tomorrow) ----
   await assignment.getByRole('button', { name: `Ngừng phân công ${name}` }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Ngừng phân công' }).click();
+  await expect(dialog).toBeHidden();
   await expect(assignment.getByRole('button', { name: `Ngừng phân công ${name}` })).toHaveCount(0);
 
-  // ---- Retire the service ----
+  // ---- Retire the service (asks first, with what it affects) ----
   await page.goto('/services');
   await serviceRow.getByRole('button', { name: 'Ngừng' }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Không có lịch hẹn sắp tới');
+  await dialog.getByRole('button', { name: 'Ngừng dịch vụ' }).click();
   await expect(serviceRow).toBeHidden();
   await page.getByText('Hiện cả dịch vụ đã ngừng').click();
   await expect(serviceRow.getByText('Đã ngừng')).toBeVisible();

@@ -74,6 +74,35 @@ export async function assertDentistHasNoOpenWork(
   if (openEncounters > 0) throw new DentistHasOpenEncountersException(openEncounters);
 }
 
+/**
+ * Accounts that can be booked or scheduled: anything not deactivated. A
+ * PENDING_SETUP account (new dentist who has not set a password yet, or the
+ * bootstrap admin who also practises) still takes bookings.
+ */
+export const SCHEDULABLE_ACCOUNT_WHERE = {
+  status: { not: 'DEACTIVATED' },
+  deactivatedAt: null,
+  deletedAt: null,
+} satisfies Prisma.UserWhereInput;
+
+/**
+ * Dentist profile filter for dentist pickers. `booking` (new appointments,
+ * online booking, dispatch): ACTIVE practice and employee not on leave.
+ * `schedule` (working hours, time off): suspended dentists and dentists on
+ * leave stay manageable (BR-STAFF-006).
+ */
+export function dentistProfileFilter(
+  scope: 'booking' | 'schedule',
+): Prisma.DentistProfileWhereInput {
+  return scope === 'booking'
+    ? { deletedAt: null, practiceStatus: 'ACTIVE', employee: { employmentStatus: 'ACTIVE' } }
+    : {
+        deletedAt: null,
+        practiceStatus: { in: ['ACTIVE', 'SUSPENDED'] },
+        employee: { employmentStatus: { not: 'TERMINATED' } },
+      };
+}
+
 /** Parse a YYYY-MM-DD string as a DATE column value. */
 export function toDateOnly(value: string): Date {
   return new Date(`${value.slice(0, 10)}T00:00:00.000Z`);

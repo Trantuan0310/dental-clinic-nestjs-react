@@ -18,6 +18,12 @@ import { Transform, Type } from 'class-transformer';
 import { DENTIST_SPECIALTIES } from '../../staff/dto/staff.dto';
 
 const CODE = /^[A-Z0-9][A-Z0-9_-]{1,29}$/;
+/** Prices are DECIMAL(15, 0) columns. */
+export const MAX_PRICE = 999_999_999_999_999;
+const PRICE_MAX_MESSAGE = 'Giá tối đa 999.999.999.999.999 đ';
+/** "  " must fail MinLength instead of being stored as "". */
+const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+const NAME_MESSAGE = 'Tên phải có ít nhất 2 ký tự';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'DIEU_TRI' })
@@ -25,8 +31,9 @@ export class CreateCategoryDto {
   code: string;
 
   @ApiProperty()
+  @Transform(trim)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: NAME_MESSAGE })
   @MaxLength(100)
   name: string;
 
@@ -42,8 +49,9 @@ export class CreateCategoryDto {
 export class UpdateCategoryDto {
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(trim)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: NAME_MESSAGE })
   @MaxLength(100)
   name?: string;
 
@@ -78,12 +86,28 @@ class ServiceFieldsDto {
   @Max(60)
   bufferAfterMin?: number;
 
-  @ApiPropertyOptional({ description: 'VND' })
+  @ApiPropertyOptional({ description: 'VND; required on create unless isFree' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 0 })
   @Min(0)
+  @Max(MAX_PRICE, { message: PRICE_MAX_MESSAGE })
   basePrice?: number;
+
+  @ApiPropertyOptional({ description: 'Explicitly free (price 0 shown as "Miễn phí")' })
+  @IsOptional()
+  @IsBoolean()
+  isFree?: boolean;
+
+  @ApiPropertyOptional({ description: 'Patients may request it on the public booking page' })
+  @IsOptional()
+  @IsBoolean()
+  bookableOnline?: boolean;
+
+  @ApiPropertyOptional({ description: 'Listed on the public price list' })
+  @IsOptional()
+  @IsBoolean()
+  showPublicPrice?: boolean;
 
   @ApiPropertyOptional({ enum: DENTIST_SPECIALTIES, nullable: true })
   @IsOptional()
@@ -107,8 +131,9 @@ export class CreateServiceDto extends ServiceFieldsDto {
   categoryId: string;
 
   @ApiProperty()
+  @Transform(trim)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: NAME_MESSAGE })
   @MaxLength(200)
   name: string;
 
@@ -136,8 +161,9 @@ export class UpdateServiceDto extends ServiceFieldsDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(trim)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: NAME_MESSAGE })
   @MaxLength(200)
   name?: string;
 }
@@ -184,7 +210,44 @@ export class AssignServiceDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 0 })
   @Min(0)
+  @Max(MAX_PRICE, { message: PRICE_MAX_MESSAGE })
   price?: number | null;
+}
+
+/**
+ * New duration/price for an assignment from a date on: the running period
+ * ends the day before, a new one starts that day. null = back to the
+ * service default, omitted = unchanged.
+ */
+export class ChangeAssignmentDto {
+  @ApiProperty({ description: 'First day of the new terms (YYYY-MM-DD), today or later' })
+  @IsDateString()
+  effectiveFrom: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(480)
+  durationMin?: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(0)
+  @Max(MAX_PRICE, { message: PRICE_MAX_MESSAGE })
+  price?: number | null;
+}
+
+export class ActivateServiceDto {
+  @ApiPropertyOptional({
+    description: 'Also restore the assignments the last deactivation ended or removed',
+  })
+  @IsOptional()
+  @IsBoolean()
+  restoreAssignments?: boolean;
 }
 
 export class EndAssignmentDto {

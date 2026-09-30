@@ -148,6 +148,7 @@ model User {
   dentistProfile             DentistProfile? @relation("DentistProfileUser")
   dentistServices            DentistService[] @relation("DentistServiceDentist")
   scheduleOverrides          ScheduleOverride[] @relation("ScheduleOverrideDentist")
+  clinicClosuresCreated      ClinicClosure[]    @relation("ClinicClosureCreator")
 
   // Online booking requests (migration 025)
   bookingRequestsPreferred   BookingRequest[] @relation("BookingPreferredDentist")
@@ -1396,6 +1397,11 @@ model Service {
   basePrice          Decimal  @default(0) @map("base_price") @db.Decimal(15, 0)
   requiredSpecialty  String?  @map("required_specialty") @db.VarChar(30)
   isActive           Boolean  @default(true) @map("is_active")
+  // Migration 038: patients may request it online / it is on the public
+  // price list / a price of 0 really means free (not "not set yet").
+  bookableOnline     Boolean  @default(true) @map("bookable_online")
+  showPublicPrice    Boolean  @default(true) @map("show_public_price")
+  isFree             Boolean  @default(false) @map("is_free")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy          String?  @map("created_by") @db.Uuid
@@ -1462,6 +1468,25 @@ model ScheduleOverride {
 
   @@index([dentistId, date])
   @@map("schedule_overrides")
+}
+
+/// Clinic-wide closed days, e.g. Tết (migration 035): every dentist is
+/// closed all day from startDate to endDate (clinic dates, inclusive).
+model ClinicClosure {
+  id        String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  startDate DateTime  @map("start_date") @db.Date
+  endDate   DateTime  @map("end_date") @db.Date
+  reason    String    @db.VarChar(500)
+  createdBy String    @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+  deletedBy String?   @map("deleted_by") @db.Uuid
+
+  creator User @relation("ClinicClosureCreator", fields: [createdBy], references: [id])
+
+  @@index([startDate, endDate])
+  @@map("clinic_closures")
 }
 
 // Snapshot of a booked service (ADR-0009 D6, migration 023)

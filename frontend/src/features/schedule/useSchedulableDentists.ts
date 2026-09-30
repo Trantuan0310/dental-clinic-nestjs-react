@@ -8,7 +8,8 @@ import { useDentistOptions } from '@/features/appointments/appointmentApi';
  * would be rejected.
  */
 export function useSchedulableDentists() {
-  const { data: dentists = [] } = useDentistOptions();
+  // Suspended / on-leave dentists keep managing schedules and time off.
+  const { data: dentists = [] } = useDentistOptions('schedule');
   const userId = useAuthStore((s) => s.user?.id);
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const ownOnly = hasPermission('appointment.read.own') && !hasPermission('appointment.read.any');

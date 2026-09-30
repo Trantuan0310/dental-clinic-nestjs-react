@@ -8,7 +8,7 @@ import { Button, Modal, Input, Textarea, Select, ConfirmDialog } from '@/compone
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useInventoryItems } from '@/features/inventory/inventoryApi';
-import { useBookableServices } from '@/features/appointments/appointmentApi';
+import { useAppointment, useBookableServices } from '@/features/appointments/appointmentApi';
 import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUsage } from '@/types/medical-records';
 import { isValidFdiToothNumber } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
@@ -37,6 +37,12 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const [serviceId, setServiceId] = useState('');
   const today = clinicToday();
   const { data: catalogServices = [] } = useBookableServices(encounter.dentistId, today);
+  // A visit booked with services froze their prices at booking time; those
+  // are pre-filled instead of today's price, with a note when they differ.
+  const [priceNote, setPriceNote] = useState('');
+  const { data: bookedVisit } = useAppointment(
+    showAddModal && !editingTreatment ? (encounter.appointmentId ?? undefined) : undefined,
+  );
 
   // Materials consumed by this treatment — only meaningful on create; the
   // backend's UpdateTreatmentDto has no field for it, so editing an existing
@@ -72,6 +78,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setProcedureName('');
     setQuantity('1');
     setUnitPrice('');
+    setPriceNote('');
     setNotes('');
     setServiceId('');
     setInventoryUsages([]);
@@ -122,6 +129,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setProcedureName('');
     setQuantity('1');
     setUnitPrice('');
+    setPriceNote('');
     setNotes('');
     setInventoryUsages([]);
     setPickedItemId('');
@@ -284,10 +292,16 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
               onChange={(e) => {
                 const sv = catalogServices.find((x) => x.serviceId === e.target.value);
                 setServiceId(e.target.value);
+                const snapshot = sv && bookedVisit?.services?.find((b) => b.serviceId === sv.serviceId);
+                setPriceNote(
+                  sv && snapshot && snapshot.price !== sv.price
+                    ? `Giá lúc đặt lịch hẹn ${formatCurrency(snapshot.price)}; giá hiện hành ${formatCurrency(sv.price)}.`
+                    : '',
+                );
                 if (sv) {
                   setProcedureCode(sv.code);
                   setProcedureName(sv.name);
-                  setUnitPrice(String(sv.price));
+                  setUnitPrice(String(snapshot ? snapshot.price : sv.price));
                 }
               }}
               options={[
@@ -320,6 +334,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             <Input
               label="Đơn giá (VND)"
               type="number"
+              hint={priceNote || undefined}
               value={unitPrice}
               onChange={(e) => setUnitPrice(e.target.value)}
               placeholder="350000"

@@ -69,6 +69,17 @@ describe('UsersService', () => {
       expect(result.pagination.hasMore).toBe(false);
     });
 
+    it('flags dentist-role accounts that have no dentist profile yet', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        validUser({ id: 'u1', userRoles: [], dentistProfile: { deletedAt: null } }),
+        validUser({ id: 'u2', userRoles: [], dentistProfile: null }),
+      ]);
+
+      const result = await service.list({});
+
+      expect(result.data.map(u => u.hasDentistProfile)).toEqual([true, false]);
+    });
+
     it('filters by status=DEACTIVATED by deactivatedAt not null', async () => {
       (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
       await service.list({ status: 'DEACTIVATED' });
@@ -155,7 +166,11 @@ describe('UsersService', () => {
       // (migration 013_soft_delete_partial_unique) — this check must mirror
       // that scope so it doesn't reject emails the DB would happily allow.
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'dup@x.com', deactivatedAt: null, deletedAt: null },
+        where: {
+          email: { equals: 'dup@x.com', mode: 'insensitive' },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
       });
     });
 
@@ -588,6 +603,225 @@ describe('UsersService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: ACTION_AUDIT.USER_PASSWORD_RESET_BY_ADMIN }),
       );
+    });
+  });
+
+  describe('invite delivery (inviteSent / emailSent)', () => {
+    beforeEach(() => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.user.create as jest.Mock).mockImplementation(async ({ data }: any) =>
+        validUser({ id: 'new-user', email: data.email, status: UserStatus.PENDING_SETUP }),
+      );
+    });
+
+    it('stores the login email in lowercase and checks duplicates the same way', async () => {
+      const result = await service.create(
+        { email: '  BS.An@Clinic.VN ', fullName: 'An' },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          email: { equals: 'bs.an@clinic.vn', mode: 'insensitive' },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
+      });
+      expect((prisma.user.create as jest.Mock).mock.calls[0][0].data.email).toBe('bs.an@clinic.vn');
+      expect(result).toMatchObject({ email: 'bs.an@clinic.vn', inviteSent: true });
+    });
+
+    it('reports inviteSent=false when the setup email could not be sent', async () => {
+      email.sendAccountSetupEmail.mockResolvedValue(false);
+
+      const result = await service.create(
+        { email: 'new@x.com', fullName: 'New' },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(result.inviteSent).toBe(false);
+    });
+
+    it('reports inviteSent=false when no invite was asked for', async () => {
+      const result = await service.create(
+        { email: 'new@x.com', fullName: 'New', sendInvite: false },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(result.inviteSent).toBe(false);
+    });
+
+    it('resetPassword with sendEmail reports whether the link went out', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser());
+      email.sendAccountSetupEmail.mockResolvedValue(false);
+
+      const result = await service.resetPassword(
+        'user-1',
+        true,
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(result).toEqual({ emailSent: false });
+    });
+  });
+
+  describe('update — login email and display name', () => {
+    it('changes the login email (lowercased) when no active account uses it', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({ email: 'old@x.com' }),
+      );
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.user.update as jest.Mock).mockResolvedValue(validUser({ email: 'new@x.com' }));
+
+      await service.update('user-1', { email: 'New@X.com' }, 'admin-1', 'admin@x.com', null, null);
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          email: { equals: 'new@x.com', mode: 'insensitive' },
+          id: { not: 'user-1' },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
+      });
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ email: 'new@x.com' }) }),
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ emailFrom: 'old@x.com', emailTo: 'new@x.com' }),
+        }),
+      );
+    });
+
+    it('refuses an email another active account already uses (any case)', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({ email: 'old@x.com' }),
+      );
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(validUser({ id: 'other' }));
+
+      await expect(
+        service.update('user-1', { email: 'Taken@X.com' }, 'admin-1', 'admin@x.com', null, null),
+      ).rejects.toThrow(EmailAlreadyExistsException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('renames the linked employee record too', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({ fullName: 'Quản trị viên' }),
+      );
+      (prisma.user.update as jest.Mock).mockResolvedValue(validUser({ fullName: 'BS. Nguyễn An' }));
+
+      await service.update(
+        'user-1',
+        { fullName: 'BS. Nguyễn An' },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(prisma.employee.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', deletedAt: null },
+        data: { fullName: 'BS. Nguyễn An', updatedBy: 'admin-1' },
+      });
+    });
+
+    it('does not touch the employee record when the name is unchanged', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser());
+      (prisma.user.update as jest.Mock).mockResolvedValue(validUser());
+
+      await service.update('user-1', {}, 'admin-1', 'admin@x.com', null, null);
+
+      expect(prisma.employee.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateRoles — editing your own roles', () => {
+    const adminRole = validRole({ id: 'r-admin', code: 'clinic_admin' });
+    const dentistRole = validRole({ id: 'r-dentist', code: 'dentist' });
+
+    beforeEach(() => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({
+          id: 'admin-1',
+          userRoles: [
+            {
+              ...validUserRole({ roleId: 'r-admin' }),
+              role: { ...adminRole, rolePermissions: [] },
+            },
+          ],
+        }),
+      );
+      (prisma.role.findUnique as jest.Mock).mockResolvedValue(adminRole);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        validUser({ id: 'admin-1', userRoles: [{ role: adminRole }] }),
+      );
+      (prisma.user.count as jest.Mock).mockResolvedValue(2);
+      (prisma.userRole.findFirst as jest.Mock).mockImplementation(async ({ where }: any) =>
+        where.role?.code === 'clinic_admin' ? { roleId: 'r-admin' } : null,
+      );
+    });
+
+    it('refuses to drop your own admin role even when other admins exist', async () => {
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([dentistRole]);
+
+      await expect(
+        service.updateRoles(
+          'admin-1',
+          { roleIds: ['r-dentist'] },
+          'admin-1',
+          'admin@x.com',
+          null,
+          null,
+        ),
+      ).rejects.toThrow(/chính mình/);
+      expect(prisma.userRole.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin add the dentist role to themselves and signs them out', async () => {
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([adminRole, dentistRole]);
+
+      await service.updateRoles(
+        'admin-1',
+        { roleIds: ['r-admin', 'r-dentist'] },
+        'admin-1',
+        'admin@x.com',
+        null,
+        null,
+      );
+
+      expect(prisma.userRole.createMany).toHaveBeenCalled();
+      // A role change always ends the sessions, so removed rights stop at once.
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'admin-1', revokedAt: null } }),
+      );
+    });
+  });
+
+  describe('reactivate — email reused meanwhile', () => {
+    it('refuses when another active account now holds the email', async () => {
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+        validUser({ email: 'a@x.com', deactivatedAt: new Date() }),
+      );
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'other' });
+
+      await expect(
+        service.reactivate('user-1', 'admin-1', 'admin@x.com', null, null),
+      ).rejects.toThrow(EmailAlreadyExistsException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 
