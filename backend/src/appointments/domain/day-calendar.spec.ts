@@ -284,12 +284,20 @@ describe('day calendar decision table', () => {
       const cal = buildDayCalendar(inputs);
       // A 90-minute visit: 10:30 fits (it used to step 90 and stop at 09:30).
       expect(freeSlots(cal, 90, 15, notBefore).slice(-3)).toEqual(['10:00', '10:15', '10:30']);
-      inputs.schedules = [{ startTime: t('08:10'), endTime: t('09:10'), slotDurationMin: 30 }];
-      expect(freeSlots(buildDayCalendar(inputs), 30, 15, notBefore)).toEqual([
-        '08:10',
-        '08:15',
-        '08:30',
-      ]);
+    });
+
+    it('offers an off-grid window start only half a step or more before the grid', () => {
+      const inputs = base();
+      const slotsFor = (from: string, to: string, minutes = 30) => {
+        inputs.schedules = [{ startTime: t(from), endTime: t(to), slotDurationMin: 30 }];
+        return freeSlots(buildDayCalendar(inputs), minutes, 15, notBefore);
+      };
+      // 08:10 is 5' before 08:15: not both.
+      expect(slotsFor('08:10', '09:10')).toEqual(['08:15', '08:30']);
+      // 08:05 is 10' before 08:15 (at least half of 15).
+      expect(slotsFor('08:05', '09:05')).toEqual(['08:05', '08:15', '08:30']);
+      // No grid time fits a 30' visit in 08:10-08:40: the window start does.
+      expect(slotsFor('08:10', '08:40')).toEqual(['08:10']);
     });
 
     it('lists a start only once when a shift overlaps the schedule', () => {

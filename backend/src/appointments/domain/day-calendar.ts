@@ -234,8 +234,9 @@ export function intervalProblem(
 
 /**
  * Bookable start times ("HH:mm") for a visit of `durationMin`, not before
- * `notBefore`: each window's own start, then every round clock time on the
- * `stepMin` grid (:00/:15/:30/:45 for 15), whatever the visit's length.
+ * `notBefore`: every round clock time on the `stepMin` grid (:00/:15/:30/:45
+ * for 15), whatever the visit's length, plus an off-grid window start (see
+ * below).
  */
 export function freeSlots(
   cal: DayCalendar,
@@ -251,8 +252,17 @@ export function freeSlots(
     const lastStart = w.end.getTime() - durationMin * 60_000;
     // First grid time at or after the window start, on the clinic clock.
     const aligned = Math.ceil((w.start.getTime() + offsetMs) / stepMs) * stepMs - offsetMs;
-    const starts = [w.start.getTime()];
-    for (let t = aligned; t <= lastStart; t += stepMs) if (t > w.start.getTime()) starts.push(t);
+    const starts: number[] = [];
+    for (let t = aligned; t <= lastStart; t += stepMs) starts.push(t);
+    // An off-grid window start (08:10) is offered only at least half a step
+    // before the next grid time (not 08:10 next to 08:15), or when no grid
+    // time fits the visit at all.
+    if (
+      aligned > w.start.getTime() &&
+      (aligned - w.start.getTime() >= stepMs / 2 || starts.length === 0)
+    ) {
+      starts.unshift(w.start.getTime());
+    }
     for (const t of starts) {
       if (t > lastStart || t <= notBefore.getTime()) continue;
       const slot = { start: new Date(t), end: new Date(t + durationMin * 60_000) };

@@ -139,6 +139,12 @@ export class PublicSlotsQueryDto {
   @ApiProperty() @IsUUID() serviceId!: string;
   @ApiProperty() @IsUUID() dentistId!: string;
   @ApiProperty({ example: '2026-10-01' }) @IsString() date!: string;
+  /** Also look for the next day with a free time when this one has none. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === '1' || value === 'true')
+  @IsBoolean()
+  next?: boolean;
 }
 export class ProposeBookingTimeDto {
   @ApiProperty() @IsUUID() dentistId!: string;

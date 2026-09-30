@@ -1299,6 +1299,7 @@ describe('BookingService public request security and validation', () => {
       prisma.dentistService.findMany = jest.fn().mockResolvedValue([]);
       prisma.workingSchedule = { findMany: jest.fn().mockResolvedValue([]) };
       prisma.shiftRegistration = { findMany: jest.fn().mockResolvedValue([]) };
+      prisma.scheduleOverride = { findMany: jest.fn().mockResolvedValue([]) };
       prisma.service = { findMany: jest.fn().mockResolvedValue([]) };
     });
     afterEach(() => {
@@ -1479,13 +1480,7 @@ describe('BookingService public request security and validation', () => {
       });
 
       it('lists open requests for a dentist and dates, by the dentist and time they are about', async () => {
-        const proposedAway = request({
-          id: 'request-2',
-          status: 'PROPOSED',
-          proposedDentistId: 'dentist-2',
-          proposedStartAt: at('2026-10-05', '10:00'),
-        });
-        prisma.bookingRequest.findMany.mockResolvedValue([request(), proposedAway]);
+        prisma.bookingRequest.findMany.mockResolvedValue([request()]);
         prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
         availability.loadDay.mockResolvedValue(closedDay);
 
@@ -1497,8 +1492,56 @@ describe('BookingService public request security and validation', () => {
 
         expect(rows.map(r => r.id)).toEqual(['request-1']);
         expect(rows[0].slotIssue).toMatchObject({ kind: 'CLOSED' });
-        const where = prisma.bookingRequest.findMany.mock.calls[0][0].where;
-        expect(where).toMatchObject({ status: { in: expect.any(Array) }, appointmentId: null });
+        // Filtered in the query (before `take`): the proposal's time and
+        // dentist while one stands, else the request's.
+        const range = { gte: at('2026-10-05', '00:00'), lt: at('2026-10-06', '00:00') };
+        const toDentist1 = {
+          OR: [
+            { proposedDentistId: 'dentist-1' },
+            { proposedDentistId: null, preferredDentistId: 'dentist-1' },
+          ],
+        };
+        expect(prisma.bookingRequest.findMany.mock.calls[0][0]).toMatchObject({
+          where: {
+            appointmentId: null,
+            OR: [
+              {
+                status: { in: ['PENDING_REVIEW', 'NEEDS_INFORMATION'] },
+                requestedStartAt: range,
+                preferredDentistId: 'dentist-1',
+              },
+              {
+                status: { in: ['PROPOSED', 'PATIENT_ACCEPTED'] },
+                proposedStartAt: range,
+                ...toDentist1,
+              },
+              {
+                status: { in: ['PROPOSED', 'PATIENT_ACCEPTED'] },
+                proposedStartAt: null,
+                requestedStartAt: range,
+                ...toDentist1,
+              },
+            ],
+          },
+          take: 200,
+        });
+      });
+
+      it('checks only the nearest open requests for the inbox', async () => {
+        const rows = Array.from({ length: 35 }, (_, i) =>
+          request({
+            id: 'request-' + i,
+            requestedStartAt: new Date(at('2026-10-05', '09:00').getTime() + i * 86_400_000),
+          }),
+        );
+        prisma.bookingRequest.findMany.mockResolvedValueOnce(rows);
+        prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+
+        await service.listForStaff({});
+
+        // One plan and one day per request (all on different days): 30, not 35.
+        expect(appointments.validateDentist).toHaveBeenCalledTimes(30);
+        expect(availability.loadDay).toHaveBeenCalledTimes(30);
       });
 
       it('refuses a reversed range', async () => {
@@ -1556,24 +1599,63 @@ describe('BookingService public request security and validation', () => {
       });
 
       it('says why a day is empty, hides the clinic note, and names the next free day', async () => {
+        // Mondays (dentist closed that day) and Wednesdays; Tuesday is off
+        // and is not loaded at all.
+        prisma.workingSchedule.findMany.mockResolvedValue([
+          { dayOfWeek: 1, validFrom: new Date('2026-01-01'), validTo: null },
+          { dayOfWeek: 3, validFrom: new Date('2026-01-01'), validTo: null },
+        ]);
         appointments.getAvailability
           .mockResolvedValueOnce({
             availableSlots: [],
             blockedReason: 'CLOSED',
             closedReason: 'Bác sĩ ốm',
+            clinicClosed: false,
           })
-          .mockResolvedValueOnce({ availableSlots: [], blockedReason: 'NO_SCHEDULE' })
           .mockResolvedValueOnce({ availableSlots: ['09:00'], blockedReason: null });
 
         const res = await service.slots({
           serviceId: 'service-1',
           dentistId: 'dentist-1',
           date: '2026-10-05',
+          next: true,
         });
 
         expect(res.emptyReason).toBe('CLOSED');
         expect(res.closedReason).toBeUndefined();
         expect(res.nextAvailableDate).toBe('2026-10-07');
+        expect(appointments.getAvailability).toHaveBeenCalledTimes(2);
+        expect(appointments.getAvailability.mock.calls[1][0].date).toBe('2026-10-07');
+        // Eligibility is checked once, not per scanned day.
+        expect(prisma.dentistService.findFirst).toHaveBeenCalledTimes(1);
+      });
+
+      it('looks for the next free day only when asked', async () => {
+        appointments.getAvailability.mockResolvedValue({ availableSlots: [], blockedReason: null });
+        const res = await service.slots({
+          serviceId: 'service-1',
+          dentistId: 'dentist-1',
+          date: '2026-10-05',
+        });
+        expect(res.nextAvailableDate).toBeNull();
+        expect(appointments.getAvailability).toHaveBeenCalledTimes(1);
+        expect(prisma.workingSchedule.findMany).not.toHaveBeenCalled();
+      });
+
+      it("shows the clinic's own closure reason to patients", async () => {
+        appointments.getAvailability.mockResolvedValue({
+          availableSlots: [],
+          blockedReason: 'CLOSED',
+          closedReason: 'Phòng khám nghỉ: Tết Nguyên đán',
+          clinicClosed: true,
+        });
+        const res = await service.slots({
+          serviceId: 'service-1',
+          dentistId: 'dentist-1',
+          date: '2026-10-05',
+        });
+        expect(res.emptyReason).toBe('CLINIC_CLOSED');
+        expect(res.closedReason).toBe('Phòng khám nghỉ: Tết Nguyên đán');
       });
 
       it('shows the reason of a clinic-wide closure (Tết) to the patient', async () => {
