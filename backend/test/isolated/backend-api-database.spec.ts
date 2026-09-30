@@ -49,7 +49,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
   }
   async function fixtureEncounter() {
     const p = await patient();
-    const start = new Date(Date.now() - ++serial * 60000);
+    // A distinct start earlier today: "now - serial minutes" alone fell on
+    // yesterday just after midnight, and an encounter of an earlier day
+    // cancels to LEFT instead of back to the queue.
+    const n = ++serial;
+    const todayStart = new Date(`${clinicDateOnly()}T00:00:00+07:00`).getTime();
+    const start = new Date(Math.max(Date.now() - n * 60000, todayStart + n * 1000));
     const a = await db.appointment.create({
       data: {
         patientId: p,
@@ -226,18 +231,20 @@ describe('Real HTTP and PostgreSQL regression', () => {
       .send({ patientId, dentistId: users.dentist, ...s, endAt: s.startAt, source: 'PHONE' })
       .expect(400);
   });
-  it('creates a near-term appointment through the real API', async () => {
-    const start = new Date(Date.now() + 3 * 60000);
+  it('creates an appointment through the real API and moves it to now', async () => {
+    // Booked on a safe slot days ahead (the API refuses the past and
+    // seconds), then moved in the database to start this clinic minute so
+    // the chain below can check in: a visit booked "now + 3 min" ran past
+    // midnight after 23:42 and failed every test that follows.
     const r = await api('post', '/appointments', 'reception')
-      .send({
-        patientId,
-        dentistId: users.dentist,
-        startAt: start.toISOString(),
-        endAt: new Date(start.getTime() + 15 * 60000).toISOString(),
-        source: 'PHONE',
-      })
+      .send({ patientId, dentistId: users.dentist, ...slot(), source: 'PHONE' })
       .expect(201);
     appointmentId = r.body.data.id;
+    const start = new Date(Math.floor(Date.now() / 60000) * 60000);
+    await db.appointment.update({
+      where: { id: appointmentId },
+      data: { startAt: start, endAt: new Date(start.getTime() + 15 * 60000) },
+    });
     expect((await db.appointment.findUniqueOrThrow({ where: { id: appointmentId } })).status).toBe(
       'SCHEDULED',
     );
@@ -1511,7 +1518,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
         });
       }
       const walkIn = await api('post', '/appointments/walk-in')
-        .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 15 })
+        .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 5 })
         .expect(201);
       expect(walkIn.body.data).toMatchObject({ status: 'CHECKED_IN', visitKind: 'WALK_IN' });
 
@@ -1527,7 +1534,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
         .expect(409);
       // The slot is free again: another walk-in right now is accepted.
       await api('post', '/appointments/walk-in')
-        .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 15 })
+        .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 5 })
         .expect(201);
     });
   });
@@ -1597,7 +1604,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
       const onTime = await checkedIn(d1, -5);
       const walkIn = (
         await api('post', '/appointments/walk-in')
-          .send({ patientId: await patient(), dentistId: d1, durationMin: 15 })
+          .send({ patientId: await patient(), dentistId: d1, durationMin: 5 })
           .expect(201)
       ).body.data.id as string;
 
@@ -1811,9 +1818,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
           .expect(201);
       }
 
-      // 4. Front desk books by service, a few minutes from now (phases 4–5).
+      // 4. Front desk books by service (phases 4–5), on a safe day ahead; the
+      // visit is moved to now in the database just before the check-in.
       const p = await patient();
-      const startAt = new Date(Math.ceil(Date.now() / 60000) * 60000 + 2 * 60000);
+      const startAt = new Date(
+        `${new Date(Date.now() + 3 * 86400000 + 7 * 3600000).toISOString().slice(0, 10)}T09:00:00+07:00`,
+      );
       const booked = await as('desk', 'post', '/appointments')
         .send({
           patientId: p,
@@ -1837,6 +1847,11 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect(clash.body.code).toBe('SLOT_CONFLICT');
 
       // 5. Check-in puts the patient in the queue; the dentist calls and starts (phase 6).
+      const now = new Date(Math.floor(Date.now() / 60000) * 60000);
+      await db.appointment.update({
+        where: { id: appointmentId },
+        data: { startAt: now, endAt: new Date(now.getTime() + 15 * 60000) },
+      });
       await as('desk', 'post', `/appointments/${appointmentId}/check-in`).send({}).expect(200);
       const queue = await as('doc', 'get', '/queue').expect(200);
       expect(queue.body.data).toEqual([
@@ -1899,7 +1914,13 @@ describe('Real HTTP and PostgreSQL regression', () => {
       expect(await actions(serviceId)).toContain('SERVICE_CREATED');
       const history = await as('desk', 'get', `/appointments/${appointmentId}/history`).expect(200);
       expect(history.body.data.events.map((e: { action: string }) => e.action)).toEqual(
-        expect.arrayContaining(['APPOINTMENT_CREATED', 'APPOINTMENT_CHECKED_IN', 'QUEUE_CALLED']),
+        expect.arrayContaining([
+          'APPOINTMENT_CREATED',
+          'APPOINTMENT_CHECKED_IN',
+          'QUEUE_CALLED',
+          'APPOINTMENT_EXAM_STARTED',
+          'APPOINTMENT_COMPLETED',
+        ]),
       );
     });
 

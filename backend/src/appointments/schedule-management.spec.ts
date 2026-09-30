@@ -481,16 +481,50 @@ describe('AppointmentsService — schedule management', () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
         { startTime: t('08:00'), endTime: t('12:00'), slotDurationMin: 30 },
       ]);
-      (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.scheduleOverride.findMany as jest.Mock)
+        // Both blocks of that changed-hours day (08:00-12:00, 13:30-17:00)…
+        .mockResolvedValueOnce([{ id: 'ov-1' }, { id: 'ov-2' }])
+        // …and none left for the calendar check.
+        .mockResolvedValue([]);
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
         { id: 'late', startAt: at(day, '18:00'), endAt: at(day, '18:30') },
       ]);
       const result = await service.deleteScheduleOverride('ov-1', admin);
-      expect(prisma.scheduleOverride.update).toHaveBeenCalledWith({
-        where: { id: 'ov-1' },
+      expect(prisma.scheduleOverride.findMany).toHaveBeenNthCalledWith(1, {
+        where: {
+          dentistId: 'dentist-1',
+          date: new Date(day),
+          kind: 'CHANGED_HOURS',
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      // Removing one block removes the whole changed-hours day.
+      expect(prisma.scheduleOverride.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['ov-1', 'ov-2'] } },
         data: { deletedAt: expect.any(Date), deletedBy: admin.sub },
       });
+      expect(result.deletedIds).toEqual(['ov-1', 'ov-2']);
       expect(result.affectedAppointments.map((a: any) => a.id)).toEqual(['late']);
+    });
+
+    it('removing a closed range removes only that override', async () => {
+      (prisma.scheduleOverride.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ov-9',
+        dentistId: 'dentist-1',
+        date: new Date(day),
+        kind: 'CLOSED',
+      });
+      (prisma.scheduleOverride.findMany as jest.Mock)
+        .mockResolvedValueOnce([{ id: 'ov-9' }])
+        .mockResolvedValue([]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      const result = await service.deleteScheduleOverride('ov-9', admin);
+      expect(prisma.scheduleOverride.findMany).toHaveBeenNthCalledWith(1, {
+        where: { id: 'ov-9', deletedAt: null },
+        select: { id: true },
+      });
+      expect(result.deletedIds).toEqual(['ov-9']);
     });
   });
 

@@ -20,6 +20,8 @@ type RequestRow = {
   status: string;
   reason?: string | null;
   responseMessage?: string | null;
+  /** The requester's own note (withdrawal, a proposed time turned down). */
+  patientMessage?: string | null;
   service: { id: string; name: string; durationMinutes: number };
   preferredDentist: { id: string; fullName: string };
   proposedDentist?: { id: string; fullName: string } | null;
@@ -31,6 +33,8 @@ type RequestRow = {
   } | null;
   /** Why an open request can no longer be confirmed as it stands (server check). */
   slotIssue?: { kind: string; message: string } | null;
+  /** Open requests made with this phone (the public form refuses it at 3). */
+  openFromPhone?: number;
 };
 type PatientMatch = {
   id: string;
@@ -109,6 +113,23 @@ function SlotIssueBadge({ issue }: { issue?: RequestRow["slotIssue"] }) {
     </span>
   );
 }
+/** Open requests at which the public form refuses a phone (backend MAX_OPEN_PER_PHONE). */
+const MAX_OPEN_PER_PHONE = 3;
+/**
+ * A phone at the online limit: its owner cannot book online until some of
+ * these are handled; possibly someone else used the number to block it.
+ */
+function PhoneLimitBadge({ count, phone }: { count?: number; phone: string }) {
+  if (!count || count < MAX_OPEN_PER_PHONE) return null;
+  return (
+    <span
+      title={`SĐT ${phone} đang có ${count} yêu cầu mở nên không đặt thêm trực tuyến được. Nếu khách không gửi các yêu cầu này, hãy từ chối những yêu cầu lạ.`}
+      className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800"
+    >
+      SĐT có {count} yêu cầu mở
+    </span>
+  );
+}
 function UrgencyBadge({ kind }: { kind: "overdue" | "soon" | null }) {
   if (!kind) return null;
   return kind === "overdue" ? (
@@ -135,6 +156,15 @@ const inputDate = (value: string | Date) => {
 };
 const fromInputDate = (value: string) =>
   clinicIso(value.slice(0, 10), value.slice(11, 16));
+/** Actions whose outcome the patient is emailed about (the server says if it went out). */
+const NOTIFIED: Record<string, string> = {
+  confirm: "Đã xác nhận lịch hẹn",
+  propose: "Đã đề xuất giờ khác",
+  decline: "Đã từ chối yêu cầu",
+  "need-information": "Đã yêu cầu bổ sung thông tin",
+};
+/** A patient who could not be emailed and must be called. */
+type CallNotice = { action: string; name: string; phone: string; noEmail: boolean };
 
 export default function BookingRequestsPage() {
   const qc = useQueryClient();
@@ -146,6 +176,7 @@ export default function BookingRequestsPage() {
   const [proposeAt, setProposeAt] = useState("");
   const [proposeDentist, setProposeDentist] = useState("");
   const [error, setError] = useState("");
+  const [callNotice, setCallNotice] = useState<CallNotice | null>(null);
   // Re-evaluated every minute so "Sắp đến giờ" / "Quá giờ" stay current.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -205,9 +236,36 @@ export default function BookingRequestsPage() {
 
   const action = useMutation({
     mutationFn: async ({ path, body }: { path: string; body?: unknown }) =>
-      api.post("/booking-requests/" + selected?.id + "/" + path, body ?? {}),
-    onSuccess: async () => {
+      api.post<{ notificationSent?: boolean }>(
+        "/booking-requests/" + selected?.id + "/" + path,
+        body ?? {},
+      ),
+    onSuccess: async (response, { path }) => {
       setError("");
+      const done = NOTIFIED[path];
+      if (done) {
+        notify.success(done);
+        // No email went out (none given, or sending failed): the patient
+        // must be called, so say it where it stays visible.
+        if (selected && response.data?.notificationSent === false) {
+          setCallNotice({
+            action: done,
+            name: selected.fullName,
+            phone: selected.phone,
+            noEmail: !selected.email,
+          });
+        }
+      } else {
+        notify.success("Đã cập nhật yêu cầu");
+      }
+      // A confirmed request is now a visit: calendars and dashboard change too.
+      if (path === "confirm") {
+        void qc.invalidateQueries({ queryKey: ["appointments"] });
+        void qc.invalidateQueries({
+          predicate: (q) =>
+            typeof q.queryKey[0] === "string" && q.queryKey[0].startsWith("dashboard"),
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["booking-requests"] });
       await query.refetch();
       setSelected(null);
@@ -234,12 +292,9 @@ export default function BookingRequestsPage() {
     );
   }, [query.data]);
   const overdue = selected ? urgency(selected, now) === "overdue" : false;
-  // Any overdue open request, or one the schedule no longer allows, can be
-  // rescued with a new time or dentist.
-  const canPropose =
-    !!selected &&
-    (["PENDING_REVIEW", "PATIENT_ACCEPTED"].includes(selected.status) ||
-      ((overdue || !!selected.slotIssue) && OPEN.includes(selected.status)));
+  // Any open request can get a (new) time or dentist, a standing proposal or
+  // one waiting on details included.
+  const canPropose = !!selected && OPEN.includes(selected.status);
 
   return (
     <div className="space-y-5">
@@ -252,6 +307,29 @@ export default function BookingRequestsPage() {
           chính thức.
         </p>
       </div>
+      {callNotice && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p>
+            <strong>{callNotice.action}</strong> —{" "}
+            {callNotice.noEmail ? "khách không có email" : "gửi email cho khách bị lỗi"}.
+            Hãy gọi {callNotice.name} theo số{" "}
+            <a href={"tel:" + callNotice.phone} className="font-semibold underline">
+              {callNotice.phone}
+            </a>{" "}
+            để báo kết quả.
+          </p>
+          <button
+            onClick={() => setCallNotice(null)}
+            aria-label="Đã gọi, ẩn thông báo"
+            className="rounded px-2 py-1 text-amber-800 hover:bg-amber-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-4">
         {["PENDING_REVIEW", "PROPOSED", "PATIENT_ACCEPTED", "CONFIRMED"].map(
           (k) => (
@@ -320,6 +398,7 @@ export default function BookingRequestsPage() {
                     {stateLabel[row.status] ?? row.status}
                     <UrgencyBadge kind={urgency(row, now)} />
                     <SlotIssueBadge issue={row.slotIssue} />
+                    <PhoneLimitBadge count={row.openFromPhone} phone={row.phone} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -411,6 +490,12 @@ export default function BookingRequestsPage() {
                 <dt className="text-gray-500">Lý do khám</dt>
                 <dd>{selected.reason || "—"}</dd>
               </div>
+              {selected.patientMessage && (
+                <div className="sm:col-span-2">
+                  <dt className="text-gray-500">Lời nhắn của khách</dt>
+                  <dd className="rounded bg-sky-50 p-2 text-sky-900">{selected.patientMessage}</dd>
+                </div>
+              )}
             </dl>
             {selected.appointment && (
               <p className="mt-4 rounded bg-emerald-50 p-3 text-sm text-emerald-800">

@@ -25,6 +25,17 @@ test.describe('Dentist View', () => {
     await expect(nav.getByText(/queue|hàng chờ/i).first()).toBeVisible();
   });
 
+  test('dentist opens "Lịch của tôi" from the sidebar', async ({ page }) => {
+    await page.goto('/');
+    const nav = page.getByRole('navigation', { name: /menu điều hướng/i });
+    await nav.getByRole('link', { name: 'Lịch của tôi', exact: true }).click();
+    await expect(page).toHaveURL(/\/my-appointments$/);
+    await expect(page.getByRole('heading', { name: 'Lịch của tôi', exact: true })).toBeVisible();
+    // Locked to the signed-in dentist: no dentist picker.
+    await expect(page.getByLabel('Lọc theo bác sĩ')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^tuần$/i })).toBeVisible();
+  });
+
   test('dentist can access Today page', async ({ page }) => {
     await page.goto('/today');
     await page.waitForLoadState('networkidle');

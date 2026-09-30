@@ -1,25 +1,28 @@
-import { useMemo } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useDentistOptions } from './appointmentApi';
 import { isOverdueNotArrived, OVERDUE_LABEL, OVERDUE_BLOCK_CLASS, useNow } from './liveStatus';
-import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
+import type { Appointment, AppointmentStatus, AppointmentType, ClockInterval } from '@/types/appointment';
 import { formatTimeOnly } from '@/lib/format';
-import { clinicMinutes, clinicParts, clinicWallClock } from '@/lib/clinicTime';
+import { clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
+import {
+  appointmentSpan,
+  HOUR_HEIGHT_PX,
+  isHourPast,
+  layoutLanes,
+  MIN_BLOCK_PX,
+  type LaneSlot,
+} from './calendarLayout';
 
 // -----------------------------------------------------------------------------
 // Shared constants
 // -----------------------------------------------------------------------------
 
-const HOUR_START = 7;
-const HOUR_END = 19;
-const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
-const HOUR_HEIGHT_PX = 56; // visual height of a 1-hour row
-const DAY_START_MIN = HOUR_START * 60;
-const DAY_END_MIN = HOUR_END * 60;
+const PX_PER_MIN = HOUR_HEIGHT_PX / 60;
+const MIN_BLOCK_MIN = Math.ceil(MIN_BLOCK_PX / PX_PER_MIN);
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
   scheduled: 'bg-gray-100 border-gray-300 text-gray-800',
@@ -44,102 +47,181 @@ const TYPE_LABEL: Record<AppointmentType, string> = {
   follow_up: 'Tái khám',
 };
 
-/** Clinic wall-clock minutes, so blocks sit at clinic time in any browser. */
-const minutesFromMidnight = (iso: string): number => clinicMinutes(iso);
+const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
+const hhmmToMin = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
 
-function appointmentTopPx(iso: string): number {
-  const min = minutesFromMidnight(iso);
-  if (min <= DAY_START_MIN) return 0;
-  if (min >= DAY_END_MIN) return (DAY_END_MIN - DAY_START_MIN) * (HOUR_HEIGHT_PX / 60);
-  return (min - DAY_START_MIN) * (HOUR_HEIGHT_PX / 60);
-}
-
-function appointmentHeightPx(startIso: string, endIso: string): number {
-  const startMin = minutesFromMidnight(startIso);
-  const endMin = minutesFromMidnight(endIso);
-  const clampedStart = Math.max(startMin, DAY_START_MIN);
-  const clampedEnd = Math.min(endMin, DAY_END_MIN);
-  const dur = Math.max(clampedEnd - clampedStart, 20); // min 20px so very short appts stay clickable
-  return dur * (HOUR_HEIGHT_PX / 60);
-}
-
-// -----------------------------------------------------------------------------
-// Day View
-// -----------------------------------------------------------------------------
-
-interface DayViewProps {
-  date: Date;
-  appointments: Appointment[];
+/** Props shared by the day and week grids. */
+interface TimeGridProps {
+  /** Grid hours [hourStart, hourEnd) — see visibleHourRange(). */
+  hourStart: number;
+  hourEnd: number;
+  /** Clinic-wide closed days ("yyyy-MM-dd" → reason): no quick-create there. */
+  closedDays?: Record<string, string>;
+  /** Working windows of the filtered dentist per clinic date (absent: no dentist filter). */
+  workingWindows?: Record<string, ClockInterval[]>;
   /** Omit to hide the per-hour "+" quick-create affordance (e.g. actor lacks appointment.create). */
   onSlotClick?: (date: Date, time: string) => void;
   onAppointmentClick: (apt: Appointment) => void;
 }
 
-export function DayView({ date, appointments, onSlotClick, onAppointmentClick }: DayViewProps) {
-  const now = useNow();
-  const dayAppointments = useMemo(
-    () =>
-      appointments
-        .filter((a) => clinicParts(a.startsAt).date === format(date, 'yyyy-MM-dd'))
-        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
-    [appointments, date],
+function HourGutter({ hours, className }: { hours: number[]; className?: string }) {
+  return (
+    <div className={cn('shrink-0 border-r border-gray-100', className)}>
+      {hours.map((hour) => (
+        <div
+          key={hour}
+          className="border-b border-gray-50 pr-2 pt-0.5 text-right text-[11px] text-gray-400"
+          style={{ height: HOUR_HEIGHT_PX }}
+        >
+          {hhmm(hour)}
+        </div>
+      ))}
+    </div>
   );
+}
+
+interface DayColumnProps
+  extends Omit<TimeGridProps, 'closedDays' | 'workingWindows' | 'hourEnd'> {
+  day: Date;
+  hours: number[];
+  appointments: Appointment[];
+  closedReason?: string;
+  windows?: ClockInterval[];
+  now: number;
+  compact?: boolean;
+  className?: string;
+}
+
+/** One day's column: working hours, hour slots and side-by-side booking blocks. */
+function DayColumn({
+  day,
+  hours,
+  hourStart,
+  appointments,
+  closedReason,
+  windows,
+  now,
+  compact = false,
+  className,
+  onSlotClick,
+  onAppointmentClick,
+}: DayColumnProps) {
+  const dateKey = format(day, 'yyyy-MM-dd');
+  const gridStartMin = hourStart * 60;
+  const lanes = layoutLanes(appointments, MIN_BLOCK_MIN);
+  const closed = closedReason !== undefined;
 
   return (
-    <div className="min-h-[600px]">
+    <div
+      className={cn('relative', closed && 'bg-gray-100/80', className)}
+      style={{ height: hours.length * HOUR_HEIGHT_PX }}
+      title={closed ? `Phòng khám nghỉ: ${closedReason}` : undefined}
+    >
+      {/* Working hours of the filtered dentist */}
+      {!closed &&
+        windows?.map((w) => (
+          <div
+            key={`${w.startTime}-${w.endTime}`}
+            className="pointer-events-none absolute inset-x-0 bg-emerald-50/70"
+            style={{
+              top: (hhmmToMin(w.startTime) - gridStartMin) * PX_PER_MIN,
+              height: (hhmmToMin(w.endTime) - hhmmToMin(w.startTime)) * PX_PER_MIN,
+            }}
+            aria-hidden
+          />
+        ))}
+
+      {/* Hour lines + quick-create slots (not on closed days or past hours) */}
+      {hours.map((hour) => {
+        const style = { top: (hour - hourStart) * HOUR_HEIGHT_PX, height: HOUR_HEIGHT_PX };
+        return onSlotClick && !closed && !isHourPast(dateKey, hour, now) ? (
+          <button
+            key={hour}
+            type="button"
+            onClick={() => onSlotClick(day, hhmm(hour))}
+            className="absolute left-0 right-0 border-b border-gray-50 px-1 text-left text-[10px] text-transparent hover:bg-brand-50/40 hover:text-brand-500"
+            style={style}
+            title={`Tạo lịch ${format(day, 'dd/MM')} ${hhmm(hour)}`}
+          >
+            +
+          </button>
+        ) : (
+          <div
+            key={hour}
+            className="pointer-events-none absolute left-0 right-0 border-b border-gray-50"
+            style={style}
+          />
+        );
+      })}
+
+      {/* Appointment blocks */}
+      {appointments.map((apt) => {
+        const { start, end } = appointmentSpan(apt);
+        return (
+          <AppointmentBlock
+            key={apt.id}
+            appointment={apt}
+            top={(start - gridStartMin) * PX_PER_MIN}
+            height={Math.max((end - start) * PX_PER_MIN, 20)}
+            lane={lanes.get(apt.id)}
+            onClick={() => onAppointmentClick(apt)}
+            overdue={isOverdueNotArrived(apt, now)}
+            compact={compact}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+const byStart = (a: Appointment, b: Appointment) =>
+  new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+
+// -----------------------------------------------------------------------------
+// Day View
+// -----------------------------------------------------------------------------
+
+interface DayViewProps extends TimeGridProps {
+  date: Date;
+  appointments: Appointment[];
+}
+
+export function DayView({
+  date,
+  appointments,
+  hourStart,
+  hourEnd,
+  closedDays,
+  workingWindows,
+  onSlotClick,
+  onAppointmentClick,
+}: DayViewProps) {
+  const now = useNow();
+  const dateKey = format(date, 'yyyy-MM-dd');
+  const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
+  const closedReason = closedDays?.[dateKey];
+
+  return (
+    <div>
+      {closedReason !== undefined && (
+        <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          Phòng khám nghỉ cả ngày: {closedReason}
+        </div>
+      )}
       <div className="flex">
-        {/* Hour gutter */}
-        <div className="w-20 shrink-0 border-r border-gray-100">
-          {HOURS.map((hour) => (
-            <div
-              key={hour}
-              className="border-b border-gray-50 pr-2 pt-1 text-right text-xs text-gray-400"
-              style={{ height: HOUR_HEIGHT_PX }}
-            >
-              {String(hour).padStart(2, '0')}:00
-            </div>
-          ))}
-        </div>
-
-        {/* Single day column with absolute-positioned appt blocks */}
-        <div className="relative flex-1">
-          {/* Hour lines */}
-          {HOURS.map((hour) => (
-            <div
-              key={hour}
-              className="border-b border-gray-50"
-              style={{ height: HOUR_HEIGHT_PX }}
-            >
-              {onSlotClick && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSlotClick(
-                      date,
-                      `${String(hour).padStart(2, '0')}:00`,
-                    )
-                  }
-                  className="ml-1 mt-1 inline-flex h-4 items-center rounded px-1 text-[10px] text-transparent hover:bg-brand-50 hover:text-brand-600"
-                  title={`Tạo lịch ${String(hour).padStart(2, '0')}:00`}
-                >
-                  +
-                </button>
-              )}
-            </div>
-          ))}
-
-          {/* Appointment blocks */}
-          {dayAppointments.map((apt) => (
-            <AppointmentBlock
-              key={apt.id}
-              appointment={apt}
-              top={appointmentTopPx(apt.startsAt)}
-              height={appointmentHeightPx(apt.startsAt, apt.endsAt)}
-              onClick={() => onAppointmentClick(apt)}
-              overdue={isOverdueNotArrived(apt, now)}
-            />
-          ))}
-        </div>
+        <HourGutter hours={hours} className="w-16 sm:w-20" />
+        <DayColumn
+          day={date}
+          hours={hours}
+          hourStart={hourStart}
+          appointments={appointments.slice().sort(byStart)}
+          closedReason={closedReason}
+          windows={workingWindows?.[dateKey]}
+          now={now}
+          className="flex-1"
+          onSlotClick={onSlotClick}
+          onAppointmentClick={onAppointmentClick}
+        />
       </div>
     </div>
   );
@@ -149,33 +231,35 @@ export function DayView({ date, appointments, onSlotClick, onAppointmentClick }:
 // Week View
 // -----------------------------------------------------------------------------
 
-interface WeekViewProps {
+interface WeekViewProps extends TimeGridProps {
   days: Date[];
   appointmentsByDate: Record<string, Appointment[]>;
-  /** Omit to hide the per-hour "+" quick-create affordance (e.g. actor lacks appointment.create). */
-  onSlotClick?: (date: Date, time: string) => void;
-  onAppointmentClick: (apt: Appointment) => void;
 }
 
 export function WeekView({
   days,
   appointmentsByDate,
+  hourStart,
+  hourEnd,
+  closedDays,
+  workingWindows,
   onSlotClick,
   onAppointmentClick,
 }: WeekViewProps) {
   const today = clinicWallClock();
   const now = useNow();
+  const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
+  const gridTemplateColumns = `56px repeat(${days.length}, minmax(96px, 1fr))`;
 
+  // min-width keeps seven columns readable on a phone; the parent scrolls sideways.
   return (
-    <div className="min-h-[600px]">
+    <div className="min-w-[720px]">
       {/* Day headers */}
-      <div
-        className="grid border-b border-gray-200 bg-gray-50"
-        style={{ gridTemplateColumns: `64px repeat(${days.length}, 1fr)` }}
-      >
+      <div className="grid border-b border-gray-200 bg-gray-50" style={{ gridTemplateColumns }}>
         <div className="border-r border-gray-100" />
         {days.map((day) => {
           const isToday = isSameDay(day, today);
+          const closedReason = closedDays?.[format(day, 'yyyy-MM-dd')];
           return (
             <div
               key={day.toISOString()}
@@ -195,78 +279,39 @@ export function WeekView({
               >
                 {format(day, 'd')}
               </p>
+              {closedReason !== undefined && (
+                <p className="truncate text-[10px] font-medium text-gray-500" title={closedReason}>
+                  Nghỉ: {closedReason}
+                </p>
+              )}
             </div>
           );
         })}
       </div>
 
       {/* Time grid */}
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `64px repeat(${days.length}, 1fr)` }}
-      >
-        {/* Hour gutter */}
-        <div className="border-r border-gray-100">
-          {HOURS.map((hour) => (
-            <div
-              key={hour}
-              className="border-b border-gray-50 pr-2 pt-0.5 text-right text-[11px] text-gray-400"
-              style={{ height: HOUR_HEIGHT_PX }}
-            >
-              {String(hour).padStart(2, '0')}:00
-            </div>
-          ))}
-        </div>
-
-        {/* Day columns */}
+      <div className="grid" style={{ gridTemplateColumns }}>
+        <HourGutter hours={hours} />
         {days.map((day) => {
           const dateKey = format(day, 'yyyy-MM-dd');
-          const dayAppointments = (appointmentsByDate[dateKey] ?? []).slice().sort(
-            (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-          );
-          const isToday = isSameDay(day, today);
-
           return (
-            <div
+            <DayColumn
               key={dateKey}
+              day={day}
+              hours={hours}
+              hourStart={hourStart}
+              appointments={(appointmentsByDate[dateKey] ?? []).slice().sort(byStart)}
+              closedReason={closedDays?.[dateKey]}
+              windows={workingWindows?.[dateKey]}
+              now={now}
+              compact
               className={cn(
-                'relative border-r border-gray-100 last:border-r-0',
-                isToday && 'bg-brand-50/30',
+                'border-r border-gray-100 last:border-r-0',
+                isSameDay(day, today) && 'bg-brand-50/30',
               )}
-              style={{ height: HOURS.length * HOUR_HEIGHT_PX }}
-            >
-              {/* Hour slot buttons */}
-              {onSlotClick && HOURS.map((hour) => (
-                <button
-                  key={hour}
-                  type="button"
-                  onClick={() =>
-                    onSlotClick(
-                      day,
-                      `${String(hour).padStart(2, '0')}:00`,
-                    )
-                  }
-                  className="absolute left-0 right-0 border-b border-gray-50 px-1 text-left text-[10px] text-transparent hover:bg-brand-50/40 hover:text-brand-500"
-                  style={{ top: (hour - HOUR_START) * HOUR_HEIGHT_PX, height: HOUR_HEIGHT_PX }}
-                  title={`Tạo lịch ${format(day, 'dd/MM')} ${String(hour).padStart(2, '0')}:00`}
-                >
-                  +
-                </button>
-              ))}
-
-              {/* Appointment blocks */}
-              {dayAppointments.map((apt) => (
-                <AppointmentBlock
-                  key={apt.id}
-                  appointment={apt}
-                  top={appointmentTopPx(apt.startsAt)}
-                  height={appointmentHeightPx(apt.startsAt, apt.endsAt)}
-                  onClick={() => onAppointmentClick(apt)}
-                  overdue={isOverdueNotArrived(apt, now)}
-                  compact
-                />
-              ))}
-            </div>
+              onSlotClick={onSlotClick}
+              onAppointmentClick={onAppointmentClick}
+            />
           );
         })}
       </div>
@@ -282,6 +327,8 @@ interface AppointmentBlockProps {
   appointment: Appointment;
   top: number;
   height: number;
+  /** Side-by-side position among overlapping blocks (whole width when absent). */
+  lane?: LaneSlot;
   onClick: () => void;
   compact?: boolean;
   /** Booked, not arrived, past the start by more than the grace time. */
@@ -292,6 +339,7 @@ function AppointmentBlock({
   appointment,
   top,
   height,
+  lane,
   onClick,
   compact = false,
   overdue = false,
@@ -327,8 +375,13 @@ function AppointmentBlock({
   // and let Tooltip wrap only the (now relatively-sized) inner button.
   return (
     <div
-      className="absolute inset-x-1 z-10"
-      style={{ top: `${top}px`, height: `${Math.max(height, 24)}px` }}
+      className="absolute z-10"
+      style={{
+        top: `${top}px`,
+        height: `${Math.max(height, MIN_BLOCK_PX)}px`,
+        left: `calc(${((lane?.lane ?? 0) / (lane?.lanes ?? 1)) * 100}% + 2px)`,
+        width: `calc(${100 / (lane?.lanes ?? 1)}% - 4px)`,
+      }}
     >
       <Tooltip label={tooltipContent} side="right" className="h-full w-full">
         <button

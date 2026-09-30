@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AppointmentsService } from './appointments.service';
 
@@ -9,13 +9,20 @@ import { AppointmentsService } from './appointments.service';
  *   - Every hour: auto-cancel PENDING shift registrations whose startTime
  *     is in the past.
  *   - Just after clinic midnight: close check-ins and queue entries left
- *     open from earlier days.
+ *     open from earlier days — and once more at startup, in case the server
+ *     was down at 00:15 (the job only touches days before today, so a
+ *     second run is a no-op).
  */
 @Injectable()
-export class AppointmentsCron {
+export class AppointmentsCron implements OnApplicationBootstrap {
   private readonly logger = new Logger(AppointmentsCron.name);
 
   constructor(private readonly appointments: AppointmentsService) {}
+
+  // Not awaited: startup never waits on it (it logs its own failures).
+  onApplicationBootstrap() {
+    void this.closeStaleCheckIns();
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async autoMarkNoShow() {

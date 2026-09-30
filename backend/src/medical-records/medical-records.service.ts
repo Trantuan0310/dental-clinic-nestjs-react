@@ -106,6 +106,31 @@ export class MedicalRecordsService {
   }
 
   /**
+   * An entry in the appointment's own history (BR-APPT-034), which front
+   * desk reads too: no clinical content, only ids. Written in `tx` so it
+   * rolls back with the change it records.
+   */
+  private appointmentHistory(
+    tx: Prisma.TransactionClient,
+    actor: JwtPayload,
+    appointmentId: string,
+    action: string,
+    metadata: Record<string, unknown>,
+  ) {
+    return this.audit.log(
+      {
+        action,
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'appointment',
+        targetId: appointmentId,
+        metadata,
+      },
+      tx,
+    );
+  }
+
+  /**
    * The front-desk variant used by startEncounterForAppointment and
    * listEncounters (see above): only a caller who holds encounter.read.own
    * and not .any is limited to their own encounters, so a role with neither
@@ -227,20 +252,28 @@ export class MedicalRecordsService {
         await reopenCancelledEncounter(tx, existing.id, current.dentistId, actor.sub);
         opened = true;
       }
-      if (!existing) {
-        const created = await tx.encounter.create({
-          data: {
-            appointmentId: appt.id,
-            patientId: appt.patientId,
-            dentistId: appt.dentistId,
-            status: EncounterStatus.IN_PROGRESS,
-            startedAt: new Date(),
-          },
+      const encounterId =
+        existing?.id ??
+        (
+          await tx.encounter.create({
+            data: {
+              appointmentId: appt.id,
+              patientId: appt.patientId,
+              dentistId: appt.dentistId,
+              status: EncounterStatus.IN_PROGRESS,
+              startedAt: new Date(),
+            },
+          })
+        ).id;
+      if (!existing) opened = true;
+      // BR-APPT-034: the exam start is part of the visit's history.
+      if (current.status === 'CHECKED_IN') {
+        await this.appointmentHistory(tx, actor, appointmentId, 'APPOINTMENT_EXAM_STARTED', {
+          encounterId,
+          ...(existing?.status === EncounterStatus.CANCELLED ? { restarted: true } : {}),
         });
-        opened = true;
-        return { encounterId: created.id };
       }
-      return { encounterId: existing.id };
+      return { encounterId };
     });
     if (opened) this.emitClinicalDataChanged(appt.patientId);
     return result;
@@ -612,6 +645,9 @@ export class MedicalRecordsService {
           where: { id: encounter.appointmentId },
           data: { status: 'COMPLETED', updatedBy: actor.sub },
         });
+        await this.appointmentHistory(tx, actor, encounter.appointmentId, 'APPOINTMENT_COMPLETED', {
+          encounterId,
+        });
 
         // Encounter audit row
         await tx.encounterAudit.create({
@@ -624,22 +660,25 @@ export class MedicalRecordsService {
           },
         });
 
-        await this.audit.log({
-          action: 'ENCOUNTER_CLOSED',
-          actorUserId: actor.sub,
-          actorEmail: actor.email,
-          targetType: 'encounter',
-          targetId: encounterId,
-          metadata: {
-            patientId: encounter.patientId,
-            appointmentId: encounter.appointmentId,
-            treatmentCount: encounter.treatments.length,
-            inventoryUsagesCount: encounter.treatments.reduce(
-              (acc, t) => acc + t.inventoryUsages.length,
-              0,
-            ),
+        await this.audit.log(
+          {
+            action: 'ENCOUNTER_CLOSED',
+            actorUserId: actor.sub,
+            actorEmail: actor.email,
+            targetType: 'encounter',
+            targetId: encounterId,
+            metadata: {
+              patientId: encounter.patientId,
+              appointmentId: encounter.appointmentId,
+              treatmentCount: encounter.treatments.length,
+              inventoryUsagesCount: encounter.treatments.reduce(
+                (acc, t) => acc + t.inventoryUsages.length,
+                0,
+              ),
+            },
           },
-        });
+          tx,
+        );
 
         if (allergyOverride) {
           // In the transaction: a close that fails later must not leave an
@@ -765,6 +804,15 @@ export class MedicalRecordsService {
       if (backToQueue.count > 0) {
         appointmentStatus = 'CHECKED_IN';
         await reopenStartedQueueEntry(tx, encounter.appointmentId, actor.sub);
+        // The cancel reason stays on the encounter (clinical); the visit's
+        // history, read by front desk, only says it went back to the queue.
+        await this.appointmentHistory(
+          tx,
+          actor,
+          encounter.appointmentId,
+          'APPOINTMENT_RETURNED_TO_QUEUE',
+          { encounterId },
+        );
       } else {
         const left = await tx.appointment.updateMany({
           where: {
@@ -782,6 +830,10 @@ export class MedicalRecordsService {
         if (left.count > 0) {
           appointmentStatus = 'LEFT';
           await closeQueueEntry(tx, encounter.appointmentId, 'LEFT', actor.sub);
+          await this.appointmentHistory(tx, actor, encounter.appointmentId, 'APPOINTMENT_LEFT', {
+            reason: PAST_DAY_ENCOUNTER_CANCELLED_REASON,
+            encounterId,
+          });
         }
       }
       await tx.encounterAudit.create({
@@ -797,20 +849,23 @@ export class MedicalRecordsService {
           },
         },
       });
-      await this.audit.log({
-        action: 'ENCOUNTER_CANCELLED',
-        actorUserId: actor.sub,
-        actorEmail: actor.email,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: {
-          appointmentId: encounter.appointmentId,
-          patientId: encounter.patientId,
-          reason: trimmed,
-          appointmentReturnedToCheckIn: appointmentStatus === 'CHECKED_IN',
-          ...(appointmentStatus === 'LEFT' ? { appointmentClosedAsLeft: true } : {}),
+      await this.audit.log(
+        {
+          action: 'ENCOUNTER_CANCELLED',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: {
+            appointmentId: encounter.appointmentId,
+            patientId: encounter.patientId,
+            reason: trimmed,
+            appointmentReturnedToCheckIn: appointmentStatus === 'CHECKED_IN',
+            ...(appointmentStatus === 'LEFT' ? { appointmentClosedAsLeft: true } : {}),
+          },
         },
-      });
+        tx,
+      );
       return encounter.patientId;
     });
     this.emitClinicalDataChanged(patientId);
@@ -901,14 +956,17 @@ export class MedicalRecordsService {
         note = await tx.clinicalNote.findUniqueOrThrow({ where: { encounterId } });
       }
 
-      await this.audit.log({
-        action: 'CLINICAL_NOTE_UPSERTED',
-        actorUserId: actor.sub,
-        actorEmail: actor.email,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: { noteId: note.id },
-      });
+      await this.audit.log(
+        {
+          action: 'CLINICAL_NOTE_UPSERTED',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: { noteId: note.id },
+        },
+        tx,
+      );
 
       return note;
     });
@@ -1065,13 +1123,16 @@ export class MedicalRecordsService {
         return t;
       })();
 
-      await this.audit.log({
-        action: 'TREATMENT_CREATED',
-        actorUserId: actor.sub,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: { treatmentId: treatment.id, procedure: dto.procedure },
-      });
+      await this.audit.log(
+        {
+          action: 'TREATMENT_CREATED',
+          actorUserId: actor.sub,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: { treatmentId: treatment.id, procedure: dto.procedure },
+        },
+        tx,
+      );
 
       return treatment;
     });
@@ -1126,13 +1187,16 @@ export class MedicalRecordsService {
         where: { id: treatmentId },
         data: { deletedAt: new Date() },
       });
-      await this.audit.log({
-        action: 'TREATMENT_DELETED',
-        actorUserId: actor.sub,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: { treatmentId },
-      });
+      await this.audit.log(
+        {
+          action: 'TREATMENT_DELETED',
+          actorUserId: actor.sub,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: { treatmentId },
+        },
+        tx,
+      );
     });
   }
 
@@ -1221,38 +1285,44 @@ export class MedicalRecordsService {
         });
       }
 
-      await this.audit.log({
-        action: active ? 'PRESCRIPTION_REPLACED' : 'PRESCRIPTION_CREATED',
-        actorUserId: actor.sub,
-        targetType: 'encounter',
-        targetId: encounterId,
-        metadata: {
-          prescriptionId: prescription.id,
-          lineCount: dto.lines.length,
-          hasDiagnosis: !!dto.diagnosis,
-          hasInstructions: !!dto.instructions,
-          hasFollowUpNote: !!dto.followUpNote,
-          ...(existing && !active && { reusedDeletedPrescription: true }),
-        },
-      });
-
-      if (conflicts.length > 0) {
-        await this.audit.log({
-          action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+      await this.audit.log(
+        {
+          action: active ? 'PRESCRIPTION_REPLACED' : 'PRESCRIPTION_CREATED',
           actorUserId: actor.sub,
-          actorEmail: actor.email,
           targetType: 'encounter',
           targetId: encounterId,
           metadata: {
             prescriptionId: prescription.id,
-            // The override covers these lines only: close accepts it for
-            // this exact version (a re-issued/reused row gets a new one).
-            prescriptionVersion: prescription.version,
-            patientId: encounter.patientId,
-            reason: overrideReason,
-            conflicts,
+            lineCount: dto.lines.length,
+            hasDiagnosis: !!dto.diagnosis,
+            hasInstructions: !!dto.instructions,
+            hasFollowUpNote: !!dto.followUpNote,
+            ...(existing && !active && { reusedDeletedPrescription: true }),
           },
-        });
+        },
+        tx,
+      );
+
+      if (conflicts.length > 0) {
+        await this.audit.log(
+          {
+            action: 'PRESCRIPTION_ALLERGY_OVERRIDE',
+            actorUserId: actor.sub,
+            actorEmail: actor.email,
+            targetType: 'encounter',
+            targetId: encounterId,
+            metadata: {
+              prescriptionId: prescription.id,
+              // The override covers these lines only: close accepts it for
+              // this exact version (a re-issued/reused row gets a new one).
+              prescriptionVersion: prescription.version,
+              patientId: encounter.patientId,
+              reason: overrideReason,
+              conflicts,
+            },
+          },
+          tx,
+        );
       }
 
       return prescription;
@@ -1374,16 +1444,19 @@ export class MedicalRecordsService {
         },
       });
 
-      await this.audit.log({
-        action: 'PRESCRIPTION_UPDATED',
-        actorUserId: actor.sub,
-        targetType: 'prescription',
-        targetId: prescriptionId,
-        metadata: {
-          encounterId: existing.encounterId,
-          fields: Object.keys(dto).filter(k => k !== 'version'),
+      await this.audit.log(
+        {
+          action: 'PRESCRIPTION_UPDATED',
+          actorUserId: actor.sub,
+          targetType: 'prescription',
+          targetId: prescriptionId,
+          metadata: {
+            encounterId: existing.encounterId,
+            fields: Object.keys(dto).filter(k => k !== 'version'),
+          },
         },
-      });
+        tx,
+      );
 
       return updated;
     });
@@ -1413,13 +1486,16 @@ export class MedicalRecordsService {
         where: { id: prescriptionId },
         data: { deletedAt: new Date() },
       });
-      await this.audit.log({
-        action: 'PRESCRIPTION_DELETED',
-        actorUserId: actor.sub,
-        targetType: 'prescription',
-        targetId: prescriptionId,
-        metadata: { encounterId: existing.encounterId },
-      });
+      await this.audit.log(
+        {
+          action: 'PRESCRIPTION_DELETED',
+          actorUserId: actor.sub,
+          targetType: 'prescription',
+          targetId: prescriptionId,
+          metadata: { encounterId: existing.encounterId },
+        },
+        tx,
+      );
     });
   }
 

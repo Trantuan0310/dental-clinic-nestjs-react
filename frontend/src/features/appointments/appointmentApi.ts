@@ -302,6 +302,7 @@ function buildRescheduleBody(
     newEndsAt: payload.newEndsAt,
     newDentistId: payload.newDentistId ?? undefined,
     reason: payload.reason,
+    durationOverrideReason: payload.durationOverrideReason?.trim() || undefined,
   };
 }
 
@@ -428,6 +429,8 @@ export interface AvailabilityOptions {
   /** Prep/clean-up time the new visit needs (ADR-0009 D4). */
   bufferBeforeMin?: number;
   bufferAfterMin?: number;
+  /** A visit being rescheduled: its own time counts as free. */
+  excludeAppointmentId?: string;
 }
 
 export function useAvailability(
@@ -456,6 +459,7 @@ export function useAvailability(
           slotDuration: opts?.slotDuration || undefined,
           bufferBeforeMin: opts?.bufferBeforeMin || undefined,
           bufferAfterMin: opts?.bufferAfterMin || undefined,
+          excludeAppointmentId: opts?.excludeAppointmentId || undefined,
         },
       });
 
@@ -877,6 +881,33 @@ export function useMarkLeft() {
   return useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }): Promise<Appointment> => {
       const row = await post<PrismaAppointmentRow>(`/appointments/${id}/left`, {
+        reason: reason.trim(),
+      });
+      return transformAppointment(row);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all });
+    },
+  });
+}
+
+/**
+ * POST /appointments/:id/undo-check-in or /undo-no-show — back to
+ * scheduled/confirmed, the same clinic day, with a reason.
+ */
+export function useUndoAppointmentStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      what,
+      reason,
+    }: {
+      id: string;
+      what: 'check-in' | 'no-show';
+      reason: string;
+    }): Promise<Appointment> => {
+      const row = await post<PrismaAppointmentRow>(`/appointments/${id}/undo-${what}`, {
         reason: reason.trim(),
       });
       return transformAppointment(row);

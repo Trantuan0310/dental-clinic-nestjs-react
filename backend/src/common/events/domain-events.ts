@@ -9,6 +9,21 @@ export interface AppointmentCancelledEvent {
   reason?: string;
 }
 
+/**
+ * A booked visit moved in time and/or to another dentist (reschedule, a day
+ * reassigned to a substitute). Emitted after the change is committed;
+ * listeners must not throw (the booking module emails the patient).
+ */
+export const APPOINTMENT_RESCHEDULED_EVENT = 'appointment.rescheduled';
+
+export interface AppointmentRescheduledEvent {
+  appointmentId: string;
+  oldStartAt: Date;
+  newStartAt: Date;
+  oldDentistId: string;
+  newDentistId: string;
+}
+
 export const ENCOUNTER_CLOSED_EVENT = 'encounter.closed';
 
 export interface InventoryUsageSnapshot {

@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppointmentStatus, Prisma, QueuePriority, QueueStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -6,9 +7,13 @@ import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import { AppointmentsService, STALE_APPOINTMENT_MSG } from './appointments.service';
-import { lockDentistCalendar } from './domain/advisory-lock';
+import { LOCKING_TX_OPTIONS, lockDentistCalendar } from './domain/advisory-lock';
 import { compareQueue } from './domain/queue';
 import { AppointmentNotFoundException } from './domain/exceptions';
+import {
+  APPOINTMENT_RESCHEDULED_EVENT,
+  AppointmentRescheduledEvent,
+} from '../common/events/domain-events';
 
 const OPEN_STATUSES: QueueStatus[] = [QueueStatus.WAITING, QueueStatus.CALLED, QueueStatus.SKIPPED];
 
@@ -48,6 +53,7 @@ export class DispatchService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly appointments: AppointmentsService,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** GET /queue — open entries for a clinic date, in dispatch order per dentist. */
@@ -260,7 +266,14 @@ export class DispatchService {
       );
       const moved = await tx.appointment.updateMany({
         where: { id: appt.id, status: AppointmentStatus.CHECKED_IN, dentistId: entry.dentistId },
-        data: { dentistId: dto.dentistId, startAt: start, endAt: end, updatedBy: actor.sub },
+        // A new reminder only matters for a later visit; cleared like a reschedule.
+        data: {
+          dentistId: dto.dentistId,
+          startAt: start,
+          endAt: end,
+          reminderSentAt: null,
+          updatedBy: actor.sub,
+        },
       });
       if (moved.count === 0) {
         throw queueError(STALE_APPOINTMENT_MSG, 'QUEUE_STALE');
@@ -278,8 +291,15 @@ export class DispatchService {
           changedBy: actor.sub,
         },
       });
-      await tx.queueEntry.update({
-        where: { id },
+      // Guarded like guardedUpdate: an entry called (or closed) since the read
+      // above must not be reset to WAITING under the new dentist.
+      const requeued = await tx.queueEntry.updateMany({
+        where: {
+          id,
+          doneAt: null,
+          dentistId: entry.dentistId,
+          status: { in: [QueueStatus.WAITING, QueueStatus.SKIPPED] },
+        },
         data: {
           dentistId: dto.dentistId,
           queueDate: new Date(clinicDateOnly(start)),
@@ -289,7 +309,14 @@ export class DispatchService {
           updatedBy: actor.sub,
         },
       });
-    });
+      if (requeued.count === 0) {
+        // Rolls back the appointment move above too.
+        throw queueError(
+          'Bệnh nhân vừa được gọi hoặc đã rời hàng đợi — tải lại rồi thử lại',
+          'QUEUE_STALE',
+        );
+      }
+    }, LOCKING_TX_OPTIONS);
     await this.log('APPOINTMENT_TRANSFERRED', actor, appt.id, {
       fromDentistId: entry.dentistId,
       toDentistId: dto.dentistId,
@@ -372,7 +399,8 @@ export class DispatchService {
               endAt: appt.endAt,
               rescheduleCount: appt.rescheduleCount,
             },
-            data: { dentistId: dto.toDentistId, updatedBy: actor.sub },
+            // The reminder names the dentist: the new one gets its own.
+            data: { dentistId: dto.toDentistId, reminderSentAt: null, updatedBy: actor.sub },
           });
           if (res.count === 0) throw new Error(STALE_APPOINTMENT_MSG);
           await tx.appointmentRescheduleLog.create({
@@ -388,12 +416,20 @@ export class DispatchService {
               changedBy: actor.sub,
             },
           });
-        });
+        }, LOCKING_TX_OPTIONS);
         await this.log('APPOINTMENT_REASSIGNED', actor, appt.id, {
           fromDentistId: dto.fromDentistId,
           toDentistId: dto.toDentistId,
           reason,
         });
+        // The patient is told of the new dentist (booking notices).
+        this.events?.emit(APPOINTMENT_RESCHEDULED_EVENT, {
+          appointmentId: appt.id,
+          oldStartAt: appt.startAt,
+          newStartAt: appt.startAt,
+          oldDentistId: dto.fromDentistId,
+          newDentistId: dto.toDentistId,
+        } satisfies AppointmentRescheduledEvent);
         moved.push({
           appointmentId: appt.id,
           startAt: appt.startAt,

@@ -84,9 +84,9 @@ export class PatientsService {
   // Code generator (BR-PT-001)
   // ============================================================================
 
-  private async generatePatientCode(): Promise<string> {
+  private async generatePatientCode(db: Prisma.TransactionClient = this.prisma): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const rows = await this.prisma.$queryRaw<Array<{ nextval: bigint }>>`
+    const rows = await db.$queryRaw<Array<{ nextval: bigint }>>`
       SELECT nextval('patient_code_seq')
     `;
     const next = rows[0].nextval;
@@ -98,7 +98,11 @@ export class PatientsService {
   // CRUD
   // ============================================================================
 
-  async create(dto: CreatePatientDto, actor: JwtPayload) {
+  /**
+   * `outerTx`: write inside the caller's transaction (an online booking
+   * confirmed with a new record), so the record rolls back with the visit.
+   */
+  async create(dto: CreatePatientDto, actor: JwtPayload, outerTx?: Prisma.TransactionClient) {
     const dob = new Date(dto.dob);
     if (!isValidDob(dob)) {
       throw new PatientContactRequiredException('Ngày sinh không hợp lệ');
@@ -122,9 +126,11 @@ export class PatientsService {
       }
     }
 
-    const code = await this.generatePatientCode();
+    // On the caller's connection when inside its transaction (one connection
+    // per online confirmation).
+    const code = await this.generatePatientCode(outerTx);
 
-    const created = await this.prisma.$transaction(async tx => {
+    const write = async (tx: Prisma.TransactionClient) => {
       const patient = await tx.patient.create({
         data: {
           code,
@@ -175,16 +181,20 @@ export class PatientsService {
       }
 
       return patient;
-    });
+    };
+    const created = outerTx ? await write(outerTx) : await this.prisma.$transaction(write);
 
-    await this.audit.log({
+    const entry = {
       action: 'PATIENT_CREATED',
       actorUserId: actor.sub,
       actorEmail: actor.email,
       targetType: 'patient',
       targetId: created.id,
       metadata: { code: created.code, fullName: created.fullName },
-    });
+    };
+    // In the caller's transaction the audit row rolls back with the record.
+    if (outerTx) await this.audit.log(entry, outerTx);
+    else await this.audit.log(entry);
 
     return created;
   }

@@ -54,6 +54,32 @@ async function snapshot() {
     payments: await source.payment.count(),
   };
 }
+// A few API tests act at the real "now", and a clinic day ends at midnight
+// Vietnam time. Bookings are made on safe days and moved to now in the
+// database, so only two things still depend on the hour: walk-ins (5 min
+// from now, inside a schedule ending 23:59) and the dispatch test's patient
+// checked in 20 min late (the queue is per clinic day). A run reaching the
+// tests between 23:52 and 00:22 clinic time waits until 00:22; any other
+// run starts at once (CI waits in ~2% of runs, at most 30 min).
+const CLINIC_OFFSET_MS = 7 * 3600000;
+const BEFORE_MIDNIGHT_MS = 8 * 60000;
+const AFTER_MIDNIGHT_MS = 22 * 60000;
+async function clearOfClinicMidnight() {
+  const dayMs = 86400000;
+  const timeOfDay = (Date.now() + CLINIC_OFFSET_MS) % dayMs;
+  const wait =
+    timeOfDay >= dayMs - BEFORE_MIDNIGHT_MS
+      ? dayMs - timeOfDay + AFTER_MIDNIGHT_MS
+      : timeOfDay < AFTER_MIDNIGHT_MS
+        ? AFTER_MIDNIGHT_MS - timeOfDay
+        : 0;
+  if (!wait) return;
+  console.log(
+    `[backend-tests] Clinic midnight is near; waiting ${Math.ceil(wait / 60000)} min so time-based tests stay on one clinic day`,
+  );
+  summary.waitedForClinicMidnightMs = wait;
+  await new Promise(resolve => setTimeout(resolve, wait));
+}
 async function main() {
   if (
     process.env.NODE_ENV === 'production' ||
@@ -71,6 +97,7 @@ async function main() {
   run('scripts/release.cjs', [], 'migrations-repeat.log');
   summary.checks.repeatMigrations = true;
   run('node_modules/ts-node/dist/bin.js', ['--transpile-only', 'prisma/seed.ts'], 'seed.log');
+  await clearOfClinicMidnight();
   run(
     'node_modules/jest/bin/jest.js',
     [

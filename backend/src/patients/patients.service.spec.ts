@@ -120,6 +120,34 @@ describe('PatientsService', () => {
       );
     });
 
+    it("writes in the caller's transaction when given one (online booking confirm)", async () => {
+      const tx = {
+        patient: { create: jest.fn().mockResolvedValue(validPatient({ id: 'new-p' })) },
+        patientIdentifier: { findFirst: jest.fn(), create: jest.fn() },
+        $queryRaw: jest.fn().mockResolvedValue([{ nextval: BigInt(7) }]),
+      };
+      (prisma.$transaction as jest.Mock).mockClear();
+      await service.create(
+        {
+          fullName: 'Nguyen Van A',
+          dob: '1990-01-15',
+          gender: Gender.MALE,
+          primaryPhone: '0901234567',
+        } as any,
+        actor,
+        tx as any,
+      );
+      expect(tx.patient.create).toHaveBeenCalledTimes(1);
+      // The code comes from the caller's connection too (one per confirmation).
+      expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(tx.patient.create.mock.calls[0][0].data.code).toMatch(/-00007$/);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PATIENT_CREATED' }),
+        tx,
+      );
+    });
+
     it('throws IdentifierAlreadyExistsException when identifier already exists on another patient', async () => {
       (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
       (prisma.patient.create as jest.Mock).mockResolvedValue(validPatient({ id: 'new-p' }));

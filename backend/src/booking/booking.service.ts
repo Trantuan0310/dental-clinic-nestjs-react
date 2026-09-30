@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,7 +12,7 @@ import { BookingRequestStatus, Gender, Prisma } from '@prisma/client';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentsService, VisitPlan } from '../appointments/appointments.service';
-import { lockBookingPhone } from '../appointments/domain/advisory-lock';
+import { LOCKING_TX_OPTIONS, lockBookingPhone } from '../appointments/domain/advisory-lock';
 import {
   AvailabilityService,
   effectiveDentistId,
@@ -40,13 +42,17 @@ import {
   BookingRequestMessageDto,
   BookingRequestNoteDto,
   CreatePublicBookingRequestDto,
+  DeclineBookingProposalDto,
   isCalendarDate,
   ListBookingRequestsDto,
   PendingInRangeQueryDto,
   ProposeBookingTimeDto,
+  PublicBookingNoteDto,
   PublicSlotsQueryDto,
   UpdatePublicBookingDetailsDto,
 } from './dto/booking.dto';
+import { formatVisitTime } from './clinic-time-format';
+import { clinicContactLine } from './clinic-contact';
 
 const ACTIVE: BookingRequestStatus[] = [
   'PENDING_REVIEW',
@@ -101,27 +107,29 @@ export const EXPIRED_MESSAGE =
   'Đã quá giờ hẹn mà chưa được xác nhận. Vui lòng đặt lịch mới hoặc gọi phòng khám.';
 const OVERDUE_STAFF_MESSAGE = 'Giờ hẹn đã qua, hãy đề xuất giờ khác hoặc từ chối yêu cầu';
 const PROPOSAL_CHANGED_MESSAGE = 'Phòng khám vừa đổi giờ đề xuất, vui lòng xem lại';
+const SLOT_GONE_MESSAGE =
+  'Rất tiếc, giờ phòng khám đề xuất vừa có người khác đặt hoặc không còn trống. ' +
+  'Hãy bấm “Không đồng ý giờ này” để lễ tân chọn giờ khác, hoặc gọi phòng khám.';
+/** A change needs the link from the confirmation email; the phone only shows the status. */
+export const MANAGE_NEEDS_LINK_MESSAGE =
+  'Để thay đổi yêu cầu, vui lòng mở đường link trong email xác nhận hoặc gọi phòng khám.';
+const CONTACT_CHANGE_MESSAGE =
+  'Không thể đổi số điện thoại hoặc email trên trang này. Vui lòng gọi phòng khám để được hỗ trợ.';
+/** Open requests one phone may have at a time, and requests it may send per clinic day. */
+export const MAX_OPEN_PER_PHONE = 3;
+export const MAX_DAILY_PER_PHONE = 5;
 const PROPOSAL_OPEN_MESSAGE =
   'Yêu cầu đang có giờ đề xuất nên không thể yêu cầu bổ sung (giờ đã thống nhất sẽ bị mất). ' +
   'Hãy gọi khách để trao đổi, đề xuất giờ khác hoặc từ chối yêu cầu.';
 
+/** "HH:mm" at the clinic (UTC+7). */
+function clinicHhmm(value: Date): string {
+  return new Date(value.getTime() + CLINIC_UTC_OFFSET_MS).toISOString().slice(11, 16);
+}
+
 /** Names compared the way people type them: NFC, single spaces, any case. */
 export function normalizeName(value: string): string {
   return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi');
-}
-
-/** "dd/MM/yyyy HH:mm" at the clinic (UTC+7). */
-export function formatClinicDateTime(value: Date): string {
-  const local = new Date(value.getTime() + CLINIC_UTC_OFFSET_MS).toISOString();
-  return (
-    local.slice(8, 10) +
-    '/' +
-    local.slice(5, 7) +
-    '/' +
-    local.slice(0, 4) +
-    ' ' +
-    local.slice(11, 16)
-  );
 }
 
 /**
@@ -226,7 +234,8 @@ export class BookingService {
         category: s.category.name,
         description: s.description,
         durationMinutes: s.defaultDurationMin,
-        basePrice: s.basePrice,
+        // Only when the clinic publishes this service's price.
+        ...(s.showPublicPrice ? { basePrice: s.basePrice } : {}),
         dentists: s.dentistServices
           .filter(a => scheduled.has(a.dentist.id))
           .map(a => ({
@@ -245,7 +254,8 @@ export class BookingService {
    * online or not. `price` is the lowest price any dentist performing it
    * today charges (their own price, else the list price) and `priceFrom`
    * says the others charge more; null means "ask the clinic" (0 without the
-   * service being marked free). Whether it can be booked online is what
+   * service being marked free). A free service that some dentists charge for
+   * is "from 0" (price 0, priceFrom). Whether it can be booked online is what
    * options() lists.
    */
   async priceList() {
@@ -274,9 +284,12 @@ export class BookingService {
     return rows.map(s => {
       const base = Number(s.basePrice);
       const prices = s.dentistServices.map(a => Number(a.price ?? s.basePrice));
-      const paid = (prices.length ? prices : [base]).filter(p => p > 0);
-      const allFree = s.isFree && prices.every(p => p === 0);
-      const price = allFree ? 0 : paid.length ? Math.min(...paid) : null;
+      const all = prices.length ? prices : [base];
+      const paid = all.filter(p => p > 0);
+      const allFree = s.isFree && paid.length === 0;
+      // Free with some dentists, paid with others: not "Miễn phí", but "từ 0 đ".
+      const partlyFree = s.isFree && !allFree && all.some(p => p === 0);
+      const price = allFree || partlyFree ? 0 : paid.length ? Math.min(...paid) : null;
       return {
         id: s.id,
         name: s.name,
@@ -284,7 +297,7 @@ export class BookingService {
         durationMinutes: s.defaultDurationMin,
         isFree: allFree,
         price,
-        priceFrom: price !== null && !allFree && paid.some(p => p !== price),
+        priceFrom: price !== null && !allFree && (partlyFree || paid.some(p => p !== price)),
       };
     });
   }
@@ -404,7 +417,8 @@ export class BookingService {
   /**
    * One day's online slots: the booking form's grid, minus the notice period.
    * A clinic-wide closure shows its reason (written for patients); a
-   * dentist's own closed-day note stays internal.
+   * dentist's own closed-day note stays internal. An empty day says why
+   * (DAY_OVER: today's working hours are over).
    */
   private async publicDay(dentistId: string, date: string, plan: VisitPlan) {
     const data = await this.appointments.getAvailability({
@@ -420,16 +434,36 @@ export class BookingService {
       time => new Date(date + 'T' + time + ':00+07:00').getTime() > earliest,
     );
     const clinicClosed = 'clinicClosed' in data && data.clinicClosed === true;
+    // No time left because the day is (nearly) over is not "full": the last
+    // moment a visit could still start in some working window.
+    const windows = data.windows ?? [];
+    const lastStart = !windows.length
+      ? Infinity
+      : Math.max(
+          ...windows.map(w => {
+            const end = new Date(date + 'T' + w.endTime + ':00+07:00').getTime();
+            // A window running to midnight ends on the next day.
+            return (
+              (w.endTime <= w.startTime ? end + 24 * 60 * 60_000 : end) - plan.durationMin * 60_000
+            );
+          }),
+        );
+    const emptyReason = availableSlots.length
+      ? null
+      : clinicClosed
+        ? 'CLINIC_CLOSED'
+        : (data.blockedReason ??
+          (lastStart <= Date.now()
+            ? 'DAY_OVER'
+            : data.availableSlots.length || lastStart <= earliest
+              ? 'TOO_SOON'
+              : 'FULL'));
     return {
       ...data,
       closedReason: clinicClosed ? data.closedReason : undefined,
       minLeadMinutes,
       availableSlots,
-      emptyReason: availableSlots.length
-        ? null
-        : clinicClosed
-          ? 'CLINIC_CLOSED'
-          : (data.blockedReason ?? (data.availableSlots.length ? 'TOO_SOON' : 'FULL')),
+      emptyReason,
     };
   }
 
@@ -457,6 +491,15 @@ export class BookingService {
       true,
     );
     await this.assertSlot(dto.dentistId, startAt, plan);
+    // Online, only the times the public page offers (the slot grid, notice
+    // period included): an off-grid 09:07 is for the front desk to arrange.
+    const offered = await this.publicDay(dto.dentistId, clinicDateOnly(startAt), plan);
+    if (!offered.availableSlots.includes(clinicHhmm(startAt))) {
+      throw new ConflictException(
+        'Giờ này không còn trống hoặc không nằm trong các giờ nhận đặt trực tuyến. ' +
+          'Vui lòng chọn một giờ trong danh sách giờ còn trống.',
+      );
+    }
     const token = randomBytes(32).toString('base64url');
     const ref = 'GS-' + randomBytes(5).toString('hex').toUpperCase();
     const row = await this.prisma.$transaction(async tx => {
@@ -479,6 +522,34 @@ export class BookingService {
             'Vui lòng tra cứu lịch hẹn bằng số điện thoại hoặc gọi phòng khám.',
         );
       }
+      // Spam limits per phone, counted under the same lock as the insert.
+      const [open, today] = await Promise.all([
+        tx.bookingRequest.count({
+          where: { phone: details.phone, status: { in: ACTIVE }, appointmentId: null },
+        }),
+        tx.bookingRequest.count({
+          where: {
+            phone: details.phone,
+            createdAt: { gte: startOfClinicDay(clinicDateOnly()) },
+          },
+        }),
+      ]);
+      if (open >= MAX_OPEN_PER_PHONE) {
+        throw new ConflictException(
+          'Số điện thoại này đã có ' +
+            open +
+            ' yêu cầu đặt lịch đang chờ xử lý nên chưa nhận thêm yêu cầu trực tuyến. ' +
+            'Vui lòng gọi phòng khám để đặt lịch hoặc hủy bớt yêu cầu; ' +
+            'nếu bạn không gửi các yêu cầu này, hãy báo phòng khám.',
+        );
+      }
+      if (today >= MAX_DAILY_PER_PHONE) {
+        throw new ConflictException(
+          'Số điện thoại này đã gửi ' +
+            today +
+            ' yêu cầu đặt lịch trong hôm nay. Vui lòng thử lại vào ngày mai hoặc gọi phòng khám.',
+        );
+      }
       return tx.bookingRequest.create({
         data: {
           referenceCode: ref,
@@ -492,7 +563,7 @@ export class BookingService {
         },
         select: { id: true, referenceCode: true, email: true, fullName: true },
       });
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'BOOKING_REQUEST_SUBMITTED',
       actorUserId: null,
@@ -520,15 +591,20 @@ export class BookingService {
     return { referenceCode: ref, accessToken: token, status: 'PENDING_REVIEW', notificationSent };
   }
 
+  /**
+   * The status of one request. The token from the confirmation link also
+   * allows changes (`canManage`); reference + phone only shows it.
+   */
   async publicStatus(reference: string, access: PublicAccess) {
-    return this.toPublic(await this.verify(reference, access));
+    const row = await this.verify(reference, access);
+    return this.toPublic(row, { canManage: this.hasToken(access) });
   }
 
   /**
    * Requests made with this phone (the patient's or the guardian's) in the
-   * last 180 days, newest first. The phone alone is the credential here, by
-   * the clinic's choice: it is what patients remember. The list shows only
-   * booking status (service, time, dentist), never the patient's details.
+   * last 180 days, newest first. The phone alone only shows booking status
+   * (service, time, dentist): no reference code, no messages, never the
+   * patient's details, and it never allows a change (that needs the token).
    */
   async lookupByPhone(input: string | undefined) {
     const phone = this.normalize(input ?? '');
@@ -544,7 +620,7 @@ export class BookingService {
       take: 10,
       include: PUBLIC_INCLUDE,
     });
-    return rows.map(row => this.toPublic(row));
+    return rows.map(row => this.toLookup(row));
   }
 
   async acceptProposal(
@@ -552,7 +628,7 @@ export class BookingService {
     access: PublicAccess,
     dto: AcceptBookingProposalDto = {},
   ) {
-    const row = await this.verify(reference, access);
+    const row = await this.verify(reference, access, true);
     if (row.status !== 'PROPOSED' || !row.proposedStartAt) {
       throw new ConflictException('Không có khung giờ mới cần xác nhận');
     }
@@ -567,6 +643,20 @@ export class BookingService {
         'Giờ phòng khám đề xuất đã qua nên không thể đồng ý nữa. Vui lòng đặt lịch mới hoặc gọi phòng khám.',
       );
     }
+    // The proposed time may have been taken since it was offered: say so now
+    // rather than let the patient believe it is held.
+    const dentistId = row.proposedDentistId ?? row.preferredDentistId;
+    try {
+      const plan = await this.staffPlan(row, dentistId, clinicDateOnly(row.proposedStartAt));
+      await this.assertSlot(dentistId, row.proposedStartAt, plan);
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      void this.notifyStaff(
+        row.id,
+        'Khách muốn đồng ý giờ đề xuất nhưng giờ đó không còn trống — cần đề xuất lại',
+      );
+      throw new ConflictException(SLOT_GONE_MESSAGE);
+    }
     await this.acceptProposedTime(row.id, seen);
     await this.audit.log({
       action: 'BOOKING_REQUEST_PROPOSAL_ACCEPTED',
@@ -576,6 +666,58 @@ export class BookingService {
       metadata: { referenceCode: row.referenceCode },
     });
     void this.notifyStaff(row.id, 'Khách đã đồng ý giờ mới — cần xác nhận');
+    return this.publicStatus(reference, access);
+  }
+
+  /**
+   * The patient turns down the proposed time (the one on their screen) and
+   * asks the front desk for another: back to PENDING_REVIEW with their note.
+   * The proposal stays on the request so the front desk sees what was
+   * refused.
+   */
+  async declineProposal(
+    reference: string,
+    access: PublicAccess,
+    dto: DeclineBookingProposalDto = {},
+  ) {
+    const row = await this.verify(reference, access, true);
+    if (row.status !== 'PROPOSED' || !row.proposedStartAt) {
+      throw new ConflictException('Không có khung giờ đề xuất nào đang chờ bạn trả lời');
+    }
+    const seen = dto.proposedStartAt ? new Date(dto.proposedStartAt) : row.proposedStartAt;
+    if (seen.getTime() !== row.proposedStartAt.getTime()) {
+      throw new ConflictException(PROPOSAL_CHANGED_MESSAGE);
+    }
+    // Back in review the request is about the time first asked for; one
+    // already past would expire at once instead of waiting for a new time.
+    if (row.requestedStartAt.getTime() <= Date.now()) {
+      throw new ConflictException(
+        'Giờ bạn chọn ban đầu đã qua nên yêu cầu không thể chờ xếp giờ khác. Vui lòng gọi phòng khám hoặc đặt lịch mới.',
+      );
+    }
+    const note = dto.message?.trim();
+    const patientMessage = (
+      'Không đồng ý giờ đề xuất ' +
+      formatVisitTime(row.proposedStartAt) +
+      (note ? ': ' + note : '')
+    ).slice(0, 1000);
+    const result = await this.prisma.bookingRequest.updateMany({
+      where: { id: row.id, status: 'PROPOSED', appointmentId: null, proposedStartAt: seen },
+      data: { status: 'PENDING_REVIEW', patientMessage },
+    });
+    if (!result.count) throw new ConflictException('Yêu cầu đã thay đổi; hãy tải lại trạng thái.');
+    await this.audit.log({
+      action: 'BOOKING_REQUEST_PROPOSAL_DECLINED',
+      actorUserId: null,
+      targetType: 'booking_request',
+      targetId: row.id,
+      metadata: {
+        referenceCode: row.referenceCode,
+        proposedStartAt: seen.toISOString(),
+        ...(note ? { note } : {}),
+      },
+    });
+    void this.notifyStaff(row.id, 'Khách không đồng ý giờ đề xuất — cần chọn giờ khác');
     return this.publicStatus(reference, access);
   }
 
@@ -598,7 +740,7 @@ export class BookingService {
   }
 
   async updateDetails(reference: string, access: PublicAccess, dto: UpdatePublicBookingDetailsDto) {
-    const row = await this.verify(reference, access);
+    const row = await this.verify(reference, access, true);
     if (row.status !== 'NEEDS_INFORMATION') {
       throw new ConflictException('Yêu cầu hiện không cần bổ sung thông tin');
     }
@@ -613,6 +755,13 @@ export class BookingService {
     const changes: Prisma.BookingRequestUpdateManyMutationInput = {};
     const differs = (next: string | undefined, stored: string | null) =>
       next !== undefined && next !== '' && next !== (stored ?? '');
+    // The phone and email are how the clinic reaches the patient and where
+    // the status link goes: never changed from the public page.
+    const phone = dto.phone?.trim() ? this.normalize(dto.phone) : undefined;
+    const email = dto.email?.trim().toLowerCase();
+    if (differs(phone, this.normalize(row.phone)) || differs(email, row.email)) {
+      throw new BadRequestException(CONTACT_CHANGE_MESSAGE);
+    }
     const fullName = dto.fullName?.trim();
     if (differs(fullName, row.fullName)) changes.fullName = fullName;
     if (dto.dob !== undefined) {
@@ -620,10 +769,6 @@ export class BookingService {
       if (dob.getTime() !== row.dob.getTime()) changes.dob = dob;
     }
     if (dto.gender !== undefined && dto.gender !== row.gender) changes.gender = dto.gender;
-    const phone = dto.phone?.trim() ? this.normalize(dto.phone) : undefined;
-    if (differs(phone, this.normalize(row.phone))) changes.phone = phone;
-    const email = dto.email?.trim().toLowerCase();
-    if (differs(email, row.email)) changes.email = email;
     const guardianName = dto.contactPersonName?.trim();
     if (differs(guardianName, row.contactPersonName)) changes.contactPersonName = guardianName;
     const guardianPhone = dto.contactPersonPhone?.trim()
@@ -660,20 +805,24 @@ export class BookingService {
       metadata: { referenceCode: row.referenceCode },
     });
     void this.notifyStaff(row.id, 'Khách đã bổ sung thông tin — cần xử lý');
-    // The phone may have just changed; the caller proved access already.
-    return this.toPublic(await this.load(row.id));
+    return this.toPublic(await this.load(row.id), { canManage: true });
   }
 
-  async withdraw(reference: string, access: PublicAccess) {
-    const row = await this.verify(reference, access);
+  /**
+   * The requester withdraws their open request. The front desk's message
+   * stays as it was; the requester's own note goes to `patientMessage`.
+   */
+  async withdraw(reference: string, access: PublicAccess, dto: PublicBookingNoteDto = {}) {
+    const row = await this.verify(reference, access, true);
     if (!ACTIVE.includes(row.status)) {
       throw new ConflictException(
         'Yêu cầu này không thể hủy trực tuyến; vui lòng liên hệ phòng khám',
       );
     }
+    const note = dto.message?.trim() || null;
     const result = await this.prisma.bookingRequest.updateMany({
       where: { id: row.id, status: { in: ACTIVE }, appointmentId: null },
-      data: { status: 'CANCELLED', responseMessage: 'Người đăng ký đã rút yêu cầu.' },
+      data: { status: 'CANCELLED', patientMessage: note },
     });
     if (!result.count) throw new ConflictException('Yêu cầu đã thay đổi; hãy tải lại trạng thái.');
     await this.audit.log({
@@ -681,11 +830,11 @@ export class BookingService {
       actorUserId: null,
       targetType: 'booking_request',
       targetId: row.id,
-      metadata: { referenceCode: row.referenceCode },
+      metadata: { referenceCode: row.referenceCode, ...(note ? { note } : {}) },
     });
+    void this.notifyStaff(row.id, 'Khách đã rút yêu cầu đặt lịch');
     return { referenceCode: row.referenceCode, status: 'CANCELLED' };
   }
-
   /**
    * Requests waiting on the front desk (the sidebar badge). Ones whose time
    * has passed are left out even before the expiry cron closes them.
@@ -733,10 +882,26 @@ export class BookingService {
         .filter(r => !r.appointmentId && effectiveStartAt(r).getTime() > now)
         .slice(0, ISSUE_CHECK_LIMIT),
     );
+    const openByPhone = await this.openCountByPhone([...active, ...rest].map(r => r.phone));
     return [...active, ...rest].map(r => ({
       ...this.toStaff(r),
       slotIssue: issues.get(r.id) ?? null,
+      // At MAX_OPEN_PER_PHONE the public form refuses that phone: the front
+      // desk sees it (possibly someone else's number used to block it).
+      openFromPhone: openByPhone.get(r.phone) ?? 0,
     }));
+  }
+
+  /** Open requests per phone, for the given phones. */
+  private async openCountByPhone(phones: string[]) {
+    const unique = [...new Set(phones)];
+    if (!unique.length) return new Map<string, number>();
+    const rows = await this.prisma.bookingRequest.groupBy({
+      by: ['phone'],
+      where: { phone: { in: unique }, status: { in: ACTIVE }, appointmentId: null },
+      _count: { _all: true },
+    });
+    return new Map(rows.map(r => [r.phone, r._count._all]));
   }
 
   /**
@@ -831,18 +996,23 @@ export class BookingService {
    * Closes open requests whose time passed without a visit being booked
    * (BookingCron, every 5 minutes). One conditional update, so a request the
    * front desk confirms or changes at the same moment is left alone, and a
-   * second run finds nothing to do.
+   * second run finds nothing to do. Requesters with an email are told.
    */
   async expireOverdue(now = new Date()) {
     const where: Prisma.BookingRequestWhereInput = {
       appointmentId: null,
       OR: this.byEffectiveStart(ACTIVE, 'lte', now),
     };
-    const candidates = await this.prisma.bookingRequest.findMany({
-      where,
-      select: { id: true, referenceCode: true },
-      take: 500,
-    });
+    const select = {
+      id: true,
+      referenceCode: true,
+      email: true,
+      fullName: true,
+      status: true,
+      requestedStartAt: true,
+      proposedStartAt: true,
+    } satisfies Prisma.BookingRequestSelect;
+    const candidates = await this.prisma.bookingRequest.findMany({ where, select, take: 500 });
     if (!candidates.length) return { expired: 0 };
     const result = await this.prisma.bookingRequest.updateMany({
       where: { ...where, id: { in: candidates.map(c => c.id) } },
@@ -855,7 +1025,7 @@ export class BookingService {
           ? candidates
           : await this.prisma.bookingRequest.findMany({
               where: { id: { in: candidates.map(c => c.id) }, status: 'EXPIRED' },
-              select: { id: true, referenceCode: true },
+              select,
             });
       // One history row per request, written in one statement (AuditService
       // has no batch call).
@@ -868,6 +1038,24 @@ export class BookingService {
           metadata: { referenceCode: c.referenceCode, expiredAt: now.toISOString() },
         })),
       });
+      // One at a time: a batch of expiries must not flood the SMTP server.
+      for (const c of expired) {
+        if (!c.email) continue;
+        await this.sendNotice(
+          c.email,
+          'Yêu cầu đặt lịch đã quá hạn',
+          c.fullName,
+          'Yêu cầu đặt lịch ' +
+            c.referenceCode +
+            ' lúc ' +
+            formatVisitTime(effectiveStartAt(c)) +
+            ' đã quá giờ hẹn mà chưa được phòng khám xác nhận nên lịch không được giữ. ' +
+            'Vui lòng đặt lịch mới hoặc gọi phòng khám.',
+          c.referenceCode,
+        ).catch(error =>
+          this.logger.warn(`Could not email the expiry of ${c.referenceCode}: ${String(error)}`),
+        );
+      }
     }
     return { expired: result.count };
   }
@@ -926,6 +1114,8 @@ export class BookingService {
     // proposal is how a request stranded by a schedule change is rescued.
     const plan = await this.staffPlan(row, dto.dentistId, clinicDateOnly(startAt));
     await this.assertSlot(dto.dentistId, startAt, plan);
+    // The patient answers from the email: a fresh link (see newAccess).
+    const access = row.email ? this.newAccess() : null;
     await this.updateUnbookedRequest(id, row.status, {
       status: 'PROPOSED',
       proposedDentistId: dto.dentistId,
@@ -943,14 +1133,17 @@ export class BookingService {
           'Phòng khám đề xuất giờ khám khác',
           row.fullName,
           'Giờ phòng khám đề xuất: ' +
-            formatClinicDateTime(startAt) +
+            formatVisitTime(startAt) +
             ' (giờ Việt Nam)' +
             (dentistName ? ', bác sĩ ' + dentistName : '') +
             '. Lời nhắn của phòng khám: ' +
             dto.message.trim(),
           row.referenceCode,
+          access?.token,
+          true,
         )
       : false;
+    await this.adoptAccess(id, access, sent);
     return { data, notificationSent: sent };
   }
 
@@ -962,6 +1155,7 @@ export class BookingService {
     // The patient could not answer in time anyway (updateDetails refuses).
     // Proposing a new time is still allowed: that rescues an overdue request.
     if (this.isOverdue(row)) throw new ConflictException(OVERDUE_STAFF_MESSAGE);
+    const access = row.email ? this.newAccess() : null;
     await this.updateUnbookedRequest(id, row.status, {
       status: 'NEEDS_INFORMATION',
       responseMessage: dto.message.trim(),
@@ -975,8 +1169,11 @@ export class BookingService {
           row.fullName,
           dto.message.trim(),
           row.referenceCode,
+          access?.token,
+          true,
         )
       : false;
+    await this.adoptAccess(id, access, sent);
     return { data: await this.getForStaff(id), notificationSent: sent };
   }
 
@@ -1055,15 +1252,29 @@ export class BookingService {
       throw new ConflictException(OVERDUE_STAFF_MESSAGE);
     }
     const plan = await this.staffPlan(row, dentistId, clinicDateOnly(startAt));
-    const patient = await this.resolvePatient(row, choice, actor);
-    const resolvedPatientId = patient.id;
-    // The visit length comes from the service (the dentist's own duration
-    // first); create() re-checks the slot, buffers and double-booking.
-    let appointment: { id: string };
-    try {
-      appointment = await this.appointments.create(
+    // The request is attached only as it was read here: a change in between
+    // (a new proposal accepted, details updated) must not be booked from
+    // stale data. updatedAt is compared to the millisecond Prisma reads.
+    const unchanged: Prisma.BookingRequestWhereInput = {
+      ...(row.updatedAt
+        ? { updatedAt: { gte: row.updatedAt, lt: new Date(row.updatedAt.getTime() + 1) } }
+        : {}),
+      requestedStartAt: row.requestedStartAt,
+      proposedStartAt: row.proposedStartAt,
+    };
+    // One transaction, one connection: the booking phone is locked first, so
+    // two requests from one phone (same name and date of birth) confirmed at
+    // once cannot both create a patient record; the record is created and
+    // the visit booked (dentist, then patient lock) in it, so a visit that
+    // cannot be booked leaves no record behind.
+    const { patient, appointment } = await this.prisma.$transaction(async tx => {
+      await lockBookingPhone(tx, this.normalize(row.phone));
+      const patient = await this.resolvePatient(row, choice, actor, tx);
+      // The visit length comes from the service (the dentist's own duration
+      // first); create() re-checks the slot, buffers and double-booking.
+      const appointment = await this.appointments.create(
         {
-          patientId: resolvedPatientId,
+          patientId: patient.id,
           dentistId,
           serviceIds: [row.serviceId],
           startAt: startAt.toISOString(),
@@ -1071,16 +1282,21 @@ export class BookingService {
           source: 'ONLINE',
         },
         actor,
-        { id: row.id, expectedStatuses: [row.status], plan },
+        { id: row.id, expectedStatuses: [row.status], plan, match: unchanged, tx },
       );
-    } catch (error) {
-      if (patient.created) await this.discardNewPatient(patient.id, row.referenceCode, actor);
-      throw error;
-    }
+      return { patient, appointment };
+    }, LOCKING_TX_OPTIONS);
+    const resolvedPatientId = patient.id;
     const confirmed = await this.prisma.bookingRequest.findUniqueOrThrow({
       where: { id },
-      select: { email: true, fullName: true, referenceCode: true },
+      select: {
+        email: true,
+        fullName: true,
+        referenceCode: true,
+        appointment: { select: { startAt: true, dentist: { select: { fullName: true } } } },
+      },
     });
+    const dentistName = confirmed.appointment?.dentist?.fullName;
     const sent = confirmed.email
       ? await this.sendNotice(
           confirmed.email,
@@ -1088,8 +1304,10 @@ export class BookingService {
           confirmed.fullName,
           'Lịch hẹn ' +
             confirmed.referenceCode +
-            ' đã được xác nhận vào ' +
-            startAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }),
+            ' đã được xác nhận: ' +
+            formatVisitTime(confirmed.appointment?.startAt ?? startAt) +
+            (dentistName ? ', bác sĩ ' + dentistName : '') +
+            '. Vui lòng đến trước giờ hẹn khoảng 10 phút.',
           confirmed.referenceCode,
         )
       : false;
@@ -1107,40 +1325,24 @@ export class BookingService {
   }
 
   /**
-   * The visit could not be booked, so the patient record created for it a
-   * moment ago would be left with nothing. Archive it (soft delete, audited);
-   * softDelete itself refuses if the record already has a visit, e.g. one a
-   * colleague booked concurrently. Never throws over the original error.
-   */
-  private async discardNewPatient(id: string, referenceCode: string, actor: JwtPayload) {
-    try {
-      await this.patients.softDelete(
-        id,
-        { reason: 'Tự động lưu trữ: không tạo được lịch hẹn từ yêu cầu ' + referenceCode },
-        actor,
-      );
-    } catch (error) {
-      this.logger.warn(`Could not archive patient ${id} after a failed confirm: ${String(error)}`);
-    }
-  }
-
-  /**
    * The patient record for the visit: the one the front desk picked, a new
    * one when they asked for it, or else the single record with the same
    * phone (own or guardian), name and date of birth. Any other record on
    * those phones means a person must choose (a child on a parent's phone).
+   * Runs in confirm()'s transaction (`tx`), under the booking-phone lock.
    */
   private async resolvePatient(
     row: any,
     choice: { patientId?: string; createNewPatient?: boolean },
     actor: JwtPayload,
+    tx: Prisma.TransactionClient,
   ): Promise<{ id: string; created: boolean }> {
     const phones = this.requestPhones(row);
     if (choice.patientId && choice.createNewPatient) {
       throw new BadRequestException('Chọn một hồ sơ có sẵn hoặc tạo hồ sơ mới, không chọn cả hai');
     }
     if (choice.patientId) {
-      const found = await this.prisma.patient.findFirst({
+      const found = await tx.patient.findFirst({
         where: { id: choice.patientId, deletedAt: null },
         select: { id: true, primaryPhone: true, contactPersonPhone: true },
       });
@@ -1155,8 +1357,8 @@ export class BookingService {
       return { id: found.id, created: false };
     }
     if (!choice.createNewPatient) {
-      const matches = await this.prisma.patient.findMany({
-        where: await this.patientsByPhone(phones),
+      const matches = await tx.patient.findMany({
+        where: await this.patientsByPhone(phones, tx),
         select: { id: true, fullName: true, dob: true, primaryPhone: true },
         take: 20,
       });
@@ -1188,7 +1390,7 @@ export class BookingService {
       contactPersonName: row.contactPersonName,
       contactPersonPhone: row.contactPersonPhone,
     };
-    return { id: (await this.patients.create(dto, actor)).id, created: true };
+    return { id: (await this.patients.create(dto, actor, tx)).id, created: true };
   }
 
   /** The request's phones (own and guardian), normalized to 0xxx. */
@@ -1205,9 +1407,12 @@ export class BookingService {
    * 0xxx). Patient phones are stored as typed ("090 123 4567", "+84…"), so the
    * stored value is normalized in SQL the same way `normalize` does.
    */
-  private async patientsByPhone(phones: string[]): Promise<Prisma.PatientWhereInput> {
+  private async patientsByPhone(
+    phones: string[],
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<Prisma.PatientWhereInput> {
     if (phones.length === 0) return { id: { in: [] } };
-    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+    const rows = await db.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM patients
       WHERE deleted_at IS NULL
         AND (
@@ -1432,18 +1637,21 @@ export class BookingService {
   }
 
   /**
-   * A requester proves access with either the one-time token from the
-   * confirmation link, or the phone number the request was made with (theirs
-   * or the guardian's). The reference code is 40 random bits and the public
+   * A requester proves access with either the token from the confirmation
+   * link (256 random bits, stored hashed), or the phone number the request
+   * was made with (theirs or the guardian's). The phone only shows the
+   * status: anyone may know a phone number, so every change (`manage`)
+   * needs the token. The reference code is 40 random bits and the public
    * routes are rate limited, so reference + phone cannot be enumerated.
    * Both failures give the same answer, so neither reveals which part was
    * wrong.
    */
-  private async verify(reference: string, access: PublicAccess) {
+  private async verify(reference: string, access: PublicAccess, manage = false) {
     const denied = new UnauthorizedException('Mã đặt lịch hoặc số điện thoại không đúng');
     const code = this.normalizeReference(reference);
     const token = access.token?.trim();
     const phone = access.phone ? this.normalize(access.phone) : '';
+    if (manage && !token) throw new ForbiddenException(MANAGE_NEEDS_LINK_MESSAGE);
     if ((!token && !phone) || (token?.length ?? 0) > 100 || phone.length > 20) throw denied;
     const row = await this.prisma.bookingRequest.findUnique({
       where: { referenceCode: code },
@@ -1476,11 +1684,32 @@ export class BookingService {
     return 'GS-' + body.slice(0, 32);
   }
 
-  private toPublic(row: any) {
+  private hasToken(access: PublicAccess) {
+    return !!access.token?.trim();
+  }
+
+  /**
+   * What a phone alone shows: the status, time, service and dentist. No
+   * reference code (it would open the request page) and no messages.
+   */
+  private toLookup(row: any) {
+    const {
+      referenceCode: _ref,
+      requestedAt: _at,
+      responseMessage: _msg,
+      canManage: _manage,
+      ...rest
+    } = this.toPublic(row);
+    return rest;
+  }
+
+  private toPublic(row: any, { canManage = false } = {}) {
     const useProposed = ['PROPOSED', 'PATIENT_ACCEPTED'].includes(row.status);
     const visit = row.appointment;
     return {
       referenceCode: row.referenceCode,
+      /** Changes need the token from the confirmation link. */
+      canManage,
       status: row.status,
       requestedAt: row.createdAt,
       requestedStartAt: row.requestedStartAt,
@@ -1531,6 +1760,28 @@ export class BookingService {
     const clean = value.replace(/[\s()-]/g, '');
     return clean.startsWith('+84') ? '0' + clean.slice(3) : clean;
   }
+  /**
+   * A new link token (256 bits; only its hash is stored). Issued with an
+   * email the patient must answer (a proposal, a request for details), so a
+   * lost or forwarded older link stops working.
+   */
+  /**
+   * The emailed link's token replaces the stored one only once the email
+   * went out: an undelivered link must not break the links the patient
+   * already has.
+   */
+  private async adoptAccess(id: string, access: { hash: string } | null, sent: boolean) {
+    if (!access || !sent) return;
+    await this.prisma.bookingRequest.update({
+      where: { id },
+      data: { accessTokenHash: access.hash },
+    });
+  }
+
+  private newAccess() {
+    const token = randomBytes(32).toString('base64url');
+    return { token, hash: this.hash(token) };
+  }
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -1542,8 +1793,15 @@ export class BookingService {
     message: string,
     reference: string,
     token?: string,
+    /** The token was just replaced: earlier links no longer work. */
+    rotated = false,
   ) {
     const base = process.env.PUBLIC_APP_URL || 'https://gensmile.online';
+    const linkNote = token
+      ? 'Dùng đường link này để xem, trả lời hoặc hủy yêu cầu' +
+        (rotated ? '; đường link trong các email trước không còn dùng được.' : '.')
+      : '';
+    const contact = clinicContactLine();
     const link =
       base +
       '/booking/status?ref=' +
@@ -1559,9 +1817,13 @@ export class BookingService {
       '</strong></p><p><a href="' +
       this.escape(link) +
       '">Xem tình trạng lịch hẹn</a></p>' +
-      '<p>Bạn cũng có thể tra cứu bất cứ lúc nào tại ' +
+      (linkNote ? '<p>' + this.escape(linkNote) + '</p>' : '') +
+      '<p>Bạn cũng có thể tra cứu tình trạng bất cứ lúc nào tại ' +
       this.escape(base) +
-      '/booking/status bằng số điện thoại đã dùng khi đặt.</p>';
+      '/booking/status bằng số điện thoại đã dùng khi đặt.</p>' +
+      '<p>' +
+      this.escape(contact) +
+      '</p>';
     return this.email.send({
       to,
       subject,
@@ -1572,9 +1834,11 @@ export class BookingService {
         reference +
         '\n' +
         link +
+        (linkNote ? '\n' + linkNote : '') +
         '\nTra cứu bằng số điện thoại đã dùng khi đặt: ' +
         base +
-        '/booking/status',
+        '/booking/status\n' +
+        contact,
     });
   }
   /**
@@ -1620,6 +1884,9 @@ export class BookingService {
         ['Bác sĩ', row.preferredDentist?.fullName ?? '—'],
         ['Thời gian', when],
         ...(row.reason ? ([['Lý do', row.reason]] as Array<[string, string]>) : []),
+        ...(row.patientMessage
+          ? ([['Lời nhắn của khách', row.patientMessage]] as Array<[string, string]>)
+          : []),
       ];
       const html =
         '<p><strong>' +

@@ -95,6 +95,7 @@ describe('ShiftRegistrationService', () => {
             },
             appointment: { count: jest.fn().mockResolvedValue(0) },
             $transaction: jest.fn(),
+            $executeRaw: jest.fn().mockResolvedValue(0),
             $executeRawUnsafe: jest.fn().mockResolvedValue(0),
           },
         },

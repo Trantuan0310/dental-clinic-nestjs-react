@@ -32,6 +32,22 @@ export class BackDatedAppointmentException extends HttpException {
   }
 }
 
+/** An advisory lock was not granted within the lock timeout (busy calendar). */
+export class CalendarBusyException extends HttpException {
+  constructor() {
+    super(
+      {
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'CALENDAR_BUSY',
+        message: 'Đang có thao tác khác trên lịch này, vui lòng thử lại',
+      },
+      HttpStatus.CONFLICT,
+    );
+    this.name = 'CalendarBusyException';
+  }
+}
+
 export class CheckInWindowException extends HttpException {
   constructor(message: string) {
     super(

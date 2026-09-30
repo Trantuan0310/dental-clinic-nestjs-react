@@ -118,6 +118,16 @@ describe('MedicalRecordsService', () => {
 
       const result = await service.startEncounterForAppointment('appt-1', receptionist);
       expect(result.encounterId).toBe('enc-new');
+      // BR-APPT-034: the start is in the visit's history, in the same transaction.
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'APPOINTMENT_EXAM_STARTED',
+          targetType: 'appointment',
+          targetId: 'appt-1',
+          metadata: { encounterId: 'enc-new' },
+        }),
+        prisma,
+      );
     });
 
     it('returns existing encounter if IN_PROGRESS (idempotent)', async () => {
@@ -454,8 +464,21 @@ describe('MedicalRecordsService', () => {
         where: { appointmentId: 'appt-1', closeReason: 'STARTED', queueDate: expect.any(Date) },
         data: expect.objectContaining({ status: 'WAITING', doneAt: null, closeReason: null }),
       });
+      // Written through the same transaction (rolls back with it).
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ENCOUNTER_CANCELLED' }),
+        expect.anything(),
+      );
+      // The visit's history says it went back to the queue — without the
+      // (clinical) cancel reason, since front desk reads it.
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'APPOINTMENT_RETURNED_TO_QUEUE',
+          targetType: 'appointment',
+          targetId: 'appt-1',
+          metadata: { encounterId: 'enc-1' },
+        }),
+        prisma,
       );
     });
 
@@ -487,6 +510,14 @@ describe('MedicalRecordsService', () => {
           after: expect.objectContaining({ appointmentStatus: 'LEFT' }),
         }),
       });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'APPOINTMENT_LEFT',
+          targetId: 'appt-1',
+          metadata: { reason: 'Hủy phiên khám của ngày trước', encounterId: 'enc-1' },
+        }),
+        prisma,
+      );
     });
 
     it('leaves the queue alone when the appointment was not IN_PROGRESS', async () => {
@@ -494,6 +525,10 @@ describe('MedicalRecordsService', () => {
       await service.cancelEncounter('enc-1', 'Bắt đầu nhầm phiên khám', admin);
       expect(prisma.encounter.update).toHaveBeenCalled();
       expect(prisma.queueEntry.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'appointment' }),
+        expect.anything(),
+      );
     });
 
     it.each([undefined, '', 'ngắn', '   quá ngắn   '])(
@@ -549,6 +584,13 @@ describe('MedicalRecordsService', () => {
       expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ action: 'REOPENED', encounterId: 'enc-1' }),
       });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'APPOINTMENT_EXAM_STARTED',
+          metadata: { encounterId: 'enc-1', restarted: true },
+        }),
+        prisma,
+      );
       // The AI summary's open-encounter count changed.
       expect(events.emit).toHaveBeenCalledWith('patient.clinical_data.changed', {
         patientId: 'patient-1',
@@ -742,6 +784,7 @@ describe('MedicalRecordsService', () => {
       expect(result).toBeDefined();
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'CLINICAL_NOTE_UPSERTED' }),
+        expect.anything(),
       );
     });
 
@@ -947,6 +990,16 @@ describe('MedicalRecordsService', () => {
         expect.stringContaining('encounter.closed'),
         expect.objectContaining({ encounterId: 'enc-1' }),
       );
+      // BR-APPT-034: completion is in the visit's history.
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'APPOINTMENT_COMPLETED',
+          targetType: 'appointment',
+          targetId: 'appt-1',
+          metadata: { encounterId: 'enc-1' },
+        }),
+        prisma,
+      );
     });
 
     it('throws InsufficientStockException when stock updateMany returns count=0', async () => {
@@ -1072,7 +1125,12 @@ describe('MedicalRecordsService', () => {
         await service.closeEncounter('enc-1', { summary: 'done' } as any, dentistActor);
 
         expect(prisma.encounter.update).toHaveBeenCalled();
-        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+        // No new override entry; only the visit's history line.
+        expect(prisma.auditLog.create).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ action: 'PRESCRIPTION_ALLERGY_OVERRIDE' }),
+          }),
+        );
       });
 
       it('ignores an override recorded for another version of the same row (re-issued after soft delete, legacy rows without version)', async () => {
@@ -1310,6 +1368,7 @@ describe('MedicalRecordsService', () => {
       });
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PRESCRIPTION_REPLACED' }),
+        expect.anything(),
       );
     });
 
@@ -1355,6 +1414,7 @@ describe('MedicalRecordsService', () => {
           action: 'PRESCRIPTION_CREATED',
           metadata: expect.objectContaining({ reusedDeletedPrescription: true }),
         }),
+        expect.anything(),
       );
     });
   });
@@ -1433,6 +1493,7 @@ describe('MedicalRecordsService', () => {
             conflicts: [expect.objectContaining({ drugName: 'Augmentin 625mg' })],
           }),
         }),
+        expect.anything(),
       );
     });
 

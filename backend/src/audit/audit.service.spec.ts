@@ -63,5 +63,16 @@ describe('AuditService', () => {
         }),
       });
     });
+
+    it('writes through the caller transaction when one is given', async () => {
+      const tx = { auditLog: { create: jest.fn().mockResolvedValue(validAuditLog()) } };
+
+      await service.log({ action: 'TEST' }, tx as never);
+
+      expect(tx.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: 'TEST' }),
+      });
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    });
   });
 });

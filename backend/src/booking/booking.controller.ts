@@ -24,9 +24,11 @@ import {
   BookingRequestNoteDto,
   ConfirmBookingRequestDto,
   CreatePublicBookingRequestDto,
+  DeclineBookingProposalDto,
   ListBookingRequestsDto,
   PendingInRangeQueryDto,
   ProposeBookingTimeDto,
+  PublicBookingNoteDto,
   PublicSlotsQueryDto,
   UpdatePublicBookingDetailsDto,
 } from './dto/booking.dto';
@@ -57,16 +59,17 @@ export class PublicBookingController {
   async create(@Body() dto: CreatePublicBookingRequestDto) {
     return { data: await this.booking.createPublic(dto) };
   }
-  // Phone-only lookup: the phone goes in a header, not the URL, so it stays
-  // out of access logs.
+  // Phone-only lookup (status only, no reference code): the phone goes in a
+  // header, not the URL, so it stays out of access logs.
   @Get('lookup')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   async lookup(@Headers('x-booking-phone') phone?: string) {
     return { data: await this.booking.lookupByPhone(phone) };
   }
-  // Access is the one-time token from the confirmation link
-  // (X-Booking-Access-Token) or the phone the request was made with
-  // (X-Booking-Phone); see BookingService.verify().
+  // Access is the token from the confirmation link (X-Booking-Access-Token)
+  // or the phone the request was made with (X-Booking-Phone), which only
+  // shows the status; every change below needs the token. See
+  // BookingService.verify().
   @Get('requests/:reference')
   @Throttle({ default: { limit: 15, ttl: 60000 } })
   async status(
@@ -86,6 +89,18 @@ export class PublicBookingController {
   ) {
     return { data: await this.booking.acceptProposal(ref, { token, phone }, dto ?? {}) };
   }
+  // "Không đồng ý giờ này": back to the front desk for another time.
+  @Post('requests/:reference/decline-proposal')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  async declineProposal(
+    @Param('reference') ref: string,
+    @Body() dto: DeclineBookingProposalDto,
+    @Headers('x-booking-access-token') token?: string,
+    @Headers('x-booking-phone') phone?: string,
+  ) {
+    return { data: await this.booking.declineProposal(ref, { token, phone }, dto ?? {}) };
+  }
   @Put('requests/:reference/details')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async details(
@@ -100,10 +115,11 @@ export class PublicBookingController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async withdraw(
     @Param('reference') ref: string,
+    @Body() dto: PublicBookingNoteDto,
     @Headers('x-booking-access-token') token?: string,
     @Headers('x-booking-phone') phone?: string,
   ) {
-    return { data: await this.booking.withdraw(ref, { token, phone }) };
+    return { data: await this.booking.withdraw(ref, { token, phone }, dto ?? {}) };
   }
 }
 

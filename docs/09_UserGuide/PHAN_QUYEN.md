@@ -9,7 +9,8 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Sửa dị ứng, bệnh nền, thuốc đang dùng | ✔ | ✔ bệnh nhân mình đã khám, hoặc đã check-in/đang khám với mình hôm nay (lịch sắp tới chỉ được xem) | ✔ |
 | Gộp, xóa, khôi phục hồ sơ | ✔ | — | — |
 | Sửa ngày sinh khi bệnh nhân đã có phiên khám (bắt buộc lý do) | ✔ | — | — |
-| **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Đặt lịch tái khám vào lịch của mình, cho bệnh nhân mình đã khám | ✔ |
+| **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Chỉ lịch hẹn của mình: đặt lịch tái khám cho bệnh nhân mình đã khám; sửa, xác nhận, đánh vắng mặt; dời (trong lịch của mình) và hủy chỉ khi còn ít nhất 24 giờ trước giờ hẹn, kể cả lịch tái khám mình vừa đặt (gấp hơn thì nhờ lễ tân). Không check-in | ✔ |
+| Xem lịch hẹn | ✔ tất cả | Chỉ lịch của mình (menu "Lịch của tôi") | ✔ tất cả |
 | Điều phối hàng chờ, yêu cầu đặt lịch online | ✔ | — | ✔ |
 | **Khám bệnh**: bắt đầu, ghi bệnh án, điều trị, kê đơn, sơ đồ răng, đóng phiên khám | — (chỉ xem) | ✔ | — |
 | Hủy phiên khám tạo nhầm | ✔ | — | — |
@@ -33,7 +34,7 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 ## Menu theo vai trò
 
 - **Lễ tân:** Dashboard (lịch hẹn, công nợ), Bệnh nhân, Lịch hẹn, Điều phối, Yêu cầu đặt lịch, Hôm nay, Hóa đơn, Kho vật tư, Bác sĩ, Dịch vụ, Lịch làm việc, Báo cáo (chỉ công nợ).
-- **Bác sĩ:** Dashboard, Hôm nay, Hàng chờ của tôi, Bệnh nhân của tôi, Hóa đơn, Kho vật tư, Bác sĩ, Dịch vụ, Lương của tôi, Ca của tôi, Lịch làm việc.
+- **Bác sĩ:** Dashboard, Hôm nay, Hàng chờ của tôi, Lịch của tôi (trang lịch hẹn lọc sẵn theo bác sĩ đang đăng nhập), Bệnh nhân của tôi, Hóa đơn, Kho vật tư, Bác sĩ, Dịch vụ, Lương của tôi, Ca của tôi, Lịch làm việc.
 - **Quản trị viên:** toàn bộ menu quản lý. Không có "Hàng chờ của tôi" và "Bệnh nhân của tôi", trừ khi tài khoản có thêm vai trò Bác sĩ.
 
 ## Tài khoản và bác sĩ

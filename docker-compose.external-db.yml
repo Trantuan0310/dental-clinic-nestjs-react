@@ -38,6 +38,10 @@ services:
       SMTP_PASS: ${SMTP_PASS:?Set SMTP password}
       EMAIL_FROM: ${EMAIL_FROM:?Set sender email}
       BOOKING_NOTIFY_EMAILS: ${BOOKING_NOTIFY_EMAILS:-}
+      # Patient emails: clinic hotline in every email; visit cancel/move/reminder switch.
+      CLINIC_NAME: ${CLINIC_NAME:-}
+      CLINIC_PHONE: ${CLINIC_PHONE:-}
+      APPOINTMENT_EMAIL_NOTICES: ${APPOINTMENT_EMAIL_NOTICES:-true}
       BOOKING_MIN_LEAD_MIN: ${BOOKING_MIN_LEAD_MIN:-120}
       # Online booking horizon in days; slot grid step in minutes (see .env example).
       BOOKING_MAX_DAYS_AHEAD: ${BOOKING_MAX_DAYS_AHEAD:-60}

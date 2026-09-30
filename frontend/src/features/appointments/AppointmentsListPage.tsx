@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, startOfMonth, startOfWeek } from 'date-fns';
 import {
   AlertCircle,
   ChevronLeft,
@@ -137,12 +138,10 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 
 // Map a row's status to a UI tab bucket. Used both for filtering and for counts
-// so the two stay in sync.
+// so the two stay in sync. A visit in progress has arrived ("Đã đến").
 function statusToTabBucket(status: AppointmentStatus): StatusTab {
-  if (status === 'scheduled' || status === 'confirmed' || status === 'in_progress') {
-    return 'scheduled';
-  }
-  if (status === 'checked_in') return 'checked_in';
+  if (status === 'scheduled' || status === 'confirmed') return 'scheduled';
+  if (status === 'checked_in' || status === 'in_progress') return 'checked_in';
   if (status === 'completed') return 'completed';
   return 'cancelled'; // cancelled | no_show | left
 }
@@ -185,29 +184,18 @@ export default function AppointmentsListPage() {
     setPage(1);
   }, [search, dentistFilter, typeFilter, sourceFilter, view, date]);
 
-  // Compute date range based on view
+  // Date range as clinic dates ("yyyy-MM-dd"), like the calendar page: the
+  // API reads them as whole clinic days. `date` is a clinic wall-clock Date,
+  // so converting its local midnight to an ISO instant shifted the range in
+  // any browser not set to UTC+7.
   const { from, to } = useMemo(() => {
-    if (view === 'day') {
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
-      return { from: start.toISOString(), to: end.toISOString() };
-    }
-    if (view === 'week') {
-      const start = new Date(date);
-      const day = start.getDay() || 7; // Mon-based
-      start.setDate(start.getDate() - (day - 1));
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      end.setHours(23, 59, 59, 999);
-      return { from: start.toISOString(), to: end.toISOString() };
-    }
-    // month
-    const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
-    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-    return { from: start.toISOString(), to: end.toISOString() };
+    const [start, end] =
+      view === 'day'
+        ? [date, date]
+        : view === 'week'
+          ? [startOfWeek(date, { weekStartsOn: 1 }), endOfWeek(date, { weekStartsOn: 1 })]
+          : [startOfMonth(date), endOfMonth(date)];
+    return { from: format(start, 'yyyy-MM-dd'), to: format(end, 'yyyy-MM-dd') };
   }, [view, date]);
 
   // Pull ALL appointments in the date range (no status filter) so the per-tab
@@ -270,12 +258,11 @@ export default function AppointmentsListPage() {
     notify.success(`Đã xuất ${visibleRows.length} lịch hẹn ra CSV.`);
   };
 
+  // addMonths clamps 31/01 to 28/02 (setMonth rolled it over to 03/03).
   const handleShiftDate = (delta: number) => {
-    const d = new Date(date);
-    if (view === 'day') d.setDate(d.getDate() + delta);
-    else if (view === 'week') d.setDate(d.getDate() + delta * 7);
-    else d.setMonth(d.getMonth() + delta);
-    setDate(d);
+    if (view === 'day') setDate(addDays(date, delta));
+    else if (view === 'week') setDate(addWeeks(date, delta));
+    else setDate(addMonths(date, delta));
   };
 
   const handleToday = () => {
@@ -289,11 +276,8 @@ export default function AppointmentsListPage() {
       return `${getWeekdayLabel(date)}, Ngày ${formatDate(date, 'dd/MM/yyyy')}`;
     }
     if (view === 'week') {
-      const start = new Date(date);
-      const day = start.getDay() || 7;
-      start.setDate(start.getDate() - (day - 1));
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
+      const start = startOfWeek(date, { weekStartsOn: 1 });
+      const end = endOfWeek(date, { weekStartsOn: 1 });
       return `Tuần ${formatDate(start, 'dd/MM')} – ${formatDate(end, 'dd/MM/yyyy')}`;
     }
     return `Tháng ${formatDate(date, 'MM/yyyy')}`;
