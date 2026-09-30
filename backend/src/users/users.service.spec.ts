@@ -166,7 +166,11 @@ describe('UsersService', () => {
       // (migration 013_soft_delete_partial_unique) — this check must mirror
       // that scope so it doesn't reject emails the DB would happily allow.
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'dup@x.com', deactivatedAt: null, deletedAt: null },
+        where: {
+          email: { equals: 'dup@x.com', mode: 'insensitive' },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
       });
     });
 
@@ -621,7 +625,11 @@ describe('UsersService', () => {
       );
 
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'bs.an@clinic.vn', deactivatedAt: null, deletedAt: null },
+        where: {
+          email: { equals: 'bs.an@clinic.vn', mode: 'insensitive' },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
       });
       expect((prisma.user.create as jest.Mock).mock.calls[0][0].data.email).toBe('bs.an@clinic.vn');
       expect(result).toMatchObject({ email: 'bs.an@clinic.vn', inviteSent: true });
@@ -681,7 +689,12 @@ describe('UsersService', () => {
       await service.update('user-1', { email: 'New@X.com' }, 'admin-1', 'admin@x.com', null, null);
 
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'new@x.com', id: { not: 'user-1' }, deactivatedAt: null, deletedAt: null },
+        where: {
+          email: { equals: 'new@x.com', mode: 'insensitive' },
+          id: { not: 'user-1' },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
       });
       expect(prisma.user.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ email: 'new@x.com' }) }),
@@ -778,7 +791,7 @@ describe('UsersService', () => {
       expect(prisma.userRole.deleteMany).not.toHaveBeenCalled();
     });
 
-    it('lets an admin add the dentist role to themselves without signing them out', async () => {
+    it('lets an admin add the dentist role to themselves and signs them out', async () => {
       (prisma.role.findMany as jest.Mock).mockResolvedValue([adminRole, dentistRole]);
 
       await service.updateRoles(
@@ -791,7 +804,10 @@ describe('UsersService', () => {
       );
 
       expect(prisma.userRole.createMany).toHaveBeenCalled();
-      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      // A role change always ends the sessions, so removed rights stop at once.
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'admin-1', revokedAt: null } }),
+      );
     });
   });
 

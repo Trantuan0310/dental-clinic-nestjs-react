@@ -1,3 +1,15 @@
+-- For the admin, after this migration (NOTICEs name the rows left alone):
+--   -- active accounts whose emails differ only in case
+--   SELECT lower(email) AS email, array_agg(id) AS ids, array_agg(email) AS spellings
+--     FROM users WHERE deactivated_at IS NULL AND deleted_at IS NULL
+--    GROUP BY lower(email) HAVING count(*) > 1;
+--   -- once each group is down to one active account (change or deactivate the others):
+--   UPDATE users SET email = lower(email) WHERE email <> lower(email);  -- only rows now unique
+--   CREATE UNIQUE INDEX IF NOT EXISTS "users_email_lower_active_key"
+--     ON "users" (lower("email")) WHERE "deactivated_at" IS NULL AND "deleted_at" IS NULL;
+-- Until then login and "forgot password" still find such an account by a
+-- case-insensitive match, but only while exactly one active account matches.
+--
 -- Login emails become case-insensitive. The app lowercases every login email
 -- it writes and every email it looks up (login, forgot password, create/edit
 -- user, link account); this migration lowercases the rows already stored and

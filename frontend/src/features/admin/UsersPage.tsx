@@ -540,9 +540,11 @@ function EditUserModal({
               .
             </p>
           )}
-          {rolesChanged && !isSelf && (
+          {rolesChanged && (
             <p className="mt-1 text-xs text-gray-500">
-              Đổi vai trò sẽ đăng xuất người dùng khỏi các phiên đang mở.
+              {isSelf
+                ? 'Đổi vai trò sẽ kết thúc các phiên của bạn: bạn cần đăng nhập lại sau khi lưu.'
+                : 'Đổi vai trò sẽ đăng xuất người dùng khỏi các phiên đang mở.'}
             </p>
           )}
         </fieldset>

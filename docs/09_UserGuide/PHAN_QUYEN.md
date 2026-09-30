@@ -43,7 +43,8 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 - Khi máy chủ chưa gửi được email mời, trang Người dùng / Nhân sự báo "Chưa gửi được email" và cho **Cấp mật khẩu tạm** (quyền `user.reset_password`, chỉ Quản trị viên). Mật khẩu tạm hiện một lần.
 - Quản trị viên không tự gỡ được vai trò Quản trị của chính mình, và không gỡ được vai trò đó của quản trị viên cuối cùng. Gỡ vai trò Bác sĩ bị chặn khi bác sĩ còn lịch hẹn sắp tới hoặc phiên khám đang mở.
 - Bác sĩ **Tạm nghỉ** (Nhân sự) hoặc **Tạm đình chỉ** (trang bác sĩ) không nhận lịch hẹn mới, nhưng lịch làm việc và ngày nghỉ vẫn sửa được. Bác sĩ tắt "Nhận bệnh nhân mới" hoặc "Nhận đặt lịch online" bị ẩn khỏi trang đặt lịch online.
-- Các thao tác mới dùng quyền có sẵn: gắn tài khoản có sẵn / danh sách tài khoản chưa gắn (`employee.update`), khôi phục nhân viên (`employee.deactivate`), sửa email và vai trò (`user.update`). Không thêm mã quyền mới.
+- Các thao tác mới dùng quyền có sẵn: gắn tài khoản có sẵn / danh sách tài khoản chưa gắn (`employee.update`; tài khoản quản trị hoặc có quyền quản lý người dùng/vai trò chỉ hiện và gắn được khi có thêm `user.update`), khôi phục nhân viên (`employee.deactivate`; kích hoạt lại tài khoản đăng nhập kèm theo cần thêm `user.deactivate`), sửa email và vai trò (`user.update`). Đổi vai trò luôn đăng xuất tài khoản đó, kể cả khi tự đổi. Không thêm mã quyền mới.
+- Email trùng nhau chỉ khác hoa thường (còn sót sau migration 037) vẫn đăng nhập được nếu chỉ có đúng một tài khoản khớp; câu SQL kiểm tra và tạo lại index nằm ở đầu file migration.
 
 ## Trong màn khám bệnh
 

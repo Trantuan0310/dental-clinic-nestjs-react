@@ -139,7 +139,11 @@ export class UsersService {
     // Mirror that scope here so a deactivated user's old email is free to
     // reuse instead of throwing on a constraint the DB no longer enforces.
     const existingUser = await this.prisma.user.findFirst({
-      where: { email, deactivatedAt: null, deletedAt: null },
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        deactivatedAt: null,
+        deletedAt: null,
+      },
     });
 
     if (existingUser) {
@@ -233,7 +237,12 @@ export class UsersService {
     const emailChanged = newEmail !== undefined && newEmail !== user.email;
     if (emailChanged) {
       const taken = await this.prisma.user.findFirst({
-        where: { email: newEmail, id: { not: userId }, deactivatedAt: null, deletedAt: null },
+        where: {
+          email: { equals: newEmail, mode: 'insensitive' },
+          id: { not: userId },
+          deactivatedAt: null,
+          deletedAt: null,
+        },
       });
       if (taken) throw new EmailAlreadyExistsException(newEmail);
     }
@@ -347,16 +356,12 @@ export class UsersService {
           })),
         });
 
-        // Sign the user out so the new roles apply at once — except an admin
-        // editing their own roles (e.g. adding the dentist role to
-        // themselves), who would otherwise be logged out mid-task; their
-        // next token refresh reads the roles from the database anyway.
-        if (userId !== actorUserId) {
-          await tx.refreshToken.updateMany({
-            where: { userId, revokedAt: null },
-            data: { revokedAt: new Date() },
-          });
-        }
+        // Sign the user out (their own admin included) so a dropped role
+        // stops working at once instead of surviving the next refresh.
+        await tx.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -643,7 +648,7 @@ export class UsersService {
   ): Promise<void> {
     const taken = await db.user.findFirst({
       where: {
-        email: normalizeEmail(user.email),
+        email: { equals: normalizeEmail(user.email), mode: 'insensitive' },
         id: { not: user.id },
         deactivatedAt: null,
         deletedAt: null,
