@@ -810,14 +810,15 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.update).toHaveBeenCalledTimes(1);
       expect(prisma.encounter.create).toHaveBeenCalledTimes(1);
       // BR-APPT-034: the start is in the visit's history, in the same transaction.
-      expect(prisma.auditLog.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
           action: 'APPOINTMENT_EXAM_STARTED',
           targetType: 'appointment',
           targetId: 'appt-1',
           metadata: { encounterId: 'encounter-1' },
         }),
-      });
+        prisma,
+      );
     });
 
     it('startEncounter() recovers an IN_PROGRESS appointment missing its encounter', async () => {
@@ -835,7 +836,7 @@ describe('AppointmentsService', () => {
       expect(result.encounter.id).toBe('encounter-recovered');
       expect(prisma.appointment.update).not.toHaveBeenCalled();
       // Already IN_PROGRESS: no second "exam started" entry.
-      expect(prisma.auditLog.create).not.toHaveBeenCalled();
+      expect(audit.log).not.toHaveBeenCalled();
     });
 
     it('startEncounter() restarts an encounter cancelled as started by mistake on the same row', async () => {
@@ -1065,36 +1066,45 @@ describe('AppointmentsService', () => {
       );
     });
 
-    it('leaves a visit whose no-show was undone until its clinic day is over', async () => {
+    it('leaves a visit whose no-show was undone today until the day is over, unless it moved since', async () => {
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
-        { id: 'today-undone', startAt: at('08:00') },
-        { id: 'yesterday-undone', startAt: at('15:00', '2026-09-29') },
-        { id: 'today-plain', startAt: at('07:00') },
+        { id: 'today-undone', lastRescheduleAt: null },
+        // Undone this morning, then rescheduled to a later time: a new booking again.
+        { id: 'undone-then-moved', lastRescheduleAt: at('08:10') },
+        // Rescheduled first, then undone: the undo still holds.
+        { id: 'moved-then-undone', lastRescheduleAt: at('07:00') },
+        { id: 'plain', lastRescheduleAt: null },
       ]);
       (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
-        { targetId: 'today-undone' },
-        { targetId: 'yesterday-undone' },
+        { targetId: 'today-undone', occurredAt: at('08:05') },
+        { targetId: 'undone-then-moved', occurredAt: at('08:00') },
+        { targetId: 'moved-then-undone', occurredAt: at('07:30') },
       ]);
       (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 2 });
 
       await service.autoMarkNoShow();
 
+      // Only today's undos count: one made on an earlier day (the visit was
+      // moved to today since) does not shield today's booking.
       expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
         where: {
           action: 'APPOINTMENT_NO_SHOW_REVERTED',
-          targetId: { in: ['today-undone', 'yesterday-undone', 'today-plain'] },
+          targetId: { in: ['today-undone', 'undone-then-moved', 'moved-then-undone', 'plain'] },
+          occurredAt: { gte: at('00:00') },
         },
-        select: { targetId: true },
+        select: { targetId: true, occurredAt: true },
       });
       const where = (prisma.appointment.updateMany as jest.Mock).mock.calls[0][0].where;
-      expect(where.id).toEqual({ in: ['yesterday-undone', 'today-plain'] });
+      expect(where.id).toEqual({ in: ['undone-then-moved', 'plain'] });
     });
 
     it('writes nothing when every due visit had its no-show undone today', async () => {
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
-        { id: 'today-undone', startAt: at('08:00') },
+        { id: 'today-undone', lastRescheduleAt: null },
       ]);
-      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([{ targetId: 'today-undone' }]);
+      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+        { targetId: 'today-undone', occurredAt: at('08:05') },
+      ]);
 
       await expect(service.autoMarkNoShow()).resolves.toEqual({ updated: 0 });
       expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
@@ -2556,6 +2566,11 @@ describe('AppointmentsService', () => {
 
         await service.checkIn('appt-1', true, 'Bệnh nhân đến muộn', actor);
 
+        // Takes calendar locks: the longer transaction limits (CALENDAR_BUSY, not a 500).
+        expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          maxWait: 10_000,
+          timeout: 20_000,
+        });
         expect(slotCheck).toHaveBeenCalledWith(
           'dentist-1',
           noShow.startAt,
@@ -2686,6 +2701,10 @@ describe('AppointmentsService', () => {
 
         expect(result.status).toBe(AppointmentStatus.CONFIRMED);
         expect(slotCheck).toHaveBeenCalled();
+        expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          maxWait: 10_000,
+          timeout: 20_000,
+        });
         expect(prisma.appointment.updateMany).toHaveBeenCalledWith({
           where: expect.objectContaining({ id: 'appt-1', status: AppointmentStatus.NO_SHOW }),
           data: {
@@ -2695,8 +2714,8 @@ describe('AppointmentsService', () => {
             updatedBy: actor.sub,
           },
         });
-        expect(prisma.auditLog.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({
             action: 'APPOINTMENT_NO_SHOW_REVERTED',
             targetType: 'appointment',
             targetId: 'appt-1',
@@ -2706,7 +2725,8 @@ describe('AppointmentsService', () => {
               noShowReason: 'Không liên lạc được',
             }),
           }),
-        });
+          prisma,
+        );
       });
 
       it('goes back to SCHEDULED when it was never confirmed', async () => {
@@ -2751,7 +2771,7 @@ describe('AppointmentsService', () => {
           SlotConflictException,
         );
         expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
-        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalled();
       });
 
       it("404s for a dentist on a colleague's appointment; 409 when changed meanwhile", async () => {
@@ -2764,7 +2784,7 @@ describe('AppointmentsService', () => {
         await expect(service.undoNoShow('appt-1', { reason: 'Đánh nhầm' }, actor)).rejects.toThrow(
           'Lịch vừa được thay đổi, tải lại rồi thử lại',
         );
-        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalled();
       });
     });
 
@@ -2812,8 +2832,8 @@ describe('AppointmentsService', () => {
           where: { appointmentId: 'appt-1', doneAt: null },
           data: expect.objectContaining({ closeReason: 'CANCELLED', doneAt: expect.any(Date) }),
         });
-        expect(prisma.auditLog.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({
             action: 'APPOINTMENT_CHECKIN_UNDONE',
             targetType: 'appointment',
             metadata: expect.objectContaining({
@@ -2821,7 +2841,8 @@ describe('AppointmentsService', () => {
               restoredStatus: AppointmentStatus.CONFIRMED,
             }),
           }),
-        });
+          prisma,
+        );
       });
 
       it('refuses once an encounter was opened (even if cancelled since)', async () => {
@@ -2878,7 +2899,7 @@ describe('AppointmentsService', () => {
           service.undoCheckIn('appt-1', { reason: 'Check-in nhầm' }, actor),
         ).rejects.toThrow('Lịch vừa được thay đổi, tải lại rồi thử lại');
         expect(prisma.queueEntry.updateMany).not.toHaveBeenCalled();
-        expect(prisma.auditLog.create).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalled();
       });
     });
 

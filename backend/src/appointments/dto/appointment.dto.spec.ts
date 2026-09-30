@@ -11,6 +11,7 @@ import {
   CreateShiftRegistrationDto,
   CreateWorkingScheduleDto,
   ListAppointmentsQueryDto,
+  StatusReasonDto,
   UpdateWorkingScheduleDto,
 } from './appointment.dto';
 import { CLINIC_TIME_MESSAGE } from '../../common/validators/is-clinic-time';
@@ -198,5 +199,26 @@ describe('CancelAppointmentDto', () => {
       }),
     ).toEqual([]);
     expect(errors({ reason: 'Bệnh nhân bận', updatedAt: '2026-02-30T00:00:00Z' })).toHaveLength(1);
+  });
+});
+
+describe('StatusReasonDto (undo of a check-in / no-show)', () => {
+  const errors = (reason: unknown) =>
+    validateSync(plainToInstance(StatusReasonDto, { reason })).flatMap(e =>
+      Object.values(e.constraints ?? {}),
+    );
+
+  it('trims the reason before checking its length', () => {
+    expect(plainToInstance(StatusReasonDto, { reason: '  Check-in nhầm  ' }).reason).toBe(
+      'Check-in nhầm',
+    );
+    expect(errors('   abc    ')).toEqual(['Lý do cần ít nhất 5 ký tự']);
+  });
+
+  it('answers a missing reason in Vietnamese', () => {
+    expect(errors(undefined)).toEqual(
+      expect.arrayContaining(['Vui lòng nhập lý do', 'Lý do cần ít nhất 5 ký tự']),
+    );
+    expect(errors('Đánh vắng mặt nhầm')).toEqual([]);
   });
 });

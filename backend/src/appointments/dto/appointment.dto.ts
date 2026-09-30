@@ -146,10 +146,11 @@ export class MarkLeftDto {
 
 /** Undo of a check-in or a no-show: the reason is kept in the history. */
 export class StatusReasonDto {
-  @ApiProperty()
-  @IsString()
-  @MinLength(5)
-  @MaxLength(500)
+  @ApiProperty({ description: 'Why the status is undone (≥ 5 characters)' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Vui lòng nhập lý do' })
+  @MinLength(5, { message: 'Lý do cần ít nhất 5 ký tự' })
+  @MaxLength(500, { message: 'Lý do tối đa 500 ký tự' })
   reason!: string;
 }
 

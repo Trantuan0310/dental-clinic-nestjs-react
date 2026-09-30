@@ -115,18 +115,19 @@ export class MedicalRecordsService {
     actor: JwtPayload,
     appointmentId: string,
     action: string,
-    metadata: Prisma.InputJsonObject,
+    metadata: Record<string, unknown>,
   ) {
-    return tx.auditLog.create({
-      data: {
+    return this.audit.log(
+      {
         action,
         actorUserId: actor.sub,
-        actorEmailAtTime: actor.email ?? null,
+        actorEmail: actor.email,
         targetType: 'appointment',
         targetId: appointmentId,
         metadata,
       },
-    });
+      tx,
+    );
   }
 
   /**

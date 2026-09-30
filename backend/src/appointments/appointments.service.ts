@@ -497,7 +497,7 @@ export class AppointmentsService {
       const checkedIn = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
       await enqueue(tx, checkedIn, new Date(now), actor.sub);
       return checkedIn;
-    });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       action: override ? 'APPOINTMENT_CHECKIN_OVERRIDDEN' : 'APPOINTMENT_CHECKED_IN',
@@ -568,11 +568,14 @@ export class AppointmentsService {
         throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
       await closeQueueEntry(tx, appointmentId, 'CANCELLED', actor.sub);
-      await this.auditInTx(tx, actor, appointmentId, 'APPOINTMENT_CHECKIN_UNDONE', {
-        reason,
-        restoredStatus: restored,
-        checkedInAt: appt.checkedInAt?.toISOString() ?? null,
-      });
+      await this.audit.log(
+        this.historyEntry(actor, appointmentId, 'APPOINTMENT_CHECKIN_UNDONE', {
+          reason,
+          restoredStatus: restored,
+          checkedInAt: appt.checkedInAt?.toISOString() ?? null,
+        }),
+        tx,
+      );
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
     });
   }
@@ -633,10 +636,13 @@ export class AppointmentsService {
       if (!existing) openedFor = appt.patientId;
       // BR-APPT-034: the exam start is part of the visit's history.
       if (appt.status === AppointmentStatus.CHECKED_IN) {
-        await this.auditInTx(tx, actor, appointmentId, 'APPOINTMENT_EXAM_STARTED', {
-          encounterId: encounter.id,
-          ...(existing?.status === EncounterStatus.CANCELLED ? { restarted: true } : {}),
-        });
+        await this.audit.log(
+          this.historyEntry(actor, appointmentId, 'APPOINTMENT_EXAM_STARTED', {
+            encounterId: encounter.id,
+            ...(existing?.status === EncounterStatus.CANCELLED ? { restarted: true } : {}),
+          }),
+          tx,
+        );
       }
 
       return { ...updated, encounter: { id: encounter.id } };
@@ -889,20 +895,24 @@ export class AppointmentsService {
       if (res.count === 0) {
         throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
-      await this.auditInTx(tx, actor, appointmentId, NO_SHOW_REVERTED_ACTION, {
-        reason,
-        restoredStatus: restored,
-        noShowReason: appt.cancelledReason,
-        noShowAt: appt.noShowAt?.toISOString() ?? null,
-      });
+      await this.audit.log(
+        this.historyEntry(actor, appointmentId, NO_SHOW_REVERTED_ACTION, {
+          reason,
+          restoredStatus: restored,
+          noShowReason: appt.cancelledReason,
+          noShowAt: appt.noShowAt?.toISOString() ?? null,
+        }),
+        tx,
+      );
       return tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
-    });
+    }, LOCKING_TX_OPTIONS);
   }
 
   /**
    * Cron-driven bulk auto-no-show (BR-APPT-012). Idempotent. Due once
    * now > max(startAt + check-in window, endAt) + AUTO_NO_SHOW_GRACE_MIN; a
-   * visit whose no-show was undone waits until its clinic day is over.
+   * visit whose no-show was undone today (and not rescheduled since) waits
+   * until the clinic day is over.
    */
   async autoMarkNoShow() {
     const now = new Date();
@@ -922,23 +932,28 @@ export class AppointmentsService {
     // lands between the two queries is not overwritten with NO_SHOW.
     const candidates = await this.prisma.appointment.findMany({
       where: due,
-      select: { id: true, startAt: true },
+      select: { id: true, lastRescheduleAt: true },
     });
     if (candidates.length === 0) return { updated: 0 };
-    const reverted = new Set(
-      (
-        await this.prisma.auditLog.findMany({
-          where: {
-            action: NO_SHOW_REVERTED_ACTION,
-            targetId: { in: candidates.map(a => a.id) },
-          },
-          select: { targetId: true },
-        })
-      ).map(r => r.targetId),
-    );
-    const todayStart = startOfClinicDay(clinicDateOnly(now));
+    // An undo holds only for the day it was made on, and only for the time it
+    // was made for: a visit moved afterwards is a new booking again.
+    const undoneAt = new Map<string, Date>();
+    for (const r of await this.prisma.auditLog.findMany({
+      where: {
+        action: NO_SHOW_REVERTED_ACTION,
+        targetId: { in: candidates.map(a => a.id) },
+        occurredAt: { gte: startOfClinicDay(clinicDateOnly(now)) },
+      },
+      select: { targetId: true, occurredAt: true },
+    })) {
+      const prev = r.targetId ? undoneAt.get(r.targetId) : undefined;
+      if (r.targetId && (!prev || r.occurredAt > prev)) undoneAt.set(r.targetId, r.occurredAt);
+    }
     const ids = candidates
-      .filter(a => !reverted.has(a.id) || a.startAt < todayStart)
+      .filter(a => {
+        const undone = undoneAt.get(a.id);
+        return !undone || (a.lastRescheduleAt !== null && a.lastRescheduleAt > undone);
+      })
       .map(a => a.id);
     if (ids.length === 0) return { updated: 0 };
     const updated = await this.prisma.appointment.updateMany({
@@ -3400,24 +3415,21 @@ export class AppointmentsService {
     }
   }
 
-  /** History entry written with the change it records (rolls back with it). */
-  private auditInTx(
-    tx: Prisma.TransactionClient,
+  /** An entry of the appointment's history (BR-APPT-034), for audit.log(…, tx). */
+  private historyEntry(
     actor: JwtPayload,
     appointmentId: string,
     action: string,
-    metadata: Prisma.InputJsonObject,
+    metadata: Record<string, unknown>,
   ) {
-    return tx.auditLog.create({
-      data: {
-        action,
-        actorUserId: actor.sub,
-        actorEmailAtTime: actor.email ?? null,
-        targetType: 'appointment',
-        targetId: appointmentId,
-        metadata,
-      },
-    });
+    return {
+      action,
+      actorUserId: actor.sub,
+      actorEmail: actor.email,
+      targetType: 'appointment',
+      targetId: appointmentId,
+      metadata,
+    };
   }
 
   private async requireAppointment(id: string) {

@@ -10,21 +10,19 @@ describe('AppointmentsCron', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  it('catches up on the end-of-day close at startup (a missed 00:15 run)', async () => {
-    appointments.closeStaleCheckIns.mockResolvedValue({
-      appointments: 1,
-      failed: 0,
-      queueEntries: 0,
-    });
+  it('catches up on the end-of-day close at startup (a missed 00:15 run) without waiting on it', () => {
+    let finish!: () => void;
+    appointments.closeStaleCheckIns.mockReturnValue(new Promise<void>(r => (finish = r)));
 
-    await cron.onApplicationBootstrap();
+    expect(cron.onApplicationBootstrap()).toBeUndefined();
 
     expect(appointments.closeStaleCheckIns).toHaveBeenCalledTimes(1);
+    finish();
   });
 
-  it('never blocks startup when the catch-up fails', async () => {
+  it('swallows a failed catch-up (logged, never an unhandled rejection)', async () => {
     appointments.closeStaleCheckIns.mockRejectedValue(new Error('db down'));
 
-    await expect(cron.onApplicationBootstrap()).resolves.toBeUndefined();
+    await expect(cron.closeStaleCheckIns()).resolves.toBeUndefined();
   });
 });

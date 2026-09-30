@@ -19,8 +19,9 @@ export class AppointmentsCron implements OnApplicationBootstrap {
 
   constructor(private readonly appointments: AppointmentsService) {}
 
-  async onApplicationBootstrap() {
-    await this.closeStaleCheckIns();
+  // Not awaited: startup never waits on it (it logs its own failures).
+  onApplicationBootstrap() {
+    void this.closeStaleCheckIns();
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
