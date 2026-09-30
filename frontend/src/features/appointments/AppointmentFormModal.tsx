@@ -183,9 +183,10 @@ export function AppointmentFormModal({
   const durationMin = Number(duration) || 30;
   // BR-APPT-031: a length other than the services' total needs a reason.
   const durationOverridden = chosenServices.length > 0 && durationMin !== servicesTotal;
-  // The slot grid keeps the dentist's step; the length check (with this
-  // visit's buffers) happens client-side in describeSlotIssue.
+  // The same grid as online booking and rescheduling (SLOT_STEP_MIN, for
+  // this visit's length and buffers); describeSlotIssue re-checks the range.
   const { data: availability } = useAvailability(dentistId || undefined, date, {
+    slotDuration: durationMin,
     bufferBeforeMin,
     bufferAfterMin,
   });
@@ -372,9 +373,17 @@ export function AppointmentFormModal({
             after: bufferAfterMin,
           }) === null,
       )
-      .slice(0, 12)
       .map(minutesToTime);
   }, [availability, date, durationMin, bufferBeforeMin, bufferAfterMin]);
+  // Every free time, grouped morning / afternoon (not only the first few).
+  const suggestedGroups = useMemo(
+    () =>
+      [
+        { label: 'Sáng', times: suggestedStarts.filter((t) => t < '12:00') },
+        { label: 'Chiều', times: suggestedStarts.filter((t) => t >= '12:00') },
+      ].filter((g) => g.times.length > 0),
+    [suggestedStarts],
+  );
 
   const durationOptions = useMemo(
     () =>
@@ -737,22 +746,27 @@ export function AppointmentFormModal({
                 {dentistId && availability && suggestedStarts.length > 0 && (
                   <div>
                     <p className="mb-1 text-xs text-gray-500">
-                      Giờ trống phù hợp với thời lượng {durationMin} phút:
+                      Giờ trống phù hợp với thời lượng {durationMin} phút ({suggestedStarts.length} giờ):
                     </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {suggestedStarts.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setStartTime(t)}
-                          className={
-                            t === startTime
-                              ? 'rounded-md border border-primary-500 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
-                              : 'rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-primary-300 hover:bg-primary-50'
-                          }
-                        >
-                          {t}
-                        </button>
+                    <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                      {suggestedGroups.map((g) => (
+                        <div key={g.label} className="flex flex-wrap items-center gap-1.5">
+                          <span className="w-10 text-xs text-gray-400">{g.label}</span>
+                          {g.times.map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setStartTime(t)}
+                              className={
+                                t === startTime
+                                  ? 'rounded-md border border-primary-500 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700'
+                                  : 'rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:border-primary-300 hover:bg-primary-50'
+                              }
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
                       ))}
                     </div>
                   </div>

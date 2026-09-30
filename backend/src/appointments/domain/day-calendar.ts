@@ -233,8 +233,9 @@ export function intervalProblem(
 }
 
 /**
- * Bookable start times ("HH:mm") for a visit of `durationMin`, stepping
- * `stepMin` from each window's start, not before `notBefore`.
+ * Bookable start times ("HH:mm") for a visit of `durationMin`, not before
+ * `notBefore`: each window's own start, then every round clock time on the
+ * `stepMin` grid (:00/:15/:30/:45 for 15), whatever the visit's length.
  */
 export function freeSlots(
   cal: DayCalendar,
@@ -243,14 +244,17 @@ export function freeSlots(
   notBefore: Date,
   buffers: Buffers = {},
 ): string[] {
+  const stepMs = Math.max(1, stepMin) * 60_000;
+  const offsetMs = 7 * 60 * 60 * 1000;
   const slots = new Set<string>();
   for (const w of cal.windows) {
-    for (
-      let t = w.start.getTime();
-      t + durationMin * 60_000 <= w.end.getTime();
-      t += stepMin * 60_000
-    ) {
-      if (t <= notBefore.getTime()) continue;
+    const lastStart = w.end.getTime() - durationMin * 60_000;
+    // First grid time at or after the window start, on the clinic clock.
+    const aligned = Math.ceil((w.start.getTime() + offsetMs) / stepMs) * stepMs - offsetMs;
+    const starts = [w.start.getTime()];
+    for (let t = aligned; t <= lastStart; t += stepMs) if (t > w.start.getTime()) starts.push(t);
+    for (const t of starts) {
+      if (t > lastStart || t <= notBefore.getTime()) continue;
       const slot = { start: new Date(t), end: new Date(t + durationMin * 60_000) };
       if (!intervalProblem(cal, slot, { buffers })) slots.add(clinicHhmm(slot.start));
     }

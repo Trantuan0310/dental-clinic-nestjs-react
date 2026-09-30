@@ -76,6 +76,9 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-noreply@gensmile.online}
       BOOKING_NOTIFY_EMAILS: ${BOOKING_NOTIFY_EMAILS:-}
       BOOKING_MIN_LEAD_MIN: ${BOOKING_MIN_LEAD_MIN:-120}
+      # Online booking horizon in days; slot grid step in minutes (see .env example).
+      BOOKING_MAX_DAYS_AHEAD: ${BOOKING_MAX_DAYS_AHEAD:-60}
+      SLOT_STEP_MIN: ${SLOT_STEP_MIN:-15}
       REDIS_URL: ${REDIS_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,11 +11,13 @@ import { BookingRequestStatus, Gender, Prisma } from '@prisma/client';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentsService, VisitPlan } from '../appointments/appointments.service';
+import { AvailabilityService } from '../appointments/availability.service';
+import { DayCalendar, intervalProblem } from '../appointments/domain/day-calendar';
 
 import { PatientsService } from '../patients/patients.service';
 import { CreatePatientDto } from '../patients/dto/patient.dto';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { clinicDateOnly, CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
+import { clinicDateOnly, CLINIC_UTC_OFFSET_MS, startOfClinicDay } from '../common/date-range.util';
 import {
   isMinor,
   isValidDob,
@@ -30,6 +33,7 @@ import {
   CreatePublicBookingRequestDto,
   isCalendarDate,
   ListBookingRequestsDto,
+  PendingInRangeQueryDto,
   ProposeBookingTimeDto,
   PublicSlotsQueryDto,
   UpdatePublicBookingDetailsDto,
@@ -79,6 +83,9 @@ const STAFF_ACTION_STATUSES: BookingRequestStatus[] = ['PENDING_REVIEW', 'PATIEN
 const PROPOSAL_STATUSES: BookingRequestStatus[] = ['PROPOSED', 'PATIENT_ACCEPTED'];
 const LOOKUP_WINDOW_MS = 180 * 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_LEAD_MIN = 120;
+const DEFAULT_MAX_DAYS_AHEAD = 60;
+/** How far past an empty day the public page looks for the next free one. */
+const NEXT_FREE_SCAN_DAYS = 14;
 // Advisory-lock namespace for online submissions per phone (1 and 2 are the
 // dentist and patient calendars, appointments/domain/advisory-lock.ts).
 const LOCK_NS_BOOKING_PHONE = 3;
@@ -134,6 +141,39 @@ export function bookingMinLeadMinutes(): number {
   return Number.isInteger(value) && value >= 0 ? value : DEFAULT_MIN_LEAD_MIN;
 }
 
+/**
+ * How far ahead an online request may be (BOOKING_MAX_DAYS_AHEAD, default
+ * 60 days after the clinic's today). Staff booking directly is not affected.
+ */
+export function bookingMaxDaysAhead(): number {
+  const raw = process.env.BOOKING_MAX_DAYS_AHEAD?.trim();
+  const value = raw ? Number(raw) : NaN;
+  return Number.isInteger(value) && value >= 1 && value <= 730 ? value : DEFAULT_MAX_DAYS_AHEAD;
+}
+
+/** "YYYY-MM-DD" `days` after a clinic date. */
+export function addClinicDays(date: string, days: number): string {
+  const d = new Date(date + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The last clinic date an online request may be for. */
+export function lastBookableDate(now = new Date()): string {
+  return addClinicDays(clinicDateOnly(now), bookingMaxDaysAhead());
+}
+
+const tooFarMessage = () =>
+  'Chỉ nhận đặt lịch trực tuyến trong vòng ' +
+  bookingMaxDaysAhead() +
+  ' ngày tới. Nếu cần hẹn xa hơn, vui lòng gọi phòng khám.';
+
+/** Why an open request can no longer be booked as it stands (see issuesFor()). */
+export interface RequestIssue {
+  kind: string;
+  message: string;
+}
+
 /** How a requester proves they own a booking request (see verify()). */
 export type PublicAccess = { token?: string; phone?: string };
 
@@ -147,11 +187,18 @@ export class BookingService {
     private readonly patients: PatientsService,
     private readonly audit: AuditService,
     private readonly email: EmailService,
+    private readonly availability: AvailabilityService,
   ) {}
 
-  /** Services that at least one dentist takes online bookings for today. */
+  /**
+   * Services that at least one dentist takes online bookings for today, with
+   * only the dentists who have working hours in the bookable range (a weekly
+   * schedule valid then, or an approved extra shift): a dentist with none
+   * could only ever show "no free time".
+   */
   async options() {
-    const today = new Date(clinicDateOnly());
+    const todayDate = clinicDateOnly();
+    const today = new Date(todayDate);
     const rows = await this.prisma.service.findMany({
       where: { isActive: true, category: { isActive: true } },
       orderBy: [{ category: { sortOrder: 'asc' } }, { name: 'asc' }],
@@ -171,6 +218,11 @@ export class BookingService {
         },
       },
     });
+    const scheduled = await this.scheduledDentists(
+      [...new Set(rows.flatMap(s => s.dentistServices.map(a => a.dentist.id)))],
+      todayDate,
+      lastBookableDate(),
+    );
     return rows
       .map(s => ({
         id: s.id,
@@ -180,16 +232,51 @@ export class BookingService {
         description: s.description,
         durationMinutes: s.defaultDurationMin,
         basePrice: s.basePrice,
-        dentists: s.dentistServices.map(a => ({
-          id: a.dentist.id,
-          fullName: a.dentist.fullName,
-          specialties: a.dentist.dentistProfile?.specialties ?? [],
-          durationMinutes: a.durationMin ?? s.defaultDurationMin,
-        })),
+        dentists: s.dentistServices
+          .filter(a => scheduled.has(a.dentist.id))
+          .map(a => ({
+            id: a.dentist.id,
+            fullName: a.dentist.fullName,
+            specialties: a.dentist.dentistProfile?.specialties ?? [],
+            durationMinutes: a.durationMin ?? s.defaultDurationMin,
+          })),
       }))
       .filter(s => s.dentists.length > 0);
   }
 
+  /** Of `ids`, the dentists with working hours at some point in [from, to]. */
+  private async scheduledDentists(ids: string[], from: string, to: string) {
+    if (!ids.length) return new Set<string>();
+    const [weekly, shifts] = await Promise.all([
+      this.prisma.workingSchedule.findMany({
+        where: {
+          dentistId: { in: ids },
+          deletedAt: null,
+          validFrom: { lte: new Date(to) },
+          OR: [{ validTo: null }, { validTo: { gte: new Date(from) } }],
+        },
+        select: { dentistId: true },
+        distinct: ['dentistId'],
+      }),
+      this.prisma.shiftRegistration.findMany({
+        where: {
+          dentistId: { in: ids },
+          status: 'APPROVED',
+          deletedAt: null,
+          date: { gte: new Date(from), lte: new Date(to) },
+        },
+        select: { dentistId: true },
+        distinct: ['dentistId'],
+      }),
+    ]);
+    return new Set([...weekly, ...shifts].map(r => r.dentistId));
+  }
+
+  /**
+   * Free start times for an online request on one day. An empty day says why
+   * (`emptyReason`: CLOSED, NO_SCHEDULE, TIME_OFF, FULL, TOO_SOON) and names
+   * the next day with a free time, if any within NEXT_FREE_SCAN_DAYS.
+   */
   async slots(q: PublicSlotsQueryDto) {
     const parsedDate = new Date(q.date + 'T00:00:00Z');
     if (
@@ -200,23 +287,50 @@ export class BookingService {
     ) {
       throw new BadRequestException('Chọn ngày hợp lệ từ hôm nay trở đi');
     }
-    const plan = await this.requireEligible(q.serviceId, q.dentistId, q.date);
+    const lastDate = lastBookableDate();
+    if (q.date > lastDate) throw new BadRequestException(tooFarMessage());
+    const day = await this.publicDay(q.serviceId, q.dentistId, q.date);
+    let nextAvailableDate: string | null = null;
+    if (!day.availableSlots.length) {
+      for (let i = 1; i <= NEXT_FREE_SCAN_DAYS && !nextAvailableDate; i++) {
+        const next = addClinicDays(q.date, i);
+        if (next > lastDate) break;
+        const found = await this.publicDay(q.serviceId, q.dentistId, next).catch(error => {
+          // The dentist stops performing the service later on: skip that day.
+          if (error instanceof BadRequestException) return null;
+          throw error;
+        });
+        if (found?.availableSlots.length) nextAvailableDate = next;
+      }
+    }
+    return { ...day, nextAvailableDate, lastDate, maxDaysAhead: bookingMaxDaysAhead() };
+  }
+
+  /** One day's online slots: the booking form's grid, minus the notice period. */
+  private async publicDay(serviceId: string, dentistId: string, date: string) {
+    const plan = await this.requireEligible(serviceId, dentistId, date);
     const data = await this.appointments.getAvailability({
-      dentistId: q.dentistId,
-      date: q.date,
+      dentistId,
+      date,
       slotDuration: plan.durationMin,
       bufferBeforeMin: plan.bufferBeforeMin,
       bufferAfterMin: plan.bufferAfterMin,
     });
     const minLeadMinutes = bookingMinLeadMinutes();
     const earliest = Date.now() + Math.max(minLeadMinutes * 60_000, 60_000);
+    const availableSlots = data.availableSlots.filter(
+      time => new Date(date + 'T' + time + ':00+07:00').getTime() > earliest,
+    );
     return {
       ...data,
-      serviceId: q.serviceId,
+      // The clinic's own note on a closed day is not for the public.
+      closedReason: undefined,
+      serviceId,
       minLeadMinutes,
-      availableSlots: data.availableSlots.filter(
-        time => new Date(q.date + 'T' + time + ':00+07:00').getTime() > earliest,
-      ),
+      availableSlots,
+      emptyReason: availableSlots.length
+        ? null
+        : (data.blockedReason ?? (data.availableSlots.length ? 'TOO_SOON' : 'FULL')),
     };
   }
 
@@ -233,6 +347,9 @@ export class BookingService {
           (leadMin % 60 === 0 ? leadMin / 60 + ' giờ' : leadMin + ' phút') +
           '. Nếu cần khám sớm hơn, hãy gọi phòng khám.',
       );
+    }
+    if (clinicDateOnly(startAt) > lastBookableDate()) {
+      throw new BadRequestException(tooFarMessage());
     }
     const plan = await this.requireEligible(dto.serviceId, dto.dentistId, clinicDateOnly(startAt));
     await this.assertSlot(dto.dentistId, startAt, plan);
@@ -504,7 +621,99 @@ export class BookingService {
             include,
           })
         : [];
-    return [...active, ...rest].map(r => this.toStaff(r));
+    const issues = await this.issuesFor(active);
+    return [...active, ...rest].map(r => ({
+      ...this.toStaff(r),
+      slotIssue: issues.get(r.id) ?? null,
+    }));
+  }
+
+  /**
+   * Open, unbooked requests (for one dentist, or all) whose time falls in
+   * [from, to] (clinic dates), nearest first, each with `slotIssue`: why it
+   * can no longer be confirmed as it stands (closed day, time-off, no
+   * schedule, suspended dentist, service no longer offered, time taken), or
+   * null. For showing next to the visits a schedule change affects.
+   */
+  async pendingInRange(q: PendingInRangeQueryDto) {
+    if (q.to < q.from) throw new BadRequestException('Khoảng ngày không hợp lệ');
+    if (q.to > addClinicDays(q.from, 366))
+      throw new BadRequestException('Khoảng ngày tối đa 1 năm');
+    const from = startOfClinicDay(q.from);
+    const to = new Date(startOfClinicDay(q.to).getTime() + 24 * 60 * 60_000);
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: {
+        status: { in: ACTIVE },
+        appointmentId: null,
+        OR: [
+          { requestedStartAt: { gte: from, lt: to } },
+          { proposedStartAt: { gte: from, lt: to } },
+        ],
+        ...(q.dentistId
+          ? {
+              AND: [
+                { OR: [{ preferredDentistId: q.dentistId }, { proposedDentistId: q.dentistId }] },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { requestedStartAt: 'asc' },
+      take: 200,
+      include: STAFF_INCLUDE,
+    });
+    const inRange = rows
+      .filter(r => {
+        const at = effectiveStartAt(r);
+        return (
+          at >= from && at < to && (!q.dentistId || this.effectiveDentistId(r) === q.dentistId)
+        );
+      })
+      .sort((a, b) => effectiveStartAt(a).getTime() - effectiveStartAt(b).getTime());
+    const issues = await this.issuesFor(inRange);
+    return inRange.map(r => ({ ...this.toStaff(r), slotIssue: issues.get(r.id) ?? null }));
+  }
+
+  /**
+   * Dentists the front desk may offer this request to: still seeing
+   * patients and performing its service (online booking or not), or having
+   * performed it when the patient sent the request (a service withdrawn
+   * since). The exact date is checked on propose.
+   */
+  async dentistOptions(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({
+      where: { id },
+      select: { serviceId: true, createdAt: true },
+    });
+    if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
+    const today = new Date(clinicDateOnly());
+    const sent = new Date(clinicDateOnly(row.createdAt));
+    const rows = await this.prisma.dentistService.findMany({
+      where: {
+        serviceId: row.serviceId,
+        OR: [
+          {
+            service: { isActive: true },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+          },
+          {
+            effectiveFrom: { lte: sent },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: sent } }],
+          },
+        ],
+        dentist: {
+          status: 'ACTIVE',
+          deletedAt: null,
+          userRoles: { some: { role: { code: 'dentist' } } },
+          OR: [
+            { dentistProfile: null },
+            { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
+          ],
+        },
+      },
+      select: { dentist: { select: { id: true, fullName: true } } },
+    });
+    const byId = new Map(rows.map(r => [r.dentist.id, r.dentist]));
+    return [...byId.values()].sort((a, b) => a.fullName.localeCompare(b.fullName, 'vi'));
   }
 
   /**
@@ -600,7 +809,11 @@ export class BookingService {
   async propose(id: string, dto: ProposeBookingTimeDto, actor: JwtPayload) {
     const row = await this.requireActive(id);
     const startAt = new Date(dto.startAt);
-    const plan = await this.requireEligible(row.serviceId, dto.dentistId, clinicDateOnly(startAt));
+    if (!Number.isFinite(startAt.getTime()))
+      throw new BadRequestException('Khung giờ không hợp lệ');
+    // Any dentist who can take the visit, not only the one asked for: a
+    // proposal is how a request stranded by a schedule change is rescued.
+    const plan = await this.staffPlan(row, dto.dentistId, clinicDateOnly(startAt));
     await this.assertSlot(dto.dentistId, startAt, plan);
     await this.updateUnbookedRequest(id, row.status, {
       status: 'PROPOSED',
@@ -730,7 +943,7 @@ export class BookingService {
     if (startAt.getTime() <= Date.now() + 60_000) {
       throw new ConflictException(OVERDUE_STAFF_MESSAGE);
     }
-    await this.requireEligible(row.serviceId, dentistId, clinicDateOnly(startAt));
+    const plan = await this.staffPlan(row, dentistId, clinicDateOnly(startAt));
     const patient = await this.resolvePatient(row, choice, actor);
     const resolvedPatientId = patient.id;
     // The visit length comes from the service (the dentist's own duration
@@ -747,7 +960,7 @@ export class BookingService {
           source: 'ONLINE',
         },
         actor,
-        { id: row.id, expectedStatuses: [row.status] },
+        { id: row.id, expectedStatuses: [row.status], plan },
       );
     } catch (error) {
       if (patient.created) await this.discardNewPatient(patient.id, row.referenceCode, actor);
@@ -1030,23 +1243,156 @@ export class BookingService {
     return plan!;
   }
 
+  /**
+   * The front desk's version of requireEligible: the dentist still sees
+   * patients (online booking or not) and performs the service on `date`. When
+   * the service was withdrawn, or the dentist's assignment to it ended, after
+   * the patient sent the request, the assignment that stood then still
+   * counts (as a booked visit keeps a withdrawn service on reschedule), so
+   * the request can still be confirmed or moved instead of being stranded.
+   */
+  private async staffPlan(
+    row: { serviceId: string; createdAt: Date },
+    dentistId: string,
+    date: string,
+  ): Promise<VisitPlan> {
+    await this.appointments.validateDentist(dentistId);
+    const day = new Date(date);
+    const current = await this.prisma.dentistService.findFirst({
+      where: {
+        dentistId,
+        serviceId: row.serviceId,
+        effectiveFrom: { lte: day },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
+        service: { isActive: true },
+      },
+      select: { id: true },
+    });
+    if (current) return (await this.appointments.planVisit(dentistId, [row.serviceId], date))!;
+    const sent = new Date(clinicDateOnly(row.createdAt));
+    const earlier = await this.prisma.dentistService.findFirst({
+      where: {
+        dentistId,
+        serviceId: row.serviceId,
+        effectiveFrom: { lte: sent },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: sent } }],
+      },
+      include: { service: true },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+    if (!earlier) {
+      throw new BadRequestException(
+        'Bác sĩ này không thực hiện dịch vụ của yêu cầu vào ngày đã chọn',
+      );
+    }
+    const durationMin = earlier.durationMin ?? earlier.service.defaultDurationMin;
+    return {
+      services: [
+        {
+          serviceId: row.serviceId,
+          serviceCode: earlier.service.code,
+          serviceName: earlier.service.name,
+          price: Number(earlier.price ?? earlier.service.basePrice),
+          durationMin,
+          bufferBeforeMin: earlier.service.bufferBeforeMin,
+          bufferAfterMin: earlier.service.bufferAfterMin,
+          sortOrder: 0,
+        },
+      ],
+      durationMin,
+      bufferBeforeMin: earlier.service.bufferBeforeMin,
+      bufferAfterMin: earlier.service.bufferAfterMin,
+    };
+  }
+
+  /**
+   * The visit fits the dentist's day: inside working hours, clear of
+   * time-off, closed ranges and other bookings (with buffers). Any valid
+   * start counts, on the suggested grid or not; the message says what is
+   * wrong.
+   */
   private async assertSlot(dentistId: string, startAt: Date, plan: VisitPlan) {
     if (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now() + 60_000)
       throw new BadRequestException('Khung giờ phải ở phía trước');
-    const local = new Date(startAt.getTime() + CLINIC_UTC_OFFSET_MS).toISOString();
-    const date = local.slice(0, 10),
-      time = local.slice(11, 16);
-    if (local.slice(17, 19) !== '00' || startAt.getUTCMilliseconds() !== 0)
+    if (startAt.getUTCSeconds() !== 0 || startAt.getUTCMilliseconds() !== 0)
       throw new BadRequestException('Khung giờ không hợp lệ');
-    const slots = await this.appointments.getAvailability({
+    const problem = await this.availability.checkSlot(
       dentistId,
-      date,
-      slotDuration: plan.durationMin,
-      bufferBeforeMin: plan.bufferBeforeMin,
-      bufferAfterMin: plan.bufferAfterMin,
-    });
-    if (!(slots.availableSlots as string[]).includes(time))
-      throw new ConflictException('Khung giờ vừa được đặt hoặc không nằm trong lịch làm việc');
+      startAt,
+      new Date(startAt.getTime() + plan.durationMin * 60_000),
+      { buffers: { beforeMin: plan.bufferBeforeMin, afterMin: plan.bufferAfterMin } },
+    );
+    if (problem) throw new ConflictException(problem.message);
+  }
+
+  /** The dentist a request is about: the proposed one while a proposal stands. */
+  private effectiveDentistId(row: {
+    status: BookingRequestStatus;
+    preferredDentistId: string;
+    proposedDentistId?: string | null;
+  }) {
+    return PROPOSAL_STATUSES.includes(row.status)
+      ? (row.proposedDentistId ?? row.preferredDentistId)
+      : row.preferredDentistId;
+  }
+
+  /**
+   * Why each open, unbooked request whose time is still ahead can no longer
+   * be confirmed as it stands, or null (an overdue one is labelled as such
+   * already). Days and plans are loaded once per dentist and date.
+   */
+  private async issuesFor(
+    rows: Array<{
+      id: string;
+      status: BookingRequestStatus;
+      appointmentId: string | null;
+      serviceId: string;
+      createdAt: Date;
+      preferredDentistId: string;
+      proposedDentistId: string | null;
+      requestedStartAt: Date;
+      proposedStartAt: Date | null;
+    }>,
+  ) {
+    const days = new Map<string, Promise<DayCalendar>>();
+    const plans = new Map<string, Promise<VisitPlan | RequestIssue>>();
+    const now = Date.now();
+    const out = new Map<string, RequestIssue | null>();
+    await Promise.all(
+      rows
+        .filter(r => ACTIVE.includes(r.status) && !r.appointmentId)
+        .filter(r => effectiveStartAt(r).getTime() > now)
+        .map(async r => {
+          const dentistId = this.effectiveDentistId(r);
+          const startAt = effectiveStartAt(r);
+          const date = clinicDateOnly(startAt);
+          const planKey = [dentistId, r.serviceId, date, clinicDateOnly(r.createdAt)].join('|');
+          if (!plans.has(planKey)) {
+            plans.set(
+              planKey,
+              this.staffPlan(r, dentistId, date).catch(error => {
+                if (error instanceof HttpException)
+                  return { kind: 'NOT_BOOKABLE', message: error.message };
+                throw error;
+              }),
+            );
+          }
+          const plan = await plans.get(planKey)!;
+          if ('kind' in plan) {
+            out.set(r.id, plan);
+            return;
+          }
+          const dayKey = dentistId + '|' + date;
+          if (!days.has(dayKey)) days.set(dayKey, this.availability.loadDay(dentistId, date));
+          const problem = intervalProblem(
+            await days.get(dayKey)!,
+            { start: startAt, end: new Date(startAt.getTime() + plan.durationMin * 60_000) },
+            { buffers: { beforeMin: plan.bufferBeforeMin, afterMin: plan.bufferAfterMin } },
+          );
+          out.set(r.id, problem ? { kind: problem.kind, message: problem.message } : null);
+        }),
+    );
+    return out;
   }
 
   /**

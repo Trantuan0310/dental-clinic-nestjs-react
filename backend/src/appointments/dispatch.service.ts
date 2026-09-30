@@ -242,6 +242,8 @@ export class DispatchService {
         dto.dentistId,
         appt.services.map(s => s.serviceId),
         clinicDateOnly(start),
+        // A booked visit keeps a service withdrawn since, as on reschedule.
+        { activeServicesOnly: false },
       );
     }
     const reason = dto.reason.trim();
@@ -345,6 +347,7 @@ export class DispatchService {
             dto.toDentistId,
             appt.services.map(s => s.serviceId),
             dto.date,
+            { activeServicesOnly: false },
           );
         }
         await this.prisma.$transaction(async tx => {

@@ -938,7 +938,6 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
               <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-gray-100 p-2">
                 {availability.availableSlots
                   .filter((s) => s.available)
-                  .slice(0, 24)
                   .map((s) => {
                     const t = clinicParts(s.startTime).time;
                     const active = rescheduleTime === t;
