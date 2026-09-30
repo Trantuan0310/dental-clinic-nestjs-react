@@ -230,7 +230,7 @@ export default function PublicBookingPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-medium text-gray-700">
                     Dịch vụ
-                    <select
+                    <select aria-label="Dịch vụ"
                       className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
                       value={serviceId}
                       onChange={(e) => {
@@ -255,7 +255,7 @@ export default function PublicBookingPage() {
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Bác sĩ
-                    <select
+                    <select aria-label="Bác sĩ"
                       className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
                       value={dentistId}
                       onChange={(e) => setDentistId(e.target.value)}
@@ -280,6 +280,7 @@ export default function PublicBookingPage() {
                     Ngày
                     <input
                       type="date"
+                      aria-label="Ngày"
                       min={today()}
                       max={lastDate}
                       value={date}
@@ -293,7 +294,7 @@ export default function PublicBookingPage() {
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Giờ còn trống
-                    <select
+                    <select aria-label="Giờ còn trống"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                       required
