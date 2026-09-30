@@ -7,10 +7,27 @@ export interface EmailOptions {
   text?: string;
 }
 
+/**
+ * Why production email delivery is not going to work, or null when it is
+ * configured. Logged once at startup (main.ts) so a VPS left on the demo
+ * defaults is noticed before staff invites silently go nowhere.
+ */
+export function emailConfigProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.NODE_ENV !== 'production') return null;
+  if (env.EMAIL_MOCK === 'true') {
+    return 'EMAIL_MOCK=true in production: no email is delivered (account invites, password resets, booking notices). Set EMAIL_MOCK=false and SMTP_HOST/SMTP_USER/SMTP_PASS.';
+  }
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
+    return 'SMTP is not configured (SMTP_HOST/SMTP_USER/SMTP_PASS): no email is delivered. Use temporary passwords for new accounts until it is.';
+  }
+  return null;
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
+  /** True when the message was actually handed to an SMTP server. */
   async send(options: EmailOptions): Promise<boolean> {
     const { to, subject, html, text } = options;
 
@@ -18,7 +35,9 @@ export class EmailService {
       this.logger.log(`[EMAIL_MOCK] To: ${to}`);
       this.logger.log(`[EMAIL_MOCK] Subject: ${subject}`);
       this.logger.log(`[EMAIL_MOCK] Body preview: ${html.substring(0, 200)}...`);
-      return true;
+      // In development the log IS the delivery; in production nobody reads
+      // it, so report the email as not sent rather than pretend.
+      return process.env.NODE_ENV !== 'production';
     }
 
     const smtpHost = process.env.SMTP_HOST;

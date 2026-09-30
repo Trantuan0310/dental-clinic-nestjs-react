@@ -965,7 +965,10 @@ async function main() {
   }
 
   // Create super admin user
-  const adminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@clinic.local';
+  // Login emails are stored lowercase (migration 037).
+  const adminEmail = (process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@clinic.local')
+    .trim()
+    .toLowerCase();
   const existingAdmin = await prisma.user.findFirst({
     where: { email: adminEmail },
   });

@@ -4,8 +4,8 @@ import { randomVnPhone } from './flow-helpers';
 /**
  * Staff (ADR-0009 phase 1): employee → login account → dentist profile →
  * suspend / reinstate → terminate, through the real UI as clinic admin.
- * The new account stays PENDING_SETUP (it is activated from the invite),
- * so it is checked on the dentist pages rather than in the booking form.
+ * The new account stays PENDING_SETUP (it is activated from the invite);
+ * it can already be booked, but it is checked on the dentist pages here.
  */
 test.describe.configure({ mode: 'serial' });
 

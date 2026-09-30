@@ -1,20 +1,55 @@
 import { useState } from 'react';
-import { Plus, MoreHorizontal, UserX, UserCheck, KeyRound } from 'lucide-react';
-import { Button, Card, StatusBadge, SearchInput, Modal, Input, Select, Textarea, Spinner } from '@/components/ui';
+import { Link } from 'react-router-dom';
+import { Plus, MoreHorizontal, UserX, UserCheck, KeyRound, LockKeyhole } from 'lucide-react';
+import {
+  Button,
+  Card,
+  Checkbox,
+  StatusBadge,
+  SearchInput,
+  Modal,
+  Input,
+  Select,
+  Textarea,
+  Spinner,
+} from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
-import { getApiErrorMessage } from '@/lib/errors';
+import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
+import { useAuthStore } from '@/stores/authStore';
 import {
   useUsers,
   useRoles,
   useCreateUser,
   useUpdateUser,
+  useUpdateUserRoles,
   useDeactivateUser,
   useReactivateUser,
   useSendPasswordLink,
 } from './adminApi';
+import { TemporaryPasswordDialog } from './TemporaryPasswordDialog';
+import { BlockingAppointmentsList } from '@/features/staff/BlockingAppointmentsList';
+import { blockingAppointments, staffErrorMessage } from '@/features/staff/labels';
+import type { BlockingAppointment } from '@/features/staff/types';
 import type { AdminUser, CreateAdminUserPayload } from '@/types/admin';
 import { NAV_ROLE_HINT } from '@/lib/nav';
 import type { RoleCode } from '@/types/auth';
+
+/** Messages for the users API business codes (roles/email edits). */
+const USER_ERROR_MESSAGE: Record<string, string> = {
+  CANNOT_REMOVE_LAST_ADMIN: 'Không thể gỡ vai trò Quản trị của quản trị viên cuối cùng.',
+  EMAIL_ALREADY_EXISTS: 'Email đăng nhập đã được dùng cho tài khoản khác.',
+  DENTIST_HAS_FUTURE_APPOINTMENTS:
+    'Bác sĩ còn lịch hẹn sắp tới. Chuyển hoặc hủy các lịch này trước khi gỡ vai trò Bác sĩ.',
+  DENTIST_HAS_OPEN_ENCOUNTERS:
+    'Bác sĩ còn phiên khám đang mở. Đóng các phiên khám trước khi gỡ vai trò Bác sĩ.',
+};
+
+function userErrorMessage(error: unknown, fallback: string): string {
+  const code = getApiErrorCode(error);
+  return (code && USER_ERROR_MESSAGE[code]) || staffErrorMessage(error, fallback);
+}
+
+type TempPasswordTarget = { user: { id: string; email: string }; emailFailed: boolean };
 
 // `user.roles` is `string[]` (custom roles beyond the 3 built-ins are
 // possible), so this falls back to the raw code for anything NAV_ROLE_HINT
@@ -32,6 +67,8 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<AdminUser | null>(null);
   const [deactivateReason, setDeactivateReason] = useState('');
+  const [tempPassword, setTempPassword] = useState<TempPasswordTarget | null>(null);
+  const canResetPassword = useAuthStore((s) => s.hasPermission('user.reset_password'));
 
   const { data, isLoading } = useUsers({
     limit: PAGE_SIZE,
@@ -39,7 +76,6 @@ export default function UsersPage() {
   });
 
   const createMutation = useCreateUser();
-  const updateMutation = useUpdateUser(editingUser?.id ?? '');
   const deactivateMutation = useDeactivateUser();
   const reactivateMutation = useReactivateUser();
   const sendLinkMutation = useSendPasswordLink();
@@ -58,21 +94,17 @@ export default function UsersPage() {
 
   const handleCreate = async (payload: CreateAdminUserPayload) => {
     try {
-      await createMutation.mutateAsync(payload);
-      notify.success('Tạo người dùng thành công');
+      const created = await createMutation.mutateAsync(payload);
       setShowCreateModal(false);
-    } catch {
-      notify.error('Không thể tạo người dùng. Vui lòng thử lại.');
-    }
-  };
-
-  const handleUpdate = async (payload: Parameters<typeof updateMutation.mutateAsync>[0]) => {
-    try {
-      await updateMutation.mutateAsync(payload);
-      notify.success('Cập nhật thành công');
-      setEditingUser(null);
-    } catch {
-      notify.error('Không thể cập nhật. Vui lòng thử lại.');
+      if (created.inviteSent) {
+        notify.success(`Đã tạo người dùng và gửi lời mời tới ${created.email}`);
+      } else {
+        // Never claim an invite that did not leave the server.
+        notify.warning('Đã tạo người dùng. Chưa gửi được email — dùng Cấp mật khẩu tạm.');
+        setTempPassword({ user: { id: created.id, email: created.email }, emailFailed: true });
+      }
+    } catch (err) {
+      notify.error(userErrorMessage(err, 'Không thể tạo người dùng. Vui lòng thử lại.'));
     }
   };
 
@@ -108,7 +140,8 @@ export default function UsersPage() {
           `Đã gửi link ${result.kind === 'setup' ? 'thiết lập tài khoản' : 'đặt lại mật khẩu'} tới ${user.email} (hiệu lực ${result.expiresInMinutes} phút)`,
         );
       } else {
-        notify.warning('Chưa gửi được email. Kiểm tra cấu hình SMTP của máy chủ.');
+        notify.warning('Chưa gửi được email — dùng Cấp mật khẩu tạm.');
+        setTempPassword({ user, emailFailed: true });
       }
     } catch (err) {
       notify.error(getApiErrorMessage(err, 'Không gửi được link. Vui lòng thử lại.'));
@@ -179,7 +212,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3 text-gray-900">{user.email}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{user.fullName}</td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-1">
+                      <div className="flex flex-wrap gap-1">
                         {user.roles.map((role) => (
                           <span
                             key={role}
@@ -188,6 +221,15 @@ export default function UsersPage() {
                             {roleLabel(role)}
                           </span>
                         ))}
+                        {user.roles.includes('dentist') && user.hasDentistProfile === false && (
+                          <Link
+                            to="/staff"
+                            className="inline-flex rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:underline"
+                            title="Tài khoản có vai trò Bác sĩ nhưng chưa có hồ sơ bác sĩ: chưa có màu lịch, dịch vụ, đặt lịch online. Tạo hồ sơ ở trang Nhân sự."
+                          >
+                            Chưa có hồ sơ bác sĩ
+                          </Link>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -231,6 +273,16 @@ export default function UsersPage() {
                             >
                               <KeyRound className="h-4 w-4 text-brand-500" />
                             </button>
+                            {canResetPassword && (
+                              <button
+                                className="rounded p-1 hover:bg-amber-50"
+                                onClick={() => setTempPassword({ user, emailFailed: false })}
+                                title="Cấp mật khẩu tạm (không cần email)"
+                                aria-label={`Cấp mật khẩu tạm cho ${user.email}`}
+                              >
+                                <LockKeyhole className="h-4 w-4 text-amber-500" />
+                              </button>
+                            )}
                             <button
                               className="rounded p-1 hover:bg-red-50"
                               onClick={() => setDeactivateTarget(user)}
@@ -268,12 +320,16 @@ export default function UsersPage() {
       {editingUser && (
         <EditUserModal
           user={editingUser}
-          isOpen={true}
           onClose={() => setEditingUser(null)}
-          onSubmit={handleUpdate}
-          isLoading={updateMutation.isPending}
+          onSendLink={() => handleSendLink(editingUser)}
         />
       )}
+
+      <TemporaryPasswordDialog
+        user={tempPassword?.user ?? null}
+        emailFailed={tempPassword?.emailFailed}
+        onClose={() => setTempPassword(null)}
+      />
 
       {/* Deactivate Confirmation */}
       <Modal
@@ -380,44 +436,140 @@ function CreateUserModal({
 
 function EditUserModal({
   user,
-  isOpen,
   onClose,
-  onSubmit,
-  isLoading,
+  onSendLink,
 }: {
   user: AdminUser;
-  isOpen: boolean;
   onClose: () => void;
-  onSubmit: (payload: { fullName?: string }) => void;
-  isLoading: boolean;
+  onSendLink: () => void;
 }) {
-  const [fullName, setFullName] = useState(user.fullName);
+  const me = useAuthStore((s) => s.user?.id);
+  const { data: rolesData } = useRoles();
+  const roles = rolesData?.data ?? [];
+  const updateUser = useUpdateUser(user.id);
+  const updateRoles = useUpdateUserRoles();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [fullName, setFullName] = useState(user.fullName);
+  const [email, setEmail] = useState(user.email);
+  const [roleCodes, setRoleCodes] = useState<string[]>(user.roles);
+  const [blocking, setBlocking] = useState<BlockingAppointment[] | null>(null);
+  const isSelf = user.id === me;
+
+  const toggleRole = (code: string, on: boolean) =>
+    setRoleCodes((current) => (on ? [...current, code] : current.filter((c) => c !== code)));
+  const rolesChanged =
+    roleCodes.length !== user.roles.length || roleCodes.some((c) => !user.roles.includes(c));
+  const normalizedEmail = email.trim().toLowerCase();
+  const emailChanged = normalizedEmail !== user.email;
+  const nameChanged = fullName.trim() !== user.fullName;
+  const saving = updateUser.isPending || updateRoles.isPending;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ fullName });
+    setBlocking(null);
+    try {
+      if (nameChanged || emailChanged) {
+        await updateUser.mutateAsync({
+          ...(nameChanged ? { fullName: fullName.trim() } : {}),
+          ...(emailChanged ? { email: normalizedEmail } : {}),
+        });
+      }
+      if (rolesChanged) {
+        const roleIds = roles.filter((r) => roleCodes.includes(r.code)).map((r) => r.id);
+        await updateRoles.mutateAsync({ id: user.id, roleIds });
+      }
+      notify.success('Cập nhật thành công');
+      if (emailChanged && user.status === 'pending_setup') {
+        notify.info('Email đăng nhập đã đổi: gửi lại link thiết lập tới email mới.');
+      }
+      onClose();
+    } catch (err) {
+      setBlocking(blockingAppointments(err));
+      notify.error(userErrorMessage(err, 'Không thể cập nhật. Vui lòng thử lại.'));
+    }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Sửa người dùng" size="md">
+    <Modal isOpen onClose={onClose} title="Sửa người dùng" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Input label="Email" value={user.email} disabled />
+        <Input
+          label="Email đăng nhập"
+          type="email"
+          required
+          maxLength={255}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          hint="Không phân biệt chữ hoa, chữ thường. Người dùng đăng nhập bằng email mới ngay sau khi lưu."
+        />
         <Input
           label="Họ và tên"
           required
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
+          hint="Đồng bộ sang hồ sơ nhân viên đã gắn."
         />
+        <fieldset>
+          <legend className="mb-1 text-sm font-medium text-gray-700 dark:text-surface-200">Vai trò</legend>
+          <div className="space-y-1">
+            {roles.map((r) => {
+              const lockSelfAdmin = isSelf && r.code === 'clinic_admin' && user.roles.includes('clinic_admin');
+              return (
+                <Checkbox
+                  key={r.id}
+                  checked={roleCodes.includes(r.code)}
+                  disabled={lockSelfAdmin}
+                  onChange={(on) => toggleRole(r.code, on)}
+                  label={
+                    <>
+                      {r.name}
+                      {lockSelfAdmin && (
+                        <span className="ml-1 text-xs text-gray-500">(không tự gỡ vai trò quản trị của mình)</span>
+                      )}
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
+          {roleCodes.includes('dentist') && user.hasDentistProfile === false && (
+            <p className="mt-1 text-xs text-amber-700">
+              Để bác sĩ có màu lịch, dịch vụ và nhận đặt lịch online, tạo hồ sơ bác sĩ ở trang{' '}
+              <Link to="/staff" className="underline">
+                Nhân sự
+              </Link>
+              .
+            </p>
+          )}
+          {rolesChanged && !isSelf && (
+            <p className="mt-1 text-xs text-gray-500">
+              Đổi vai trò sẽ đăng xuất người dùng khỏi các phiên đang mở.
+            </p>
+          )}
+        </fieldset>
+        {blocking && <BlockingAppointmentsList appointments={blocking} />}
         {/* Status is changed via the dedicated deactivate/reactivate actions
             in the table row, not here — the generic update endpoint doesn't
             accept a status field (see adminApi.ts). */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <Button variant="outline" type="button" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button type="submit" isLoading={isLoading}>
-            Lưu
-          </Button>
+        <div className="flex flex-wrap justify-between gap-3 border-t border-gray-100 pt-4">
+          <div>
+            {user.status === 'pending_setup' && (
+              <Button variant="ghost" type="button" onClick={onSendLink}>
+                Gửi lại link thiết lập
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" type="button" onClick={onClose}>
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              isLoading={saving}
+              disabled={roleCodes.length === 0 || !fullName.trim() || !normalizedEmail}
+            >
+              Lưu
+            </Button>
+          </div>
         </div>
       </form>
     </Modal>

@@ -1,6 +1,7 @@
-import { IsString, IsOptional, IsEnum, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsEmail, MinLength, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import { NormalizeEmail } from '../../common/email.util';
 
 export enum UserStatus {
   ACTIVE = 'ACTIVE',
@@ -15,6 +16,13 @@ export class UpdateUserDto {
   @MaxLength(200)
   @Transform(({ value }) => value?.trim())
   fullName?: string;
+
+  @ApiPropertyOptional({ example: 'bs.an@clinic.vn', description: 'Login email (lowercased)' })
+  @IsOptional()
+  @NormalizeEmail()
+  @IsEmail()
+  @MaxLength(255)
+  email?: string;
 
   @ApiPropertyOptional({ enum: UserStatus, description: 'User status' })
   @IsOptional()

@@ -107,6 +107,20 @@ describe('AuthService', () => {
       );
     });
 
+    it('looks the account up by the lowercase email (login is case-insensitive)', async () => {
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.login({ email: '  BS.An@Clinic.VN ', password: 'x' }, null, null),
+      ).rejects.toThrow(InvalidCredentialsException);
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { email: 'bs.an@clinic.vn', deactivatedAt: null, deletedAt: null },
+        }),
+      );
+    });
+
     it('throws InvalidCredentialsException when user not found', async () => {
       (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 
@@ -373,6 +387,44 @@ describe('AuthService', () => {
       );
     });
 
+    it('finishes account setup: a PENDING_SETUP account becomes ACTIVE', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        validUser({ status: UserStatus.PENDING_SETUP }),
+      );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+
+      await service.changePassword(
+        'user-1',
+        { currentPassword: 'TempPass123', newPassword: 'NewPass123!' },
+        null,
+        null,
+      );
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { passwordHash: 'hashed-password', status: 'ACTIVE' },
+        }),
+      );
+    });
+
+    it('leaves the status of an ACTIVE account alone', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(
+        validUser({ status: UserStatus.ACTIVE }),
+      );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+
+      await service.changePassword(
+        'user-1',
+        { currentPassword: 'OldPass123!', newPassword: 'NewPass123!' },
+        null,
+        null,
+      );
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { passwordHash: 'hashed-password' } }),
+      );
+    });
+
     it('throws InvalidCredentialsException when current password is wrong', async () => {
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(validUser());
       (argon2.verify as jest.Mock).mockResolvedValue(false);
@@ -425,10 +477,15 @@ describe('AuthService', () => {
       (prisma.user.findFirst as jest.Mock).mockResolvedValue(validUser());
       (prisma.passwordResetToken.create as jest.Mock).mockResolvedValue({});
 
-      await service.forgotPassword('test@example.com', '127.0.0.1', 'jest');
+      await service.forgotPassword('Test@Example.com', '127.0.0.1', 'jest');
 
       expect(prisma.passwordResetToken.create).toHaveBeenCalled();
-      expect(emailService.sendPasswordResetEmail).toHaveBeenCalled();
+      // Sent to the stored address, not to whatever casing was typed.
+      expect(emailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        validUser().email,
+        expect.any(String),
+        expect.any(Number),
+      );
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: ActionAudit.PASSWORD_RESET_REQUESTED }),
       );

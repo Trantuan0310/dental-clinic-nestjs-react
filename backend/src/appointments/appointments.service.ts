@@ -76,6 +76,7 @@ import {
 import { closeQueueEntry, enqueue } from './domain/queue';
 import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
 import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
+import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
@@ -1117,15 +1118,20 @@ export class AppointmentsService {
 
   /**
    * `{ id, fullName }` as before, plus the profile's calendar colour and
-   * practice status. Dentists whose profile is not ACTIVE are left out
-   * (BR-STAFF-006); dentists without a profile yet stay listed.
+   * practice status. Accounts that are not deactivated (PENDING_SETUP
+   * included) with the dentist role. `booking` (default) lists who takes new
+   * appointments (BR-STAFF-006: ACTIVE practice, employee not on leave);
+   * `schedule` also lists suspended dentists and dentists on leave, whose
+   * working hours and time off stay manageable. A dentist role without a
+   * profile (e.g. given on the Users page) stays listed, as validateDentist
+   * still accepts it, with `practiceStatus: null`; the Users page flags such
+   * accounts so a profile gets created — hiding them would silently drop a
+   * bookable dentist from every picker.
    */
-  async listDentistOptions() {
+  async listDentistOptions(scope: 'booking' | 'schedule' = 'booking') {
     const rows = await this.prisma.user.findMany({
       where: {
-        status: 'ACTIVE',
-        deactivatedAt: null,
-        deletedAt: null,
+        ...SCHEDULABLE_ACCOUNT_WHERE,
         userRoles: {
           some: {
             role: {
@@ -1134,10 +1140,7 @@ export class AppointmentsService {
             },
           },
         },
-        OR: [
-          { dentistProfile: null },
-          { dentistProfile: { practiceStatus: 'ACTIVE', deletedAt: null } },
-        ],
+        OR: [{ dentistProfile: null }, { dentistProfile: dentistProfileFilter(scope) }],
       },
       select: {
         id: true,
@@ -3029,19 +3032,29 @@ export class AppointmentsService {
   }
 
   /**
-   * BR-STAFF-006: a dentist is an active account with the dentist role and,
-   * once profiles exist, an ACTIVE dentist profile. Bookings require an
-   * ACTIVE practice; schedules and time-off may still be managed while a
-   * dentist is suspended (`forBooking: false`). Accounts without a profile
-   * (created before migration 019 or by an old seed) are accepted by role
-   * alone until PR-7 removes that fallback.
+   * BR-STAFF-006: a dentist is an account that is not deactivated (a
+   * PENDING_SETUP account still practises) with the dentist role and, once
+   * profiles exist, a dentist profile. Bookings require an ACTIVE practice
+   * and an employee who is not on leave; schedules and time-off may still be
+   * managed while a dentist is suspended or on leave (`forBooking: false`).
+   * Accounts without a profile (created before migration 019 or by an old
+   * seed) are accepted by role alone until PR-7 removes that fallback.
    */
   async validateDentist(dentistId: string, { forBooking = true } = {}) {
     const u = await this.prisma.user.findUnique({
       where: { id: dentistId },
-      include: { userRoles: { include: { role: true } }, dentistProfile: true },
+      include: {
+        userRoles: { include: { role: true } },
+        dentistProfile: { include: { employee: { select: { employmentStatus: true } } } },
+      },
     });
-    if (!u || u.status !== 'ACTIVE' || !u.userRoles.some(ur => ur.role.code === 'dentist')) {
+    if (
+      !u ||
+      u.status === 'DEACTIVATED' ||
+      u.deactivatedAt ||
+      u.deletedAt ||
+      !u.userRoles.some(ur => ur.role.code === 'dentist')
+    ) {
       throw new AppointmentNotFoundException(
         dentistId,
         'Bác sĩ không tồn tại hoặc không còn hoạt động',
@@ -3056,6 +3069,11 @@ export class AppointmentsService {
       throw new AppointmentNotFoundException(
         dentistId,
         'Bác sĩ đang tạm ngưng hoặc đã nghỉ, không nhận lịch hẹn',
+      );
+    } else if (forBooking && profile.employee && profile.employee.employmentStatus !== 'ACTIVE') {
+      throw new AppointmentNotFoundException(
+        dentistId,
+        'Bác sĩ đang tạm nghỉ, không nhận lịch hẹn mới. Chọn bác sĩ khác.',
       );
     }
     return u;
