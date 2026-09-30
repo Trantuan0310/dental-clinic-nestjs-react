@@ -10,11 +10,22 @@ import {
   AppointmentRescheduledEvent,
 } from '../common/events/domain-events';
 import { formatVisitTime } from './clinic-time-format';
+import { appointmentEmailNoticesEnabled, clinicContactLine } from './clinic-contact';
+import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 
 /** Reminders go out for visits starting in (now + REMINDER_MIN_AHEAD, now + REMINDER_AHEAD]. */
 export const REMINDER_AHEAD_MS = 24 * 60 * 60_000;
 const REMINDER_MIN_AHEAD_MS = 2 * 60 * 60_000;
 const REMINDER_BATCH = 200;
+/** No reminder is sent between 21:00 and 07:00 at the clinic; the next run catches up. */
+const QUIET_FROM_HOUR = 21;
+const QUIET_UNTIL_HOUR = 7;
+
+/** 21:00–07:00 at the clinic (UTC+7). */
+export function isQuietHour(now: Date): boolean {
+  const hour = new Date(now.getTime() + CLINIC_UTC_OFFSET_MS).getUTCHours();
+  return hour >= QUIET_FROM_HOUR || hour < QUIET_UNTIL_HOUR;
+}
 
 const VISIT_SELECT = {
   id: true,
@@ -42,6 +53,7 @@ export class AppointmentNoticesService {
 
   @OnEvent(APPOINTMENT_CANCELLED_EVENT)
   async onCancelled(event: AppointmentCancelledEvent) {
+    if (!appointmentEmailNoticesEnabled()) return;
     try {
       const visit = await this.visit(event.appointmentId);
       // A visit already under way or past (a late cancel of a checked-in
@@ -66,14 +78,9 @@ export class AppointmentNoticesService {
   async onRescheduled(event: AppointmentRescheduledEvent) {
     const moved = event.oldStartAt.getTime() !== event.newStartAt.getTime();
     const changedDentist = event.oldDentistId !== event.newDentistId;
-    if (!moved && !changedDentist) return;
+    // The reminder flag is cleared by the move itself (same transaction).
+    if ((!moved && !changedDentist) || !appointmentEmailNoticesEnabled()) return;
     try {
-      // The new time gets its own reminder. Raw SQL: a reminder flag is not
-      // an edit of the visit (updated_at stays).
-      if (moved) {
-        await this.prisma.$executeRaw`
-          UPDATE appointments SET reminder_sent_at = NULL WHERE id = ${event.appointmentId}::uuid`;
-      }
       const visit = await this.visit(event.appointmentId);
       if (!visit || visit.startAt.getTime() <= Date.now()) return;
       const dentist = visit.dentist?.fullName;
@@ -105,8 +112,12 @@ export class AppointmentNoticesService {
    * two runs (or two servers) never send it twice. Run hourly (BookingCron),
    * so each reminder goes out about 24 hours ahead; a visit booked for
    * sooner is reminded at the next run, unless it is under 2 hours away.
+   * Nothing is sent at night (isQuietHour). Visits already booked when
+   * migration 041 ran were marked as reminded, so the first run after the
+   * deploy does not send a backlog.
    */
   async sendDueReminders(now = new Date()) {
+    if (!appointmentEmailNoticesEnabled() || isQuietHour(now)) return { due: 0, sent: 0 };
     const due = await this.prisma.appointment.findMany({
       where: {
         status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
@@ -169,8 +180,14 @@ export class AppointmentNoticesService {
         to,
         subject,
         html:
-          '<p>Xin chào ' + escape(visit.patient.fullName) + ',</p><p>' + escape(message) + '</p>',
-        text: 'Xin chào ' + visit.patient.fullName + ',\n' + message,
+          '<p>Xin chào ' +
+          escape(visit.patient.fullName) +
+          ',</p><p>' +
+          escape(message) +
+          '</p><p>' +
+          escape(clinicContactLine()) +
+          '</p>',
+        text: 'Xin chào ' + visit.patient.fullName + ',\n' + message + '\n' + clinicContactLine(),
       });
     } catch (error) {
       this.logger.warn(`Could not send "${subject}": ${String(error)}`);

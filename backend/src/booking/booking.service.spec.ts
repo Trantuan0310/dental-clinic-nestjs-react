@@ -1,7 +1,7 @@
 import { UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Gender } from '@prisma/client';
-import { BookingService, EXPIRED_MESSAGE, isSerializationFailure } from './booking.service';
+import { BookingService, EXPIRED_MESSAGE } from './booking.service';
 import { AvailabilityService } from '../appointments/availability.service';
 
 const plan = {
@@ -45,6 +45,7 @@ describe('BookingService public request security and validation', () => {
         findUniqueOrThrow: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       auditLog: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       $executeRaw: jest.fn().mockResolvedValue(1),
@@ -510,13 +511,14 @@ describe('BookingService public request security and validation', () => {
         plan,
         // Attached only as read: the times it was confirmed from.
         match: { requestedStartAt: startAt, proposedStartAt: undefined },
+        tx: prisma,
       },
     );
     // Matching and creating the patient happen under the request phone's lock.
     expect(prisma.$executeRaw).toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
       maxWait: 10_000,
-      timeout: 30_000,
+      timeout: 20_000,
     });
     // A request already received is still handled if the service was taken
     // offline since.
@@ -659,7 +661,7 @@ describe('BookingService public request security and validation', () => {
       expect(patients.create).not.toHaveBeenCalled();
     });
 
-    it('archives the patient record it just created when the visit cannot be booked', async () => {
+    it('rolls the new patient record back with a visit that cannot be booked', async () => {
       prisma.bookingRequest.findUnique.mockResolvedValue(
         request({ requestedStartAt: minutes(24 * 60) }),
       );
@@ -668,11 +670,10 @@ describe('BookingService public request security and validation', () => {
       appointments.create.mockRejectedValue(new ConflictException('Slot taken'));
 
       await expect(service.confirm('request-1', actor)).rejects.toThrow('Slot taken');
-      expect(patients.softDelete).toHaveBeenCalledWith(
-        'patient-new',
-        expect.objectContaining({ reason: expect.stringContaining('GS-1A2B3C4D5E') }),
-        actor,
-      );
+      // Created in confirm()'s transaction (the mock client is prisma), so
+      // the failed booking rolls it back; nothing is left to archive.
+      expect(patients.create).toHaveBeenCalledWith(expect.anything(), actor, prisma);
+      expect(patients.softDelete).not.toHaveBeenCalled();
     });
 
     it('leaves an existing patient record alone when the visit cannot be booked', async () => {
@@ -983,6 +984,7 @@ describe('BookingService public request security and validation', () => {
         expect(patients.create).toHaveBeenCalledWith(
           expect.objectContaining({ fullName: 'Nguyễn Bé An', primaryPhone: '0901234567' }),
           actor,
+          prisma,
         );
         expect(appointments.create.mock.calls[0][0].patientId).toBe('patient-new');
         expect(audit.log).toHaveBeenCalledWith(
@@ -1623,6 +1625,7 @@ describe('BookingService public request security and validation', () => {
           id: 'request-1',
           expectedStatuses: ['PENDING_REVIEW'],
           match: expect.objectContaining({ requestedStartAt: expect.any(Date) }),
+          tx: prisma,
           plan: expect.objectContaining({ durationMin: 45, bufferAfterMin: 15 }),
         });
       });
@@ -2183,31 +2186,31 @@ describe('BookingService public request security and validation', () => {
           appointment: null,
         });
         await service.confirm('request-1', actor);
-        const lock = prisma.$executeRaw.mock.invocationCallOrder[0];
+        // The phone lock (namespace 3), keyed by the normalized phone (after
+        // the lock_timeout set_config).
+        const at = prisma.$executeRaw.mock.calls.findIndex(
+          (c: any[]) => c[1] === 3 && c[2] === '0901234567',
+        );
+        expect(at).toBeGreaterThanOrEqual(0);
+        const lock = prisma.$executeRaw.mock.invocationCallOrder[at];
         expect(lock).toBeLessThan(prisma.$queryRaw.mock.invocationCallOrder[0]);
         expect(lock).toBeLessThan(patients.create.mock.invocationCallOrder[0]);
-        // The phone lock (namespace 3), keyed by the normalized phone.
-        expect(prisma.$executeRaw.mock.calls[0].slice(1)).toEqual([3, '0901234567']);
       });
 
-      it('retries archiving the new record when a serialization failure aborts it', async () => {
+      it('creates the record and the visit in one transaction, so a failed booking leaves none', async () => {
         appointments.create.mockRejectedValue(new ConflictException('Slot taken'));
-        patients.softDelete
-          .mockRejectedValueOnce(
-            Object.assign(new Error('Transaction failed due to a write conflict'), {
-              code: 'P2034',
-            }),
-          )
-          .mockResolvedValueOnce(undefined);
         await expect(service.confirm('request-1', actor)).rejects.toThrow('Slot taken');
-        expect(patients.softDelete).toHaveBeenCalledTimes(2);
+        // The mock transaction client is `prisma` itself.
+        expect(patients.create).toHaveBeenCalledWith(expect.anything(), actor, prisma);
+        expect(appointments.create.mock.calls[0][2].tx).toBe(prisma);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          maxWait: 10_000,
+          timeout: 20_000,
+        });
+        // Nothing to archive afterwards: the rollback removed the record.
+        expect(patients.softDelete).not.toHaveBeenCalled();
       });
-    });
-
-    it('recognizes serialization failures worth retrying', () => {
-      expect(isSerializationFailure({ code: 'P2034' })).toBe(true);
-      expect(isSerializationFailure(new Error('could not serialize access'))).toBe(true);
-      expect(isSerializationFailure(new ConflictException('Slot taken'))).toBe(false);
     });
 
     describe('prices and lengths on the public pages', () => {
@@ -2277,6 +2280,79 @@ describe('BookingService public request security and validation', () => {
       await expect(service.slots(q)).resolves.toMatchObject({ emptyReason: 'TOO_SOON' });
       await expect(service.slots({ ...q, date: '2026-10-05' })).resolves.toMatchObject({
         emptyReason: 'FULL',
+      });
+    });
+
+    describe('emails the patient must answer', () => {
+      const actorStaff = { sub: 'staff-1', email: 's@x', permissions: [] } as any;
+      beforeEach(() => {
+        process.env.CLINIC_PHONE = '028 1234 5678';
+        jest.spyOn(service, 'getForStaff').mockResolvedValue({ id: 'request-1' } as any);
+        appointments.getAvailability.mockResolvedValue({ availableSlots: ['10:00'] });
+        email.send.mockResolvedValue(true);
+      });
+      afterEach(() => delete process.env.CLINIC_PHONE);
+
+      it('issues a new link with a proposal, saying older links stop working', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        await service.propose(
+          'request-1',
+          {
+            dentistId: 'dentist-1',
+            startAt: '2026-10-02T03:00:00.000Z',
+            message: 'Mời đến giờ này',
+          },
+          actorStaff,
+        );
+        const { data } = prisma.bookingRequest.updateMany.mock.calls[0][0];
+        const sent = email.send.mock.calls[0][0];
+        const token = decodeURIComponent(/#token=([^\s"]+)/.exec(sent.text)![1]);
+        expect(data.accessTokenHash).toBe(createHash('sha256').update(token).digest('hex'));
+        expect(data.accessTokenHash).not.toBe(request().accessTokenHash);
+        expect(sent.text).toContain('đường link trong các email trước không còn dùng được');
+        expect(sent.text).toContain('028 1234 5678');
+      });
+
+      it('issues a new link when asking for details, and none without an email', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        await service.requestInformation('request-1', { message: 'Cần ảnh CCCD' }, actorStaff);
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data.accessTokenHash).toEqual(
+          expect.any(String),
+        );
+        expect(email.send.mock.calls[0][0].text).toContain('#token=');
+
+        prisma.bookingRequest.updateMany.mockClear();
+        email.send.mockClear();
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ email: null }));
+        await service.requestInformation('request-1', { message: 'Cần ảnh CCCD' }, actorStaff);
+        // No email: the patient's current link keeps working.
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).not.toHaveProperty(
+          'accessTokenHash',
+        );
+        expect(email.send).not.toHaveBeenCalled();
+      });
+
+      it('sends a plain notice (a decline) without a link token', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        await service.decline('request-1', { message: 'Bác sĩ nghỉ' }, actorStaff);
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).not.toHaveProperty(
+          'accessTokenHash',
+        );
+        expect(email.send.mock.calls[0][0].text).not.toContain('#token=');
+      });
+    });
+
+    it('tells the front desk how many open requests each phone holds', async () => {
+      prisma.bookingRequest.findMany.mockResolvedValueOnce([request()]).mockResolvedValueOnce([]);
+      prisma.bookingRequest.groupBy.mockResolvedValue([
+        { phone: '0901234567', _count: { _all: 3 } },
+      ]);
+      const rows = await service.listForStaff({});
+      expect(rows[0].openFromPhone).toBe(3);
+      expect(prisma.bookingRequest.groupBy.mock.calls[0][0].where).toEqual({
+        phone: { in: ['0901234567'] },
+        status: { in: ['PENDING_REVIEW', 'NEEDS_INFORMATION', 'PROPOSED', 'PATIENT_ACCEPTED'] },
+        appointmentId: null,
       });
     });
   });

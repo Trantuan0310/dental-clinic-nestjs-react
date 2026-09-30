@@ -12,7 +12,7 @@ import { BookingRequestStatus, Gender, Prisma } from '@prisma/client';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentsService, VisitPlan } from '../appointments/appointments.service';
-import { lockBookingPhone } from '../appointments/domain/advisory-lock';
+import { LOCKING_TX_OPTIONS, lockBookingPhone } from '../appointments/domain/advisory-lock';
 import {
   AvailabilityService,
   effectiveDentistId,
@@ -52,6 +52,7 @@ import {
   UpdatePublicBookingDetailsDto,
 } from './dto/booking.dto';
 import { formatVisitTime } from './clinic-time-format';
+import { clinicContactLine } from './clinic-contact';
 
 const ACTIVE: BookingRequestStatus[] = [
   'PENDING_REVIEW',
@@ -120,18 +121,6 @@ export const MAX_DAILY_PER_PHONE = 5;
 const PROPOSAL_OPEN_MESSAGE =
   'Yêu cầu đang có giờ đề xuất nên không thể yêu cầu bổ sung (giờ đã thống nhất sẽ bị mất). ' +
   'Hãy gọi khách để trao đổi, đề xuất giờ khác hoặc từ chối yêu cầu.';
-
-const DISCARD_ATTEMPTS = 5;
-
-/** A Postgres serialization failure / deadlock (Prisma P2034), worth retrying. */
-export function isSerializationFailure(error: unknown): boolean {
-  const e = error as { code?: unknown; message?: unknown } | null;
-  if (e?.code === 'P2034' || e?.code === '40001' || e?.code === '40P01') return true;
-  return (
-    typeof e?.message === 'string' &&
-    /could not serialize|write conflict|deadlock detected/i.test(e.message)
-  );
-}
 
 /** "HH:mm" at the clinic (UTC+7). */
 function clinicHhmm(value: Date): string {
@@ -549,8 +538,9 @@ export class BookingService {
         throw new ConflictException(
           'Số điện thoại này đã có ' +
             open +
-            ' yêu cầu đặt lịch đang chờ xử lý. Vui lòng chờ phòng khám phản hồi, ' +
-            'hủy bớt yêu cầu không cần nữa hoặc gọi phòng khám.',
+            ' yêu cầu đặt lịch đang chờ xử lý nên chưa nhận thêm yêu cầu trực tuyến. ' +
+            'Vui lòng gọi phòng khám để đặt lịch hoặc hủy bớt yêu cầu; ' +
+            'nếu bạn không gửi các yêu cầu này, hãy báo phòng khám.',
         );
       }
       if (today >= MAX_DAILY_PER_PHONE) {
@@ -573,7 +563,7 @@ export class BookingService {
         },
         select: { id: true, referenceCode: true, email: true, fullName: true },
       });
-    });
+    }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'BOOKING_REQUEST_SUBMITTED',
       actorUserId: null,
@@ -892,10 +882,26 @@ export class BookingService {
         .filter(r => !r.appointmentId && effectiveStartAt(r).getTime() > now)
         .slice(0, ISSUE_CHECK_LIMIT),
     );
+    const openByPhone = await this.openCountByPhone([...active, ...rest].map(r => r.phone));
     return [...active, ...rest].map(r => ({
       ...this.toStaff(r),
       slotIssue: issues.get(r.id) ?? null,
+      // At MAX_OPEN_PER_PHONE the public form refuses that phone: the front
+      // desk sees it (possibly someone else's number used to block it).
+      openFromPhone: openByPhone.get(r.phone) ?? 0,
     }));
+  }
+
+  /** Open requests per phone, for the given phones. */
+  private async openCountByPhone(phones: string[]) {
+    const unique = [...new Set(phones)];
+    if (!unique.length) return new Map<string, number>();
+    const rows = await this.prisma.bookingRequest.groupBy({
+      by: ['phone'],
+      where: { phone: { in: unique }, status: { in: ACTIVE }, appointmentId: null },
+      _count: { _all: true },
+    });
+    return new Map(rows.map(r => [r.phone, r._count._all]));
   }
 
   /**
@@ -1108,12 +1114,15 @@ export class BookingService {
     // proposal is how a request stranded by a schedule change is rescued.
     const plan = await this.staffPlan(row, dto.dentistId, clinicDateOnly(startAt));
     await this.assertSlot(dto.dentistId, startAt, plan);
+    // The patient answers from the email: a fresh link (see newAccess).
+    const access = row.email ? this.newAccess() : null;
     await this.updateUnbookedRequest(id, row.status, {
       status: 'PROPOSED',
       proposedDentistId: dto.dentistId,
       proposedStartAt: startAt,
       responseMessage: dto.message.trim(),
       handledBy: actor.sub,
+      ...(access ? { accessTokenHash: access.hash } : {}),
     });
     await this.auditAction('BOOKING_REQUEST_TIME_PROPOSED', id, actor);
     const data = await this.getForStaff(id);
@@ -1131,6 +1140,8 @@ export class BookingService {
             '. Lời nhắn của phòng khám: ' +
             dto.message.trim(),
           row.referenceCode,
+          access?.token,
+          true,
         )
       : false;
     return { data, notificationSent: sent };
@@ -1144,10 +1155,12 @@ export class BookingService {
     // The patient could not answer in time anyway (updateDetails refuses).
     // Proposing a new time is still allowed: that rescues an overdue request.
     if (this.isOverdue(row)) throw new ConflictException(OVERDUE_STAFF_MESSAGE);
+    const access = row.email ? this.newAccess() : null;
     await this.updateUnbookedRequest(id, row.status, {
       status: 'NEEDS_INFORMATION',
       responseMessage: dto.message.trim(),
       handledBy: actor.sub,
+      ...(access ? { accessTokenHash: access.hash } : {}),
     });
     await this.auditAction('BOOKING_REQUEST_INFORMATION_REQUESTED', id, actor);
     const sent = row.email
@@ -1157,6 +1170,8 @@ export class BookingService {
           row.fullName,
           dto.message.trim(),
           row.referenceCode,
+          access?.token,
+          true,
         )
       : false;
     return { data: await this.getForStaff(id), notificationSent: sent };
@@ -1247,38 +1262,30 @@ export class BookingService {
       requestedStartAt: row.requestedStartAt,
       proposedStartAt: row.proposedStartAt,
     };
-    // Two requests from one phone (same name and date of birth) confirmed at
-    // once must not both create a patient record: matching and creating are
-    // serialized per phone. The lock is held by this transaction while the
-    // work runs on its own connections (patients.create and
-    // appointments.create have their own transactions).
-    const { patient, appointment } = await this.prisma.$transaction(
-      async tx => {
-        await lockBookingPhone(tx, this.normalize(row.phone));
-        const patient = await this.resolvePatient(row, choice, actor);
-        // The visit length comes from the service (the dentist's own duration
-        // first); create() re-checks the slot, buffers and double-booking.
-        try {
-          const appointment = await this.appointments.create(
-            {
-              patientId: patient.id,
-              dentistId,
-              serviceIds: [row.serviceId],
-              startAt: startAt.toISOString(),
-              reason: row.reason ?? undefined,
-              source: 'ONLINE',
-            },
-            actor,
-            { id: row.id, expectedStatuses: [row.status], plan, match: unchanged },
-          );
-          return { patient, appointment };
-        } catch (error) {
-          if (patient.created) await this.discardNewPatient(patient.id, row.referenceCode, actor);
-          throw error;
-        }
-      },
-      { maxWait: 10_000, timeout: 30_000 },
-    );
+    // One transaction, one connection: the booking phone is locked first, so
+    // two requests from one phone (same name and date of birth) confirmed at
+    // once cannot both create a patient record; the record is created and
+    // the visit booked (dentist, then patient lock) in it, so a visit that
+    // cannot be booked leaves no record behind.
+    const { patient, appointment } = await this.prisma.$transaction(async tx => {
+      await lockBookingPhone(tx, this.normalize(row.phone));
+      const patient = await this.resolvePatient(row, choice, actor, tx);
+      // The visit length comes from the service (the dentist's own duration
+      // first); create() re-checks the slot, buffers and double-booking.
+      const appointment = await this.appointments.create(
+        {
+          patientId: patient.id,
+          dentistId,
+          serviceIds: [row.serviceId],
+          startAt: startAt.toISOString(),
+          reason: row.reason ?? undefined,
+          source: 'ONLINE',
+        },
+        actor,
+        { id: row.id, expectedStatuses: [row.status], plan, match: unchanged, tx },
+      );
+      return { patient, appointment };
+    }, LOCKING_TX_OPTIONS);
     const resolvedPatientId = patient.id;
     const confirmed = await this.prisma.bookingRequest.findUniqueOrThrow({
       where: { id },
@@ -1318,53 +1325,24 @@ export class BookingService {
   }
 
   /**
-   * The visit could not be booked, so the patient record created for it a
-   * moment ago would be left with nothing. Archive it (soft delete, audited);
-   * softDelete itself refuses if the record already has a visit, e.g. one a
-   * colleague booked concurrently. Never throws over the original error.
-   */
-  private async discardNewPatient(id: string, referenceCode: string, actor: JwtPayload) {
-    // softDelete runs Serializable: under concurrent confirms it can be
-    // aborted as a serialization failure, which would leave the record
-    // behind. Retried a few times before giving up.
-    for (let attempt = 1; ; attempt++) {
-      try {
-        await this.patients.softDelete(
-          id,
-          { reason: 'Tự động lưu trữ: không tạo được lịch hẹn từ yêu cầu ' + referenceCode },
-          actor,
-        );
-        return;
-      } catch (error) {
-        if (attempt < DISCARD_ATTEMPTS && isSerializationFailure(error)) {
-          await new Promise(resolve => setTimeout(resolve, 25 * attempt + Math.random() * 50));
-          continue;
-        }
-        this.logger.warn(
-          `Could not archive patient ${id} after a failed confirm: ${String(error)}`,
-        );
-        return;
-      }
-    }
-  }
-
-  /**
    * The patient record for the visit: the one the front desk picked, a new
    * one when they asked for it, or else the single record with the same
    * phone (own or guardian), name and date of birth. Any other record on
    * those phones means a person must choose (a child on a parent's phone).
+   * Runs in confirm()'s transaction (`tx`), under the booking-phone lock.
    */
   private async resolvePatient(
     row: any,
     choice: { patientId?: string; createNewPatient?: boolean },
     actor: JwtPayload,
+    tx: Prisma.TransactionClient,
   ): Promise<{ id: string; created: boolean }> {
     const phones = this.requestPhones(row);
     if (choice.patientId && choice.createNewPatient) {
       throw new BadRequestException('Chọn một hồ sơ có sẵn hoặc tạo hồ sơ mới, không chọn cả hai');
     }
     if (choice.patientId) {
-      const found = await this.prisma.patient.findFirst({
+      const found = await tx.patient.findFirst({
         where: { id: choice.patientId, deletedAt: null },
         select: { id: true, primaryPhone: true, contactPersonPhone: true },
       });
@@ -1379,8 +1357,8 @@ export class BookingService {
       return { id: found.id, created: false };
     }
     if (!choice.createNewPatient) {
-      const matches = await this.prisma.patient.findMany({
-        where: await this.patientsByPhone(phones),
+      const matches = await tx.patient.findMany({
+        where: await this.patientsByPhone(phones, tx),
         select: { id: true, fullName: true, dob: true, primaryPhone: true },
         take: 20,
       });
@@ -1412,7 +1390,7 @@ export class BookingService {
       contactPersonName: row.contactPersonName,
       contactPersonPhone: row.contactPersonPhone,
     };
-    return { id: (await this.patients.create(dto, actor)).id, created: true };
+    return { id: (await this.patients.create(dto, actor, tx)).id, created: true };
   }
 
   /** The request's phones (own and guardian), normalized to 0xxx. */
@@ -1429,9 +1407,12 @@ export class BookingService {
    * 0xxx). Patient phones are stored as typed ("090 123 4567", "+84…"), so the
    * stored value is normalized in SQL the same way `normalize` does.
    */
-  private async patientsByPhone(phones: string[]): Promise<Prisma.PatientWhereInput> {
+  private async patientsByPhone(
+    phones: string[],
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<Prisma.PatientWhereInput> {
     if (phones.length === 0) return { id: { in: [] } };
-    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+    const rows = await db.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM patients
       WHERE deleted_at IS NULL
         AND (
@@ -1779,6 +1760,15 @@ export class BookingService {
     const clean = value.replace(/[\s()-]/g, '');
     return clean.startsWith('+84') ? '0' + clean.slice(3) : clean;
   }
+  /**
+   * A new link token (256 bits; only its hash is stored). Issued with an
+   * email the patient must answer (a proposal, a request for details), so a
+   * lost or forwarded older link stops working.
+   */
+  private newAccess() {
+    const token = randomBytes(32).toString('base64url');
+    return { token, hash: this.hash(token) };
+  }
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -1790,8 +1780,15 @@ export class BookingService {
     message: string,
     reference: string,
     token?: string,
+    /** The token was just replaced: earlier links no longer work. */
+    rotated = false,
   ) {
     const base = process.env.PUBLIC_APP_URL || 'https://gensmile.online';
+    const linkNote = token
+      ? 'Dùng đường link này để xem, trả lời hoặc hủy yêu cầu' +
+        (rotated ? '; đường link trong các email trước không còn dùng được.' : '.')
+      : '';
+    const contact = clinicContactLine();
     const link =
       base +
       '/booking/status?ref=' +
@@ -1807,9 +1804,13 @@ export class BookingService {
       '</strong></p><p><a href="' +
       this.escape(link) +
       '">Xem tình trạng lịch hẹn</a></p>' +
-      '<p>Bạn cũng có thể tra cứu bất cứ lúc nào tại ' +
+      (linkNote ? '<p>' + this.escape(linkNote) + '</p>' : '') +
+      '<p>Bạn cũng có thể tra cứu tình trạng bất cứ lúc nào tại ' +
       this.escape(base) +
-      '/booking/status bằng số điện thoại đã dùng khi đặt.</p>';
+      '/booking/status bằng số điện thoại đã dùng khi đặt.</p>' +
+      '<p>' +
+      this.escape(contact) +
+      '</p>';
     return this.email.send({
       to,
       subject,
@@ -1820,9 +1821,11 @@ export class BookingService {
         reference +
         '\n' +
         link +
+        (linkNote ? '\n' + linkNote : '') +
         '\nTra cứu bằng số điện thoại đã dùng khi đặt: ' +
         base +
-        '/booking/status',
+        '/booking/status\n' +
+        contact,
     });
   }
   /**

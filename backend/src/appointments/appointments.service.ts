@@ -211,7 +211,9 @@ export class AppointmentsService {
    * request is linked in the same transaction, so two staff confirming the
    * same request can't both create a visit. Its `plan` (BookingService)
    * may keep a service withdrawn after the patient sent the request;
-   * `match` narrows the attach to the request as the caller read it.
+   * `match` narrows the attach to the request as the caller read it. With
+   * `tx` the visit is written in the caller's transaction (which already
+   * holds its booking-phone lock; dentist then patient locks follow here).
    */
   async create(
     dto: CreateAppointmentDto,
@@ -221,6 +223,7 @@ export class AppointmentsService {
       expectedStatuses: BookingRequestStatus[];
       plan?: VisitPlan;
       match?: Prisma.BookingRequestWhereInput;
+      tx?: Prisma.TransactionClient;
     },
   ) {
     const startAt = new Date(dto.startAt);
@@ -230,7 +233,8 @@ export class AppointmentsService {
     await this.assertDentistMayBook(dto.dentistId, dto.patientId, actor);
 
     const dentist = await this.validateDentist(dto.dentistId);
-    await this.validateActivePatient(dto.patientId);
+    // The caller's transaction may have just created the patient.
+    await this.validateActivePatient(dto.patientId, fromBookingRequest?.tx);
     const plan =
       fromBookingRequest?.plan ??
       (await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt)));
@@ -260,7 +264,7 @@ export class AppointmentsService {
     // advisory lock keyed by dentistId. This prevents two concurrent
     // bookings on the same dentist from both passing the gap check
     // (BR-APPT-002 / 003 / 004 — see Phase 9.2 R2-7 lesson).
-    return this.prisma.$transaction(async tx => {
+    const write = async (tx: Prisma.TransactionClient) => {
       await this.lockDentist(tx, dto.dentistId);
       await this.lockPatient(tx, dto.patientId);
       await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx, plan);
@@ -327,7 +331,10 @@ export class AppointmentsService {
       }
 
       return created;
-    }, LOCKING_TX_OPTIONS);
+    };
+    return fromBookingRequest?.tx
+      ? write(fromBookingRequest.tx)
+      : this.prisma.$transaction(write, LOCKING_TX_OPTIONS);
   }
 
   // See domain/advisory-lock.ts.
@@ -1178,6 +1185,8 @@ export class AppointmentsService {
           status: AppointmentStatus.SCHEDULED,
           confirmedAt: null,
           confirmedBy: null,
+          // The day-before reminder was for the old time (booking notices).
+          reminderSentAt: null,
           updatedBy: actor.sub,
         },
       });
@@ -3509,8 +3518,11 @@ export class AppointmentsService {
     return u;
   }
 
-  private async validateActivePatient(patientId: string) {
-    const p = await this.prisma.patient.findUnique({ where: { id: patientId } });
+  private async validateActivePatient(
+    patientId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const p = await db.patient.findUnique({ where: { id: patientId } });
     if (!p || p.deletedAt) {
       throw new AppointmentNotFoundException(
         patientId,

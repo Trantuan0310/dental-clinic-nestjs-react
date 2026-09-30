@@ -1,4 +1,4 @@
-import { AppointmentNoticesService } from './appointment-notices.service';
+import { AppointmentNoticesService, isQuietHour } from './appointment-notices.service';
 import { formatVisitTime } from './clinic-time-format';
 
 describe('formatVisitTime', () => {
@@ -76,7 +76,7 @@ describe('AppointmentNoticesService', () => {
       expect(email.send).not.toHaveBeenCalled();
     });
 
-    it('emails the old and new time of a moved visit, and re-arms its reminder', async () => {
+    it('emails the old and new time of a moved visit', async () => {
       prisma.appointment.findUnique.mockResolvedValue(visit());
       await service.onRescheduled({
         appointmentId: 'appt-1',
@@ -85,8 +85,8 @@ describe('AppointmentNoticesService', () => {
         oldDentistId: 'd1',
         newDentistId: 'd1',
       });
-      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
-      expect(prisma.$executeRaw.mock.calls[0][0].join('?')).toContain('reminder_sent_at = NULL');
+      // The reminder flag is cleared by the move's own transaction, not here.
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
       const sent = email.send.mock.calls[0][0];
       expect(sent.subject).toBe('Lịch hẹn đã được dời');
       expect(sent.text).toContain('từ 16:00 thứ Năm 01/10/2026 sang 10:00 thứ Sáu 02/10/2026');
@@ -105,6 +105,46 @@ describe('AppointmentNoticesService', () => {
       const sent = email.send.mock.calls[0][0];
       expect(sent.subject).toBe('Lịch hẹn đổi bác sĩ');
       expect(sent.text).toContain('được chuyển sang bác sĩ BS. Lê Minh');
+    });
+  });
+
+  describe('the clinic contact and the on/off switch', () => {
+    afterEach(() => {
+      delete process.env.CLINIC_PHONE;
+      delete process.env.CLINIC_NAME;
+      delete process.env.APPOINTMENT_EMAIL_NOTICES;
+    });
+
+    it("ends every visit email with the clinic's hotline", async () => {
+      process.env.CLINIC_NAME = 'Nha khoa GENSMILE';
+      process.env.CLINIC_PHONE = '028 1234 5678';
+      prisma.appointment.findMany.mockResolvedValue([visit()]);
+      await service.sendDueReminders();
+      expect(email.send.mock.calls[0][0].text).toContain(
+        'vui lòng gọi Nha khoa GENSMILE: 028 1234 5678',
+      );
+    });
+
+    it('sends no visit email when APPOINTMENT_EMAIL_NOTICES=false', async () => {
+      process.env.APPOINTMENT_EMAIL_NOTICES = 'false';
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      prisma.appointment.findMany.mockResolvedValue([visit()]);
+      await service.onCancelled({
+        appointmentId: 'appt-1',
+        patientId: 'p1',
+        dentistId: 'd1',
+        cancelledAt: NOW,
+        cancelledBy: 'staff-1',
+      });
+      await service.onRescheduled({
+        appointmentId: 'appt-1',
+        oldStartAt: NOW,
+        newStartAt: visitAt,
+        oldDentistId: 'd1',
+        newDentistId: 'd1',
+      });
+      await expect(service.sendDueReminders()).resolves.toEqual({ due: 0, sent: 0 });
+      expect(email.send).not.toHaveBeenCalled();
     });
   });
 
@@ -128,6 +168,17 @@ describe('AppointmentNoticesService', () => {
       expect(prisma.$executeRaw.mock.calls[0][0].join('?')).toContain('reminder_sent_at IS NULL');
       expect(email.send).toHaveBeenCalledTimes(1);
       expect(email.send.mock.calls[0][0].subject).toBe('Nhắc lịch khám 10:00 thứ Sáu 02/10/2026');
+    });
+
+    it('sends nothing between 21:00 and 07:00 at the clinic', async () => {
+      prisma.appointment.findMany.mockResolvedValue([visit()]);
+      // 22:30 and 06:59 in Vietnam.
+      for (const at of ['2026-10-01T15:30:00Z', '2026-09-30T23:59:00Z']) {
+        await expect(service.sendDueReminders(new Date(at))).resolves.toEqual({ due: 0, sent: 0 });
+      }
+      expect(isQuietHour(new Date('2026-10-01T00:00:00Z'))).toBe(false); // 07:00
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      expect(email.send).not.toHaveBeenCalled();
     });
 
     it('does not retry a reminder the mail server refused', async () => {
