@@ -416,7 +416,8 @@ export default function PublicBookingPage() {
                   2. Thông tin người đến khám
                 </h2>
                 <p className="-mt-2 mb-3 text-xs text-gray-500">
-                  Điền họ tên và ngày sinh của chính người sẽ khám (không phải người đặt hộ).
+                  Điền họ tên và ngày sinh của chính người sẽ khám (không phải người đặt hộ). Số
+                  điện thoại là của người khám, hoặc của người liên hệ nếu người khám không có.
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-medium text-gray-700 sm:col-span-2">
@@ -470,9 +471,6 @@ export default function PublicBookingPage() {
                       placeholder="0901 234 567"
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
                     />
-                    <span className="mt-1 block text-xs font-normal text-gray-500">
-                      Số của người khám, hoặc của người liên hệ nếu người khám không có.
-                    </span>
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Email (để nhận thông báo)

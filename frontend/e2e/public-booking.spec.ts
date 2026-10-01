@@ -49,7 +49,7 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await pub.getByLabel('Họ và tên').fill(name);
   await pub.getByLabel('Ngày sinh').fill('1990-05-01');
   await pub.getByLabel('Số điện thoại', { exact: true }).fill(phone);
-  await pub.getByRole('checkbox').check();
+  await pub.getByRole('checkbox', { name: /Tôi đồng ý/ }).check();
   await pub.getByRole('button', { name: 'Gửi yêu cầu đặt lịch' }).click();
 
   await expect(pub).toHaveURL(/\/booking\/status\?new=1&ref=GS-/);
