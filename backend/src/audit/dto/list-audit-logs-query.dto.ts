@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsDateString, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsUUID, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ListAuditLogsQueryDto {
@@ -32,8 +33,12 @@ export class ListAuditLogsQueryDto {
   @IsUUID()
   targetId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ minimum: 1, maximum: 500 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
   limit?: number;
 
   @ApiPropertyOptional()
