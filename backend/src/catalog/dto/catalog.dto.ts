@@ -255,6 +255,11 @@ export class EndAssignmentDto {
   @IsOptional()
   @IsDateString()
   effectiveTo?: string;
+
+  @ApiPropertyOptional({ description: 'End it although visits are booked after that day' })
+  @IsOptional()
+  @IsBoolean()
+  confirm?: boolean;
 }
 
 export class OnDateQueryDto {
