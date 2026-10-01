@@ -744,8 +744,9 @@ export class BookingService {
   /**
    * Requests made with this phone (the patient's or the guardian's) in the
    * last 180 days, newest first. The phone alone only shows booking status
-   * (service, time, dentist): no reference code, no messages, never the
-   * patient's details, and it never allows a change (that needs the token).
+   * (time and status, with masked initials): no service or dentist, no
+   * reference code, no messages, and it never allows a change (that needs
+   * the token).
    */
   async lookupByPhone(input: string | undefined) {
     const phone = this.normalize(input ?? '');

@@ -1,7 +1,7 @@
 import { UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Gender } from '@prisma/client';
-import { BookingService, EXPIRED_MESSAGE } from './booking.service';
+import { BookingService, EXPIRED_MESSAGE, maskName, normalizePhone } from './booking.service';
 import { AvailabilityService } from '../appointments/availability.service';
 
 const plan = {
@@ -2485,6 +2485,414 @@ describe('BookingService public request security and validation', () => {
         status: { in: ['PENDING_REVIEW', 'NEEDS_INFORMATION', 'PROPOSED', 'PATIENT_ACCEPTED'] },
         appointmentId: null,
       });
+    });
+  });
+
+  describe('round 4: online booking exceptions', () => {
+    // 2026-10-01 08:00 at the clinic (UTC+7).
+    const NOW = new Date('2026-10-01T01:00:00Z');
+    const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000);
+    const actor = { sub: 'staff-1', email: 's@x', permissions: [] } as any;
+    const request = (over: Record<string, unknown> = {}) => ({
+      id: 'request-1',
+      referenceCode: 'GS-1A2B3C4D5E',
+      status: 'PENDING_REVIEW',
+      appointmentId: null,
+      serviceId: 'service-1',
+      preferredDentistId: 'dentist-1',
+      proposedDentistId: null,
+      requestedStartAt: minutes(24 * 60),
+      proposedStartAt: null,
+      reason: null,
+      phone: '0911222333',
+      contactPersonName: null,
+      contactPersonPhone: null,
+      fullName: 'Trần Văn Cũ',
+      dob: new Date('1960-02-03'),
+      gender: 'MALE',
+      email: 'new@x.vn',
+      accessTokenHash: createHash('sha256').update('right-token').digest('hex'),
+      accessRotatedAt: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+      service: { name: 'Khám', defaultDurationMin: 30 },
+      preferredDentist: { fullName: 'BS A' },
+      proposedDentist: null,
+      appointment: null,
+      ...over,
+    });
+    const oldRecord = {
+      id: 'old',
+      code: 'BN001',
+      fullName: 'trần văn cũ',
+      dob: new Date('1960-02-03'),
+      email: null,
+      primaryPhone: '0999000111',
+      contactPersonName: null,
+      contactPersonPhone: null,
+    };
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate', 'setTimeout'] });
+      prisma.bookingRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      prisma.dentistService.findFirst.mockResolvedValue({ id: 'assignment-1' });
+      prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({
+        email: null,
+        fullName: 'Trần Văn Cũ',
+        referenceCode: 'GS-1A2B3C4D5E',
+      });
+      appointments.create.mockResolvedValue({ id: 'appt-1' });
+      jest.spyOn(service, 'getForStaff').mockResolvedValue({ id: 'request-1' } as any);
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+      delete process.env.BOOKING_PATIENT_CANCEL_MIN_HOURS;
+    });
+
+    describe('a returning patient on a new phone (A4-02, A4-03)', () => {
+      it('does not create a second record when one has the same name and date of birth', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        // No record on the request's phone; the namesake is found by date of birth.
+        prisma.patient.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([oldRecord]);
+        await expect(service.confirm('request-1', actor)).rejects.toThrow(
+          'cùng họ tên và ngày sinh nhưng khác số điện thoại',
+        );
+        expect(patients.create).not.toHaveBeenCalled();
+        expect(appointments.create).not.toHaveBeenCalled();
+      });
+
+      it('suggests the namesake record, flagged as on another phone', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany
+          .mockResolvedValueOnce([]) // by phone
+          .mockResolvedValueOnce([oldRecord]) // same name and date of birth
+          .mockResolvedValueOnce([]); // phone history
+        const list = await service.patientMatches('request-1');
+        expect(list).toEqual([
+          expect.objectContaining({ id: 'old', sameNameAndDob: true, differentPhone: true }),
+        ]);
+      });
+
+      it('books the picked record on another phone only once the identity was checked', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findFirst.mockResolvedValue({
+          id: 'old',
+          primaryPhone: '0999000111',
+          contactPersonPhone: null,
+          email: null,
+        });
+        await expect(service.confirm('request-1', actor, { patientId: 'old' })).rejects.toThrow(
+          'Đã xác minh danh tính',
+        );
+        await expect(
+          service.confirm('request-1', actor, { patientId: 'old', confirmIdentity: true }),
+        ).rejects.toThrow('Ghi cách đã xác minh');
+
+        await service.confirm('request-1', actor, {
+          patientId: 'old',
+          confirmIdentity: true,
+          identityNote: 'Khách đọc đúng SĐT cũ và ngày sinh',
+          updatePatientPhone: true,
+        });
+        expect(appointments.create.mock.calls[0][0].patientId).toBe('old');
+        // The new phone (with history) and the email typed online are saved.
+        expect(prisma.patient.updateMany).toHaveBeenCalledWith({
+          where: { id: 'old' },
+          data: { primaryPhone: '0911222333', email: 'new@x.vn', updatedBy: 'staff-1' },
+        });
+        expect(prisma.patientPhoneHistory.create).toHaveBeenCalledWith({
+          data: {
+            patientId: 'old',
+            oldPhone: '0999000111',
+            newPhone: '0911222333',
+            changedBy: 'staff-1',
+          },
+        });
+        const confirmed = audit.log.mock.calls.find(
+          (c: any[]) => c[0].action === 'BOOKING_REQUEST_CONFIRMED',
+        )[0];
+        expect(confirmed.metadata).toMatchObject({
+          identityConfirmed: true,
+          identityNote: 'Khách đọc đúng SĐT cũ và ngày sinh',
+          patientPhoneUpdated: true,
+          patientEmailUpdated: true,
+        });
+      });
+
+      it("keeps a record's own email unless asked to replace it", async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ phone: '0999000111' }));
+        prisma.patient.findFirst.mockResolvedValue({
+          id: 'old',
+          primaryPhone: '0999000111',
+          contactPersonPhone: null,
+          email: 'old@x.vn',
+        });
+        await service.confirm('request-1', actor, { patientId: 'old' });
+        expect(prisma.patient.updateMany).not.toHaveBeenCalled();
+        await service.confirm('request-1', actor, { patientId: 'old', updatePatientEmail: true });
+        expect(prisma.patient.updateMany.mock.calls[0][0].data).toEqual({
+          email: 'new@x.vn',
+          updatedBy: 'staff-1',
+        });
+      });
+    });
+
+    describe('confirming', () => {
+      it('answers a second confirm of the same request as already done (A5-20)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(
+          request({ status: 'CONFIRMED', appointmentId: 'appt-1' }),
+        );
+        await expect(service.confirm('request-1', actor)).resolves.toMatchObject({
+          alreadyConfirmed: true,
+        });
+        expect(appointments.create).not.toHaveBeenCalled();
+      });
+
+      it('stops inside the lock when another click confirmed it meanwhile', async () => {
+        prisma.bookingRequest.findUnique
+          .mockResolvedValueOnce(request())
+          .mockResolvedValueOnce({ appointmentId: 'appt-0' });
+        await expect(service.confirm('request-1', actor)).resolves.toMatchObject({
+          alreadyConfirmed: true,
+        });
+        expect(appointments.create).not.toHaveBeenCalled();
+        expect(patients.create).not.toHaveBeenCalled();
+      });
+
+      it('books another time the patient agreed to by phone in one step (A4-22)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ status: 'PROPOSED' }));
+        prisma.patient.findMany.mockResolvedValue([]);
+        patients.create.mockResolvedValue({ id: 'p-new' });
+        const startAt = minutes(26 * 60).toISOString();
+        await service.confirm('request-1', actor, { startAt, dentistId: 'dentist-2' });
+        expect(appointments.create.mock.calls[0][0]).toMatchObject({
+          dentistId: 'dentist-2',
+          startAt,
+        });
+        expect(appointments.create.mock.calls[0][2].expectedStatuses).toEqual(['PROPOSED']);
+      });
+
+      it('says what to do when the dentist left since the request (A5-13)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        const { NotFoundException } = jest.requireActual('@nestjs/common');
+        appointments.validateDentist.mockRejectedValue(
+          new NotFoundException('Bác sĩ không tồn tại hoặc không còn hoạt động'),
+        );
+        await expect(service.confirm('request-1', actor)).rejects.toThrow(
+          expect.objectContaining({ status: 409, message: expect.stringContaining('bác sĩ khác') }),
+        );
+      });
+
+      it('sends a fresh link with the confirmation, for cancelling (A4-13)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([]);
+        patients.create.mockResolvedValue({ id: 'p-new' });
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({
+          email: 'new@x.vn',
+          fullName: 'Trần Văn Cũ',
+          referenceCode: 'GS-1A2B3C4D5E',
+          service: { name: 'Khám' },
+          appointment: { startAt: minutes(24 * 60), dentist: { fullName: 'BS A' } },
+        });
+        email.send.mockResolvedValue(true);
+        await service.confirm('request-1', actor);
+        expect(email.send.mock.calls[0][0].text).toContain('#token=');
+        expect(email.send.mock.calls[0][0].text).toContain('hủy lịch bằng đường link');
+        expect(prisma.bookingRequest.update).toHaveBeenCalledWith({
+          where: { id: 'request-1' },
+          data: { accessTokenHash: expect.any(String), accessRotatedAt: NOW },
+        });
+      });
+    });
+
+    describe('the patient on the status page', () => {
+      it('tells an old link it was replaced, not "wrong code" (A4-27)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(
+          request({ accessRotatedAt: new Date('2026-10-01T02:00:00Z') }),
+        );
+        await expect(
+          service.publicStatus('GS-1A2B3C4D5E', { token: 'old-token' }),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ code: 'ACCESS_ROTATED' }),
+        });
+      });
+
+      it('gives the real reason a proposed time no longer works (A5-10)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(
+          request({ status: 'PROPOSED', proposedStartAt: minutes(48 * 60) }),
+        );
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(
+          request({ status: 'PROPOSED', proposedStartAt: minutes(48 * 60) }),
+        );
+        availability.checkSlot.mockResolvedValue({ kind: 'CLOSED', message: 'Mất điện' });
+        await expect(
+          service.acceptProposal('GS-1A2B3C4D5E', { token: 'right-token' }),
+        ).rejects.toThrow('phòng khám nghỉ vào thời gian này');
+        expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('shows a closed day on an open request, in the patient words', async () => {
+        const row = request({ status: 'PATIENT_ACCEPTED', proposedStartAt: minutes(48 * 60) });
+        prisma.bookingRequest.findUnique.mockResolvedValue(row);
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(row);
+        availability.loadDay.mockResolvedValue({
+          ...openDay,
+          closedAllDay: true,
+          clinicClosed: true,
+          closedReason: 'Mất điện',
+        });
+        const status = await service.publicStatus('GS-1A2B3C4D5E', { token: 'right-token' });
+        expect(status.slotIssue).toEqual({
+          kind: 'CLOSED',
+          message: expect.stringContaining('phòng khám nghỉ vào thời gian này'),
+        });
+      });
+
+      const booked = (startInMin: number) =>
+        request({
+          status: 'CONFIRMED',
+          appointmentId: 'appt-1',
+          appointment: {
+            id: 'appt-1',
+            status: 'CONFIRMED',
+            startAt: minutes(startInMin),
+            endAt: minutes(startInMin + 30),
+            dentistId: 'dentist-1',
+            deletedAt: null,
+            rescheduleCount: 0,
+            dentist: { fullName: 'BS A' },
+          },
+        });
+
+      it('lets the patient cancel a confirmed visit from the link, until the cut-off', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(booked(24 * 60));
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(booked(24 * 60));
+        await service.cancelVisit('GS-1A2B3C4D5E', { token: 'right-token' }, { message: 'Bận' });
+        expect(prisma.appointment.updateMany).toHaveBeenCalledWith({
+          where: {
+            id: 'appt-1',
+            deletedAt: null,
+            status: 'CONFIRMED',
+            startAt: minutes(24 * 60),
+          },
+          data: expect.objectContaining({
+            status: 'CANCELLED',
+            cancelledReason: 'Khách hủy qua đường link đặt lịch: Bận',
+          }),
+        });
+
+        prisma.appointment.updateMany.mockClear();
+        prisma.bookingRequest.findUnique.mockResolvedValue(booked(3 * 60));
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(booked(3 * 60));
+        await expect(
+          service.cancelVisit('GS-1A2B3C4D5E', { token: 'right-token' }),
+        ).rejects.toThrow('dưới 4 giờ');
+        await expect(service.cancelVisit('GS-1A2B3C4D5E', { phone: '0911222333' })).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('front desk actions', () => {
+      it('closes a spam request without emailing the address it gave (A4-08)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        const res = await service.decline('request-1', { message: 'Rác', spam: true }, actor);
+        expect(res.notificationSent).toBeNull();
+        expect(email.send).not.toHaveBeenCalled();
+      });
+
+      it('corrects a mistyped email with the reason, and sends the link there (A4-06)', async () => {
+        prisma.bookingRequest.findUnique
+          .mockResolvedValueOnce(request({ email: 'me@gmail.con' }))
+          .mockResolvedValueOnce(request({ email: 'me@gmail.com' }));
+        email.send.mockResolvedValue(true);
+        await service.updateContact(
+          'request-1',
+          { email: 'me@gmail.com', reason: 'Khách gọi báo gõ sai' },
+          actor,
+        );
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).toEqual({
+          email: 'me@gmail.com',
+        });
+        const audited = audit.log.mock.calls[0][0];
+        expect(audited.action).toBe('BOOKING_REQUEST_CONTACT_UPDATED');
+        expect(audited.metadata).toEqual({
+          reason: 'Khách gọi báo gõ sai',
+          changes: { email: { from: 'me@gmail.con', to: 'me@gmail.com' } },
+        });
+        expect(email.send.mock.calls[0][0].to).toBe('me@gmail.com');
+        expect(email.send.mock.calls[0][0].text).toContain('#token=');
+      });
+
+      it('links a walk-in of today to the request of a patient at the desk (A4-10)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.appointment.findFirst.mockResolvedValue({
+          id: 'walk-in',
+          patientId: 'p1',
+          startAt: minutes(5),
+          status: 'CHECKED_IN',
+          bookingRequest: null,
+        });
+        await service.arrived('request-1', { appointmentId: 'walk-in' }, actor);
+        expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).toEqual({
+          status: 'CONFIRMED',
+          appointmentId: 'walk-in',
+          patientId: 'p1',
+          handledBy: 'staff-1',
+        });
+        expect(email.send).not.toHaveBeenCalled();
+      });
+
+      it('checks the proposed time before recording a phone agreement (A4-12)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(
+          request({ status: 'PROPOSED', proposedStartAt: minutes(48 * 60) }),
+        );
+        availability.checkSlot.mockResolvedValue({ kind: 'SLOT_CONFLICT', message: 'x' });
+        await expect(service.markProposalAcceptedByPhone('request-1', {}, actor)).rejects.toThrow(
+          'Hãy đề xuất giờ khác',
+        );
+        expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('finds a request by its code, phone or name, any status (A4-10)', async () => {
+        prisma.bookingRequest.findMany.mockResolvedValue([]);
+        await service.listForStaff({ q: 'gs 1a2b' } as any);
+        expect(prisma.bookingRequest.findMany.mock.calls[0][0].where.OR).toEqual(
+          expect.arrayContaining([{ referenceCode: { contains: '1A2B' } }]),
+        );
+        await service.listForStaff({ q: '0912.345.678' } as any);
+        expect(prisma.bookingRequest.findMany.mock.calls[1][0].where.OR).toEqual(
+          expect.arrayContaining([{ phone: { contains: '0912345678' } }]),
+        );
+      });
+    });
+
+    it('does not email "expired" to a requester who has a visit that day anyway', async () => {
+      const row = {
+        id: 'request-1',
+        referenceCode: 'GS-1',
+        email: 'me@x.vn',
+        fullName: 'An',
+        phone: '0911222333',
+        contactPersonPhone: null,
+        status: 'PENDING_REVIEW',
+        requestedStartAt: minutes(-10),
+        proposedStartAt: null,
+      };
+      prisma.bookingRequest.findMany.mockResolvedValue([row]);
+      prisma.$queryRaw.mockResolvedValue([{ id: 'p1' }]);
+      prisma.appointment.count.mockResolvedValue(1);
+      await service.expireOverdue(NOW);
+      expect(email.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('phone formats (A4-19)', () => {
+    it('reads dots, 84 and 0084 prefixes as the same number', () => {
+      for (const typed of ['0912.345.678', '84912345678', '0084 912 345 678', '+84-912-345-678'])
+        expect(normalizePhone(typed)).toBe('0912345678');
+      expect(maskName('Nguyễn Văn An')).toBe('N*** V** A*');
     });
   });
 });
