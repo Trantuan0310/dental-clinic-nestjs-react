@@ -121,26 +121,3 @@ export class ListInvoicesQueryDto {
   @IsUUID()
   cursor?: string;
 }
-
-export class RevenueReportQueryDto {
-  @ApiProperty()
-  @IsDateString()
-  from!: string;
-
-  @ApiProperty()
-  @IsDateString()
-  to!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  dentistId?: string;
-}
-
-export class OutstandingReportQueryDto {
-  @ApiProperty()
-  @IsNumber()
-  @Min(1)
-  @IsNumber()
-  daysOutstanding!: number;
-}

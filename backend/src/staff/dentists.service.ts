@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { isRowScoped } from '../common/row-scope';
 import {
   ChangePracticeStatusDto,
   DENTIST_SELF_EDITABLE_FIELDS,
@@ -180,8 +181,11 @@ export class DentistsService {
    * plus a readiness checklist: what still keeps this dentist out of the
    * booking screens or the public site.
    */
-  async overview(userId: string) {
+  async overview(userId: string, actor?: JwtPayload) {
     const row = await this.findOrThrow(userId);
+    // A6-21: the upcoming list names patients — only the dentist themself or
+    // a caller who sees every calendar (BR-APPT-024) gets it.
+    const showUpcoming = !actor || actor.sub === userId || !isRowScoped(actor, 'appointment');
     const profile = this.format(row);
     const now = new Date();
     const today = clinicToday(now);
@@ -203,22 +207,25 @@ export class DentistsService {
           slotDurationMin: true,
         },
       }),
-      this.prisma.appointment.findMany({
-        where: {
-          dentistId: userId,
-          startAt: { gte: now },
-          status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'] },
-        },
-        orderBy: { startAt: 'asc' },
-        take: 10,
-        select: {
-          id: true,
-          startAt: true,
-          endAt: true,
-          status: true,
-          patient: { select: { id: true, fullName: true, code: true } },
-        },
-      }),
+      showUpcoming
+        ? this.prisma.appointment.findMany({
+            where: {
+              dentistId: userId,
+              deletedAt: null,
+              startAt: { gte: now },
+              status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'] },
+            },
+            orderBy: { startAt: 'asc' },
+            take: 10,
+            select: {
+              id: true,
+              startAt: true,
+              endAt: true,
+              status: true,
+              patient: { select: { id: true, fullName: true, code: true } },
+            },
+          })
+        : Promise.resolve(null),
       this.prisma.dentistService.count({
         where: {
           dentistId: userId,
@@ -264,6 +271,7 @@ export class DentistsService {
         validFrom: s.validFrom.toISOString().slice(0, 10),
         validTo: s.validTo ? s.validTo.toISOString().slice(0, 10) : null,
       })),
+      // null = hidden from this viewer (not "none booked").
       upcomingAppointments: upcoming,
     };
   }
