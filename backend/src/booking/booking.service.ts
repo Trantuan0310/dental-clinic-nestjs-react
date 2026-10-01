@@ -1477,6 +1477,8 @@ export class BookingService {
             status: true,
             patient: { select: { code: true, fullName: true } },
             dentist: { select: { fullName: true } },
+            // Already the visit of an online request (not one to link).
+            bookingRequest: { select: { id: true } },
           },
           orderBy: { startAt: 'asc' },
           take: 20,

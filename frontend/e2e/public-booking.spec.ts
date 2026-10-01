@@ -9,7 +9,8 @@ import { test, expect } from './fixtures';
  */
 test('patient requests a visit online and the front desk confirms it', async ({ page, browser }) => {
   const suffix = Date.now().toString().slice(-6);
-  const name = `Khách Online ${suffix}`;
+  // Names on the public form are letters only: the run's suffix as letters.
+  const name = `Khách Online ${suffix.replace(/\d/g, (d) => 'ABCDEFGHIK'[Number(d)])}`;
   const phone = `09${suffix}${Math.floor(10 + Math.random() * 89)}`;
 
   // A patient has no staff session: start from an empty storage state.
