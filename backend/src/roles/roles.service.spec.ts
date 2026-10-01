@@ -205,7 +205,7 @@ describe('RolesService', () => {
 
   describe('delete', () => {
     it('throws CannotDeleteSystemRoleException when role is system', async () => {
-      (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      (prisma.role.findFirstOrThrow as jest.Mock).mockResolvedValue({
         ...validRole({ isSystem: true }),
         userRoles: [],
       });
@@ -215,7 +215,7 @@ describe('RolesService', () => {
     });
 
     it('throws CannotDeleteRoleWithUsersException when users still assigned', async () => {
-      (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      (prisma.role.findFirstOrThrow as jest.Mock).mockResolvedValue({
         ...validRole({ isSystem: false }),
         userRoles: [{ id: 'ur-1' }, { id: 'ur-2' }],
       });
@@ -226,14 +226,22 @@ describe('RolesService', () => {
     });
 
     it('soft-deletes role when conditions met', async () => {
-      (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      (prisma.role.findFirstOrThrow as jest.Mock).mockResolvedValue({
         ...validRole({ isSystem: false }),
         userRoles: [],
       });
       (prisma.userRole.count as jest.Mock).mockResolvedValue(0);
       (prisma.role.update as jest.Mock).mockResolvedValue({});
+      (prisma.userRole.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
 
       await service.delete('role-1', adminActor.sub, adminActor.email, null, null);
+
+      // A6-22: assignments of deactivated accounts go too, so reactivating
+      // one cannot bring back the deleted role's permissions.
+      expect(prisma.userRole.deleteMany).toHaveBeenCalledWith({ where: { roleId: 'role-1' } });
+      expect(prisma.role.findFirstOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'role-1', deletedAt: null } }),
+      );
 
       expect(prisma.role.update).toHaveBeenCalledWith(
         expect.objectContaining({

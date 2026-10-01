@@ -856,6 +856,25 @@ describe('MedicalRecordsService', () => {
       expect(prisma.clinicalNote.upsert).not.toHaveBeenCalled();
     });
 
+    it("A6-20: an owner holding admin + dentist reads every encounter but cannot write a colleague's", async () => {
+      const owner = userPayloadWithPermissions(
+        ['encounter.read.any', 'encounter.read.own', 'clinical_note.write', 'treatment.write'],
+        'owner-1',
+      );
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS, dentistId: 'some-other-dentist' }),
+      );
+
+      await expect(
+        service.upsertClinicalNote('enc-1', { chiefComplaint: 'x' } as any, owner),
+      ).rejects.toThrow(/Chỉ bác sĩ phụ trách phiên khám/);
+      await expect(service.closeEncounter('enc-1', {} as any, owner)).rejects.toThrow(
+        /Chỉ bác sĩ phụ trách phiên khám/,
+      );
+      expect(prisma.clinicalNote.upsert).not.toHaveBeenCalled();
+      expect(prisma.encounter.update).not.toHaveBeenCalled();
+    });
+
     it('appendNote adds a stamped progress entry instead of overwriting notes', async () => {
       (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue({ notes: 'Ghi chú cũ' });
       (prisma.user.findUnique as jest.Mock).mockResolvedValue({ fullName: 'BS An' });

@@ -4,6 +4,7 @@ import { Prisma, Gender } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { isRowScoped } from '../common/row-scope';
 import { PaginatedResult, PaginationSchema } from '../common/dto/pagination.dto';
 import { endOfDayInclusive } from '../common/date-range.util';
 import {
@@ -1250,9 +1251,9 @@ export class PatientsService {
    * two formulas disagreed on would pass one gate and fail the other.
    */
   private isRowScopedDentist(actor: JwtPayload): boolean {
-    return (
-      !actor.permissions.includes('patient.delete') && !actor.permissions.includes('patient.update')
-    );
+    // Shared rule (A6-19): roster permissions mean clinic-wide, except for a
+    // caller whose own appointments are row-scoped.
+    return isRowScoped(actor, 'patient');
   }
 
   private toPatientListItem(p: {

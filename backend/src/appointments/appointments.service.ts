@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { isRowScoped } from '../common/row-scope';
 import {
   endOfDayInclusive,
   clinicDateOnly,
@@ -3483,11 +3484,13 @@ export class AppointmentsService {
     }
   }
 
+  /**
+   * Limited to the caller's own appointments unless they hold
+   * appointment.read.any — including a role with neither read scope
+   * (default deny, A6-19; common/row-scope.ts).
+   */
   isRowScopedDentist(actor: JwtPayload): boolean {
-    return (
-      actor.permissions.includes('appointment.read.own') &&
-      !actor.permissions.includes('appointment.read.any')
-    );
+    return isRowScoped(actor, 'appointment');
   }
 
   /**

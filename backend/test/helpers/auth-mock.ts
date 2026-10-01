@@ -11,7 +11,10 @@ export const adminPayload = (sub = 'admin-1'): JwtPayload =>
   createMockJwtPayload({
     sub,
     email: 'admin@clinic.com',
-    permissions: ['*'],
+    // '*' is not a wildcard anywhere in the app; the clinic-wide read scopes
+    // are listed so row-scope checks (common/row-scope.ts, default deny)
+    // treat this actor as the clinic admin it stands for.
+    permissions: ['*', 'appointment.read.any', 'encounter.read.any', 'invoice.read.any'],
   });
 
 export const dentistPayload = (sub = 'dentist-1'): JwtPayload =>

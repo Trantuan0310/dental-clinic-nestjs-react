@@ -67,4 +67,20 @@ describe('PatientsProxyController — dentist read scope', () => {
       ForbiddenException,
     );
   });
+
+  it('A6-19: the invoice.read alias alone lists no invoices (was every invoice)', async () => {
+    const aliasOnly = { ...dentist, permissions: ['invoice.read'] };
+    await expect(controller.patientInvoices('p', aliasOnly)).rejects.toThrow(ForbiddenException);
+    expect(db.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps invoice.read.own to invoices of the caller's encounters", async () => {
+    db.invoice.findMany.mockResolvedValue([]);
+    await controller.patientInvoices('p', dentist);
+    expect(db.invoice.findMany.mock.calls[0][0].where).toEqual({
+      patientId: 'p',
+      deletedAt: null,
+      encounter: { dentistId: dentist.sub },
+    });
+  });
 });
