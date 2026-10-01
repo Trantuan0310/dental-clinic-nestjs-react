@@ -478,6 +478,12 @@ model Appointment {
   // reminder_sent_at IS NULL, not deleted, SCHEDULED/CONFIRMED) is managed
   // by migration 041 only.
   reminderSentAt    DateTime?           @map("reminder_sent_at") @db.Timestamptz()
+  // Migration 044: the reminder's outcome (SENT / FAILED / BLOCKED) for the
+  // visit time in reminderStatusFor; FAILED is retried by later runs.
+  reminderStatus    String?             @map("reminder_status") @db.VarChar(20)
+  reminderNote      String?             @map("reminder_note") @db.VarChar(500)
+  reminderAttempts  Int                 @default(0) @map("reminder_attempts") @db.SmallInt
+  reminderStatusFor DateTime?           @map("reminder_status_for") @db.Timestamptz()
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy         String?             @map("created_by") @db.Uuid
@@ -1606,6 +1612,11 @@ model BookingRequest {
   appointmentId      String?              @unique @map("appointment_id") @db.Uuid
   handledBy          String?              @map("handled_by") @db.Uuid
   notificationSentAt DateTime?            @map("notification_sent_at") @db.Timestamptz()
+  /// Migration 044: the link was replaced by a newer email.
+  accessRotatedAt     DateTime?           @map("access_rotated_at") @db.Timestamptz()
+  /// Migration 044: the last patient email failed; the front desk must call.
+  noticeFailedAt      DateTime?           @map("notice_failed_at") @db.Timestamptz()
+  noticeFailedSubject String?             @map("notice_failed_subject") @db.VarChar(200)
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz()
 
