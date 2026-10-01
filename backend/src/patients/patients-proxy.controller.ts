@@ -157,7 +157,7 @@ export class PatientsProxyController {
   }
 
   @Get('invoices')
-  @RequirePermissions('invoice.read.any', 'invoice.read.own', 'invoice.read')
+  @RequirePermissions('invoice.read.any', 'invoice.read.own')
   @ApiOperation({
     summary:
       'Proxy — invoices for patient (uses Billing permission, BR-BILL-003 dentist row-level)',

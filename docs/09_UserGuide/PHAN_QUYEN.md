@@ -12,18 +12,19 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | **Lịch hẹn**: đặt, dời, hủy, check-in | ✔ | Chỉ lịch hẹn của mình: đặt lịch tái khám cho bệnh nhân mình đã khám; sửa, xác nhận, đánh vắng mặt; dời (trong lịch của mình) và hủy chỉ khi còn ít nhất 24 giờ trước giờ hẹn, kể cả lịch tái khám mình vừa đặt (gấp hơn thì nhờ lễ tân). Không check-in | ✔ |
 | Xem lịch hẹn | ✔ tất cả | Chỉ lịch của mình (menu "Lịch của tôi") | ✔ tất cả |
 | Điều phối hàng chờ, yêu cầu đặt lịch online | ✔ | — | ✔ |
-| **Khám bệnh**: bắt đầu, ghi bệnh án, điều trị, kê đơn, sơ đồ răng, đóng phiên khám | — (chỉ xem) | ✔ | — |
+| **Khám bệnh**: bắt đầu, ghi bệnh án, điều trị, kê đơn, sơ đồ răng, đóng phiên khám | — (chỉ xem) | ✔ chỉ phiên khám của mình (kể cả khi tài khoản có thêm vai trò Quản trị) | — |
 | Hủy phiên khám tạo nhầm | ✔ | — | — |
 | **Hóa đơn**: tạo, phát hành, thu tiền | ✔ | Xem hóa đơn phiên khám của mình | ✔ |
 | Hủy hóa đơn | ✔ | — | — |
-| **Báo cáo**: công nợ | ✔ | — | ✔ |
+| **Báo cáo**: công nợ (mọi khoản nợ, chia nhóm tuổi nợ) | ✔ | — | ✔ |
 | Doanh thu, chi phí, lợi nhuận, doanh thu theo bác sĩ | ✔ | — | — |
+| Thống kê lịch khám (đến / vắng / hủy / về sớm / vãng lai / online), KPI hôm nay | ✔ toàn phòng khám | ✔ lịch của mình | ✔ toàn phòng khám |
 | Chi phí phòng khám (nhập, duyệt) | ✔ | — | — |
 | **Kho**: xem | ✔ | ✔ | ✔ |
 | Nhập, xuất kho | ✔ | — | ✔ |
 | Thêm, sửa vật tư | ✔ | — | — |
 | **Nhân sự**: hồ sơ nhân viên, tài khoản (tạo mới hoặc gắn tài khoản có sẵn), khôi phục nhân viên đã nghỉ việc | ✔ | — | — |
-| Hồ sơ bác sĩ | ✔ | Sửa hồ sơ của mình | Xem |
+| Hồ sơ bác sĩ | ✔ | Sửa hồ sơ của mình; lịch hẹn sắp tới (tên bệnh nhân) chỉ thấy ở hồ sơ của chính mình | Xem (kể cả lịch hẹn sắp tới) |
 | Lịch làm việc, ngày nghỉ bác sĩ | ✔ sửa, duyệt | Sửa lịch của mình | Xem |
 | Ngày nghỉ toàn phòng khám (Tết, lễ) | ✔ (`clinic_closure.manage`, migration 035) | Xem | Xem |
 | Ca làm việc (đăng ký, duyệt) | Duyệt | Đăng ký ca của mình | — |
@@ -53,6 +54,20 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 - Nút **Đặt lịch tái khám** mở form đặt lịch với bệnh nhân điền sẵn, bác sĩ khóa vào chính mình, loại lịch là "Tái khám".
 - Quản trị viên mở phiên khám chỉ xem, không có nút ghi hoặc sửa.
 
+## Số liệu báo cáo
+
+- **Doanh thu** (trang Báo cáo và Dashboard dùng chung một định nghĩa): hóa đơn đã phát hành (Đã phát hành / Một phần / Đã thanh toán), tính theo **ngày phát hành**. Hóa đơn nháp và hóa đơn đã hủy không cộng vào tổng, chỉ hiện ở ô riêng "Không tính vào doanh thu". Theo dịch vụ / thủ thuật là số sau giảm giá (chia theo tỷ lệ).
+- **Đã thu**: phiếu thu tính theo **ngày thu**, trừ phiếu hoàn tiền theo **ngày hoàn** (hoàn tháng sau thì trừ vào tháng sau, không sửa số tháng trước). Phiếu thu đã hủy (thu nhầm) không tính ở đâu cả.
+- **Lịch hẹn**: đếm theo trạng thái cuối cùng của lịch. "Đã đến" = đã check-in / đang khám / đã xong / về trước khi khám. Hoàn tác vắng mặt rồi check-in muộn chỉ tính một lần là "đã đến". "Tổng lịch hẹn" trên Dashboard không tính lịch hủy; "Bệnh nhân" và "Khách mới" chỉ tính lần bệnh nhân thực sự đến.
+- Lễ tân không có quyền xem doanh thu, nhưng danh sách hóa đơn (`invoice.read.any`) vẫn lọc được theo ngày, nên về nguyên tắc vẫn cộng ra được doanh thu. Nếu cần giấu hẳn doanh thu với lễ tân thì phải giới hạn thêm danh sách hóa đơn (chưa làm).
+- Xuất CSV: có BOM UTF-8 (Excel hiện đúng dấu tiếng Việt). Ô bắt đầu bằng `=`, `+`, `-`, `@` được thêm dấu `'` để Excel không chạy như công thức.
+
+## Quyền "menu" và phạm vi dữ liệu
+
+- Các mã `appointment.read`, `encounter.read`, `invoice.read`, `medical_record.read`, `report.read` (và các mã "alias FE" khác) **chỉ mở menu**. API chỉ xét quyền gốc: `*.read.any` (xem tất cả), `*.read.own` (chỉ của mình), `report.revenue.read`, `report.outstanding.read`… (migration `047_report_permission_cleanup` ghi rõ điều này trong mô tả quyền).
+- Vai trò không có `.read.any` cũng không có `.read.own` thì **không** thấy dòng nào (mặc định từ chối), kể cả khi được cấp quyền sửa / hủy. Vai trò có `appointment.read.own` chỉ thấy bệnh nhân của mình, dù có `patient.update`.
+- Vai trò đã xóa không còn cấp quyền nào. Xóa vai trò sẽ gỡ vai trò đó khỏi mọi tài khoản, kể cả tài khoản đã vô hiệu hóa.
+
 ## Tùy chỉnh
 
-Quản trị viên chỉnh quyền của từng vai trò trong **Quản trị → Vai trò**. Lưu ý: mỗi migration phân quyền về sau (như 027) có thể đặt lại các quyền mà nó liên quan.
+Ba vai trò có sẵn (Quản trị viên, Bác sĩ, Lễ tân) **không sửa được quyền** trên màn hình (hệ thống chặn). Muốn cấu hình khác mặc định: vào **Quản trị → Vai trò**, tạo vai trò mới với bộ quyền mong muốn rồi gán thay cho vai trò có sẵn. Khi tạo vai trò, nhớ cấp quyền xem tương ứng (`*.read.any` hoặc `*.read.own`) cho mọi quyền sửa — thiếu quyền xem thì vai trò không thao tác được trên dòng nào. Mỗi migration phân quyền về sau (như 027) và lần chạy lại seed có thể đặt lại quyền của ba vai trò có sẵn.
