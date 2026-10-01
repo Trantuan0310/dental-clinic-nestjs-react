@@ -15,6 +15,7 @@ import type {
   RevenueByProcedure,
   RevenueBySource,
 } from '@/types/dashboard';
+import type { AppointmentStats, RevenueByCustomerType } from './types';
 
 export interface RangeQuery {
   from?: string;
@@ -74,6 +75,22 @@ export const dashboardApi = {
   appointmentsByDay: async (q: RangeQuery): Promise<AppointmentPoint[]> => {
     const { data } = await api.get<{ data: AppointmentPoint[] }>(
       '/billing/reports/appointments-by-day',
+      range(q),
+    );
+    return data.data;
+  },
+
+  revenueByCustomerType: async (q: RangeQuery): Promise<RevenueByCustomerType[]> => {
+    const { data } = await api.get<{ data: RevenueByCustomerType[] }>(
+      '/billing/reports/revenue-by-customer-type',
+      range(q),
+    );
+    return data.data;
+  },
+
+  appointmentStats: async (q: RangeQuery): Promise<AppointmentStats> => {
+    const { data } = await api.get<{ data: AppointmentStats }>(
+      '/billing/reports/appointment-stats',
       range(q),
     );
     return data.data;

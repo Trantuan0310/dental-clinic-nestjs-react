@@ -3,6 +3,7 @@
 // =============================================================================
 import type { ReactNode } from 'react';
 import { format, startOfMonth, subDays, subMonths } from 'date-fns';
+import { clinicWallClock } from '@/lib/clinicTime';
 
 export type TimeRange = 'today' | '7d' | '15d' | '30d' | '6m';
 export type CustomerType = 'NEW' | 'RETURNING';
@@ -20,7 +21,8 @@ export interface DashboardKpis {
     returningCount?: number;
     sparkline?: Array<{ date: string; value: number }>;
   };
-  appointments: { total: number; pctChange: number };
+  /** total excludes cancellations; arrived = patient came (final status). */
+  appointments: { total: number; pctChange: number; arrived?: number; cancelled?: number };
   treatmentRevenue: { total: number; pctChange: number };
   collected: { total: number; pctChange: number };
 }
@@ -38,7 +40,36 @@ export interface MonthlyRevenuePoint {
 
 export interface AppointmentPoint {
   date: string;
+  /** Appointments that were not cancelled. */
   count: number;
+  arrived?: number;
+  noShow?: number;
+  cancelled?: number;
+}
+
+/** Outcome tallies by final status (backend appointment-stats, A6-12). */
+export interface AppointmentTally {
+  total: number;
+  pending: number;
+  arrived: number;
+  inClinic: number;
+  completed: number;
+  left: number;
+  noShow: number;
+  cancelled: number;
+  cancelledAfterCheckIn: number;
+}
+
+export interface AppointmentStats {
+  from: string;
+  to: string;
+  dentistId: string | null;
+  scope: 'own' | 'all';
+  summary: AppointmentTally & { walkIn: number; online: number };
+  rates: { arrivalPct: number; noShowPct: number; cancelPct: number; leftPct: number };
+  bySource: Array<AppointmentTally & { source: string; sourceLabel: string }>;
+  byDentist: Array<AppointmentTally & { dentistId: string; dentistName: string }>;
+  onlineFunnel: { requests: number; booked: number; arrived: number } | null;
 }
 
 export interface FinanceSummary {
@@ -73,10 +104,12 @@ export interface RevenueByDentistRow {
   percentage: number;
 }
 
+/** Computed by the backend from real invoices (A6-13). */
 export interface RevenueByCustomerType {
   type: CustomerType;
   revenue: number;
   percentage: number;
+  count: number;
 }
 
 export const TEAL = '#0d9488';
@@ -99,6 +132,15 @@ export const RANGE_OPTIONS: Array<{ value: TimeRange; label: string }> = [
   { value: '6m', label: '6 tháng' },
 ];
 
+/** Short label for card titles ("Lịch hẹn 7 ngày qua"). */
+export const RANGE_TITLES: Record<TimeRange, string> = {
+  today: 'hôm nay',
+  '7d': '7 ngày qua',
+  '15d': '15 ngày qua',
+  '30d': '30 ngày qua',
+  '6m': '6 tháng qua',
+};
+
 export const RANGE_DESCRIPTIONS: Record<TimeRange, string> = {
   today: 'Hôm nay',
   '7d': '7 ngày qua',
@@ -107,7 +149,8 @@ export const RANGE_DESCRIPTIONS: Record<TimeRange, string> = {
   '6m': '6 tháng qua',
 };
 
-export function resolveRange(range: TimeRange, today = new Date()): DateRange {
+/** Dates on the clinic calendar, whatever the workstation's time zone (A6-18). */
+export function resolveRange(range: TimeRange, today = clinicWallClock()): DateRange {
   const to = format(today, 'yyyy-MM-dd');
   const startOf = (daysAgo: number) =>
     format(subDays(today, daysAgo), 'yyyy-MM-dd');
@@ -155,28 +198,6 @@ export function formatDayLabel(s: string): string {
 export function formatMonthLabel(s: string): string {
   const [y, m] = s.split('-');
   return y && m ? `T${m}/${y.slice(2)}` : s;
-}
-
-export function buildCustomerTypeSplit(
-  rows: RevenueByDentistRow[],
-  patientNew: number,
-  patientReturning: number,
-): RevenueByCustomerType[] {
-  const total = rows.reduce((acc, r) => acc + r.revenue, 0);
-  const total_patients = patientNew + patientReturning;
-  const newShare = total_patients > 0 ? patientNew / total_patients : 0.5;
-  return [
-    {
-      type: 'NEW',
-      revenue: Math.round(total * newShare),
-      percentage: Math.round(newShare * 1000) / 10,
-    },
-    {
-      type: 'RETURNING',
-      revenue: Math.round(total * (1 - newShare)),
-      percentage: Math.round((1 - newShare) * 1000) / 10,
-    },
-  ];
 }
 
 export interface CardScaffoldProps {
