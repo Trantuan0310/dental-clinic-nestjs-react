@@ -79,11 +79,16 @@ export interface PayrollPeriod {
 
 export interface PayrollAdjustment {
   id: string;
+  /** Owned by (period, dentist) since migration 046; survives recomputes. */
+  payrollPeriodId: string;
+  dentistId: string;
   type: 'BONUS' | 'PENALTY' | 'DEDUCTION' | 'MANUAL_OVERRIDE';
   amountVnd: number;
   reason: string;
-  adjustedByUserId: string;
+  /** Null for a system clawback (invoice voided after its period closed). */
+  adjustedByUserId: string | null;
   adjustedAt: string;
+  sourceInvoiceId?: string | null;
 }
 
 export type PayrollAdjustmentType = PayrollAdjustment['type'];
@@ -93,7 +98,15 @@ export interface PayrollEncounterDetail {
   encounterStartAt: string;
   encounterEndAt: string;
   durationMinutes: number;
+  /** Commission basis of the row (invoice line after discount). */
   treatmentRevenueVnd: number;
+  // Migration 046 (null on older rows): the issued invoice line counted.
+  invoiceId?: string | null;
+  invoiceItemId?: string | null;
+  basisAmountVnd?: number | string | null;
+  commissionPct?: number | string | null;
+  /** Rows since 046: { invoiceCode, description, lineTotal, invoiceTotal, ... }; older rows differ. */
+  treatmentBreakdown?: unknown;
 }
 
 // `dentistName` is flattened client-side from `dentist.fullName` by
@@ -127,6 +140,31 @@ export interface PayrollLineItem {
 
 export interface PayrollPeriodDetail extends PayrollPeriod {
   lineItems: PayrollLineItem[];
+}
+
+/** GET /payroll/periods/:id/warnings — things to settle before locking. */
+export interface PayrollPeriodWarnings {
+  draftInvoiceDays: number;
+  draftInvoices: Array<{
+    invoiceId: string;
+    code: string;
+    totalVnd: number;
+    createdAt: string;
+    ageDays: number;
+    patientName: string;
+    dentistId: string | null;
+    dentistName: string;
+  }>;
+  dentistsWithoutCompensation: Array<{ dentistId: string; dentistName: string; encounterCount: number }>;
+  outsideHoursEncounters: Array<{
+    encounterId: string;
+    startedAt: string;
+    closedAt: string;
+    minutes: number;
+    dentistId: string;
+    dentistName: string;
+  }>;
+  terminatedDentists: Array<{ dentistId: string | null; dentistName: string; terminationDate: string | null }>;
 }
 
 export interface CreatePayrollPeriodPayload {

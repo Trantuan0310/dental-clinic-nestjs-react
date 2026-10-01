@@ -29,6 +29,7 @@ import {
   MarkPaidDto,
   ListPeriodsQueryDto,
   ListCompensationsQueryDto,
+  PeriodWarningsQueryDto,
 } from './dto/payroll.dto';
 
 @ApiTags('Payroll')
@@ -133,6 +134,20 @@ export class PayrollController {
   @ApiOperation({ summary: 'Get period detail with line items' })
   async getPeriodDetail(@Param('id', ParseUUIDPipe) id: string) {
     const data = await this.payroll.getPeriodDetail(id);
+    return { data };
+  }
+
+  @Get('periods/:id/warnings')
+  @RequirePermissions('payroll.read.any')
+  @ApiOperation({
+    summary:
+      'Things to settle before locking: old draft invoices, visits without pay terms, visits outside paid hours, leavers',
+  })
+  async getPeriodWarnings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: PeriodWarningsQueryDto,
+  ) {
+    const data = await this.payroll.getPeriodWarnings(id, query.draftDays);
     return { data };
   }
 

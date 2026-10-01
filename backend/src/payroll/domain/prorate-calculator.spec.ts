@@ -4,6 +4,8 @@ import {
   compRange,
   proRateBaseSalary,
   effectiveCommissionPct,
+  proRateBaseSalaryParts,
+  compensationOn,
 } from './prorate-calculator';
 
 describe('daysBetweenInclusive', () => {
@@ -66,6 +68,12 @@ describe('proRateBaseSalary', () => {
     expect(proRateBaseSalary(15_000_000, comp, payPeriod)).toBe(15_000_000);
   });
 
+  it('pro-rates an open-ended comp that starts mid-period (A1-08)', () => {
+    // From Aug 25, no end: Aug 25-31 = 7 of 31 days.
+    const comp = compRange(new Date('2026-08-25'), null);
+    expect(proRateBaseSalary(31_000_000, comp, payPeriod)).toBe(7_000_000);
+  });
+
   it('pro-rates when comp starts mid-month', () => {
     // Comp: 15tr from Aug 16 → Dec 31, pay period: Aug 1-31 (31 days)
     // overlap: Aug 16-31 = 16 days
@@ -84,6 +92,61 @@ describe('proRateBaseSalary', () => {
     const compA = compRange(new Date('2026-08-01'), new Date('2026-08-15'));
     const payA = proRateBaseSalary(15_000_000, compA, payPeriod);
     expect(payA).toBe(7_258_065); // 15_000_000 * 15/31 rounded
+  });
+});
+
+describe('proRateBaseSalaryParts (A6-04, A2-15)', () => {
+  const payPeriod = { start: new Date('2026-09-01'), end: new Date('2026-09-30') };
+  const term = (id: string, salary: number, from: string, to: string | null) => ({
+    id,
+    monthlySalary: salary,
+    commissionPct: 0,
+    overtimeHourlyVnd: 0,
+    effectiveFrom: new Date(from),
+    effectiveTo: to ? new Date(to) : null,
+  });
+
+  it('adds every comp overlapping the period, each by its own days', () => {
+    const r = proRateBaseSalaryParts(
+      [
+        term('a', 30_000_000, '2026-01-01', '2026-09-15'),
+        term('b', 60_000_000, '2026-09-16', null),
+      ],
+      payPeriod,
+    );
+    // 15 days × 1tr + 15 days × 2tr
+    expect(r.parts.map(p => p.amount)).toEqual([15_000_000, 30_000_000]);
+    expect(r.total).toBe(45_000_000);
+  });
+
+  it('a newcomer from the 25th is paid 6 of 30 days', () => {
+    const r = proRateBaseSalaryParts([term('a', 30_000_000, '2026-09-25', null)], payPeriod);
+    expect(r.total).toBe(6_000_000);
+  });
+
+  it('stops at the termination date (inclusive)', () => {
+    const r = proRateBaseSalaryParts(
+      [term('a', 30_000_000, '2026-01-01', null)],
+      payPeriod,
+      new Date('2026-09-20'),
+    );
+    expect(r.total).toBe(20_000_000);
+  });
+
+  it('pays nothing when terminated before the period', () => {
+    const r = proRateBaseSalaryParts(
+      [term('a', 30_000_000, '2026-01-01', null)],
+      payPeriod,
+      new Date('2026-08-31'),
+    );
+    expect(r.total).toBe(0);
+  });
+
+  it('compensationOn picks the comp in force that day', () => {
+    const terms = [term('a', 1, '2026-01-01', '2026-09-15'), term('b', 2, '2026-09-16', null)];
+    expect(compensationOn(terms, '2026-09-15')?.id).toBe('a');
+    expect(compensationOn(terms, '2026-09-16')?.id).toBe('b');
+    expect(compensationOn(terms, '2025-12-31')).toBeNull();
   });
 });
 

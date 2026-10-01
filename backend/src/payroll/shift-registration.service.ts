@@ -15,7 +15,7 @@ import {
   shiftInstants,
 } from '../appointments/domain/shift-bookings';
 import { LOCKING_TX_OPTIONS, lockDentistCalendar } from '../appointments/domain/advisory-lock';
-import { CLINIC_UTC_OFFSET_MS, clinicDateOnly } from '../common/date-range.util';
+import { CLINIC_UTC_OFFSET_MS, clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
 @Injectable()
@@ -437,12 +437,10 @@ export class ShiftRegistrationService {
     }> = [];
 
     for (const shift of approvedShifts) {
-      // Compute next day as UTC midnight to avoid TZ drift.
-      const dayStart = new Date(
-        Date.UTC(shift.date.getUTCFullYear(), shift.date.getUTCMonth(), shift.date.getUTCDate()),
-      );
-      const dayEnd = new Date(dayStart);
-      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+      // The shift's clinic day, 00:00-24:00 Asia/Ho_Chi_Minh (H1): UTC
+      // midnight bounds counted 07:00 VN to 07:00 VN the next day.
+      const dayStart = startOfClinicDay(shift.date.toISOString().slice(0, 10));
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
 
       const encounterCount = await this.prisma.encounter.count({
         where: {

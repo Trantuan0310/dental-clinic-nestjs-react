@@ -59,3 +59,19 @@ export const PATIENT_CLINICAL_DATA_CHANGED_EVENT = 'patient.clinical_data.change
 export interface PatientClinicalDataChangedEvent {
   patientId: string;
 }
+
+/**
+ * Invoice lifecycle (billing, round 4). Payroll pays commission on issued
+ * invoices (ISSUED/PARTIAL/PAID, by issuedAt) and recomputes or claws back
+ * when one of these fires. Emit after the change is committed; listeners
+ * reload the invoice by id and must not throw.
+ */
+export const INVOICE_ISSUED_EVENT = 'invoice.issued';
+export const INVOICE_VOIDED_EVENT = 'invoice.voided';
+export const INVOICE_PAYMENT_RECORDED_EVENT = 'invoice.payment_recorded';
+export const INVOICE_REFUNDED_EVENT = 'invoice.refunded';
+
+export interface InvoiceChangedEvent {
+  invoiceId: string;
+  encounterId?: string;
+}

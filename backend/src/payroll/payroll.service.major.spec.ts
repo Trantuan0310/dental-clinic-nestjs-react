@@ -431,7 +431,7 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
       (prisma.payrollLineItem.findUnique as jest.Mock).mockResolvedValue({
         id: 'line-1',
         payrollPeriodId: 'period-1',
-        dentistId: 'admin-1',
+        dentistId: 'dentist-1',
         baseSalaryVnd: new Prisma.Decimal(5_000_000), // stale
         commissionVnd: new Prisma.Decimal(0),
         overtimePayVnd: new Prisma.Decimal(0),
@@ -453,7 +453,7 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
             findUnique: jest.fn().mockResolvedValue({
               id: 'line-1',
               payrollPeriodId: 'period-1',
-              dentistId: 'admin-1',
+              dentistId: 'dentist-1',
               baseSalaryVnd: new Prisma.Decimal(8_000_000), // fresh
               commissionVnd: new Prisma.Decimal(0),
               overtimePayVnd: new Prisma.Decimal(0),
@@ -492,7 +492,7 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
       (prisma.payrollLineItem.findUnique as jest.Mock).mockResolvedValue({
         id: 'line-1',
         payrollPeriodId: 'period-1',
-        dentistId: 'admin-1',
+        dentistId: 'dentist-1',
         baseSalaryVnd: new Prisma.Decimal(5_000_000),
         commissionVnd: new Prisma.Decimal(0),
         overtimePayVnd: new Prisma.Decimal(0),

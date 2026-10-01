@@ -8,7 +8,9 @@ import {
   Max,
   IsUUID,
   IsArray,
+  IsInt,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PayrollCycle, PayrollAdjustmentType } from '@prisma/client';
 
@@ -203,4 +205,17 @@ export class ListCompensationsQueryDto {
   @IsOptional()
   @IsDateString()
   activeOn?: string;
+}
+
+export class PeriodWarningsQueryDto {
+  @ApiPropertyOptional({
+    description: 'Warn about draft invoices older than this many days',
+    example: 3,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  draftDays?: number;
 }

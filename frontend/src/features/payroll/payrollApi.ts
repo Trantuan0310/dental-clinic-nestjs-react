@@ -8,6 +8,7 @@ import type {
   UpdateCompensationPayload,
   PayrollPeriod,
   PayrollPeriodDetail,
+  PayrollPeriodWarnings,
   CreatePayrollPeriodPayload,
   PayrollHistoryItem,
   Payslip,
@@ -24,6 +25,7 @@ export const payrollKeys = {
   compensations: (filters?: Record<string, unknown>) => ['payroll', 'compensations', filters ?? {}] as const,
   periods: (filters?: Record<string, unknown>) => ['payroll', 'periods', filters ?? {}] as const,
   period: (id: string) => ['payroll', 'period', id] as const,
+  periodWarnings: (id: string) => ['payroll', 'period', id, 'warnings'] as const,
   myHistory: ['payroll', 'me', 'history'] as const,
   myPayslip: (periodId: string) => ['payroll', 'me', 'payslip', periodId] as const,
   myCompensation: ['payroll', 'me', 'compensation'] as const,
@@ -192,6 +194,15 @@ export function usePeriodDetail(id: string | undefined) {
     enabled: !!id,
     queryKey: payrollKeys.period(id ?? ''),
     queryFn: () => get<PayrollPeriodDetail>(`/payroll/periods/${id}`).then(mapPeriodDetail),
+  });
+}
+
+/** Old draft invoices, visits without pay terms, visits outside paid hours, leavers. */
+export function usePeriodWarnings(id: string | undefined, enabled = true) {
+  return useQuery({
+    enabled: !!id && enabled,
+    queryKey: payrollKeys.periodWarnings(id ?? ''),
+    queryFn: () => get<PayrollPeriodWarnings>(`/payroll/periods/${id}/warnings`),
   });
 }
 

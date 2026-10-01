@@ -58,8 +58,8 @@ export const proRateBaseSalary = (
   const periodDays = daysBetweenInclusive(payPeriod.start, payPeriod.end);
   if (periodDays <= 0) return 0;
 
-  // Open-ended comp (no effective_to) covers the period entirely.
-  if (compensationRange.openEnded) return monthlySalary;
+  // Open-ended (no effective_to) only means no upper bound: a comp starting
+  // on the 25th still pays 25th..end, not the whole period (A1-08).
 
   // BR-PAY-013 (docs/03_Specification/Payroll/SPEC.md): pro-rate = actual_days / period_days.
   // Ratio is always overlap / periodDays, so a comp that fully covers the pay
@@ -67,6 +67,59 @@ export const proRateBaseSalary = (
   // long the comp's own effective range is.
   const ratio = overlap / periodDays;
   return Math.round(monthlySalary * ratio);
+};
+
+export interface CompensationTerm {
+  id: string;
+  monthlySalary: number;
+  commissionPct: number;
+  overtimeHourlyVnd: number;
+  /** DATE values (UTC midnight of the clinic date). */
+  effectiveFrom: Date;
+  effectiveTo: Date | null;
+}
+
+/**
+ * Base salary of every compensation overlapping the period, each pro-rated
+ * by its own days in the period (BR-PAY-013): a raise on the 16th pays the
+ * old rate for 1–15 and the new one for 16–end. Days after `lastPaidDay`
+ * (termination date) are not paid. The denominator stays the period length.
+ */
+export const proRateBaseSalaryParts = (
+  terms: CompensationTerm[],
+  payPeriod: { start: Date; end: Date },
+  lastPaidDay: Date | null = null,
+): { total: number; parts: Array<{ compensationId: string; days: number; amount: number }> } => {
+  const periodDays = daysBetweenInclusive(payPeriod.start, payPeriod.end);
+  if (periodDays <= 0) return { total: 0, parts: [] };
+  const parts = terms.map(t => {
+    const from = Math.max(t.effectiveFrom.getTime(), payPeriod.start.getTime());
+    const to = Math.min(
+      (t.effectiveTo ?? payPeriod.end).getTime(),
+      payPeriod.end.getTime(),
+      (lastPaidDay ?? payPeriod.end).getTime(),
+    );
+    const days = to >= from ? daysBetweenInclusive(new Date(from), new Date(to)) : 0;
+    return {
+      compensationId: t.id,
+      days,
+      amount: Math.round((t.monthlySalary * days) / periodDays),
+    };
+  });
+  return { total: parts.reduce((s, p) => s + p.amount, 0), parts };
+};
+
+/** The compensation in force on a clinic date ("YYYY-MM-DD"), if any. */
+export const compensationOn = <T extends { effectiveFrom: Date; effectiveTo: Date | null }>(
+  terms: T[],
+  dateKey: string,
+): T | null => {
+  const day = new Date(dateKey).getTime();
+  return (
+    terms.find(
+      t => t.effectiveFrom.getTime() <= day && (!t.effectiveTo || t.effectiveTo.getTime() >= day),
+    ) ?? null
+  );
 };
 
 export const effectiveCommissionPct = (

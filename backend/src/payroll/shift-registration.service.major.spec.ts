@@ -322,6 +322,11 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
       expect(noShows).toHaveLength(1);
       expect(noShows[0].shiftId).toBe('shift-noshow-1');
       expect(noShows[0].dentistName).toBe('Dr. A');
+      // H1: the shift's clinic day, 00:00-24:00 VN, not UTC midnight.
+      expect((prisma.encounter.count as jest.Mock).mock.calls[0][0].where.closedAt).toEqual({
+        gte: new Date('2026-08-19T00:00:00+07:00'),
+        lt: new Date('2026-08-20T00:00:00+07:00'),
+      });
     });
 
     it('returns empty when all shifts have encounters', async () => {
