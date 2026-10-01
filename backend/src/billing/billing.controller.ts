@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Body,
   Param,
   Query,
@@ -24,10 +25,14 @@ import {
   ListInvoicesQueryDto,
   OutstandingReportQueryDto,
   RecordPaymentDto,
+  RefundDto,
+  ReissueInvoiceDto,
   RevenueReportQueryDto,
   UpdateDiscountDto,
+  UpdateInvoiceItemDto,
   UpdateInvoiceNotesDto,
   VoidInvoiceDto,
+  VoidPaymentDto,
 } from './dto/billing.dto';
 import { DashboardRangeQueryDto } from './dto/dashboard.dto';
 
@@ -116,6 +121,73 @@ export class BillingController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.billing.recordPayment(id, dto, actor) };
+  }
+
+  @Patch('invoices/:id/items/:itemId')
+  @RequirePermissions('invoice.item.update')
+  @ApiOperation({ summary: 'Fix or drop a line of a DRAFT invoice (reason required)' })
+  async updateItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: UpdateInvoiceItemDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.billing.updateItem(id, itemId, dto, actor) };
+  }
+
+  @Post('invoices/:id/refunds')
+  @RequirePermissions('invoice.refund')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Refund money to the patient (dated today, reason required)' })
+  async refund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RefundDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.billing.refund(id, dto, actor) };
+  }
+
+  @Post('payments/:paymentId/void')
+  @RequirePermissions('invoice.payment.void')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel a payment/refund entered by mistake (not your own)' })
+  async voidPayment(
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: VoidPaymentDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.billing.voidPayment(paymentId, dto, actor) };
+  }
+
+  @Post('invoices/:id/reissue')
+  @RequirePermissions('invoice.reissue')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'New DRAFT invoice replacing a VOIDED one (idempotent)' })
+  async reissue(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReissueInvoiceDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.billing.reissue(id, dto, actor) };
+  }
+
+  @Post('invoices/from-encounter/:encounterId')
+  @RequirePermissions('invoice.create')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Draft the missing invoice of a closed encounter (idempotent)' })
+  async fromEncounter(
+    @Param('encounterId', ParseUUIDPipe) encounterId: string,
+    @User() actor: JwtPayload,
+  ) {
+    const { invoice, created } = await this.billing.createFromEncounter(encounterId, actor);
+    return { data: invoice, created };
+  }
+
+  @Get('reconciliation/missing-invoices')
+  @RequirePermissions('invoice.create', 'invoice.read.any')
+  @ApiOperation({ summary: 'Completed encounters without a valid (non-voided) invoice' })
+  async missingInvoices() {
+    return wrapAsPaginated(await this.billing.listEncountersMissingInvoice());
   }
 
   @Get('invoices/:id/audits')

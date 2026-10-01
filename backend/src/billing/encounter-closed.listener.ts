@@ -7,7 +7,7 @@ import { ENCOUNTER_CLOSED_EVENT, EncounterClosedEvent } from '../common/events/d
 /**
  * Subscribes to encounter.closed events (BR-MR-005 / BR-BILL-001) and
  * auto-creates a DRAFT invoice with one line per treatment. Idempotent —
- * the service checks Invoice.findUnique({ encounterId }).
+ * the service returns the encounter's non-voided invoice if there is one.
  */
 @Injectable()
 export class EncounterClosedListener {
@@ -29,13 +29,15 @@ export class EncounterClosedListener {
         this.logger.log(
           `Created DRAFT invoice ${result.code} for encounter ${payload.encounterId}`,
         );
+      } else if ((payload.treatments ?? []).length === 0) {
+        // Nothing to bill: no 0đ draft clutters the list (A5-17).
+        this.logger.log(`Encounter ${payload.encounterId} closed with no treatment; no invoice`);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Failed to create invoice from encounter ${payload.encounterId}: ${msg}`);
-      // Re-throw so caller (MedicalRecordsService) can log it; the in-tx
-      // invoice creation IS committed already if it succeeded, so the
-      // outer close has already returned. We just log here.
+      // The close is already committed; BillingCron drafts the missing
+      // invoice later and the front desk can "tạo bù" it (A2-03).
     }
   }
 }

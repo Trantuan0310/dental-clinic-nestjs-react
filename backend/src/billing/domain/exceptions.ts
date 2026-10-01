@@ -8,6 +8,8 @@ const INVOICE_STATUS_LABEL: Record<string, string> = {
   VOIDED: 'Đã hủy',
 };
 
+const vnd = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)}đ`;
+
 export class InvoiceNotFoundException extends HttpException {
   constructor(id?: string) {
     super(
@@ -41,13 +43,15 @@ export class InvoiceAlreadyExistsException extends HttpException {
 }
 
 export class InvoiceNotEditableException extends HttpException {
-  constructor(currentStatus: string) {
+  constructor(currentStatus: string, message?: string) {
     super(
       {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'INVOICE_NOT_EDITABLE',
-        message: `Không thể sửa hóa đơn ở trạng thái ${INVOICE_STATUS_LABEL[currentStatus] ?? currentStatus}`,
+        message:
+          message ??
+          `Không thể sửa hóa đơn ở trạng thái ${INVOICE_STATUS_LABEL[currentStatus] ?? currentStatus}`,
         details: { status: currentStatus },
       },
       HttpStatus.CONFLICT,
@@ -63,7 +67,7 @@ export class InvoiceVersionMismatchException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'INVOICE_VERSION_MISMATCH',
-        message: `Version mismatch: expected ${expected}, got ${actual}`,
+        message: 'Hóa đơn vừa được người khác thay đổi. Tải lại trang rồi thử lại.',
         details: { expected, actual },
       },
       HttpStatus.CONFLICT,
@@ -79,7 +83,7 @@ export class InvoiceVoidFailedException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'INVOICE_VOID_FAILED',
-        message: `Cannot void invoice: ${reason}`,
+        message: reason,
       },
       HttpStatus.CONFLICT,
     );
@@ -109,11 +113,49 @@ export class PaymentExceedsOutstandingException extends HttpException {
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'PAYMENT_EXCEEDS_OUTSTANDING',
-        message: `Payment amount ${requested} exceeds outstanding ${outstanding}`,
+        message: `Số tiền ${vnd(requested)} vượt quá số còn nợ ${vnd(outstanding)}`,
         details: { requested, outstanding },
       },
       HttpStatus.BAD_REQUEST,
     );
     this.name = 'PaymentExceedsOutstandingException';
+  }
+}
+
+/** Invoice/payment corrections that break a business rule (409 by default). */
+export class InvoiceCorrectionException extends HttpException {
+  constructor(
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+    status: HttpStatus = HttpStatus.CONFLICT,
+  ) {
+    super(
+      {
+        statusCode: status,
+        error: status === HttpStatus.CONFLICT ? 'Conflict' : HttpStatus[status],
+        code,
+        message,
+        ...(details && { details }),
+      },
+      status,
+    );
+    this.name = 'InvoiceCorrectionException';
+  }
+}
+
+export class PaymentNotFoundException extends HttpException {
+  constructor(id: string) {
+    super(
+      {
+        statusCode: HttpStatus.NOT_FOUND,
+        error: 'Not Found',
+        code: 'PAYMENT_NOT_FOUND',
+        message: 'Không tìm thấy phiếu thu',
+        details: { id },
+      },
+      HttpStatus.NOT_FOUND,
+    );
+    this.name = 'PaymentNotFoundException';
   }
 }
