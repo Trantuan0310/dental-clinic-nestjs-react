@@ -4,14 +4,27 @@
  *
  * Notes:
  * - Values are wrapped in double quotes; embedded quotes are doubled (per RFC 4180).
+ * - Formula-looking text is neutralized (CSV injection).
  * - A BOM is prepended so Excel opens the file with the correct UTF-8 encoding
  *   for Vietnamese diacritics.
  */
 
-function escapeCell(value: unknown): string {
+/**
+ * CSV injection guard (A6-15): a cell starting with = + - @ (or a tab / CR)
+ * is run as a formula by Excel/Sheets. Names and reasons come from the public
+ * booking form, so text cells get a leading apostrophe. Plain numbers
+ * (including negatives such as refunds) stay numbers.
+ */
+export function neutralizeFormula(str: string): string {
+  if (/^[=+\-@\t\r]/.test(str) && !/^-?\d+(\.\d+)?$/.test(str)) return `'${str}`;
+  return str;
+}
+
+export function escapeCell(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const str = String(value);
-  // Escape double quotes by doubling them; surround the whole cell in quotes.
+  const str = neutralizeFormula(String(value));
+  // Escape double quotes by doubling them; surround the whole cell in quotes
+  // (keeps commas and line breaks inside the cell).
   return `"${str.replace(/"/g, '""')}"`;
 }
 

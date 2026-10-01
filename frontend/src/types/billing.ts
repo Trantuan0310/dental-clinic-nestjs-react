@@ -127,41 +127,61 @@ export interface RevenueReportByDentistEntry {
   dentistId: string;
   dentistName: string;
   revenue: number;
+  /** Collected on this dentist's invoices in the range (by payment date). */
   paid: number;
   count: number;
+  sharePct: number;
 }
 
 export interface RevenueReportByPaymentMethodEntry {
   method: PaymentMethod;
+  /** Net of refunds. */
   amount: number;
   count: number;
+  sharePct: number;
 }
 
 export interface RevenueReportByStatusEntry {
   status: string;
   count: number;
   total: number;
-  paid: number;
   outstanding: number;
 }
 
+export interface RevenueReportByServiceEntry {
+  service: string;
+  total: number;
+  count: number;
+}
+
+/**
+ * Revenue = issued invoices (ISSUED/PARTIAL/PAID) by issue date; collected =
+ * payments by payment date net of refunds. DRAFT/VOIDED only in `excluded`.
+ */
 export interface RevenueReport {
   from: string;
   to: string;
+  dentistId: string | null;
   totalInvoiced: number;
   totalCollected: number;
+  totalRefunded: number;
   totalOutstanding: number;
   invoiceCount: number;
   byStatus: RevenueReportByStatusEntry[];
+  excluded: {
+    draft: { count: number; total: number };
+    voided: { count: number; total: number };
+  };
   byMonth: RevenueReportByMonthEntry[];
   byDentist: RevenueReportByDentistEntry[];
+  byService: RevenueReportByServiceEntry[];
   byPaymentMethod: RevenueReportByPaymentMethodEntry[];
 }
 
 export interface RevenueByDayEntry {
   date: string;
   revenue: number;
-  count: number;
+  invoiceCount: number;
 }
 
 export interface RevenueReportDailyEntry {
@@ -184,17 +204,25 @@ export interface RevenueReportBySourceEntry {
   count: number;
 }
 
+export type OutstandingBucket = 'D0_7' | 'D8_30' | 'D31_60' | 'D61_90' | 'D90_PLUS';
+
 export interface OutstandingAgingEntry {
   id: string;
   code: string;
-  // Backend (`BillingService.outstandingAging`) returns the patient as a
-  // nested object straight from its Prisma `select`, not flattened
-  // `patientName`/`patientCode` fields — those never existed on the wire.
   patient: {
+    id: string;
     fullName: string;
     code: string;
+    phone: string | null;
   };
+  /** Start of the visit the invoice is for. */
+  visitDate: string | null;
+  dentistName: string | null;
+  total: number;
   outstanding: number;
   issuedAt: string;
+  /** Whole clinic days since issue. */
   daysOld: number;
+  bucket: OutstandingBucket;
+  bucketLabel: string;
 }
