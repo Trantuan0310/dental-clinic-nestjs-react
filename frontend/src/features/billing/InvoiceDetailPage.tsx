@@ -9,6 +9,11 @@ import {
   Send,
   XCircle,
   Plus,
+  Percent,
+  Pencil,
+  RotateCcw,
+  Undo2,
+  FilePlus2,
 } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
 import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } from '@/components/ui';
@@ -18,6 +23,15 @@ import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { ClinicPrintHeading } from '@/components/brand/ClinicPrintHeading';
+import { useAuthStore } from '@/stores/authStore';
+import type { InvoiceLineItem, Payment } from '@/types/billing';
+import {
+  DiscountModal,
+  ItemEditModal,
+  RefundModal,
+  ReissueModal,
+  VoidPaymentModal,
+} from './InvoiceCorrections';
 
 export default function InvoiceDetailPage() {
   const navigate = useNavigate();
@@ -27,6 +41,13 @@ export default function InvoiceDetailPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [voidReason, setVoidReason] = useState('');
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [showRefund, setShowRefund] = useState(false);
+  const [showReissue, setShowReissue] = useState(false);
+  const [editingItem, setEditingItem] = useState<InvoiceLineItem | null>(null);
+  const [voidingPayment, setVoidingPayment] = useState<Payment | null>(null);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const myId = useAuthStore((s) => s.user?.id);
 
   const { data: invoice, isLoading } = useQuery({
     queryKey: ['invoice', id],
@@ -82,10 +103,17 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const canIssue = invoice.status === 'DRAFT';
+  const isDraft = invoice.status === 'DRAFT';
+  const canIssue = isDraft;
   const canPay = invoice.status === 'ISSUED' || invoice.status === 'PARTIAL';
-  const canVoid = invoice.status !== 'VOIDED' && invoice.status !== 'PAID';
+  // Money kept on the invoice must be refunded or its payment cancelled first (A2-01).
+  const canVoid = invoice.status !== 'VOIDED' && invoice.paidAmount <= 0;
+  const keepsMoney = invoice.status !== 'VOIDED' && invoice.paidAmount > 0;
+  const canRefund = keepsMoney && invoice.status !== 'DRAFT';
+  const canReissue = invoice.status === 'VOIDED' && !invoice.replacedBy;
+  const editLines = isDraft && hasPermission('invoice.item.update');
   const discountAmount = invoice.subtotal - invoice.total;
+  const refunded = invoice.refundedAmount ?? 0;
 
   return (
     <div className="print-document space-y-3">
@@ -128,11 +156,35 @@ export default function InvoiceDetailPage() {
               </Button>
             </PermissionGuard>
           )}
+          {isDraft && (
+            <PermissionGuard permission="invoice.update">
+              <Button variant="outline" onClick={() => setShowDiscount(true)}>
+                <Percent className="h-4 w-4" />
+                Giảm giá
+              </Button>
+            </PermissionGuard>
+          )}
+          {canRefund && (
+            <PermissionGuard permission="invoice.refund">
+              <Button variant="outline" onClick={() => setShowRefund(true)}>
+                <Undo2 className="h-4 w-4" />
+                Hoàn tiền
+              </Button>
+            </PermissionGuard>
+          )}
           {canVoid && (
             <PermissionGuard permission="invoice.void">
               <Button variant="ghost" onClick={() => setShowVoidModal(true)}>
                 <XCircle className="h-4 w-4" />
                 Hủy HĐ
+              </Button>
+            </PermissionGuard>
+          )}
+          {canReissue && (
+            <PermissionGuard permission="invoice.reissue">
+              <Button variant="outline" onClick={() => setShowReissue(true)}>
+                <FilePlus2 className="h-4 w-4" />
+                Lập lại hóa đơn
               </Button>
             </PermissionGuard>
           )}
@@ -179,6 +231,29 @@ export default function InvoiceDetailPage() {
                   {invoice.voidReason}
                 </Alert>
               )}
+              {invoice.replacedBy && (
+                <Alert type="info">
+                  Đã lập lại thành hóa đơn{' '}
+                  <Link className="font-medium underline" to={`/billing/invoices/${invoice.replacedBy.id}`}>
+                    {invoice.replacedBy.code}
+                  </Link>
+                  .
+                </Alert>
+              )}
+              {invoice.replaces && (
+                <Alert type="info">
+                  Lập lại thay cho hóa đơn đã hủy{' '}
+                  <Link className="font-medium underline" to={`/billing/invoices/${invoice.replaces.id}`}>
+                    {invoice.replaces.code}
+                  </Link>
+                  .
+                </Alert>
+              )}
+              {keepsMoney && hasPermission('invoice.void') && (
+                <p className="text-xs text-gray-500 print:hidden">
+                  Muốn hủy hóa đơn này: hủy phiếu thu ghi nhầm hoặc hoàn tiền cho khách trước, rồi chọn "Hủy HĐ".
+                </p>
+              )}
             </div>
           </Card>
 
@@ -193,6 +268,7 @@ export default function InvoiceDetailPage() {
                     <th className="py-2 font-medium text-gray-600 text-right">SL</th>
                     <th className="py-2 font-medium text-gray-600 text-right">Đơn giá</th>
                     <th className="py-2 font-medium text-gray-600 text-right">Tổng</th>
+                    {editLines && <th className="py-2 print:hidden" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -203,6 +279,18 @@ export default function InvoiceDetailPage() {
                       <td className="py-2 text-right">{item.quantity}</td>
                       <td className="py-2 text-right">{formatCurrency(item.unitPrice)}</td>
                       <td className="py-2 text-right font-medium">{formatCurrency(item.lineTotal)}</td>
+                      {editLines && (
+                        <td className="py-2 text-right print:hidden">
+                          <button
+                            type="button"
+                            aria-label={`Sửa dòng ${item.description}`}
+                            onClick={() => setEditingItem(item)}
+                            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -232,9 +320,15 @@ export default function InvoiceDetailPage() {
                 <span>{formatCurrency(invoice.total)}</span>
               </div>
               <div className="flex justify-between text-sm text-green-600">
-                <span>Đã thu</span>
+                <span>{refunded > 0 ? 'Đã thu (sau hoàn)' : 'Đã thu'}</span>
                 <span>{formatCurrency(invoice.paidAmount)}</span>
               </div>
+              {refunded > 0 && (
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>Đã hoàn cho khách</span>
+                  <span>{formatCurrency(refunded)}</span>
+                </div>
+              )}
               {invoice.outstandingAmount > 0 && (
                 <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-100 pt-2">
                   <span>Còn nợ</span>
@@ -262,24 +356,58 @@ export default function InvoiceDetailPage() {
           <Card title="Lịch sử thanh toán">
             {invoice.payments && invoice.payments.length > 0 ? (
               <div className="space-y-2">
-                {invoice.payments.map((payment) => (
-                  <div key={payment.id} className="rounded bg-gray-50 p-2.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="font-medium text-green-600">
-                        +{formatCurrency(payment.amount)}
-                      </span>
-                      <span className="text-gray-500">
-                        {format(new Date(payment.paidAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
-                      </span>
+                {invoice.payments.map((payment) => {
+                  const isRefund = payment.kind === 'REFUND';
+                  const voided = payment.status === 'VOIDED';
+                  const mayVoid =
+                    !voided && invoice.status !== 'VOIDED' && hasPermission('invoice.payment.void');
+                  return (
+                    <div
+                      key={payment.id}
+                      className={`rounded p-2.5 text-sm ${voided ? 'bg-gray-50 opacity-70' : isRefund ? 'bg-red-50' : 'bg-gray-50'}`}
+                    >
+                      <div className="flex justify-between">
+                        <span
+                          className={`font-medium ${voided ? 'text-gray-400 line-through' : isRefund ? 'text-red-600' : 'text-green-600'}`}
+                        >
+                          {isRefund ? '−' : '+'}
+                          {formatCurrency(payment.amount)}
+                          {isRefund && ' (hoàn)'}
+                        </span>
+                        <span className="text-gray-500">
+                          {format(new Date(payment.paidAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-gray-500">
+                        {payment.method === 'CASH' && 'Tiền mặt'}
+                        {payment.method === 'BANK_TRANSFER' && 'Chuyển khoản'}
+                        {payment.note && <span> • {payment.note}</span>}
+                      </div>
+                      <p className="text-xs text-gray-400">Bởi: {payment.receivedByUser?.fullName ?? '-'}</p>
+                      {voided && (
+                        <p className="text-xs text-red-600">
+                          Đã hủy{payment.voidedByUser ? ` bởi ${payment.voidedByUser.fullName}` : ''}
+                          {payment.voidReason ? `: ${payment.voidReason}` : ''}
+                        </p>
+                      )}
+                      {mayVoid && (
+                        <button
+                          type="button"
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-red-600 hover:underline print:hidden"
+                          onClick={() => setVoidingPayment(payment)}
+                          title={
+                            payment.receivedBy === myId
+                              ? 'Phiếu do bạn lập: cần một quản trị viên khác hủy (trừ khi chỉ có mình bạn có quyền này)'
+                              : undefined
+                          }
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          {isRefund ? 'Hủy phiếu hoàn (lập nhầm)' : 'Hủy phiếu thu (ghi nhầm)'}
+                        </button>
+                      )}
                     </div>
-                    <div className="mt-0.5 text-xs text-gray-500">
-                      {payment.method === 'CASH' && 'Tiền mặt'}
-                      {payment.method === 'BANK_TRANSFER' && 'Chuyển khoản'}
-                      {payment.note && <span> • {payment.note}</span>}
-                    </div>
-                    <p className="text-xs text-gray-400">Bởi: {payment.receivedByUser?.fullName ?? '-'}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-gray-500">Chưa có thanh toán nào</p>
@@ -295,6 +423,12 @@ export default function InvoiceDetailPage() {
         invoice={invoice}
       />
 
+      <DiscountModal invoice={invoice} isOpen={showDiscount} onClose={() => setShowDiscount(false)} />
+      <ItemEditModal invoice={invoice} item={editingItem} onClose={() => setEditingItem(null)} />
+      <RefundModal invoice={invoice} isOpen={showRefund} onClose={() => setShowRefund(false)} />
+      <VoidPaymentModal invoice={invoice} payment={voidingPayment} onClose={() => setVoidingPayment(null)} />
+      <ReissueModal invoice={invoice} isOpen={showReissue} onClose={() => setShowReissue(false)} />
+
       {/* Void Modal */}
       <Modal
         isOpen={showVoidModal}
@@ -304,7 +438,8 @@ export default function InvoiceDetailPage() {
       >
         <div className="space-y-4">
           <Alert type="warning">
-            Hành động này sẽ hủy hóa đơn. Không thể hoàn tác.
+            Hóa đơn sẽ bị hủy và không còn tính doanh thu. Nếu lập sai, sau khi hủy có thể chọn "Lập lại hóa đơn"
+            để tạo hóa đơn mới cho phiên khám này.
           </Alert>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -326,7 +461,7 @@ export default function InvoiceDetailPage() {
               variant="danger"
               onClick={() => voidMutation.mutate(voidReason)}
               isLoading={voidMutation.isPending}
-              disabled={!voidReason.trim()}
+              disabled={voidReason.trim().length < 5}
             >
               Hủy hóa đơn
             </Button>
