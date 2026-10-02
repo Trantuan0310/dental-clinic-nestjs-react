@@ -228,6 +228,29 @@ export function useDeleteRole() {
 // Audit Logs
 // ---------------------------------------------------------------------------
 
+/** Most rows one CSV export fetches (A6-27: export the filter, not the loaded pages). */
+export const AUDIT_EXPORT_MAX = 5000;
+
+/**
+ * Every log matching the filters, page by page through the API's keyset
+ * cursor, up to AUDIT_EXPORT_MAX rows. `truncated` says the cap was hit.
+ */
+export async function fetchAllAuditLogs(
+  filters: Omit<AuditLogFilters, 'cursor' | 'limit'>,
+): Promise<{ rows: AuditLogListResponse['data']; truncated: boolean }> {
+  const rows: AuditLogListResponse['data'] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await getList<AuditLogListResponse>('/admin/audit-logs', {
+      params: { ...filters, limit: 500, ...(cursor ? { cursor } : {}) },
+    });
+    rows.push(...page.data);
+    cursor = page.pagination.nextCursor ?? undefined;
+    if (!page.pagination.hasMore || !cursor) return { rows, truncated: false };
+    if (rows.length >= AUDIT_EXPORT_MAX) return { rows: rows.slice(0, AUDIT_EXPORT_MAX), truncated: true };
+  }
+}
+
 export function useAuditLogs(params?: AuditLogFilters) {
   return useQuery({
     queryKey: ['admin', 'audit-logs', params],
