@@ -2016,16 +2016,26 @@ export class AppointmentsService {
     return { ...created, affectedAppointments };
   }
 
-  async listTimeOffs(query: ListTimeOffsQueryDto) {
+  async listTimeOffs(query: ListTimeOffsQueryDto, actor?: JwtPayload) {
+    const rows = await this.prisma.timeOff.findMany({
+      where: {
+        deletedAt: null,
+        ...(query.dentistId ? { dentistId: query.dentistId } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      orderBy: { startAt: 'desc' },
+    });
+    // A6-24: the reason (illness, pregnancy check…) is personal. Colleagues
+    // and front desk see only when the dentist is away; the dentist and
+    // whoever approves leave see why.
+    const seesReason = (dentistId: string) =>
+      !actor || actor.sub === dentistId || actor.permissions.includes('time_off.approve');
     return {
-      data: await this.prisma.timeOff.findMany({
-        where: {
-          deletedAt: null,
-          ...(query.dentistId ? { dentistId: query.dentistId } : {}),
-          ...(query.status ? { status: query.status } : {}),
-        },
-        orderBy: { startAt: 'desc' },
-      }),
+      data: rows.map(r =>
+        seesReason(r.dentistId)
+          ? r
+          : { ...r, reason: null, decisionNote: null, reasonHidden: true },
+      ),
     };
   }
 

@@ -221,8 +221,8 @@ export class AppointmentsController {
 
   @Get('time-offs')
   @RequirePermissions('schedule.read')
-  async listTimeOffs(@Query() query: ListTimeOffsQueryDto) {
-    return wrapAsPaginated(await this.appointments.listTimeOffs(query));
+  async listTimeOffs(@Query() query: ListTimeOffsQueryDto, @User() actor: JwtPayload) {
+    return wrapAsPaginated(await this.appointments.listTimeOffs(query, actor));
   }
 
   @Post('time-offs/:id/approve')

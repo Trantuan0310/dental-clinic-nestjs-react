@@ -3393,4 +3393,27 @@ describe('AppointmentsService', () => {
       );
     });
   });
+
+  describe('listTimeOffs (A6-24)', () => {
+    const row = (dentistId: string) => ({
+      id: `t-${dentistId}`,
+      dentistId,
+      reason: 'Khám thai',
+      decisionNote: 'OK',
+    });
+
+    it("hides a colleague's reason, keeps one's own and the approver's view", async () => {
+      prisma.timeOff.findMany.mockResolvedValue([row('dentist-1'), row('dentist-2')]);
+
+      const own = await service.listTimeOffs({} as any, dentistPayload('dentist-1'));
+      expect(own.data[0]).toMatchObject({ reason: 'Khám thai' });
+      expect(own.data[1]).toMatchObject({ reason: null, decisionNote: null, reasonHidden: true });
+
+      const desk = await service.listTimeOffs({} as any, receptionistPayload());
+      expect(desk.data.every((r: any) => r.reason === null)).toBe(true);
+
+      const approve = await service.listTimeOffs({} as any, approver);
+      expect(approve.data.map((r: any) => r.reason)).toEqual(['Khám thai', 'Khám thai']);
+    });
+  });
 });
