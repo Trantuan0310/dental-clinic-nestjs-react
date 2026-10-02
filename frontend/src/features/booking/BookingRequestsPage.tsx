@@ -857,6 +857,13 @@ export default function BookingRequestsPage() {
             {canPropose && (
               <div className="mt-5 rounded-lg bg-slate-50 p-4">
                 <h3 className="font-semibold">Giờ thay thế</h3>
+                {dentistOptions.isSuccess && dentists.length === 0 && (
+                  <p className="mt-2 rounded bg-orange-50 p-2 text-sm text-orange-900">
+                    Không còn bác sĩ nào thực hiện dịch vụ này (bác sĩ đã nghỉ hoặc dịch vụ đã
+                    ngừng). Hãy gọi khách để đặt dịch vụ khác qua điện thoại, rồi từ chối yêu cầu này
+                    kèm lời nhắn giải thích.
+                  </p>
+                )}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <label className="text-sm">
                     Bác sĩ
