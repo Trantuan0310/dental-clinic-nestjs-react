@@ -32,6 +32,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const [procedureName, setProcedureName] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [unitPrice, setUnitPrice] = useState('');
+  const [priceReason, setPriceReason] = useState('');
   const [notes, setNotes] = useState('');
   // ADR-0009 D6: optional catalogue pick; it pre-fills code, name and price.
   const [serviceId, setServiceId] = useState('');
@@ -43,6 +44,31 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const { data: bookedVisit } = useAppointment(
     showAddModal && !editingTreatment ? (encounter.appointmentId ?? undefined) : undefined,
   );
+  // Services booked on this visit stay pickable at their frozen price even
+  // when stopped or no longer assigned to the dentist since (A5-19, A2-13).
+  const pickable = [
+    ...catalogServices.map((sv) => ({ serviceId: sv.serviceId, code: sv.code, name: sv.name, price: sv.price, durationMin: sv.durationMin, offCatalog: false })),
+    ...(bookedVisit?.services ?? [])
+      .filter((b) => !catalogServices.some((sv) => sv.serviceId === b.serviceId))
+      .map((b) => ({ serviceId: b.serviceId, code: b.serviceCode, name: b.serviceName, price: b.price, durationMin: b.durationMin, offCatalog: true })),
+  ];
+  // Decision 3: the booked (else catalogue) price is the default; another
+  // price needs treatment.price_override and a reason, kept in the audit.
+  const canOverridePrice = useAuthStore((s) => s.hasPermission('treatment.price_override'));
+  const pickedSnapshot = serviceId ? bookedVisit?.services?.find((b) => b.serviceId === serviceId) : undefined;
+  const listPrice: number | null = editingTreatment
+    ? (editingTreatment.listPrice ?? null)
+    : serviceId
+      ? (pickedSnapshot?.price ?? pickable.find((sv) => sv.serviceId === serviceId)?.price ?? null)
+      : null;
+  const priceNumber = Number(unitPrice);
+  const priceChanged = editingTreatment
+    ? unitPrice !== '' && priceNumber !== (editingTreatment.unitPrice ?? editingTreatment.priceCents)
+    : false;
+  const needsReason = editingTreatment
+    ? priceChanged && (listPrice === null || priceNumber !== listPrice)
+    : listPrice !== null && unitPrice !== '' && priceNumber !== listPrice;
+  const priceLocked = listPrice !== null && !canOverridePrice;
 
   // Materials consumed by this treatment — only meaningful on create; the
   // backend's UpdateTreatmentDto has no field for it, so editing an existing
@@ -78,6 +104,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setProcedureName('');
     setQuantity('1');
     setUnitPrice('');
+    setPriceReason('');
     setPriceNote('');
     setNotes('');
     setServiceId('');
@@ -129,8 +156,11 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setProcedureName('');
     setQuantity('1');
     setUnitPrice('');
+    setPriceReason('');
     setPriceNote('');
     setNotes('');
+    // A2-21: the next free-text line must not carry the previous pick.
+    setServiceId('');
     setInventoryUsages([]);
     setPickedItemId('');
     setPickedQty('1');
@@ -143,6 +173,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setProcedureName(treatment.procedureName ?? '');
     setQuantity(treatment.quantity.toString());
     setUnitPrice((treatment.unitPrice ?? treatment.priceCents).toString());
+    setPriceReason('');
     setNotes(treatment.notes ?? '');
   };
 
@@ -161,6 +192,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           treatmentName: procedureName,
           quantity: parseInt(quantity),
           priceCents: parseInt(unitPrice),
+          ...(priceChanged && priceReason.trim() && { priceReason: priceReason.trim() }),
           description: notes,
         },
       });
@@ -172,10 +204,11 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         treatmentName: procedureName,
         quantity: parseInt(quantity),
         priceCents: parseInt(unitPrice),
+        ...(needsReason && { priceReason: priceReason.trim() }),
         description: notes,
         inventoryItemsUsed: inventoryUsages,
         serviceId: serviceId || undefined,
-        durationMinutes: catalogServices.find((sv) => sv.serviceId === serviceId)?.durationMin,
+        durationMinutes: pickable.find((sv) => sv.serviceId === serviceId)?.durationMin,
       });
     }
   };
@@ -201,8 +234,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         Object.entries(treatmentsByTooth).map(([tooth, toothTreatments]) => (
           <div key={tooth} className="rounded-lg border border-gray-200 p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h4 className="font-medium text-gray-900">Răng {tooth}</h4>
-              {onViewToothDetail && (
+              <h4 className="font-medium text-gray-900">{tooth ? `Răng ${tooth}` : 'Toàn hàm / Chung'}</h4>
+              {onViewToothDetail && tooth && (
                 <button
                   type="button"
                   onClick={() => onViewToothDetail(Number(tooth))}
@@ -220,11 +253,16 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                 >
                   <div>
                     <p className="font-medium text-gray-900">{treatment.procedureName}</p>
-                    <p className="text-sm text-gray-500">Mã: {treatment.procedureCode}</p>
                     <p className="text-sm text-gray-600">
                       {treatment.quantity} x {formatCurrency(treatment.unitPrice)} ={' '}
                       <span className="font-medium">{formatCurrency(treatment.total)}</span>
                     </p>
+                    {treatment.listPrice != null && treatment.listPrice !== treatment.unitPrice && (
+                      <p className="text-xs text-amber-700">
+                        Giá đã chốt {formatCurrency(treatment.listPrice)}
+                        {treatment.priceReason ? ` • Lý do: ${treatment.priceReason}` : ''}
+                      </p>
+                    )}
                     {treatment.notes && (
                       <p className="mt-1 text-xs text-gray-500">{treatment.notes}</p>
                     )}
@@ -284,13 +322,14 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             value={toothNumber}
             onChange={(e) => setToothNumber(String(e.target.value))}
             placeholder="VD: 16 (răng sữa: 51–85)"
+            hint="Để trống nếu không gắn răng (khám, cạo vôi, X-quang toàn hàm…)"
           />
-          {!editingTreatment && catalogServices.length > 0 && (
+          {!editingTreatment && pickable.length > 0 && (
             <Select
               label="Dịch vụ từ danh mục"
               value={serviceId}
               onChange={(e) => {
-                const sv = catalogServices.find((x) => x.serviceId === e.target.value);
+                const sv = pickable.find((x) => x.serviceId === e.target.value);
                 setServiceId(e.target.value);
                 const snapshot = sv && bookedVisit?.services?.find((b) => b.serviceId === sv.serviceId);
                 setPriceNote(
@@ -306,16 +345,13 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
               }}
               options={[
                 { value: '', label: '— Nhập tay —' },
-                ...catalogServices.map((sv) => ({ value: sv.serviceId, label: `${sv.name} (${sv.code})` })),
+                ...pickable.map((sv) => ({
+                  value: sv.serviceId,
+                  label: `${sv.name} (${sv.code})${sv.offCatalog ? ' — theo lịch hẹn, đã ngừng/không còn phân công' : ''}`,
+                })),
               ]}
             />
           )}
-          <Input
-            label="Mã thủ thuật"
-            value={procedureCode}
-            onChange={(e) => setProcedureCode(e.target.value)}
-            placeholder="VD: D2392"
-          />
           <Input
             label="Tên thủ thuật"
             value={procedureName}
@@ -334,12 +370,27 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             <Input
               label="Đơn giá (VND)"
               type="number"
-              hint={priceNote || undefined}
+              step={1000}
+              hint={
+                priceLocked
+                  ? `Theo giá đã chốt ${formatCurrency(listPrice!)}`
+                  : priceNote || (listPrice !== null ? `Giá đã chốt ${formatCurrency(listPrice)}` : undefined)
+              }
+              disabled={priceLocked}
               value={unitPrice}
               onChange={(e) => setUnitPrice(e.target.value)}
               placeholder="350000"
             />
           </div>
+          {needsReason && (
+            <Input
+              label="Lý do đổi đơn giá *"
+              value={priceReason}
+              onChange={(e) => setPriceReason(e.target.value)}
+              placeholder="VD: Răng sữa, làm nhỏ hơn bình thường"
+              hint="Bắt buộc; được ghi vào nhật ký"
+            />
+          )}
           <Textarea
             label="Ghi chú"
             value={notes}
@@ -420,7 +471,12 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             <Button
               onClick={handleSubmit}
               isLoading={createMutation.isPending || updateMutation.isPending}
-              disabled={!toothNumber || !procedureName || !unitPrice}
+              disabled={
+                !procedureName ||
+                !unitPrice ||
+                !Number.isInteger(Number(unitPrice)) ||
+                (needsReason && priceReason.trim().length < 3)
+              }
             >
               {editingTreatment ? 'Lưu' : 'Thêm'}
             </Button>

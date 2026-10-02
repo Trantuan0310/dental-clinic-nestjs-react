@@ -31,6 +31,9 @@ interface PrismaTreatmentRow {
   description?: string | null;
   unitPrice: number | string;
   quantity?: number;
+  serviceId?: string | null;
+  listPrice?: number | string | null;
+  priceReason?: string | null;
   createdAt: string;
 }
 
@@ -41,6 +44,7 @@ function toCreateTreatmentBody(payload: CreateTreatmentPayload) {
     procedure: payload.treatmentName || payload.treatmentCode || '',
     description: payload.description ?? payload.notes,
     unitPrice: payload.priceCents,
+    priceReason: payload.priceReason || undefined,
     quantity: payload.quantity && payload.quantity > 0 ? payload.quantity : undefined,
     toothNumbers:
       payload.toothNumber !== undefined && payload.toothNumber !== ''
@@ -66,6 +70,7 @@ function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
       description: payload.description ?? payload.notes,
     }),
     ...(payload.priceCents !== undefined && { unitPrice: payload.priceCents }),
+    ...(payload.priceReason && { priceReason: payload.priceReason }),
     ...(payload.quantity !== undefined && payload.quantity > 0 && { quantity: payload.quantity }),
     // Tooth edits were silently dropped before UpdateTreatmentDto accepted them.
     ...(payload.toothNumber !== undefined && {
@@ -92,6 +97,9 @@ function transformTreatment(raw: PrismaTreatmentRow): Treatment {
     quantity,
     lineTotalCents: unitPrice * quantity,
     total: unitPrice * quantity,
+    serviceId: raw.serviceId ?? null,
+    listPrice: raw.listPrice === null || raw.listPrice === undefined ? null : Number(raw.listPrice),
+    priceReason: raw.priceReason ?? null,
     createdAt: raw.createdAt,
   };
 }

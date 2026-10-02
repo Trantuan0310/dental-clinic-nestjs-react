@@ -73,9 +73,15 @@ export const INVOICE_PAYMENT_RECORDED_EVENT = 'invoice.payment_recorded';
 export const INVOICE_PAYMENT_VOIDED_EVENT = 'invoice.payment_voided';
 export const INVOICE_REFUNDED_EVENT = 'invoice.refunded';
 
+/** Minimal shape every invoice.* payload satisfies (payroll reloads by id). */
+export interface InvoiceChangedEvent {
+  invoiceId: string;
+  encounterId?: string;
+}
+
 export type InvoiceEventStatus = 'DRAFT' | 'ISSUED' | 'PARTIAL' | 'PAID' | 'VOIDED';
 
-export interface InvoiceEventBase {
+export interface InvoiceEventBase extends InvoiceChangedEvent {
   invoiceId: string;
   invoiceCode: string;
   encounterId: string;
