@@ -37,7 +37,7 @@ import {
   CompensationTerm,
 } from './domain/prorate-calculator';
 import {
-  allocateInvoiceBasis,
+  invoiceBasisByLine,
   clinicDateValue,
   dateKey,
   minutesOf,
@@ -901,6 +901,12 @@ export class PayrollService {
           select: { id: true, treatmentId: true, description: true, lineTotal: true },
           orderBy: { sequence: 'asc' },
         },
+        // Refunds count on their own date: one made after this period is
+        // clawed back in the period it falls in (reconcileClawbacks).
+        payments: {
+          where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
+          select: { amount: true },
+        },
       },
       orderBy: { issuedAt: 'asc' },
     });
@@ -930,10 +936,11 @@ export class PayrollService {
       const term = compensationOn(terms, workDay);
       if (!term) invoicesWithoutTerms.push(inv.code);
       const pct = term?.commissionPct ?? 0;
-      const basis = allocateInvoiceBasis(
+      const refundedVnd = (inv.payments ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      const basis = invoiceBasisByLine(
         inv.items.map(i => ({ id: i.id, lineTotal: Number(i.lineTotal) })),
-        Number(inv.subtotal),
         Number(inv.total),
+        refundedVnd,
       );
       const startedAt = enc.startedAt ?? enc.closedAt ?? inv.issuedAt ?? new Date();
       const closedAt = enc.closedAt ?? enc.startedAt ?? inv.issuedAt ?? new Date();
@@ -961,6 +968,7 @@ export class PayrollService {
             lineTotal: Number(item.lineTotal),
             invoiceSubtotal: Number(inv.subtotal),
             invoiceTotal: Number(inv.total),
+            invoiceRefundedVnd: refundedVnd,
             basisAmountVnd: amount,
             commissionPct: pct,
           },
@@ -1074,10 +1082,14 @@ export class PayrollService {
   }
 
   /**
-   * H5: an invoice counted in a period that is now APPROVED/PAID/LOCKED and
-   * voided afterwards is clawed back in this (open) period as a DEDUCTION,
-   * once: what was paid on it minus what was already clawed back. Only rows
-   * written since migration 046 (with invoice_item_id) are considered.
+   * H5: commission already paid in a closed period (APPROVED/PAID/LOCKED) on
+   * an invoice whose basis has since dropped — voided, or refunded in part —
+   * is clawed back in this open period as a DEDUCTION, dated by the void /
+   * refund (only changes before this period's end count). A refund cancelled
+   * later raises the basis again and the difference is paid back as a BONUS.
+   * Idempotent: what was paid, minus what is owed now, minus what earlier and
+   * this period's adjustments already settled. Only rows written since
+   * migration 046 (with invoice_item_id) are considered.
    */
   private async reconcileClawbacks(
     tx: Prisma.TransactionClient,
@@ -1096,6 +1108,7 @@ export class PayrollService {
         },
         select: {
           invoiceId: true,
+          invoiceItemId: true,
           basisAmountVnd: true,
           commissionPct: true,
           period: { select: { periodStart: true, periodEnd: true } },
@@ -1104,46 +1117,100 @@ export class PayrollService {
     if (counted.length === 0) return [];
 
     const range = periodInstantRange(payPeriod);
-    const voided = await tx.invoice.findMany({
-      where: {
-        id: { in: [...new Set(counted.map(c => c.invoiceId as string))] },
-        status: InvoiceStatus.VOIDED,
-        voidedAt: { lt: range.toExclusive },
-      },
-      select: { id: true, code: true },
-    });
-    if (!voided?.length) return [];
+    const countedIds = [...new Set(counted.map(c => c.invoiceId as string))];
+    // Only invoices that changed since: voided, refunded, or already adjusted
+    // (a refund cancelled later brings refundedAmount back to 0).
+    const touched =
+      (await tx.payrollAdjustment.findMany({
+        where: { dentistId, sourceInvoiceId: { in: countedIds } },
+        select: { sourceInvoiceId: true },
+      })) ?? [];
+    const invoices =
+      (await tx.invoice.findMany({
+        where: {
+          id: { in: countedIds },
+          OR: [
+            { status: InvoiceStatus.VOIDED },
+            { refundedAmount: { gt: 0 } },
+            { id: { in: touched.map(t => t.sourceInvoiceId as string) } },
+          ],
+        },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          voidedAt: true,
+          total: true,
+          items: {
+            where: { deletedAt: null },
+            select: { id: true, lineTotal: true },
+            orderBy: { sequence: 'asc' },
+          },
+          payments: {
+            where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
+            select: { amount: true },
+          },
+        },
+      })) ?? [];
 
+    // Settled so far by this and earlier periods (a later open period's
+    // clawback must not be undone when an earlier one recomputes).
     const already =
       (await tx.payrollAdjustment.findMany({
-        where: { dentistId, sourceInvoiceId: { in: voided.map(v => v.id) } },
-        select: { sourceInvoiceId: true, amountVnd: true },
+        where: {
+          dentistId,
+          sourceInvoiceId: { in: invoices.map(v => v.id) },
+          period: { periodStart: { lte: payPeriod.start } },
+        },
+        select: { sourceInvoiceId: true, type: true, amountVnd: true },
       })) ?? [];
 
     const made: Array<{ invoiceCode: string; amountVnd: number }> = [];
-    for (const inv of voided) {
+    for (const inv of invoices) {
       const rows = counted.filter(c => c.invoiceId === inv.id);
+      const voided =
+        inv.status === InvoiceStatus.VOIDED &&
+        (!inv.voidedAt || inv.voidedAt.getTime() < range.toExclusive.getTime());
+      const refunded = (inv.payments ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      const basisNow = voided
+        ? new Map<string, number>()
+        : invoiceBasisByLine(
+            (inv.items ?? []).map(i => ({ id: i.id, lineTotal: Number(i.lineTotal) })),
+            Number(inv.total),
+            refunded,
+          );
       const paid = Math.round(
         rows.reduce((s, r) => s + Number(r.basisAmountVnd ?? 0) * Number(r.commissionPct ?? 0), 0),
       );
-      const clawed = already
+      const owedNow = Math.round(
+        rows.reduce(
+          (s, r) =>
+            s + (basisNow.get(r.invoiceItemId as string) ?? 0) * Number(r.commissionPct ?? 0),
+          0,
+        ),
+      );
+      const settled = already
         .filter(a => a.sourceInvoiceId === inv.id)
-        .reduce((s, a) => s + Number(a.amountVnd), 0);
-      const due = paid - clawed;
-      if (due <= 0) continue;
+        .reduce((s, a) => s + (a.type === 'BONUS' ? -1 : 1) * Number(a.amountVnd), 0);
+      const due = paid - owedNow - settled;
+      if (due === 0) continue;
       const p = rows[0].period;
+      const closed = `kỳ lương ${dateKey(p.periodStart)} – ${dateKey(p.periodEnd)} đã chốt`;
       await tx.payrollAdjustment.create({
         data: {
           payrollPeriodId: periodId,
           dentistId,
-          type: PayrollAdjustmentType.DEDUCTION,
-          amountVnd: due,
-          reason: `Truy thu hoa hồng: hóa đơn ${inv.code} đã hủy sau khi kỳ lương ${dateKey(p.periodStart)} – ${dateKey(p.periodEnd)} đã chốt`,
+          type: due > 0 ? PayrollAdjustmentType.DEDUCTION : PayrollAdjustmentType.BONUS,
+          amountVnd: Math.abs(due),
+          reason:
+            due > 0
+              ? `Truy thu hoa hồng: hóa đơn ${inv.code} ${voided ? 'đã hủy' : 'đã hoàn tiền'} sau khi ${closed}`
+              : `Trả lại hoa hồng: hóa đơn ${inv.code} — phiếu hoàn đã hủy sau khi ${closed}`,
           adjustedByUserId: null,
           sourceInvoiceId: inv.id,
         },
       });
-      made.push({ invoiceCode: inv.code, amountVnd: due });
+      made.push({ invoiceCode: inv.code, amountVnd: -due });
     }
     return made;
   }

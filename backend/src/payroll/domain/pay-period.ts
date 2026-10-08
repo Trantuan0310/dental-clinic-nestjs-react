@@ -1,5 +1,6 @@
 import { clinicDateOnly, startOfClinicDay } from '../../common/date-range.util';
 import { DayCalendar, Interval, mergeWindows } from '../../appointments/domain/day-calendar';
+import { allocateNet } from '../../billing/domain/invoice-math';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -36,33 +37,22 @@ export function periodDateKeys(period: { start: Date; end: Date }): string[] {
 export const clinicDateValue = (instant: Date): Date => new Date(clinicDateOnly(instant));
 
 /**
- * Commission basis of each invoice line: its line total after the invoice
- * discount, shared pro rata (line × total / subtotal). Rounded to whole đồng
- * with the leftover đồng going to the largest remainders, so the lines add
- * up to the rounded invoice total exactly.
+ * Commission basis of each invoice line: what the clinic keeps on the
+ * invoice (total − refunds, never below 0) split over the lines with the
+ * billing module's own rule (allocateNet — the invoice's netLineTotal when
+ * nothing was refunded), so payroll matches the invoice to the đồng.
  */
-export function allocateInvoiceBasis(
+export function invoiceBasisByLine(
   items: Array<{ id: string; lineTotal: number }>,
-  subtotal: number,
   total: number,
+  refunded = 0,
 ): Map<string, number> {
-  const out = new Map<string, number>();
-  if (subtotal <= 0 || total <= 0) {
-    for (const i of items) out.set(i.id, 0);
-    return out;
-  }
-  const ratio = total / subtotal;
-  const raw = items.map(i => ({ id: i.id, value: Math.max(i.lineTotal, 0) * ratio }));
-  const target = Math.round(raw.reduce((s, r) => s + r.value, 0));
-  const floors = raw.map(r => ({ id: r.id, base: Math.floor(r.value), frac: r.value % 1 }));
-  let left = target - floors.reduce((s, f) => s + f.base, 0);
-  for (const f of [...floors].sort((a, b) => b.frac - a.frac)) {
-    if (left <= 0) break;
-    f.base += 1;
-    left -= 1;
-  }
-  for (const f of floors) out.set(f.id, f.base);
-  return out;
+  const kept = Math.max(0, Math.round(total - refunded));
+  const parts = allocateNet(
+    items.map(i => i.lineTotal),
+    kept,
+  );
+  return new Map(items.map((i, idx) => [i.id, parts[idx] ?? 0]));
 }
 
 /** a minus every interval in `cut` (both sorted or not). */

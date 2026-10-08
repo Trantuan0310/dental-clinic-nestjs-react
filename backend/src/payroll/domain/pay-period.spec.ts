@@ -1,9 +1,10 @@
 import {
-  allocateInvoiceBasis,
+  invoiceBasisByLine,
   clinicDateValue,
   periodDateKeys,
   periodInstantRange,
 } from './pay-period';
+import { allocateNet } from '../../billing/domain/invoice-math';
 
 /** In [from, toExclusive) — the filter every payroll query uses (H1). */
 const inPeriod = (instant: string, p: { start: Date; end: Date }) => {
@@ -53,36 +54,39 @@ describe('periodInstantRange (H1: clinic days, half-open)', () => {
   });
 });
 
-describe('allocateInvoiceBasis (H5: discount shared pro rata)', () => {
-  it('shares an invoice discount across lines', () => {
-    const m = allocateInvoiceBasis(
+describe('invoiceBasisByLine (H5: same split as the invoice netLineTotal)', () => {
+  const lines = [
+    { id: 'a', lineTotal: 100_000 },
+    { id: 'b', lineTotal: 100_000 },
+    { id: 'c', lineTotal: 100_000 },
+  ];
+
+  it('matches billing allocateNet line by line (discounted invoice)', () => {
+    const m = invoiceBasisByLine(lines, 200_000);
+    expect([...m.values()]).toEqual(allocateNet([100_000, 100_000, 100_000], 200_000));
+    expect([...m.values()].reduce((s, v) => s + v, 0)).toBe(200_000);
+  });
+
+  it('shares an invoice discount pro rata', () => {
+    const m = invoiceBasisByLine(
       [
         { id: 'a', lineTotal: 6_000_000 },
         { id: 'b', lineTotal: 4_000_000 },
       ],
-      10_000_000,
       5_000_000,
     );
     expect(m.get('a')).toBe(3_000_000);
     expect(m.get('b')).toBe(2_000_000);
   });
 
-  it('rounds to đồng and the lines add up to the invoice total', () => {
-    const m = allocateInvoiceBasis(
-      [
-        { id: 'a', lineTotal: 100_000 },
-        { id: 'b', lineTotal: 100_000 },
-        { id: 'c', lineTotal: 100_000 },
-      ],
-      300_000,
-      200_000,
-    );
+  it('a refund lowers the basis; never below 0', () => {
+    const m = invoiceBasisByLine(lines, 300_000, 100_000);
+    expect([...m.values()]).toEqual(allocateNet([100_000, 100_000, 100_000], 200_000));
     expect([...m.values()].reduce((s, v) => s + v, 0)).toBe(200_000);
-    expect([...m.values()].every(v => Number.isInteger(v))).toBe(true);
+    expect([...invoiceBasisByLine(lines, 300_000, 400_000).values()]).toEqual([0, 0, 0]);
   });
 
   it('a 0đ invoice gives no basis', () => {
-    const m = allocateInvoiceBasis([{ id: 'a', lineTotal: 0 }], 0, 0);
-    expect(m.get('a')).toBe(0);
+    expect(invoiceBasisByLine([{ id: 'a', lineTotal: 0 }], 0).get('a')).toBe(0);
   });
 });

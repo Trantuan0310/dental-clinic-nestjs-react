@@ -5,7 +5,7 @@ import { PayrollService } from './payroll.service';
 import {
   ENCOUNTER_CLOSED_EVENT,
   INVOICE_ISSUED_EVENT,
-  INVOICE_PAYMENT_RECORDED_EVENT,
+  INVOICE_PAYMENT_VOIDED_EVENT,
   INVOICE_REFUNDED_EVENT,
   INVOICE_VOIDED_EVENT,
   InvoiceChangedEvent,
@@ -42,11 +42,18 @@ export class PayrollEventListener {
     await this.recompute(period.id, payload.dentistId, `encounter ${payload.encounterId} closed`);
   }
 
+  /**
+   * Issue, void, refund and a cancelled payment/refund row change the
+   * commission basis (issued total − refunds). A plain payment does not
+   * (basis is the issued invoice, not cash), so it is not listened to.
+   */
   @OnEvent(INVOICE_ISSUED_EVENT)
   @OnEvent(INVOICE_VOIDED_EVENT)
-  @OnEvent(INVOICE_PAYMENT_RECORDED_EVENT)
   @OnEvent(INVOICE_REFUNDED_EVENT)
-  async handleInvoiceChanged(payload: InvoiceChangedEvent) {
+  @OnEvent(INVOICE_PAYMENT_VOIDED_EVENT)
+  async handleInvoiceChanged(
+    payload: InvoiceChangedEvent & { occurredAt?: Date; refundedAt?: Date },
+  ) {
     try {
       const invoice = await this.prisma.invoice.findUnique({
         where: { id: payload.invoiceId },
@@ -67,11 +74,17 @@ export class PayrollEventListener {
         const p = await this.payroll.findOpenPeriodFor(invoice.issuedAt);
         if (p) periodIds.add(p.id);
       }
-      // A void after that period closed: the open period takes the clawback.
-      if (invoice.status === 'VOIDED') {
-        const p = await this.payroll.findOpenPeriodFor(invoice.voidedAt ?? new Date(), true);
+      // A void / refund (or a cancelled refund) after that period closed:
+      // the open period of the day it happened takes the clawback.
+      const changedAt =
+        invoice.status === 'VOIDED'
+          ? invoice.voidedAt
+          : (payload.refundedAt ?? payload.occurredAt ?? null);
+      if (changedAt || invoice.status === 'VOIDED') {
+        const when = new Date(changedAt ?? new Date());
+        const p = await this.payroll.findOpenPeriodFor(when, true);
         if (p) periodIds.add(p.id);
-        else this.logger.warn(`No open payroll period to claw back voided invoice ${invoice.id}`);
+        else this.logger.warn(`No open payroll period to settle invoice ${invoice.id}`);
       }
       for (const id of periodIds) {
         await this.recompute(id, dentistId, `invoice ${invoice.id} ${invoice.status}`);

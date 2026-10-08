@@ -222,48 +222,138 @@ describe('PayrollService.computePeriod — round 4', () => {
     expect(details[1].treatmentId).toBeNull();
   });
 
-  it('H5: an invoice voided after its period closed is clawed back once in the open period', async () => {
+  describe('H5: basis dropped after its period closed (void, refund) → settled in the open period', () => {
+    // August (closed) paid 10% on two lines of HD-OLD: 3tr + 1tr = 400k.
     const counted = [
-      {
-        invoiceId: 'inv-old',
-        basisAmountVnd: new Prisma.Decimal(4_000_000),
-        commissionPct: new Prisma.Decimal(0.1),
-        period: { periodStart: new Date('2026-08-01'), periodEnd: new Date('2026-08-31') },
-      },
-    ];
+      { invoiceItemId: 'it-a', basis: 3_000_000 },
+      { invoiceItemId: 'it-b', basis: 1_000_000 },
+    ].map(r => ({
+      invoiceId: 'inv-old',
+      invoiceItemId: r.invoiceItemId,
+      basisAmountVnd: new Prisma.Decimal(r.basis),
+      commissionPct: new Prisma.Decimal(0.1),
+      period: { periodStart: new Date('2026-08-01'), periodEnd: new Date('2026-08-31') },
+    }));
+    const oldInvoice = (over: Record<string, unknown>) => ({
+      id: 'inv-old',
+      code: 'HD-OLD',
+      status: 'PAID',
+      voidedAt: null,
+      total: new Prisma.Decimal(4_000_000),
+      items: [
+        { id: 'it-a', lineTotal: new Prisma.Decimal(3_000_000) },
+        { id: 'it-b', lineTotal: new Prisma.Decimal(1_000_000) },
+      ],
+      payments: [],
+      ...over,
+    });
+    const setup = (inv: Record<string, unknown>, settled: unknown[] = []) => {
+      const tx = makeTx({
+        payrollEncounterDetail: { findMany: fn(counted) },
+        invoice: {
+          findMany: jest
+            .fn()
+            .mockImplementation(({ where }) => (where.id ? [oldInvoice(inv)] : [])),
+        },
+        payrollAdjustment: {
+          findMany: jest
+            .fn()
+            .mockImplementation(({ where }: any) => (where.sourceInvoiceId ? settled : [])),
+        },
+      });
+      return { tx, ...makeService(tx) };
+    };
+
+    it('voided: claws back all of it, once', async () => {
+      const { tx, service } = setup({
+        status: 'VOIDED',
+        voidedAt: new Date('2026-09-10T09:00:00+07:00'),
+      });
+      await service.computePeriod('p-sep', 'admin-1');
+      expect(tx.payrollEncounterDetail.findMany.mock.calls[0][0].where.period).toEqual({
+        status: { in: ['APPROVED', 'PAID', 'LOCKED'] },
+      });
+      expect(tx.payrollAdjustment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          payrollPeriodId: 'p-sep',
+          dentistId: 'd1',
+          type: 'DEDUCTION',
+          amountVnd: 400_000,
+          sourceInvoiceId: 'inv-old',
+          adjustedByUserId: null,
+        }),
+      });
+
+      const again = setup({ status: 'VOIDED', voidedAt: new Date('2026-09-10T09:00:00+07:00') }, [
+        { sourceInvoiceId: 'inv-old', type: 'DEDUCTION', amountVnd: new Prisma.Decimal(400_000) },
+      ]);
+      await again.service.computePeriod('p-sep', 'admin-1');
+      expect(again.tx.payrollAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('refunded 1tr in September: claws back 10% of it, filtered by the refund date', async () => {
+      const { tx, service } = setup({
+        refundedAmount: new Prisma.Decimal(1_000_000),
+        payments: [{ amount: new Prisma.Decimal(1_000_000) }],
+      });
+      await service.computePeriod('p-sep', 'admin-1');
+      const invCall = tx.invoice.findMany.mock.calls.find(c => c[0].where.id)![0];
+      expect(invCall.select.payments.where).toEqual({
+        kind: 'REFUND',
+        status: 'COMPLETED',
+        paidAt: { lt: new Date('2026-10-01T00:00:00+07:00') },
+      });
+      expect(tx.payrollAdjustment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ type: 'DEDUCTION', amountVnd: 100_000 }),
+      });
+    });
+
+    it('refund cancelled after it was clawed back: the difference is paid back', async () => {
+      const { tx, service } = setup({ payments: [] }, [
+        { sourceInvoiceId: 'inv-old', type: 'DEDUCTION', amountVnd: new Prisma.Decimal(100_000) },
+      ]);
+      await service.computePeriod('p-sep', 'admin-1');
+      expect(tx.payrollAdjustment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ type: 'BONUS', amountVnd: 100_000 }),
+      });
+    });
+  });
+
+  it('H5: a refund inside the period lowers that period basis (same split as the invoice)', async () => {
     const tx = makeTx({
-      payrollEncounterDetail: { findMany: fn(counted) },
       invoice: {
-        findMany: jest
-          .fn()
-          .mockImplementation(({ where }) => (where.id ? [{ id: 'inv-old', code: 'HD-OLD' }] : [])),
+        findMany: jest.fn().mockImplementation(({ where }) =>
+          where.encounter?.dentistId === 'd1'
+            ? [
+                {
+                  id: 'inv-1',
+                  code: 'HD-1',
+                  subtotal: new Prisma.Decimal(3_000_000),
+                  total: new Prisma.Decimal(3_000_000),
+                  issuedAt: new Date('2026-09-05T10:00:00+07:00'),
+                  encounter: {
+                    id: 'enc-1',
+                    startedAt: null,
+                    closedAt: new Date('2026-09-05T09:00:00+07:00'),
+                  },
+                  items: [1, 2, 3].map(n => ({
+                    id: `it-${n}`,
+                    treatmentId: `t-${n}`,
+                    description: `Răng ${n}`,
+                    lineTotal: new Prisma.Decimal(1_000_000),
+                  })),
+                  payments: [{ amount: new Prisma.Decimal(1_000_000) }], // one tooth refunded
+                },
+              ]
+            : [],
+        ),
       },
     });
     const { service } = makeService(tx);
     await service.computePeriod('p-sep', 'admin-1');
-
-    const detailWhere = tx.payrollEncounterDetail.findMany.mock.calls[0][0].where;
-    expect(detailWhere.period).toEqual({ status: { in: ['APPROVED', 'PAID', 'LOCKED'] } });
-    expect(tx.payrollAdjustment.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        payrollPeriodId: 'p-sep',
-        dentistId: 'd1',
-        type: 'DEDUCTION',
-        amountVnd: 400_000,
-        sourceInvoiceId: 'inv-old',
-        adjustedByUserId: null,
-      }),
-    });
-
-    // Already clawed back → nothing more.
-    tx.payrollAdjustment.create.mockClear();
-    tx.payrollAdjustment.findMany.mockImplementation(({ where }: any) =>
-      where.sourceInvoiceId
-        ? [{ sourceInvoiceId: 'inv-old', amountVnd: new Prisma.Decimal(400_000) }]
-        : [],
-    );
-    await service.computePeriod('p-sep', 'admin-1');
-    expect(tx.payrollAdjustment.create).not.toHaveBeenCalled();
+    const line = tx.payrollLineItem.upsert.mock.calls[0][0].update;
+    expect(line.totalRevenueVnd).toBe(2_000_000);
+    expect(line.commissionVnd).toBe(200_000);
   });
 
   it('scoped recompute (listener) touches only that dentist and retries a serialization failure', async () => {
@@ -439,6 +529,39 @@ describe('PayrollEventListener — round 4', () => {
     await listener.handleInvoiceChanged({ invoiceId: 'inv' });
     expect(payroll.computePeriod).toHaveBeenCalledTimes(1);
     expect(payroll.computePeriod).toHaveBeenCalledWith('p-sep', null, { dentistIds: ['d1'] });
+  });
+
+  it('refund: settles in the open period of the refund date, not only the issue period', async () => {
+    const { listener, prisma, payroll } = make();
+    prisma.invoice.findUnique.mockResolvedValue({
+      id: 'inv',
+      status: 'PAID',
+      issuedAt: new Date('2026-08-20T09:00:00+07:00'),
+      voidedAt: null,
+      encounter: { dentistId: 'd1' },
+    });
+    payroll.findOpenPeriodFor.mockImplementation(async (at: Date) =>
+      at.getUTCMonth() === 9 ? { id: 'p-oct' } : null,
+    );
+    await listener.handleInvoiceChanged({
+      invoiceId: 'inv',
+      refundedAt: new Date('2026-10-02T09:00:00+07:00'),
+    });
+    expect(payroll.computePeriod).toHaveBeenCalledWith('p-oct', null, { dentistIds: ['d1'] });
+  });
+
+  it('does not recompute on a plain payment (basis is the issued invoice, not cash)', () => {
+    const events = Reflect.getMetadata(
+      'EVENT_LISTENER_METADATA',
+      PayrollEventListener.prototype.handleInvoiceChanged,
+    ) as Array<{ event: string }>;
+    const names = events.map(e => e.event).sort();
+    expect(names).toEqual([
+      'invoice.issued',
+      'invoice.payment_voided',
+      'invoice.refunded',
+      'invoice.voided',
+    ]);
   });
 
   it('never throws into the emitter', async () => {

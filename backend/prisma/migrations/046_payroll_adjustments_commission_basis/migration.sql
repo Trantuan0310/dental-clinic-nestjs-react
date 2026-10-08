@@ -6,6 +6,11 @@
 --    their line item; nothing is deleted.
 -- 2. Commission is paid on issued invoices: each detail row records the
 --    invoice line, the amount after the invoice discount and the rate used.
+--
+-- One transaction (like 030/045): every statement here is transactional
+-- (no CREATE INDEX CONCURRENTLY), so a failure leaves nothing half-moved.
+
+BEGIN;
 
 -- ---------------------------------------------------------------------------
 -- 1. payroll_adjustments → (payroll_period_id, dentist_id)
@@ -98,3 +103,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS payroll_encounter_details_line_item_invoice_it
   ON payroll_encounter_details (payroll_line_item_id, invoice_item_id);
 CREATE INDEX IF NOT EXISTS payroll_encounter_details_invoice_id_idx
   ON payroll_encounter_details (invoice_id);
+
+COMMIT;
