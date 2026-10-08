@@ -197,6 +197,15 @@ export class CancelAppointmentDto {
   @IsOptional()
   @IsCalendarDate()
   updatedAt?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'The clinic cancels (closed day, absent dentist): allowed after the start time, ' +
+      'never counted against the patient (front desk / admin only)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  byClinic?: boolean;
 }
 
 export class NoShowDto {
@@ -243,6 +252,62 @@ export class RescheduleAppointmentDto {
   @IsString()
   @MaxLength(500)
   durationOverrideReason?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Moved for the clinic's reasons (closed day, absent dentist): not counted in the " +
+      "patient's limit of 3 reschedules (front desk / admin only)",
+  })
+  @IsOptional()
+  @IsBoolean()
+  byClinic?: boolean;
+}
+
+export class BulkRescheduleItemDto {
+  @ApiProperty()
+  @IsUUID()
+  appointmentId!: string;
+
+  @ApiPropertyOptional({ description: 'New start; default the current one (dentist change)' })
+  @IsOptional()
+  @IsAppointmentInstant()
+  newStartsAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  newDentistId?: string;
+}
+
+/** POST /appointments/bulk-reschedule — the impact list's "move these visits". */
+export class BulkRescheduleDto {
+  @ApiProperty({ type: [BulkRescheduleItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => BulkRescheduleItemDto)
+  items!: BulkRescheduleItemDto[];
+
+  @ApiProperty({ example: 'Bác sĩ nghỉ ốm' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(5, { message: 'Lý do cần ít nhất 5 ký tự' })
+  @MaxLength(300)
+  reason!: string;
+}
+
+/** POST /appointments/:id/clinic-contact — the patient was (not yet) told. */
+export class ClinicContactDto {
+  @ApiProperty({ description: 'true = reached the patient; false = clear the mark' })
+  @IsBoolean()
+  contacted!: boolean;
+
+  @ApiPropertyOptional({ example: 'Đã gọi, khách đồng ý dời sang thứ Sáu' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class ListAppointmentsQueryDto {
@@ -553,6 +618,11 @@ export class UpdateWorkingScheduleDto {
   @IsOptional()
   @IsCalendarDate()
   effectiveFrom?: string;
+
+  @ApiPropertyOptional({ description: 'updatedAt the client last saw (ISO); 409 if changed' })
+  @IsOptional()
+  @IsCalendarDate()
+  expectedUpdatedAt?: string;
 }
 
 export class CreateTimeOffDto {
@@ -560,12 +630,13 @@ export class CreateTimeOffDto {
   @IsUUID()
   dentistId!: string;
 
-  @ApiProperty()
-  @IsCalendarDate()
+  // An instant with its offset: a zone-less time used to be read as UTC.
+  @ApiProperty({ example: '2026-10-01T13:00:00+07:00' })
+  @IsAppointmentInstant()
   startAt!: string;
 
-  @ApiProperty()
-  @IsCalendarDate()
+  @ApiProperty({ example: '2026-10-01T17:00:00+07:00' })
+  @IsAppointmentInstant()
   endAt!: string;
 
   @ApiProperty({ enum: TimeOffType })
@@ -588,6 +659,28 @@ export class ListTimeOffsQueryDto {
   @IsOptional()
   @IsEnum(TimeOffStatus)
   status?: TimeOffStatus;
+}
+
+/** Withdraw a time-off; one already running ends now instead (needs a reason). */
+export class CancelTimeOffDto {
+  @ApiPropertyOptional({ example: 'Bác sĩ khỏe lại, làm buổi chiều' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+/** Shorten or extend a time-off (its end only). */
+export class UpdateTimeOffDto {
+  @ApiProperty({ example: '2026-10-03T17:00:00+07:00' })
+  @IsAppointmentInstant()
+  endAt!: string;
+
+  @ApiProperty({ example: 'Bác sĩ cần nghỉ thêm 2 ngày' })
+  @IsString()
+  @MinLength(5, { message: 'Lý do cần ít nhất 5 ký tự' })
+  @MaxLength(500)
+  reason!: string;
 }
 
 export class DecideTimeOffDto {
@@ -726,6 +819,14 @@ export class ClinicClosureDto {
   @MinLength(3, { message: 'Lý do tối thiểu 3 ký tự' })
   @MaxLength(500)
   reason!: string;
+
+  @ApiPropertyOptional({
+    example: '14:00',
+    description: 'Closed from this clinic time on the first day (mid-day closure)',
+  })
+  @IsOptional()
+  @IsClinicTime()
+  startTime?: string;
 }
 
 export class ListClinicClosuresQueryDto {

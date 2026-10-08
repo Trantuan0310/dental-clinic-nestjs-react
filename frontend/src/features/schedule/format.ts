@@ -1,7 +1,9 @@
 import type { ScheduleChangeImpact } from '@/types/schedule';
 
+/** dd/mm/yyyy HH:mm in clinic time, whatever zone the workstation is set to (A1-14). */
 export function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

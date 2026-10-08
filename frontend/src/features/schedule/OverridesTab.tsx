@@ -1,13 +1,25 @@
 import { useMemo, useState } from 'react';
-import { format } from 'date-fns';
 import { CalendarX2, Plus, Trash2 } from 'lucide-react';
-import { Alert, Badge, Button, Card, DatePicker, EmptyState, Input, Modal, Select, Textarea } from '@/components/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  DatePicker,
+  EmptyState,
+  Input,
+  Modal,
+  Select,
+  Textarea,
+} from '@/components/ui';
+import { clinicToday } from '@/lib/clinicTime';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
-import { useDentistOptions } from '@/features/appointments/appointmentApi';
+import { useAvailability, useDentistOptions } from '@/features/appointments/appointmentApi';
 import { useCreateScheduleOverride, useDeleteScheduleOverride, useScheduleOverrides } from './scheduleApi';
 import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { TimeBlocksEditor } from './TimeBlocksEditor';
@@ -30,6 +42,7 @@ export function OverridesTab() {
   const [dentistFilter, setDentistFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const [affected, setAffected] = useState<ScheduleChangeImpact | null>(null);
+  const [deleting, setDeleting] = useState<(ScheduleOverride & { times: string[] }) | null>(null);
   const { data: dentists = [] } = useDentistOptions();
   const { data: overrides = [], isLoading } = useScheduleOverrides(dentistFilter || undefined);
   const remove = useDeleteScheduleOverride();
@@ -118,15 +131,7 @@ export function OverridesTab() {
                           size="sm"
                           variant="ghost"
                           aria-label={`Xóa ngoại lệ ngày ${formatDate(o.date)}`}
-                          onClick={() =>
-                            remove.mutate(o.id, {
-                              onSuccess: (result) => {
-                                notify.success('Đã xóa ngoại lệ; lịch trở lại như tuần');
-                                if (hasImpact(result)) setAffected(result);
-                              },
-                              onError: (e) => notify.error(getApiErrorMessage(e, 'Không xóa được')),
-                            })
-                          }
+                          onClick={() => setDeleting(o)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -140,6 +145,30 @@ export function OverridesTab() {
         </Card>
       )}
 
+      <ConfirmDialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Xóa ngoại lệ lịch làm việc"
+        description={
+          deleting
+            ? `Xóa ngoại lệ ${deleting.kind === 'CLOSED' ? 'đóng lịch' : 'đổi giờ'} ngày ${formatDate(deleting.date)} (${deleting.times.join(', ')}) của ${nameById.get(deleting.dentistId) ?? 'bác sĩ'}? Ngày này sẽ trở lại giờ làm theo lịch tuần.`
+            : undefined
+        }
+        confirmText="Xóa"
+        variant="danger"
+        isLoading={remove.isPending}
+        onConfirm={() => {
+          if (!deleting) return;
+          remove.mutate(deleting.id, {
+            onSuccess: (result) => {
+              setDeleting(null);
+              notify.success('Đã xóa ngoại lệ; lịch trở lại như tuần');
+              if (hasImpact(result)) setAffected(result);
+            },
+            onError: (e) => notify.error(getApiErrorMessage(e, 'Không xóa được')),
+          });
+        }}
+      />
       <CreateOverrideModal
         open={creating}
         onClose={() => setCreating(false)}
@@ -149,6 +178,7 @@ export function OverridesTab() {
         open={affected !== null}
         appointments={affected?.affectedAppointments ?? []}
         bookingRequests={affected?.affectedBookingRequests ?? []}
+        waitingPatients={affected?.waitingPatients ?? []}
         onClose={() => setAffected(null)}
       />
     </div>
@@ -166,7 +196,8 @@ function CreateOverrideModal({
 }) {
   const { data: dentists = [] } = useDentistOptions();
   const create = useCreateScheduleOverride();
-  const today = format(new Date(), 'yyyy-MM-dd');
+  // The clinic's date, whatever zone the workstation is set to (A1-14).
+  const today = clinicToday();
   const [form, setForm] = useState({
     dentistId: '',
     date: today,
@@ -178,6 +209,12 @@ function CreateOverrideModal({
   });
   const [ranges, setRanges] = useState<TimeBlock[]>(defaultBlocks);
   const changed = form.kind === 'CHANGED_HOURS';
+  // A1-29: start from the dentist's own hours that day, not the clinic's.
+  const { data: dayAvailability } = useAvailability(
+    changed && form.dentistId ? form.dentistId : undefined,
+    changed ? form.date : undefined,
+  );
+  const currentWindows = dayAvailability?.windows ?? [];
   const withTimes = !changed && !form.wholeDay;
   const rangeError = changed ? blockError(ranges) : null;
 
@@ -249,6 +286,16 @@ function CreateOverrideModal({
               khung (VD 09:00–12:00 và 13:30–17:00). Ngày đã có khung đổi giờ thì khung mới được cộng thêm, không được
               chồng lên khung cũ.
             </Alert>
+            {currentWindows.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setRanges(currentWindows.map((w) => ({ startTime: w.startTime, endTime: w.endTime })))}
+              >
+                Lấy giờ làm hiện tại ({currentWindows.map((w) => `${w.startTime}–${w.endTime}`).join(', ')})
+              </Button>
+            )}
             <TimeBlocksEditor blocks={ranges} onChange={setRanges} startLabel="Làm từ" />
             {rangeError && <p className="text-xs text-red-600">{rangeError}</p>}
           </div>

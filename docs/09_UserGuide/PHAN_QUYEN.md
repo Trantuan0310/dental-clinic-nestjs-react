@@ -24,7 +24,10 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Thêm, sửa vật tư | ✔ | — | — |
 | **Nhân sự**: hồ sơ nhân viên, tài khoản (tạo mới hoặc gắn tài khoản có sẵn), khôi phục nhân viên đã nghỉ việc | ✔ | — | — |
 | Hồ sơ bác sĩ | ✔ | Sửa hồ sơ của mình | Xem |
-| Lịch làm việc, ngày nghỉ bác sĩ | ✔ sửa, duyệt | Sửa lịch của mình | Xem |
+| Lịch làm việc, ngày nghỉ bác sĩ | ✔ sửa, duyệt | Sửa lịch của mình (không lùi ngày; không rút giờ còn lịch hẹn) | Xem (không xem lý do nghỉ) |
+| Ghi bác sĩ vắng đột xuất hôm nay, có hiệu lực ngay (`time_off.record_urgent`, migration 043) | ✔ | — | ✔ (bắt đầu trong hôm nay, kết thúc chậm nhất cuối ngày mai) |
+| Lịch hẹn bị ảnh hưởng: chuyển bác sĩ thay, dời hàng loạt, đánh dấu đã gọi báo bệnh nhân | ✔ | — | ✔ |
+| "Phòng khám hủy/dời" (không tính giới hạn 3 lần dời, không là vắng mặt) | ✔ | — | ✔ |
 | Ngày nghỉ toàn phòng khám (Tết, lễ) | ✔ (`clinic_closure.manage`, migration 035) | Xem | Xem |
 | Ca làm việc (đăng ký, duyệt) | Duyệt | Đăng ký ca của mình | — |
 | Lương: cấu hình, tính, duyệt, trả | ✔ | Xem lương của mình | — |
@@ -46,6 +49,15 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 - Bác sĩ **Tạm nghỉ** (Nhân sự) hoặc **Tạm đình chỉ** (trang bác sĩ) không nhận lịch hẹn mới, nhưng lịch làm việc và ngày nghỉ vẫn sửa được. Bác sĩ tắt "Nhận bệnh nhân mới" hoặc "Nhận đặt lịch online" bị ẩn khỏi trang đặt lịch online.
 - Các thao tác mới dùng quyền có sẵn: gắn tài khoản có sẵn / danh sách tài khoản chưa gắn (`employee.update`; tài khoản quản trị hoặc có quyền quản lý người dùng/vai trò chỉ hiện và gắn được khi có thêm `user.update`), khôi phục nhân viên (`employee.deactivate`; kích hoạt lại tài khoản đăng nhập kèm theo cần thêm `user.deactivate`), sửa email và vai trò (`user.update`). Đổi vai trò luôn đăng xuất tài khoản đó, kể cả khi tự đổi. Không thêm mã quyền mới.
 - Email trùng nhau chỉ khác hoa thường (còn sót sau migration 037) vẫn đăng nhập được nếu chỉ có đúng một tài khoản khớp; câu SQL kiểm tra và tạo lại index nằm ở đầu file migration.
+
+## Bác sĩ vắng, phòng khám nghỉ (vòng 4, migration 043)
+
+- Lý do nghỉ phép chỉ quản trị (`time_off.approve`) và chính bác sĩ xem được; lễ tân chỉ thấy khoảng thời gian.
+- Lễ tân hủy được vắng đột xuất do chính mình ghi; quản trị kết thúc sớm, gia hạn hoặc hủy mọi kỳ nghỉ (cần lý do).
+- Check-in vào bác sĩ đang nghỉ phép / lịch đóng / phòng khám nghỉ bị chặn: đổi lịch sang bác sĩ khác (chọn "Phòng khám dời") rồi check-in.
+- Lịch rơi vào ngày nghỉ hoặc bác sĩ vắng mà chưa xử lý thì hệ thống tự ghi "Phòng khám hủy", không đánh vắng mặt.
+- "Thay bác sĩ cả ngày" (`queue.manage`) mặc định đóng lịch của bác sĩ vắng ngày đó và có nút hoàn tác.
+- Cho nghỉ việc với ngày trong tương lai là lên lịch: tài khoản vẫn hoạt động tới ngày đó rồi tự khóa.
 
 ## Trong màn khám bệnh
 

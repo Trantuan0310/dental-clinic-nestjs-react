@@ -16,6 +16,7 @@ import {
 } from '../appointments/domain/shift-bookings';
 import { LOCKING_TX_OPTIONS, lockDentistCalendar } from '../appointments/domain/advisory-lock';
 import { CLINIC_UTC_OFFSET_MS, clinicDateOnly } from '../common/date-range.util';
+import { shiftDayProblem } from '../appointments/domain/day-calendar-loader';
 import { CreateShiftRegistrationDto, RejectShiftDto } from './dto/shift-registration.dto';
 
 @Injectable()
@@ -92,6 +93,17 @@ export class ShiftRegistrationService {
     if (dto.startTime >= dto.endTime) {
       throw new ShiftPastDateException('endTime must be strictly after startTime');
     }
+
+    // A1-17: no shift on a closed day, inside approved time-off, or for an
+    // account that is not an active dentist.
+    const dayProblem = await shiftDayProblem(
+      this.prisma,
+      dentistId,
+      date,
+      dto.startTime,
+      dto.endTime,
+    );
+    if (dayProblem) throw new ShiftConflictException(dayProblem);
 
     // BR-PAY-020: conflict check vs ALL active WorkingSchedules (not just first)
     const dayOfWeek = date.getUTCDay();
@@ -179,6 +191,15 @@ export class ShiftRegistrationService {
     if (shift.date < today) {
       throw new ShiftPastDateException('Cannot approve shift for past date');
     }
+    // A1-17: the day may have closed (or time-off been approved) since.
+    const dayProblem = await shiftDayProblem(
+      this.prisma,
+      shift.dentistId,
+      shift.date,
+      shift.startTime,
+      shift.endTime,
+    );
+    if (dayProblem) throw new ShiftConflictException(dayProblem);
 
     // Guarded write: only succeed if status is still what we just read.
     // Without this, two admins racing to approve/reject the same PENDING
@@ -289,6 +310,13 @@ export class ShiftRegistrationService {
       // considered a late cancel. We audit it; admin can then create a PayrollAdjustment.
       const shiftStart = shiftInstants(shift).start;
       hoursUntilShift = (shiftStart.getTime() - Date.now()) / 3_600_000;
+      // A1-18: a shift already started (or worked) stays on record; pay is
+      // corrected with a payroll adjustment that carries a reason.
+      if (hoursUntilShift < 0) {
+        throw new ShiftRegistrationNotCancellableException(
+          'Ca đã bắt đầu hoặc đã làm xong — không hủy được. Nếu cần điều chỉnh lương, hãy tạo khoản điều chỉnh có lý do.',
+        );
+      }
       if (hoursUntilShift >= 0 && hoursUntilShift < 24) {
         lateCancelByAdmin = true;
       }

@@ -19,18 +19,22 @@ export async function futureActiveAppointments(
   db: Db,
   dentistUserId: string,
   now: Date = new Date(),
+  /** A planned departure (A5-12): only visits from that clinic day on. */
+  fromStart?: Date,
 ): Promise<AffectedAppointment[]> {
   const rows = await db.appointment.findMany({
     where: {
       dentistId: dentistUserId,
-      OR: [
-        {
-          status: { in: [...UPCOMING_APPOINTMENT_STATUSES] },
-          endAt: { gt: now },
-        },
-        // A visit being treated blocks even once its slot has run over.
-        { status: 'IN_PROGRESS' },
-      ],
+      OR: fromStart
+        ? [{ status: { in: [...UPCOMING_APPOINTMENT_STATUSES] }, startAt: { gte: fromStart } }]
+        : [
+            {
+              status: { in: [...UPCOMING_APPOINTMENT_STATUSES] },
+              endAt: { gt: now },
+            },
+            // A visit being treated blocks even once its slot has run over.
+            { status: 'IN_PROGRESS' },
+          ],
     },
     select: {
       id: true,

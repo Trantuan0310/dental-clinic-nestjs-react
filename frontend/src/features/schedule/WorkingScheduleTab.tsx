@@ -15,7 +15,7 @@ import {
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { clinicToday } from '@/lib/clinicTime';
+import { clinicParts, clinicToday } from '@/lib/clinicTime';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
@@ -67,6 +67,7 @@ export function WorkingScheduleTab() {
   const [editing, setEditing] = useState<WorkingSchedule | null>(null);
   const [ending, setEnding] = useState<WorkingSchedule | null>(null);
   const [deleting, setDeleting] = useState<WorkingSchedule | null>(null);
+  const [restorePrevious, setRestorePrevious] = useState(true);
   const [impact, setImpact] = useState<ScheduleChangeImpact | null>(null);
 
   const { data: dentists = [] } = useDentistOptions('schedule');
@@ -77,6 +78,18 @@ export function WorkingScheduleTab() {
   const ownOnly = hasPermission('appointment.read.own') && !hasPermission('appointment.read.any');
   const canEdit = (s: WorkingSchedule) => hasPermission('schedule.write') && (!ownOnly || s.dentistId === userId);
   const today = clinicToday();
+  // A1-19: a row not started yet, or created by mistake today for today.
+  const deletable = (s: WorkingSchedule) =>
+    phaseOf(s, today) === 'upcoming' || (dateOf(s.validFrom) === today && clinicParts(s.createdAt).date === today);
+  // A1-20: the row a change "from day X" ended the day before X.
+  const predecessorOf = (s: WorkingSchedule) => {
+    const from = dateOf(s.validFrom)!;
+    const dayBefore = new Date(new Date(from).getTime() - 86_400_000).toISOString().slice(0, 10);
+    return (schedules ?? []).find(
+      (p) => p.id !== s.id && p.dentistId === s.dentistId && p.dayOfWeek === s.dayOfWeek && dateOf(p.validTo) === dayBefore,
+    );
+  };
+  const previous = deleting ? predecessorOf(deleting) : undefined;
 
   const dentistNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -189,7 +202,7 @@ export function WorkingScheduleTab() {
                                 <Button size="sm" variant="ghost" aria-label={`Kết thúc ${label}`} onClick={() => setEnding(s)}>
                                   <CalendarX2 className="h-4 w-4" />
                                 </Button>
-                                {phase === 'upcoming' && (
+                                {deletable(s) && (
                                   <Button size="sm" variant="ghost" aria-label={`Xóa ${label}`} onClick={() => setDeleting(s)}>
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
@@ -234,19 +247,39 @@ export function WorkingScheduleTab() {
         onClose={() => setDeleting(null)}
         title="Xóa lịch làm việc"
         description={
-          deleting
-            ? `Xóa lịch ${DAY_LABELS[deleting.dayOfWeek]} ${deleting.startTime}–${deleting.endTime} (chưa bắt đầu, hiệu lực từ ${viDate(deleting.validFrom)})?`
-            : undefined
+          deleting ? (
+            <div className="space-y-2">
+              <p>
+                Xóa lịch {DAY_LABELS[deleting.dayOfWeek]} {deleting.startTime}–{deleting.endTime} (hiệu lực từ{' '}
+                {viDate(deleting.validFrom)})?
+              </p>
+              {previous && (
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={restorePrevious}
+                    onChange={(e) => setRestorePrevious(e.target.checked)}
+                  />
+                  <span>
+                    Khôi phục giờ cũ {previous.startTime}–{previous.endTime} (lịch cũ đã dừng ngày{' '}
+                    {viDate(previous.validTo!)} vì thay đổi này). Không chọn thì {DAY_LABELS[deleting.dayOfWeek]} từ{' '}
+                    {viDate(deleting.validFrom)} sẽ không còn giờ làm.
+                  </span>
+                </label>
+              )}
+            </div>
+          ) : undefined
         }
         confirmText="Xóa"
         variant="danger"
         isLoading={remove.isPending}
         onConfirm={() => {
           if (!deleting) return;
-          remove.mutate(deleting.id, {
+          remove.mutate({ id: deleting.id, restorePrevious: Boolean(previous) && restorePrevious }, {
             onSuccess: (result) => {
               setDeleting(null);
-              afterChange('Đã xóa lịch làm việc', result);
+              setRestorePrevious(true);
+              afterChange(result.restoredSchedule ? 'Đã xóa lịch và khôi phục giờ cũ' : 'Đã xóa lịch làm việc', result);
             },
             onError: (err) => notify.error(getApiErrorMessage(err, 'Không xóa được lịch làm việc')),
           });
@@ -366,6 +399,7 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
           <Input
             label="Hiệu lực từ"
             type="date"
+            min={clinicToday()}
             value={validFrom}
             onChange={(e) => setValidFrom(e.target.value)}
             required
@@ -441,6 +475,7 @@ function EditWorkingScheduleModal({
           : {}),
         ...(validToChanged ? { validTo: validTo || null } : {}),
         ...(hoursChanged && started ? { effectiveFrom } : {}),
+        expectedUpdatedAt: schedule.updatedAt,
       },
       {
         onSuccess: onSaved,
@@ -559,7 +594,7 @@ function EndWorkingScheduleModal({
             disabled={!lastDay || lastDay < minEnd}
             onClick={() =>
               update.mutate(
-                { id: schedule.id, validTo: lastDay },
+                { id: schedule.id, validTo: lastDay, expectedUpdatedAt: schedule.updatedAt },
                 {
                   onSuccess: onSaved,
                   onError: (err) => notify.error(getApiErrorMessage(err, 'Không kết thúc được lịch làm việc')),

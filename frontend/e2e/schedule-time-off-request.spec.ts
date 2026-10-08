@@ -5,7 +5,7 @@ test.use({ storageState: 'e2e/.auth/dentist.json' });
 
 test('a dentist requests leave, sees it pending and withdraws it', async ({ page }) => {
   const start = new Date(Date.now() + 45 * 86400000);
-  const local = (d: Date, hh: string) => `${d.toISOString().slice(0, 10)}T${hh}`;
+  const date = start.toISOString().slice(0, 10);
   const reason = `E2E xin nghỉ ${Date.now()}`;
 
   await page.goto('/schedule');
@@ -13,8 +13,12 @@ test('a dentist requests leave, sees it pending and withdraws it', async ({ page
   await page.getByRole('button', { name: /xin nghỉ phép/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText(/chờ duyệt và chưa chặn lịch hẹn/)).toBeVisible();
-  await dialog.getByLabel('Từ').fill(local(start, '08:00'));
-  await dialog.getByLabel('Đến').fill(local(start, '12:00'));
+  // Clinic date + clinic time, whatever zone the browser is in (A1-14).
+  await dialog.getByLabel('Từ ngày').fill(date);
+  await dialog.getByLabel('Đến ngày').fill(date);
+  const times = dialog.getByLabel('Giờ (giờ phòng khám)');
+  await times.nth(0).fill('08:00');
+  await times.nth(1).fill('12:00');
   await dialog.getByLabel('Lý do (không bắt buộc)').fill(reason);
   await dialog.getByRole('button', { name: /gửi đơn/i }).click();
   await expect(dialog).toBeHidden();

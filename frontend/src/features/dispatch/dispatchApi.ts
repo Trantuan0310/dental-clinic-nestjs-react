@@ -40,6 +40,10 @@ export interface QueueEntry {
 export interface ReassignDayResult {
   moved: Array<{ appointmentId: string; startAt: string; patientName: string }>;
   failed: Array<{ appointmentId: string; startAt: string; patientName: string; reason: string }>;
+  /** The CLOSED override that now keeps the absent dentist's day shut (A3-06). */
+  closedOverrideId?: string | null;
+  /** Patients already checked in with the absent dentist: move them with "Chuyển BS". */
+  waiting?: Array<{ queueEntryId: string; appointmentId: string; patientName: string; startAt: string }>;
 }
 
 export const PRIORITY_LABEL: Record<QueuePriority, string> = {
@@ -111,8 +115,29 @@ export const useTransferPatient = () =>
 export function useReassignDay() {
   const qc = useQueryClient();
   return useMutation({
+    mutationFn: (body: {
+      fromDentistId: string;
+      toDentistId: string;
+      date: string;
+      reason: string;
+      closeFromDentist?: boolean;
+    }) => post<ReassignDayResult>('/queue/reassign-day', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['schedule'] });
+    },
+  });
+}
+
+/** Undo "thay bác sĩ cả ngày": reopen the day, move the untouched visits back. */
+export function useUndoReassignDay() {
+  const qc = useQueryClient();
+  return useMutation({
     mutationFn: (body: { fromDentistId: string; toDentistId: string; date: string; reason: string }) =>
-      post<ReassignDayResult>('/queue/reassign-day', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['appointments'] }),
+      post<ReassignDayResult & { reopened: boolean }>('/queue/reassign-day/undo', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+      qc.invalidateQueries({ queryKey: ['schedule'] });
+    },
   });
 }

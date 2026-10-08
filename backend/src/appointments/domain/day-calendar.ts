@@ -42,7 +42,11 @@ export interface DayInputs {
   /** APPROVED time-off overlapping the day. */
   timeOffs: Array<{ startAt: Date; endAt: Date }>;
   /** Clinic-wide closures (Tết, holidays) covering the day (migration 035). */
-  clinicClosures?: Array<{ reason: string }>;
+  clinicClosures?: Array<{
+    reason: string;
+    /** Closed only from this clinic time (first day of a mid-day closure, migration 043). */
+    startTime?: Date | null;
+  }>;
   /** Appointments holding a slot (not CANCELLED/NO_SHOW/LEFT, not deleted). */
   bookings: Array<{
     id: string;
@@ -58,7 +62,7 @@ export interface DayCalendar {
   /** Periods the dentist works; a booking must fit inside one of them. */
   windows: Interval[];
   /** Time-off and closed ranges inside the day. */
-  blocked: Array<Interval & { kind: 'TIME_OFF' | 'CLOSED' }>;
+  blocked: Array<Interval & { kind: 'TIME_OFF' | 'CLOSED'; reason?: string }>;
   /** The time each booking occupies, buffers included (ADR-0009 D4). */
   bookings: Array<Interval & { id: string }>;
   closedAllDay: boolean;
@@ -122,7 +126,10 @@ export function mergeWindows(windows: Interval[]): Interval[] {
 }
 
 export function buildDayCalendar(i: DayInputs): DayCalendar {
-  const clinicClosure = i.clinicClosures?.[0];
+  const clinicClosure = i.clinicClosures?.find(c => !c.startTime);
+  // The whole clinic closes from a time of day (power cut from 14:00).
+  const clinicFrom = i.clinicClosures?.filter(c => c.startTime) ?? [];
+  const nextDay = new Date(atClinicTime(i.date, '00:00').getTime() + 24 * 60 * 60_000);
   const closedAll = i.overrides.find(o => o.kind === 'CLOSED' && !o.startTime);
   const changed = i.overrides.filter(o => o.kind === 'CHANGED_HOURS' && o.startTime && o.endTime);
 
@@ -151,6 +158,12 @@ export function buildDayCalendar(i: DayInputs): DayCalendar {
         end: atClinicTime(i.date, timeOfDay(o.endTime!)),
         kind: 'CLOSED' as const,
       })),
+    ...clinicFrom.map(c => ({
+      start: atClinicTime(i.date, timeOfDay(c.startTime!)),
+      end: nextDay,
+      kind: 'CLOSED' as const,
+      reason: `Phòng khám nghỉ: ${c.reason}`,
+    })),
     ...i.timeOffs.map(t => ({ start: t.startAt, end: t.endAt, kind: 'TIME_OFF' as const })),
   ];
 
@@ -214,7 +227,9 @@ export function intervalProblem(
     return block.kind === 'CLOSED'
       ? {
           kind: 'CLOSED',
-          message: `Lịch của bác sĩ đóng ${clinicHhmm(block.start)}-${clinicHhmm(block.end)} ngày ${cal.date}`,
+          message: block.reason
+            ? `${block.reason} (từ ${clinicHhmm(block.start)} ngày ${cal.date})`
+            : `Lịch của bác sĩ đóng ${clinicHhmm(block.start)}-${clinicHhmm(block.end)} ngày ${cal.date}`,
         }
       : {
           kind: 'TIME_OFF',
@@ -270,4 +285,24 @@ export function freeSlots(
     }
   }
   return [...slots].sort();
+}
+
+/**
+ * Why a day with working hours still has no time: every window lies inside
+ * time-off or closed ranges ('TIME_OFF' when any of it is time-off), else null.
+ */
+export function blockedAllDay(cal: DayCalendar): 'TIME_OFF' | 'CLOSED' | null {
+  if (cal.windows.length === 0) return null;
+  const used = new Set<'TIME_OFF' | 'CLOSED'>();
+  for (const w of cal.windows) {
+    let reached = w.start.getTime();
+    for (const b of [...cal.blocked].sort((x, y) => x.start.getTime() - y.start.getTime())) {
+      if (b.end.getTime() <= reached || b.start.getTime() > reached) continue;
+      used.add(b.kind);
+      reached = b.end.getTime();
+      if (reached >= w.end.getTime()) break;
+    }
+    if (reached < w.end.getTime()) return null;
+  }
+  return used.has('TIME_OFF') ? 'TIME_OFF' : 'CLOSED';
 }

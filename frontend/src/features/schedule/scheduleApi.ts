@@ -20,6 +20,8 @@ import type {
   ImpactedAppointment,
   ScheduleOverride,
   TimeOffStatus,
+  TimeOffImpactPreview,
+  BulkRescheduleResult,
 } from '@/types/schedule';
 
 const get = async <T>(url: string, config?: Parameters<typeof api.get>[1]) => {
@@ -121,11 +123,18 @@ export function useUpdateWorkingSchedule() {
   });
 }
 
-/** Only a schedule that has not started yet can be deleted; a running one is ended. */
+/**
+ * Only a schedule that has not started yet (or one created by mistake today)
+ * can be deleted; a running one is ended. `restorePrevious` gives the row it
+ * replaced its old end back (A1-20).
+ */
 export function useDeleteWorkingSchedule() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => del<ScheduleChangeImpact>(`/appointments/schedules/${id}`),
+    mutationFn: ({ id, restorePrevious }: { id: string; restorePrevious?: boolean }) =>
+      del<ScheduleChangeImpact & { restoredSchedule?: RawWorkingSchedule | null }>(
+        `/appointments/schedules/${id}${restorePrevious ? '?restorePrevious=true' : ''}`,
+      ),
     onSuccess: () => invalidateCalendar(qc),
   });
 }
@@ -180,8 +189,56 @@ export function useDecideTimeOff() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, action, note }: { id: string; action: 'approve' | 'reject' | 'cancel'; note?: string }) =>
-      post<CreateTimeOffResult>(`/appointments/time-offs/${id}/${action}`, action === 'cancel' ? {} : { note }),
+      // Cancelling an approved (or running) time-off needs a reason (A1-11).
+      post<CreateTimeOffResult>(
+        `/appointments/time-offs/${id}/${action}`,
+        action === 'cancel' ? (note ? { reason: note } : {}) : { note },
+      ),
     onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+/** What approving a pending time-off would touch (A1-10). */
+export function useTimeOffImpact(id: string | null) {
+  return useQuery({
+    queryKey: ['schedule', 'time-off-impact', id],
+    enabled: Boolean(id),
+    queryFn: () => get<TimeOffImpactPreview>(`/appointments/time-offs/${id}/impact`),
+  });
+}
+
+/** Shorten or extend a time-off (A1-11). */
+export function useUpdateTimeOff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, endAt, reason }: { id: string; endAt: string; reason: string }) =>
+      patch<CreateTimeOffResult>(`/appointments/time-offs/${id}`, { endAt, reason }),
+    onSuccess: () => invalidateCalendar(qc),
+  });
+}
+
+/** The front desk reached (or un-marks) the patient about a calendar change. */
+export function useClinicContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, contacted, note }: { id: string; contacted: boolean; note?: string }) =>
+      post<unknown>(`/appointments/${id}/clinic-contact`, { contacted, note }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['schedule', 'impact'] }),
+  });
+}
+
+/** Move several visits as clinic moves (not counted in the patient's limit). */
+export function useBulkReschedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      items: Array<{ appointmentId: string; newStartsAt?: string; newDentistId?: string }>;
+      reason: string;
+    }) => post<BulkRescheduleResult>('/appointments/bulk-reschedule', payload),
+    onSuccess: () => {
+      invalidateCalendar(qc);
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    },
   });
 }
 

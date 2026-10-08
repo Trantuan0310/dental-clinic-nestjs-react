@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EmployeeType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -15,6 +15,9 @@ import {
   UpdateEmployeeDto,
 } from './dto/staff.dto';
 import {
+  DentistHasFutureAppointmentsException,
+  DentistHasOpenBookingRequestsException,
+  OpenBookingRequestRef,
   DentistProfileNotAllowedException,
   EmployeeNotFoundException,
   EmployeeValidationException,
@@ -30,6 +33,52 @@ import {
   toDateOnly,
 } from './staff-rules';
 import { EmailAlreadyExistsException } from '../common/exceptions/business-rule.exception';
+import { startOfClinicDay } from '../common/date-range.util';
+import {
+  effectiveDentistId,
+  effectiveStartAt,
+  OPEN_BOOKING_STATUSES,
+} from '../appointments/availability.service';
+
+/**
+ * A5-13 / C4: online requests still waiting (on the clinic or the patient)
+ * whose dentist — the proposed one while a proposal stands — is this one,
+ * for a time from `from` on.
+ */
+async function openBookingRequestsFor(
+  db: Prisma.TransactionClient,
+  dentistId: string,
+  from: Date,
+): Promise<OpenBookingRequestRef[]> {
+  const rows =
+    (await db.bookingRequest.findMany({
+      where: {
+        appointmentId: null,
+        status: { in: OPEN_BOOKING_STATUSES },
+        OR: [{ preferredDentistId: dentistId }, { proposedDentistId: dentistId }],
+      },
+      select: {
+        id: true,
+        referenceCode: true,
+        fullName: true,
+        status: true,
+        preferredDentistId: true,
+        proposedDentistId: true,
+        requestedStartAt: true,
+        proposedStartAt: true,
+      },
+      take: 200,
+    })) ?? [];
+  return rows
+    .filter(r => effectiveDentistId(r) === dentistId && effectiveStartAt(r) >= from)
+    .map(r => ({
+      id: r.id,
+      referenceCode: r.referenceCode,
+      fullName: r.fullName,
+      status: r.status,
+      startAt: effectiveStartAt(r),
+    }));
+}
 import { normalizeEmail } from '../common/email.util';
 
 /**
@@ -80,6 +129,8 @@ export interface RequestMeta {
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -208,7 +259,13 @@ export class EmployeesService {
     return this.format(updated);
   }
 
-  /** BR-STAFF-004 / BR-STAFF-005. */
+  /**
+   * BR-STAFF-004 / BR-STAFF-005. A5-12: a termination date ahead is a plan —
+   * the account stays open and the dentist works until then; from that day
+   * the calendar is closed to bookings (AvailabilityService) and the daily
+   * job carries it out (finalizeScheduledTerminations). Only visits and
+   * online requests from that day on must be handled first (A5-13 / C4).
+   */
   async terminate(id: string, dto: TerminateEmployeeDto, actor: JwtPayload, meta: RequestMeta) {
     const current = await this.findOrThrow(id);
     if (current.employmentStatus === 'TERMINATED') {
@@ -221,50 +278,178 @@ export class EmployeesService {
     if (current.userId === actor.sub) {
       throw new EmployeeValidationException('You cannot terminate your own employee record');
     }
+    const planned = terminationDate > clinicToday();
+    const firstDayOff = startOfClinicDay(terminationDate.toISOString().slice(0, 10));
 
     const updated = await this.prisma.$transaction(
       async tx => {
         if (current.dentistProfile && current.userId) {
-          await assertDentistHasNoOpenWork(tx, current.userId);
+          if (planned) {
+            const blocking = await futureActiveAppointments(
+              tx,
+              current.userId,
+              new Date(),
+              firstDayOff,
+            );
+            if (blocking.length > 0) throw new DentistHasFutureAppointmentsException(blocking);
+          } else {
+            await assertDentistHasNoOpenWork(tx, current.userId);
+          }
+          const requests = await openBookingRequestsFor(
+            tx,
+            current.userId,
+            planned ? firstDayOff : new Date(),
+          );
+          if (requests.length > 0) throw new DentistHasOpenBookingRequestsException(requests);
         }
         if (current.userId) await this.assertNotLastAdmin(tx, current.userId);
 
-        const row = await tx.employee.update({
-          where: { id },
-          data: {
-            employmentStatus: 'TERMINATED',
-            terminationDate,
-            updatedBy: actor.sub,
-          },
-          include: EMPLOYEE_INCLUDE,
-        });
-        if (current.dentistProfile) {
-          await tx.dentistProfile.update({
-            where: { employeeId: id },
-            data: { practiceStatus: 'INACTIVE', updatedBy: actor.sub },
+        if (planned) {
+          return tx.employee.update({
+            where: { id },
+            data: { terminationDate, updatedBy: actor.sub },
+            include: EMPLOYEE_INCLUDE,
           });
         }
-        if (current.userId) {
-          await tx.user.update({
-            where: { id: current.userId },
-            data: { status: 'DEACTIVATED', deactivatedAt: new Date(), updatedBy: actor.sub },
-          });
-          await tx.refreshToken.updateMany({
-            where: { userId: current.userId, revokedAt: null },
-            data: { revokedAt: new Date() },
-          });
-        }
-        return row;
+        return this.applyTermination(tx, current, terminationDate, actor.sub);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    await this.log('EMPLOYEE_TERMINATED', actor, id, meta, {
-      reason: dto.reason,
-      terminationDate: terminationDate.toISOString().slice(0, 10),
-      accountDeactivated: Boolean(current.userId),
+    await this.log(
+      planned ? 'EMPLOYEE_TERMINATION_SCHEDULED' : 'EMPLOYEE_TERMINATED',
+      actor,
+      id,
+      meta,
+      {
+        reason: dto.reason,
+        terminationDate: terminationDate.toISOString().slice(0, 10),
+        accountDeactivated: !planned && Boolean(current.userId),
+      },
+    );
+    return planned ? { ...this.format(updated), terminationScheduled: true } : this.format(updated);
+  }
+
+  /** Close the employee record, the dentist profile and the login, now. */
+  private async applyTermination(
+    tx: Prisma.TransactionClient,
+    current: { id: string; userId: string | null; dentistProfile: unknown },
+    terminationDate: Date,
+    actorId: string | null,
+  ) {
+    const row = await tx.employee.update({
+      where: { id: current.id },
+      data: { employmentStatus: 'TERMINATED', terminationDate, updatedBy: actorId },
+      include: EMPLOYEE_INCLUDE,
     });
-    return this.format(updated);
+    if (current.dentistProfile) {
+      await tx.dentistProfile.update({
+        where: { employeeId: current.id },
+        data: { practiceStatus: 'INACTIVE', updatedBy: actorId },
+      });
+    }
+    if (current.userId) {
+      await tx.user.update({
+        where: { id: current.userId },
+        data: { status: 'DEACTIVATED', deactivatedAt: new Date(), updatedBy: actorId },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: current.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    if (current.dentistProfile && current.userId) {
+      await this.closeDentistCalendar(tx, current.userId, terminationDate);
+    }
+    return row;
+  }
+
+  /**
+   * A1-22: a dentist who leaves keeps no hours to come back to — weekly rows
+   * end the day before (past days stay for payroll), pending leave and shift
+   * requests from then on are withdrawn. A reinstated dentist gets new hours.
+   */
+  private async closeDentistCalendar(
+    tx: Prisma.TransactionClient,
+    dentistId: string,
+    terminationDate: Date,
+  ) {
+    const today = clinicToday();
+    const from = terminationDate > today ? terminationDate : today;
+    const lastDay = new Date(from.getTime() - 24 * 60 * 60_000);
+    await tx.workingSchedule.updateMany({
+      where: { dentistId, deletedAt: null, validFrom: { gte: from } },
+      data: { deletedAt: new Date() },
+    });
+    await tx.workingSchedule.updateMany({
+      where: {
+        dentistId,
+        deletedAt: null,
+        validFrom: { lt: from },
+        OR: [{ validTo: null }, { validTo: { gt: lastDay } }],
+      },
+      data: { validTo: lastDay },
+    });
+    await tx.timeOff.updateMany({
+      where: {
+        dentistId,
+        status: 'PENDING',
+        deletedAt: null,
+        endAt: { gt: startOfClinicDay(from.toISOString().slice(0, 10)) },
+      },
+      data: {
+        status: 'CANCELLED',
+        decidedAt: new Date(),
+        decisionNote: 'Tự hủy: bác sĩ nghỉ việc',
+      },
+    });
+    await tx.shiftRegistration.updateMany({
+      where: { dentistId, status: 'PENDING', deletedAt: null, date: { gte: from } },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    });
+  }
+
+  /**
+   * Daily (StaffCron): carry out the terminations planned for today or
+   * earlier. One still blocked (a visit or an exam left open) is retried the
+   * next run and logged, never forced.
+   */
+  async finalizeScheduledTerminations(now: Date = new Date()) {
+    const due = await this.prisma.employee.findMany({
+      where: {
+        deletedAt: null,
+        employmentStatus: { not: 'TERMINATED' },
+        terminationDate: { lte: clinicToday(now) },
+      },
+      include: EMPLOYEE_INCLUDE,
+    });
+    let terminated = 0;
+    for (const e of due ?? []) {
+      try {
+        await this.prisma.$transaction(
+          async tx => {
+            if (e.dentistProfile && e.userId) await assertDentistHasNoOpenWork(tx, e.userId, now);
+            await this.applyTermination(tx, e, e.terminationDate!, null);
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        await this.audit.log({
+          action: 'EMPLOYEE_TERMINATED',
+          targetType: 'employee',
+          targetId: e.id,
+          metadata: {
+            scheduled: true,
+            terminationDate: e.terminationDate!.toISOString().slice(0, 10),
+            accountDeactivated: Boolean(e.userId),
+          },
+        });
+        terminated++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Planned termination of employee ${e.id} postponed: ${msg}`);
+      }
+    }
+    return { terminated };
   }
 
   /** Link an existing account or create one (BR-STAFF-003). */
@@ -377,6 +562,19 @@ export class EmployeesService {
    */
   async reinstate(id: string, dto: ReinstateEmployeeDto, actor: JwtPayload, meta: RequestMeta) {
     const current = await this.findOrThrow(id);
+    // A5-12: a planned departure not reached yet is simply called off.
+    if (current.employmentStatus !== 'TERMINATED' && current.terminationDate) {
+      const updated = await this.prisma.employee.update({
+        where: { id },
+        data: { terminationDate: null, updatedBy: actor.sub },
+        include: EMPLOYEE_INCLUDE,
+      });
+      await this.log('EMPLOYEE_TERMINATION_CANCELLED', actor, id, meta, {
+        reason: dto.reason,
+        previousTerminationDate: current.terminationDate.toISOString().slice(0, 10),
+      });
+      return this.format(updated);
+    }
     if (current.employmentStatus !== 'TERMINATED') {
       throw new EmployeeValidationException('Chỉ khôi phục được nhân viên đã nghỉ việc');
     }

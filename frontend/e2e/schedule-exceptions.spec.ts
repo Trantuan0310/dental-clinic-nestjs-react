@@ -26,5 +26,7 @@ test('admin closes a dentist day and removes the override', async ({ page }) => 
   await expect(row).toContainText(shown);
   await expect(row).toContainText('Cả ngày');
   await row.getByRole('button', { name: `Xóa ngoại lệ ngày ${shown}` }).click();
+  // Removing an override asks first (A1-23).
+  await page.getByRole('dialog').getByRole('button', { name: 'Xóa' }).click();
   await expect(row).toBeHidden();
 });

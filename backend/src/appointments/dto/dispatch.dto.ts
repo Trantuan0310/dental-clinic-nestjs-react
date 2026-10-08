@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 
@@ -56,6 +56,34 @@ export class ReassignDayDto {
   date!: string;
 
   @ApiProperty({ example: 'BS An nghỉ ốm' })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(300)
+  reason!: string;
+
+  @ApiPropertyOptional({
+    description: "Close the absent dentist's day so nobody books them (default true)",
+  })
+  @IsOptional()
+  @IsBoolean()
+  closeFromDentist?: boolean;
+}
+
+/** Undo "thay bác sĩ cả ngày": reopen the day, move the untouched visits back. */
+export class UndoReassignDayDto {
+  @ApiProperty()
+  @IsUUID()
+  fromDentistId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  toDentistId!: string;
+
+  @ApiProperty({ example: '2026-10-01' })
+  @IsCalendarDate()
+  date!: string;
+
+  @ApiProperty({ example: 'BS An đã quay lại làm' })
   @IsString()
   @MinLength(5)
   @MaxLength(300)

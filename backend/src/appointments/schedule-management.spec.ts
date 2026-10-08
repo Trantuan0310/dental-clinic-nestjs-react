@@ -362,7 +362,11 @@ describe('AppointmentsService — schedule management', () => {
         where: { id: 'ws-1' },
         data: { deletedAt: expect.any(Date) },
       });
-      expect(result).toEqual({ affectedAppointments: [], affectedBookingRequests: [] });
+      expect(result).toEqual({
+        affectedAppointments: [],
+        affectedBookingRequests: [],
+        restoredSchedule: null,
+      });
     });
 
     it("lists open online requests the change leaves outside working hours, with the dentist's own duration", async () => {
@@ -634,7 +638,7 @@ describe('AppointmentsService — schedule management', () => {
           endDate: { gte: new Date(start) },
           deletedAt: null,
         },
-        select: { reason: true },
+        select: { reason: true, startDate: true, startTime: true },
       });
     });
 
@@ -663,6 +667,204 @@ describe('AppointmentsService — schedule management', () => {
       const past = await service.deleteClinicClosure('cc-1', admin).catch(e => e);
       expect(statusOf(past)).toBe(409);
       expect(prisma.clinicClosure.update).not.toHaveBeenCalled();
+    });
+
+    it('A1-23: removing a running closure reopens from today, keeping the days already closed', async () => {
+      (prisma.clinicClosure.findFirst as jest.Mock).mockResolvedValue({
+        id: 'cc-1',
+        startDate: new Date(addDays(today, -2)),
+        endDate: new Date(addDays(today, 3)),
+        reason: 'Tết',
+      });
+      await service.deleteClinicClosure('cc-1', admin);
+      expect(prisma.clinicClosure.update).toHaveBeenCalledWith({
+        where: { id: 'cc-1' },
+        data: { endDate: new Date(addDays(today, -1)) },
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'CLINIC_CLOSURE_REOPENED' }),
+      );
+    });
+
+    it('A1-15: a closure from 14:00 closes the afternoon only, and waiting patients do not block it', async () => {
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      const result = await service.createClinicClosure(
+        { startDate: start, endDate: start, reason: 'Mất điện', startTime: '14:00' },
+        admin,
+      );
+      expect((prisma.clinicClosure.create as jest.Mock).mock.calls[0][0].data.startTime).toEqual(
+        t('14:00'),
+      );
+      expect(result.startTime).toBe('14:00');
+      // Patients at the clinic are looked for from 14:00 only.
+      const inClinic = (prisma.appointment.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(inClinic.endAt).toEqual({ gt: at(start, '14:00') });
+
+      // The day calendar: the morning stays bookable, the afternoon is closed.
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([
+        { startTime: t('08:00'), endTime: t('17:00'), slotDurationMin: 30 },
+      ]);
+      (prisma.clinicClosure.findMany as jest.Mock).mockResolvedValue([
+        { reason: 'Mất điện', startDate: new Date(start), startTime: t('14:00') },
+      ]);
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.timeOff.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([]);
+      const slots = await service.getAvailability({ dentistId: 'dentist-1', date: start } as any);
+      expect(slots.availableSlots).toContain('13:00');
+      expect(slots.availableSlots).not.toContain('14:00');
+    });
+  });
+
+  describe('round 4: who may change a schedule, and how it is undone', () => {
+    const day = addDays(today, 7);
+    const row = {
+      id: 'ws-1',
+      dentistId: 'dentist-1',
+      dayOfWeek: dow(day),
+      startTime: t('08:00'),
+      endTime: t('17:00'),
+      slotDurationMin: 30,
+      validFrom: new Date('2020-01-01'),
+      validTo: null,
+      isPaidShift: true,
+      shiftType: 'FULL_DAY',
+      deletedAt: null,
+      createdAt: new Date('2020-01-01'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+    beforeEach(() => {
+      (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue(row);
+      (prisma.workingSchedule.update as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        ...row,
+        ...data,
+      }));
+    });
+
+    it('A1-02: a new weekly schedule cannot start in the past', async () => {
+      const error = await service
+        .bulkCreateWorkingSchedules(
+          {
+            dentistId: 'dentist-1',
+            daysOfWeek: [1],
+            blocks: [{ startTime: '08:00', endTime: '12:00' }],
+            validFrom: addDays(today, -30),
+          },
+          admin,
+        )
+        .catch(e => e);
+      expect(statusOf(error)).toBe(400);
+      expect(prisma.workingSchedule.create).not.toHaveBeenCalled();
+    });
+
+    it('A5-11: a dentist cannot withdraw hours that leave booked patients outside them', async () => {
+      (prisma.workingSchedule.findMany as jest.Mock).mockImplementation(async ({ where }: any) =>
+        where.id ? [] : [{ startTime: t('08:00'), endTime: t('11:00'), slotDurationMin: 30 }],
+      );
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+        { id: 'outside', startAt: at(day, '15:30'), endAt: at(day, '16:00') },
+      ]);
+      const error = await service
+        .updateWorkingSchedule('ws-1', { endTime: '11:00' }, dentistPayload('dentist-1'))
+        .catch(e => e);
+      expect(statusOf(error)).toBe(409);
+      expect(error.getResponse().error).toBe('SCHEDULE_CHANGE_NEEDS_ADMIN');
+      expect(error.message).toMatch(/nhờ lễ tân/);
+    });
+
+    it('A1-25: refuses an edit made on a stale copy', async () => {
+      const error = await service
+        .updateWorkingSchedule(
+          'ws-1',
+          { endTime: '12:00', expectedUpdatedAt: '2025-12-31T00:00:00.000Z' },
+          admin,
+        )
+        .catch(e => e);
+      expect(statusOf(error)).toBe(409);
+      expect(prisma.workingSchedule.update).not.toHaveBeenCalled();
+    });
+
+    it('A1-20: deleting a change "from day X" can give the old row its end back', async () => {
+      const from = addDays(today, 3);
+      (prisma.workingSchedule.findFirst as jest.Mock)
+        .mockResolvedValueOnce({ ...row, id: 'ws-new', validFrom: new Date(from) })
+        .mockResolvedValueOnce({ ...row, id: 'ws-old', validTo: new Date(addDays(from, -1)) });
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      const result = await service.deleteWorkingSchedule('ws-new', admin, {
+        restorePrevious: true,
+      });
+      expect(prisma.workingSchedule.update).toHaveBeenCalledWith({
+        where: { id: 'ws-old' },
+        data: { validTo: null },
+      });
+      expect(result.restoredSchedule).toMatchObject({ validTo: null });
+    });
+
+    it('A1-19: a row created today by mistake for today can be deleted while nobody was seen in it', async () => {
+      (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue({
+        ...row,
+        validFrom: new Date(today),
+        createdAt: new Date(),
+      });
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      const worked = await service.deleteWorkingSchedule('ws-1', admin).catch(e => e);
+      expect(worked.message).toMatch(/đã có bệnh nhân khám/);
+
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+      await service.deleteWorkingSchedule('ws-1', admin);
+      expect(prisma.workingSchedule.update).toHaveBeenCalledWith({
+        where: { id: 'ws-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('A1-23: an override of a past day is history', async () => {
+      (prisma.scheduleOverride.findFirst as jest.Mock).mockResolvedValue({
+        id: 'ov-1',
+        dentistId: 'dentist-1',
+        date: new Date(addDays(today, -1)),
+        kind: 'CLOSED',
+      });
+      const error = await service.deleteScheduleOverride('ov-1', admin).catch(e => e);
+      expect(statusOf(error)).toBe(409);
+      expect(prisma.scheduleOverride.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('X-3: changed hours that still cover a checked-in patient are not blocked by them', async () => {
+      const date = today;
+      (prisma.scheduleOverride.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.scheduleOverride.create as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        id: 'ov-1',
+        createdAt: new Date(),
+        ...data,
+      }));
+      const morning = {
+        id: 'a-1',
+        status: 'IN_PROGRESS',
+        startAt: at(date, '09:00'),
+        endAt: at(date, '09:30'),
+        patient: { fullName: 'Khách sáng' },
+      };
+      (prisma.appointment.findMany as jest.Mock).mockResolvedValue([morning]);
+      // After the change the day still has 08:00-16:00.
+      jest
+        .spyOn(service as any, 'calendarProblem')
+        .mockImplementation(async (...args: any[]) =>
+          args[1] < at(date, '16:00') ? null : { kind: 'OUTSIDE_WORKING_HOURS', message: 'x' },
+        );
+      const result = await service.createScheduleOverride(
+        {
+          dentistId: 'dentist-1',
+          date,
+          kind: 'CHANGED_HOURS',
+          startTime: '08:00',
+          endTime: '16:00',
+          reason: 'Về sớm',
+        } as any,
+        admin,
+      );
+      expect(result.waitingPatients).toEqual([]);
     });
   });
 });

@@ -25,7 +25,11 @@ import {
   ApproveShiftRegistrationDto,
   AvailabilityQueryDto,
   BulkCreateWorkingSchedulesDto,
+  BulkRescheduleDto,
+  CancelTimeOffDto,
+  ClinicContactDto,
   ClinicClosureDto,
+  UpdateTimeOffDto,
   ListClinicClosuresQueryDto,
   UpdateWorkingScheduleDto,
   CancelAppointmentDto,
@@ -168,9 +172,20 @@ export class AppointmentsController {
   @Delete('schedules/:id')
   @RequirePermissions('schedule.write')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete a schedule not started yet (end a running one instead)' })
-  async deleteSchedule(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    return { data: await this.appointments.deleteWorkingSchedule(id, actor) };
+  @ApiOperation({
+    summary:
+      'Delete a schedule not started yet (end a running one instead); restorePrevious=true gives the row it replaced its old end back',
+  })
+  async deleteSchedule(
+    @Param('id', ParseUUIDPipe) id: string,
+    @User() actor: JwtPayload,
+    @Query('restorePrevious') restorePrevious?: string,
+  ) {
+    return {
+      data: await this.appointments.deleteWorkingSchedule(id, actor, {
+        restorePrevious: restorePrevious === 'true',
+      }),
+    };
   }
 
   // ==========================================================================
@@ -212,8 +227,9 @@ export class AppointmentsController {
   // Time-off
   // ==========================================================================
 
+  // time_off.record_urgent: the front desk records a sudden absence today.
   @Post('time-offs')
-  @RequirePermissions('schedule.write')
+  @RequirePermissions('schedule.write', 'time_off.record_urgent')
   @HttpCode(HttpStatus.CREATED)
   async createTimeOff(@Body() dto: CreateTimeOffDto, @User() actor: JwtPayload) {
     return { data: await this.appointments.createTimeOff(dto, actor) };
@@ -221,8 +237,26 @@ export class AppointmentsController {
 
   @Get('time-offs')
   @RequirePermissions('schedule.read')
-  async listTimeOffs(@Query() query: ListTimeOffsQueryDto) {
-    return wrapAsPaginated(await this.appointments.listTimeOffs(query));
+  async listTimeOffs(@Query() query: ListTimeOffsQueryDto, @User() actor: JwtPayload) {
+    return wrapAsPaginated(await this.appointments.listTimeOffs(query, actor));
+  }
+
+  @Get('time-offs/:id/impact')
+  @RequirePermissions('schedule.read')
+  @ApiOperation({ summary: 'Bookings a time-off would affect (preview before approving)' })
+  async timeOffImpact(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.timeOffImpact(id, actor) };
+  }
+
+  @Patch('time-offs/:id')
+  @RequirePermissions('schedule.write', 'time_off.approve')
+  @ApiOperation({ summary: 'Shorten or extend a time-off (its end)' })
+  async updateTimeOff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTimeOffDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.updateTimeOff(id, dto, actor) };
   }
 
   @Post('time-offs/:id/approve')
@@ -249,10 +283,15 @@ export class AppointmentsController {
   }
 
   @Post('time-offs/:id/cancel')
-  @RequirePermissions('schedule.write')
+  @RequirePermissions('schedule.write', 'time_off.record_urgent')
   @HttpCode(HttpStatus.OK)
-  async cancelTimeOff(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    return { data: await this.appointments.cancelTimeOff(id, actor) };
+  @ApiOperation({ summary: 'Withdraw a time-off; a running approved one ends now (A1-11)' })
+  async cancelTimeOff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelTimeOffDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.cancelTimeOff(id, dto ?? {}, actor) };
   }
 
   // ==========================================================================
@@ -409,6 +448,28 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Create appointment (BR-APPT-001 → BR-APPT-005)' })
   async create(@Body() dto: CreateAppointmentDto, @User() actor: JwtPayload) {
     return { data: await this.appointments.create(dto, actor) };
+  }
+
+  @Post('bulk-reschedule')
+  @RequirePermissions('appointment.update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Move several visits as clinic moves (impact list); returns moved / failed',
+  })
+  async bulkReschedule(@Body() dto: BulkRescheduleDto, @User() actor: JwtPayload) {
+    return { data: await this.appointments.bulkReschedule(dto, actor) };
+  }
+
+  @Post(':id/clinic-contact')
+  @RequirePermissions('appointment.update')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark that the patient was told about a calendar change' })
+  async clinicContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ClinicContactDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.setClinicContact(id, dto, actor) };
   }
 
   @Patch(':id/reschedule')

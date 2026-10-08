@@ -303,6 +303,7 @@ function buildRescheduleBody(
     newDentistId: payload.newDentistId ?? undefined,
     reason: payload.reason,
     durationOverrideReason: payload.durationOverrideReason?.trim() || undefined,
+    byClinic: payload.byClinic || undefined,
   };
 }
 
@@ -452,6 +453,7 @@ export function useAvailability(
         windows?: ClockInterval[];
         busy?: ClockInterval[];
         blockedReason?: string | null;
+        pendingTimeOffs?: ClockInterval[];
       }>('/appointments/availability', {
         params: {
           dentistId,
@@ -484,6 +486,7 @@ export function useAvailability(
         windows: raw.windows ?? [],
         busy: raw.busy ?? [],
         blockedReason: raw.blockedReason ?? null,
+        pendingTimeOffs: raw.pendingTimeOffs ?? [],
       };
     },
     staleTime: 60_000,

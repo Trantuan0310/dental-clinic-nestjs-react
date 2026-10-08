@@ -478,6 +478,13 @@ model Appointment {
   // reminder_sent_at IS NULL, not deleted, SCHEDULED/CONFIRMED) is managed
   // by migration 041 only.
   reminderSentAt    DateTime?           @map("reminder_sent_at") @db.Timestamptz()
+  // Migration 043: cancelled for the clinic's reasons (closed day, absent
+  // dentist) — never the patient's cancellation nor a no-show.
+  cancelledByClinic Boolean             @default(false) @map("cancelled_by_clinic")
+  // Migration 043: the front desk reached the patient about a calendar change.
+  clinicContactedAt DateTime?           @map("clinic_contacted_at") @db.Timestamptz()
+  clinicContactedBy String?             @map("clinic_contacted_by") @db.Uuid
+  clinicContactNote String?             @map("clinic_contact_note") @db.VarChar(500)
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy         String?             @map("created_by") @db.Uuid
@@ -561,6 +568,8 @@ model AppointmentRescheduleLog {
   newStartAt      DateTime @map("new_start_at") @db.Timestamptz()
   newEndAt        DateTime @map("new_end_at") @db.Timestamptz()
   reason          String?
+  // Migration 043: moved for the clinic's reasons (not the patient's limit).
+  byClinic        Boolean  @default(false) @map("by_clinic")
   changedBy       String   @map("changed_by") @db.Uuid
   changedAt       DateTime @default(now()) @map("changed_at") @db.Timestamptz()
 
@@ -1481,6 +1490,8 @@ model ClinicClosure {
   id        String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   startDate DateTime  @map("start_date") @db.Date
   endDate   DateTime  @map("end_date") @db.Date
+  // Migration 043: closed from this clinic time on the first day (null = all day).
+  startTime DateTime? @map("start_time") @db.Time(0)
   reason    String    @db.VarChar(500)
   createdBy String    @map("created_by") @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()

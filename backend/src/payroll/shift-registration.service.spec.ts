@@ -94,6 +94,19 @@ describe('ShiftRegistrationService', () => {
               findMany: jest.fn().mockResolvedValue([]),
             },
             appointment: { count: jest.fn().mockResolvedValue(0) },
+            // shiftDayProblem (A1-17): an active dentist, an open day.
+            user: {
+              findUnique: jest.fn().mockResolvedValue({
+                status: 'ACTIVE',
+                deactivatedAt: null,
+                deletedAt: null,
+                userRoles: [{ role: { code: 'dentist' } }],
+              }),
+            },
+            scheduleOverride: { findMany: jest.fn().mockResolvedValue([]) },
+            timeOff: { findMany: jest.fn().mockResolvedValue([]) },
+            clinicClosure: { findMany: jest.fn().mockResolvedValue([]) },
+            employee: { findMany: jest.fn().mockResolvedValue([]) },
             $transaction: jest.fn(),
             $executeRaw: jest.fn().mockResolvedValue(0),
             $executeRawUnsafe: jest.fn().mockResolvedValue(0),
@@ -113,6 +126,42 @@ describe('ShiftRegistrationService', () => {
   });
 
   describe('create', () => {
+    it('refuses a shift on a day the clinic is closed (A1-17)', async () => {
+      (prisma as any).clinicClosure.findMany.mockResolvedValue([
+        {
+          startDate: new Date(FUTURE_DATE),
+          endDate: new Date(FUTURE_DATE),
+          startTime: null,
+          reason: 'Nghỉ lễ',
+        },
+      ]);
+      await expect(
+        service.create(
+          { date: FUTURE_DATE, startTime: '18:00', endTime: '21:00' },
+          'dentist-1',
+          false,
+        ),
+      ).rejects.toThrow(/Phòng khám nghỉ: Nghỉ lễ/);
+      expect(prisma.shiftRegistration.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a shift inside approved time-off (A1-17)', async () => {
+      (prisma as any).timeOff.findMany.mockResolvedValue([
+        {
+          dentistId: 'dentist-1',
+          startAt: new Date(`${FUTURE_DATE}T00:00:00+07:00`),
+          endAt: new Date(`${FUTURE_DATE}T23:00:00+07:00`),
+        },
+      ]);
+      await expect(
+        service.create(
+          { date: FUTURE_DATE, startTime: '18:00', endTime: '21:00' },
+          'dentist-1',
+          false,
+        ),
+      ).rejects.toThrow(/nghỉ phép/);
+    });
+
     it('creates a PENDING shift in the future', async () => {
       (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
@@ -371,6 +420,20 @@ describe('ShiftRegistrationService', () => {
         await expect(service.cancel('shift-1', 'dentist-1', false)).rejects.toThrow(
           /Còn 22\.0 giờ/,
         );
+      });
+
+      it('admin: an approved shift already started cannot be cancelled (A1-18)', async () => {
+        (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
+          ...mockShiftPending,
+          date: new Date('2099-01-05'),
+          startTime: '06:00',
+          endTime: '10:00',
+          status: ShiftRegistrationStatus.APPROVED,
+        });
+        await expect(service.cancel('shift-1', 'admin-1', true)).rejects.toThrow(
+          /Ca đã bắt đầu hoặc đã làm xong/,
+        );
+        expect(prisma.shiftRegistration.updateMany).not.toHaveBeenCalled();
       });
 
       it('admin: a 03:00 shift tomorrow is 20h away → flagged as late cancel', async () => {

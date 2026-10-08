@@ -22,6 +22,7 @@ import {
   QueueSkipDto,
   QueueTransferDto,
   ReassignDayDto,
+  UndoReassignDayDto,
 } from './dto/dispatch.dto';
 
 /** Dispatch queue (ADR-0009 phase 6). */
@@ -45,6 +46,14 @@ export class DispatchController {
   @ApiOperation({ summary: "Move a dentist's bookings on a date to a substitute (BR-DSP-006)" })
   async reassignDay(@Body() dto: ReassignDayDto, @User() actor: JwtPayload) {
     return { data: await this.dispatch.reassignDay(dto, actor) };
+  }
+
+  @Post('reassign-day/undo')
+  @RequirePermissions('queue.manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Undo a day reassignment: reopen the day, move untouched visits back' })
+  async undoReassignDay(@Body() dto: UndoReassignDayDto, @User() actor: JwtPayload) {
+    return { data: await this.dispatch.undoReassignDay(dto, actor) };
   }
 
   @Post(':id/call')
