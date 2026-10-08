@@ -421,6 +421,33 @@ describe('MedicalRecordsService', () => {
       );
     });
 
+    // A3-03: started by mistake — only while nothing was done in it.
+    it('refuses a dentist once the encounter has a treatment or a prescription', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ dentistId: 'dentist-1' }),
+      );
+      (prisma.treatment.count as jest.Mock).mockResolvedValueOnce(1);
+      await expect(
+        service.cancelEncounter('enc-1', 'Mở nhầm bệnh nhân', cancelActor),
+      ).rejects.toMatchObject({ code: 'ENCOUNTER_HAS_CLINICAL_DATA' });
+
+      (prisma.treatment.count as jest.Mock).mockResolvedValueOnce(0);
+      (prisma.prescription.findFirst as jest.Mock).mockResolvedValueOnce({ id: 'rx-1' });
+      await expect(
+        service.cancelEncounter('enc-1', 'Mở nhầm bệnh nhân', cancelActor),
+      ).rejects.toMatchObject({ code: 'ENCOUNTER_HAS_CLINICAL_DATA' });
+      expect(prisma.encounter.update).not.toHaveBeenCalled();
+    });
+
+    it('lets the admin cancel an encounter with treatments', async () => {
+      const admin = userPayloadWithPermissions(['encounter.read.any', 'encounter.cancel']);
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(validEncounter());
+      (prisma.treatment.count as jest.Mock).mockResolvedValue(3);
+      await service.cancelEncounter('enc-1', 'Mở nhầm bệnh nhân', admin);
+      expect(prisma.treatment.count).not.toHaveBeenCalled();
+      expect(prisma.encounter.update).toHaveBeenCalled();
+    });
+
     it("lets encounter.read.any cancel any dentist's encounter", async () => {
       const admin = userPayloadWithPermissions(['encounter.read.any', 'encounter.cancel']);
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(

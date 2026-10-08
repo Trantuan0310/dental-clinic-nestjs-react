@@ -14,16 +14,24 @@ type Db = PrismaClient | Prisma.TransactionClient;
 /** Checked in later than this after the booked start counts as late. */
 export const LATE_AFTER_MIN = 15;
 
-/** Dispatch order of the priority classes (BR-DSP-001). */
-export const PRIORITY_RANK: Record<QueuePriority, number> = {
-  EMERGENCY: 0,
-  ON_TIME: 1,
-  LATE: 2,
-  WALK_IN: 3,
+/** Status blocks shown top to bottom: the one being called, then the line, then skipped. */
+const STATUS_RANK: Record<QueueStatus, number> = {
+  CALLED: 0,
+  WAITING: 1,
+  SKIPPED: 2,
+  LEFT: 3,
+  DONE: 3,
+  CANCELLED: 3,
 };
 
-/** Status blocks shown top to bottom: the one being called, then the line, then skipped. */
-const STATUS_RANK: Record<QueueStatus, number> = { CALLED: 0, WAITING: 1, SKIPPED: 2, LEFT: 3 };
+/**
+ * A late patient lines up as if they had come this long after their
+ * check-in: behind the patients booked around then, not behind the whole
+ * day (A3-09).
+ */
+export const LATE_PENALTY_MIN = 15;
+/** A walk-in waits behind booked patients for about this long at most. */
+export const WALK_IN_WAIT_CAP_MIN = 45;
 
 export function priorityAtCheckIn(
   appt: { visitKind: 'BOOKED' | 'WALK_IN'; startAt: Date },
@@ -39,16 +47,38 @@ export interface Orderable {
   status: QueueStatus;
   priority: QueuePriority;
   checkedInAt: Date;
+  appointment: { startAt: Date };
 }
 
 /**
- * BR-DSP-001: called first, then waiting by class (emergency > on time >
- * late > walk-in), then by check-in time; skipped patients wait at the end.
+ * When the patient is due in line: the booked time for one who came on
+ * time (or early), the arrival plus LATE_PENALTY_MIN for a late one, the
+ * arrival plus WALK_IN_WAIT_CAP_MIN for a walk-in.
+ */
+export function dueAt(e: Orderable): number {
+  switch (e.priority) {
+    case QueuePriority.ON_TIME:
+      return e.appointment.startAt.getTime();
+    case QueuePriority.LATE:
+      return e.checkedInAt.getTime() + LATE_PENALTY_MIN * 60_000;
+    case QueuePriority.WALK_IN:
+      return e.checkedInAt.getTime() + WALK_IN_WAIT_CAP_MIN * 60_000;
+    default:
+      return e.checkedInAt.getTime();
+  }
+}
+
+/**
+ * BR-DSP-001: called first, then emergencies, then everyone waiting by the
+ * time they are due (dueAt), earlier check-in breaking ties; skipped
+ * patients wait at the end.
  */
 export function compareQueue(a: Orderable, b: Orderable): number {
   return (
     STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
-    PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] ||
+    Number(a.priority !== QueuePriority.EMERGENCY) -
+      Number(b.priority !== QueuePriority.EMERGENCY) ||
+    dueAt(a) - dueAt(b) ||
     a.checkedInAt.getTime() - b.checkedInAt.getTime()
   );
 }
@@ -90,7 +120,49 @@ export async function reopenStartedQueueEntry(db: Db, appointmentId: string, act
   });
 }
 
+/**
+ * Puts a patient marked "Đã về" by mistake (or who came back) back in line
+ * with their priority and check-in time (A3-04). Only today's entries
+ * closed by LEFT reopen; returns how many did.
+ */
+export async function reopenLeftQueueEntry(db: Db, appointmentId: string, actorId: string) {
+  const res = await db.queueEntry.updateMany({
+    where: { appointmentId, closeReason: 'LEFT', queueDate: new Date(clinicDateOnly()) },
+    data: { status: QueueStatus.WAITING, doneAt: null, closeReason: null, updatedBy: actorId },
+  });
+  return res.count;
+}
+
+/**
+ * The dentist started an exam: any other patient left "called" for them
+ * that day goes back to waiting (keeping their place), so the next call
+ * is not refused as "busy" (A3-15).
+ */
+export async function releaseOtherCalled(
+  db: Db,
+  appt: { id: string; dentistId: string; startAt: Date },
+  actorId: string,
+) {
+  await db.queueEntry.updateMany({
+    where: {
+      dentistId: appt.dentistId,
+      queueDate: new Date(clinicDateOnly(appt.startAt)),
+      status: QueueStatus.CALLED,
+      doneAt: null,
+      NOT: { appointmentId: appt.id },
+    },
+    data: { status: QueueStatus.WAITING, updatedBy: actorId },
+  });
+}
+
 export type CloseReason = 'STARTED' | 'CANCELLED' | 'LEFT';
+
+/** Status of a closed entry, so a query on status alone counts it right (A5-21). */
+const CLOSED_STATUS: Record<CloseReason, QueueStatus> = {
+  STARTED: QueueStatus.DONE,
+  CANCELLED: QueueStatus.CANCELLED,
+  LEFT: QueueStatus.LEFT,
+};
 
 /**
  * Closes the open entry, if any (no-op for appointments that never queued).
@@ -107,7 +179,7 @@ export async function closeQueueEntry(
     data: {
       doneAt: new Date(),
       closeReason: reason,
-      ...(reason === 'LEFT' ? { status: QueueStatus.LEFT } : {}),
+      status: CLOSED_STATUS[reason],
       updatedBy: actorId,
     },
   });

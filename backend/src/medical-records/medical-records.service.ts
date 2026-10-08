@@ -42,7 +42,12 @@ import {
 import { isMinor, readJsonStringArray } from '../patients/domain/patient-rules';
 import { AllergyConflict, findAllergyConflicts, normalizeTerm } from './domain/allergy-check';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
-import { closeQueueEntry, reopenStartedQueueEntry } from '../appointments/domain/queue';
+import {
+  closeQueueEntry,
+  releaseOtherCalled,
+  reopenStartedQueueEntry,
+} from '../appointments/domain/queue';
+import { APPOINTMENT_STATUS_LABEL } from '../appointments/domain/status-label';
 import { reopenCancelledEncounter } from './domain/reopen-encounter';
 import { dentistCanReadPatient } from '../common/dentist-patient-access';
 
@@ -170,7 +175,7 @@ export class MedicalRecordsService {
         throw new EncounterNotFoundException(encounterId);
       }
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
-        throw new EncounterNotClosableException('Only IN_PROGRESS encounters can be edited');
+        throw new EncounterNotClosableException('Chỉ sửa được phiên khám đang mở');
       }
       patientId = encounter.patientId;
       return write(tx);
@@ -214,7 +219,7 @@ export class MedicalRecordsService {
 
     if (appt.status !== 'CHECKED_IN' && appt.status !== 'IN_PROGRESS') {
       throw new EncounterNotClosableException(
-        `Cannot start encounter from appointment status ${appt.status}`,
+        `Không thể bắt đầu khám: lịch hẹn đang ở trạng thái "${APPOINTMENT_STATUS_LABEL[appt.status]}" (cần đã check-in)`,
       );
     }
 
@@ -225,7 +230,7 @@ export class MedicalRecordsService {
       if (!current || current.deletedAt) throw new EncounterNotFoundException(appointmentId);
       if (current.status !== 'CHECKED_IN' && current.status !== 'IN_PROGRESS') {
         throw new EncounterNotClosableException(
-          `Cannot start encounter from appointment status ${current.status}`,
+          `Không thể bắt đầu khám: lịch hẹn đang ở trạng thái "${APPOINTMENT_STATUS_LABEL[current.status]}" (cần đã check-in)`,
         );
       }
       const existing = await tx.encounter.findUnique({
@@ -233,10 +238,11 @@ export class MedicalRecordsService {
         select: { id: true, status: true },
       });
       if (existing?.status === EncounterStatus.COMPLETED) {
-        throw new EncounterNotClosableException('Encounter already completed');
+        throw new EncounterNotClosableException('Phiên khám đã kết thúc');
       }
       await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
       if (current.status === 'CHECKED_IN') {
+        await releaseOtherCalled(tx, current, actor.sub);
         await tx.appointment.update({
           where: { id: appointmentId },
           data: { status: 'IN_PROGRESS', updatedBy: actor.sub },
@@ -551,10 +557,10 @@ export class MedicalRecordsService {
           throw new EncounterNotFoundException(encounterId);
         }
         if (encounter.status === EncounterStatus.COMPLETED) {
-          throw new EncounterNotClosableException('Encounter already completed');
+          throw new EncounterNotClosableException('Phiên khám đã kết thúc');
         }
         if (encounter.status === EncounterStatus.CANCELLED) {
-          throw new EncounterNotClosableException('Encounter was cancelled');
+          throw new EncounterNotClosableException('Phiên khám đã bị hủy');
         }
 
         // An allergy recorded after the prescription was saved must not slip
@@ -747,8 +753,9 @@ export class MedicalRecordsService {
    * Cancel an in-progress encounter (admin/dentist override; BR-MR-005).
    * Row-level like every other clinical write: a caller without
    * encounter.read.any may only cancel their own encounter (404 otherwise,
-   * so other dentists' encounter ids can't be probed). encounter.cancel is
-   * admin-only in the seeded roles, but a custom role may be granted it.
+   * so other dentists' encounter ids can't be probed). The seeded dentist
+   * holds encounter.cancel (migration 042) but, being row-scoped, only while
+   * the encounter has no treatment or prescription (A3-03).
    *
    * The patient is still in the clinic, so in the same transaction the
    * appointment goes back to CHECKED_IN and its queue entry reopens; the
@@ -776,8 +783,29 @@ export class MedicalRecordsService {
       }
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
         throw new EncounterNotClosableException(
-          `Cannot cancel encounter in status ${encounter.status}`,
+          encounter.status === EncounterStatus.COMPLETED
+            ? 'Phiên khám đã kết thúc — không thể hủy'
+            : 'Phiên khám đã bị hủy trước đó',
         );
+      }
+      // A3-03: a dentist cancels their own encounter opened by mistake, only
+      // while nothing was done in it; past that it is the admin's call.
+      if (this.isRowScopedDentist(actor)) {
+        const [treatments, prescription] = await Promise.all([
+          tx.treatment.count({ where: { encounterId, deletedAt: null } }),
+          tx.prescription.findFirst({
+            where: { encounterId, deletedAt: null },
+            select: { id: true },
+          }),
+        ]);
+        if (treatments > 0 || prescription) {
+          throw new BusinessRuleException(
+            'Phiên khám đã có điều trị hoặc đơn thuốc — bác sĩ không tự hủy được. Hãy xóa điều trị/đơn thuốc nhập nhầm hoặc nhờ quản trị viên hủy.',
+            HttpStatus.CONFLICT,
+            undefined,
+            'ENCOUNTER_HAS_CLINICAL_DATA',
+          );
+        }
       }
       await tx.encounter.update({
         where: { id: encounterId },
@@ -1051,9 +1079,7 @@ export class MedicalRecordsService {
         throw new EncounterNotFoundException(encounterId);
       }
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
-        throw new EncounterNotClosableException(
-          'Cannot add treatments to non-IN_PROGRESS encounter',
-        );
+        throw new EncounterNotClosableException('Chỉ thêm điều trị vào phiên khám đang mở');
       }
 
       // Determine next sequence
