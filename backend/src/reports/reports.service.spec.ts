@@ -213,58 +213,36 @@ describe('ReportsService', () => {
   });
 
   describe('appointmentStats (A6-12)', () => {
-    const rows = [
-      {
-        status: 'COMPLETED',
-        source: 'ONLINE',
-        visitKind: 'BOOKED',
-        checkedInAt: new Date(),
-        dentistId: 'd1',
-        dentist: { fullName: 'BS An' },
-      },
-      {
-        status: 'NO_SHOW',
-        source: 'PHONE',
-        visitKind: 'BOOKED',
-        checkedInAt: null,
-        dentistId: 'd1',
-        dentist: { fullName: 'BS An' },
-      },
-      {
-        status: 'CANCELLED',
-        source: 'PHONE',
-        visitKind: 'BOOKED',
-        checkedInAt: new Date(),
-        dentistId: 'd1',
-        dentist: { fullName: 'BS An' },
-      },
-      {
-        status: 'LEFT',
-        source: 'WALK_IN',
-        visitKind: 'WALK_IN',
-        checkedInAt: new Date(),
-        dentistId: 'd2',
-        dentist: { fullName: 'BS Bình' },
-      },
-      {
-        status: 'SCHEDULED',
-        source: 'PHONE',
-        visitKind: 'BOOKED',
-        checkedInAt: null,
-        dentistId: 'd2',
-        dentist: { fullName: 'BS Bình' },
-      },
-    ];
+    const g = (status: string, source: string, visitKind: string, dentistId: string, n = 1) => ({
+      status,
+      source,
+      visitKind,
+      dentistId,
+      _count: { _all: n },
+    });
 
-    it('counts by final status, source and dentist with the online funnel', async () => {
-      prisma.appointment.findMany.mockResolvedValue(rows);
-      prisma.bookingRequest.findMany.mockResolvedValue([
-        { appointment: { status: 'COMPLETED', deletedAt: null } },
-        { appointment: null },
+    it('counts by final status, source and dentist in the database, with the online funnel', async () => {
+      prisma.appointment.groupBy
+        .mockResolvedValueOnce([
+          g('COMPLETED', 'ONLINE', 'BOOKED', 'd1'),
+          g('NO_SHOW', 'PHONE', 'BOOKED', 'd1'),
+          g('CANCELLED', 'PHONE', 'BOOKED', 'd1'),
+          g('LEFT', 'WALK_IN', 'WALK_IN', 'd2'),
+          g('SCHEDULED', 'PHONE', 'BOOKED', 'd2'),
+        ])
+        .mockResolvedValueOnce([{ source: 'PHONE', dentistId: 'd1', _count: { _all: 1 } }]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'd1', fullName: 'BS An' },
+        { id: 'd2', fullName: 'BS Bình' },
       ]);
+      prisma.bookingRequest.count
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
 
       const s = await service.appointmentStats({ from: '2026-10-01', to: '2026-10-01' }, admin);
 
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
       expect(s.summary).toMatchObject({
         total: 5,
         pending: 1,
@@ -278,23 +256,40 @@ describe('ReportsService', () => {
         online: 1,
       });
       expect(s.rates.noShowPct).toBeCloseTo(33.3, 1);
-      expect(s.bySource.find(x => x.source === 'PHONE')).toMatchObject({ total: 3, noShow: 1 });
-      expect(s.byDentist.map(d => [d.dentistId, d.total])).toEqual([
-        ['d1', 3],
-        ['d2', 2],
+      expect(s.bySource.find(x => x.source === 'PHONE')).toMatchObject({
+        total: 3,
+        noShow: 1,
+        cancelledAfterCheckIn: 1,
+      });
+      expect(s.byDentist.map(d => [d.dentistName, d.total])).toEqual([
+        ['BS An', 3],
+        ['BS Bình', 2],
       ]);
       expect(s.onlineFunnel).toEqual({ requests: 2, booked: 1, arrived: 1 });
     });
 
     it('limits a row-scoped dentist to their own calendar, ignoring dentistId', async () => {
-      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.appointment.groupBy.mockResolvedValue([]);
 
       const s = await service.appointmentStats({ dentistId: 'd2' }, dentist);
 
-      expect(prisma.appointment.findMany.mock.calls[0][0].where.dentistId).toBe('dentist-1');
+      expect(prisma.appointment.groupBy.mock.calls[0][0].where.dentistId).toBe('dentist-1');
       expect(s.scope).toBe('own');
       expect(s.onlineFunnel).toBeNull();
-      expect(prisma.bookingRequest.findMany).not.toHaveBeenCalled();
+      expect(prisma.bookingRequest.count).not.toHaveBeenCalled();
+    });
+
+    it('refuses a reversed range or one longer than a year', async () => {
+      await expect(
+        service.appointmentStats({ from: '2026-10-02', to: '2026-10-01' }, admin),
+      ).rejects.toThrow(/Từ ngày/);
+      await expect(
+        service.appointmentStats({ from: '2000-01-01', to: '2026-10-01' }, admin),
+      ).rejects.toThrow(/tối đa 366 ngày/);
+      await expect(service.revenueReport({ from: '2024-01-01', to: '2026-10-01' })).rejects.toThrow(
+        /tối đa 366 ngày/,
+      );
+      expect(prisma.appointment.groupBy).not.toHaveBeenCalled();
     });
   });
 

@@ -106,7 +106,10 @@ export default function ReportsPage() {
 
   const colors = isDark ? CHART_COLORS_DARK : CHART_COLORS_LIGHT;
   // ISO 'yyyy-MM-dd' strings compare correctly lexicographically.
-  const isDateRangeValid = fromDate <= toDate;
+  const isOrderValid = fromDate <= toDate;
+  // The API reads at most 366 days per report.
+  const isSpanValid = Date.parse(toDate) - Date.parse(fromDate) <= 365 * 86_400_000;
+  const isDateRangeValid = isOrderValid && isSpanValid;
 
   // report.read only opens the menu; the API checks the canonical codes
   // (A6-25), so each section is gated by the code its endpoint needs.
@@ -307,7 +310,9 @@ export default function ReportsPage() {
         </div>
         {!isDateRangeValid && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-            "Từ ngày" phải trước hoặc bằng "Đến ngày".
+            {isOrderValid
+              ? 'Khoảng thời gian tối đa 366 ngày. Hãy chọn khoảng ngắn hơn hoặc xem từng năm.'
+              : '"Từ ngày" phải trước hoặc bằng "Đến ngày".'}
           </p>
         )}
       </Card>

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { AppointmentStatus, InvoiceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpenseService } from '../expense/expense.service';
@@ -43,6 +43,8 @@ export const AGING_BUCKETS = [
 ] as const;
 
 const DAY_MS = 86_400_000;
+/** Longest range a report reads in one call (a year, leap day included). */
+export const MAX_RANGE_DAYS = 366;
 
 interface CollectionRow {
   amount: Prisma.Decimal;
@@ -81,7 +83,22 @@ export class ReportsService {
       fromDate = startOfClinicDay(clinicDateOnly(toDate));
       fromDate.setUTCDate(fromDate.getUTCDate() - 6);
     }
+    this.assertRange(fromDate, toDate);
     return { fromDate, toDate };
+  }
+
+  /** From before to, at most MAX_RANGE_DAYS: a report never reads a whole table. */
+  private assertRange(fromDate: Date, toDate: Date) {
+    if (fromDate.getTime() > toDate.getTime()) {
+      throw new BadRequestException('"Từ ngày" phải trước hoặc bằng "Đến ngày".');
+    }
+    if (toDate.getTime() - fromDate.getTime() > MAX_RANGE_DAYS * DAY_MS) {
+      throw new BadRequestException(
+        'Khoảng thời gian tối đa ' +
+          MAX_RANGE_DAYS +
+          ' ngày. Hãy chọn khoảng ngắn hơn hoặc xem từng năm.',
+      );
+    }
   }
 
   /** The previous range of equal length immediately before [from, to]. */
@@ -134,6 +151,7 @@ export class ReportsService {
   async revenueReport(query: { from: string; to: string; dentistId?: string }) {
     const fromDate = startOfClinicDay(query.from);
     const toDate = endOfClinicDay(query.to);
+    this.assertRange(fromDate, toDate);
     const byDentistFilter: Prisma.InvoiceWhereInput = query.dentistId
       ? { encounter: { dentistId: query.dentistId } }
       : {};
@@ -531,21 +549,25 @@ export class ReportsService {
     const { fromDate, toDate } = this.resolveRange(query.from, query.to);
     const scoped = isRowScoped(actor, 'appointment');
     const dentistId = scoped ? actor.sub : query.dentistId;
-    const rows = await this.prisma.appointment.findMany({
-      where: {
-        deletedAt: null,
-        startAt: { gte: fromDate, lte: toDate },
-        ...(dentistId ? { dentistId } : {}),
-      },
-      select: {
-        status: true,
-        source: true,
-        visitKind: true,
-        checkedInAt: true,
-        dentistId: true,
-        dentist: { select: { fullName: true } },
-      },
-    });
+    const where: Prisma.AppointmentWhereInput = {
+      deletedAt: null,
+      startAt: { gte: fromDate, lte: toDate },
+      ...(dentistId ? { dentistId } : {}),
+    };
+    // Counted in the database (A6-12 review): one row per combination, not
+    // one per appointment.
+    const [groups, lateCancels] = await Promise.all([
+      this.prisma.appointment.groupBy({
+        by: ['status', 'source', 'visitKind', 'dentistId'],
+        where,
+        _count: { _all: true },
+      }),
+      this.prisma.appointment.groupBy({
+        by: ['source', 'dentistId'],
+        where: { ...where, status: AppointmentStatus.CANCELLED, checkedInAt: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
 
     type Tally = {
       total: number;
@@ -569,58 +591,71 @@ export class ReportsService {
       cancelled: 0,
       cancelledAfterCheckIn: 0,
     });
-    const add = (t: Tally, a: (typeof rows)[number]) => {
-      t.total += 1;
-      if (PENDING_STATUSES.includes(a.status)) t.pending += 1;
-      if (ARRIVED_STATUSES.includes(a.status)) t.arrived += 1;
-      if (a.status === AppointmentStatus.CHECKED_IN || a.status === AppointmentStatus.IN_PROGRESS) {
-        t.inClinic += 1;
+    const add = (t: Tally, status: AppointmentStatus, n: number) => {
+      t.total += n;
+      if (PENDING_STATUSES.includes(status)) t.pending += n;
+      if (ARRIVED_STATUSES.includes(status)) t.arrived += n;
+      if (status === AppointmentStatus.CHECKED_IN || status === AppointmentStatus.IN_PROGRESS) {
+        t.inClinic += n;
       }
-      if (a.status === AppointmentStatus.COMPLETED) t.completed += 1;
-      if (a.status === AppointmentStatus.LEFT) t.left += 1;
-      if (a.status === AppointmentStatus.NO_SHOW) t.noShow += 1;
-      if (a.status === AppointmentStatus.CANCELLED) {
-        t.cancelled += 1;
-        if (a.checkedInAt) t.cancelledAfterCheckIn += 1;
-      }
+      if (status === AppointmentStatus.COMPLETED) t.completed += n;
+      if (status === AppointmentStatus.LEFT) t.left += n;
+      if (status === AppointmentStatus.NO_SHOW) t.noShow += n;
+      if (status === AppointmentStatus.CANCELLED) t.cancelled += n;
     };
 
     const summary = { ...empty(), walkIn: 0, online: 0 };
     const sources = new Map<string, Tally>();
     const dentists = new Map<string, Tally & { dentistId: string; dentistName: string }>();
-    for (const a of rows) {
-      add(summary, a);
-      if (a.visitKind === 'WALK_IN') summary.walkIn += 1;
-      if (a.source === 'ONLINE') summary.online += 1;
-      const s = sources.get(a.source) ?? empty();
-      add(s, a);
-      sources.set(a.source, s);
-      const d = dentists.get(a.dentistId) ?? {
-        ...empty(),
-        dentistId: a.dentistId,
-        dentistName: a.dentist?.fullName ?? 'Chưa rõ',
-      };
-      add(d, a);
-      dentists.set(a.dentistId, d);
+    const source = (key: string) => {
+      const t = sources.get(key) ?? empty();
+      sources.set(key, t);
+      return t;
+    };
+    const dentist = (id: string) => {
+      const t = dentists.get(id) ?? { ...empty(), dentistId: id, dentistName: 'Chưa rõ' };
+      dentists.set(id, t);
+      return t;
+    };
+    for (const g of groups) {
+      const n = g._count._all;
+      add(summary, g.status, n);
+      if (g.visitKind === 'WALK_IN') summary.walkIn += n;
+      if (g.source === 'ONLINE') summary.online += n;
+      add(source(g.source), g.status, n);
+      add(dentist(g.dentistId), g.status, n);
+    }
+    for (const g of lateCancels) {
+      const n = g._count._all;
+      summary.cancelledAfterCheckIn += n;
+      source(g.source).cancelledAfterCheckIn += n;
+      dentist(g.dentistId).cancelledAfterCheckIn += n;
+    }
+    if (dentists.size) {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: [...dentists.keys()] } },
+        select: { id: true, fullName: true },
+      });
+      for (const u of users) dentist(u.id).dentistName = u.fullName;
     }
 
     // Online funnel: requests sent → booked → came. Front-desk data only.
     let onlineFunnel: { requests: number; booked: number; arrived: number } | null = null;
     if (!scoped && !dentistId) {
-      const requests = await this.prisma.bookingRequest.findMany({
-        where: { createdAt: { gte: fromDate, lte: toDate } },
-        select: { appointment: { select: { status: true, deletedAt: true } } },
-      });
-      onlineFunnel = {
-        requests: requests.length,
-        booked: requests.filter(r => r.appointment && !r.appointment.deletedAt).length,
-        arrived: requests.filter(
-          r =>
-            r.appointment &&
-            !r.appointment.deletedAt &&
-            ARRIVED_STATUSES.includes(r.appointment.status),
-        ).length,
-      };
+      const sent = { createdAt: { gte: fromDate, lte: toDate } };
+      const [requests, booked, arrived] = await Promise.all([
+        this.prisma.bookingRequest.count({ where: sent }),
+        this.prisma.bookingRequest.count({
+          where: { ...sent, appointment: { is: { deletedAt: null } } },
+        }),
+        this.prisma.bookingRequest.count({
+          where: {
+            ...sent,
+            appointment: { is: { deletedAt: null, status: { in: ARRIVED_STATUSES } } },
+          },
+        }),
+      ]);
+      onlineFunnel = { requests, booked, arrived };
     }
 
     // Due = appointments whose outcome is known (excludes still-pending ones).
