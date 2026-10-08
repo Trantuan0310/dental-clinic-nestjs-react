@@ -21,3 +21,15 @@ UPDATE permissions SET description = 'Menu Báo cáo (chỉ điều hướng; d�
 -- bring them back. Permission loading also ignores deleted roles.
 DELETE FROM user_roles
  WHERE role_id IN (SELECT id FROM roles WHERE deleted_at IS NOT NULL);
+
+-- A6-28 (time part): a visit must end after it starts. The app already
+-- refuses it; this guards scripts and seeds. NOT VALID checks new and changed
+-- rows only, so a stray historical row cannot block the deploy. (Money
+-- invariants on invoices/payments are left to the billing migration.)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'appointments_end_after_start') THEN
+    ALTER TABLE appointments
+      ADD CONSTRAINT appointments_end_after_start CHECK (end_at > start_at) NOT VALID;
+  END IF;
+END $$;

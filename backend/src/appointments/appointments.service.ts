@@ -1488,7 +1488,10 @@ export class AppointmentsService {
       take: pageSize + 1,
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
       include: {
-        patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
+        // deletedAt: past visits of a deleted record stay listed (A6-31), labelled.
+        patient: {
+          select: { id: true, code: true, fullName: true, primaryPhone: true, deletedAt: true },
+        },
         dentist: { select: { id: true, fullName: true } },
         // The FK lives on Encounter (appointmentId), not Appointment — the
         // frontend navigates from an in-progress/completed appointment to
