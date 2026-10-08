@@ -65,7 +65,8 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 ## Quyền "menu" và phạm vi dữ liệu
 
 - Các mã `appointment.read`, `encounter.read`, `invoice.read`, `medical_record.read`, `report.read` (và các mã "alias FE" khác) **chỉ mở menu**. API chỉ xét quyền gốc: `*.read.any` (xem tất cả), `*.read.own` (chỉ của mình), `report.revenue.read`, `report.outstanding.read`… (migration `047_report_permission_cleanup` ghi rõ điều này trong mô tả quyền).
-- Vai trò không có `.read.any` cũng không có `.read.own` thì **không** thấy dòng nào (mặc định từ chối), kể cả khi được cấp quyền sửa / hủy. Vai trò có `appointment.read.own` chỉ thấy bệnh nhân của mình, dù có `patient.update`.
+- Vai trò không có `.read.any` cũng không có `.read.own` thì **không** thấy dòng nào (mặc định từ chối), kể cả khi được cấp quyền sửa / hủy: hệ thống báo 403 nêu rõ quyền còn thiếu (không coi vai trò đó là bác sĩ). Chỉ vai trò có `appointment.read.own` (không có `.any`) mới bị giới hạn "lịch của mình" như bác sĩ, và chỉ thấy bệnh nhân của mình dù có `patient.update`.
+- Yêu cầu đặt lịch online: xem hồ sơ trùng (patient-matches) cần xem hồ sơ bệnh nhân toàn phòng khám; xác nhận yêu cầu cần thêm `appointment.read.any`.
 - Vai trò đã xóa không còn cấp quyền nào. Xóa vai trò sẽ gỡ vai trò đó khỏi mọi tài khoản, kể cả tài khoản đã vô hiệu hóa.
 
 ## Tùy chỉnh

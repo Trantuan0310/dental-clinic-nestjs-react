@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { JwtPayload } from './guards/permissions.guard';
 
 /**
@@ -40,6 +41,33 @@ export function rowScope(
   if (perms.includes(`${resource}.read.any`)) return 'any';
   if (perms.includes(`${resource}.read.own`)) return 'own';
   return 'none';
+}
+
+const SCOPE_NAMES: Record<ScopedResource, string> = {
+  appointment: 'lịch hẹn toàn phòng khám (appointment.read.any)',
+  encounter: 'phiên khám toàn phòng khám (encounter.read.any)',
+  invoice: 'hóa đơn toàn phòng khám (invoice.read.any)',
+  patient: 'hồ sơ bệnh nhân toàn phòng khám (patient.update, không giới hạn lịch của mình)',
+};
+
+/**
+ * For screens that search or pick among every clinic record (e.g. matching
+ * an online request to existing patients): the caller must see that
+ * resource clinic-wide, or get a 403 naming what is missing — not a side
+ * door around the row scope.
+ */
+export function assertClinicWide(
+  actor: Pick<JwtPayload, 'permissions'>,
+  ...resources: ScopedResource[]
+): void {
+  const missing = resources.filter(r => rowScope(actor, r) !== 'any');
+  if (missing.length) {
+    throw new ForbiddenException(
+      'Vai trò của bạn chưa được xem ' +
+        missing.map(r => SCOPE_NAMES[r]).join(' và ') +
+        '. Nhờ quản trị viên bổ sung quyền ở Quản trị → Vai trò.',
+    );
+  }
 }
 
 /** True unless the caller sees every row of `resource` ('own' and 'none' alike). */

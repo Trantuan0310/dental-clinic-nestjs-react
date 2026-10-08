@@ -1,4 +1,4 @@
-import { isRowScoped, rowScope } from './row-scope';
+import { assertClinicWide, isRowScoped, rowScope } from './row-scope';
 
 const actor = (...permissions: string[]) => ({ permissions });
 
@@ -26,5 +26,16 @@ describe('rowScope (A6-19)', () => {
     expect(rowScope(actor('patient.read'), 'patient')).toBe('own');
     expect(rowScope(actor('patient.delete'), 'patient')).toBe('any');
     expect(rowScope(actor(), 'patient')).toBe('none');
+  });
+
+  it('assertClinicWide closes side doors such as booking patient matches', () => {
+    const desk = actor('patient.update', 'appointment.read.any');
+    expect(() => assertClinicWide(desk, 'patient', 'appointment')).not.toThrow();
+    // A custom role with booking_request.* but only its own calendar.
+    const own = actor('patient.read', 'patient.update', 'appointment.read.own');
+    expect(() => assertClinicWide(own, 'patient')).toThrow(/hồ sơ bệnh nhân toàn phòng khám/);
+    expect(() => assertClinicWide(actor('patient.update'), 'patient', 'appointment')).toThrow(
+      /appointment\.read\.any/,
+    );
   });
 });

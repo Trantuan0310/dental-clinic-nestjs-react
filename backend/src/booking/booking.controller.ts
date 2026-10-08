@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
+import { assertClinicWide } from '../common/row-scope';
 import {
   AcceptBookingProposalDto,
   BookingRequestMessageDto,
@@ -154,7 +155,9 @@ export class BookingRequestsController {
   }
   @Get(':id/patient-matches')
   @RequirePermissions('booking_request.read')
-  async matches(@Param('id', ParseUUIDPipe) id: string) {
+  async matches(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    // Lists existing patient records: clinic-wide patient scope only (A6-19).
+    assertClinicWide(actor, 'patient');
     return { data: await this.booking.patientMatches(id) };
   }
   @Get(':id')
@@ -218,6 +221,8 @@ export class BookingRequestsController {
     @Body() body: ConfirmBookingRequestDto,
     @User() actor: JwtPayload,
   ) {
+    // Picks or creates a patient record and books any dentist's calendar.
+    assertClinicWide(actor, 'patient', 'appointment');
     return this.booking.confirm(id, actor, {
       patientId: body?.patientId,
       createNewPatient: body?.createNewPatient,
