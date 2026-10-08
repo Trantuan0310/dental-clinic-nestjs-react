@@ -50,6 +50,7 @@ describe('BillingService — corrections (round 4, H6)', () => {
       typeof cb === 'function' ? cb(prisma) : Promise.all(cb),
     );
     prisma.$queryRaw.mockResolvedValue([{ nextval: 7n }]);
+    prisma.payment.groupBy.mockResolvedValue([]);
     service = new BillingService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditService,
@@ -141,7 +142,45 @@ describe('BillingService — corrections (round 4, H6)', () => {
       );
       await expect(
         service.voidInvoice('inv-1', { version: 0, reason: 'Ghi sai' }, admin),
-      ).rejects.toThrow(/Hủy phiếu thu ghi nhầm hoặc lập phiếu hoàn tiền/);
+      ).rejects.toThrow(/"Hủy phiếu thu \(ghi nhầm\)".*"Hoàn tiền" hết số đã thu/);
+    });
+
+    it('checks the receipt rows, not only the paid column', async () => {
+      prisma.invoice.findUnique.mockResolvedValueOnce(
+        validInvoice({ status: InvoiceStatus.PAID, paidAmount: D(0) }),
+      );
+      prisma.payment.groupBy.mockResolvedValue([
+        { kind: 'PAYMENT', _sum: { amount: D(500_000) }, _count: { _all: 1 } },
+        { kind: 'REFUND', _sum: { amount: D(200_000) }, _count: { _all: 1 } },
+      ]);
+      await expect(
+        service.voidInvoice('inv-1', { version: 0, reason: 'Ghi sai' }, admin),
+      ).rejects.toThrow(/300\.000đ đã thu \(1 phiếu thu còn hiệu lực\)/);
+      expect(prisma.invoice.update).not.toHaveBeenCalled();
+    });
+
+    it('voids once every receipt was cancelled or refunded in full', async () => {
+      prisma.invoice.findUnique.mockResolvedValueOnce(
+        validInvoice({
+          status: InvoiceStatus.PAID,
+          paidAmount: D(0),
+          refundedAmount: D(500_000),
+          issuedAt: new Date(),
+        }),
+      );
+      prisma.payment.groupBy.mockResolvedValue([
+        { kind: 'PAYMENT', _sum: { amount: D(500_000) }, _count: { _all: 1 } },
+        { kind: 'REFUND', _sum: { amount: D(500_000) }, _count: { _all: 1 } },
+      ]);
+      await service.voidInvoice('inv-1', { version: 0, reason: 'Khách hủy liệu trình' }, admin);
+      expect(prisma.invoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: InvoiceStatus.VOIDED }),
+        }),
+      );
+      expect(prisma.payment.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { invoiceId: 'inv-1', status: 'COMPLETED' } }),
+      );
     });
 
     it('emits invoice.voided with the previous status', async () => {
@@ -237,11 +276,21 @@ describe('BillingService — corrections (round 4, H6)', () => {
       expect(prisma.invoice.updateMany).not.toHaveBeenCalled();
     });
 
-    it('lets the only holder of the permission void their own payment', async () => {
+    it('lets the only holder void their own payment, with a fuller reason and its own audit', async () => {
       prisma.payment.findUnique.mockResolvedValue(payment({ receivedBy: 'admin-1' }));
       prisma.user.count.mockResolvedValue(0);
       prisma.invoice.updateMany.mockResolvedValue({ count: 1 });
-      await service.voidPayment('pay-1', { reason: 'Thu nhầm hóa đơn' }, admin);
+      await expect(
+        service.voidPayment('pay-1', { reason: 'Thu nhầm' }, admin),
+      ).rejects.toMatchObject({ response: { code: 'SELF_CORRECTION_REASON_REQUIRED' } });
+      await service.voidPayment('pay-1', { reason: 'Thu nhầm hóa đơn của khách khác' }, admin);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'PAYMENT_SELF_VOIDED',
+          metadata: expect.objectContaining({ soleHolder: true }),
+        }),
+        prisma,
+      );
       expect(prisma.user.count).toHaveBeenCalledWith({
         where: expect.objectContaining({ id: { not: 'admin-1' }, status: 'ACTIVE' }),
       });
@@ -357,6 +406,35 @@ describe('BillingService — corrections (round 4, H6)', () => {
           admin,
         ),
       ).rejects.toMatchObject({ response: { code: 'REFUND_SELF_FORBIDDEN' } });
+    });
+
+    it('the sole holder may refund their own collection: reason ≥ 10, INVOICE_SELF_REFUND', async () => {
+      prisma.invoice.findUnique.mockResolvedValue(paid());
+      prisma.payment.count.mockResolvedValue(1);
+      prisma.user.count.mockResolvedValue(0);
+      prisma.invoice.updateMany.mockResolvedValue({ count: 1 });
+      prisma.payment.create.mockResolvedValue({ id: 'ref-2', paidAt: new Date() });
+      await expect(
+        service.refund(
+          'inv-1',
+          { amount: 100_000, method: PaymentMethod.CASH, reason: 'Hoàn tiền', version: 2 },
+          admin,
+        ),
+      ).rejects.toMatchObject({ response: { code: 'SELF_CORRECTION_REASON_REQUIRED' } });
+      await service.refund(
+        'inv-1',
+        {
+          amount: 100_000,
+          method: PaymentMethod.CASH,
+          reason: 'Khách hủy răng 26, hoàn tiền mặt tại quầy',
+          version: 2,
+        },
+        admin,
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'INVOICE_SELF_REFUND' }),
+        prisma,
+      );
     });
 
     it('refuses on DRAFT', async () => {

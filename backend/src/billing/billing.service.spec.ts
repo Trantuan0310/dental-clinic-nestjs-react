@@ -62,6 +62,7 @@ describe('BillingService', () => {
       _sum: { total: 0, paidAmount: 0, outstandingAmount: 0 },
       _count: { _all: 0 },
     });
+    (prisma.payment.groupBy as jest.Mock).mockResolvedValue([]);
     // Re-read after a change, for the domain event (loadForEvent).
     (prisma.invoice.findUniqueOrThrow as jest.Mock).mockImplementation(async () =>
       forEvent({ status: InvoiceStatus.ISSUED }),
