@@ -271,10 +271,15 @@ describe('Phase one audit regressions', () => {
       id: 't',
       encounterId: 'e',
       deletedAt: null,
+      unitPrice: 100,
+      listPrice: null,
       encounter: { dentistId: dentist.sub },
     });
     db.treatment.update.mockResolvedValue({ id: 't', unitPrice: 123 });
-    expect(await medical.updateTreatment('e', 't', { unitPrice: 123 }, dentist)).toEqual({
+    // A price edit carries its reason (decision 3, round 4).
+    expect(
+      await medical.updateTreatment('e', 't', { unitPrice: 123, priceReason: 'Sửa giá' }, dentist),
+    ).toEqual({
       id: 't',
       unitPrice: 123,
     });
