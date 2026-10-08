@@ -347,13 +347,27 @@ export default function BookingRequestsPage() {
       body?: unknown;
       method?: "post" | "patch" | "put";
     }) =>
-      api[method]<{ notificationSent?: boolean | null; alreadyConfirmed?: boolean }>(
+      api[method]<{
+        notificationSent?: boolean | null;
+        alreadyConfirmed?: boolean;
+        patientChangesNotApplied?: string[];
+      }>(
         "/booking-requests/" + selected?.id + "/" + path,
         body ?? {},
       ),
     onSuccess: async (response, { path }) => {
       setError("");
       const done = NOTIFIED[path];
+      if (response.data?.patientChangesNotApplied?.length) {
+        // Booked, but this account may not change patient records.
+        notify.error(
+          "Chưa cập nhật " +
+            response.data.patientChangesNotApplied
+              .map((f) => (f === "email" ? "email" : "số điện thoại"))
+              .join(", ") +
+            " của hồ sơ: tài khoản không có quyền sửa hồ sơ bệnh nhân. Nhờ người có quyền cập nhật.",
+        );
+      }
       if (response.data?.alreadyConfirmed) {
         notify.success("Yêu cầu đã được xác nhận trước đó, không tạo thêm lịch");
       } else if (done) {
@@ -838,16 +852,17 @@ export default function BookingRequestsPage() {
                 )}
                 {chosen && selected.email && (
                   <p className="mt-2 text-xs text-gray-600">
-                    {!chosen.email ? (
-                      <>Email {selected.email} sẽ được lưu vào hồ sơ để gửi nhắc lịch.</>
-                    ) : chosen.email.toLowerCase() !== selected.email.toLowerCase() ? (
+                    {/* The email was typed on the public form: saved only when ticked (after checking with the patient). */}
+                    {!chosen.email || chosen.email.toLowerCase() !== selected.email.toLowerCase() ? (
                       <label className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           checked={updateEmail}
                           onChange={(e) => setUpdateEmail(e.target.checked)}
                         />
-                        Thay email hồ sơ ({chosen.email}) bằng {selected.email}
+                        {chosen.email
+                          ? `Thay email hồ sơ (${chosen.email}) bằng ${selected.email}`
+                          : `Lưu email ${selected.email} vào hồ sơ (để gửi nhắc lịch) — chỉ tick khi đã xác nhận với khách`}
                       </label>
                     ) : null}
                   </p>
