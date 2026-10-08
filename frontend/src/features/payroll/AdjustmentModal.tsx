@@ -12,7 +12,8 @@ import { useAddAdjustment } from '@/features/payroll/payrollApi';
 import { formatVnd } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
-import type { PayrollLineItem, PayrollAdjustmentType } from '@/types/payroll';
+import { useAuthStore } from '@/stores/authStore';
+import { SELF_APPROVAL_REASON_MIN, type PayrollLineItem, type PayrollAdjustmentType } from '@/types/payroll';
 
 const schema = z
   .object({
@@ -46,21 +47,32 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
     defaultValues: { type: 'BONUS', amountVnd: 1000000, reason: '' },
   });
   const [serverError, setServerError] = useState<string | null>(null);
+  const [selfReason, setSelfReason] = useState('');
+  const myId = useAuthStore((s) => s.user?.id);
+  const isOwnLine = !!lineItem && lineItem.dentistId === myId;
   const adj = useAddAdjustment(periodId);
   const type = watch('type');
 
   const onSubmit = handleSubmit(async (values) => {
     if (!lineItem) return;
     setServerError(null);
+    if (isOwnLine && selfReason.trim().length < SELF_APPROVAL_REASON_MIN) {
+      setServerError(
+        `Bạn đang điều chỉnh lương của chính mình — nhập lý do tự duyệt (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự).`,
+      );
+      return;
+    }
     try {
       await adj.mutateAsync({
         lineItemId: lineItem.id,
         type: values.type as PayrollAdjustmentType,
         amountVnd: values.amountVnd,
         reason: values.reason,
+        ...(isOwnLine && { selfApprovalReason: selfReason.trim() }),
       });
       notify.success('Đã thêm điều chỉnh');
       reset();
+      setSelfReason('');
       onClose();
     } catch (err) {
       setServerError(getApiErrorMessage(err, 'Không thể thêm điều chỉnh'));
@@ -123,6 +135,22 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
           error={errors.reason?.message}
           required
         />
+        {isOwnLine && (
+          <>
+            <Alert variant="warning" title="Bạn đang điều chỉnh lương của chính mình">
+              Chỉ được làm khi phòng khám không có quản trị viên nào khác. Thao tác được ghi nhật ký riêng
+              (PAYROLL_SELF_APPROVED).
+            </Alert>
+            <Textarea
+              label="Lý do tự duyệt"
+              placeholder="VD: Phòng khám chỉ có một quản trị viên"
+              rows={2}
+              value={selfReason}
+              onChange={(e) => setSelfReason(e.target.value)}
+              required
+            />
+          </>
+        )}
         <Alert variant="warning">
           Điều chỉnh sẽ được audit log. MANUAL_OVERRIDE sẽ được log riêng với severity=HIGH.
         </Alert>

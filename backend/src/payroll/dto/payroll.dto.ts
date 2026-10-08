@@ -9,10 +9,14 @@ import {
   IsUUID,
   IsArray,
   IsInt,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PayrollCycle, PayrollAdjustmentType } from '@prisma/client';
+
+const SELF_APPROVAL_REASON_DOC =
+  'Required (min 10 chars) when acting on your own pay as the only admin; logged as PAYROLL_SELF_APPROVED';
 
 export class UpdatePayrollConfigDto {
   @ApiPropertyOptional({ enum: PayrollCycle })
@@ -104,6 +108,12 @@ export class CreateCompensationDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: SELF_APPROVAL_REASON_DOC })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  selfApprovalReason?: string;
 }
 
 export class UpdateCompensationDto {
@@ -135,6 +145,12 @@ export class UpdateCompensationDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: SELF_APPROVAL_REASON_DOC })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  selfApprovalReason?: string;
 }
 
 export class CreatePayrollPeriodDto {
@@ -167,6 +183,20 @@ export class AddAdjustmentDto {
   @ApiProperty()
   @IsString()
   reason: string;
+
+  @ApiPropertyOptional({ description: SELF_APPROVAL_REASON_DOC })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  selfApprovalReason?: string;
+}
+
+export class ApprovePeriodDto {
+  @ApiPropertyOptional({ description: SELF_APPROVAL_REASON_DOC })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  selfApprovalReason?: string;
 }
 
 export class MarkPaidDto {

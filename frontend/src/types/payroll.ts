@@ -193,7 +193,12 @@ export interface CreateCompensationPayload {
   commissionPercentage: number;
   overtimeHourlyRate?: number;
   notes?: string;
+  /** Required when the only admin sets their own pay (PAYROLL_SELF_APPROVED). */
+  selfApprovalReason?: string;
 }
+
+/** Minimum length of the reason for acting on your own pay. */
+export const SELF_APPROVAL_REASON_MIN = 10;
 
 export interface UpdateCompensationPayload extends Partial<CreateCompensationPayload> {}
 

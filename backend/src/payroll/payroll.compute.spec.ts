@@ -1,7 +1,11 @@
 import { PayrollPeriodStatus, Prisma } from '@prisma/client';
 import { PayrollService } from './payroll.service';
 import { PayrollEventListener } from './payroll.listener';
-import { PayrollForbiddenException, PayrollStateException } from './domain/exceptions';
+import {
+  PayrollForbiddenException,
+  PayrollStateException,
+  PayrollValidationException,
+} from './domain/exceptions';
 
 /**
  * Round 4 payroll fixes: H2 (recompute keeps adjustments, scoped + retried),
@@ -286,42 +290,115 @@ describe('PayrollService.computePeriod — round 4', () => {
   });
 });
 
-describe('PayrollService — no self-approval', () => {
-  it('approvePeriod refuses an approver who has a payslip in the period', async () => {
-    const { service, prisma } = makeService(makeTx(), period({ status: 'REVIEWING' }));
-    prisma.payrollLineItem.findFirst.mockResolvedValue({ id: 'li-own' });
-    prisma.payrollPeriod.updateMany = jest.fn();
-    await expect(service.approvePeriod('p-sep', 'owner-dentist')).rejects.toThrow(
-      PayrollForbiddenException,
+describe('PayrollService — acting on your own pay (owner who also practises)', () => {
+  /** `otherAdmins`: active users other than the actor holding the permission. */
+  const setup = (otherAdmins: number, p = period({ status: 'REVIEWING' })) => {
+    const ctx = makeService(makeTx(), p);
+    ctx.prisma.user = { count: fn(otherAdmins) };
+    ctx.prisma.payrollPeriod.updateMany = fn({ count: 1 });
+    ctx.prisma.payrollPeriod.findUniqueOrThrow = fn({ id: 'p-sep', status: 'APPROVED' });
+    ctx.prisma.dentistCompensation.findFirst = fn(null);
+    ctx.prisma.dentistCompensation.create = jest
+      .fn()
+      .mockImplementation(({ data }: any) => ({ id: 'comp-new', ...data }));
+    return ctx;
+  };
+  const selfAudits = (audit: { log: jest.Mock }) =>
+    audit.log.mock.calls.filter(c => c[0].action === 'PAYROLL_SELF_APPROVED');
+
+  it('approve: blocked while another admin can approve', async () => {
+    const { service, prisma } = setup(1);
+    prisma.payrollLineItem.findFirst.mockResolvedValue({ id: 'li-own', netPayVnd: 1 });
+    await expect(
+      service.approvePeriod('p-sep', 'owner', 'Chỉ có một quản trị viên'),
+    ).rejects.toThrow(PayrollForbiddenException);
+    expect(prisma.payrollPeriod.updateMany).not.toHaveBeenCalled();
+    // The permission looked up is the one the action needs.
+    expect(JSON.stringify(prisma.user.count.mock.calls[0][0].where)).toContain(
+      'payroll.period.approve',
+    );
+  });
+
+  it('approve: sole admin needs a reason, then it goes through with PAYROLL_SELF_APPROVED', async () => {
+    const { service, prisma, audit } = setup(0);
+    prisma.payrollLineItem.findFirst.mockResolvedValue({ id: 'li-own', netPayVnd: 25_000_000 });
+    await expect(service.approvePeriod('p-sep', 'owner')).rejects.toThrow(
+      PayrollValidationException,
+    );
+    await expect(service.approvePeriod('p-sep', 'owner', 'ngắn')).rejects.toThrow(
+      PayrollValidationException,
     );
     expect(prisma.payrollPeriod.updateMany).not.toHaveBeenCalled();
-  });
 
-  it("createCompensation refuses one's own pay terms", async () => {
-    const { service } = makeService(makeTx());
-    await expect(
-      service.createCompensation(
-        { dentistId: 'owner', effectiveFrom: '2026-09-01', baseSalaryVnd: 1, commissionPct: 0.1 },
-        'owner',
-      ),
-    ).rejects.toThrow(PayrollForbiddenException);
-  });
-
-  it("addAdjustment refuses one's own line, even for payroll.admin", async () => {
-    const { service, prisma } = makeService(makeTx());
-    prisma.payrollLineItem.findUnique = fn({
-      id: 'li',
-      payrollPeriodId: 'p-sep',
-      dentistId: 'owner',
+    await service.approvePeriod('p-sep', 'owner', '  Phòng khám chỉ có một quản trị viên  ');
+    expect(prisma.payrollPeriod.updateMany).toHaveBeenCalled();
+    const [entry] = selfAudits(audit);
+    expect(entry[0]).toMatchObject({
+      actorUserId: 'owner',
+      targetType: 'PAYROLL_PERIOD',
+      targetId: 'p-sep',
+      metadata: {
+        operation: 'PERIOD_APPROVE',
+        reason: 'Phòng khám chỉ có một quản trị viên',
+        lineItemId: 'li-own',
+      },
     });
+  });
+
+  it('approve: no own payslip → no reason needed, no self audit', async () => {
+    const { service, audit } = setup(3);
+    await service.approvePeriod('p-sep', 'admin');
+    expect(selfAudits(audit)).toHaveLength(0);
+  });
+
+  it('own compensation: blocked with another admin, allowed alone with a reason', async () => {
+    const dto = {
+      dentistId: 'owner',
+      effectiveFrom: '2026-09-01',
+      baseSalaryVnd: 1,
+      commissionPct: 0.1,
+    };
+    const blocked = setup(1);
+    await expect(blocked.service.createCompensation(dto, 'owner')).rejects.toThrow(
+      PayrollForbiddenException,
+    );
+
+    const alone = setup(0);
+    await expect(alone.service.createCompensation(dto, 'owner')).rejects.toThrow(
+      PayrollValidationException,
+    );
+    await alone.service.createCompensation(
+      { ...dto, selfApprovalReason: 'Chủ phòng khám tự lập lương' },
+      'owner',
+    );
+    expect(selfAudits(alone.audit)[0][0].metadata.operation).toBe('COMPENSATION_CREATE');
+  });
+
+  it('own adjustment: blocked with another admin, allowed alone with a reason', async () => {
+    const own = { id: 'li', payrollPeriodId: 'p-sep', dentistId: 'owner' };
+    const blocked = setup(1, period());
+    blocked.prisma.payrollLineItem.findUnique = fn(own);
     await expect(
-      service.addAdjustment(
+      blocked.service.addAdjustment(
         'p-sep',
         { lineItemId: 'li', type: 'BONUS', amountVnd: 1, reason: 'Thưởng tháng' },
         'owner',
         ['payroll.admin'],
       ),
     ).rejects.toThrow(PayrollForbiddenException);
+
+    const alone = setup(0, period());
+    alone.prisma.payrollLineItem.findUnique = fn(own);
+    await expect(
+      alone.service.addAdjustment(
+        'p-sep',
+        { lineItemId: 'li', type: 'BONUS', amountVnd: 1, reason: 'Thưởng tháng' },
+        'owner',
+        ['payroll.admin'],
+      ),
+    ).rejects.toThrow(PayrollValidationException);
+    // The reason gate runs before any write.
+    expect(alone.prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

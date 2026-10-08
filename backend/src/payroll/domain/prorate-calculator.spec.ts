@@ -142,6 +142,57 @@ describe('proRateBaseSalaryParts (A6-04, A2-15)', () => {
     expect(r.total).toBe(0);
   });
 
+  it('WEEKLY: a week pays 7 days of the month, not a whole month', () => {
+    const week = { start: new Date('2026-09-07'), end: new Date('2026-09-13') };
+    const r = proRateBaseSalaryParts([term('a', 30_000_000, '2026-01-01', null)], week);
+    expect(r.total).toBe(7_000_000);
+  });
+
+  it('WEEKLY/BIWEEKLY pieces of a month add up to exactly one monthly salary (rounding included)', () => {
+    // August 2026 has 31 days; 10,000,000 / 31 is not a whole number.
+    const pieces = [
+      ['2026-08-01', '2026-08-02'],
+      ['2026-08-03', '2026-08-09'],
+      ['2026-08-10', '2026-08-16'],
+      ['2026-08-17', '2026-08-23'],
+      ['2026-08-24', '2026-08-30'],
+      ['2026-08-31', '2026-08-31'],
+    ];
+    const terms = [term('a', 10_000_000, '2026-01-01', null)];
+    const sum = pieces
+      .map(
+        ([s, e]) => proRateBaseSalaryParts(terms, { start: new Date(s), end: new Date(e) }).total,
+      )
+      .reduce((a, b) => a + b, 0);
+    expect(sum).toBe(10_000_000);
+    const halves = [
+      ['2026-08-01', '2026-08-15'],
+      ['2026-08-16', '2026-08-31'],
+    ]
+      .map(
+        ([s, e]) => proRateBaseSalaryParts(terms, { start: new Date(s), end: new Date(e) }).total,
+      )
+      .reduce((a, b) => a + b, 0);
+    expect(halves).toBe(10_000_000);
+  });
+
+  it('a week across two months takes each day at its own month rate', () => {
+    // Aug 31 (1/31 of August) + Sep 1-6 (6/30 of September)
+    const r = proRateBaseSalaryParts([term('a', 31_000_000, '2026-01-01', null)], {
+      start: new Date('2026-08-31'),
+      end: new Date('2026-09-06'),
+    });
+    expect(r.total).toBe(1_000_000 + 6_200_000);
+  });
+
+  it('a full month pays exactly the monthly salary', () => {
+    const r = proRateBaseSalaryParts([term('a', 10_000_000, '2026-01-01', null)], {
+      start: new Date('2026-02-01'),
+      end: new Date('2026-02-28'),
+    });
+    expect(r.total).toBe(10_000_000);
+  });
+
   it('compensationOn picks the comp in force that day', () => {
     const terms = [term('a', 1, '2026-01-01', '2026-09-15'), term('b', 2, '2026-09-16', null)];
     expect(compensationOn(terms, '2026-09-15')?.id).toBe('a');

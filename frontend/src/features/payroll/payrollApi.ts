@@ -117,6 +117,7 @@ function toCompensationBody(payload: CreateCompensationPayload | UpdateCompensat
     }),
     ...(payload.overtimeHourlyRate !== undefined && { overtimeHourlyVnd: payload.overtimeHourlyRate }),
     ...(payload.notes !== undefined && { notes: payload.notes }),
+    ...(payload.selfApprovalReason && { selfApprovalReason: payload.selfApprovalReason }),
   };
 }
 
@@ -241,6 +242,7 @@ export function useAddAdjustment(periodId: string) {
       type: 'BONUS' | 'PENALTY' | 'DEDUCTION' | 'MANUAL_OVERRIDE';
       amountVnd: number;
       reason: string;
+      selfApprovalReason?: string;
     }) => post<PayrollLineItem>(`/payroll/periods/${periodId}/adjustments`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: payrollKeys.period(periodId) });
@@ -262,7 +264,14 @@ export function useLockPeriod() {
 export function useApprovePeriod() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => post<PayrollPeriod>(`/payroll/periods/${id}/approve`),
+    // `selfApprovalReason`: the sole admin approving a period with their own payslip.
+    mutationFn: (vars: string | { id: string; selfApprovalReason?: string }) => {
+      const { id, selfApprovalReason } = typeof vars === 'string' ? { id: vars } : vars;
+      return post<PayrollPeriod>(
+        `/payroll/periods/${id}/approve`,
+        selfApprovalReason ? { selfApprovalReason } : undefined,
+      );
+    },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: payrollKeys.period(data.id) });
       qc.invalidateQueries({ queryKey: ['payroll', 'periods'] });

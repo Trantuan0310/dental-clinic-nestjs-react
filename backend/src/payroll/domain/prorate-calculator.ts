@@ -79,11 +79,29 @@ export interface CompensationTerm {
   effectiveTo: Date | null;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Monthly salary earned over calendar days [from, to] of ONE month: the
+ * month's salary up to day `to` minus up to the day before `from`, each
+ * rounded. Being a difference of cumulative amounts, consecutive pieces of a
+ * month (weekly or half-month periods) add up to exactly one month's salary.
+ */
+const monthPiece = (monthlySalary: number, from: Date, to: Date): number => {
+  const daysInMonth = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const upTo = (day: number) => Math.round((monthlySalary * day) / daysInMonth);
+  return upTo(to.getUTCDate()) - upTo(from.getUTCDate() - 1);
+};
+
 /**
  * Base salary of every compensation overlapping the period, each pro-rated
- * by its own days in the period (BR-PAY-013): a raise on the 16th pays the
- * old rate for 1–15 and the new one for 16–end. Days after `lastPaidDay`
- * (termination date) are not paid. The denominator stays the period length.
+ * by its own days (BR-PAY-013): a raise on the 16th pays the old rate for
+ * 1–15 and the new one for 16–end. Each day is worth salary / days of ITS
+ * month, so a weekly period pays ~7/30 of a month (not a whole month), a
+ * period crossing months splits by month, and a full month pays exactly the
+ * monthly salary. Days after `lastPaidDay` (termination date) are not paid.
  */
 export const proRateBaseSalaryParts = (
   terms: CompensationTerm[],
@@ -99,11 +117,19 @@ export const proRateBaseSalaryParts = (
       payPeriod.end.getTime(),
       (lastPaidDay ?? payPeriod.end).getTime(),
     );
-    const days = to >= from ? daysBetweenInclusive(new Date(from), new Date(to)) : 0;
+    if (to < from) return { compensationId: t.id, days: 0, amount: 0 };
+    let amount = 0;
+    let cursor = new Date(from);
+    while (cursor.getTime() <= to) {
+      const monthEnd = Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0);
+      const pieceEnd = new Date(Math.min(monthEnd, to));
+      amount += monthPiece(t.monthlySalary, cursor, pieceEnd);
+      cursor = new Date(pieceEnd.getTime() + DAY_MS);
+    }
     return {
       compensationId: t.id,
-      days,
-      amount: Math.round((t.monthlySalary * days) / periodDays),
+      days: daysBetweenInclusive(new Date(from), new Date(to)),
+      amount,
     };
   });
   return { total: parts.reduce((s, p) => s + p.amount, 0), parts };

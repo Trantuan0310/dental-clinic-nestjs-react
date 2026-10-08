@@ -72,8 +72,8 @@ const CLOSED_PERIOD_STATUSES: PayrollPeriodStatus[] = [
 /** "Hóa đơn nháp quá X ngày" warning before locking a period. */
 export const DEFAULT_DRAFT_INVOICE_WARN_DAYS = 3;
 
-const SELF_APPROVAL_MESSAGE =
-  'Bạn có phiếu lương trong kỳ này nên không thể tự duyệt. Nhờ một quản trị viên khác duyệt kỳ lương.';
+/** Minimum reason length when an owner-dentist approves their own pay. */
+export const SELF_APPROVAL_REASON_MIN = 10;
 
 /** bonus/penalty from a dentist's adjustments in one period. */
 export function sumAdjustments(rows: Array<{ type: string; amountVnd: Prisma.Decimal | number }>) {
@@ -228,13 +228,74 @@ export class PayrollService {
     return rows.map(r => ({ ...r, dentistName: r.dentist?.fullName ?? '' }));
   }
 
-  async createCompensation(dto: CreateCompensationDto, actorUserId: string) {
-    // An owner who also practises does not approve their own pay terms.
-    if (dto.dentistId === actorUserId) {
+  /**
+   * Owner who also practises acting on their own pay. With another active
+   * user able to do it, they must do it; when the actor is the only one (the
+   * usual one-admin clinic), it goes through with a stated reason and a
+   * separate PAYROLL_SELF_APPROVED audit entry. Returns the trimmed reason.
+   */
+  private async assertSelfAction(
+    actorUserId: string,
+    permission: string,
+    reason: string | undefined,
+    what: string,
+  ): Promise<string> {
+    const others = await this.prisma.user.count({
+      where: {
+        id: { not: actorUserId },
+        status: 'ACTIVE',
+        deletedAt: null,
+        userRoles: {
+          some: {
+            role: {
+              deletedAt: null,
+              rolePermissions: { some: { permission: { code: permission } } },
+            },
+          },
+        },
+      },
+    });
+    if (others > 0) {
       throw new PayrollForbiddenException(
-        'Không thể tự lập chế độ lương cho chính mình. Nhờ một quản trị viên khác thực hiện.',
+        `Bạn không thể tự ${what} của chính mình vì phòng khám còn quản trị viên khác. Nhờ họ thực hiện.`,
       );
     }
+    const trimmed = reason?.trim() ?? '';
+    if (trimmed.length < SELF_APPROVAL_REASON_MIN) {
+      throw new PayrollValidationException(
+        `Bạn đang tự ${what} của chính mình. Nhập lý do (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự) để xác nhận.`,
+      );
+    }
+    return trimmed;
+  }
+
+  private async logSelfApproval(
+    actorUserId: string,
+    operation: string,
+    targetType: string,
+    targetId: string,
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    await this.audit.log({
+      actorUserId,
+      action: 'PAYROLL_SELF_APPROVED',
+      targetType,
+      targetId,
+      metadata: { operation, reason, ...extra },
+    });
+  }
+
+  async createCompensation(dto: CreateCompensationDto, actorUserId: string) {
+    const selfReason =
+      dto.dentistId === actorUserId
+        ? await this.assertSelfAction(
+            actorUserId,
+            'payroll.compensation.update',
+            dto.selfApprovalReason,
+            'lập chế độ lương',
+          )
+        : null;
     // BR-PAY-022: prevent overlap. Postgres exclusion constraint will also enforce,
     // but pre-check for friendly error message.
     const overlap = await this.findCompensationOverlap(
@@ -273,6 +334,15 @@ export class PayrollService {
         commissionPct: created.commissionPct,
       },
     });
+    if (selfReason) {
+      await this.logSelfApproval(
+        actorUserId,
+        'COMPENSATION_CREATE',
+        'DENTIST_COMPENSATION',
+        created.id,
+        selfReason,
+      );
+    }
 
     return created;
   }
@@ -282,11 +352,15 @@ export class PayrollService {
       where: { id },
       select: { dentistId: true },
     });
-    if (current?.dentistId === actorUserId) {
-      throw new PayrollForbiddenException(
-        'Không thể tự sửa chế độ lương của chính mình. Nhờ một quản trị viên khác thực hiện.',
-      );
-    }
+    const selfReason =
+      current?.dentistId === actorUserId
+        ? await this.assertSelfAction(
+            actorUserId,
+            'payroll.compensation.update',
+            dto.selfApprovalReason,
+            'sửa chế độ lương',
+          )
+        : null;
     const updated = await this.prisma.dentistCompensation.update({
       where: { id },
       data: {
@@ -308,8 +382,18 @@ export class PayrollService {
       action: 'COMPENSATION_UPDATED',
       targetType: 'DENTIST_COMPENSATION',
       targetId: id,
-      metadata: { fields: Object.keys(dto) },
+      metadata: { fields: Object.keys(dto).filter(k => k !== 'selfApprovalReason') },
     });
+    if (selfReason) {
+      await this.logSelfApproval(
+        actorUserId,
+        'COMPENSATION_UPDATE',
+        'DENTIST_COMPENSATION',
+        id,
+        selfReason,
+        { fields: Object.keys(dto).filter(k => k !== 'selfApprovalReason') },
+      );
+    }
 
     return updated;
   }
@@ -1402,15 +1486,19 @@ export class PayrollService {
     // ONLY their own line item (self-adjustment is a no-op; in practice for
     // MVP dentists never have permission for this, but guard anyway).
     const isAdmin = actorPermissions.includes('payroll.admin');
-    // Nobody adjusts their own pay (owner who also practises included).
-    if (lineItemPrecheck.dentistId === actorUserId) {
-      throw new PayrollForbiddenException(
-        'Không thể tự điều chỉnh lương của chính mình. Nhờ một quản trị viên khác thực hiện.',
-      );
-    }
     if (!isAdmin) {
       throw new PayrollNotFoundException('PayrollLineItem', dto.lineItemId); // 404, don't leak
     }
+    // Own line (owner who also practises): only as the sole admin, with a reason.
+    const selfReason =
+      lineItemPrecheck.dentistId === actorUserId
+        ? await this.assertSelfAction(
+            actorUserId,
+            'payroll.admin',
+            dto.selfApprovalReason,
+            'điều chỉnh lương',
+          )
+        : null;
 
     // M#7: MANUAL_OVERRIDE requires elevated audit log (separate action so
     // it's easy to query for compliance review).
@@ -1507,6 +1595,16 @@ export class PayrollService {
         severity: dto.type === 'MANUAL_OVERRIDE' ? 'HIGH' : 'NORMAL',
       },
     });
+    if (selfReason) {
+      await this.logSelfApproval(
+        actorUserId,
+        'ADJUSTMENT_ADD',
+        'PAYROLL_LINE_ITEM',
+        dto.lineItemId,
+        selfReason,
+        { periodId, type: dto.type, amountVnd: dto.amountVnd },
+      );
+    }
 
     return this.getPeriodDetail(periodId);
   }
@@ -1556,17 +1654,24 @@ export class PayrollService {
     return updated;
   }
 
-  async approvePeriod(periodId: string, actorUserId: string) {
+  async approvePeriod(periodId: string, actorUserId: string, selfApprovalReason?: string) {
     const period = await this.prisma.payrollPeriod.findUnique({ where: { id: periodId } });
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.APPROVED);
 
-    // An owner who is also a dentist does not approve their own payslip.
+    // The period holds the approver's own payslip (owner who also practises).
     const ownLine = await this.prisma.payrollLineItem.findFirst({
       where: { payrollPeriodId: periodId, dentistId: actorUserId },
-      select: { id: true },
+      select: { id: true, netPayVnd: true },
     });
-    if (ownLine) throw new PayrollForbiddenException(SELF_APPROVAL_MESSAGE);
+    const selfReason = ownLine
+      ? await this.assertSelfAction(
+          actorUserId,
+          'payroll.period.approve',
+          selfApprovalReason,
+          'duyệt kỳ lương có phiếu lương',
+        )
+      : null;
 
     // See lockPeriod() above — same guarded-write race protection.
     const approved = await this.prisma.payrollPeriod.updateMany({
@@ -1592,6 +1697,16 @@ export class PayrollService {
       targetType: 'PAYROLL_PERIOD',
       targetId: periodId,
     });
+    if (selfReason && ownLine) {
+      await this.logSelfApproval(
+        actorUserId,
+        'PERIOD_APPROVE',
+        'PAYROLL_PERIOD',
+        periodId,
+        selfReason,
+        { lineItemId: ownLine.id, netPayVnd: Number(ownLine.netPayVnd) },
+      );
+    }
 
     return updated;
   }

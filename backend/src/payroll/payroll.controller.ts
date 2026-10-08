@@ -30,6 +30,7 @@ import {
   ListPeriodsQueryDto,
   ListCompensationsQueryDto,
   PeriodWarningsQueryDto,
+  ApprovePeriodDto,
 } from './dto/payroll.dto';
 
 @ApiTags('Payroll')
@@ -186,8 +187,12 @@ export class PayrollController {
   @RequirePermissions('payroll.period.approve')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Approve period (REVIEWING → APPROVED)' })
-  async approvePeriod(@Param('id', ParseUUIDPipe) id: string, @User() user: JwtPayload) {
-    const data = await this.payroll.approvePeriod(id, user.sub);
+  async approvePeriod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApprovePeriodDto,
+    @User() user: JwtPayload,
+  ) {
+    const data = await this.payroll.approvePeriod(id, user.sub, dto?.selfApprovalReason);
     return { data };
   }
 

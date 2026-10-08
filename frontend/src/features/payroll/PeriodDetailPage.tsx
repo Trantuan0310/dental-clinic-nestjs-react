@@ -18,7 +18,12 @@ import {
 import { LineItemBreakdownDrawer } from './LineItemBreakdownDrawer';
 import { AdjustmentModal } from './AdjustmentModal';
 import { MarkPaidModal } from './MarkPaidModal';
-import type { PayrollLineItem, PayrollPeriodWarnings } from '@/types/payroll';
+import { Textarea } from '@/components/ui/Textarea';
+import {
+  SELF_APPROVAL_REASON_MIN,
+  type PayrollLineItem,
+  type PayrollPeriodWarnings,
+} from '@/types/payroll';
 
 function warningCount(w: PayrollPeriodWarnings | undefined) {
   if (!w) return 0;
@@ -111,6 +116,9 @@ export default function PeriodDetailPage() {
   const isOpenPeriod = period?.status === 'DRAFT' || period?.status === 'REVIEWING';
   const { data: warnings } = usePeriodWarnings(id, isOpenPeriod);
   const [confirmLock, setConfirmLock] = useState(false);
+  const myId = useAuthStore((s) => s.user?.id);
+  const [confirmSelfApprove, setConfirmSelfApprove] = useState(false);
+  const [selfReason, setSelfReason] = useState('');
 
   const [breakdownItem, setBreakdownItem] = useState<PayrollLineItem | null>(null);
   const [adjustItem, setAdjustItem] = useState<PayrollLineItem | null>(null);
@@ -158,11 +166,23 @@ export default function PeriodDetailPage() {
     }
   };
 
+  // The approver has their own payslip here (owner who also practises).
+  const ownLine = period.lineItems.find((li) => li.dentistId === myId);
+
   const runApprove = async () => {
+    if (ownLine && selfReason.trim().length < SELF_APPROVAL_REASON_MIN) {
+      notify.error(`Nhập lý do tự duyệt (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự).`);
+      return;
+    }
     try {
-      await approvePeriod.mutateAsync(period.id);
+      await approvePeriod.mutateAsync(
+        ownLine ? { id: period.id, selfApprovalReason: selfReason.trim() } : period.id,
+      );
+      setConfirmSelfApprove(false);
+      setSelfReason('');
       notify.success('Đã duyệt kỳ lương');
     } catch (err) {
+      setConfirmSelfApprove(false);
       notify.error(getApiErrorMessage(err, 'Không thể duyệt kỳ lương'));
     }
   };
@@ -207,7 +227,11 @@ export default function PeriodDetailPage() {
             </Button>
           )}
           {canApprove && (
-            <Button variant="outline" onClick={runApprove} isLoading={approvePeriod.isPending}>
+            <Button
+              variant="outline"
+              onClick={() => (ownLine ? setConfirmSelfApprove(true) : runApprove())}
+              isLoading={approvePeriod.isPending}
+            >
               <CheckCircle className="h-4 w-4" /> Duyệt
             </Button>
           )}
@@ -322,6 +346,32 @@ export default function PeriodDetailPage() {
         onClose={() => setAdjustItem(null)}
         periodId={period.id}
         lineItem={adjustItem}
+      />
+
+      <ConfirmDialog
+        open={confirmSelfApprove}
+        onClose={() => setConfirmSelfApprove(false)}
+        onConfirm={runApprove}
+        title="Bạn đang duyệt kỳ lương có phiếu của chính mình"
+        description={
+          <div className="space-y-2">
+            <p>
+              Kỳ này có phiếu lương của bạn ({formatVnd(ownLine?.netPayVnd ?? 0)} thực nhận). Chỉ được tự duyệt khi
+              phòng khám không có quản trị viên nào khác; thao tác được ghi nhật ký riêng (PAYROLL_SELF_APPROVED).
+            </p>
+            <Textarea
+              label="Lý do tự duyệt"
+              placeholder="VD: Phòng khám chỉ có một quản trị viên"
+              rows={2}
+              value={selfReason}
+              onChange={(e) => setSelfReason(e.target.value)}
+              hint={`Ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự`}
+              required
+            />
+          </div>
+        }
+        confirmLabel="Tự duyệt"
+        isLoading={approvePeriod.isPending}
       />
 
       <ConfirmDialog
