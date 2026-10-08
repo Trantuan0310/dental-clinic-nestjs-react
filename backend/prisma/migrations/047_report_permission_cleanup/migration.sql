@@ -22,14 +22,9 @@ UPDATE permissions SET description = 'Menu Báo cáo (chỉ điều hướng; d�
 DELETE FROM user_roles
  WHERE role_id IN (SELECT id FROM roles WHERE deleted_at IS NOT NULL);
 
--- A6-28 (time part): a visit must end after it starts. The app already
--- refuses it; this guards scripts and seeds. NOT VALID checks new and changed
--- rows only, so a stray historical row cannot block the deploy. (Money
--- invariants on invoices/payments are left to the billing migration.)
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'appointments_end_after_start') THEN
-    ALTER TABLE appointments
-      ADD CONSTRAINT appointments_end_after_start CHECK (end_at > start_at) NOT VALID;
-  END IF;
-END $$;
+-- A6-28 (time part) is deliberately NOT a constraint here: even NOT VALID
+-- re-checks every later UPDATE of an old row, so one historical visit with
+-- end_at <= start_at would make the reminder cron or a cancel fail with 500,
+-- and there is no safe automatic fix (moving end_at could overlap another
+-- visit). The app already refuses such times. To find rows to fix by hand:
+--   SELECT id, start_at, end_at FROM appointments WHERE end_at <= start_at;

@@ -3416,4 +3416,26 @@ describe('AppointmentsService', () => {
       expect(approve.data.map((r: any) => r.reason)).toEqual(['Khám thai', 'Khám thai']);
     });
   });
+
+  describe('row scope of a custom role (A6-19)', () => {
+    const noScope = {
+      sub: 'asst-1',
+      email: 'a@x',
+      permissions: ['appointment.update', 'appointment.create'],
+    };
+
+    it('refuses a role with neither read scope with a 403 naming the permission', async () => {
+      prisma.appointment.findMany.mockResolvedValue([]);
+      await expect(service.list({} as any, noScope)).rejects.toThrow(/appointment\.read\.any/);
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      // Not mistaken for a dentist booking someone else's calendar.
+      expect(() => service.appointmentScope(noScope)).toThrow(/chưa có quyền xem lịch hẹn/);
+      expect(service.isRowScopedDentist(noScope)).toBe(false);
+    });
+
+    it('limits only appointment.read.own (without .any) to the own calendar', () => {
+      expect(service.appointmentScope(dentistPayload())).toBe('own');
+      expect(service.appointmentScope(receptionistPayload())).toBe('any');
+    });
+  });
 });

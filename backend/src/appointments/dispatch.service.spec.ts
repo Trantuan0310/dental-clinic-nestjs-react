@@ -11,6 +11,7 @@ describe('DispatchService.reassignDay — guarded move (race with a reschedule)'
     planVisit: jest.fn().mockResolvedValue(null),
     ensureSlotAvailable: jest.fn().mockResolvedValue(undefined),
     isRowScopedDentist: jest.fn().mockReturnValue(false),
+    appointmentScope: jest.fn().mockReturnValue('any'),
   };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
   const startAt = new Date(Date.now() + 3 * 86400000);
@@ -98,6 +99,7 @@ describe('DispatchService.transfer — guarded queue move (race with a call)', (
     planVisit: jest.fn().mockResolvedValue(null),
     ensureSlotAvailable: jest.fn().mockResolvedValue(undefined),
     isRowScopedDentist: jest.fn().mockReturnValue(false),
+    appointmentScope: jest.fn().mockReturnValue('any'),
   };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
   const entry = {
