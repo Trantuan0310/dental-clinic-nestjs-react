@@ -88,8 +88,8 @@ export class AddAddendumDto {
 // Treatment
 // ---------------------------------------------------------------------------
 
-/** treatments.unit_price is numeric(12,2). */
-export const MAX_UNIT_PRICE = 9_999_999_999.99;
+/** treatments.unit_price is numeric(12,2); VND is whole đồng. */
+export const MAX_UNIT_PRICE = 9_999_999_999;
 
 export class CreateTreatmentDto {
   @ApiPropertyOptional({
@@ -112,10 +112,21 @@ export class CreateTreatmentDto {
   description?: string;
 
   @ApiProperty({ example: 12, minimum: 0, maximum: MAX_UNIT_PRICE })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 0 }, { message: 'Đơn giá phải là số đồng nguyên' })
   @Min(0)
   @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice!: number;
+
+  /**
+   * Required when a catalogue pick is charged at another price than the one
+   * frozen at booking / the dentist's assignment (decision 3, audited).
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(500)
+  priceReason?: string;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 1 })
   @IsOptional()
@@ -191,10 +202,18 @@ export class UpdateTreatmentDto {
 
   @ApiPropertyOptional({ maximum: MAX_UNIT_PRICE })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 0 }, { message: 'Đơn giá phải là số đồng nguyên' })
   @Min(0)
   @Max(MAX_UNIT_PRICE, { message: 'Đơn giá vượt quá giới hạn cho phép' })
   unitPrice?: number;
+
+  /** Required whenever the unit price changes (decision 3, audited). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(500)
+  priceReason?: string;
 
   @ApiPropertyOptional({ minimum: 1, maximum: 100 })
   @IsOptional()

@@ -422,6 +422,12 @@ const PERMISSIONS = [
     description: 'Xóa mềm liệu trình điều trị',
   },
   {
+    code: 'treatment.price_override',
+    resource: 'treatment',
+    action: 'price_override',
+    description: 'Áp đơn giá thủ thuật khác giá niêm yết/giá đã chốt (có lý do)',
+  },
+  {
     code: 'prescription.write',
     resource: 'prescription',
     action: 'write',
@@ -473,6 +479,32 @@ const PERMISSIONS = [
     resource: 'invoice',
     action: 'payment.create',
     description: 'Ghi nhận thanh toán cho hóa đơn',
+  },
+  // Corrections (migration 045): clinic admin only, so whoever collects the
+  // money is not the one who cancels or refunds it.
+  {
+    code: 'invoice.payment.void',
+    resource: 'invoice',
+    action: 'payment.void',
+    description: 'Hủy phiếu thu ghi nhầm (có lý do; không tự hủy phiếu mình thu)',
+  },
+  {
+    code: 'invoice.refund',
+    resource: 'invoice',
+    action: 'refund',
+    description: 'Lập phiếu hoàn tiền cho bệnh nhân (có lý do)',
+  },
+  {
+    code: 'invoice.reissue',
+    resource: 'invoice',
+    action: 'reissue',
+    description: 'Lập lại hóa đơn cho phiên khám có hóa đơn đã hủy',
+  },
+  {
+    code: 'invoice.item.update',
+    resource: 'invoice',
+    action: 'item.update',
+    description: 'Sửa/bỏ dòng hóa đơn nháp (có lý do)',
   },
   {
     code: 'report.revenue.read',
@@ -839,6 +871,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'clinical_note.addendum',
     'treatment.write',
     'treatment.delete',
+    // A price other than the booked/catalogue one needs a reason (audited).
+    'treatment.price_override',
     'prescription.write',
     'dental_chart.read',
     'dental_chart.write',

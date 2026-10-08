@@ -162,7 +162,15 @@ export class CatalogController {
     @Body() dto: EndAssignmentDto,
     @User() actor: JwtPayload,
   ) {
-    return { data: await this.catalog.endAssignment(userId, assignmentId, dto.effectiveTo, actor) };
+    return {
+      data: await this.catalog.endAssignment(
+        userId,
+        assignmentId,
+        dto.effectiveTo,
+        actor,
+        dto.confirm === true,
+      ),
+    };
   }
 
   @Post('dentists/:userId/services/:assignmentId/change')

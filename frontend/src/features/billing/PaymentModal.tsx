@@ -15,7 +15,7 @@ interface PaymentModalProps {
 
 export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   const queryClient = useQueryClient();
-  const [amount, setAmount] = useState(invoice.outstandingAmount.toString());
+  const [amount, setAmount] = useState(String(Math.floor(invoice.outstandingAmount)));
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [note, setNote] = useState('');
 
@@ -25,7 +25,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   // time it's opened. Re-sync to the current invoice whenever it (re)opens.
   useEffect(() => {
     if (isOpen) {
-      setAmount(invoice.outstandingAmount.toString());
+      setAmount(String(Math.floor(invoice.outstandingAmount)));
       setMethod('CASH');
       setNote('');
     }
@@ -50,7 +50,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   });
 
   const handlePayAll = () => {
-    setAmount(invoice.outstandingAmount.toString());
+    setAmount(String(Math.floor(invoice.outstandingAmount)));
   };
 
   const handleSubmit = () => {
@@ -133,6 +133,8 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
               !amount ||
               !Number.isFinite(parsedAmount) ||
               parsedAmount <= 0 ||
+              // Whole đồng only; a sub-đồng remainder of an old invoice counts as settled.
+              !Number.isInteger(parsedAmount) ||
               parsedAmount > invoice.outstandingAmount
             }
           >

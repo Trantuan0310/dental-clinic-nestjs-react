@@ -81,6 +81,11 @@ export interface TreatmentLine {
   lineTotalCents: number;
   inventoryItemsUsed?: TreatmentInventoryUsage[];
   createdAt: string;
+  /** Catalogue pick and the price it started from (booking snapshot / assignment). */
+  serviceId?: string | null;
+  listPrice?: number | null;
+  /** Why the price differs from listPrice (decision 3). */
+  priceReason?: string | null;
   // ---- Legacy aliases (kept for backward-compat with older UI code) ----
   procedureCode?: string;
   procedureName?: string;
@@ -505,6 +510,8 @@ export interface CreateTreatmentPayload {
   treatmentName?: string;
   description?: string;
   priceCents: number;
+  /** Required when the price differs from the booked/catalogue one, or changes on edit. */
+  priceReason?: string;
   quantity: number;
   inventoryItemId?: string;
   inventoryItemsUsed?: TreatmentInventoryUsage[];

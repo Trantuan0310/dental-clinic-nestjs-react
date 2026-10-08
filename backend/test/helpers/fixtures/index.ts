@@ -300,6 +300,7 @@ export const validInvoice = (overrides: Partial<any> = {}) => ({
   discountValue: null,
   total: new Prisma.Decimal(500_000),
   paidAmount: new Prisma.Decimal(0),
+  refundedAmount: new Prisma.Decimal(0),
   outstandingAmount: new Prisma.Decimal(500_000),
   notes: null,
   issuedAt: null,
@@ -312,6 +313,7 @@ export const validInvoice = (overrides: Partial<any> = {}) => ({
   createdBy: 'user-1',
   version: 0,
   deletedAt: null,
+  replacesInvoiceId: null,
   ...overrides,
 });
 

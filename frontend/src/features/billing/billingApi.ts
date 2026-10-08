@@ -9,7 +9,9 @@ import type {
   InvoiceListResponse,
   InvoiceFilters,
   CreateAdhocInvoicePayload,
+  EncounterMissingInvoice,
   Payment,
+  PaymentMethod,
   PaymentListResponse,
   PaymentFilters,
   CreatePaymentPayload,
@@ -71,9 +73,64 @@ export const billingApi = {
     return unwrap(data);
   },
 
-  // Reversing a payment is not currently exposed by the controller.
-  async reversePayment(_invoiceId: string, _paymentId: string, _reason: string): Promise<Payment> {
-    throw new Error('reversePayment endpoint is not implemented in the backend.');
+  // Corrections. Errors carry a Vietnamese message saying what to do next.
+  async updateDiscount(
+    id: string,
+    payload: { discountType: 'PERCENT' | 'AMOUNT'; discountValue: number; reason?: string; version: number },
+  ): Promise<Invoice> {
+    const { data } = await api.put<{ data: Invoice }>(`${BASE}/invoices/${id}/discount`, payload);
+    return unwrap(data);
+  },
+
+  async updateItem(
+    id: string,
+    itemId: string,
+    payload: {
+      description?: string;
+      unitPrice?: number;
+      quantity?: number;
+      remove?: boolean;
+      reason: string;
+      version: number;
+    },
+  ): Promise<Invoice> {
+    const { data } = await api.patch<{ data: Invoice }>(`${BASE}/invoices/${id}/items/${itemId}`, payload);
+    return unwrap(data);
+  },
+
+  /** "Hủy phiếu thu": cancels a payment or refund entered by mistake. */
+  async voidPayment(paymentId: string, reason: string): Promise<Invoice> {
+    const { data } = await api.post<{ data: Invoice }>(`${BASE}/payments/${paymentId}/void`, { reason });
+    return unwrap(data);
+  },
+
+  async refund(
+    id: string,
+    payload: { amount: number; method: PaymentMethod; reason: string; version: number },
+  ): Promise<Invoice> {
+    const { data } = await api.post<{ data: Invoice }>(`${BASE}/invoices/${id}/refunds`, payload);
+    return unwrap(data);
+  },
+
+  /** New DRAFT replacing a voided invoice (returns the existing one if already done). */
+  async reissueInvoice(id: string, reason: string): Promise<Invoice> {
+    const { data } = await api.post<{ data: Invoice }>(`${BASE}/invoices/${id}/reissue`, { reason });
+    return unwrap(data);
+  },
+
+  /** "Tạo bù": the missing invoice of a closed encounter (idempotent). */
+  async createFromEncounter(encounterId: string): Promise<{ data: Invoice; created: boolean }> {
+    const { data } = await api.post<{ data: Invoice; created: boolean }>(
+      `${BASE}/invoices/from-encounter/${encounterId}`,
+    );
+    return data;
+  },
+
+  async listMissingInvoices(): Promise<EncounterMissingInvoice[]> {
+    const { data } = await api.get<{ data: EncounterMissingInvoice[] }>(
+      `${BASE}/reconciliation/missing-invoices`,
+    );
+    return data.data;
   },
 
   // Reports
