@@ -265,7 +265,7 @@ export class ConfirmBookingRequestDto {
   identityNote?: string;
   /** Replace the picked record's phone with the request's (phone history kept). */
   @ApiPropertyOptional() @IsOptional() @IsBoolean() updatePatientPhone?: boolean;
-  /** Replace the record's email with the request's (a record without one gets it anyway). */
+  /** Put the request's email on the record (replacing any): never without this tick. */
   @ApiPropertyOptional() @IsOptional() @IsBoolean() updatePatientEmail?: boolean;
   /** Book this time instead (the patient agreed to it by phone); `dentistId` optional. */
   @ApiPropertyOptional()

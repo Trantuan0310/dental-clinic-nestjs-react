@@ -84,6 +84,7 @@ const PUBLIC_INCLUDE = {
       startAt: true,
       endAt: true,
       dentistId: true,
+      source: true,
       rescheduleCount: true,
       deletedAt: true,
       dentist: { select: { fullName: true } },
@@ -143,13 +144,26 @@ const CONTACT_CHANGE_MESSAGE =
  * time; a phone shared by a family may have more, up to MAX_OPEN_PER_PHONE.
  * Requests one phone, or one email, may send per clinic day.
  */
+/**
+ * booking_requests.close_reason (migration 044), read by the reports'
+ * online funnel: why a request ended without (or after) its visit.
+ */
+export type BookingCloseReason =
+  | 'DECLINED'
+  | 'SPAM'
+  | 'EXPIRED'
+  | 'WITHDRAWN_ONLINE'
+  | 'CANCELLED_BY_PHONE'
+  | 'ARRIVED_WALK_IN'
+  | 'ARRIVED_NO_VISIT'
+  | 'PATIENT_CANCELLED_VISIT';
 export const MAX_OPEN_PER_PERSON = 3;
 export const MAX_OPEN_PER_PHONE = 6;
 export const MAX_DAILY_PER_PHONE = 8;
 export const MAX_DAILY_PER_EMAIL = 5;
 /** Names on the public form: letters (any script), spaces and . ' - only. */
 const NAME_MAX = 100;
-const NAME_PATTERN = /^[\p{L}\p{M}][\p{L}\p{M} .'’-]*$/u;
+const NAME_PATTERN = /^[\p{L}\p{M}][\p{L}\p{M} .'’‘\-‐]*$/u;
 const DEFAULT_PATIENT_CANCEL_MIN_HOURS = 4;
 /** A request this close to its time is flagged urgent in the clinic's email. */
 const URGENT_MS = 12 * 60 * 60_000;
@@ -971,7 +985,7 @@ export class BookingService {
     const note = dto.message?.trim() || null;
     const result = await this.prisma.bookingRequest.updateMany({
       where: { id: row.id, status: { in: ACTIVE }, appointmentId: null },
-      data: { status: 'CANCELLED', patientMessage: note },
+      data: { status: 'CANCELLED', patientMessage: note, closeReason: 'WITHDRAWN_ONLINE' },
     });
     if (!result.count) throw new ConflictException('Yêu cầu đã thay đổi; hãy tải lại trạng thái.');
     await this.audit.log({
@@ -994,12 +1008,7 @@ export class BookingService {
   async cancelVisit(reference: string, access: PublicAccess, dto: PublicBookingNoteDto = {}) {
     const row = await this.verify(reference, access, true);
     const visit = row.appointment;
-    if (
-      row.status !== 'CONFIRMED' ||
-      !visit ||
-      visit.deletedAt ||
-      !['SCHEDULED', 'CONFIRMED'].includes(visit.status)
-    ) {
+    if (!visit || !this.visitCancellableByPatient(row)) {
       throw new ConflictException(
         'Lịch hẹn này không thể hủy trực tuyến; vui lòng liên hệ phòng khám',
       );
@@ -1030,12 +1039,16 @@ export class BookingService {
       },
     });
     if (!result.count) throw new ConflictException('Lịch hẹn đã thay đổi; hãy tải lại trạng thái.');
-    if (note) {
-      await this.prisma.bookingRequest.update({
-        where: { id: row.id },
-        data: { patientMessage: note.slice(0, 1000) },
-      });
-    }
+    // For reports: the request stays CONFIRMED (its visit says CANCELLED),
+    // marked as cancelled by the patient online.
+    await this.prisma.bookingRequest.update({
+      where: { id: row.id },
+      data: {
+        patientCancelledAt: new Date(),
+        closeReason: 'PATIENT_CANCELLED_VISIT',
+        ...(note ? { patientMessage: note.slice(0, 1000) } : {}),
+      },
+    });
     await this.audit.log({
       action: 'APPOINTMENT_CANCELLED',
       actorUserId: null,
@@ -1279,7 +1292,7 @@ export class BookingService {
     if (!candidates.length) return { expired: 0 };
     const result = await this.prisma.bookingRequest.updateMany({
       where: { ...where, id: { in: candidates.map(c => c.id) } },
-      data: { status: 'EXPIRED', responseMessage: EXPIRED_MESSAGE },
+      data: { status: 'EXPIRED', responseMessage: EXPIRED_MESSAGE, closeReason: 'EXPIRED' },
     });
     if (result.count > 0) {
       // Rarely, a candidate was handled between the read and the update.
@@ -1620,6 +1633,7 @@ export class BookingService {
       status: 'DECLINED',
       responseMessage: dto.message.trim(),
       handledBy: actor.sub,
+      closeReason: dto.spam ? 'SPAM' : 'DECLINED',
     });
     await this.auditAction('BOOKING_REQUEST_DECLINED', id, actor, dto.spam ? { spam: true } : {});
     // Spam: the address was typed by whoever filled in the form, so the
@@ -1650,6 +1664,7 @@ export class BookingService {
       status: 'CANCELLED',
       patientMessage: ('Khách hủy qua điện thoại' + (note ? ': ' + note : '')).slice(0, 1000),
       handledBy: actor.sub,
+      closeReason: 'CANCELLED_BY_PHONE',
     });
     await this.auditAction('BOOKING_REQUEST_WITHDRAWN', id, actor, {
       channel: 'PHONE',
@@ -1687,6 +1702,7 @@ export class BookingService {
           1000,
         ),
         handledBy: actor.sub,
+        closeReason: 'ARRIVED_NO_VISIT',
       });
       await this.auditAction('BOOKING_REQUEST_ARRIVED', id, actor, {
         appointmentId: null,
@@ -1711,11 +1727,27 @@ export class BookingService {
       throw new BadRequestException('Chỉ gắn được lượt khám của hôm nay');
     if (['CANCELLED', 'NO_SHOW', 'LEFT'].includes(visit.status))
       throw new BadRequestException('Lượt khám đã hủy, vắng mặt hoặc khách đã về');
+    // Only a visit of the person the request is about: a record on its
+    // phones (own or guardian), or with its name and date of birth. Linking
+    // someone else's visit would show it (and its time) to the request's
+    // link holder.
+    const own = new Set<string>([
+      ...(((await this.patientsByPhone(this.requestPhones(row))).id as { in: string[] })?.in ?? []),
+      ...(await this.sameNameAndDobPatients(row)).map(p => p.id),
+      ...(row.patientId ? [row.patientId] : []),
+    ]);
+    if (!own.has(visit.patientId)) {
+      throw new ConflictException(
+        'Lượt khám này là của bệnh nhân khác (không cùng số điện thoại hoặc họ tên + ngày sinh với yêu cầu). ' +
+          'Hãy chọn đúng lượt khám của khách, hoặc sửa thông tin yêu cầu nếu khách gõ sai.',
+      );
+    }
     await this.updateUnbookedRequest(id, row.status, {
       status: 'CONFIRMED',
       appointmentId: visit.id,
       patientId: visit.patientId,
       handledBy: actor.sub,
+      closeReason: 'ARRIVED_WALK_IN',
     });
     await this.auditAction('BOOKING_REQUEST_ARRIVED', id, actor, {
       appointmentId: visit.id,
@@ -1742,8 +1774,9 @@ export class BookingService {
       const email = dto.email.trim().toLowerCase() || null;
       if (email !== row.email) changes.email = email;
     }
+    // Staff-typed names are not held to the public form's name rule (a note
+    // such as "Bé Na (con chị Hoa)" is the front desk's call); the DTO caps length.
     if (dto.fullName !== undefined && dto.fullName.trim() !== row.fullName) {
-      this.checkName(dto.fullName.trim(), 'Họ và tên');
       changes.fullName = dto.fullName.trim();
     }
     if (dto.dob !== undefined) {
@@ -1752,7 +1785,6 @@ export class BookingService {
     }
     if (dto.contactPersonName !== undefined) {
       const name = dto.contactPersonName.trim() || null;
-      if (name) this.checkName(name, 'Tên người giám hộ');
       if (name !== row.contactPersonName) changes.contactPersonName = name;
     }
     if (dto.contactPersonPhone !== undefined) {
@@ -1980,8 +2012,14 @@ export class BookingService {
       ...(patient.phoneUpdated ? { patientPhoneUpdated: true } : {}),
       ...(patient.emailUpdated ? { patientEmailUpdated: true } : {}),
       ...(override ? { changedByPhone: { startAt: startAt.toISOString(), dentistId } } : {}),
+      ...(patient.notApplied?.length ? { patientChangesNotApplied: patient.notApplied } : {}),
     });
-    return { data: await this.getForStaff(id), notificationSent: sent };
+    return {
+      data: await this.getForStaff(id),
+      notificationSent: sent,
+      // Asked for, but the caller may not change patient records.
+      ...(patient.notApplied?.length ? { patientChangesNotApplied: patient.notApplied } : {}),
+    };
   }
 
   private async alreadyConfirmed(id: string) {
@@ -1995,9 +2033,9 @@ export class BookingService {
    * those phones, or a record with the same name and date of birth on
    * another phone (a returning patient on a new number), means a person
    * must choose. A picked record on another phone needs the front desk to
-   * say the identity was checked (and how). The request's email is saved on
-   * a matched record that has none (or replaces it when asked), so the
-   * visit's reminders and changes reach the patient.
+   * say the identity was checked (and how). The request's email (and phone)
+   * go on a matched record only when the front desk ticks it and may change
+   * patient records (syncPatientContact).
    * Runs in confirm()'s transaction (`tx`), under the booking-phone lock.
    */
   private async resolvePatient(
@@ -2011,6 +2049,7 @@ export class BookingService {
     identityConfirmed?: boolean;
     phoneUpdated?: boolean;
     emailUpdated?: boolean;
+    notApplied?: string[];
   }> {
     const phones = this.requestPhones(row);
     if (choice.patientId && choice.createNewPatient) {
@@ -2106,7 +2145,7 @@ export class BookingService {
     phoneMatches: boolean,
     actor: JwtPayload,
     tx: Prisma.TransactionClient,
-  ): Promise<{ phoneUpdated?: boolean; emailUpdated?: boolean }> {
+  ): Promise<{ phoneUpdated?: boolean; emailUpdated?: boolean; notApplied?: string[] }> {
     const data: Prisma.PatientUncheckedUpdateManyInput = {};
     const changes: Record<string, { from: string | null; to: string }> = {};
     const newPhone = this.normalize(row.phone);
@@ -2114,16 +2153,19 @@ export class BookingService {
       data.primaryPhone = newPhone;
       changes.primaryPhone = { from: found.primaryPhone, to: newPhone };
     }
+    // The email was typed on the public form by whoever sent it: it goes on
+    // the record (and gets its reminders) only when the front desk ticks it.
     const email = row.email?.trim().toLowerCase();
-    if (
-      email &&
-      email !== (found.email ?? '').toLowerCase() &&
-      (!found.email || choice.updatePatientEmail)
-    ) {
+    if (email && email !== (found.email ?? '').toLowerCase() && choice.updatePatientEmail) {
       data.email = email;
       changes.email = { from: found.email, to: email };
     }
     if (!Object.keys(data).length) return {};
+    // Changing the record is a patient.update act, whatever the booking
+    // permissions: without it the visit is booked and the change only suggested.
+    if (!actor.permissions?.includes('patient.update')) {
+      return { notApplied: Object.keys(changes) };
+    }
     await tx.patient.updateMany({
       where: { id: found.id },
       data: { ...data, updatedBy: actor.sub },
@@ -2222,14 +2264,23 @@ export class BookingService {
    * Names go into the clinic's emails, so the form must not carry a message.
    */
   private checkName(value: string, label: string) {
+    // Initials joined to a name ("Ng.Văn An", "T.T.Hoa") are fine; a dot
+    // between two longer words ("evil.example") or a known web suffix reads
+    // as an address.
     if (
       value.length > NAME_MAX ||
       !NAME_PATTERN.test(value) ||
-      /\p{L}{2,}\.\p{L}{2,}/u.test(value) ||
-      /\b(https?|www)\b/i.test(value)
+      /\p{L}{3,}\.\p{L}{3,}/u.test(value) ||
+      /\.\s*(com|net|org|vn|info|biz|xyz|io|me|ly|co|link|online|site|top|app|click)\b/iu.test(
+        value,
+      ) ||
+      /(^|\s)(https?|www)(\s|$|\.)/i.test(value)
     ) {
       throw new BadRequestException(
-        label + ' chỉ gồm chữ cái và khoảng trắng, tối đa ' + NAME_MAX + ' ký tự',
+        label +
+          ' chỉ gồm chữ cái, khoảng trắng và các dấu . \' - (ví dụ "Nguyễn T. Hoa", "H\'Hen Niê"), tối đa ' +
+          NAME_MAX +
+          ' ký tự, không chứa địa chỉ web',
       );
     }
   }
@@ -2602,6 +2653,24 @@ export class BookingService {
     return { ...rest, patientInitials: maskName(row.fullName ?? '') };
   }
 
+  /**
+   * The patient may cancel from the link only the visit this request was
+   * confirmed into (source ONLINE): not a visit the front desk linked when
+   * the patient came to the desk (ARRIVED_WALK_IN), which may be someone
+   * else's had the wrong one been picked.
+   */
+  private visitCancellableByPatient(row: any): boolean {
+    const visit = row.appointment;
+    return (
+      row.status === 'CONFIRMED' &&
+      !row.closeReason &&
+      !!visit &&
+      !visit.deletedAt &&
+      visit.source === 'ONLINE' &&
+      ['SCHEDULED', 'CONFIRMED'].includes(visit.status)
+    );
+  }
+
   private toPublic(row: any, { canManage = false } = {}) {
     const useProposed = ['PROPOSED', 'PATIENT_ACCEPTED'].includes(row.status);
     const visit = row.appointment;
@@ -2630,13 +2699,9 @@ export class BookingService {
       // before the cron closes it.
       overdue: !row.appointment && this.isOverdue(row),
       // A confirmed visit the patient may still cancel from the link, until then.
-      cancelUntil:
-        visit &&
-        !visit.deletedAt &&
-        row.status === 'CONFIRMED' &&
-        ['SCHEDULED', 'CONFIRMED'].includes(visit.status)
-          ? new Date(visit.startAt.getTime() - patientCancelMinHours() * 60 * 60_000)
-          : null,
+      cancelUntil: this.visitCancellableByPatient(row)
+        ? new Date(visit.startAt.getTime() - patientCancelMinHours() * 60 * 60_000)
+        : null,
       responseMessage: row.responseMessage,
       appointment: visit
         ? {

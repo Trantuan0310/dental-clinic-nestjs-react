@@ -1617,6 +1617,11 @@ model BookingRequest {
   /// Migration 044: the last patient email failed; the front desk must call.
   noticeFailedAt      DateTime?           @map("notice_failed_at") @db.Timestamptz()
   noticeFailedSubject String?             @map("notice_failed_subject") @db.VarChar(200)
+  /// Migration 044: why it was closed (BookingCloseReason in booking.service.ts);
+  /// partial index booking_requests_close_reason_idx is managed by the migration.
+  closeReason         String?             @map("close_reason") @db.VarChar(30)
+  /// Migration 044: the patient cancelled the confirmed visit from the link.
+  patientCancelledAt  DateTime?           @map("patient_cancelled_at") @db.Timestamptz()
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz()
 

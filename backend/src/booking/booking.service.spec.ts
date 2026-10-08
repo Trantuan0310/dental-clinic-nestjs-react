@@ -352,7 +352,11 @@ describe('BookingService public request security and validation', () => {
           service.withdraw('GS-1A2B3C4D5E', { token: 'right-token' }, { message: 'Bận việc' }),
         ).resolves.toEqual({ referenceCode: 'GS-1A2B3C4D5E', status: 'CANCELLED' });
         const { data } = prisma.bookingRequest.updateMany.mock.calls[0][0];
-        expect(data).toEqual({ status: 'CANCELLED', patientMessage: 'Bận việc' });
+        expect(data).toEqual({
+          status: 'CANCELLED',
+          patientMessage: 'Bận việc',
+          closeReason: 'WITHDRAWN_ONLINE',
+        });
         expect(data).not.toHaveProperty('responseMessage');
         expect(audit.log).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -590,7 +594,11 @@ describe('BookingService public request security and validation', () => {
       await expect(service.expireOverdue()).resolves.toEqual({ expired: 2 });
 
       const { where, data } = prisma.bookingRequest.updateMany.mock.calls[0][0];
-      expect(data).toEqual({ status: 'EXPIRED', responseMessage: EXPIRED_MESSAGE });
+      expect(data).toEqual({
+        status: 'EXPIRED',
+        responseMessage: EXPIRED_MESSAGE,
+        closeReason: 'EXPIRED',
+      });
       expect(where.appointmentId).toBeNull();
       expect(where.id).toEqual({ in: ['r1', 'r2'] });
       expect(where.OR).toEqual([
@@ -2129,7 +2137,28 @@ describe('BookingService public request security and validation', () => {
         ]) {
           await expect(submitWith({ fullName })).rejects.toThrow('chỉ gồm chữ cái');
         }
-        await expect(submitWith({ fullName: "Nguyễn T. O'Neil-Hà" })).resolves.toBeDefined();
+        await expect(submitWith({ fullName: 'Hoa tại bit.ly' })).rejects.toThrow('địa chỉ web');
+      });
+
+      it('accepts real names: diacritics (NFC/NFD), initials, ethnic and foreign names', async () => {
+        for (const fullName of [
+          'Nguyễn Thị Ánh Tuyết',
+          'Nguyễn Thị Ánh Tuyết'.normalize('NFD'),
+          'Ng.Văn An',
+          'T.T.Hoa',
+          "Nguyễn T. O'Neil-Hà",
+          "H'Hen Niê",
+          'Y-Ngông Niê Kdăm',
+          'Ksor‐H’Bia', // U+2010 hyphen, U+2019 apostrophe
+          'Đinh ‘Ra',
+          'Lò Văn Pủa',
+          'José Müller',
+          'Søren Østergård',
+          '李小龍',
+          'Kim Ji-woo',
+        ]) {
+          await expect(submitWith({ fullName })).resolves.toBeDefined();
+        }
       });
     });
 
@@ -2492,7 +2521,7 @@ describe('BookingService public request security and validation', () => {
     // 2026-10-01 08:00 at the clinic (UTC+7).
     const NOW = new Date('2026-10-01T01:00:00Z');
     const minutes = (n: number) => new Date(NOW.getTime() + n * 60_000);
-    const actor = { sub: 'staff-1', email: 's@x', permissions: [] } as any;
+    const actor = { sub: 'staff-1', email: 's@x', permissions: ['patient.update'] } as any;
     const request = (over: Record<string, unknown> = {}) => ({
       id: 'request-1',
       referenceCode: 'GS-1A2B3C4D5E',
@@ -2593,6 +2622,7 @@ describe('BookingService public request security and validation', () => {
           confirmIdentity: true,
           identityNote: 'Khách đọc đúng SĐT cũ và ngày sinh',
           updatePatientPhone: true,
+          updatePatientEmail: true,
         });
         expect(appointments.create.mock.calls[0][0].patientId).toBe('old');
         // The new phone (with history) and the email typed online are saved.
@@ -2634,6 +2664,36 @@ describe('BookingService public request security and validation', () => {
           email: 'new@x.vn',
           updatedBy: 'staff-1',
         });
+      });
+
+      it('never puts the email typed online on a record without the tick, even an empty one', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ phone: '0999000111' }));
+        prisma.patient.findFirst.mockResolvedValue({
+          id: 'old',
+          primaryPhone: '0999000111',
+          contactPersonPhone: null,
+          email: null,
+        });
+        await service.confirm('request-1', actor, { patientId: 'old' });
+        expect(prisma.patient.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('only suggests the change to a caller without patient.update', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ phone: '0999000111' }));
+        prisma.patient.findFirst.mockResolvedValue({
+          id: 'old',
+          primaryPhone: '0999000111',
+          contactPersonPhone: null,
+          email: null,
+        });
+        const bookingOnly = { ...actor, permissions: ['booking_request.manage'] };
+        const res = await service.confirm('request-1', bookingOnly, {
+          patientId: 'old',
+          updatePatientEmail: true,
+        });
+        expect(prisma.patient.updateMany).not.toHaveBeenCalled();
+        expect(appointments.create).toHaveBeenCalled();
+        expect(res).toMatchObject({ patientChangesNotApplied: ['email'] });
       });
     });
 
@@ -2758,6 +2818,7 @@ describe('BookingService public request security and validation', () => {
             startAt: minutes(startInMin),
             endAt: minutes(startInMin + 30),
             dentistId: 'dentist-1',
+            source: 'ONLINE',
             deletedAt: null,
             rescheduleCount: 0,
             dentist: { fullName: 'BS A' },
@@ -2780,6 +2841,15 @@ describe('BookingService public request security and validation', () => {
             cancelledReason: 'Khách hủy qua đường link đặt lịch: Bận',
           }),
         });
+        // Reports read it on the request (which stays CONFIRMED).
+        expect(prisma.bookingRequest.update).toHaveBeenCalledWith({
+          where: { id: 'request-1' },
+          data: {
+            patientCancelledAt: NOW,
+            closeReason: 'PATIENT_CANCELLED_VISIT',
+            patientMessage: 'Bận',
+          },
+        });
 
         prisma.appointment.updateMany.mockClear();
         prisma.bookingRequest.findUnique.mockResolvedValue(booked(3 * 60));
@@ -2790,6 +2860,23 @@ describe('BookingService public request security and validation', () => {
         await expect(service.cancelVisit('GS-1A2B3C4D5E', { phone: '0911222333' })).rejects.toThrow(
           ForbiddenException,
         );
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('never cancels from the link a visit linked at the desk (FF review)', async () => {
+        const linked = booked(24 * 60);
+        const row = {
+          ...linked,
+          closeReason: 'ARRIVED_WALK_IN',
+          appointment: { ...(linked.appointment as any), source: 'WALK_IN' },
+        };
+        prisma.bookingRequest.findUnique.mockResolvedValue(row);
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue(row);
+        await expect(
+          service.cancelVisit('GS-1A2B3C4D5E', { token: 'right-token' }),
+        ).rejects.toThrow('không thể hủy trực tuyến');
+        const status = await service.publicStatus('GS-1A2B3C4D5E', { token: 'right-token' });
+        expect(status.cancelUntil).toBeNull();
         expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
       });
     });
@@ -2834,14 +2921,45 @@ describe('BookingService public request security and validation', () => {
           status: 'CHECKED_IN',
           bookingRequest: null,
         });
+        // p1 is on the request's phone.
+        prisma.$queryRaw.mockResolvedValue([{ id: 'p1' }]);
         await service.arrived('request-1', { appointmentId: 'walk-in' }, actor);
         expect(prisma.bookingRequest.updateMany.mock.calls[0][0].data).toEqual({
           status: 'CONFIRMED',
           appointmentId: 'walk-in',
           patientId: 'p1',
           handledBy: 'staff-1',
+          closeReason: 'ARRIVED_WALK_IN',
         });
         expect(email.send).not.toHaveBeenCalled();
+      });
+
+      it("refuses to link someone else's visit to the request (FF review)", async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.appointment.findFirst.mockResolvedValue({
+          id: 'walk-in',
+          patientId: 'stranger',
+          startAt: minutes(5),
+          status: 'CHECKED_IN',
+          bookingRequest: null,
+        });
+        prisma.$queryRaw.mockResolvedValue([{ id: 'p1' }]);
+        prisma.patient.findMany.mockResolvedValue([]);
+        await expect(
+          service.arrived('request-1', { appointmentId: 'walk-in' }, actor),
+        ).rejects.toThrow('của bệnh nhân khác');
+        expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('records why a request was closed, for the reports (FF review)', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        await service.decline('request-1', { message: 'Rác', spam: true }, actor);
+        await service.decline('request-1', { message: 'Hết chỗ' }, actor);
+        await service.cancelledByPhone('request-1', {}, actor);
+        await service.arrived('request-1', {}, actor);
+        expect(
+          prisma.bookingRequest.updateMany.mock.calls.map((c: any[]) => c[0].data.closeReason),
+        ).toEqual(['SPAM', 'DECLINED', 'CANCELLED_BY_PHONE', 'ARRIVED_NO_VISIT']);
       });
 
       it('checks the proposed time before recording a phone agreement (A4-12)', async () => {
