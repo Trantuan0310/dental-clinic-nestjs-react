@@ -1392,12 +1392,7 @@ export class BookingService {
     const others = [
       ...(await this.sameNameAndDobPatients(row)),
       ...(await this.prisma.patient.findMany({
-        where: {
-          deletedAt: null,
-          phoneHistory: {
-            some: { OR: [{ oldPhone: { in: phones } }, { newPhone: { in: phones } }] },
-          },
-        },
+        where: await this.patientsByPhoneHistory(phones),
         select,
         take: 10,
       })),
@@ -1435,7 +1430,6 @@ export class BookingService {
         contactPersonName: true,
         contactPersonPhone: true,
       },
-      take: 200,
     });
     return (rows ?? []).filter(p => this.sameNameAndDob(p, row));
   }
@@ -2222,6 +2216,23 @@ export class BookingService {
           OR regexp_replace(regexp_replace(COALESCE(contact_person_phone, ''), '[[:space:]().-]', '', 'g'), '^([+]84|0084|84(?=[0-9]{9}$))', '0')
             = ANY(${phones}::text[])
         )
+      LIMIT 50`;
+    return { deletedAt: null, id: { in: rows.map(r => r.id) } };
+  }
+
+  /** Live records with one of `phones` in their phone history, normalized as above. */
+  private async patientsByPhoneHistory(
+    phones: string[],
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<Prisma.PatientWhereInput> {
+    if (phones.length === 0) return { id: { in: [] } };
+    const rows = await db.$queryRaw<Array<{ id: string }>>`
+      SELECT DISTINCT h.patient_id AS id FROM patient_phone_history h
+      JOIN patients p ON p.id = h.patient_id AND p.deleted_at IS NULL
+      WHERE regexp_replace(regexp_replace(COALESCE(h.old_phone, ''), '[[:space:]().-]', '', 'g'), '^([+]84|0084|84(?=[0-9]{9}$))', '0')
+              = ANY(${phones}::text[])
+         OR regexp_replace(regexp_replace(h.new_phone, '[[:space:]().-]', '', 'g'), '^([+]84|0084|84(?=[0-9]{9}$))', '0')
+              = ANY(${phones}::text[])
       LIMIT 50`;
     return { deletedAt: null, id: { in: rows.map(r => r.id) } };
   }

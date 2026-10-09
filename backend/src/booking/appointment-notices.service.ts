@@ -271,6 +271,7 @@ export class AppointmentNoticesService {
       select: {
         ...VISIT_SELECT,
         reminderNote: true,
+        reminderSentAt: true,
         patient: { select: { id: true, fullName: true, primaryPhone: true } },
       },
       orderBy: { startAt: 'asc' },
@@ -283,6 +284,14 @@ export class AppointmentNoticesService {
       let note = r.reminderNote;
       if (r.reminderStatus === 'BLOCKED') {
         note = await this.visitProblem(r);
+        // Fixed too close to the visit for the email run (≥2 h ahead): still
+        // unreminded, so the front desk calls.
+        if (
+          !note &&
+          r.reminderSentAt == null &&
+          r.startAt.getTime() - now.getTime() <= REMINDER_MIN_AHEAD_MS
+        )
+          note = 'Đã sửa nhưng quá sát giờ để gửi email nhắc — hãy gọi báo khách.';
         if (!note) continue;
       }
       out.push({
