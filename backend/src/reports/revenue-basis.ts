@@ -1,4 +1,4 @@
-import { InvoiceStatus, PaymentStatus, Prisma } from '@prisma/client';
+import { InvoiceStatus, PaymentKind, PaymentStatus, Prisma } from '@prisma/client';
 
 /**
  * H7 / A6-08 — the ONE definition of revenue and collections used by the
@@ -42,19 +42,10 @@ export function revenueInvoiceSql(alias: string, from: Date, to: Date): Prisma.S
 }
 
 // ---------------------------------------------------------------------------
-// Collections. Refund rows and payment voiding (H6) belong to the billing
-// team: `payments.kind` PAYMENT | REFUND (amount stays positive) and
-// `payments.voided_at`. This module reads them only when the generated client
-// has them, so it is correct both before and after that migration lands.
+// Collections and refunds (H6, billing migration 045): `payments.kind`
+// PAYMENT | REFUND (amount positive, paidAt = refund date), a voided receipt
+// has status VOIDED and voidedAt set and counts nowhere.
 // ---------------------------------------------------------------------------
-
-const PAYMENT_FIELDS = new Set(
-  Prisma.dmmf.datamodel.models.find(m => m.name === 'Payment')?.fields.map(f => f.name) ?? [],
-);
-export const PAYMENT_HAS_KIND = PAYMENT_FIELDS.has('kind');
-const PAYMENT_HAS_VOIDED_AT = PAYMENT_FIELDS.has('voidedAt');
-
-export const REFUND_KIND = 'REFUND';
 
 /** Payments that count towards "Đã thu" (refunds included, signed later). */
 export function collectedPaymentWhere(
@@ -62,23 +53,64 @@ export function collectedPaymentWhere(
   to: Date,
   invoice: Prisma.InvoiceWhereInput = {},
 ): Prisma.PaymentWhereInput {
+  // Includes receipts of an invoice voided after a full refund: payment and
+  // refund both stay COMPLETED and net to zero, each on its own date.
   return {
     status: PaymentStatus.COMPLETED,
-    ...(PAYMENT_HAS_VOIDED_AT ? ({ voidedAt: null } as Prisma.PaymentWhereInput) : {}),
+    voidedAt: null,
     paidAt: { gte: from, lte: to },
     invoice: { deletedAt: null, ...invoice },
   };
 }
 
-/** Extra select so {@link signedPaymentAmount} can tell refunds apart. */
-export const PAYMENT_KIND_SELECT = (PAYMENT_HAS_KIND ? { kind: true } : {}) as Prisma.PaymentSelect;
-
 /** + for a payment, − for a refund. */
-export function signedPaymentAmount(row: { amount: Prisma.Decimal | number | string }): number {
+export function signedPaymentAmount(row: {
+  amount: Prisma.Decimal | number | string;
+  kind: PaymentKind;
+}): number {
   const amount = Number(row.amount ?? 0);
-  return (row as { kind?: string }).kind === REFUND_KIND ? -amount : amount;
+  return row.kind === PaymentKind.REFUND ? -amount : amount;
 }
 
-export function isRefund(row: object): boolean {
-  return (row as { kind?: string }).kind === REFUND_KIND;
+/**
+ * Refunds that lower revenue (same basis as ISSUED_NET commission:
+ * total − refunds, by refund date). Refunds on a VOIDED invoice are left
+ * out: that invoice is not revenue at all, so they would count twice.
+ */
+export function revenueRefundWhere(
+  from: Date,
+  to: Date,
+  invoice: Prisma.InvoiceWhereInput = {},
+): Prisma.PaymentWhereInput {
+  return {
+    kind: PaymentKind.REFUND,
+    status: PaymentStatus.COMPLETED,
+    voidedAt: null,
+    paidAt: { gte: from, lte: to },
+    invoice: { deletedAt: null, status: { in: REVENUE_INVOICE_STATUSES }, ...invoice },
+  };
+}
+
+/**
+ * Revenue movements as SQL rows (invoice_id, at, amount, cnt): each issued
+ * invoice at its issue time (+total, cnt 1) and each refund on a counted
+ * invoice at its refund time (−amount, cnt 0). Aggregates group these.
+ */
+export function revenueRowsSql(from: Date, to: Date): Prisma.Sql {
+  return Prisma.sql`(
+    SELECT i.id AS invoice_id, i."issued_at" AS at, i."total" AS amount, 1 AS cnt
+    FROM "invoices" i
+    WHERE ${revenueInvoiceSql('i', from, to)}
+    UNION ALL
+    SELECT i.id, p."paid_at", -p."amount", 0
+    FROM "payments" p
+    JOIN "invoices" i ON i.id = p."invoice_id"
+    WHERE p."kind"::text = 'REFUND'
+      AND p."status"::text = 'COMPLETED'
+      AND p."voided_at" IS NULL
+      AND p."paid_at" >= ${from}
+      AND p."paid_at" <= ${to}
+      AND i."deleted_at" IS NULL
+      AND i."status"::text IN (${Prisma.join(REVENUE_INVOICE_STATUSES)})
+  )`;
 }

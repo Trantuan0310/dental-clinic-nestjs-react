@@ -1,16 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AppointmentStatus, InvoiceStatus, Prisma } from '@prisma/client';
+import { AppointmentStatus, InvoiceStatus, PaymentKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpenseService } from '../expense/expense.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { isRowScoped } from '../common/row-scope';
 import { clinicDateOnly, endOfClinicDay, startOfClinicDay } from '../common/date-range.util';
 import {
-  PAYMENT_KIND_SELECT,
+  REVENUE_INVOICE_STATUSES,
   collectedPaymentWhere,
-  isRefund,
   revenueInvoiceSql,
   revenueInvoiceWhere,
+  revenueRefundWhere,
+  revenueRowsSql,
   signedPaymentAmount,
 } from './revenue-basis';
 
@@ -33,6 +34,22 @@ const SOURCE_LABELS: Record<string, string> = {
   RETURNING: 'Khách quay lại',
 };
 
+/** Booking requests closed because the patient came to the desk (FC, 044). */
+const ARRIVED_CLOSE_REASONS = ['ARRIVED_WALK_IN', 'ARRIVED_NO_VISIT'];
+
+export interface OnlineFunnel {
+  /** Requests sent in the range, junk (SPAM) left out. */
+  requests: number;
+  booked: number;
+  arrived: number;
+  /** Withdrawn or cancelled by the patient (online or by phone). */
+  patientCancelled: number;
+  /** Declined by the clinic. */
+  declined: number;
+  expired: number;
+  spam: number;
+}
+
 /** Aging buckets of an open balance, by whole clinic days since issue. */
 export const AGING_BUCKETS = [
   { key: 'D0_7', label: 'Dưới 7 ngày', max: 7 },
@@ -48,9 +65,10 @@ export const MAX_RANGE_DAYS = 366;
 
 interface CollectionRow {
   amount: Prisma.Decimal;
+  kind: PaymentKind;
   method: string;
   paidAt: Date;
-  invoice: { encounter: { dentistId: string } | null } | null;
+  invoice: { status: InvoiceStatus; encounter: { dentistId: string } | null } | null;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -120,18 +138,42 @@ export class ReportsService {
     from: Date,
     to: Date,
     invoice: Prisma.InvoiceWhereInput = {},
-  ): Promise<Array<CollectionRow & { signed: number; refund: boolean }>> {
-    const rows = (await this.prisma.payment.findMany({
+  ): Promise<Array<CollectionRow & { signed: number; refund: boolean; lowersRevenue: boolean }>> {
+    const rows: CollectionRow[] = await this.prisma.payment.findMany({
       where: collectedPaymentWhere(from, to, invoice),
       select: {
         amount: true,
+        kind: true,
         method: true,
         paidAt: true,
-        invoice: { select: { encounter: { select: { dentistId: true } } } },
-        ...PAYMENT_KIND_SELECT,
+        invoice: { select: { status: true, encounter: { select: { dentistId: true } } } },
       },
-    })) as unknown as CollectionRow[];
-    return rows.map(r => ({ ...r, signed: signedPaymentAmount(r), refund: isRefund(r) }));
+    });
+    return rows.map(r => {
+      const refund = r.kind === PaymentKind.REFUND;
+      return {
+        ...r,
+        signed: signedPaymentAmount(r),
+        refund,
+        // Same rule as revenueRefundWhere: not on a voided invoice.
+        lowersRevenue: refund && !!r.invoice && REVENUE_INVOICE_STATUSES.includes(r.invoice.status),
+      };
+    });
+  }
+
+  /** Issued revenue minus refunds on counted invoices, both dated in range. */
+  private async revenueTotal(from: Date, to: Date): Promise<number> {
+    const [issued, refunds] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        _sum: { total: true },
+        where: revenueInvoiceWhere(from, to),
+      }),
+      this.prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: revenueRefundWhere(from, to),
+      }),
+    ]);
+    return Number(issued._sum.total ?? 0) - Number(refunds._sum.amount ?? 0);
   }
 
   private async collectedTotal(from: Date, to: Date): Promise<number> {
@@ -203,7 +245,11 @@ export class ReportsService {
       }),
     ]);
 
-    const totalInvoiced = invoices.reduce((acc, i) => acc + Number(i.total ?? 0), 0);
+    // Revenue = issued totals − refunds dated in the range (commission basis).
+    const revenueRefunds = collections.filter(p => p.lowersRevenue);
+    const totalInvoiced =
+      invoices.reduce((acc, i) => acc + Number(i.total ?? 0), 0) +
+      revenueRefunds.reduce((acc, p) => acc + p.signed, 0);
     const totalCollected = collections.reduce((acc, p) => acc + p.signed, 0);
     const totalRefunded = collections.filter(p => p.refund).reduce((a, p) => a - p.signed, 0);
 
@@ -233,6 +279,7 @@ export class ReportsService {
       m.count += 1;
     }
     for (const p of collections) month(clinicMonth(p.paidAt)).paid += p.signed;
+    for (const p of revenueRefunds) month(clinicMonth(p.paidAt)).total += p.signed;
 
     // Dentists: revenue of their encounters' invoices, collected on them.
     const dentistMap = new Map<
@@ -256,8 +303,11 @@ export class ReportsService {
       d.revenue += Number(inv.total ?? 0);
       d.count += 1;
     }
-    for (const p of collections)
-      dentist(p.invoice?.encounter?.dentistId ?? 'unknown').paid += p.signed;
+    for (const p of collections) {
+      const d = dentist(p.invoice?.encounter?.dentistId ?? 'unknown');
+      d.paid += p.signed;
+      if (p.lowersRevenue) d.revenue += p.signed;
+    }
     // A dentist only paid on older invoices still needs a name.
     const nameless = [...dentistMap.values()].filter(
       d => d.dentistName === 'Chưa rõ' && d.dentistId !== 'unknown',
@@ -391,17 +441,11 @@ export class ReportsService {
         select: { patientId: true, startAt: true, status: true },
       });
 
-    const [current, previous, revAgg, prevRevAgg, collected, prevCollected] = await Promise.all([
+    const [current, previous, revenue, prevRevenue, collected, prevCollected] = await Promise.all([
       appts(fromDate, toDate),
       appts(prevFrom, prevTo),
-      this.prisma.invoice.aggregate({
-        _sum: { total: true },
-        where: revenueInvoiceWhere(fromDate, toDate),
-      }),
-      this.prisma.invoice.aggregate({
-        _sum: { total: true },
-        where: revenueInvoiceWhere(prevFrom, prevTo),
-      }),
+      this.revenueTotal(fromDate, toDate),
+      this.revenueTotal(prevFrom, prevTo),
       this.collectedTotal(fromDate, toDate),
       this.collectedTotal(prevFrom, prevTo),
     ]);
@@ -438,8 +482,6 @@ export class ReportsService {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, ids]) => ({ date, value: ids.size }));
 
-    const revenue = Number(revAgg._sum.total ?? 0);
-    const prevRevenue = Number(prevRevAgg._sum.total ?? 0);
     const apptTotal = notCancelled(current);
     const prevApptTotal = notCancelled(previous);
 
@@ -473,11 +515,10 @@ export class ReportsService {
     const { fromDate, toDate } = this.resolveRange(query.from, query.to);
     const rows = await this.prisma.$queryRaw<Array<{ d: string; total: number; count: bigint }>>`
       SELECT
-        to_char(i."issued_at" AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS d,
-        COALESCE(SUM(i."total"), 0)::float AS total,
-        COUNT(*) AS count
-      FROM "invoices" i
-      WHERE ${revenueInvoiceSql('i', fromDate, toDate)}
+        to_char(r.at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS d,
+        COALESCE(SUM(r.amount), 0)::float AS total,
+        SUM(r.cnt) AS count
+      FROM ${revenueRowsSql(fromDate, toDate)} r
       GROUP BY 1
       ORDER BY 1 ASC
     `;
@@ -496,10 +537,9 @@ export class ReportsService {
     monthStart.setUTCMonth(monthStart.getUTCMonth() - 5);
     const start = startOfClinicDay(monthStart.toISOString().slice(0, 10));
     const rows = await this.prisma.$queryRaw<Array<{ m: string; total: number }>>`
-      SELECT to_char(i."issued_at" AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM') AS m,
-             COALESCE(SUM(i."total"), 0)::float AS total
-      FROM "invoices" i
-      WHERE ${revenueInvoiceSql('i', start, today)}
+      SELECT to_char(r.at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM') AS m,
+             COALESCE(SUM(r.amount), 0)::float AS total
+      FROM ${revenueRowsSql(start, today)} r
       GROUP BY 1
       ORDER BY 1 ASC
     `;
@@ -639,23 +679,54 @@ export class ReportsService {
       for (const u of users) dentist(u.id).dentistName = u.fullName;
     }
 
-    // Online funnel: requests sent → booked → came. Front-desk data only.
-    let onlineFunnel: { requests: number; booked: number; arrived: number } | null = null;
+    // Online funnel: requests sent → booked → came, by the request's close
+    // reason (booking migration 044). Junk requests are left out; a patient
+    // who came to the desk counts as arrived even without a linked visit;
+    // the patient's own cancellations are kept apart from the clinic's.
+    let onlineFunnel: OnlineFunnel | null = null;
     if (!scoped && !dentistId) {
-      const sent = { createdAt: { gte: fromDate, lte: toDate } };
-      const [requests, booked, arrived] = await Promise.all([
-        this.prisma.bookingRequest.count({ where: sent }),
+      const sent: Prisma.BookingRequestWhereInput = {
+        createdAt: { gte: fromDate, lte: toDate },
+        OR: [{ closeReason: null }, { closeReason: { not: 'SPAM' } }],
+      };
+      const [byReason, booked, arrived] = await Promise.all([
+        this.prisma.bookingRequest.groupBy({
+          by: ['closeReason'],
+          where: { createdAt: { gte: fromDate, lte: toDate } },
+          _count: { _all: true },
+        }),
         this.prisma.bookingRequest.count({
           where: { ...sent, appointment: { is: { deletedAt: null } } },
         }),
         this.prisma.bookingRequest.count({
           where: {
-            ...sent,
-            appointment: { is: { deletedAt: null, status: { in: ARRIVED_STATUSES } } },
+            AND: [
+              sent,
+              {
+                OR: [
+                  { closeReason: { in: ARRIVED_CLOSE_REASONS } },
+                  { appointment: { is: { deletedAt: null, status: { in: ARRIVED_STATUSES } } } },
+                ],
+              },
+            ],
           },
         }),
       ]);
-      onlineFunnel = { requests, booked, arrived };
+      const n = (...reasons: string[]) =>
+        byReason
+          .filter(r => r.closeReason && reasons.includes(r.closeReason))
+          .reduce((a, r) => a + r._count._all, 0);
+      const all = byReason.reduce((a, r) => a + r._count._all, 0);
+      const spam = n('SPAM');
+      onlineFunnel = {
+        requests: all - spam,
+        booked,
+        arrived,
+        patientCancelled: n('PATIENT_CANCELLED_VISIT', 'WITHDRAWN_ONLINE', 'CANCELLED_BY_PHONE'),
+        declined: n('DECLINED'),
+        expired: n('EXPIRED'),
+        spam,
+      };
     }
 
     // Due = appointments whose outcome is known (excludes still-pending ones).
@@ -687,12 +758,12 @@ export class ReportsService {
       Array<{ source: string; total: number; count: bigint }>
     >`
       SELECT a."source" AS source,
-             COALESCE(SUM(i."total"), 0)::float AS total,
-             COUNT(*) AS count
-      FROM "invoices" i
+             COALESCE(SUM(r.amount), 0)::float AS total,
+             SUM(r.cnt) AS count
+      FROM ${revenueRowsSql(fromDate, toDate)} r
+      JOIN "invoices" i ON i.id = r.invoice_id
       JOIN "encounters" e ON e.id = i."encounter_id"
       JOIN "appointments" a ON a.id = e."appointment_id"
-      WHERE ${revenueInvoiceSql('i', fromDate, toDate)}
       GROUP BY 1
       ORDER BY total DESC
     `;
@@ -742,12 +813,12 @@ export class ReportsService {
     >`
       SELECT e."dentist_id",
              u."full_name" AS dentist_name,
-             COALESCE(SUM(i."total"), 0)::float AS total,
-             COUNT(*) AS count
-      FROM "invoices" i
+             COALESCE(SUM(r.amount), 0)::float AS total,
+             SUM(r.cnt) AS count
+      FROM ${revenueRowsSql(fromDate, toDate)} r
+      JOIN "invoices" i ON i.id = r.invoice_id
       JOIN "encounters" e ON e.id = i."encounter_id"
       JOIN "users" u ON u.id = e."dentist_id"
-      WHERE ${revenueInvoiceSql('i', fromDate, toDate)}
       GROUP BY 1, 2
       ORDER BY total DESC
     `;
@@ -777,11 +848,11 @@ export class ReportsService {
         GROUP BY 1
       )
       SELECT CASE WHEN fv.first_at < ${fromDate} THEN 'RETURNING' ELSE 'NEW' END AS type,
-             COALESCE(SUM(i."total"), 0)::float AS total,
-             COUNT(*) AS count
-      FROM "invoices" i
+             COALESCE(SUM(r.amount), 0)::float AS total,
+             SUM(r.cnt) AS count
+      FROM ${revenueRowsSql(fromDate, toDate)} r
+      JOIN "invoices" i ON i.id = r.invoice_id
       LEFT JOIN first_visit fv ON fv."patient_id" = i."patient_id"
-      WHERE ${revenueInvoiceSql('i', fromDate, toDate)}
       GROUP BY 1
     `;
     const total = rows.reduce((acc, r) => acc + Number(r.total), 0);

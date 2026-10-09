@@ -1048,7 +1048,10 @@ export function AppointmentStatsCard({ stats, range, isLoading, isError, onRetry
       {stats.onlineFunnel && stats.onlineFunnel.requests > 0 && (
         <p className="mt-3 text-xs text-gray-500">
           Yêu cầu đặt online trong kỳ: {stats.onlineFunnel.requests} · đã thành lịch:{' '}
-          {stats.onlineFunnel.booked} · đã đến: {stats.onlineFunnel.arrived}
+          {stats.onlineFunnel.booked} · đã đến: {stats.onlineFunnel.arrived} · khách tự hủy:{' '}
+          {stats.onlineFunnel.patientCancelled} · phòng khám từ chối: {stats.onlineFunnel.declined} · hết hạn:{' '}
+          {stats.onlineFunnel.expired}
+          {stats.onlineFunnel.spam > 0 && ` (không tính ${stats.onlineFunnel.spam} yêu cầu rác)`}
         </p>
       )}
     </Card>

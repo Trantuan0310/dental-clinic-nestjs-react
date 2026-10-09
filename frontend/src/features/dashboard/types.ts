@@ -69,7 +69,16 @@ export interface AppointmentStats {
   rates: { arrivalPct: number; noShowPct: number; cancelPct: number; leftPct: number };
   bySource: Array<AppointmentTally & { source: string; sourceLabel: string }>;
   byDentist: Array<AppointmentTally & { dentistId: string; dentistName: string }>;
-  onlineFunnel: { requests: number; booked: number; arrived: number } | null;
+  /** Junk requests excluded; patient cancellations kept apart from the clinic's. */
+  onlineFunnel: {
+    requests: number;
+    booked: number;
+    arrived: number;
+    patientCancelled: number;
+    declined: number;
+    expired: number;
+    spam: number;
+  } | null;
 }
 
 export interface FinanceSummary {

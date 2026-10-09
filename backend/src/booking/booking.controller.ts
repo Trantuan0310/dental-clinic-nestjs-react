@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -21,19 +22,24 @@ import { User } from '../common/decorators/user.decorator';
 import { assertClinicWide } from '../common/row-scope';
 import {
   AcceptBookingProposalDto,
+  BookingArrivedDto,
   BookingRequestMessageDto,
   BookingRequestNoteDto,
   ConfirmBookingRequestDto,
   CreatePublicBookingRequestDto,
   DeclineBookingProposalDto,
+  DeclineBookingRequestDto,
   ListBookingRequestsDto,
   PendingInRangeQueryDto,
   ProposeBookingTimeDto,
   PublicBookingNoteDto,
   PublicSlotsQueryDto,
+  ReceptionistNoteDto,
+  UpdateBookingContactDto,
   UpdatePublicBookingDetailsDto,
 } from './dto/booking.dto';
 import { BookingService } from './booking.service';
+import { AppointmentNoticesService } from './appointment-notices.service';
 
 @ApiTags('Public booking')
 @Controller('public/booking')
@@ -122,6 +128,18 @@ export class PublicBookingController {
   ) {
     return { data: await this.booking.withdraw(ref, { token, phone }, dto ?? {}) };
   }
+  // The patient cancels their confirmed visit (link token, until a few hours before).
+  @Post('requests/:reference/cancel-visit')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  async cancelVisit(
+    @Param('reference') ref: string,
+    @Body() dto: PublicBookingNoteDto,
+    @Headers('x-booking-access-token') token?: string,
+    @Headers('x-booking-phone') phone?: string,
+  ) {
+    return { data: await this.booking.cancelVisit(ref, { token, phone }, dto ?? {}) };
+  }
 }
 
 @ApiTags('Booking requests')
@@ -129,7 +147,10 @@ export class PublicBookingController {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('booking-requests')
 export class BookingRequestsController {
-  constructor(private readonly booking: BookingService) {}
+  constructor(
+    private readonly booking: BookingService,
+    private readonly notices: AppointmentNoticesService,
+  ) {}
   @Get()
   @RequirePermissions('booking_request.read')
   async list(@Query() q: ListBookingRequestsDto) {
@@ -148,6 +169,15 @@ export class BookingRequestsController {
   async pendingInRange(@Query() q: PendingInRangeQueryDto) {
     return { data: await this.booking.pendingInRange(q) };
   }
+  // Visits in the next two days whose email reminder did not go out (closed
+  // day, dentist away, mail error): the front desk calls those patients.
+  @Get('reminder-issues')
+  @RequirePermissions('booking_request.read')
+  async reminderIssues(@User() actor: JwtPayload) {
+    // Lists patients' names and phones across every dentist's visits.
+    assertClinicWide(actor, 'patient', 'appointment');
+    return { data: await this.notices.reminderIssues() };
+  }
   @Get(':id/dentists')
   @RequirePermissions('booking_request.read')
   async dentists(@Param('id', ParseUUIDPipe) id: string) {
@@ -159,6 +189,13 @@ export class BookingRequestsController {
     // Lists existing patient records: clinic-wide patient scope only (A6-19).
     assertClinicWide(actor, 'patient');
     return { data: await this.booking.patientMatches(id) };
+  }
+  // Other open requests and upcoming visits of the same phone or person.
+  @Get(':id/related')
+  @RequirePermissions('booking_request.read')
+  async related(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    assertClinicWide(actor, 'patient', 'appointment');
+    return { data: await this.booking.related(id) };
   }
   @Get(':id')
   @RequirePermissions('booking_request.read')
@@ -208,10 +245,70 @@ export class BookingRequestsController {
   @RequirePermissions('booking_request.manage')
   async decline(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: BookingRequestMessageDto,
+    @Body() dto: DeclineBookingRequestDto,
     @User() actor: JwtPayload,
   ) {
     return this.booking.decline(id, dto, actor);
+  }
+  // The patient called to cancel their open request.
+  @Post(':id/cancelled-by-phone')
+  @RequirePermissions('booking_request.manage')
+  @HttpCode(HttpStatus.OK)
+  async cancelledByPhone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BookingRequestNoteDto,
+    @User() actor: JwtPayload,
+  ) {
+    return this.booking.cancelledByPhone(id, dto, actor);
+  }
+  // The patient came to the desk with an unconfirmed request.
+  @Post(':id/arrived')
+  @RequirePermissions('booking_request.manage')
+  @HttpCode(HttpStatus.OK)
+  async arrived(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BookingArrivedDto,
+    @User() actor: JwtPayload,
+  ) {
+    assertClinicWide(actor, 'patient', 'appointment');
+    return this.booking.arrived(id, dto, actor);
+  }
+  // Correct a mistyped phone, email or name (audited with the reason).
+  @Patch(':id/contact')
+  @RequirePermissions('booking_request.manage')
+  async contact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBookingContactDto,
+    @User() actor: JwtPayload,
+  ) {
+    assertClinicWide(actor, 'patient', 'appointment');
+    return this.booking.updateContact(id, dto, actor);
+  }
+  @Post(':id/resend-link')
+  @RequirePermissions('booking_request.manage')
+  @HttpCode(HttpStatus.OK)
+  async resendLink(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return this.booking.resendLink(id, actor);
+  }
+  @Put(':id/note')
+  @RequirePermissions('booking_request.manage')
+  async note(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReceptionistNoteDto,
+    @User() actor: JwtPayload,
+  ) {
+    return this.booking.setNote(id, dto, actor);
+  }
+  // An email that did not go out: the patient was called instead.
+  @Post(':id/called')
+  @RequirePermissions('booking_request.manage')
+  @HttpCode(HttpStatus.OK)
+  async called(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BookingRequestNoteDto,
+    @User() actor: JwtPayload,
+  ) {
+    return this.booking.markCalled(id, dto, actor);
   }
   @Post(':id/confirm')
   @RequirePermissions('booking_request.manage')
@@ -223,9 +320,6 @@ export class BookingRequestsController {
   ) {
     // Picks or creates a patient record and books any dentist's calendar.
     assertClinicWide(actor, 'patient', 'appointment');
-    return this.booking.confirm(id, actor, {
-      patientId: body?.patientId,
-      createNewPatient: body?.createNewPatient,
-    });
+    return this.booking.confirm(id, actor, body ?? {});
   }
 }
