@@ -1899,12 +1899,23 @@ describe('AppointmentsService', () => {
         patientId: 'patient-1',
         dentistId: dto.dentistId,
         startAt: new Date(dto.startAt),
+        endAt: new Date('2027-03-15T02:30:00Z'),
+        services: [],
         createdBy: actor.sub,
         createdAt: new Date(),
       };
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce(same);
-      await expect(service.create(dto, actor)).resolves.toBe(same);
+      await expect(service.create(dto, actor)).resolves.toMatchObject({ id: 'appt-first' });
       expect(prisma.appointment.create).not.toHaveBeenCalled();
+
+      // Another request (different services) is not a repeat.
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce({
+        ...same,
+        services: [{ serviceId: 'svc-x' }],
+      });
+      await expect(service.create(dto, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'ALREADY_BOOKED' }),
+      });
 
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce({
         ...same,
@@ -4135,6 +4146,23 @@ describe('AppointmentsService', () => {
         expect(res.rescheduleCount).toBe(2);
         expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
         expect(events.emit).not.toHaveBeenCalled();
+      });
+
+      it('the same time on a visit that may not move is still refused', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+          ...booked,
+          status: AppointmentStatus.CANCELLED,
+        });
+        await expect(
+          service.reschedule(
+            'appt-1',
+            {
+              newStartsAt: booked.startAt.toISOString(),
+              newEndsAt: booked.endAt.toISOString(),
+            } as any,
+            actor,
+          ),
+        ).rejects.toThrow(/Không thể đổi lịch hẹn/);
       });
 
       it('a client that saw an older version is told to reload', async () => {
