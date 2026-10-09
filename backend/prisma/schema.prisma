@@ -131,18 +131,19 @@ model User {
   updatedExpenses Expense[] @relation("ExpenseUpdater")
 
   // Payroll (Phase 9)
-  compensations              DentistCompensation[] @relation("CompensationDentist")
-  approvedCompensations      DentistCompensation[] @relation("CompensationApprover")
-  shiftRegistrations         ShiftRegistration[]   @relation("ShiftRegistrationDentist")
-  approvedShiftRegistrations ShiftRegistration[]   @relation("ShiftRegistrationApprover")
-  createdShiftRegistrations  ShiftRegistration[]   @relation("ShiftRegistrationCreator")
-  payrollLineItems           PayrollLineItem[]
-  createdPayrollPeriods      PayrollPeriod[]       @relation("PayrollPeriodCreator")
-  lockedPayrollPeriods       PayrollPeriod[]       @relation("PayrollPeriodLocker")
-  approvedPayrollPeriods     PayrollPeriod[]       @relation("PayrollPeriodApprover")
-  paidPayrollPeriods         PayrollPeriod[]       @relation("PayrollPeriodPayer")
-  createdPayrollAdjustments  PayrollAdjustment[]   @relation("PayrollAdjustmentActor")
-  payrollConfigUpdated       PayrollConfig?        @relation("PayrollConfigUpdater")
+  compensations               DentistCompensation[] @relation("CompensationDentist")
+  approvedCompensations       DentistCompensation[] @relation("CompensationApprover")
+  shiftRegistrations          ShiftRegistration[]   @relation("ShiftRegistrationDentist")
+  approvedShiftRegistrations  ShiftRegistration[]   @relation("ShiftRegistrationApprover")
+  createdShiftRegistrations   ShiftRegistration[]   @relation("ShiftRegistrationCreator")
+  payrollLineItems            PayrollLineItem[]
+  createdPayrollPeriods       PayrollPeriod[]       @relation("PayrollPeriodCreator")
+  lockedPayrollPeriods        PayrollPeriod[]       @relation("PayrollPeriodLocker")
+  approvedPayrollPeriods      PayrollPeriod[]       @relation("PayrollPeriodApprover")
+  paidPayrollPeriods          PayrollPeriod[]       @relation("PayrollPeriodPayer")
+  createdPayrollAdjustments   PayrollAdjustment[]   @relation("PayrollAdjustmentActor")
+  payrollAdjustmentsAsDentist PayrollAdjustment[]   @relation("PayrollAdjustmentDentist")
+  payrollConfigUpdated        PayrollConfig?        @relation("PayrollConfigUpdater")
 
   // Staff (ADR-0009 phase 1)
   employees             Employee[]         @relation("EmployeeUser")
@@ -1169,8 +1170,9 @@ model PayrollPeriod {
   openedFrom PayrollPeriod?  @relation("PeriodReopen", fields: [openedFromPeriodId], references: [id])
   reopens    PayrollPeriod[] @relation("PeriodReopen")
 
-  lineItems  PayrollLineItem[]
-  encounters PayrollEncounterDetail[]
+  lineItems   PayrollLineItem[]
+  encounters  PayrollEncounterDetail[]
+  adjustments PayrollAdjustment[]
 
   // BR-PAY-003 + BR-PAY-019: Partial unique constraint lives in migration SQL,
   // not in Prisma schema. We need:
@@ -1225,38 +1227,63 @@ model PayrollEncounterDetail {
   payrollLineItemId   String   @map("payroll_line_item_id") @db.Uuid
   payrollPeriodId     String   @map("payroll_period_id") @db.Uuid
   encounterId         String   @map("encounter_id") @db.Uuid
-  treatmentId         String   @map("treatment_id") @db.Uuid
+  /// Null for an invoice line that is not a treatment (migration 046).
+  treatmentId         String?  @map("treatment_id") @db.Uuid
+  /// Commission basis counted for this row (= basisAmountVnd for rows from
+  /// migration 046 on; list price × quantity on older rows).
   treatmentRevenueVnd Decimal  @map("treatment_revenue_vnd") @db.Decimal(15, 0)
   encounterStartAt    DateTime @map("encounter_start_at") @db.Timestamptz()
   encounterEndAt      DateTime @map("encounter_end_at") @db.Timestamptz()
   durationMinutes     Int      @map("duration_minutes")
   treatmentBreakdown  Json     @map("treatment_breakdown") @db.JsonB
+  // Migration 046: commission comes from issued invoices. The invoice line,
+  // its amount after the invoice discount (pro rata) and the commission rate
+  // used, so a void after the period closes can be clawed back exactly.
+  // FKs (ON DELETE SET NULL) live in the migration; no Prisma relation so the
+  // billing models stay untouched.
+  invoiceId           String?  @map("invoice_id") @db.Uuid
+  invoiceItemId       String?  @map("invoice_item_id") @db.Uuid
+  basisAmountVnd      Decimal? @map("basis_amount_vnd") @db.Decimal(15, 0)
+  commissionPct       Decimal? @map("commission_pct") @db.Decimal(5, 4)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   lineItem  PayrollLineItem @relation(fields: [payrollLineItemId], references: [id], onDelete: Cascade)
   period    PayrollPeriod   @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
   encounter Encounter       @relation(fields: [encounterId], references: [id])
-  treatment Treatment       @relation(fields: [treatmentId], references: [id])
+  treatment Treatment?      @relation(fields: [treatmentId], references: [id])
 
-  @@unique([payrollLineItemId, encounterId, treatmentId])
+  @@unique([payrollLineItemId, invoiceItemId], map: "payroll_encounter_details_line_item_invoice_item_key")
   @@index([encounterId])
   @@index([payrollPeriodId, encounterId])
+  @@index([invoiceId])
   @@map("payroll_encounter_details")
 }
 
 model PayrollAdjustment {
   id                String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  payrollLineItemId String                @map("payroll_line_item_id") @db.Uuid
+  // Migration 046: an adjustment belongs to (period, dentist), so recomputing
+  // the period never drops it; the line item link is kept for display and is
+  // re-attached on every compute.
+  payrollPeriodId   String                @map("payroll_period_id") @db.Uuid
+  dentistId         String                @map("dentist_id") @db.Uuid
+  payrollLineItemId String?               @map("payroll_line_item_id") @db.Uuid
   type              PayrollAdjustmentType
   amountVnd         Decimal               @map("amount_vnd") @db.Decimal(15, 0)
   reason            String
-  adjustedByUserId  String                @map("adjusted_by_user_id") @db.Uuid
+  /// Null for system-made rows (commission clawback of a voided invoice).
+  adjustedByUserId  String?               @map("adjusted_by_user_id") @db.Uuid
   adjustedAt        DateTime              @default(now()) @map("adjusted_at") @db.Timestamptz()
+  /// Set on a commission clawback: the invoice voided after its period closed.
+  sourceInvoiceId   String?               @map("source_invoice_id") @db.Uuid
 
-  lineItem       PayrollLineItem @relation(fields: [payrollLineItemId], references: [id], onDelete: Cascade)
-  adjustedByUser User            @relation("PayrollAdjustmentActor", fields: [adjustedByUserId], references: [id])
+  period         PayrollPeriod    @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  dentist        User             @relation("PayrollAdjustmentDentist", fields: [dentistId], references: [id])
+  lineItem       PayrollLineItem? @relation(fields: [payrollLineItemId], references: [id], onDelete: SetNull)
+  adjustedByUser User?            @relation("PayrollAdjustmentActor", fields: [adjustedByUserId], references: [id])
 
   @@index([payrollLineItemId, adjustedAt(sort: Desc)])
+  @@index([payrollPeriodId, dentistId])
+  @@index([sourceInvoiceId])
   @@map("payroll_adjustments")
 }
 

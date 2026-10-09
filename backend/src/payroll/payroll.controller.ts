@@ -29,6 +29,8 @@ import {
   MarkPaidDto,
   ListPeriodsQueryDto,
   ListCompensationsQueryDto,
+  PeriodWarningsQueryDto,
+  ApprovePeriodDto,
 } from './dto/payroll.dto';
 
 @ApiTags('Payroll')
@@ -136,6 +138,20 @@ export class PayrollController {
     return { data };
   }
 
+  @Get('periods/:id/warnings')
+  @RequirePermissions('payroll.read.any')
+  @ApiOperation({
+    summary:
+      'Things to settle before locking: old draft invoices, visits without pay terms, visits outside paid hours, leavers',
+  })
+  async getPeriodWarnings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: PeriodWarningsQueryDto,
+  ) {
+    const data = await this.payroll.getPeriodWarnings(id, query.draftDays);
+    return { data };
+  }
+
   @Post('periods/:id/compute')
   @RequirePermissions('payroll.period.compute')
   @HttpCode(HttpStatus.OK)
@@ -171,8 +187,12 @@ export class PayrollController {
   @RequirePermissions('payroll.period.approve')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Approve period (REVIEWING → APPROVED)' })
-  async approvePeriod(@Param('id', ParseUUIDPipe) id: string, @User() user: JwtPayload) {
-    const data = await this.payroll.approvePeriod(id, user.sub);
+  async approvePeriod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApprovePeriodDto,
+    @User() user: JwtPayload,
+  ) {
+    const data = await this.payroll.approvePeriod(id, user.sub, dto?.selfApprovalReason);
     return { data };
   }
 
