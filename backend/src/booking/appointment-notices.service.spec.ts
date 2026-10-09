@@ -26,16 +26,35 @@ describe('AppointmentNoticesService', () => {
     ...over,
   });
 
+  let availability: { checkSlot: jest.Mock };
+  let appointments: { validateDentist: jest.Mock };
   beforeEach(() => {
     jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate'] });
+    // EMAIL_MOCK outside production: EmailService "delivers" (logs).
+    process.env.EMAIL_MOCK = 'true';
     prisma = {
-      appointment: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+      appointment: {
+        findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
     email = { send: jest.fn().mockResolvedValue(true) };
-    service = new AppointmentNoticesService(prisma, email as any);
+    availability = { checkSlot: jest.fn().mockResolvedValue(null) };
+    appointments = { validateDentist: jest.fn().mockResolvedValue({}) };
+    service = new AppointmentNoticesService(
+      prisma,
+      email as any,
+      availability as any,
+      appointments as any,
+    );
   });
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    delete process.env.EMAIL_MOCK;
+    delete process.env.BOOKING_NOTIFY_EMAILS;
+  });
 
   describe('changes the clinic makes', () => {
     it('emails the patient a cancelled visit, without the internal reason', async () => {
@@ -143,7 +162,7 @@ describe('AppointmentNoticesService', () => {
         oldDentistId: 'd1',
         newDentistId: 'd1',
       });
-      await expect(service.sendDueReminders()).resolves.toEqual({ due: 0, sent: 0 });
+      await expect(service.sendDueReminders()).resolves.toMatchObject({ due: 0, sent: 0 });
       expect(email.send).not.toHaveBeenCalled();
     });
   });
@@ -154,7 +173,12 @@ describe('AppointmentNoticesService', () => {
       // appt-2 was claimed by another run in between.
       prisma.$executeRaw.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
 
-      await expect(service.sendDueReminders()).resolves.toEqual({ due: 2, sent: 1 });
+      await expect(service.sendDueReminders()).resolves.toEqual({
+        due: 2,
+        sent: 1,
+        blocked: 0,
+        failed: 0,
+      });
 
       const where = prisma.appointment.findMany.mock.calls[0][0].where;
       expect(where).toMatchObject({
@@ -174,19 +198,122 @@ describe('AppointmentNoticesService', () => {
       prisma.appointment.findMany.mockResolvedValue([visit()]);
       // 22:30 and 06:59 in Vietnam.
       for (const at of ['2026-10-01T15:30:00Z', '2026-09-30T23:59:00Z']) {
-        await expect(service.sendDueReminders(new Date(at))).resolves.toEqual({ due: 0, sent: 0 });
+        await expect(service.sendDueReminders(new Date(at))).resolves.toMatchObject({
+          due: 0,
+          sent: 0,
+        });
       }
       expect(isQuietHour(new Date('2026-10-01T00:00:00Z'))).toBe(false); // 07:00
       expect(prisma.appointment.findMany).not.toHaveBeenCalled();
       expect(email.send).not.toHaveBeenCalled();
     });
 
-    it('does not retry a reminder the mail server refused', async () => {
-      prisma.appointment.findMany.mockResolvedValue([visit()]);
+    it('releases a reminder the mail server refused, for the next runs to retry (A4-09)', async () => {
+      prisma.appointment.findMany.mockResolvedValue([
+        visit({ reminderStatus: null, reminderAttempts: 0, reminderStatusFor: null }),
+      ]);
       email.send.mockResolvedValue(false);
-      await expect(service.sendDueReminders()).resolves.toEqual({ due: 1, sent: 0 });
-      // Only the claim; the flag is not cleared for another attempt.
-      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      await expect(service.sendDueReminders()).resolves.toMatchObject({
+        due: 1,
+        sent: 0,
+        failed: 1,
+      });
+      const { where, data } = prisma.appointment.updateMany.mock.calls[0][0];
+      expect(where).toEqual({ id: 'appt-1', reminderSentAt: NOW });
+      expect(data).toMatchObject({
+        reminderSentAt: null,
+        reminderStatus: 'FAILED',
+        reminderAttempts: 1,
+        reminderStatusFor: visitAt,
+      });
+    });
+
+    it('stops retrying after the last attempt and tells the clinic', async () => {
+      process.env.BOOKING_NOTIFY_EMAILS = 'desk@clinic.vn';
+      prisma.appointment.findMany.mockResolvedValue([
+        visit({ reminderStatus: 'FAILED', reminderAttempts: 2, reminderStatusFor: visitAt }),
+      ]);
+      email.send.mockResolvedValueOnce(false).mockResolvedValue(true);
+      await service.sendDueReminders();
+      expect(prisma.appointment.updateMany.mock.calls[0][0].data).toMatchObject({
+        reminderSentAt: NOW,
+        reminderAttempts: 3,
+      });
+      expect(email.send.mock.calls[1][0].to).toBe('desk@clinic.vn');
+      expect(email.send.mock.calls[1][0].text).toContain('gửi email nhắc lịch lỗi nhiều lần');
+    });
+
+    it('claims nothing while email cannot be delivered at all', async () => {
+      delete process.env.EMAIL_MOCK;
+      prisma.appointment.findMany.mockResolvedValue([visit()]);
+      await expect(service.sendDueReminders()).resolves.toMatchObject({ due: 0, sent: 0 });
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+    });
+
+    it('does not remind a visit on a closed day, time-off or outside hours (A4-01/A5-08)', async () => {
+      process.env.BOOKING_NOTIFY_EMAILS = 'desk@clinic.vn';
+      prisma.appointment.findMany.mockResolvedValue([
+        visit({ dentistId: 'd1', endAt: new Date(visitAt.getTime() + 30 * 60_000) }),
+      ]);
+      availability.checkSlot.mockResolvedValue({
+        kind: 'CLOSED',
+        message: 'Mất điện (ngày 2026-10-02)',
+      });
+      await expect(service.sendDueReminders()).resolves.toMatchObject({ sent: 0, blocked: 1 });
+      expect(availability.checkSlot).toHaveBeenCalledWith('d1', visitAt, expect.any(Date), {
+        ignoreBookings: true,
+      });
+      // Not claimed: a visit fixed in time is reminded by a later run.
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      expect(prisma.appointment.updateMany.mock.calls[0][0].data).toMatchObject({
+        reminderStatus: 'BLOCKED',
+        reminderNote: 'Mất điện (ngày 2026-10-02)',
+      });
+      // Only the clinic is told.
+      expect(email.send).toHaveBeenCalledTimes(1);
+      expect(email.send.mock.calls[0][0].to).toBe('desk@clinic.vn');
+    });
+
+    it('does not remind a visit with a dentist who no longer takes bookings', async () => {
+      const { HttpException } = jest.requireActual('@nestjs/common');
+      appointments.validateDentist.mockRejectedValue(
+        new HttpException('Bác sĩ đang tạm nghỉ, không nhận lịch hẹn mới.', 404),
+      );
+      prisma.appointment.findMany.mockResolvedValue([visit()]);
+      await expect(service.sendDueReminders()).resolves.toMatchObject({ blocked: 1, sent: 0 });
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it('puts the reference code and status link in an online visit reminder', async () => {
+      process.env.PUBLIC_APP_URL = 'https://nk.example';
+      prisma.appointment.findMany.mockResolvedValue([
+        visit({
+          bookingRequest: { referenceCode: 'GS-ABC' },
+          services: [{ serviceName: 'Cạo vôi' }],
+        }),
+      ]);
+      await service.sendDueReminders();
+      delete process.env.PUBLIC_APP_URL;
+      const text = email.send.mock.calls[0][0].text;
+      expect(text).toContain('Mã đặt lịch: GS-ABC');
+      expect(text).toContain('(Cạo vôi)');
+      expect(text).toContain('https://nk.example/booking/status?ref=GS-ABC');
+    });
+
+    it('lists the visits whose reminder did not go out, for their current time only', async () => {
+      prisma.appointment.findMany.mockResolvedValue([
+        visit({ reminderStatus: 'FAILED', reminderStatusFor: visitAt, reminderNote: 'lỗi' }),
+        // Moved since it was blocked: not about this time.
+        visit({
+          id: 'appt-2',
+          reminderStatus: 'BLOCKED',
+          reminderStatusFor: new Date(0),
+          reminderNote: 'x',
+        }),
+      ]);
+      const list = await service.reminderIssues();
+      expect(list.map(r => r.appointmentId)).toEqual(['appt-1']);
     });
   });
 });

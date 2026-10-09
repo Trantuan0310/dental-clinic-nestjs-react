@@ -169,6 +169,16 @@ export default function PublicBookingPage() {
 
   const set = (key: keyof typeof form, value: string | boolean) =>
     setForm((old) => ({ ...old, [key]: value }));
+  // Age of the person to be seen, on the clinic's today (null until a date is typed).
+  const age = useMemo(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) return null;
+    const [y, m, d] = form.dob.split("-").map(Number);
+    const [ty, tm, td] = today().split("-").map(Number);
+    return ty - y - (tm < m || (tm === m && td < d) ? 1 : 0);
+  }, [form.dob]);
+  // Booking for someone else (or a child under 12): contact person fields.
+  const [onBehalf, setOnBehalf] = useState(false);
+  const showContact = onBehalf || (age !== null && age < 12);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -181,7 +191,14 @@ export default function PublicBookingPage() {
       const startAt = new Date(date + "T" + time + ":00+07:00").toISOString();
       const response = await api.post<{ data: BookingResult }>(
         "/public/booking/requests",
-        { ...form, serviceId, dentistId, startAt },
+        {
+          ...form,
+          // Fields hidden again (box unticked) are not sent.
+          ...(showContact ? {} : { contactPersonName: "", contactPersonPhone: "" }),
+          serviceId,
+          dentistId,
+          startAt,
+        },
       );
       const result = response.data.data;
       // The status page gets the token in the URL fragment (never sent to
@@ -192,8 +209,12 @@ export default function PublicBookingPage() {
         token: result.accessToken,
         phone: form.phone.trim(),
       });
+      // An email was given but could not be sent: the status page says so.
+      const mailFailed = !!form.email.trim() && result.notificationSent === false;
       navigate(
-        "/booking/status?new=1&ref=" +
+        "/booking/status?new=1" +
+          (mailFailed ? "&mail=0" : "") +
+          "&ref=" +
           encodeURIComponent(result.referenceCode) +
           "#token=" +
           encodeURIComponent(result.accessToken),
@@ -261,12 +282,6 @@ export default function PublicBookingPage() {
                         </option>
                       ))}
                     </select>
-                    {(() => {
-                      const bio = service?.dentists.find((d) => d.id === dentistId)?.bio;
-                      return bio ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500">{bio}</span>
-                      ) : null;
-                    })()}
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Bác sĩ
@@ -290,6 +305,12 @@ export default function PublicBookingPage() {
                         </option>
                       ))}
                     </select>
+                    {(() => {
+                      const bio = service?.dentists.find((d) => d.id === dentistId)?.bio;
+                      return bio ? (
+                        <span className="mt-1 block text-xs font-normal text-gray-500">{bio}</span>
+                      ) : null;
+                    })()}
                     {/* The length depends on the dentist (their own duration first). */}
                     {(() => {
                       const minutes = service?.dentists.find((d) => d.id === dentistId)?.durationMinutes;
@@ -392,14 +413,18 @@ export default function PublicBookingPage() {
               </div>
               <div>
                 <h2 className="mb-3 font-semibold text-gray-900">
-                  2. Thông tin người đăng ký
+                  2. Thông tin người đến khám
                 </h2>
+                <p className="-mt-2 mb-3 text-xs text-gray-500">
+                  Điền họ tên và ngày sinh của chính người sẽ khám (không phải người đặt hộ). Số
+                  điện thoại là của người khám, hoặc của người liên hệ nếu người khám không có.
+                </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-                    Họ và tên
+                    Họ và tên người đến khám
                     <input
                       required
-                      maxLength={200}
+                      maxLength={100}
                       value={form.fullName}
                       onChange={(e) => set("fullName", e.target.value)}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
@@ -429,6 +454,12 @@ export default function PublicBookingPage() {
                       <option value="OTHER">Khác</option>
                     </select>
                   </label>
+                  {age !== null && age < 18 && (
+                    <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2">
+                      Người khám dưới 18 tuổi: vui lòng có cha mẹ hoặc người giám hộ đi cùng khi đến
+                      khám{age < 12 ? " và nhập thông tin người giám hộ bên dưới" : ""}.
+                    </p>
+                  )}
                   <label className="text-sm font-medium text-gray-700">
                     Số điện thoại
                     <input
@@ -437,6 +468,7 @@ export default function PublicBookingPage() {
                       maxLength={20}
                       value={form.phone}
                       onChange={(e) => set("phone", e.target.value)}
+                      placeholder="0901 234 567"
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
                     />
                   </label>
@@ -449,25 +481,40 @@ export default function PublicBookingPage() {
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Người giám hộ (nếu dưới 12 tuổi)
+                  <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
                     <input
-                      value={form.contactPersonName}
-                      onChange={(e) => set("contactPersonName", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      type="checkbox"
+                      checked={showContact}
+                      onChange={(e) => setOnBehalf(e.target.checked)}
                     />
+                    Tôi đặt hộ người khác (người nhà, trẻ em, người lớn tuổi)
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    SĐT người giám hộ
-                    <input
-                      type="tel"
-                      value={form.contactPersonPhone}
-                      onChange={(e) =>
-                        set("contactPersonPhone", e.target.value)
-                      }
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
-                    />
-                  </label>
+                  {showContact && (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">
+                        Người liên hệ / giám hộ{age !== null && age < 12 ? " (bắt buộc)" : ""}
+                        <input
+                          maxLength={100}
+                          required={age !== null && age < 12}
+                          value={form.contactPersonName}
+                          onChange={(e) => set("contactPersonName", e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                        />
+                      </label>
+                      <label className="text-sm font-medium text-gray-700">
+                        SĐT người liên hệ / giám hộ
+                        <input
+                          type="tel"
+                          required={age !== null && age < 12}
+                          value={form.contactPersonPhone}
+                          onChange={(e) =>
+                            set("contactPersonPhone", e.target.value)
+                          }
+                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                        />
+                      </label>
+                    </>
+                  )}
                   <label className="text-sm font-medium text-gray-700 sm:col-span-2">
                     Lý do khám (không nhập thông tin khẩn cấp)
                     <textarea
