@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppointmentStatus, BookingRequestStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { LOCKING_TX_OPTIONS, lockDentistCalendar } from '../appointments/domain/advisory-lock';
@@ -308,6 +309,19 @@ export class CatalogService {
         isActive ? 'Dịch vụ đang hoạt động' : 'Dịch vụ đã ngừng từ trước',
       );
     }
+    if (isActive) {
+      // An active service in a stopped group would vanish from online booking
+      // and the price list while still bookable at the desk (A2-24).
+      const category = await this.prisma.serviceCategory.findUnique({
+        where: { id: current.categoryId },
+        select: { name: true, isActive: true },
+      });
+      if (category && !category.isActive) {
+        throw new CatalogValidationException(
+          `Nhóm "${category.name}" đang ngừng; mở lại nhóm trước rồi mới mở lại dịch vụ`,
+        );
+      }
+    }
     const today = clinicToday();
     const { updated, ended, restore, restored } = await this.prisma.$transaction(async tx => {
       let plan: RestorePlan | null = null;
@@ -474,12 +488,50 @@ export class CatalogService {
     return this.formatAssignment(created, today);
   }
 
-  /** BR-SVC-005: end, don't delete (a not-yet-started period is removed). */
+  /**
+   * Booked visits (SCHEDULED/CONFIRMED) of this dentist with this service on
+   * or after `from` (a clinic day): they would be left with a dentist who no
+   * longer performs it (A2-13).
+   */
+  private async visitsAfter(dentistId: string, serviceId: string, from: Date) {
+    const where: Prisma.AppointmentWhereInput = {
+      dentistId,
+      deletedAt: null,
+      status: { in: UPCOMING_VISIT },
+      startAt: { gte: new Date(Math.max(Date.now(), from.getTime() - CLINIC_UTC_OFFSET_MS)) },
+      services: { some: { serviceId } },
+    };
+    const [count, sample] = await Promise.all([
+      this.prisma.appointment.count({ where }),
+      this.prisma.appointment.findMany({
+        where,
+        orderBy: { startAt: 'asc' },
+        take: 10,
+        select: { id: true, startAt: true, patient: { select: { fullName: true, code: true } } },
+      }),
+    ]);
+    return {
+      count,
+      appointments: sample.map(a => ({
+        id: a.id,
+        startAt: a.startAt,
+        patientName: a.patient.fullName,
+        patientCode: a.patient.code,
+      })),
+    };
+  }
+
+  /**
+   * BR-SVC-005: end, don't delete (a not-yet-started period is removed).
+   * Visits already booked after the end are listed and need `confirm`, so
+   * the front desk can move them first (A2-13).
+   */
   async endAssignment(
     dentistId: string,
     assignmentId: string,
     to: string | undefined,
     actor: JwtPayload,
+    confirm = false,
   ) {
     const row = await this.prisma.dentistService.findFirst({
       where: { id: assignmentId, dentistId },
@@ -493,13 +545,33 @@ export class CatalogService {
       throw new CatalogValidationException('Ngày kết thúc không được ở quá khứ');
     }
 
+    const affected = await this.visitsAfter(
+      dentistId,
+      row.serviceId,
+      row.effectiveFrom > today ? row.effectiveFrom : addDays(effectiveTo, 1),
+    );
+    if (affected.count > 0 && !confirm) {
+      throw new BusinessRuleException(
+        `Còn ${affected.count} lịch hẹn của bác sĩ với dịch vụ "${row.service.name}" sau ngày kết thúc. ` +
+          'Hãy dời lịch hoặc đổi bác sĩ cho các lịch này (hoặc báo khách) trước, hoặc xác nhận vẫn ngừng.',
+        HttpStatus.CONFLICT,
+        affected,
+        'ASSIGNMENT_HAS_UPCOMING_VISITS',
+      );
+    }
+
     if (row.effectiveFrom > today) {
       await this.prisma.dentistService.delete({ where: { id: assignmentId } });
       await this.log('DENTIST_SERVICE_CANCELLED', actor, 'dentist_service', assignmentId, {
         dentistId,
         serviceId: row.serviceId,
+        affectedAppointments: affected.count,
       });
-      return { ...this.formatAssignment(row, today), removed: true };
+      return {
+        ...this.formatAssignment(row, today),
+        removed: true,
+        affectedAppointments: affected.count,
+      };
     }
     if (effectiveTo < row.effectiveFrom) {
       throw new CatalogValidationException('Ngày kết thúc trước ngày bắt đầu phân công');
@@ -513,8 +585,13 @@ export class CatalogService {
       dentistId,
       serviceId: row.serviceId,
       effectiveTo: day(effectiveTo),
+      affectedAppointments: affected.count,
     });
-    return { ...this.formatAssignment(updated, today), removed: false };
+    return {
+      ...this.formatAssignment(updated, today),
+      removed: false,
+      affectedAppointments: affected.count,
+    };
   }
 
   /**

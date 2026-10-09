@@ -399,6 +399,9 @@ export class MedicalRecordsService {
       notes: t.description,
       priceCents: unitPrice,
       unitPrice,
+      serviceId: t.serviceId ?? null,
+      listPrice: t.listPrice === null || t.listPrice === undefined ? null : Number(t.listPrice),
+      priceReason: t.priceReason ?? null,
       quantity,
       lineTotalCents: lineTotal,
       total: lineTotal,
@@ -1077,11 +1080,19 @@ export class MedicalRecordsService {
       });
       const sequence = (maxSeq._max.sequence ?? -1) + 1;
 
-      // D6: a catalogue pick must name an active service; the free-text
-      // procedure/price stay as sent (the form pre-fills them, staff may edit).
+      // D6: a catalogue pick must name an active service, or one booked on
+      // this visit (stopped since: its frozen price still applies, A5-19).
+      // Its price is the one frozen at booking, else the dentist's that day;
+      // charging another needs treatment.price_override and a reason
+      // (decision 3). Free-text lines have no list price.
+      let listPrice: number | null = null;
       if (dto.serviceId) {
         const service = await tx.service.findUnique({ where: { id: dto.serviceId } });
-        if (!service || !service.isActive) {
+        const booked = await tx.appointmentService.findFirst({
+          where: { appointmentId: encounter.appointmentId, serviceId: dto.serviceId },
+          select: { price: true },
+        });
+        if (!service || (!service.isActive && !booked)) {
           throw new BusinessRuleException(
             'Dịch vụ không tồn tại hoặc đã ngừng',
             HttpStatus.BAD_REQUEST,
@@ -1089,6 +1100,10 @@ export class MedicalRecordsService {
             'SERVICE_INACTIVE',
           );
         }
+        listPrice = booked
+          ? Number(booked.price)
+          : await this.assignedPrice(tx, encounter.dentistId, service, encounter.startedAt);
+        this.assertPriceAllowed(actor, listPrice, dto.unitPrice, dto.priceReason);
       }
 
       // A usage pointing at a missing item used to surface as an FK 500.
@@ -1117,6 +1132,8 @@ export class MedicalRecordsService {
             procedure: dto.procedure,
             description: dto.description ?? null,
             unitPrice: dto.unitPrice,
+            listPrice,
+            priceReason: listPrice !== null && dto.unitPrice !== listPrice ? dto.priceReason : null,
             quantity: dto.quantity ?? 1,
             durationMinutes: dto.durationMinutes ?? null,
             toothNumbers: (dto.toothNumbers ?? []) as unknown as Prisma.InputJsonValue,
@@ -1143,7 +1160,15 @@ export class MedicalRecordsService {
           actorUserId: actor.sub,
           targetType: 'encounter',
           targetId: encounterId,
-          metadata: { treatmentId: treatment.id, procedure: dto.procedure },
+          metadata: {
+            treatmentId: treatment.id,
+            procedure: dto.procedure,
+            serviceId: dto.serviceId ?? null,
+            unitPrice: dto.unitPrice,
+            quantity: dto.quantity ?? 1,
+            listPrice,
+            ...(treatment.priceReason && { priceReason: treatment.priceReason }),
+          },
         },
         tx,
       );
@@ -1169,12 +1194,33 @@ export class MedicalRecordsService {
         throw new TreatmentNotInEncounterException();
       }
 
-      return tx.treatment.update({
+      // Decision 3: a new price needs a reason (unless it goes back to the
+      // list price), and one off the list price needs treatment.price_override.
+      const oldPrice = Number(t.unitPrice);
+      const listPrice = t.listPrice == null ? null : Number(t.listPrice);
+      const priceChanged = dto.unitPrice !== undefined && dto.unitPrice !== oldPrice;
+      if (priceChanged) {
+        if (listPrice !== null) {
+          this.assertPriceAllowed(actor, listPrice, dto.unitPrice!, dto.priceReason);
+        } else if (!dto.priceReason || dto.priceReason.length < 3) {
+          throw new BusinessRuleException(
+            'Nhập lý do sửa đơn giá',
+            HttpStatus.BAD_REQUEST,
+            { treatmentId },
+            'TREATMENT_PRICE_REASON_REQUIRED',
+          );
+        }
+      }
+
+      const updated = await tx.treatment.update({
         where: { id: treatmentId },
         data: {
           ...(dto.procedure !== undefined && { procedure: dto.procedure }),
           ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.unitPrice !== undefined && { unitPrice: dto.unitPrice }),
+          ...(priceChanged && {
+            priceReason: dto.unitPrice === listPrice ? null : (dto.priceReason ?? null),
+          }),
           ...(dto.quantity !== undefined && { quantity: dto.quantity }),
           ...(dto.durationMinutes !== undefined && { durationMinutes: dto.durationMinutes }),
           ...(dto.toothNumbers !== undefined && {
@@ -1182,7 +1228,88 @@ export class MedicalRecordsService {
           }),
         },
       });
+
+      const before: Record<string, unknown> = {};
+      const after: Record<string, unknown> = {};
+      const track = (key: string, from: unknown, to: unknown) => {
+        if (to !== undefined && JSON.stringify(from) !== JSON.stringify(to)) {
+          before[key] = from;
+          after[key] = to;
+        }
+      };
+      track('procedure', t.procedure, dto.procedure);
+      track('description', t.description, dto.description);
+      track('unitPrice', oldPrice, dto.unitPrice);
+      track('quantity', t.quantity, dto.quantity);
+      track('toothNumbers', t.toothNumbers, dto.toothNumbers);
+      track('durationMinutes', t.durationMinutes, dto.durationMinutes);
+      if (Object.keys(after).length > 0) {
+        await this.audit.log(
+          {
+            action: 'TREATMENT_UPDATED',
+            actorUserId: actor.sub,
+            targetType: 'encounter',
+            targetId: encounterId,
+            metadata: {
+              treatmentId,
+              before,
+              after,
+              listPrice,
+              ...(priceChanged && dto.priceReason && { priceReason: dto.priceReason }),
+            },
+          },
+          tx,
+        );
+      }
+      return updated;
     });
+  }
+
+  /** The dentist's price for a catalogue service on the visit day (else the base price). */
+  private async assignedPrice(
+    tx: Prisma.TransactionClient,
+    dentistId: string,
+    service: { id: string; basePrice: Prisma.Decimal },
+    visitAt: Date,
+  ): Promise<number> {
+    const day = new Date(`${clinicDateOnly(visitAt)}T00:00:00Z`);
+    const assignment = await tx.dentistService.findFirst({
+      where: {
+        dentistId,
+        serviceId: service.id,
+        effectiveFrom: { lte: day },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
+      },
+      orderBy: { effectiveFrom: 'desc' },
+      select: { price: true },
+    });
+    return Number(assignment?.price ?? service.basePrice);
+  }
+
+  /** Decision 3: off-list price needs treatment.price_override and a reason. */
+  private assertPriceAllowed(
+    actor: JwtPayload,
+    listPrice: number,
+    unitPrice: number,
+    reason: string | undefined,
+  ) {
+    if (unitPrice === listPrice) return;
+    if (!actor.permissions.includes('treatment.price_override')) {
+      throw new BusinessRuleException(
+        `Đơn giá của dịch vụ này là ${new Intl.NumberFormat('vi-VN').format(listPrice)}đ (giá đã chốt). Bạn không có quyền áp giá khác.`,
+        HttpStatus.FORBIDDEN,
+        { listPrice, unitPrice },
+        'TREATMENT_PRICE_OVERRIDE_FORBIDDEN',
+      );
+    }
+    if (!reason || reason.length < 3) {
+      throw new BusinessRuleException(
+        `Đơn giá khác giá đã chốt ${new Intl.NumberFormat('vi-VN').format(listPrice)}đ: nhập lý do.`,
+        HttpStatus.BAD_REQUEST,
+        { listPrice, unitPrice },
+        'TREATMENT_PRICE_REASON_REQUIRED',
+      );
+    }
   }
 
   async deleteTreatment(encounterId: string, treatmentId: string, actor: JwtPayload) {

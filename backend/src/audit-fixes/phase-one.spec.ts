@@ -61,6 +61,7 @@ describe('Phase one audit regressions', () => {
         db as unknown as PrismaService,
         audit as unknown as AuditService,
         {} as ExpenseService,
+        events as unknown as EventEmitter2,
       );
       const response = await new BillingController(billing).byEncounter('other-encounter', actor);
       expect(response.data).toEqual([]);
@@ -72,7 +73,8 @@ describe('Phase one audit regressions', () => {
             encounter: { dentistId: actor.sub },
           }),
         },
-        include: { items: { orderBy: { sequence: 'asc' } } },
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        include: { items: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } } },
       });
     },
   );
@@ -84,6 +86,7 @@ describe('Phase one audit regressions', () => {
       db as unknown as PrismaService,
       audit as unknown as AuditService,
       {} as ExpenseService,
+      events as unknown as EventEmitter2,
     );
     expect((await new BillingController(billing).byEncounter('e', dentist)).data).toEqual([
       invoice,
@@ -270,10 +273,15 @@ describe('Phase one audit regressions', () => {
       id: 't',
       encounterId: 'e',
       deletedAt: null,
+      unitPrice: 100,
+      listPrice: null,
       encounter: { dentistId: dentist.sub },
     });
     db.treatment.update.mockResolvedValue({ id: 't', unitPrice: 123 });
-    expect(await medical.updateTreatment('e', 't', { unitPrice: 123 }, dentist)).toEqual({
+    // A price edit carries its reason (decision 3, round 4).
+    expect(
+      await medical.updateTreatment('e', 't', { unitPrice: 123, priceReason: 'Sửa giá' }, dentist),
+    ).toEqual({
       id: 't',
       unitPrice: 123,
     });

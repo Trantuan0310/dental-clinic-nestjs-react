@@ -1,6 +1,6 @@
 # Phân quyền theo vai trò
 
-Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiều vai trò cùng lúc: ví dụ chủ phòng khám vừa quản lý vừa khám bệnh thì gán cả **Quản trị viên** và **Bác sĩ**. Bảng dưới đây là cấu hình từ migration `027_role_permission_tuning` (và `030_patient_dob_override_permission`) (`backend/prisma/seed.ts` giữ cùng danh sách).
+Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiều vai trò cùng lúc: ví dụ chủ phòng khám vừa quản lý vừa khám bệnh thì gán cả **Quản trị viên** và **Bác sĩ**. Bảng dưới đây là cấu hình từ migration `027_role_permission_tuning` (và `030_patient_dob_override_permission`, `045_invoice_corrections`) (`backend/prisma/seed.ts` giữ cùng danh sách).
 
 | Việc | Quản trị viên | Bác sĩ | Lễ tân |
 |---|:---:|:---:|:---:|
@@ -16,6 +16,12 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Hủy phiên khám tạo nhầm | ✔ | — | — |
 | **Hóa đơn**: tạo, phát hành, thu tiền | ✔ | Xem hóa đơn phiên khám của mình | ✔ |
 | Hủy hóa đơn | ✔ | — | — |
+| Hủy phiếu thu ghi nhầm (`invoice.payment.void`, bắt buộc lý do; không tự hủy phiếu mình thu, trừ khi là người duy nhất có quyền này) | ✔ | — | — |
+| Hoàn tiền cho bệnh nhân (`invoice.refund`, bắt buộc lý do; tính vào ngày hoàn) | ✔ | — | — |
+| Lập lại hóa đơn cho phiên khám có hóa đơn đã hủy (`invoice.reissue`) | ✔ | — | — |
+| Sửa/bỏ dòng hóa đơn nháp (`invoice.item.update`, bắt buộc lý do) | ✔ | — | — |
+| Giảm giá, ghi chú hóa đơn nháp; tạo bù hóa đơn cho phiên đã đóng chưa có hóa đơn | ✔ | — | ✔ |
+| Áp đơn giá thủ thuật khác giá đã chốt khi đặt lịch/giá phân công (`treatment.price_override`, bắt buộc lý do, ghi audit) | ✔ (chỉ có tác dụng khi giữ cả vai trò Bác sĩ) | ✔ phiên khám của mình | — |
 | **Báo cáo**: công nợ (mọi khoản nợ, chia nhóm tuổi nợ) | ✔ | — | ✔ |
 | Doanh thu, chi phí, lợi nhuận, doanh thu theo bác sĩ | ✔ | — | — |
 | Thống kê lịch khám (đến / vắng / hủy / về sớm / vãng lai / online), KPI hôm nay | ✔ toàn phòng khám | ✔ lịch của mình | ✔ toàn phòng khám |

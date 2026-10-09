@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { EncounterStatus } from '@prisma/client';
+import { EncounterStatus, Prisma } from '@prisma/client';
 import { MedicalRecordsService } from './medical-records.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -1610,6 +1610,143 @@ describe('MedicalRecordsService', () => {
     });
   });
 
+  describe('treatment price (decision 3)', () => {
+    const openEncounter = () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
+      (prisma.treatment.create as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        id: 'tr-new',
+        ...data,
+      }));
+      (prisma.service.findUnique as jest.Mock).mockResolvedValue({
+        id: 'svc-1',
+        isActive: true,
+        basePrice: new Prisma.Decimal(350_000),
+      });
+    };
+    const pick = (unitPrice: number, extra: Record<string, unknown> = {}) =>
+      ({ serviceId: 'svc-1', procedure: 'Trám', unitPrice, ...extra }) as any;
+
+    it('defaults to the price frozen at booking and stores it as the list price', async () => {
+      openEncounter();
+      (prisma.appointmentService.findFirst as jest.Mock).mockResolvedValue({
+        price: new Prisma.Decimal(300_000),
+      });
+      await service.createTreatment('enc-1', pick(300_000), dentistActor);
+      expect(prisma.treatment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ listPrice: 300_000, priceReason: null }),
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'TREATMENT_CREATED',
+          metadata: expect.objectContaining({ unitPrice: 300_000, listPrice: 300_000 }),
+        }),
+        prisma,
+      );
+    });
+
+    it("falls back to the dentist's assignment price on the visit day", async () => {
+      openEncounter();
+      (prisma.appointmentService.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.dentistService.findFirst as jest.Mock).mockResolvedValue({
+        price: new Prisma.Decimal(420_000),
+      });
+      await service.createTreatment('enc-1', pick(420_000), dentistActor);
+      expect(prisma.treatment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ listPrice: 420_000 }),
+      });
+    });
+
+    it('another price needs treatment.price_override and a reason', async () => {
+      openEncounter();
+      (prisma.appointmentService.findFirst as jest.Mock).mockResolvedValue({
+        price: new Prisma.Decimal(300_000),
+      });
+      await expect(
+        service.createTreatment('enc-1', pick(3_000_000), dentistActor),
+      ).rejects.toMatchObject({ status: 403 });
+
+      const allowed = {
+        ...dentistActor,
+        permissions: [...dentistActor.permissions, 'treatment.price_override'],
+      };
+      await expect(service.createTreatment('enc-1', pick(250_000), allowed)).rejects.toMatchObject({
+        status: 400,
+      });
+      await service.createTreatment(
+        'enc-1',
+        pick(250_000, { priceReason: 'Răng sữa, làm nhỏ' }),
+        allowed,
+      );
+      expect(prisma.treatment.create).toHaveBeenLastCalledWith({
+        data: expect.objectContaining({
+          unitPrice: 250_000,
+          listPrice: 300_000,
+          priceReason: 'Răng sữa, làm nhỏ',
+        }),
+      });
+    });
+
+    it('accepts a stopped service that was booked on this visit (A5-19)', async () => {
+      openEncounter();
+      (prisma.service.findUnique as jest.Mock).mockResolvedValue({
+        id: 'svc-1',
+        isActive: false,
+        basePrice: new Prisma.Decimal(0),
+      });
+      (prisma.appointmentService.findFirst as jest.Mock).mockResolvedValue({
+        price: new Prisma.Decimal(500_000),
+      });
+      await service.createTreatment('enc-1', pick(500_000), dentistActor);
+      expect(prisma.treatment.create).toHaveBeenCalled();
+
+      (prisma.appointmentService.findFirst as jest.Mock).mockResolvedValue(null);
+      await expect(
+        service.createTreatment('enc-1', pick(500_000), dentistActor),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('a price edit needs a reason and is audited as TREATMENT_UPDATED', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+      );
+      (prisma.treatment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'tr-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        unitPrice: new Prisma.Decimal(200_000),
+        listPrice: null,
+        quantity: 1,
+        procedure: 'Nhổ răng',
+        encounter: { dentistId: 'dentist-1' },
+      });
+      await expect(
+        service.updateTreatment('enc-1', 'tr-1', { unitPrice: 250_000 } as any, dentistActor),
+      ).rejects.toMatchObject({ status: 400 });
+      await service.updateTreatment(
+        'enc-1',
+        'tr-1',
+        { unitPrice: 250_000, quantity: 2, priceReason: 'Răng khó' } as any,
+        dentistActor,
+      );
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'TREATMENT_UPDATED',
+          metadata: expect.objectContaining({
+            before: { unitPrice: 200_000, quantity: 1 },
+            after: { unitPrice: 250_000, quantity: 2 },
+            priceReason: 'Răng khó',
+          }),
+        }),
+        prisma,
+      );
+    });
+  });
+
   describe('treatment DTO limits', () => {
     it('rejects a unit price beyond numeric(12,2) instead of failing with a 500', () => {
       const errs = validateSync(
@@ -1617,11 +1754,15 @@ describe('MedicalRecordsService', () => {
       );
       expect(errs.some(e => e.property === 'unitPrice')).toBe(true);
       const ok = validateSync(
-        plainToInstance(UpdateTreatmentDto, { unitPrice: 9_999_999_999.99, toothNumbers: [55] }),
+        plainToInstance(UpdateTreatmentDto, { unitPrice: 9_999_999_999, toothNumbers: [55] }),
       );
       expect(ok).toHaveLength(0);
       expect(
         validateSync(plainToInstance(UpdateTreatmentDto, { toothNumbers: [99] })),
+      ).not.toHaveLength(0);
+      // VND has no subunit (A2-11).
+      expect(
+        validateSync(plainToInstance(UpdateTreatmentDto, { unitPrice: 350_000.5 })),
       ).not.toHaveLength(0);
     });
 

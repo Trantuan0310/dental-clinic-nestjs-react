@@ -92,10 +92,14 @@ export const catalogApi = {
     );
     return unwrap(data);
   },
-  async endAssignment(dentistId: string, assignmentId: string, effectiveTo?: string) {
-    const { data } = await api.post<{ data: DentistServiceAssignment & { removed: boolean } }>(
+  // `confirm`: end it although visits are booked after that day (the first
+  // try answers 409 ASSIGNMENT_HAS_UPCOMING_VISITS listing them).
+  async endAssignment(dentistId: string, assignmentId: string, effectiveTo?: string, confirm = false) {
+    const { data } = await api.post<{
+      data: DentistServiceAssignment & { removed: boolean; affectedAppointments: number };
+    }>(
       `/dentists/${dentistId}/services/${assignmentId}/end`,
-      effectiveTo ? { effectiveTo } : {},
+      { ...(effectiveTo ? { effectiveTo } : {}), ...(confirm ? { confirm: true } : {}) },
     );
     return unwrap(data);
   },

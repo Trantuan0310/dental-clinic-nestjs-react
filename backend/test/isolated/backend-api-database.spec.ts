@@ -71,7 +71,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
   }
   async function invoiceFor(id: string) {
     for (let i = 0; i < 100; i++) {
-      const invoice = await db.invoice.findUnique({ where: { encounterId: id } });
+      const invoice = await db.invoice.findFirst({ where: { encounterId: id } });
       if (invoice) return invoice;
       await new Promise(resolve => setTimeout(resolve, 30));
     }
@@ -422,7 +422,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
   it('applies decimal invoice discounts and refuses stale versions', async () => {
     const original = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
     await api('put', `/billing/invoices/${invoiceId}/discount`)
-      .send({ discountType: 'PERCENT', discountValue: 10, version: original.version })
+      .send({
+        discountType: 'PERCENT',
+        discountValue: 10,
+        reason: 'Khách quen',
+        version: original.version,
+      })
       .expect(200);
     const discounted = await db.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
     expect(Number(discounted.total)).toBe(315000);

@@ -18,11 +18,19 @@ export interface InvoiceLineItem {
 export interface Payment {
   id: string;
   invoiceId: string;
+  /** Always positive; a REFUND is money handed back (paidAt = refund day). */
   amount: number;
   method: PaymentMethod;
+  kind?: 'PAYMENT' | 'REFUND';
+  /** VOIDED = cancelled as entered by mistake (not counted). */
+  status?: 'COMPLETED' | 'VOIDED';
   note?: string | null;
   paidAt: string;
+  receivedBy?: string;
   receivedByUser?: { fullName: string; email: string } | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  voidedByUser?: { fullName: string } | null;
 }
 
 export interface Invoice {
@@ -38,9 +46,15 @@ export interface Invoice {
   discountType?: 'PERCENT' | 'AMOUNT' | null;
   discountValue?: number | null;
   total: number;
+  /** Net money kept: payments − refunds. */
   paidAmount: number;
+  refundedAmount?: number;
   outstandingAmount: number;
   version: number;
+  encounterId?: string;
+  /** Voided invoice this one re-made, and the invoice that replaced this one. */
+  replaces?: { id: string; code: string } | null;
+  replacedBy?: { id: string; code: string; status: InvoiceStatus } | null;
   items?: InvoiceLineItem[];
   payments?: Payment[];
   notes?: string | null;
@@ -85,6 +99,18 @@ export interface CreateInvoicePayload {
   lineItems: Omit<InvoiceLineItem, 'id' | 'sequence' | 'lineTotal'>[];
   discount?: number;
   notes?: string;
+}
+
+/** A closed encounter without a valid (non-voided) invoice. */
+export interface EncounterMissingInvoice {
+  encounterId: string;
+  closedAt: string | null;
+  patientId: string;
+  patientCode: string;
+  patientName: string;
+  dentistId: string;
+  dentistName: string;
+  voidedInvoice: { id: string; code: string; voidReason: string | null } | null;
 }
 
 export interface CreateAdhocInvoicePayload {
