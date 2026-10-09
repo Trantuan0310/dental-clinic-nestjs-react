@@ -67,7 +67,6 @@ async function openBookingRequestsFor(
         requestedStartAt: true,
         proposedStartAt: true,
       },
-      take: 200,
     })) ?? [];
   return rows
     .filter(r => effectiveDentistId(r) === dentistId && effectiveStartAt(r) >= from)

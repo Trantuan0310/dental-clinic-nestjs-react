@@ -264,6 +264,46 @@ describe('AppointmentsService', () => {
   });
 
   describe('checkIn', () => {
+    beforeEach(() => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+        dentistProfile: {
+          practiceStatus: 'ACTIVE',
+          deletedAt: null,
+          employee: { employmentStatus: 'ACTIVE' },
+        },
+      });
+    });
+
+    it('refuses a check-in into the queue of a dentist on leave (ON_LEAVE)', async () => {
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: AppointmentStatus.CONFIRMED,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        startAt: new Date(Date.now() + 5 * 60_000),
+        endAt: new Date(Date.now() + 35 * 60_000),
+        deletedAt: null,
+      });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+        dentistProfile: {
+          practiceStatus: 'ACTIVE',
+          deletedAt: null,
+          employee: { employmentStatus: 'ON_LEAVE' },
+        },
+      });
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      await expect(service.checkIn('appt-1', false, undefined, actor)).rejects.toThrow(/tạm nghỉ/);
+    });
+
     it('A5-22: refuses a check-in into the queue of a dentist on approved time-off', async () => {
       const existing = {
         id: 'appt-1',
@@ -2844,6 +2884,19 @@ describe('AppointmentsService', () => {
     afterEach(() => jest.useRealTimers());
 
     describe('checkIn', () => {
+      beforeEach(() => {
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+          id: 'dentist-1',
+          status: 'ACTIVE',
+          userRoles: [{ role: { code: 'dentist' } }],
+          dentistProfile: {
+            practiceStatus: 'ACTIVE',
+            deletedAt: null,
+            employee: { employmentStatus: 'ACTIVE' },
+          },
+        });
+      });
+
       it('9:35 for 9:00–9:30: asks for a late check-in reason, offering only exits that work', async () => {
         setNow(at('09:35'));
         (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(visit());

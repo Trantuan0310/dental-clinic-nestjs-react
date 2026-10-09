@@ -1589,6 +1589,17 @@ export class AppointmentsService {
    * clinic) — nobody would call the patient. The visit is moved first.
    */
   private async assertDentistPresent(appt: Appointment, queuedAt: Date | null = null) {
+    // A dentist suspended, on leave or gone keeps their visits on the calendar
+    // (to be moved), but takes no patient into the queue.
+    try {
+      await this.validateDentist(appt.dentistId);
+    } catch (e) {
+      if (!(e instanceof AppointmentNotFoundException)) throw e;
+      throw new DentistAbsentException(
+        `${e.message} — không check-in vào hàng chờ của bác sĩ này. ` +
+          'Hãy "Đổi lịch" sang bác sĩ khác (chọn "Phòng khám dời", không tính lượt) rồi check-in.',
+      );
+    }
     // An early check-in (FA, A3-07) lines up now: the dentist must be in now too.
     const spans: Array<[Date, Date]> = [[appt.startAt, appt.endAt]];
     if (queuedAt) spans.push([queuedAt, new Date(queuedAt.getTime() + 60_000)]);
@@ -3429,7 +3440,9 @@ export class AppointmentsService {
     const affectedAppointments =
       (await tx.appointment.findMany({
         where: {
-          startAt: { gte: start, lt: end },
+          // Overlap, not start: a 13:30–14:30 visit is hit by a 14:00 closure.
+          startAt: { lt: end },
+          endAt: { gt: start },
           deletedAt: null,
           status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
         },
