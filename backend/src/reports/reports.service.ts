@@ -777,7 +777,11 @@ export class ReportsService {
     }));
   }
 
-  /** Top procedures by revenue AFTER the invoice discount (pro rata per line). */
+  /**
+   * Top procedures by revenue AFTER the invoice discount (pro rata per line),
+   * net of refunds dated in range: each issue/refund movement of an invoice
+   * is spread over its lines by their share of the subtotal.
+   */
   async revenueByProcedure(query: { from?: string; to?: string; limit?: number }) {
     const { fromDate, toDate } = this.resolveRange(query.from, query.to);
     const limit = query.limit ?? 10;
@@ -786,14 +790,13 @@ export class ReportsService {
     >`
       SELECT t."procedure" AS procedure,
              COALESCE(SUM(
-               ii."line_total" * CASE WHEN i."subtotal" > 0 THEN i."total" / i."subtotal" ELSE 1 END
+               r.amount * ii."line_total" / NULLIF(i."subtotal", 0)
              ), 0)::float AS total,
-             COUNT(*) AS count
-      FROM "invoice_items" ii
-      JOIN "invoices" i ON i.id = ii."invoice_id"
+             SUM(r.cnt) AS count
+      FROM ${revenueRowsSql(fromDate, toDate)} r
+      JOIN "invoices" i ON i.id = r.invoice_id
+      JOIN "invoice_items" ii ON ii."invoice_id" = i.id AND ii."deleted_at" IS NULL
       JOIN "treatments" t ON t.id = ii."treatment_id"
-      WHERE ii."deleted_at" IS NULL
-        AND ${revenueInvoiceSql('i', fromDate, toDate)}
       GROUP BY 1
       ORDER BY total DESC
       LIMIT ${limit}

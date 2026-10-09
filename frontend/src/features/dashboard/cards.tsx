@@ -244,7 +244,10 @@ export function CustomerTypeCard({ rows: data, isLoading, isError, onRetry }: Cu
     );
   }
 
-  if (totalRevenue === 0) {
+  // Net of refunds the total can be 0 (or below) with invoices issued.
+  const invoiceCount = data.reduce((acc, d) => acc + (d.count ?? 0), 0);
+  const showPie = totalRevenue > 0 && data.every((d) => d.revenue >= 0);
+  if (invoiceCount === 0 && totalRevenue === 0) {
     return (
       <Card title="Doanh số theo loại khách" description="Phân bổ doanh thu giữa khách mới và quay lại">
         <EmptyState
@@ -270,6 +273,7 @@ export function CustomerTypeCard({ rows: data, isLoading, isError, onRetry }: Cu
       description="Khách mới = lần đầu đến khám trong kỳ; tính trên hóa đơn đã phát hành"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
+        {showPie ? (
         <div className="relative mx-auto h-44 w-full max-w-[200px] md:mx-0 md:w-5/12 md:max-w-none">
           <ResponsiveContainer>
             <PieChart>
@@ -289,6 +293,12 @@ export function CustomerTypeCard({ rows: data, isLoading, isError, onRetry }: Cu
             <span className="text-base font-bold text-gray-900">{formatCurrency(totalRevenue)}</span>
           </div>
         </div>
+        ) : (
+          <div className="text-center md:w-5/12">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Tổng (sau hoàn tiền)</p>
+            <p className="text-base font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
+          </div>
+        )}
         <div className="flex-1 space-y-2">
           {data.map((d) => (
             <div key={d.type} className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2">
