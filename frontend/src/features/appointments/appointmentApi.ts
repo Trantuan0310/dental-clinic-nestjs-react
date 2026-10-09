@@ -151,6 +151,7 @@ export type PrismaAppointmentRow = {
     code?: string;
     fullName?: string;
     primaryPhone?: string | null;
+    deletedAt?: Date | string | null;
   } | null;
   dentist?: { id: string; fullName?: string } | null;
   encounter?: { id: string } | null;
@@ -175,6 +176,7 @@ export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
     patientCode: patient.code ?? '',
     patientName: patient.fullName ?? '',
     patientPhone: patient.primaryPhone ?? null,
+    patientDeleted: 'deletedAt' in patient && !!patient.deletedAt,
     dentistId: raw.dentistId,
     dentistName: dentist.fullName ?? '',
     startsAt: startIso,

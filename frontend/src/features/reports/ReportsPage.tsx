@@ -1,11 +1,11 @@
 /**
- * ReportsPage — Revenue Reports with proper backend data shape alignment.
- * Backend returns: totalInvoiced, totalCollected, byMonth (not totalRevenue/totalPaid/daily)
+ * ReportsPage — revenue (issued invoices by issue date), collected (payments
+ * by payment date, net of refunds) and every open balance by age.
+ * Same definitions as the Dashboard (backend reports/revenue-basis.ts).
  */
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, subDays } from 'date-fns';
 import {
   Receipt,
   TrendingUp,
@@ -17,6 +17,9 @@ import { billingApi } from '@/features/billing/billingApi';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Card, Alert } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
+import { exportCsv } from '@/lib/csv';
+import { clinicParts, clinicToday } from '@/lib/clinicTime';
+import type { OutstandingAgingEntry, OutstandingBucket } from '@/types/billing';
 import {
   LineChart,
   Line,
@@ -42,12 +45,28 @@ const tooltipFormatter = ((value: unknown, name: unknown) => {
 }) as TooltipFormatter;
 
 const paymentMethodLabels: Record<string, string> = {
-  cash: 'Tiền mặt',
-  bank_transfer: 'Chuyển khoản',
-  card: 'Thẻ',
-  insurance: 'BHYT',
-  other: 'Khác',
+  CASH: 'Tiền mặt',
+  BANK_TRANSFER: 'Chuyển khoản',
 };
+
+/** "yyyy-MM-dd" → "dd/MM" without going through the browser's time zone. */
+const dayLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+/** Clinic calendar date of an instant, as dd/MM/yyyy. */
+const clinicDateLabel = (value: string | null) => {
+  if (!value) return '—';
+  const d = clinicParts(value).date;
+  return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+};
+const daysBefore = (iso: string, days: number) =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+
+const AGING_COLUMNS: Array<{ bucket: OutstandingBucket; label: string; color: string }> = [
+  { bucket: 'D90_PLUS', label: 'Trên 90 ngày', color: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' },
+  { bucket: 'D61_90', label: '61–90 ngày', color: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300' },
+  { bucket: 'D31_60', label: '31–60 ngày', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+  { bucket: 'D8_30', label: '8–30 ngày', color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' },
+  { bucket: 'D0_7', label: 'Dưới 7 ngày', color: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' },
+];
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Nháp',
@@ -71,29 +90,10 @@ function ChartErrorNotice({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function exportToCSV<T extends Record<string, unknown>>(data: T[], filename: string) {
-  if (!data.length) return;
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row =>
-    headers.map(h => {
-      const val = row[h];
-      const str = val === null || val === undefined ? '' : String(val);
-      return str.includes(',') ? `"${str}"` : str;
-    }).join(',')
-  );
-  const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${filename}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 export default function ReportsPage() {
-  const [fromDate, setFromDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [toDate, setToDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  // Clinic calendar, not the workstation's clock.
+  const [fromDate, setFromDate] = useState(() => daysBefore(clinicToday(), 30));
+  const [toDate, setToDate] = useState(() => clinicToday());
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -106,17 +106,16 @@ export default function ReportsPage() {
 
   const colors = isDark ? CHART_COLORS_DARK : CHART_COLORS_LIGHT;
   // ISO 'yyyy-MM-dd' strings compare correctly lexicographically.
-  const isDateRangeValid = fromDate <= toDate;
+  const isOrderValid = fromDate <= toDate;
+  // The API reads at most 366 days per report.
+  const isSpanValid = Date.parse(toDate) - Date.parse(fromDate) <= 365 * 86_400_000;
+  const isDateRangeValid = isOrderValid && isSpanValid;
 
-  // report.read is only a nav-gating alias — the actual endpoints below
-  // each check a canonical permission. Route guard alone used to let every
-  // query here fire unconditionally, so a role holding report.read without
-  // the canonical grants (not possible with the 3 seeded roles today, but
-  // not guarded against either) would 403 on every widget with no graceful
-  // handling, unlike Dashboard which gates each section this way already.
-  const hasAnyPermission = useAuthStore((s) => s.hasAnyPermission);
-  const canSeeRevenue = hasAnyPermission(['report.revenue.read', 'report.read']);
-  const canSeeOutstanding = hasAnyPermission(['report.outstanding.read', 'report.read']);
+  // report.read only opens the menu; the API checks the canonical codes
+  // (A6-25), so each section is gated by the code its endpoint needs.
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canSeeRevenue = hasPermission('report.revenue.read');
+  const canSeeOutstanding = hasPermission('report.outstanding.read');
 
   // Main revenue report
   const {
@@ -169,16 +168,18 @@ export default function ReportsPage() {
     isError: outstandingError,
     refetch: refetchOutstanding,
   } = useQuery({
+    // Every open balance (A6-09): the buckets below used to be empty except
+    // ">90 days" because only 90-day-old debt was requested.
     queryKey: ['outstanding-report'],
-    queryFn: () => billingApi.getOutstandingReport(90),
+    queryFn: () => billingApi.getOutstandingReport(),
     enabled: canSeeOutstanding,
   });
 
   // Chart data from daily revenue
   const dailyChartData = (dailyData ?? []).map(d => ({
-    date: format(new Date(d.date), 'dd/MM'),
+    date: dayLabel(d.date),
     revenue: d.revenue / 1_000_000, // Millions VND
-    count: d.count,
+    count: d.invoiceCount,
   }));
 
   // Chart data from monthly revenue in report
@@ -193,15 +194,14 @@ export default function ReportsPage() {
     name: d.dentistName.replace(/^BS\.\s*/i, ''),
     revenue: d.revenue / 1_000_000,
     paid: d.paid / 1_000_000,
-    percent: d.count,
+    count: d.count,
   }));
 
-  // Revenue by payment method chart data
-  const totalRevenue = report?.totalInvoiced ?? 0;
+  // Collected by payment method (net of refunds; shares of what was collected)
   const paymentChartData = (report?.byPaymentMethod ?? []).map(m => ({
     method: paymentMethodLabels[m.method] ?? m.method,
     amount: m.amount,
-    percent: totalRevenue > 0 ? (m.amount / totalRevenue) * 100 : 0,
+    percent: m.sharePct,
     count: m.count,
   }));
 
@@ -221,34 +221,33 @@ export default function ReportsPage() {
   }));
 
   const outstandingList = outstandingData?.data ?? [];
+  // Oldest first: the bucket comes from the backend (clinic days).
+  const sortedOutstanding = [...outstandingList].sort((a, b) => b.daysOld - a.daysOld);
+  const byBucket = (bucket: OutstandingBucket) => outstandingList.filter(i => i.bucket === bucket);
 
-  const outstandingByDays = {
-    overdue90: outstandingList.filter(i => i.daysOld > 90),
-    overdue60: outstandingList.filter(i => i.daysOld > 60 && i.daysOld <= 90),
-    overdue30: outstandingList.filter(i => i.daysOld > 30 && i.daysOld <= 60),
-    overdue7: outstandingList.filter(i => i.daysOld > 7 && i.daysOld <= 30),
-    current: outstandingList.filter(i => i.daysOld <= 7),
-  };
-
+  // Shared exporter: UTF-8 BOM + formula neutralizing (A6-15).
   const handleExportRevenue = () => {
-    const exportData = (dailyData ?? []).map(d => ({
-      date: d.date,
-      revenue: d.revenue,
-      invoice_count: d.count,
-    }));
-    exportToCSV(exportData, 'revenue_report');
+    exportCsv(`doanh-thu_${fromDate}_${toDate}`, dailyData ?? [], [
+      { header: 'Ngày phát hành', accessor: d => d.date },
+      { header: 'Doanh thu', accessor: d => d.revenue },
+      { header: 'Số hóa đơn', accessor: d => d.invoiceCount },
+    ]);
   };
 
   const handleExportOutstanding = () => {
-    const exportData = outstandingList.map(i => ({
-      code: i.code,
-      patient_name: i.patient.fullName,
-      patient_code: i.patient.code,
-      outstanding: i.outstanding,
-      issued_at: i.issuedAt,
-      days_old: i.daysOld,
-    }));
-    exportToCSV(exportData, 'outstanding_report');
+    exportCsv<OutstandingAgingEntry>(`cong-no_${clinicToday()}`, sortedOutstanding, [
+      { header: 'Mã hóa đơn', accessor: i => i.code },
+      { header: 'Bệnh nhân', accessor: i => i.patient.fullName },
+      { header: 'Mã BN', accessor: i => i.patient.code },
+      { header: 'SĐT', accessor: i => i.patient.phone ?? '' },
+      { header: 'Ngày khám', accessor: i => clinicDateLabel(i.visitDate) },
+      { header: 'Bác sĩ', accessor: i => i.dentistName ?? '' },
+      { header: 'Tổng hóa đơn', accessor: i => i.total },
+      { header: 'Còn nợ', accessor: i => i.outstanding },
+      { header: 'Ngày phát hành', accessor: i => clinicDateLabel(i.issuedAt) },
+      { header: 'Số ngày nợ', accessor: i => i.daysOld },
+      { header: 'Nhóm tuổi nợ', accessor: i => i.bucketLabel },
+    ]);
   };
 
   const gridColor = isDark ? '#374151' : '#E5E7EB';
@@ -261,18 +260,23 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Báo cáo doanh thu</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Thống kê doanh thu, công nợ và biến động tồn kho
+            Doanh thu tính theo <strong>ngày phát hành hóa đơn</strong> (không gồm hóa đơn nháp, đã hủy).
+            Đã thu tính theo <strong>ngày thu</strong>, đã trừ tiền hoàn.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportRevenue}>
-            <Download className="h-4 w-4" />
-            Xuất doanh thu
-          </Button>
-          <Button variant="outline" onClick={handleExportOutstanding}>
-            <Download className="h-4 w-4" />
-            Xuất công nợ
-          </Button>
+          {canSeeRevenue && (
+            <Button variant="outline" onClick={handleExportRevenue} disabled={!dailyData?.length}>
+              <Download className="h-4 w-4" />
+              Xuất doanh thu
+            </Button>
+          )}
+          {canSeeOutstanding && (
+            <Button variant="outline" onClick={handleExportOutstanding} disabled={!outstandingList.length}>
+              <Download className="h-4 w-4" />
+              Xuất công nợ
+            </Button>
+          )}
         </div>
       </div>
 
@@ -306,7 +310,9 @@ export default function ReportsPage() {
         </div>
         {!isDateRangeValid && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-            "Từ ngày" phải trước hoặc bằng "Đến ngày".
+            {isOrderValid
+              ? 'Khoảng thời gian tối đa 366 ngày. Hãy chọn khoảng ngắn hơn hoặc xem từng năm.'
+              : '"Từ ngày" phải trước hoặc bằng "Đến ngày".'}
           </p>
         )}
       </Card>
@@ -345,7 +351,7 @@ export default function ReportsPage() {
               <Receipt className="h-6 w-6 text-brand-600 dark:text-brand-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Tổng doanh thu</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Doanh thu (theo ngày phát hành)</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {reportLoading ? '—' : formatCurrency(report?.totalInvoiced ?? 0)}
               </p>
@@ -359,10 +365,13 @@ export default function ReportsPage() {
               <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Đã thu</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Đã thu (theo ngày thu)</p>
               <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
                 {reportLoading ? '—' : formatCurrency(report?.totalCollected ?? 0)}
               </p>
+              {!!report?.totalRefunded && (
+                <p className="text-xs text-gray-500">Đã trừ hoàn tiền {formatCurrency(report.totalRefunded)}</p>
+              )}
             </div>
           </div>
         </Card>
@@ -373,7 +382,7 @@ export default function ReportsPage() {
               <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Còn nợ</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Còn nợ (của hóa đơn trong kỳ)</p>
               <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
                 {reportLoading ? '—' : formatCurrency(report?.totalOutstanding ?? 0)}
               </p>
@@ -387,7 +396,7 @@ export default function ReportsPage() {
               <Receipt className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Số hóa đơn</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Số hóa đơn đã phát hành</p>
               <p className="text-2xl font-semibold text-gray-900 dark:text-white">
                 {reportLoading ? '—' : (report?.invoiceCount ?? 0).toLocaleString()}
               </p>
@@ -397,7 +406,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Revenue by Status */}
-      {report?.byStatus && report.byStatus.length > 0 && (
+      {report && (report.byStatus.length > 0 || report.excluded.draft.count + report.excluded.voided.count > 0) && (
         <Card title="Doanh thu theo trạng thái">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
             {report.byStatus.map((s) => (
@@ -407,6 +416,16 @@ export default function ReportsPage() {
                 <p className="text-xs text-gray-400">{s.count} hóa đơn</p>
               </div>
             ))}
+            {/* Shown apart, never added to the totals above. */}
+            <div className="rounded-lg border border-dashed border-gray-300 p-3 dark:border-gray-600">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Không tính vào doanh thu</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Nháp: {report.excluded.draft.count} ({formatCurrency(report.excluded.draft.total)})
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Đã hủy: {report.excluded.voided.count} ({formatCurrency(report.excluded.voided.total)})
+              </p>
+            </div>
           </div>
         </Card>
       )}
@@ -414,7 +433,7 @@ export default function ReportsPage() {
       {/* Charts Row 1 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Daily Revenue Chart */}
-        <Card title="Doanh thu theo ngày">
+        <Card title="Doanh thu theo ngày phát hành">
           <div className="h-64">
             {dailyError ? (
               <ChartErrorNotice onRetry={() => refetchDaily()} />
@@ -452,8 +471,8 @@ export default function ReportsPage() {
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axisColor} />
                 <YAxis tick={{ fontSize: 12 }} stroke={axisColor} tickFormatter={(v) => `${v}M`} />
                 <Tooltip formatter={tooltipFormatter} />
-                <Bar dataKey="revenue" fill={colors[0]} name="Tổng" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="collected" fill={colors[2]} name="Đã thu" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" fill={colors[0]} name="Doanh thu" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="collected" fill={colors[2]} name="Đã thu (theo ngày thu)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -472,13 +491,14 @@ export default function ReportsPage() {
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
                 <Tooltip formatter={tooltipFormatter} />
                 <Bar dataKey="revenue" fill={colors[0]} name="Doanh thu" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="paid" fill={colors[2]} name="Đã thu" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
         {/* Revenue by Procedure */}
-        <Card title="Doanh thu theo dịch vụ (Top 10)">
+        <Card title="Doanh thu theo dịch vụ (Top 10, sau giảm giá)">
           <div className="h-64">
             {byProcedureError ? (
               <ChartErrorNotice onRetry={() => refetchByProcedure()} />
@@ -498,7 +518,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Revenue by Payment Method */}
-      <Card title="Doanh thu theo phương thức thanh toán">
+      <Card title="Đã thu theo phương thức thanh toán (trừ tiền hoàn)">
         <div className="space-y-3">
           {paymentChartData.map((method) => (
             <div key={method.method} className="flex items-center gap-4">
@@ -561,25 +581,22 @@ export default function ReportsPage() {
       {canSeeOutstanding && (
       <Card
         title="Báo cáo công nợ theo thời gian"
-        description={`${outstandingList.length} hóa đơn chưa thanh toán`}
+        description={`${outstandingList.length} hóa đơn còn nợ (tính đến hôm nay, mọi thời điểm phát hành)`}
       >
         {/* Aging summary */}
         <div className="grid grid-cols-5 gap-3 mb-6">
-          {[
-            { label: 'Quá hạn > 90 ngày', items: outstandingByDays.overdue90, color: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' },
-            { label: '61-90 ngày', items: outstandingByDays.overdue60, color: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300' },
-            { label: '31-60 ngày', items: outstandingByDays.overdue30, color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
-            { label: '8-30 ngày', items: outstandingByDays.overdue7, color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' },
-            { label: 'Dưới 7 ngày', items: outstandingByDays.current, color: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' },
-          ].map(({ label, items, color }) => (
-            <div key={label} className={`rounded-lg p-3 ${color}`}>
-              <p className="text-xs font-medium">{label}</p>
-              <p className="text-lg font-semibold">{items.length}</p>
-              <p className="text-xs">
-                {formatCurrency(items.reduce((s, i) => s + i.outstanding, 0))}
-              </p>
-            </div>
-          ))}
+          {AGING_COLUMNS.map(({ bucket, label, color }) => {
+            const items = byBucket(bucket);
+            return (
+              <div key={bucket} className={`rounded-lg p-3 ${color}`}>
+                <p className="text-xs font-medium">{label}</p>
+                <p className="text-lg font-semibold">{items.length}</p>
+                <p className="text-xs">
+                  {formatCurrency(items.reduce((s, i) => s + i.outstanding, 0))}
+                </p>
+              </div>
+            );
+          })}
         </div>
 
         {/* Outstanding table */}
@@ -590,24 +607,34 @@ export default function ReportsPage() {
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Mã hóa đơn</th>
                   <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Bệnh nhân</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">SĐT</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Ngày khám</th>
                   <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Còn nợ</th>
                   <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Ngày phát hành</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Số ngày quá hạn</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Số ngày nợ</th>
                 </tr>
               </thead>
               <tbody>
-                {outstandingList.slice(0, 50).map((item) => (
+                {sortedOutstanding.slice(0, 50).map((item) => (
                   <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="py-2 px-3 font-mono text-gray-900 dark:text-white">{item.code}</td>
                     <td className="py-2 px-3 text-gray-700 dark:text-gray-300">
                       {item.patient.fullName}
                       <span className="ml-2 text-xs text-gray-400">({item.patient.code})</span>
                     </td>
+                    <td className="py-2 px-3 text-gray-700 dark:text-gray-300">
+                      {item.patient.phone ? (
+                        <a href={`tel:${item.patient.phone}`} className="hover:underline">{item.patient.phone}</a>
+                      ) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-center text-gray-500 dark:text-gray-400">
+                      {clinicDateLabel(item.visitDate)}
+                    </td>
                     <td className="py-2 px-3 text-right font-medium text-amber-600 dark:text-amber-400">
                       {formatCurrency(item.outstanding)}
                     </td>
                     <td className="py-2 px-3 text-center text-gray-500 dark:text-gray-400">
-                      {item.issuedAt ? format(new Date(item.issuedAt), 'dd/MM/yyyy') : '—'}
+                      {clinicDateLabel(item.issuedAt)}
                     </td>
                     <td className={`py-2 px-3 text-right ${
                       item.daysOld > 90 ? 'text-red-600 dark:text-red-400' :

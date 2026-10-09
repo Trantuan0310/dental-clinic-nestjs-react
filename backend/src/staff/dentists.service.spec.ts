@@ -175,6 +175,33 @@ describe('DentistsService', () => {
     });
   });
 
+  describe('overview — upcoming patients (A6-21)', () => {
+    beforeEach(() => {
+      prisma.workingSchedule.findMany.mockResolvedValue([]);
+      prisma.appointment.findMany.mockResolvedValue([{ id: 'a-1' }]);
+      prisma.dentistService.count.mockResolvedValue(0);
+    });
+
+    it("hides another dentist's upcoming patients from a row-scoped dentist", async () => {
+      const other = { sub: 'dentist-2', email: 'd2@x', permissions: ['appointment.read.own'] };
+      const { upcomingAppointments } = await service.overview('user-9', other);
+      expect(upcomingAppointments).toBeNull();
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('shows them to the dentist themself and to front desk, without deleted bookings', async () => {
+      const self = { sub: 'user-9', email: 'd@x', permissions: ['appointment.read.own'] };
+      expect((await service.overview('user-9', self)).upcomingAppointments).toEqual([
+        { id: 'a-1' },
+      ]);
+      const desk = { sub: 'r-1', email: 'r@x', permissions: ['appointment.read.any'] };
+      expect((await service.overview('user-9', desk)).upcomingAppointments).toEqual([
+        { id: 'a-1' },
+      ]);
+      expect(prisma.appointment.findMany.mock.calls[0][0].where.deletedAt).toBeNull();
+    });
+  });
+
   describe('overview — readiness checklist', () => {
     it('reports what keeps a new dentist out of the booking screens', async () => {
       prisma.dentistProfile.findFirst.mockResolvedValue(

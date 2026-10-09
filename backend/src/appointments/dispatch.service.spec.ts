@@ -5,6 +5,7 @@ import { adminPayload } from '../../test/helpers';
 import { clinicDateOnly } from '../common/date-range.util';
 
 const appointmentsMock = () => ({
+  appointmentScope: jest.fn().mockReturnValue('any'),
   validateDentist: jest.fn().mockResolvedValue({}),
   planVisit: jest.fn().mockResolvedValue(null),
   ensureSlotAvailable: jest.fn().mockResolvedValue(undefined),

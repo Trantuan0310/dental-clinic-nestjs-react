@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
+import { assertClinicWide } from '../common/row-scope';
 import {
   AcceptBookingProposalDto,
   BookingArrivedDto,
@@ -172,7 +173,9 @@ export class BookingRequestsController {
   // day, dentist away, mail error): the front desk calls those patients.
   @Get('reminder-issues')
   @RequirePermissions('booking_request.read')
-  async reminderIssues() {
+  async reminderIssues(@User() actor: JwtPayload) {
+    // Lists patients' names and phones across every dentist's visits.
+    assertClinicWide(actor, 'patient', 'appointment');
     return { data: await this.notices.reminderIssues() };
   }
   @Get(':id/dentists')
@@ -182,13 +185,16 @@ export class BookingRequestsController {
   }
   @Get(':id/patient-matches')
   @RequirePermissions('booking_request.read')
-  async matches(@Param('id', ParseUUIDPipe) id: string) {
+  async matches(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    // Lists existing patient records: clinic-wide patient scope only (A6-19).
+    assertClinicWide(actor, 'patient');
     return { data: await this.booking.patientMatches(id) };
   }
   // Other open requests and upcoming visits of the same phone or person.
   @Get(':id/related')
   @RequirePermissions('booking_request.read')
-  async related(@Param('id', ParseUUIDPipe) id: string) {
+  async related(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    assertClinicWide(actor, 'patient', 'appointment');
     return { data: await this.booking.related(id) };
   }
   @Get(':id')
@@ -264,6 +270,7 @@ export class BookingRequestsController {
     @Body() dto: BookingArrivedDto,
     @User() actor: JwtPayload,
   ) {
+    assertClinicWide(actor, 'patient', 'appointment');
     return this.booking.arrived(id, dto, actor);
   }
   // Correct a mistyped phone, email or name (audited with the reason).
@@ -274,6 +281,7 @@ export class BookingRequestsController {
     @Body() dto: UpdateBookingContactDto,
     @User() actor: JwtPayload,
   ) {
+    assertClinicWide(actor, 'patient', 'appointment');
     return this.booking.updateContact(id, dto, actor);
   }
   @Post(':id/resend-link')
@@ -310,6 +318,8 @@ export class BookingRequestsController {
     @Body() body: ConfirmBookingRequestDto,
     @User() actor: JwtPayload,
   ) {
+    // Picks or creates a patient record and books any dentist's calendar.
+    assertClinicWide(actor, 'patient', 'appointment');
     return this.booking.confirm(id, actor, body ?? {});
   }
 }

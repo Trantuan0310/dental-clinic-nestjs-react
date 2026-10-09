@@ -45,6 +45,8 @@ export interface Appointment {
   patientCode: string;
   patientName: string;
   patientPhone?: string | null;
+  /** The patient record was deleted (merged/removed); history kept (A6-31). */
+  patientDeleted?: boolean;
   dentistId: string;
   dentistName: string;
   startsAt: string;

@@ -41,21 +41,23 @@ import { formatCurrency, formatNumber } from '@/lib/format';
 import {
   ACCENT_AMBER,
   RANGE_DESCRIPTIONS,
+  RANGE_TITLES,
   SOURCE_COLORS,
   TEAL,
   TEAL_DARK,
   TEAL_LIGHT,
-  buildCustomerTypeSplit,
   formatDayLabel,
   formatMonthLabel,
   vndCompact,
   type AppointmentPoint,
+  type AppointmentStats,
   type CustomerType,
   type DailyRevenuePoint,
   type DashboardKpis,
   type FinanceSummary,
   type MonthlyRevenuePoint,
   type OutstandingSummary,
+  type RevenueByCustomerType,
   type RevenueByDentistRow,
   type RevenueByProcedure,
   type RevenueBySource,
@@ -153,7 +155,7 @@ export function KpiRow({ kpis, range, isLoading, isError, onRetry }: KpiRowProps
               <Tooltip
                 label={
                   <span>
-                    Bệnh nhân có lịch hẹn đầu tiên trong khoảng thời gian đã chọn.
+                    Bệnh nhân lần đầu đến khám (đã check-in) trong khoảng thời gian đã chọn.
                   </span>
                 }
               >
@@ -164,7 +166,7 @@ export function KpiRow({ kpis, range, isLoading, isError, onRetry }: KpiRowProps
               <Tooltip
                 label={
                   <span>
-                    Bệnh nhân đã có lịch hẹn trước khoảng thời gian đang xem.
+                    Bệnh nhân đã từng đến khám trước khoảng thời gian đang xem.
                   </span>
                 }
               >
@@ -179,7 +181,7 @@ export function KpiRow({ kpis, range, isLoading, isError, onRetry }: KpiRowProps
         deltaLabel={comparisonLabel}
       />
       <KpiCard
-        label="Tổng lịch hẹn"
+        label="Lịch hẹn (không tính lịch hủy)"
         value={formatNumber(kpis.appointments.total)}
         delta={kpis.appointments.pctChange}
         icon={<Calendar className="h-5 w-5" />}
@@ -214,26 +216,14 @@ export function KpiRow({ kpis, range, isLoading, isError, onRetry }: KpiRowProps
 // -----------------------------------------------------------------------------
 
 interface CustomerTypeCardProps {
-  rows: RevenueByDentistRow[];
-  patientNew: number;
-  patientReturning: number;
+  /** Real split from the backend (A6-13), no longer pro-rated by head count. */
+  rows: RevenueByCustomerType[];
   isLoading: boolean;
   isError?: boolean;
   onRetry?: () => void;
 }
 
-export function CustomerTypeCard({
-  rows,
-  patientNew,
-  patientReturning,
-  isLoading,
-  isError,
-  onRetry,
-}: CustomerTypeCardProps) {
-  const data = useMemo(
-    () => buildCustomerTypeSplit(rows, patientNew, patientReturning),
-    [rows, patientNew, patientReturning],
-  );
+export function CustomerTypeCard({ rows: data, isLoading, isError, onRetry }: CustomerTypeCardProps) {
   const totalRevenue = data.reduce((acc, d) => acc + d.revenue, 0);
   const labels: Record<CustomerType, string> = { NEW: 'Khách mới', RETURNING: 'Khách cũ' };
   const colors: Record<CustomerType, string> = { NEW: TEAL, RETURNING: TEAL_LIGHT };
@@ -254,7 +244,10 @@ export function CustomerTypeCard({
     );
   }
 
-  if (totalRevenue === 0) {
+  // Net of refunds the total can be 0 (or below) with invoices issued.
+  const invoiceCount = data.reduce((acc, d) => acc + (d.count ?? 0), 0);
+  const showPie = totalRevenue > 0 && data.every((d) => d.revenue >= 0);
+  if (invoiceCount === 0 && totalRevenue === 0) {
     return (
       <Card title="Doanh số theo loại khách" description="Phân bổ doanh thu giữa khách mới và quay lại">
         <EmptyState
@@ -277,9 +270,10 @@ export function CustomerTypeCard({
   return (
     <Card
       title="Doanh số theo loại khách"
-      description="Phân bổ doanh thu giữa khách mới và quay lại"
+      description="Khách mới = lần đầu đến khám trong kỳ; tính trên hóa đơn đã phát hành"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
+        {showPie ? (
         <div className="relative mx-auto h-44 w-full max-w-[200px] md:mx-0 md:w-5/12 md:max-w-none">
           <ResponsiveContainer>
             <PieChart>
@@ -299,6 +293,12 @@ export function CustomerTypeCard({
             <span className="text-base font-bold text-gray-900">{formatCurrency(totalRevenue)}</span>
           </div>
         </div>
+        ) : (
+          <div className="text-center md:w-5/12">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Tổng (sau hoàn tiền)</p>
+            <p className="text-base font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
+          </div>
+        )}
         <div className="flex-1 space-y-2">
           {data.map((d) => (
             <div key={d.type} className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2">
@@ -308,7 +308,9 @@ export function CustomerTypeCard({
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-gray-900">{formatCurrency(d.revenue)}</p>
-                <p className="text-xs text-gray-500">{d.percentage}%</p>
+                <p className="text-xs text-gray-500">
+                  {d.percentage}% · {d.count} hóa đơn
+                </p>
               </div>
             </div>
           ))}
@@ -643,12 +645,16 @@ export function DentistRankingCard({ rows, isLoading, isError, onRetry }: Dentis
 
 interface DailyChartCardProps {
   rows: DailyRevenuePoint[];
+  range: TimeRange;
   isLoading: boolean;
   isError?: boolean;
   onRetry?: () => void;
 }
 
-export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChartCardProps) {
+export function DailyChartCard({ rows, range, isLoading, isError, onRetry }: DailyChartCardProps) {
+  // Title follows the selected range (A6-18), it used to always say 15 days.
+  const title = `Doanh số theo ngày — ${RANGE_TITLES[range]}`;
+  const description = 'Theo ngày phát hành hóa đơn; số hóa đơn đã phát hành mỗi ngày';
   const data = useMemo(
     () => rows.map((r) => ({ ...r, label: formatDayLabel(r.date), revenueM: r.revenue / 1_000_000 })),
     [rows],
@@ -656,7 +662,7 @@ export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChart
 
   if (isLoading) {
     return (
-      <Card title="Thống kê lịch sử 15 ngày gần nhất" description="Doanh số và số phiếu khám theo ngày">
+      <Card title={title} description={description}>
         <CardSkeleton />
       </Card>
     );
@@ -664,7 +670,7 @@ export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChart
 
   if (isError) {
     return (
-      <Card title="Thống kê lịch sử 15 ngày gần nhất" description="Doanh số và số phiếu khám theo ngày">
+      <Card title={title} description={description}>
         <CardErrorState onRetry={onRetry} />
       </Card>
     );
@@ -672,10 +678,10 @@ export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChart
 
   if (rows.length === 0) {
     return (
-      <Card title="Thống kê lịch sử 15 ngày gần nhất" description="Doanh số và số phiếu khám theo ngày">
+      <Card title={title} description={description}>
         <EmptyState
           icon={<BarChart3 className="h-10 w-10" />}
-          title="Chưa có dữ liệu 15 ngày qua"
+          title="Chưa có hóa đơn phát hành trong kỳ"
           description="Hãy mở rộng khoảng thời gian sang 30 ngày hoặc 6 tháng."
         />
       </Card>
@@ -684,8 +690,8 @@ export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChart
 
   return (
     <Card
-      title="Thống kê lịch sử 15 ngày gần nhất"
-      description="Doanh số và số phiếu khám theo ngày"
+      title={title}
+      description={description}
       actions={
         <span className="inline-flex items-center gap-3 text-xs">
           <span className="flex items-center gap-1">
@@ -694,7 +700,7 @@ export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChart
           </span>
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full" style={{ background: ACCENT_AMBER }} />
-            Số phiếu
+            Số hóa đơn
           </span>
         </span>
       }
@@ -709,11 +715,11 @@ export function DailyChartCard({ rows, isLoading, isError, onRetry }: DailyChart
             <ReTooltip
               formatter={(value: any, name: any) => {
                 if (name === 'Doanh thu (triệu)') return [`${Number(value).toFixed(1)} tr ₫`, name];
-                return [value, 'Số phiếu khám'];
+                return [value, 'Số hóa đơn'];
               }}
             />
             <Bar yAxisId="left" dataKey="revenueM" name="Doanh thu (triệu)" fill={TEAL} radius={[4, 4, 0, 0]} />
-            <Bar yAxisId="right" dataKey="invoiceCount" name="Số phiếu khám" fill={ACCENT_AMBER} radius={[4, 4, 0, 0]} />
+            <Bar yAxisId="right" dataKey="invoiceCount" name="Số hóa đơn" fill={ACCENT_AMBER} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -795,17 +801,22 @@ export function MonthlyChartCard({ rows, isLoading, isError, onRetry }: MonthlyC
 
 interface AppointmentsCardProps {
   rows: AppointmentPoint[];
+  range: TimeRange;
+  /** Own calendar only (a dentist), so the title does not read as clinic-wide. */
+  ownOnly?: boolean;
   isLoading: boolean;
   isError?: boolean;
   onRetry?: () => void;
 }
 
-export function AppointmentsCard({ rows, isLoading, isError, onRetry }: AppointmentsCardProps) {
+export function AppointmentsCard({ rows, range, ownOnly, isLoading, isError, onRetry }: AppointmentsCardProps) {
   const data = useMemo(() => rows.map((r) => ({ ...r, label: formatDayLabel(r.date) })), [rows]);
+  const title = `${ownOnly ? 'Lịch hẹn của tôi' : 'Lịch hẹn'} — ${RANGE_TITLES[range]}`;
+  const description = 'Số lịch hẹn theo ngày (không tính lịch hủy)';
 
   if (isLoading) {
     return (
-      <Card title="Lịch hẹn 7 ngày" description="Số lượng lịch hẹn theo ngày">
+      <Card title={title} description={description}>
         <CardSkeleton />
       </Card>
     );
@@ -813,7 +824,7 @@ export function AppointmentsCard({ rows, isLoading, isError, onRetry }: Appointm
 
   if (isError) {
     return (
-      <Card title="Lịch hẹn 7 ngày" description="Số lượng lịch hẹn theo ngày">
+      <Card title={title} description={description}>
         <CardErrorState onRetry={onRetry} />
       </Card>
     );
@@ -821,10 +832,10 @@ export function AppointmentsCard({ rows, isLoading, isError, onRetry }: Appointm
 
   if (rows.length === 0) {
     return (
-      <Card title="Lịch hẹn 7 ngày" description="Số lượng lịch hẹn theo ngày">
+      <Card title={title} description={description}>
         <EmptyState
           icon={<Calendar className="h-10 w-10" />}
-          title="Chưa có lịch hẹn 7 ngày qua"
+          title="Chưa có lịch hẹn trong kỳ"
           description="Đặt lịch mới để bắt đầu sử dụng."
           action={
             // 'hide' mode, not the default 'disable': PermissionGuard's
@@ -848,7 +859,7 @@ export function AppointmentsCard({ rows, isLoading, isError, onRetry }: Appointm
   }
 
   return (
-    <Card title="Lịch hẹn 7 ngày" description="Số lượng lịch hẹn theo ngày">
+    <Card title={title} description={description}>
       <div className="h-48 md:h-56">
         <ResponsiveContainer>
           <LineChart data={data} margin={{ top: 10, right: 16, bottom: 5, left: 8 }}>
@@ -885,7 +896,7 @@ interface FinanceCardProps {
 export function FinanceCard({ finance, isLoading, isError, onRetry }: FinanceCardProps) {
   if (isLoading) {
     return (
-      <Card title="Thu chi" description="Tổng thu và tổng chi trong kỳ">
+      <Card title="Thu chi" description="Tổng thu và chi phí đã duyệt trong kỳ">
         <CardSkeleton />
       </Card>
     );
@@ -893,14 +904,14 @@ export function FinanceCard({ finance, isLoading, isError, onRetry }: FinanceCar
 
   if (isError || !finance) {
     return (
-      <Card title="Thu chi" description="Tổng thu và tổng chi trong kỳ">
+      <Card title="Thu chi" description="Tổng thu và chi phí đã duyệt trong kỳ">
         <CardErrorState onRetry={onRetry} />
       </Card>
     );
   }
 
   return (
-    <Card title="Thu chi" description="Tổng thu và tổng chi trong kỳ">
+    <Card title="Thu chi" description="Tổng thu và chi phí đã duyệt trong kỳ">
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-md border border-emerald-100 bg-emerald-50/60 p-4 dark:border-emerald-900/30 dark:bg-emerald-900/20 dark:p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
@@ -920,10 +931,11 @@ export function FinanceCard({ finance, isLoading, isError, onRetry }: FinanceCar
         </div>
       </div>
       {finance.totalExpense === 0 && (
-        <Alert type="info" className="mt-3" title="Module đang phát triển">
-          Tính năng chi phí đang được hoàn thiện — số liệu tổng chi sẽ được cập nhật sớm.
-        </Alert>
+        <p className="mt-3 text-xs text-gray-500">
+          Chưa có khoản chi nào được duyệt trong kỳ. Nhập và duyệt chi phí ở mục Chi phí.
+        </p>
       )}
+      <p className="mt-2 text-xs text-gray-500">Tổng thu tính theo ngày thu, đã trừ tiền hoàn.</p>
     </Card>
   );
 }
@@ -978,6 +990,80 @@ export function OutstandingCard({ outstanding, isLoading, isError, onRetry }: Ou
           <Eye className="h-4 w-4" /> Xem chi tiết
         </Link>
       </div>
+    </Card>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Appointment outcomes (A6-12) — the front desk's "today" KPIs
+// -----------------------------------------------------------------------------
+
+interface AppointmentStatsCardProps {
+  stats: AppointmentStats | undefined;
+  range: TimeRange;
+  isLoading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
+}
+
+export function AppointmentStatsCard({ stats, range, isLoading, isError, onRetry }: AppointmentStatsCardProps) {
+  const own = stats?.scope === 'own';
+  const title = `${own ? 'Lịch khám của tôi' : 'Lịch khám'} — ${RANGE_TITLES[range]}`;
+  const description = 'Theo trạng thái cuối của lịch hẹn';
+  if (isLoading) {
+    return (
+      <Card title={title} description={description}>
+        <CardSkeleton />
+      </Card>
+    );
+  }
+  if (isError || !stats) {
+    return (
+      <Card title={title} description={description}>
+        <CardErrorState onRetry={onRetry} />
+      </Card>
+    );
+  }
+  const s = stats.summary;
+  const tiles: Array<{ label: string; value: number; hint: string; cls: string }> = [
+    { label: 'Tổng lịch', value: s.total, hint: 'Mọi lịch hẹn trong kỳ, kể cả lịch hủy', cls: 'text-gray-900' },
+    { label: 'Chưa đến', value: s.pending, hint: 'Đã đặt / đã xác nhận, chưa check-in', cls: 'text-sky-700' },
+    { label: 'Đã đến', value: s.arrived, hint: 'Đã check-in, đang khám, đã xong hoặc về trước khi khám', cls: 'text-emerald-700' },
+    { label: 'Đang ở phòng khám', value: s.inClinic, hint: 'Đã check-in hoặc đang khám', cls: 'text-teal-700' },
+    { label: 'Vắng', value: s.noShow, hint: `Tỷ lệ vắng ${stats.rates.noShowPct}% số lịch đã tới giờ`, cls: 'text-amber-700' },
+    {
+      label: 'Hủy',
+      value: s.cancelled,
+      hint: s.cancelledAfterCheckIn
+        ? `${s.cancelledAfterCheckIn} lịch hủy sau khi đã check-in`
+        : 'Lịch bị hủy (bệnh nhân hoặc phòng khám)',
+      cls: 'text-rose-700',
+    },
+    { label: 'Về trước khi khám', value: s.left, hint: 'Đã check-in rồi về, chưa được khám', cls: 'text-orange-700' },
+    { label: 'Vãng lai', value: s.walkIn, hint: 'Khách đến không hẹn trước', cls: 'text-indigo-700' },
+    { label: 'Đặt online', value: s.online, hint: 'Lịch đến từ trang đặt lịch online', cls: 'text-violet-700' },
+  ];
+  return (
+    <Card title={title} description={description}>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
+        {tiles.map((t) => (
+          <Tooltip key={t.label} label={<span>{t.hint}</span>}>
+            <div className="cursor-help rounded-md border border-gray-100 px-2 py-2 dark:border-surface-700">
+              <p className="text-[11px] font-medium text-gray-500 dark:text-surface-400">{t.label}</p>
+              <p className={`text-xl font-semibold ${t.cls} dark:text-surface-100`}>{formatNumber(t.value)}</p>
+            </div>
+          </Tooltip>
+        ))}
+      </div>
+      {stats.onlineFunnel && stats.onlineFunnel.requests > 0 && (
+        <p className="mt-3 text-xs text-gray-500">
+          Yêu cầu đặt online trong kỳ: {stats.onlineFunnel.requests} · đã thành lịch:{' '}
+          {stats.onlineFunnel.booked} · đã đến: {stats.onlineFunnel.arrived} · khách tự hủy:{' '}
+          {stats.onlineFunnel.patientCancelled} · phòng khám từ chối: {stats.onlineFunnel.declined} · hết hạn:{' '}
+          {stats.onlineFunnel.expired}
+          {stats.onlineFunnel.spam > 0 && ` (không tính ${stats.onlineFunnel.spam} yêu cầu rác)`}
+        </p>
+      )}
     </Card>
   );
 }

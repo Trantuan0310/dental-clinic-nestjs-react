@@ -207,7 +207,11 @@ describe('UsersService', () => {
           null,
           null,
         ),
-      ).rejects.toThrow(/roles not found/);
+      ).rejects.toThrow(/Vai trò không tồn tại hoặc đã bị xóa/);
+      // A6-22: a soft-deleted role cannot be assigned by id either.
+      expect(prisma.role.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['r1', 'r2'] }, deletedAt: null },
+      });
     });
 
     it('creates user with PENDING_SETUP status, assigns roles, logs audit', async () => {

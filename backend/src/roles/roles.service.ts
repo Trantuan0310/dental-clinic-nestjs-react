@@ -238,8 +238,8 @@ export class RolesService {
     ipAddress: string | null,
     userAgent: string | null,
   ): Promise<void> {
-    const role = await this.prisma.role.findUniqueOrThrow({
-      where: { id: roleId },
+    const role = await this.prisma.role.findFirstOrThrow({
+      where: { id: roleId, deletedAt: null },
       include: {
         userRoles: { where: { user: { deactivatedAt: null } } },
       },
@@ -253,9 +253,16 @@ export class RolesService {
       throw new CannotDeleteRoleWithUsersException();
     }
 
-    await this.prisma.role.update({
-      where: { id: roleId },
-      data: { deletedAt: new Date() },
+    // A6-22: also drop the assignments still held by deactivated accounts,
+    // so reactivating one of them does not silently restore the permissions
+    // of a role no longer visible on the Roles screen.
+    const removed = await this.prisma.$transaction(async tx => {
+      const dropped = await tx.userRole.deleteMany({ where: { roleId } });
+      await tx.role.update({
+        where: { id: roleId },
+        data: { deletedAt: new Date() },
+      });
+      return dropped;
     });
 
     await this.auditService.log({
@@ -264,7 +271,7 @@ export class RolesService {
       actorEmail,
       targetType: 'role',
       targetId: roleId,
-      metadata: { code: role.code, name: role.name },
+      metadata: { code: role.code, name: role.name, removedAssignments: removed.count },
       ipAddress,
       userAgent,
     });

@@ -15,6 +15,7 @@ import { BookingModule } from './booking/booking.module';
 import { MediaModule } from './media/media.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
 import { BillingModule } from './billing/billing.module';
+import { ReportsModule } from './reports/reports.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { ExpenseModule } from './expense/expense.module';
 import { AiModule } from './ai/ai.module';
@@ -55,6 +56,7 @@ import { CatalogModule } from './catalog/catalog.module';
     MediaModule,
     MedicalRecordsModule,
     BillingModule,
+    ReportsModule,
     InventoryModule,
     ExpenseModule,
     AiModule,

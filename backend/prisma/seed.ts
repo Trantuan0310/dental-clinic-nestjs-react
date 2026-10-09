@@ -127,7 +127,7 @@ const PERMISSIONS = [
     code: 'appointment.read',
     resource: 'appointment',
     action: 'read',
-    description: 'Xem lịch hẹn',
+    description: 'Menu Lịch hẹn (chỉ điều hướng; dữ liệu cần appointment.read.any/.own)',
   },
   {
     code: 'appointment.read.any',
@@ -367,7 +367,7 @@ const PERMISSIONS = [
     code: 'encounter.read',
     resource: 'encounter',
     action: 'read',
-    description: 'Xem hồ sơ y khoa',
+    description: 'Menu Hồ sơ y khoa (chỉ điều hướng; dữ liệu cần encounter.read.any/.own)',
   },
   {
     code: 'encounter.read.any',
@@ -456,7 +456,12 @@ const PERMISSIONS = [
 
   // Billing permissions
   { code: 'invoice.create', resource: 'invoice', action: 'create', description: 'Tạo hóa đơn' },
-  { code: 'invoice.read', resource: 'invoice', action: 'read', description: 'Xem hóa đơn' },
+  {
+    code: 'invoice.read',
+    resource: 'invoice',
+    action: 'read',
+    description: 'Menu Hóa đơn (chỉ điều hướng; dữ liệu cần invoice.read.any/.own)',
+  },
   {
     code: 'invoice.read.any',
     resource: 'invoice',
@@ -688,7 +693,7 @@ const PERMISSIONS = [
     code: 'medical_record.read',
     resource: 'medical_record',
     action: 'read',
-    description: 'Xem bệnh án (alias FE cho encounter.read+patient.read)',
+    description: 'Menu Bệnh án (chỉ điều hướng; không mở nội dung lâm sàng)',
   },
   // Payroll / shift (frontend shorthand) — alias to dotted canonical
   {
@@ -726,7 +731,8 @@ const PERMISSIONS = [
     code: 'report.read',
     resource: 'report',
     action: 'read',
-    description: 'Xem báo cáo (alias FE cho report.revenue.read/outstanding.read)',
+    description:
+      'Menu Báo cáo (chỉ điều hướng; dữ liệu cần report.revenue.read / report.outstanding.read)',
   },
   // Admin / system (frontend shorthand) — alias to canonical names
   {

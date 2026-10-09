@@ -23,18 +23,15 @@ import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   IssueInvoiceDto,
   ListInvoicesQueryDto,
-  OutstandingReportQueryDto,
   RecordPaymentDto,
   RefundDto,
   ReissueInvoiceDto,
-  RevenueReportQueryDto,
   UpdateDiscountDto,
   UpdateInvoiceItemDto,
   UpdateInvoiceNotesDto,
   VoidInvoiceDto,
   VoidPaymentDto,
 } from './dto/billing.dto';
-import { DashboardRangeQueryDto } from './dto/dashboard.dto';
 
 @ApiTags('Billing')
 @ApiBearerAuth()
@@ -204,89 +201,5 @@ export class BillingController {
   ) {
     const invoice = await this.billing.getInvoiceByEncounterId(encounterId, actor);
     return wrapAsPaginated(invoice ? [invoice] : []);
-  }
-
-  // ==========================================================================
-  // Reports
-  // ==========================================================================
-
-  @Get('reports/revenue')
-  @RequirePermissions('report.revenue.read')
-  async revenueReport(@Query() q: RevenueReportQueryDto) {
-    return {
-      data: await this.billing.revenueReport({
-        from: q.from,
-        to: q.to,
-        dentistId: q.dentistId,
-      }),
-    };
-  }
-
-  @Get('reports/outstanding')
-  @RequirePermissions('report.outstanding.read')
-  async outstandingAging(@Query() q: OutstandingReportQueryDto) {
-    return wrapAsPaginated(
-      await this.billing.outstandingAging({
-        daysOutstanding: q.daysOutstanding ?? 30,
-      }),
-    );
-  }
-
-  // ==========================================================================
-  // Dashboard analytics (Phase 10)
-  // ==========================================================================
-
-  @Get('reports/dashboard-kpis')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async dashboardKpis(@Query() q: DashboardRangeQueryDto) {
-    return this.billing.dashboardKpis({ from: q.from, to: q.to });
-  }
-
-  @Get('reports/revenue-by-day')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async revenueByDay(@Query() q: DashboardRangeQueryDto) {
-    return { data: await this.billing.revenueByDay({ from: q.from, to: q.to }) };
-  }
-
-  @Get('reports/revenue-by-month')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async revenueByMonth() {
-    return { data: await this.billing.revenueByMonth() };
-  }
-
-  @Get('reports/appointments-by-day')
-  @RequirePermissions('appointment.read', 'report.read')
-  async appointmentsByDay(@Query() q: DashboardRangeQueryDto) {
-    return { data: await this.billing.appointmentsByDay({ from: q.from, to: q.to }) };
-  }
-
-  @Get('reports/revenue-by-source')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async revenueBySource(@Query() q: DashboardRangeQueryDto) {
-    return { data: await this.billing.revenueBySource({ from: q.from, to: q.to }) };
-  }
-
-  @Get('reports/revenue-by-procedure')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async revenueByProcedure(@Query() q: DashboardRangeQueryDto) {
-    return { data: await this.billing.revenueByProcedure({ from: q.from, to: q.to }) };
-  }
-
-  @Get('reports/revenue-by-dentist')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async revenueByDentist(@Query() q: DashboardRangeQueryDto) {
-    return { data: await this.billing.revenueByDentist({ from: q.from, to: q.to }) };
-  }
-
-  @Get('reports/finance-summary')
-  @RequirePermissions('report.revenue.read', 'report.read')
-  async financeSummary(@Query() q: DashboardRangeQueryDto) {
-    return this.billing.financeSummary({ from: q.from, to: q.to });
-  }
-
-  @Get('reports/outstanding-summary')
-  @RequirePermissions('report.outstanding.read')
-  async outstandingSummary() {
-    return this.billing.outstandingSummary();
   }
 }

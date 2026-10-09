@@ -5,7 +5,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
-import { endOfDayInclusive } from '../common/date-range.util';
+import { Prisma } from '@prisma/client';
+import { endOfClinicDay, startOfClinicDay } from '../common/date-range.util';
 
 @ApiTags('admin/audit-logs')
 @ApiBearerAuth()
@@ -21,7 +22,7 @@ export class AuditController {
   async list(@Query() query: ListAuditLogsQueryDto) {
     const { actor, action, targetType, targetId, from, to, limit = 20, cursor } = query;
 
-    const where: Record<string, unknown> = {};
+    const where: Prisma.AuditLogWhereInput & Record<string, unknown> = {};
 
     if (actor) {
       where.actorUserId = actor;
@@ -40,34 +41,38 @@ export class AuditController {
     }
 
     if (from || to) {
+      // Clinic days (A6-27): a bare date means 00:00–23:59 Asia/Ho_Chi_Minh,
+      // not UTC (which dropped 00:00–07:00 and took the next morning).
       where.occurredAt = {};
       if (from) {
-        (where.occurredAt as Record<string, Date>).gte = new Date(from);
+        (where.occurredAt as Record<string, Date>).gte = startOfClinicDay(from);
       }
       if (to) {
-        // A bare `to=YYYY-MM-DD` is UTC midnight — `lte` on that excludes
-        // every event during that day. Same bug/fix already applied to
-        // patients/expense list filters; push the bound to end-of-day.
-        (where.occurredAt as Record<string, Date>).lte = endOfDayInclusive(to);
+        (where.occurredAt as Record<string, Date>).lte = endOfClinicDay(to);
       }
     }
 
+    const conditions: Prisma.AuditLogWhereInput[] = [where];
     if (cursor) {
       const cursorLog = await this.prisma.auditLog.findUnique({
         where: { id: cursor },
-        select: { occurredAt: true },
+        select: { id: true, occurredAt: true },
       });
       if (cursorLog) {
-        where.occurredAt = {
-          ...((where.occurredAt as Record<string, Date>) || {}),
-          lt: cursorLog.occurredAt,
-        };
+        // Keyset on (occurredAt, id): rows sharing the cursor's millisecond
+        // are no longer skipped at a page boundary.
+        conditions.push({
+          OR: [
+            { occurredAt: { lt: cursorLog.occurredAt } },
+            { occurredAt: cursorLog.occurredAt, id: { lt: cursorLog.id } },
+          ],
+        });
       }
     }
 
     const logs = await this.prisma.auditLog.findMany({
-      where,
-      orderBy: { occurredAt: 'desc' },
+      where: conditions.length > 1 ? { AND: conditions } : where,
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
     });
 
