@@ -317,6 +317,25 @@ describe('PayrollService — resolveWorkedShifts (BR-PAY-011)', () => {
       });
       expect(r.totalHours).toBe(54 - 9 - 4);
       expect(r.workedShifts).toBe(5);
+      // The base salary loses this share (planned 54h, 13h on leave).
+      expect(r.plannedMinutes).toBe(54 * 60);
+      expect(r.leaveMinutes).toBe(13 * 60);
+    });
+
+    it('a closure starting at 13:00 is all-day on its later days', async () => {
+      const r = await run({
+        closures: [
+          {
+            startDate: new Date('2026-09-07'),
+            endDate: new Date('2026-09-08'),
+            reason: 'x',
+            startTime: t('13:00'),
+          },
+        ],
+      });
+      // Mon pays 08:00-13:00 (5h); Tue is closed all day; clinic closures are not leave.
+      expect(r.totalHours).toBe(54 - 4 - 9);
+      expect(r.leaveMinutes).toBe(0);
     });
 
     it('a CLOSED override removes the day or the closed range', async () => {

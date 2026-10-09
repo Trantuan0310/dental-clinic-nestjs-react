@@ -1,6 +1,7 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildDayCalendar, Interval } from '../appointments/domain/day-calendar';
+import { closuresOnDay } from '../appointments/domain/day-calendar-loader';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { clinicDateOnly } from '../common/date-range.util';
@@ -305,7 +306,7 @@ export class PayrollService {
     );
     if (overlap) {
       throw new PeriodOverlapException(
-        `Compensation already exists for this dentist in [${overlap.effectiveFrom.toISOString().slice(0, 10)}, ${overlap.effectiveTo?.toISOString().slice(0, 10) ?? 'âˆž'})`,
+        `Compensation already exists for this dentist in [${overlap.effectiveFrom.toISOString().slice(0, 10)}, ${overlap.effectiveTo?.toISOString().slice(0, 10) ?? 'âˆž'}]`,
       );
     }
 
@@ -423,13 +424,14 @@ export class PayrollService {
     effectiveFrom: Date,
     effectiveTo: Date | null,
   ) {
-    // For two ranges to overlap: A.start < B.end AND B.start < A.end
+    // effectiveTo is inclusive (payroll pays that day), so terms ending and
+    // starting on the same date overlap: A.start <= B.end AND B.start <= A.end.
     return this.prisma.dentistCompensation.findFirst({
       where: {
         dentistId,
         deletedAt: null,
-        effectiveFrom: { lt: effectiveTo ?? new Date('9999-12-31') },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gt: effectiveFrom } }],
+        effectiveFrom: { lte: effectiveTo ?? new Date('9999-12-31') },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
       },
     });
   }
@@ -988,14 +990,29 @@ export class PayrollService {
       },
       select: { id: true, startedAt: true, closedAt: true },
     });
-    const { workedShifts, totalHours, overtimeHours, overtimeThresholdHours, outsideHours, days } =
-      await this.resolveWorkedShifts(tx, dentistId, payPeriod, {
-        lastPaidDay,
-        visits: visits ?? [],
-      });
+    const {
+      workedShifts,
+      totalHours,
+      overtimeHours,
+      overtimeThresholdHours,
+      outsideHours,
+      days,
+      plannedMinutes,
+      leaveMinutes,
+    } = await this.resolveWorkedShifts(tx, dentistId, payPeriod, {
+      lastPaidDay,
+      visits: visits ?? [],
+    });
     const overtimePayVnd = Math.round(
       overtimeHours * overtimeHourlyVnd * Number(config.overtimeMultiplier),
     );
+    // Approved time-off is unpaid (owner decision): the base salary loses the
+    // share of the period's scheduled hours the dentist was on leave.
+    const leaveDeductionVnd =
+      plannedMinutes > 0 ? Math.round((baseSalaryVnd * leaveMinutes) / plannedMinutes) : 0;
+    const paidBaseVnd = baseSalaryVnd - leaveDeductionVnd;
+    // A completed visit counts even before its invoice is issued.
+    for (const v of visits ?? []) encounterIds.add(v.id);
 
     // 5. Bonus / penalty: a clawback for invoices voided after their period
     //    closed is recorded first, then every adjustment of (period, dentist).
@@ -1012,7 +1029,7 @@ export class PayrollService {
     const { bonusVnd, penaltyVnd } = sumAdjustments(adjustmentRows);
 
     // 6. Gross pay
-    const grossPayVnd = baseSalaryVnd + commissionVnd + overtimePayVnd + bonusVnd - penaltyVnd;
+    const grossPayVnd = paidBaseVnd + commissionVnd + overtimePayVnd + bonusVnd - penaltyVnd;
 
     // 7. Tax TNCN (BR-PAY-009)
     const taxableGrossForTax = Math.max(grossPayVnd, 0);
@@ -1033,6 +1050,14 @@ export class PayrollService {
       compensation: terms.length
         ? { parts: base.parts }
         : { note: 'No compensation for this dentist in period' },
+      ...(leaveDeductionVnd && {
+        unpaidLeave: {
+          leaveHours: Math.round((leaveMinutes / 60) * 100) / 100,
+          plannedHours: Math.round((plannedMinutes / 60) * 100) / 100,
+          deductionVnd: leaveDeductionVnd,
+          baseBeforeLeaveVnd: baseSalaryVnd,
+        },
+      }),
       ...(lastPaidDay && { terminatedOn: dateKey(lastPaidDay) }),
       commissionBasis: 'ISSUED_INVOICE_AFTER_DISCOUNT',
       invoicesCount: (invoices ?? []).length,
@@ -1066,7 +1091,7 @@ export class PayrollService {
       workedShifts,
       totalHours,
       overtimeHours,
-      baseSalaryVnd,
+      baseSalaryVnd: paidBaseVnd,
       commissionVnd,
       overtimePayVnd,
       bonusVnd,
@@ -1242,6 +1267,10 @@ export class PayrollService {
     overtimeThresholdHours: number;
     outsideHours: Array<{ encounterId: string; startedAt: Date; closedAt: Date; minutes: number }>;
     days: Record<string, number>;
+    /** Paid minutes the schedule planned, before approved time-off. */
+    plannedMinutes: number;
+    /** Of those, the minutes lost to approved time-off (unpaid). */
+    leaveMinutes: number;
   }> {
     const range = periodInstantRange(payPeriod);
     const [workingSchedules, approvedShifts, overrides, timeOffs, closures] = await Promise.all([
@@ -1283,7 +1312,7 @@ export class PayrollService {
           startDate: { lte: payPeriod.end },
           endDate: { gte: payPeriod.start },
         },
-        select: { startDate: true, endDate: true, reason: true },
+        select: { startDate: true, endDate: true, reason: true, startTime: true },
       }),
     ]);
 
@@ -1301,6 +1330,7 @@ export class PayrollService {
 
     let workedShifts = 0;
     let totalMinutes = 0;
+    let plannedMinutes = 0;
     const days: Record<string, number> = {};
     const paidByDay = new Map<string, Interval[]>();
     const keys = periodDateKeys(payPeriod);
@@ -1309,7 +1339,7 @@ export class PayrollService {
       const day = new Date(key);
       const dayStart = new Date(`${key}T00:00:00+07:00`);
       const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
-      const cal = buildDayCalendar({
+      const inputs = {
         date: key,
         schedules: (workingSchedules ?? []).filter(
           s =>
@@ -1320,12 +1350,18 @@ export class PayrollService {
         shifts: shiftsByDate.get(key) ?? [],
         overrides: overridesByDate.get(key) ?? [],
         timeOffs: (timeOffs ?? []).filter(t => t.startAt < dayEnd && t.endAt > dayStart),
-        clinicClosures: (closures ?? []).filter(
-          c => dateKey(c.startDate) <= key && dateKey(c.endDate) >= key,
+        // A closure's start time applies to its first day only.
+        clinicClosures: closuresOnDay(
+          (closures ?? []).filter(c => dateKey(c.startDate) <= key && dateKey(c.endDate) >= key),
+          key,
         ),
         bookings: [],
-      });
+      };
+      const cal = buildDayCalendar(inputs);
       const paid = paidIntervals(cal);
+      plannedMinutes += inputs.timeOffs.length
+        ? minutesOf(paidIntervals(buildDayCalendar({ ...inputs, timeOffs: [] })))
+        : minutesOf(paid);
       paidByDay.set(key, paid);
       const minutes = minutesOf(paid);
       if (minutes <= 0) continue;
@@ -1375,6 +1411,8 @@ export class PayrollService {
       overtimeThresholdHours: Math.round(overtimeThresholdHours * 100) / 100,
       outsideHours,
       days,
+      plannedMinutes,
+      leaveMinutes: Math.max(plannedMinutes - totalMinutes, 0),
     };
   }
 
