@@ -287,6 +287,30 @@ describe('AppointmentsService', () => {
       expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
     });
 
+    it('A5-22 + A3-07: an early check-in also needs the dentist present now', async () => {
+      const existing = {
+        id: 'appt-1',
+        status: AppointmentStatus.CONFIRMED,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        startAt: new Date(Date.now() + 3 * 60 * 60 * 1000),
+        endAt: new Date(Date.now() + 3.5 * 60 * 60 * 1000),
+      };
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(existing);
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({ id: 'patient-1' });
+      const spy = jest
+        .spyOn(service as any, 'calendarProblem')
+        .mockImplementation(async (...args: any[]) =>
+          args[1] < existing.startAt
+            ? { kind: 'TIME_OFF', message: 'Bác sĩ nghỉ buổi sáng' }
+            : null,
+        );
+      jest.spyOn(service as any, 'isClinicToday').mockReturnValue(true);
+      const error = await service.checkIn('appt-1', true, 'Khách đến sớm', actor).catch(e => e);
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(error.getResponse().code).toBe('DENTIST_ABSENT');
+    });
+
     it('transitions scheduled appointment to checked_in', async () => {
       // Start time within check-in window (15 minutes before to 30 minutes after)
       const existing = {

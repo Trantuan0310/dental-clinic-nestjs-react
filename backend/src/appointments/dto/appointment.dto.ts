@@ -314,10 +314,7 @@ export class BulkRescheduleDto {
   items!: BulkRescheduleItemDto[];
 
   @ApiProperty({ example: 'Bác sĩ nghỉ ốm' })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @MinLength(5, { message: 'Lý do cần ít nhất 5 ký tự' })
-  @MaxLength(300)
+  @ReasonText(5, 300)
   reason!: string;
 }
 
@@ -701,9 +698,7 @@ export class UpdateTimeOffDto {
   endAt!: string;
 
   @ApiProperty({ example: 'Bác sĩ cần nghỉ thêm 2 ngày' })
-  @IsString()
-  @MinLength(5, { message: 'Lý do cần ít nhất 5 ký tự' })
-  @MaxLength(500)
+  @ReasonText(5, 500)
   reason!: string;
 }
 

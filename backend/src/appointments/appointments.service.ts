@@ -537,7 +537,7 @@ export class AppointmentsService {
         'Hồ sơ bệnh nhân đã bị xóa (lưu trữ) — khôi phục hồ sơ ở trang Bệnh nhân rồi check-in lại',
       );
     }
-    await this.assertDentistPresent(appt);
+    await this.assertDentistPresent(appt, early ? new Date(now) : null);
 
     // Guarded write: only succeed if status is still what we just read.
     // Front-desk check-in/cancel/no-show are the most concurrent-actor-prone
@@ -1575,18 +1575,19 @@ export class AppointmentsService {
    * visit's time (approved time-off, closed day, clinic closure, left the
    * clinic) — nobody would call the patient. The visit is moved first.
    */
-  private async assertDentistPresent(appt: Appointment) {
-    const problem = await this.calendarProblem(
-      appt.dentistId,
-      appt.startAt,
-      appt.endAt,
-      this.prisma,
-    );
-    if (problem && (problem.kind === 'TIME_OFF' || problem.kind === 'CLOSED')) {
-      throw new DentistAbsentException(
-        `${problem.message} — không check-in vào hàng chờ của bác sĩ vắng. ` +
-          'Hãy "Đổi lịch" sang bác sĩ khác (chọn "Phòng khám dời", không tính lượt) rồi check-in.',
-      );
+  private async assertDentistPresent(appt: Appointment, queuedAt: Date | null = null) {
+    // An early check-in (FA, A3-07) lines up now: the dentist must be in now too.
+    const spans: Array<[Date, Date]> = [[appt.startAt, appt.endAt]];
+    if (queuedAt) spans.push([queuedAt, new Date(queuedAt.getTime() + 60_000)]);
+    for (const [from, to] of spans) {
+      const problem = await this.calendarProblem(appt.dentistId, from, to, this.prisma);
+      if (problem && (problem.kind === 'TIME_OFF' || problem.kind === 'CLOSED')) {
+        throw new DentistAbsentException(
+          `${problem.message} — không check-in vào hàng chờ của bác sĩ vắng. ` +
+            'Hãy "Đổi lịch" sang bác sĩ khác (chọn "Phòng khám dời", không tính lượt) rồi check-in, ' +
+            'hoặc tiếp nhận vãng lai vào hàng chờ bác sĩ khác.',
+        );
+      }
     }
   }
 
