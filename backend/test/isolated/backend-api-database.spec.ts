@@ -1834,7 +1834,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
             dayOfWeek,
             startTime: '00:00',
             endTime: '23:59',
-            validFrom: '2020-01-01',
+            validFrom: new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10),
           })
           .expect(201);
       }
