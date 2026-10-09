@@ -12,7 +12,14 @@ import { formatTimeOnly } from '@/lib/format';
 import { resolveRange, type TimeRange } from './dashboard/types';
 import { DashboardHeader } from './dashboard/DashboardHeader';
 import { AiSummaryCard } from './dashboard/AiSummaryCard';
-import { AppointmentsCard, DentistRankingCard, FinanceCard, OutstandingCard, SourceCard } from './dashboard/cards';
+import {
+  AppointmentStatsCard,
+  AppointmentsCard,
+  DentistRankingCard,
+  FinanceCard,
+  OutstandingCard,
+  SourceCard,
+} from './dashboard/cards';
 import {
   KpiRow,
   LazyCustomerTypeCard,
@@ -27,14 +34,16 @@ export default function DashboardPage() {
   const dateRange = useMemo(() => resolveRange(range), [range]);
   const commonParams = { from: dateRange.from, to: dateRange.to };
 
-  // Revenue/finance widgets need report.revenue.read (or the report.read nav
-  // alias) at the backend — a dentist has neither, so those calls 403. Gate
-  // both the fetch and the section below by permission instead of firing
-  // the request and rendering a red error card for every widget on login.
+  // Each widget is gated by the canonical code its endpoint checks; FE alias
+  // codes (report.read, appointment.read) only open menus (A6-25). Gating the
+  // fetch avoids a red error card per widget for roles without access.
   const hasAnyPermission = useAuthStore((s) => s.hasAnyPermission);
-  const canSeeRevenue = hasAnyPermission(['report.revenue.read', 'report.read']);
-  const canSeeAppointmentsByDay = hasAnyPermission(['appointment.read', 'report.read']);
-  const canSeeOutstanding = hasAnyPermission(['report.outstanding.read', 'report.read']);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canSeeRevenue = hasPermission('report.revenue.read');
+  const canSeeAppointmentsByDay = hasAnyPermission(['appointment.read.any', 'appointment.read.own']);
+  // A dentist's appointment widgets cover their own calendar only (A6-18).
+  const ownAppointmentsOnly = !hasPermission('appointment.read.any');
+  const canSeeOutstanding = hasPermission('report.outstanding.read');
 
   const {
     data: kpis,
@@ -89,6 +98,29 @@ export default function DashboardPage() {
     queryKey: ['dashboard-revenue-by-dentist', dateRange],
     queryFn: () => dashboardApi.revenueByDentist(commonParams),
     enabled: canSeeRevenue,
+  });
+
+  const {
+    data: revenueByCustomerType,
+    isLoading: revenueByCustomerTypeLoading,
+    isError: revenueByCustomerTypeError,
+    refetch: refetchRevenueByCustomerType,
+  } = useQuery({
+    queryKey: ['dashboard-revenue-by-customer-type', dateRange],
+    queryFn: () => dashboardApi.revenueByCustomerType(commonParams),
+    enabled: canSeeRevenue,
+  });
+
+  const {
+    data: appointmentStats,
+    isLoading: appointmentStatsLoading,
+    isError: appointmentStatsError,
+    refetch: refetchAppointmentStats,
+  } = useQuery({
+    // Under the ['appointments'] prefix so every booking mutation refreshes it.
+    queryKey: ['appointments', 'dashboard-stats', dateRange],
+    queryFn: () => dashboardApi.appointmentStats(commonParams),
+    enabled: canSeeAppointmentsByDay,
   });
 
   const {
@@ -171,6 +203,17 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* Row 1.2 — appointment outcomes; the front desk's KPIs for today */}
+      {canSeeAppointmentsByDay && (
+        <AppointmentStatsCard
+          stats={appointmentStats}
+          range={range}
+          isLoading={appointmentStatsLoading}
+          isError={appointmentStatsError}
+          onRetry={refetchAppointmentStats}
+        />
+      )}
+
       {/* Row 1.5 — AI tóm tắt hồ sơ bệnh nhân */}
       <AiSummaryCard patientOptions={aiPatientOptions} />
 
@@ -179,15 +222,10 @@ export default function DashboardPage() {
         <div className="grid gap-3 grid-cols-1 md:grid-cols-12">
           <div className="md:col-span-5">
             <LazyCustomerTypeCard
-              rows={revenueByDentist ?? []}
-              patientNew={kpis?.patients.newCount ?? 0}
-              patientReturning={kpis?.patients.returningCount ?? 0}
-              isLoading={revenueByDentistLoading || kpisLoading}
-              isError={revenueByDentistError || kpisError}
-              onRetry={() => {
-                refetchRevenueByDentist();
-                refetchKpis();
-              }}
+              rows={revenueByCustomerType ?? []}
+              isLoading={revenueByCustomerTypeLoading}
+              isError={revenueByCustomerTypeError}
+              onRetry={refetchRevenueByCustomerType}
             />
           </div>
           <div className="md:col-span-7">
@@ -227,6 +265,7 @@ export default function DashboardPage() {
       {canSeeRevenue && (
         <LazyDailyChartCard
           rows={revenueByDay ?? []}
+          range={range}
           isLoading={revenueByDayLoading}
           isError={revenueByDayError}
           onRetry={refetchRevenueByDay}
@@ -250,6 +289,8 @@ export default function DashboardPage() {
             <div className={canSeeRevenue ? 'lg:col-span-4' : 'lg:col-span-12'}>
               <AppointmentsCard
                 rows={appointmentsByDay ?? []}
+                range={range}
+                ownOnly={ownAppointmentsOnly}
                 isLoading={appointmentsByDayLoading}
                 isError={appointmentsByDayError}
                 onRetry={refetchAppointmentsByDay}

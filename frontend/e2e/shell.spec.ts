@@ -10,7 +10,7 @@ test.describe('Shell — post-login', () => {
     await page.waitForLoadState('networkidle');
     const cards = page.getByTestId('kpi-card');
     await expect(cards).toHaveCount(4);
-    for (const label of ['Bệnh nhân', 'Tổng lịch hẹn', 'Doanh số điều trị', 'Tiền đã thu']) {
+    for (const label of ['Bệnh nhân', 'Lịch hẹn (không tính lịch hủy)', 'Doanh số điều trị', 'Tiền đã thu']) {
       await expect(cards.filter({ hasText: label })).toBeVisible();
     }
     await expect(page.getByText('Không thể tải số liệu KPI', { exact: true })).toHaveCount(0);

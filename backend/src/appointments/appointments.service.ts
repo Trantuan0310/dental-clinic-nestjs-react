@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { rowScope } from '../common/row-scope';
 import {
   endOfDayInclusive,
   clinicDateOnly,
@@ -412,7 +413,7 @@ export class AppointmentsService {
   async confirm(appointmentId: string, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
 
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     if (appt.status === AppointmentStatus.CONFIRMED) return appt;
@@ -481,7 +482,7 @@ export class AppointmentsService {
   ) {
     const appt = await this.requireAppointment(appointmentId);
     // Row-level, as confirm/markNoShow: a dentist acts on their own calendar only.
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
 
@@ -613,7 +614,7 @@ export class AppointmentsService {
    */
   async undoCheckIn(appointmentId: string, dto: StatusReasonDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     const reason = this.statusReason(dto.reason, 'Hoàn tác check-in');
@@ -695,7 +696,7 @@ export class AppointmentsService {
       await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
       const appt = await tx.appointment.findUnique({ where: { id: appointmentId } });
       if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(appointmentId);
-      if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
         throw new AppointmentNotFoundException(appointmentId);
       }
       if (
@@ -827,7 +828,7 @@ export class AppointmentsService {
     if (byClinic && this.isRowScopedDentist(actor)) {
       throw new ForbiddenException('Chỉ lễ tân/quản trị ghi nhận "Phòng khám hủy"');
     }
-    if (this.isRowScopedDentist(actor)) {
+    if (this.appointmentScope(actor) === 'own') {
       // A plain dentist may only cancel their OWN appointments. The old
       // check here was `dentistId === actor.sub`, and fell through to the
       // receptionist/admin branch (only a "before start" check, no
@@ -934,7 +935,7 @@ export class AppointmentsService {
     // check) — without this, that grant alone would have newly exposed the
     // same missing-ownership-check bug already fixed for update/reschedule/
     // cancel/startEncounter above.
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
 
@@ -1001,7 +1002,7 @@ export class AppointmentsService {
    */
   async undoNoShow(appointmentId: string, dto: StatusReasonDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     const reason = this.statusReason(dto.reason, 'Hoàn tác vắng mặt');
@@ -1301,7 +1302,7 @@ export class AppointmentsService {
     if (!appt || appt.deletedAt) throw new AppointmentNotFoundException(appointmentId);
 
     // Row-level: dentist can only reschedule their own appointments.
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     // A3-12: a client that saw an older version reloads first instead of
@@ -1354,7 +1355,7 @@ export class AppointmentsService {
     }
     this.assertVisitLength(newStart, newEnd);
     const newDentistId = dto.newDentistId ?? appt.dentistId;
-    if (this.isRowScopedDentist(actor)) {
+    if (this.appointmentScope(actor) === 'own') {
       // A dentist moves their own bookings only within their own calendar.
       if (newDentistId !== actor.sub) {
         throw new ForbiddenException('Bác sĩ chỉ đổi lịch trong lịch làm việc của chính mình');
@@ -1520,7 +1521,7 @@ export class AppointmentsService {
    * from its services (A5-05). Visits that cannot move are listed with why.
    */
   async bulkReschedule(dto: BulkRescheduleDto, actor: JwtPayload) {
-    if (this.isRowScopedDentist(actor)) {
+    if (this.appointmentScope(actor) === 'own') {
       throw new ForbiddenException('Chỉ lễ tân/quản trị dời lịch hàng loạt');
     }
     const moved: Array<{ appointmentId: string; startAt: Date; dentistId: string }> = [];
@@ -1576,7 +1577,7 @@ export class AppointmentsService {
   /** The front desk reached (or could not yet reach) the patient about a change. */
   async setClinicContact(appointmentId: string, dto: ClinicContactDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     const note = blankToNull(dto.note);
@@ -1657,7 +1658,7 @@ export class AppointmentsService {
     // param, same pattern as billing.listInvoices' dentistId fix.
     const where: Prisma.AppointmentWhereInput = {
       status: AppointmentStatus.CHECKED_IN,
-      dentistId: this.isRowScopedDentist(actor) ? actor.sub : dentistId,
+      dentistId: this.appointmentScope(actor) === 'own' ? actor.sub : dentistId,
       startAt: { gte: dayStart, lt: dayEnd },
       deletedAt: null,
     };
@@ -1707,7 +1708,7 @@ export class AppointmentsService {
     if (!appt) throw new AppointmentNotFoundException(id);
 
     // Row-level: dentist can only read their own appointments.
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(id);
     }
 
@@ -1722,7 +1723,7 @@ export class AppointmentsService {
     const appt = await this.requireAppointment(id);
 
     // Row-level: dentist can only update their own appointments.
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(id);
     }
 
@@ -1817,7 +1818,7 @@ export class AppointmentsService {
     // for the 3 seeded roles today, but fragile: a future role with
     // patient.read alone would be silently scoped here regardless of its
     // actual appointment permissions.
-    const isDentist = this.isRowScopedDentist(actor);
+    const isDentist = this.appointmentScope(actor) === 'own';
     const where: Prisma.AppointmentWhereInput = {
       deletedAt: null,
       ...(isDentist ? { dentistId: actor.sub } : q.dentistId ? { dentistId: q.dentistId } : {}),
@@ -1858,7 +1859,10 @@ export class AppointmentsService {
       take: pageSize + 1,
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
       include: {
-        patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
+        // deletedAt: past visits of a deleted record stay listed (A6-31), labelled.
+        patient: {
+          select: { id: true, code: true, fullName: true, primaryPhone: true, deletedAt: true },
+        },
         dentist: { select: { id: true, fullName: true } },
         // The FK lives on Encounter (appointmentId), not Appointment — the
         // frontend navigates from an in-progress/completed appointment to
@@ -1884,7 +1888,7 @@ export class AppointmentsService {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const isDentist = this.isRowScopedDentist(actor);
+    const isDentist = this.appointmentScope(actor) === 'own';
     const items = await this.prisma.appointment.findMany({
       where: {
         startAt: { gte: dayStart, lt: dayEnd },
@@ -4274,7 +4278,7 @@ export class AppointmentsService {
    */
   async markLeft(appointmentId: string, dto: MarkLeftDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     // The same request sent twice (A3-21): already recorded.
@@ -4327,7 +4331,7 @@ export class AppointmentsService {
    */
   async undoLeft(appointmentId: string, dto: StatusReasonDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
-    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+    if (this.appointmentScope(actor) === 'own' && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
     const reason = this.statusReason(dto.reason, 'Hoàn tác "đã về"');
@@ -4562,7 +4566,7 @@ export class AppointmentsService {
     actor: JwtPayload,
     db: Prisma.TransactionClient = this.prisma,
   ) {
-    if (!this.isRowScopedDentist(actor)) return;
+    if (this.appointmentScope(actor) !== 'own') return;
     if (dentistId !== actor.sub) {
       throw new ForbiddenException('Bác sĩ chỉ đặt lịch vào lịch làm việc của chính mình');
     }
@@ -4572,11 +4576,29 @@ export class AppointmentsService {
     }
   }
 
+  /**
+   * A dentist limited to their own calendar: holds appointment.read.own and
+   * not .any. Schedule checks use this as is; appointment rows go through
+   * appointmentScope(), which also refuses a role with neither scope.
+   */
   isRowScopedDentist(actor: JwtPayload): boolean {
-    return (
-      actor.permissions.includes('appointment.read.own') &&
-      !actor.permissions.includes('appointment.read.any')
-    );
+    return rowScope(actor, 'appointment') === 'own';
+  }
+
+  /**
+   * Row scope for reading or acting on appointments (A6-19). A role with
+   * neither appointment.read.any nor .own sees no appointment at all: it gets
+   * a 403 that names the missing permission, not a misleading "dentist only
+   * books their own calendar" or an empty list.
+   */
+  appointmentScope(actor: JwtPayload): 'any' | 'own' {
+    const scope = rowScope(actor, 'appointment');
+    if (scope === 'none') {
+      throw new ForbiddenException(
+        'Vai trò của bạn chưa có quyền xem lịch hẹn (appointment.read.any hoặc appointment.read.own) nên không xem hay thao tác được lịch hẹn. Nhờ quản trị viên bổ sung quyền ở Quản trị → Vai trò.',
+      );
+    }
+    return scope;
   }
 
   /**

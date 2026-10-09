@@ -146,7 +146,11 @@ export function AppointmentFormModal({
   const [reason, setReason] = useState(appointment?.reason ?? '');
   const [chiefComplaint, setChiefComplaint] = useState(appointment?.chiefComplaint ?? '');
   const [notes, setNotes] = useState(appointment?.notes ?? '');
-  const [source, setSource] = useState<AppointmentSource>('phone');
+  // A follow-up booked from the encounter is a returning patient, not a call
+  // (A6-18: "Khách quay lại" in the source report stayed empty otherwise).
+  const [source, setSource] = useState<AppointmentSource>(
+    defaultType === 'follow_up' ? 'returning' : 'phone',
+  );
   // ADR-0009 phase 5: services chosen for the visit, in click order.
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [durationOverrideReason, setDurationOverrideReason] = useState('');
@@ -333,7 +337,7 @@ export function AppointmentFormModal({
       setNotes(appointment.notes ?? '');
     } else {
       setSelectedPatient(null);
-      setSource('phone');
+      setSource(defaultType === 'follow_up' ? 'returning' : 'phone');
       setDentistId(lockedDentistId ?? defaultDentistId ?? '');
       setDate(defaultDate ?? clinicToday());
       setStartTime(defaultStartTime ?? '09:00');

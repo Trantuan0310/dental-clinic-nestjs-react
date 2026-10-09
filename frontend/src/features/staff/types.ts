@@ -132,13 +132,14 @@ export interface DentistOverview {
     validTo: string | null;
     slotDurationMin: number;
   }>;
+  /** null: hidden — only the dentist themself and staff who see every calendar get it. */
   upcomingAppointments: Array<{
     id: string;
     startAt: string;
     endAt: string;
     status: string;
     patient: { id: string; fullName: string; code: string };
-  }>;
+  }> | null;
 }
 
 /** 409 DENTIST_HAS_FUTURE_APPOINTMENTS details (BR-STAFF-004). */

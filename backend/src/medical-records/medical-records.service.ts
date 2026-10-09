@@ -4,6 +4,7 @@ import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { isRowScoped } from '../common/row-scope';
 import {
   clinicDateOnly,
   clinicDateTimeLabel,
@@ -107,7 +108,25 @@ export class MedicalRecordsService {
    * everyone else's encounters from her.
    */
   private isRowScopedDentist(actor: JwtPayload): boolean {
-    return !actor.permissions.includes('encounter.read.any');
+    return isRowScoped(actor, 'encounter');
+  }
+
+  /**
+   * Clinical WRITE (notes, treatments, prescriptions, chart, close) is the
+   * encounter's own dentist's act only (A6-20) — clinic-wide READ
+   * (encounter.read.any) does not extend to writing. An owner holding both
+   * admin and dentist roles reads every encounter but writes only their own.
+   * A caller who cannot even read the encounter keeps getting 404.
+   */
+  private assertClinicalWriter(
+    actor: JwtPayload,
+    encounter: { id: string; dentistId: string },
+  ): void {
+    if (encounter.dentistId === actor.sub) return;
+    if (this.isRowScopedDentist(actor)) throw new EncounterNotFoundException(encounter.id);
+    throw new ForbiddenException(
+      'Chỉ bác sĩ phụ trách phiên khám mới được ghi hoặc sửa bệnh án của phiên này. Hãy nhờ bác sĩ phụ trách cập nhật.',
+    );
   }
 
   /**
@@ -171,9 +190,8 @@ export class MedicalRecordsService {
       // All clinical writes and close share this lock, including first-note creation.
       await this.lockEncounter(tx, encounterId);
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
-      if (!encounter || (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub)) {
-        throw new EncounterNotFoundException(encounterId);
-      }
+      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      this.assertClinicalWriter(actor, encounter);
       if (encounter.status !== EncounterStatus.IN_PROGRESS) {
         throw new EncounterNotClosableException('Chỉ sửa được phiên khám đang mở');
       }
@@ -556,9 +574,7 @@ export class MedicalRecordsService {
           },
         });
         if (!encounter) throw new EncounterNotFoundException(encounterId);
-        if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
-          throw new EncounterNotFoundException(encounterId);
-        }
+        this.assertClinicalWriter(actor, encounter);
         if (encounter.status === EncounterStatus.COMPLETED) {
           throw new EncounterNotClosableException('Phiên khám đã kết thúc');
         }
@@ -1009,9 +1025,7 @@ export class MedicalRecordsService {
       include: { clinicalNote: true },
     });
     if (!encounter) throw new EncounterNotFoundException(encounterId);
-    if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
-      throw new EncounterNotFoundException(encounterId);
-    }
+    this.assertClinicalWriter(actor, encounter);
     if (encounter.status !== EncounterStatus.IN_PROGRESS) {
       if (encounter.status !== EncounterStatus.COMPLETED || !encounter.closedAt) {
         throw new ForbiddenException(

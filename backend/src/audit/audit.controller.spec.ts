@@ -73,10 +73,9 @@ describe('AuditController', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             occurredAt: expect.objectContaining({
-              gte: new Date(from),
-              // `to` is a bare date — the inclusive bound is end-of-day, not
-              // midnight, or a same-day (from === to) query matches nothing.
-              lte: new Date(`${to}T23:59:59.999Z`),
+              // A6-27: bare dates are whole clinic days (Asia/Ho_Chi_Minh).
+              gte: new Date(`${from}T00:00:00+07:00`),
+              lte: new Date(`${to}T23:59:59.999+07:00`),
             }),
           }),
         }),
@@ -95,25 +94,30 @@ describe('AuditController', () => {
       expect(result.data).toHaveLength(1);
     });
 
-    it('applies cursor-based pagination using occurredAt lt', async () => {
+    it('pages by (occurredAt, id) so rows sharing a millisecond are not skipped (A6-27)', async () => {
+      const at = new Date('2025-06-15T10:00:00Z');
       (prisma.auditLog.findUnique as jest.Mock).mockResolvedValue({
-        occurredAt: new Date('2025-06-15T10:00:00Z'),
+        id: 'cursor-log',
+        occurredAt: at,
       });
       (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
 
-      await controller.list({ cursor: 'cursor-log' } as any);
+      await controller.list({ cursor: 'cursor-log', action: 'LOGIN_SUCCESS' } as any);
 
       expect(prisma.auditLog.findUnique).toHaveBeenCalledWith({
         where: { id: 'cursor-log' },
-        select: { occurredAt: true },
+        select: { id: true, occurredAt: true },
       });
-      expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            occurredAt: expect.objectContaining({ lt: new Date('2025-06-15T10:00:00Z') }),
-          }),
-        }),
-      );
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.orderBy).toEqual([{ occurredAt: 'desc' }, { id: 'desc' }]);
+      expect(call.where).toEqual({
+        AND: [
+          { action: 'LOGIN_SUCCESS' },
+          {
+            OR: [{ occurredAt: { lt: at } }, { occurredAt: at, id: { lt: 'cursor-log' } }],
+          },
+        ],
+      });
     });
 
     it('ignores invalid cursor (no log found) and continues', async () => {

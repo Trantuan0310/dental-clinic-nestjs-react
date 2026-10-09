@@ -14,6 +14,7 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { JwtPayload } from '../common/guards/permissions.guard';
+import { rowScope } from '../common/row-scope';
 import { dentistCanReadPatient } from '../common/dentist-patient-access';
 
 /**
@@ -156,7 +157,7 @@ export class PatientsProxyController {
   }
 
   @Get('invoices')
-  @RequirePermissions('invoice.read.any', 'invoice.read.own', 'invoice.read')
+  @RequirePermissions('invoice.read.any', 'invoice.read.own')
   @ApiOperation({
     summary:
       'Proxy — invoices for patient (uses Billing permission, BR-BILL-003 dentist row-level)',
@@ -167,11 +168,14 @@ export class PatientsProxyController {
       throw new ForbiddenException('Patient not found or deleted');
     }
 
+    // Row scope (A6-19, common/row-scope.ts): the `invoice.read` FE alias
+    // alone grants no rows — it used to fall through to "all invoices".
+    const scope = rowScope(actor, 'invoice');
+    if (scope === 'none') {
+      throw new ForbiddenException('Bạn không có quyền xem hóa đơn của bệnh nhân này');
+    }
     // Dentist row-level: BR-BILL-003 → only invoices linked to encounter they own
-    if (
-      !actor.permissions.includes('invoice.read.any') &&
-      actor.permissions.includes('invoice.read.own')
-    ) {
+    if (scope === 'own') {
       const rows = await this.prisma.invoice.findMany({
         where: {
           patientId: id,

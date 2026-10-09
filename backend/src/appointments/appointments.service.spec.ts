@@ -4238,4 +4238,49 @@ describe('AppointmentsService', () => {
       });
     });
   });
+
+  describe('listTimeOffs (A6-24)', () => {
+    const row = (dentistId: string) => ({
+      id: `t-${dentistId}`,
+      dentistId,
+      reason: 'Khám thai',
+      decisionNote: 'OK',
+    });
+
+    it("hides a colleague's reason, keeps one's own and the approver's view", async () => {
+      prisma.timeOff.findMany.mockResolvedValue([row('dentist-1'), row('dentist-2')]);
+
+      const own = await service.listTimeOffs({} as any, dentistPayload('dentist-1'));
+      expect(own.data[0]).toMatchObject({ reason: 'Khám thai' });
+      expect(own.data[1]).toMatchObject({ reason: null, decisionNote: null, reasonHidden: true });
+
+      const desk = await service.listTimeOffs({} as any, receptionistPayload());
+      expect(desk.data.every((r: any) => r.reason === null)).toBe(true);
+
+      const approve = await service.listTimeOffs({} as any, approver);
+      expect(approve.data.map((r: any) => r.reason)).toEqual(['Khám thai', 'Khám thai']);
+    });
+  });
+
+  describe('row scope of a custom role (A6-19)', () => {
+    const noScope = {
+      sub: 'asst-1',
+      email: 'a@x',
+      permissions: ['appointment.update', 'appointment.create'],
+    };
+
+    it('refuses a role with neither read scope with a 403 naming the permission', async () => {
+      prisma.appointment.findMany.mockResolvedValue([]);
+      await expect(service.list({} as any, noScope)).rejects.toThrow(/appointment\.read\.any/);
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+      // Not mistaken for a dentist booking someone else's calendar.
+      expect(() => service.appointmentScope(noScope)).toThrow(/chưa có quyền xem lịch hẹn/);
+      expect(service.isRowScopedDentist(noScope)).toBe(false);
+    });
+
+    it('limits only appointment.read.own (without .any) to the own calendar', () => {
+      expect(service.appointmentScope(dentistPayload())).toBe('own');
+      expect(service.appointmentScope(receptionistPayload())).toBe('any');
+    });
+  });
 });

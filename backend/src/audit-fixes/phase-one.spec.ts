@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
@@ -253,9 +254,10 @@ describe('Phase one audit regressions', () => {
     it.each(writes)('blocks %s for dentist and admin', async (_name, write) => {
       db.encounter.findUnique.mockResolvedValue(validEncounter({ dentistId: dentist.sub, status }));
       db.prescription.findUnique.mockResolvedValue({ id: 'p', encounterId: 'e', deletedAt: null });
-      for (const actor of [dentist, admin]) {
-        await expect(write(medical, actor)).rejects.toThrow(EncounterNotClosableException);
-      }
+      await expect(write(medical, dentist)).rejects.toThrow(EncounterNotClosableException);
+      // A6-20: clinic-wide read is not a licence to write another dentist's
+      // encounter — refused before the status check.
+      await expect(write(medical, admin)).rejects.toThrow(ForbiddenException);
       expect(db.treatment.update).not.toHaveBeenCalled();
       expect(db.prescription.update).not.toHaveBeenCalled();
       expect(db.clinicalNote.create).not.toHaveBeenCalled();

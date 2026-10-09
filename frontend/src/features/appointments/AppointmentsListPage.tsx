@@ -515,7 +515,12 @@ export default function AppointmentsListPage() {
                       </p>
                     </td>
                     <td>
-                      <p className="font-medium text-gray-900">{r.patientName}</p>
+                      <p className="font-medium text-gray-900">
+                        {r.patientName}
+                        {r.patientDeleted && (
+                          <span className="ml-1 text-xs font-normal text-gray-500">(hồ sơ đã xóa)</span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-500">{r.patientCode}</p>
                     </td>
                     <td className="font-mono text-xs text-gray-700">

@@ -182,7 +182,11 @@ export default function DentistDetailPage() {
           </Card>
 
           <Card title="Lịch hẹn sắp tới">
-            {upcomingAppointments.length === 0 ? (
+            {upcomingAppointments === null ? (
+              <p className="text-sm text-gray-500">
+                Lịch hẹn của bác sĩ khác chỉ hiện cho chính bác sĩ đó và lễ tân/quản trị.
+              </p>
+            ) : upcomingAppointments.length === 0 ? (
               <p className="text-sm text-gray-500">Không có lịch hẹn sắp tới.</p>
             ) : (
               <ul className="divide-y divide-gray-100 text-sm dark:divide-surface-800">

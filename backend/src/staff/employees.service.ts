@@ -88,6 +88,7 @@ const PRIVILEGED_ACCOUNT: Prisma.UserWhereInput = {
   userRoles: {
     some: {
       role: {
+        deletedAt: null,
         OR: [
           { code: 'clinic_admin' },
           {

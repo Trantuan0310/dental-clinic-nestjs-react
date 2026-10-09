@@ -1,8 +1,10 @@
 ﻿import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { Button, Card, SearchInput, Spinner } from '@/components/ui';
-import { useAuditLogs } from './adminApi';
+import { AUDIT_EXPORT_MAX, fetchAllAuditLogs, useAuditLogs } from './adminApi';
 import type { AuditLog } from '@/types/admin';
+import { exportCsv } from '@/lib/csv';
+import { notify } from '@/components/ui/Toast';
 
 const PAGE_SIZE = 20;
 
@@ -70,42 +72,48 @@ export default function AuditLogsPage() {
     if (pagination?.nextCursor) setCursor(pagination.nextCursor);
   };
 
-  const handleExportCsv = () => {
-    const header = ['Thời gian', 'Hành động', 'Người thực hiện', 'Đối tượng', 'ID đối tượng', 'IP'];
-    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const rows = filteredLogs.map((log) =>
-      [
-        new Date(log.occurredAt).toLocaleString('vi-VN'),
-        ACTION_LABELS[log.action] ?? log.action,
-        log.actorEmailAtTime ?? 'Hệ thống',
-        TARGET_TYPE_LABELS[log.targetType ?? ''] ?? log.targetType ?? '',
-        log.targetId ?? '',
-        log.ipAddress ?? '',
-      ]
-        .map(escape)
-        .join(','),
+  const matchesSearch = (log: AuditLog) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      (log.actorEmailAtTime?.toLowerCase() ?? '').includes(q) ||
+      (log.action.toLowerCase()).includes(q) ||
+      (log.targetType?.toLowerCase() ?? '').includes(q) ||
+      (log.targetId?.toLowerCase() ?? '').includes(q)
     );
-    const csv = [header.map(escape).join(','), ...rows].join('\r\n');
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
-  const filteredLogs = search
-    ? logs.filter((log) => {
-        const q = search.toLowerCase();
-        return (
-          (log.actorEmailAtTime?.toLowerCase() ?? '').includes(q) ||
-          (log.action.toLowerCase()).includes(q) ||
-          (log.targetType?.toLowerCase() ?? '').includes(q) ||
-          (log.targetId?.toLowerCase() ?? '').includes(q)
-        );
-      })
-    : logs;
+  // Exports every log matching the filters (not only the pages loaded so
+  // far), via the shared exporter: BOM + formula neutralizing (A6-15/27).
+  const [exporting, setExporting] = useState(false);
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const { rows, truncated } = await fetchAllAuditLogs({
+        ...(actionFilter ? { action: actionFilter } : {}),
+        ...(entityFilter ? { targetType: entityFilter } : {}),
+        ...(dateFrom ? { from: dateFrom } : {}),
+        ...(dateTo ? { to: dateTo } : {}),
+      });
+      exportCsv(`nhat-ky-${new Date().toISOString().slice(0, 10)}`, rows.filter(matchesSearch), [
+        { header: 'Thời gian', accessor: (log) => new Date(log.occurredAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) },
+        { header: 'Hành động', accessor: (log) => ACTION_LABELS[log.action] ?? log.action },
+        { header: 'Người thực hiện', accessor: (log) => log.actorEmailAtTime ?? 'Hệ thống' },
+        { header: 'Đối tượng', accessor: (log) => TARGET_TYPE_LABELS[log.targetType ?? ''] ?? log.targetType ?? '' },
+        { header: 'ID đối tượng', accessor: (log) => log.targetId ?? '' },
+        { header: 'IP', accessor: (log) => log.ipAddress ?? '' },
+      ]);
+      if (truncated) {
+        notify.info(`Chỉ xuất ${AUDIT_EXPORT_MAX} dòng mới nhất. Hãy thu hẹp khoảng ngày để xuất phần còn lại.`);
+      }
+    } catch {
+      notify.error('Không xuất được nhật ký. Vui lòng thử lại.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const filteredLogs = search ? logs.filter(matchesSearch) : logs;
 
   return (
     <div className="space-y-4">
@@ -116,9 +124,9 @@ export default function AuditLogsPage() {
             Theo dõi mọi hoạt động trong hệ thống
           </p>
         </div>
-        <Button variant="outline" onClick={handleExportCsv} disabled={filteredLogs.length === 0}>
+        <Button variant="outline" onClick={handleExportCsv} disabled={filteredLogs.length === 0 || exporting}>
           <Download className="h-4 w-4" />
-          Xuất CSV
+          {exporting ? 'Đang xuất…' : 'Xuất CSV (toàn bộ theo bộ lọc)'}
         </Button>
       </div>
 

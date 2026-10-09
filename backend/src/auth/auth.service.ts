@@ -238,6 +238,7 @@ export class AuthService {
     // orderBy gives no guarantee which row comes back otherwise).
     const include = {
       userRoles: {
+        where: { role: { deletedAt: null } },
         include: {
           role: {
             include: {
@@ -757,6 +758,7 @@ export class AuthService {
       where: { id: userId },
       include: {
         userRoles: {
+          where: { role: { deletedAt: null } },
           include: {
             role: {
               include: {

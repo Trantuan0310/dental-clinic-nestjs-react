@@ -85,7 +85,7 @@ export class DispatchService {
   /** GET /queue — open entries for a clinic date, in dispatch order per dentist. */
   async list(q: { dentistId?: string; date?: string }, actor: JwtPayload) {
     const date = q.date ?? clinicDateOnly();
-    const dentistId = this.appointments.isRowScopedDentist(actor) ? actor.sub : q.dentistId;
+    const dentistId = this.appointments.appointmentScope(actor) === 'own' ? actor.sub : q.dentistId;
     const rows = await this.prisma.queueEntry.findMany({
       where: {
         queueDate: new Date(date),
@@ -146,7 +146,7 @@ export class DispatchService {
     if (
       !entry ||
       entry.doneAt ||
-      (this.appointments.isRowScopedDentist(actor) && entry.dentistId !== actor.sub)
+      (this.appointments.appointmentScope(actor) === 'own' && entry.dentistId !== actor.sub)
     ) {
       throw new AppointmentNotFoundException(id, 'Không tìm thấy lượt chờ');
     }

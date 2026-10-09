@@ -80,6 +80,7 @@ export class UsersService {
       take: pageSize + 1,
       include: {
         userRoles: {
+          where: { role: { deletedAt: null } },
           include: { role: true },
         },
         dentistProfile: { select: { deletedAt: true } },
@@ -152,11 +153,13 @@ export class UsersService {
 
     const roleIds = createUserDto.roleIds ?? [];
     const roles = await this.prisma.role.findMany({
-      where: { id: { in: roleIds } },
+      where: { id: { in: roleIds }, deletedAt: null },
     });
 
     if (roles.length !== roleIds.length) {
-      throw new NotFoundException('One or more roles not found');
+      throw new NotFoundException(
+        'Vai trò không tồn tại hoặc đã bị xóa. Hãy tải lại danh sách vai trò rồi chọn lại.',
+      );
     }
 
     const tempPassword = crypto.randomBytes(16).toString('base64').slice(0, 16);
@@ -262,6 +265,7 @@ export class UsersService {
           },
           include: {
             userRoles: {
+              where: { role: { deletedAt: null } },
               include: {
                 role: { include: { rolePermissions: { include: { permission: true } } } },
               },
@@ -319,11 +323,13 @@ export class UsersService {
     await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
     const roles = await this.prisma.role.findMany({
-      where: { id: { in: updateRolesDto.roleIds } },
+      where: { id: { in: updateRolesDto.roleIds }, deletedAt: null },
     });
 
     if (roles.length !== updateRolesDto.roleIds.length) {
-      throw new NotFoundException('One or more roles not found');
+      throw new NotFoundException(
+        'Vai trò không tồn tại hoặc đã bị xóa. Hãy tải lại danh sách vai trò rồi chọn lại.',
+      );
     }
 
     await this.prisma.$transaction(
@@ -623,6 +629,7 @@ export class UsersService {
       where: { id: userId },
       include: {
         userRoles: {
+          where: { role: { deletedAt: null } },
           include: {
             role: {
               include: {
@@ -696,7 +703,7 @@ export class UsersService {
     const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
-        userRoles: { include: { role: true } },
+        userRoles: { where: { role: { deletedAt: null } }, include: { role: true } },
       },
     });
 
@@ -732,7 +739,7 @@ export class UsersService {
     const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
-        userRoles: { include: { role: true } },
+        userRoles: { where: { role: { deletedAt: null } }, include: { role: true } },
       },
     });
 

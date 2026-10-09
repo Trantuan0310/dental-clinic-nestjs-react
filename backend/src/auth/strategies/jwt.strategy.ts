@@ -27,6 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       where: { id: payload.sub },
       include: {
         userRoles: {
+          where: { role: { deletedAt: null } },
           include: {
             role: {
               include: {

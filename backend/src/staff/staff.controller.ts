@@ -160,8 +160,8 @@ export class DentistsController {
   @Get(':userId/overview')
   @RequirePermissions('dentist.read')
   @ApiOperation({ summary: 'Profile, weekly schedule and upcoming appointments' })
-  async overview(@Param('userId', ParseUUIDPipe) userId: string) {
-    return { data: await this.dentists.overview(userId) };
+  async overview(@Param('userId', ParseUUIDPipe) userId: string, @User() actor: JwtPayload) {
+    return { data: await this.dentists.overview(userId, actor) };
   }
 
   @Patch(':userId')
