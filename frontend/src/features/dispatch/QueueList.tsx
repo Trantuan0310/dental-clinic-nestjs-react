@@ -1,9 +1,20 @@
 import { useState } from 'react';
-import { AlertTriangle, ArrowRightLeft, BellRing, Clock, DoorOpen, Play, SkipForward, Undo2 } from 'lucide-react';
-import { Badge, Button, Modal, Select, Textarea } from '@/components/ui';
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  BellOff,
+  BellRing,
+  Clock,
+  DoorOpen,
+  Play,
+  ShieldOff,
+  SkipForward,
+  Undo2,
+} from 'lucide-react';
+import { Badge, Button, Checkbox, ConfirmDialog, Modal, Select, Textarea } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { notify } from '@/components/ui/Toast';
-import { getApiErrorMessage } from '@/lib/errors';
+import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import {
   useDentistOptions,
   useMarkLeft,
@@ -15,9 +26,11 @@ import {
   type QueueEntry,
   type QueuePriority,
   useCallPatient,
+  useClearEmergency,
   useMarkEmergency,
   useSkipPatient,
   useTransferPatient,
+  useUncallPatient,
 } from './dispatchApi';
 
 const PRIORITY_VARIANT: Record<QueuePriority, 'danger' | 'success' | 'warning' | 'info'> = {
@@ -27,11 +40,13 @@ const PRIORITY_VARIANT: Record<QueuePriority, 'danger' | 'success' | 'warning' |
   WALK_IN: 'info',
 };
 
-type Dialog =
-  | { kind: 'skip' | 'emergency' | 'left' | 'undo'; entry: QueueEntry }
-  | { kind: 'transfer'; entry: QueueEntry };
+type DialogKind = 'skip' | 'emergency' | 'clear_emergency' | 'left' | 'undo' | 'transfer';
+type Dialog = { kind: DialogKind; entry: QueueEntry };
 
-const DIALOG_TEXT = {
+const DIALOG_TEXT: Record<
+  DialogKind,
+  { title: string; description: string; min: number; confirm: string; placeholder: string }
+> = {
   skip: {
     title: 'Bỏ qua bệnh nhân',
     description: 'Bệnh nhân không có mặt khi gọi. Họ xuống cuối hàng và có thể được gọi lại.',
@@ -46,9 +61,17 @@ const DIALOG_TEXT = {
     confirm: 'Đưa lên đầu',
     placeholder: 'VD: Sưng mặt, sốt cao',
   },
+  clear_emergency: {
+    title: 'Gỡ ưu tiên cấp cứu',
+    description: 'Bệnh nhân trở lại thứ tự theo giờ hẹn/giờ đến như lúc check-in.',
+    min: 5,
+    confirm: 'Gỡ cấp cứu',
+    placeholder: 'VD: Đánh dấu cấp cứu nhầm',
+  },
   left: {
     title: 'Bệnh nhân đã về (chưa khám)',
-    description: 'Bệnh nhân rời phòng khám trước khi được khám. Giờ hẹn được giải phóng.',
+    description:
+      'Bệnh nhân rời phòng khám trước khi được khám. Giờ hẹn được giải phóng. Nếu bấm nhầm hoặc bệnh nhân quay lại trong ngày, mở lịch hẹn và chọn "Hoàn tác đã về".',
     min: 5,
     confirm: 'Xác nhận đã về',
     placeholder: 'VD: Chờ lâu, xin về',
@@ -56,7 +79,7 @@ const DIALOG_TEXT = {
   undo: {
     title: 'Hoàn tác check-in',
     description:
-      'Check-in nhầm: lịch quay về trạng thái trước khi check-in và rời hàng đợi. Nếu bệnh nhân bỏ về, hãy dùng "Đã về".',
+      'Check-in nhầm: lịch quay về trạng thái trước khi check-in và rời hàng đợi. Bệnh nhân tạm ra ngoài thì dùng "Bỏ qua" (giữ lượt, gọi lại sau); bỏ về thì dùng "Đã về".',
     min: 5,
     confirm: 'Hoàn tác',
     placeholder: 'VD: Check-in nhầm bệnh nhân',
@@ -64,12 +87,12 @@ const DIALOG_TEXT = {
   transfer: {
     title: 'Chuyển sang bác sĩ khác',
     description:
-      'Lượt khám giữ nguyên thời lượng và thứ tự ưu tiên, bắt đầu từ bây giờ. Bác sĩ mới phải làm được các dịch vụ đã chọn và đang rảnh.',
+      'Bệnh nhân vào hàng chờ của bác sĩ mới, giữ thứ tự ưu tiên và giờ check-in; thời lượng theo dịch vụ của bác sĩ mới. Bác sĩ mới phải làm được các dịch vụ đã chọn và đang trong giờ làm (có thể đang bận khám).',
     min: 5,
     confirm: 'Chuyển',
     placeholder: 'VD: BS đang quá tải, BS khác đang trống',
   },
-} as const;
+};
 
 /**
  * One dentist's queue in dispatch order (BR-DSP-001). `mode="dentist"` is
@@ -90,9 +113,15 @@ export function QueueList({
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [reason, setReason] = useState('');
   const [targetDentist, setTargetDentist] = useState('');
+  // A3-02c: the new dentist's hours end before the visit would; asked once.
+  const [overtimeAsked, setOvertimeAsked] = useState<string | null>(null);
+  const [allowOvertime, setAllowOvertime] = useState(false);
+  const [confirmStart, setConfirmStart] = useState<QueueEntry | null>(null);
   const call = useCallPatient();
+  const uncall = useUncallPatient();
   const skip = useSkipPatient();
   const emergency = useMarkEmergency();
+  const clearEmergency = useClearEmergency();
   const transfer = useTransferPatient();
   const markLeft = useMarkLeft();
   const undoCheckIn = useUndoAppointmentStatus();
@@ -101,6 +130,8 @@ export function QueueList({
   const open = (d: Dialog) => {
     setReason('');
     setTargetDentist('');
+    setOvertimeAsked(null);
+    setAllowOvertime(false);
     setDialog(d);
   };
 
@@ -110,6 +141,10 @@ export function QueueList({
       notify.success(ok);
       setDialog(null);
     } catch (err) {
+      if (getApiErrorCode(err) === 'OVERTIME_CONFIRM_REQUIRED') {
+        setOvertimeAsked(getApiErrorMessage(err, fail));
+        return;
+      }
       notify.error(getApiErrorMessage(err, fail));
     }
   };
@@ -127,6 +162,12 @@ export function QueueList({
         `${name} được ưu tiên cấp cứu`,
         'Không cập nhật được',
       );
+    } else if (dialog.kind === 'clear_emergency') {
+      void run(
+        () => clearEmergency.mutateAsync({ id: entry.id, reason: r }),
+        `Đã gỡ ưu tiên cấp cứu của ${name}`,
+        'Không cập nhật được',
+      );
     } else if (dialog.kind === 'left') {
       void run(
         () => markLeft.mutateAsync({ id: entry.appointmentId, reason: r }),
@@ -141,7 +182,17 @@ export function QueueList({
       );
     } else {
       void run(
-        () => transfer.mutateAsync({ id: entry.id, dentistId: targetDentist, reason: r }),
+        async () => {
+          const res = (await transfer.mutateAsync({
+            id: entry.id,
+            dentistId: targetDentist,
+            reason: r,
+            allowOvertime,
+          })) as { warning?: string } | undefined;
+          // X-5: the new dentist has leave pending that day.
+          if (res?.warning) notify.warning(res.warning);
+          return res;
+        },
         `Đã chuyển ${name}`,
         'Không chuyển được',
       );
@@ -150,7 +201,12 @@ export function QueueList({
 
   const text = dialog ? DIALOG_TEXT[dialog.kind] : null;
   const pending =
-    skip.isPending || emergency.isPending || markLeft.isPending || transfer.isPending || undoCheckIn.isPending;
+    skip.isPending ||
+    emergency.isPending ||
+    clearEmergency.isPending ||
+    markLeft.isPending ||
+    transfer.isPending ||
+    undoCheckIn.isPending;
 
   return (
     <>
@@ -223,6 +279,26 @@ export function QueueList({
                       </Button>
                     </PermissionGuard>
                   )}
+                  {/* Called by mistake: back in line, same place, no skip counted (A3-15). */}
+                  {called && (
+                    <PermissionGuard permission="queue.call">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<BellOff className="h-3.5 w-3.5" />}
+                        isLoading={uncall.isPending && uncall.variables === e.id}
+                        onClick={() =>
+                          void run(
+                            () => uncall.mutateAsync(e.id),
+                            `${p.fullName} trở lại hàng chờ`,
+                            'Không hủy gọi được',
+                          )
+                        }
+                      >
+                        Hủy gọi
+                      </Button>
+                    </PermissionGuard>
+                  )}
                   {/* Calling is optional: the dentist may start the exam straight away. */}
                   {mode === 'dentist' && e.status !== 'SKIPPED' && onStart && (
                     <PermissionGuard permission="encounter.start" mode="hide">
@@ -230,7 +306,7 @@ export function QueueList({
                         size="sm"
                         leftIcon={<Play className="h-3.5 w-3.5" />}
                         isLoading={startingId === e.appointmentId}
-                        onClick={() => onStart(e.appointmentId)}
+                        onClick={() => setConfirmStart(e)}
                       >
                         Bắt đầu khám
                       </Button>
@@ -250,7 +326,7 @@ export function QueueList({
                   )}
                   {mode === 'desk' && (
                     <>
-                      {e.priority !== 'EMERGENCY' && (
+                      {e.priority !== 'EMERGENCY' ? (
                         <PermissionGuard permission="queue.manage">
                           <Button
                             size="sm"
@@ -261,19 +337,28 @@ export function QueueList({
                             Cấp cứu
                           </Button>
                         </PermissionGuard>
-                      )}
-                      {!called && (
+                      ) : (
                         <PermissionGuard permission="queue.manage">
                           <Button
                             size="sm"
                             variant="ghost"
-                            leftIcon={<ArrowRightLeft className="h-3.5 w-3.5" />}
-                            onClick={() => open({ kind: 'transfer', entry: e })}
+                            leftIcon={<ShieldOff className="h-3.5 w-3.5" />}
+                            onClick={() => open({ kind: 'clear_emergency', entry: e })}
                           >
-                            Chuyển BS
+                            Gỡ cấp cứu
                           </Button>
                         </PermissionGuard>
                       )}
+                      <PermissionGuard permission="queue.manage">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          leftIcon={<ArrowRightLeft className="h-3.5 w-3.5" />}
+                          onClick={() => open({ kind: 'transfer', entry: e })}
+                        >
+                          Chuyển BS
+                        </Button>
+                      </PermissionGuard>
                       <PermissionGuard permission="appointment.mark_left">
                         <Button
                           size="sm"
@@ -284,8 +369,8 @@ export function QueueList({
                           Đã về
                         </Button>
                       </PermissionGuard>
-                      {/* A walk-in has no booking to go back to. */}
-                      {e.appointment.visitKind !== 'WALK_IN' && (
+                      {/* A walk-in has no booking to go back to, nor has a transferred visit. */}
+                      {e.appointment.visitKind !== 'WALK_IN' && !e.transferredFromId && (
                         <PermissionGuard permission="appointment.check_in">
                           <Button
                             size="sm"
@@ -320,7 +405,8 @@ export function QueueList({
               onClick={submit}
               isLoading={pending}
               disabled={
-                reason.trim().length < (text?.min ?? 0) || (dialog?.kind === 'transfer' && !targetDentist)
+                reason.trim().length < (text?.min ?? 0) ||
+                (dialog?.kind === 'transfer' && (!targetDentist || (overtimeAsked !== null && !allowOvertime)))
               }
             >
               {text?.confirm}
@@ -337,12 +423,27 @@ export function QueueList({
               <Select
                 label="Bác sĩ nhận"
                 value={targetDentist}
-                onChange={(ev) => setTargetDentist(ev.target.value)}
+                onChange={(ev) => {
+                  setTargetDentist(ev.target.value);
+                  setOvertimeAsked(null);
+                  setAllowOvertime(false);
+                }}
                 placeholder="Chọn bác sĩ"
                 options={dentists
                   .filter((d) => d.id !== dialog.entry.dentistId)
                   .map((d) => ({ value: d.id, label: d.fullName }))}
               />
+            )}
+            {dialog.kind === 'transfer' && overtimeAsked && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900">
+                <p>{overtimeAsked}</p>
+                <Checkbox
+                  className="mt-1"
+                  checked={allowOvertime}
+                  onChange={setAllowOvertime}
+                  label="Bác sĩ đồng ý khám ngoài giờ (lý do bên dưới được ghi lại)"
+                />
+              </div>
             )}
             <Textarea
               label={`Lý do (ít nhất ${text.min} ký tự)`}
@@ -354,6 +455,26 @@ export function QueueList({
           </div>
         )}
       </Modal>
+
+      {/* A3-03: starting the wrong patient has no easy way back. */}
+      <ConfirmDialog
+        open={confirmStart !== null}
+        onClose={() => setConfirmStart(null)}
+        onConfirm={() => {
+          if (confirmStart) onStart?.(confirmStart.appointmentId);
+          setConfirmStart(null);
+        }}
+        title="Bắt đầu khám?"
+        description={
+          confirmStart && (
+            <>
+              Mở phiên khám cho <strong>{confirmStart.appointment.patient.fullName}</strong> (
+              {confirmStart.appointment.patient.code}). Kiểm tra đúng người trước khi bắt đầu.
+            </>
+          )
+        }
+        confirmLabel="Bắt đầu khám"
+      />
     </>
   );
 }

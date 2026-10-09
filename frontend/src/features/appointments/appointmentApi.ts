@@ -304,6 +304,8 @@ function buildRescheduleBody(
     reason: payload.reason,
     durationOverrideReason: payload.durationOverrideReason?.trim() || undefined,
     byClinic: payload.byClinic || undefined,
+    rescheduleCount: payload.rescheduleCount,
+    updatedAt: payload.updatedAt,
   };
 }
 
@@ -869,6 +871,8 @@ export function useCreateWalkIn() {
         reason: payload.reason?.trim() || undefined,
         chiefComplaint: payload.chiefComplaint?.trim() || undefined,
         appointmentType: payload.appointmentType?.toUpperCase(),
+        overtimeReason: payload.overtimeReason?.trim() || undefined,
+        ignoreUpcomingBookings: payload.ignoreUpcomingBookings || undefined,
       });
       return transformAppointment(row);
     },
@@ -895,8 +899,9 @@ export function useMarkLeft() {
 }
 
 /**
- * POST /appointments/:id/undo-check-in or /undo-no-show — back to
- * scheduled/confirmed, the same clinic day, with a reason.
+ * POST /appointments/:id/undo-check-in, /undo-no-show or /undo-left — back
+ * to scheduled/confirmed (or, for "left", to the queue), the same clinic
+ * day, with a reason.
  */
 export function useUndoAppointmentStatus() {
   const qc = useQueryClient();
@@ -907,7 +912,7 @@ export function useUndoAppointmentStatus() {
       reason,
     }: {
       id: string;
-      what: 'check-in' | 'no-show';
+      what: 'check-in' | 'no-show' | 'left';
       reason: string;
     }): Promise<Appointment> => {
       const row = await post<PrismaAppointmentRow>(`/appointments/${id}/undo-${what}`, {

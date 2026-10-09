@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { PaginatedResult, PaginationSchema } from '../common/dto/pagination.dto';
-import { endOfDayInclusive } from '../common/date-range.util';
+import { clinicDateOnly, endOfDayInclusive, startOfClinicDay } from '../common/date-range.util';
 import {
   PATIENT_CLINICAL_DATA_CHANGED_EVENT,
   PatientClinicalDataChangedEvent,
@@ -407,7 +407,9 @@ export class PatientsService {
               OR: [
                 {
                   status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
-                  startAt: { gte: new Date() },
+                  // From the start of today: a visit just past its start may
+                  // still see the patient arrive (A3-23).
+                  startAt: { gte: startOfClinicDay(clinicDateOnly()) },
                 },
                 // A patient in the clinic right now blocks even once the slot
                 // start has passed.

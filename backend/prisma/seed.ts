@@ -403,7 +403,7 @@ const PERMISSIONS = [
     code: 'encounter.cancel',
     resource: 'encounter',
     action: 'cancel',
-    description: 'Hủy phiên khám (admin)',
+    description: 'Hủy phiên khám mở nhầm',
   },
   {
     code: 'clinical_note.write',
@@ -844,6 +844,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'encounter.read',
     'encounter.read.own',
     'encounter.complete',
+    // Own encounter started by mistake, before any treatment (migration 042).
+    'encounter.cancel',
     'clinical_note.write',
     'clinical_note.addendum',
     'treatment.write',

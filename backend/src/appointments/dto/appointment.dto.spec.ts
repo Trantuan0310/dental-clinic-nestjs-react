@@ -11,9 +11,11 @@ import {
   CreateShiftRegistrationDto,
   CreateWorkingScheduleDto,
   ListAppointmentsQueryDto,
+  MarkLeftDto,
   StatusReasonDto,
   UpdateWorkingScheduleDto,
 } from './appointment.dto';
+import { QueueEmergencyDto, QueueSkipDto, QueueTransferDto, ReassignDayDto } from './dispatch.dto';
 import { CLINIC_TIME_MESSAGE } from '../../common/validators/is-clinic-time';
 
 describe('ListAppointmentsQueryDto.status transform', () => {
@@ -215,10 +217,31 @@ describe('StatusReasonDto (undo of a check-in / no-show)', () => {
     expect(errors('   abc    ')).toEqual(['Lý do cần ít nhất 5 ký tự']);
   });
 
-  it('answers a missing reason in Vietnamese', () => {
-    expect(errors(undefined)).toEqual(
-      expect.arrayContaining(['Vui lòng nhập lý do', 'Lý do cần ít nhất 5 ký tự']),
-    );
+  // A5-23: one message, not "required", "too short" and "too long" at once.
+  it('answers a missing reason with one Vietnamese message', () => {
+    expect(errors(undefined)).toEqual(['Vui lòng nhập lý do']);
+    expect(errors('     ')).toEqual(['Vui lòng nhập lý do']);
+    expect(errors('x'.repeat(501))).toEqual(['Lý do tối đa 500 ký tự']);
     expect(errors('Đánh vắng mặt nhầm')).toEqual([]);
+  });
+});
+
+// A3-18: a reason made of spaces is no reason, on every queue/left action.
+describe('reasons of queue actions and "left" are trimmed', () => {
+  it.each<[string, new () => object]>([
+    ['MarkLeftDto', MarkLeftDto],
+    ['QueueSkipDto', QueueSkipDto],
+    ['QueueEmergencyDto', QueueEmergencyDto],
+    ['QueueTransferDto', QueueTransferDto],
+    ['ReassignDayDto', ReassignDayDto],
+  ])('%s', (_name, cls) => {
+    const dto = plainToInstance(cls, { reason: '        ' });
+    const reasonErrors = validateSync(dto)
+      .filter(e => e.property === 'reason')
+      .flatMap(e => Object.values(e.constraints ?? {}));
+    expect(reasonErrors).toEqual(['Vui lòng nhập lý do']);
+    expect((plainToInstance(cls, { reason: '  Gọi 2 lần  ' }) as { reason: string }).reason).toBe(
+      'Gọi 2 lần',
+    );
   });
 });

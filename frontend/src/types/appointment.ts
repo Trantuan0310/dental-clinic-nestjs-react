@@ -149,6 +149,10 @@ export interface CreateWalkInPayload {
   reason?: string;
   chiefComplaint?: string;
   appointmentType?: AppointmentType;
+  /** Confirms a visit running past the end of the dentist's hours (A3-02). */
+  overtimeReason?: string;
+  /** The patient has a booking to come and this is another visit (A3-08). */
+  ignoreUpcomingBookings?: boolean;
 }
 
 /** A service the dentist performs on a date, as offered by the booking form. */
@@ -208,6 +212,9 @@ export interface RescheduleAppointmentPayload {
   durationOverrideReason?: string;
   /** A clinic move: not counted in the patient's limit of 3. */
   byClinic?: boolean;
+  /** The version the client saw: a visit moved since is a 409 (A3-12). */
+  rescheduleCount?: number;
+  updatedAt?: string;
 }
 
 export interface CheckInPayload {

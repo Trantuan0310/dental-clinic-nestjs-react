@@ -90,7 +90,14 @@ import {
   UpdateTimeOffDto,
 } from './dto/appointment.dto';
 import { MAX_VISIT_MINUTES } from './dto/is-appointment-instant';
-import { closeQueueEntry, enqueue, LATE_AFTER_MIN } from './domain/queue';
+import {
+  closeQueueEntry,
+  enqueue,
+  LATE_AFTER_MIN,
+  releaseOtherCalled,
+  reopenLeftQueueEntry,
+} from './domain/queue';
+import { APPOINTMENT_STATUS_LABEL } from './domain/status-label';
 import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
 import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
 import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
@@ -122,16 +129,9 @@ export const END_OF_DAY_LEFT_REASON = 'Hệ thống đóng cuối ngày';
 export const STALE_APPOINTMENT_MSG = 'Lịch vừa được thay đổi, tải lại rồi thử lại';
 /** The client's copy (rescheduleCount / updatedAt) is older than the row. */
 export const CHANGED_SINCE_READ_MSG = 'Lịch vừa được thay đổi, vui lòng tải lại';
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  SCHEDULED: 'đã đặt',
-  CONFIRMED: 'đã xác nhận',
-  CHECKED_IN: 'đã check-in',
-  IN_PROGRESS: 'đang khám',
-  COMPLETED: 'đã hoàn thành',
-  CANCELLED: 'đã hủy',
-  NO_SHOW: 'vắng mặt',
-  LEFT: 'đã về (chưa khám)',
-};
+const STATUS_LABEL = APPOINTMENT_STATUS_LABEL;
+/** The same request repeated within this window gets the first result (A3-21). */
+const REPEAT_SUBMIT_MS = 2 * 60_000;
 
 const blankToNull = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
 
@@ -280,6 +280,36 @@ export class AppointmentsService {
     const write = async (tx: Prisma.TransactionClient) => {
       await this.lockDentist(tx, dto.dentistId);
       await this.lockPatient(tx, dto.patientId);
+      // A5-15: this very visit is already booked. Sent twice by the same
+      // person just now: the first booking is the answer; otherwise say so
+      // instead of "the slot is taken" (which reads as "not booked yet").
+      const same = await tx.appointment.findFirst({
+        where: {
+          patientId: dto.patientId,
+          dentistId: dto.dentistId,
+          startAt,
+          status: { notIn: ACTIVE_APPOINTMENT_EXCLUDED_STATUSES },
+          deletedAt: null,
+        },
+      });
+      if (
+        same &&
+        same.patientId === dto.patientId &&
+        same.dentistId === dto.dentistId &&
+        same.startAt?.getTime() === startAt.getTime()
+      ) {
+        if (
+          !fromBookingRequest &&
+          same.createdBy === actor.sub &&
+          Date.now() - same.createdAt.getTime() < REPEAT_SUBMIT_MS
+        ) {
+          return same;
+        }
+        throw new SlotConflictException(
+          `Bệnh nhân này đã có lịch đúng giờ này với bác sĩ này (đặt lúc ${this.toClinicTimeString(same.createdAt)} ngày ${this.viDate(new Date(clinicDateOnly(same.createdAt)))}) — không cần đặt lại`,
+          'ALREADY_BOOKED',
+        );
+      }
       await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx, plan);
       await this.ensurePatientFree(dto.patientId, startAt, endAt, undefined, tx);
 
@@ -460,9 +490,17 @@ export class AppointmentsService {
       );
     }
 
-    if (now < windowStart) {
+    // A3-07: earlier than the window the same clinic day, a patient may be
+    // checked in early with a reason; the booking keeps its time and the
+    // patient lines up by it (queue dueAt), not ahead of earlier bookings.
+    const early = now < windowStart;
+    if (early && !(override && this.isClinicToday(appt.startAt, now))) {
+      const today = this.isClinicToday(appt.startAt, now);
       throw new CheckInWindowException(
-        `Chưa đến giờ check-in — mở từ ${this.toClinicTimeString(new Date(windowStart))} ngày ${clinicDateOnly(new Date(windowStart))}`,
+        today
+          ? `Chưa đến giờ check-in (mở từ ${this.toClinicTimeString(new Date(windowStart))}) — có thể check-in sớm với lý do`
+          : `Lịch hẹn này vào ${this.toClinicTimeString(appt.startAt)} ngày ${this.viDate(new Date(clinicDateOnly(appt.startAt)))}, chưa phải hôm nay — nếu bệnh nhân muốn khám hôm nay, hãy đổi lịch hoặc tiếp nhận vãng lai`,
+        today ? [{ code: 'early_check_in', label: 'Check-in sớm (cần lý do)' }] : undefined,
       );
     }
     const late = fromNoShow || now > windowEnd;
@@ -488,14 +526,16 @@ export class AppointmentsService {
     const reason = overrideReason?.trim() ?? '';
     if (override && reason.length < STATUS_REASON_MIN_LENGTH) {
       throw new CheckInWindowException(
-        `Check-in muộn cần lý do (ít nhất ${STATUS_REASON_MIN_LENGTH} ký tự)`,
+        `Check-in ${early ? 'sớm' : 'muộn'} cần lý do (ít nhất ${STATUS_REASON_MIN_LENGTH} ký tự)`,
       );
     }
 
     // BR-APPT-008: active patient
     const patient = await this.prisma.patient.findUnique({ where: { id: appt.patientId } });
     if (!patient || patient.deletedAt) {
-      throw new InvalidAppointmentStateException('Hồ sơ bệnh nhân đã bị xóa');
+      throw new InvalidAppointmentStateException(
+        'Hồ sơ bệnh nhân đã bị xóa (lưu trữ) — khôi phục hồ sơ ở trang Bệnh nhân rồi check-in lại',
+      );
     }
     await this.assertDentistPresent(appt);
 
@@ -542,6 +582,7 @@ export class AppointmentsService {
         ? {
             override: true,
             overrideReason: reason,
+            ...(early ? { early: true } : {}),
             ...(fromNoShow
               ? { fromStatus: AppointmentStatus.NO_SHOW, noShowReason: appt.cancelledReason }
               : {}),
@@ -586,11 +627,33 @@ export class AppointmentsService {
       await tx.$queryRaw`SELECT id FROM appointments WHERE id = ${appointmentId}::uuid FOR UPDATE`;
       const encounter = await tx.encounter.findUnique({
         where: { appointmentId },
-        select: { id: true },
+        select: {
+          id: true,
+          status: true,
+          _count: { select: { treatments: { where: { deletedAt: null } } } },
+          prescription: { select: { deletedAt: true } },
+        },
       });
-      if (encounter) {
+      // A3-03: an exam started by mistake and cancelled with nothing recorded
+      // does not hold the visit; any other encounter does.
+      const emptyCancelled =
+        encounter?.status === EncounterStatus.CANCELLED &&
+        encounter._count.treatments === 0 &&
+        (!encounter.prescription || encounter.prescription.deletedAt !== null);
+      if (encounter && !emptyCancelled) {
         throw new InvalidAppointmentStateException(
           'Lượt khám đã từng được mở — không thể hoàn tác check-in; nếu bệnh nhân về, hãy ghi nhận "Đã về"',
+        );
+      }
+      // A3-19: a transfer moved the visit to another dentist and time; going
+      // back to "booked" would leave it there, so it is refused.
+      const transferred = await tx.queueEntry.findFirst({
+        where: { appointmentId, transferredFromId: { not: null } },
+        select: { id: true },
+      });
+      if (transferred) {
+        throw new InvalidAppointmentStateException(
+          'Bệnh nhân đã được chuyển sang bác sĩ khác — không hoàn tác check-in được; nếu bệnh nhân về, hãy ghi nhận "Đã về"',
         );
       }
       const res = await tx.appointment.updateMany({
@@ -628,7 +691,7 @@ export class AppointmentsService {
         appt.status !== AppointmentStatus.IN_PROGRESS
       ) {
         throw new InvalidAppointmentStateException(
-          `Cannot start encounter from status ${appt.status}; appointment must be CHECKED_IN`,
+          `Không thể bắt đầu khám: lịch hẹn đang ở trạng thái "${STATUS_LABEL[appt.status]}" (cần đã check-in)`,
         );
       }
 
@@ -637,10 +700,14 @@ export class AppointmentsService {
         select: { id: true, status: true },
       });
       if (existing?.status === EncounterStatus.COMPLETED) {
-        throw new InvalidAppointmentStateException('Encounter already completed');
+        throw new InvalidAppointmentStateException('Phiên khám của lịch này đã kết thúc');
       }
 
       await closeQueueEntry(tx, appointmentId, 'STARTED', actor.sub);
+      // A3-15: whoever else was called for this dentist waits again.
+      if (appt.status === AppointmentStatus.CHECKED_IN) {
+        await releaseOtherCalled(tx, appt, actor.sub);
+      }
       const updated =
         appt.status === AppointmentStatus.CHECKED_IN
           ? await tx.appointment.update({
@@ -706,6 +773,15 @@ export class AppointmentsService {
 
   async cancel(appointmentId: string, dto: CancelAppointmentDto, actor: JwtPayload) {
     const appt = await this.requireAppointment(appointmentId);
+    // The same request sent twice (A3-21): already cancelled by this person.
+    if (
+      appt.status === AppointmentStatus.CANCELLED &&
+      appt.cancelledBy === actor.sub &&
+      appt.cancelledAt &&
+      Date.now() - appt.cancelledAt.getTime() < REPEAT_SUBMIT_MS
+    ) {
+      return appt;
+    }
     // The client saw an older version (moved or edited since): reload first.
     if (
       (dto.rescheduleCount !== undefined && dto.rescheduleCount !== appt.rescheduleCount) ||
@@ -1215,6 +1291,24 @@ export class AppointmentsService {
     // Row-level: dentist can only reschedule their own appointments.
     if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
+    }
+    // A3-12 / A5-07: the same time and dentist again (a double submit or a
+    // slip) changes nothing and costs no reschedule; a client that saw an
+    // older version reloads first instead of overwriting a colleague.
+    if (
+      new Date(dto.newStartsAt).getTime() === appt.startAt.getTime() &&
+      new Date(dto.newEndsAt).getTime() === appt.endAt.getTime() &&
+      (dto.newDentistId ?? appt.dentistId) === appt.dentistId
+    ) {
+      const { services: _services, ...unchanged } = appt;
+      return unchanged;
+    }
+    if (
+      (dto.rescheduleCount !== undefined && dto.rescheduleCount !== appt.rescheduleCount) ||
+      (dto.updatedAt !== undefined &&
+        new Date(dto.updatedAt).getTime() !== appt.updatedAt.getTime())
+    ) {
+      throw new InvalidAppointmentStateException(CHANGED_SINCE_READ_MSG);
     }
 
     // Only a not-yet-arrived appointment can move. CHECKED_IN / IN_PROGRESS
@@ -3998,48 +4092,125 @@ export class AppointmentsService {
   }
 
   /**
-   * BR-APPT-032: a walk-in is booked from now and checked in at once. The
-   * dentist must be working, free and not on leave right now; the 1-minute
-   * lead time of pre-booked visits does not apply.
+   * BR-APPT-032: a walk-in is booked from now and checked in at once. It
+   * joins the dentist's queue (A3-02): the dentist must be on duty and not
+   * on leave, but may be busy with other visits; a visit running past the
+   * end of hours needs `overtimeReason`. The 1-minute lead time of
+   * pre-booked visits does not apply.
    */
   async createWalkIn(dto: CreateWalkInDto, actor: JwtPayload) {
-    const startAt = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    const now = new Date(Math.floor(Date.now() / 60_000) * 60_000);
     await this.assertDentistMayBook(dto.dentistId, dto.patientId, actor);
     const dentist = await this.validateDentist(dto.dentistId);
     await this.validateActivePatient(dto.patientId);
-    const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(startAt));
+    const plan = await this.planVisit(dto.dentistId, dto.serviceIds, clinicDateOnly(now));
     const minutes = plan?.durationMin ?? dto.durationMin ?? this.defaultSlotMinutes(dentist);
-    const endAt = new Date(startAt.getTime() + minutes * 60_000);
-    this.assertVisitLength(startAt, endAt);
+    this.assertVisitLength(now, new Date(now.getTime() + minutes * 60_000));
+    const dayStart = startOfClinicDay(clinicDateOnly(now));
+    const dayEnd = new Date(dayStart.getTime() + DAY_MS);
 
-    const created = await this.prisma.$transaction(async tx => {
+    // A3-08: a patient with a booking to come may be here for it (wrong day
+    // or early): the desk decides, instead of the booking later turning
+    // into a reminder and a no-show.
+    if (!dto.ignoreUpcomingBookings) {
+      const upcoming = await this.prisma.appointment.findMany({
+        where: {
+          patientId: dto.patientId,
+          status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+          startAt: { gte: dayStart },
+          deletedAt: null,
+        },
+        orderBy: { startAt: 'asc' },
+        take: 3,
+        select: { id: true, startAt: true, dentist: { select: { fullName: true } } },
+      });
+      if (upcoming?.length) {
+        const first = upcoming[0];
+        const when =
+          first.startAt < dayEnd
+            ? `${this.toClinicTimeString(first.startAt)} hôm nay`
+            : `${this.toClinicTimeString(first.startAt)} ngày ${this.viDate(new Date(clinicDateOnly(first.startAt)))}`;
+        throw new BusinessRuleException(
+          `Bệnh nhân đã có lịch hẹn ${when} với BS ${first.dentist?.fullName ?? ''}. Nếu bệnh nhân đến cho lịch đó, hãy mở lịch hẹn để check-in (hoặc đổi lịch về hôm nay); nếu là lượt khám khác, chọn "Vẫn tiếp nhận vãng lai".`,
+          HttpStatus.CONFLICT,
+          {
+            bookings: upcoming.map(u => ({
+              id: u.id,
+              startAt: u.startAt,
+              dentistName: u.dentist?.fullName ?? '',
+            })),
+          },
+          'PATIENT_HAS_BOOKING',
+        );
+      }
+    }
+
+    const {
+      walkIn: created,
+      repeated,
+      overtime,
+    } = await this.prisma.$transaction(async tx => {
       await this.lockDentist(tx, dto.dentistId);
       await this.lockPatient(tx, dto.patientId);
-      await this.ensureSlotAvailable(dto.dentistId, startAt, endAt, actor, undefined, tx, plan);
-      await this.ensurePatientFree(dto.patientId, startAt, endAt, undefined, tx);
-      const walkIn = await tx.appointment.create({
-        data: {
+      // One visit in the clinic at a time; the same request sent twice
+      // (A3-21) gets the walk-in it already made.
+      const open = await tx.appointment.findFirst({
+        where: {
           patientId: dto.patientId,
-          dentistId: dto.dentistId,
-          startAt,
-          endAt,
-          ...this.planColumns(plan, null),
-          visitKind: 'WALK_IN',
-          source: 'WALK_IN',
-          status: AppointmentStatus.CHECKED_IN,
-          checkedInAt: new Date(),
-          checkedInBy: actor.sub,
-          reason: blankToNull(dto.reason),
-          chiefComplaint: blankToNull(dto.chiefComplaint),
-          appointmentType: dto.appointmentType,
-          createdBy: actor.sub,
-          updatedBy: actor.sub,
+          status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+          startAt: { gte: dayStart, lt: dayEnd },
+          deletedAt: null,
         },
-        include: { services: true },
+        include: { services: true, dentist: { select: { fullName: true } } },
       });
-      await enqueue(tx, walkIn, walkIn.checkedInAt ?? startAt, actor.sub);
-      return walkIn;
+      if (open) {
+        if (
+          open.visitKind === 'WALK_IN' &&
+          open.dentistId === dto.dentistId &&
+          open.status === AppointmentStatus.CHECKED_IN &&
+          Date.now() - open.createdAt.getTime() < REPEAT_SUBMIT_MS
+        ) {
+          const { dentist: _dentist, ...walkIn } = open;
+          return { walkIn, repeated: true, overtime: false };
+        }
+        throw new BusinessRuleException(
+          `Bệnh nhân đang ${STATUS_LABEL[open.status]} (lượt ${this.toClinicTimeString(open.startAt)} với BS ${open.dentist?.fullName ?? ''}) — không tạo thêm lượt vãng lai. Muốn đổi bác sĩ, hãy dùng "Chuyển BS" trong hàng chờ.`,
+          HttpStatus.CONFLICT,
+          { appointmentId: open.id },
+          'PATIENT_ALREADY_IN_CLINIC',
+        );
+      }
+      const slot = await this.queueSlot(tx, dto.dentistId, now, minutes, {
+        overtimeReason: dto.overtimeReason,
+        buffers: plan,
+      });
+      await this.ensurePatientFree(dto.patientId, slot.startAt, slot.endAt, undefined, tx);
+      const walkIn = await this.slotSafe(() =>
+        tx.appointment.create({
+          data: {
+            patientId: dto.patientId,
+            dentistId: dto.dentistId,
+            startAt: slot.startAt,
+            endAt: slot.endAt,
+            ...this.planColumns(plan, null),
+            visitKind: 'WALK_IN',
+            source: 'WALK_IN',
+            status: AppointmentStatus.CHECKED_IN,
+            checkedInAt: new Date(),
+            checkedInBy: actor.sub,
+            reason: blankToNull(dto.reason),
+            chiefComplaint: blankToNull(dto.chiefComplaint),
+            appointmentType: dto.appointmentType,
+            createdBy: actor.sub,
+            updatedBy: actor.sub,
+          },
+          include: { services: true },
+        }),
+      );
+      await enqueue(tx, walkIn, walkIn.checkedInAt ?? slot.startAt, actor.sub);
+      return { walkIn, repeated: false, overtime: slot.overtime };
     }, LOCKING_TX_OPTIONS);
+    if (repeated) return created;
     await this.audit.log({
       action: 'APPOINTMENT_WALK_IN',
       actorUserId: actor.sub,
@@ -4049,8 +4220,10 @@ export class AppointmentsService {
       metadata: {
         dentistId: dto.dentistId,
         patientId: dto.patientId,
-        startAt: startAt.toISOString(),
+        startAt: created.startAt.toISOString(),
         ...(plan ? { serviceCodes: plan.services.map(sv => sv.serviceCode) } : {}),
+        ...(overtime ? { overtime: true, overtimeReason: dto.overtimeReason?.trim() } : {}),
+        ...(dto.ignoreUpcomingBookings ? { ignoredUpcomingBookings: true } : {}),
       },
     });
     return created;
@@ -4065,18 +4238,27 @@ export class AppointmentsService {
     if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
+    // The same request sent twice (A3-21): already recorded.
+    if (
+      appt.status === AppointmentStatus.LEFT &&
+      appt.leftAt &&
+      Date.now() - appt.leftAt.getTime() < REPEAT_SUBMIT_MS
+    ) {
+      return appt;
+    }
     if (appt.status !== AppointmentStatus.CHECKED_IN) {
       throw new InvalidAppointmentStateException(
         `Chỉ ghi nhận "đã về" cho bệnh nhân đã check-in (lịch đang ở trạng thái "${STATUS_LABEL[appt.status]}")`,
       );
     }
+    const reason = this.statusReason(dto.reason, 'Ghi nhận "đã về"');
     await this.prisma.$transaction(async tx => {
       const result = await tx.appointment.updateMany({
         where: { id: appointmentId, status: AppointmentStatus.CHECKED_IN },
         data: {
           status: AppointmentStatus.LEFT,
           leftAt: new Date(),
-          leftReason: dto.reason.trim(),
+          leftReason: reason,
           updatedBy: actor.sub,
         },
       });
@@ -4091,10 +4273,106 @@ export class AppointmentsService {
       actorEmail: actor.email,
       targetType: 'appointment',
       targetId: appointmentId,
-      metadata: { reason: dto.reason.trim() },
+      metadata: { reason },
     });
     // No encounter exists before the exam starts, so nothing else to close.
     return this.prisma.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+  }
+
+  /**
+   * A3-04 / A5-16: undo "Đã về" (marked by mistake, or the patient came
+   * back) the same clinic day, with a reason: back to CHECKED_IN in the
+   * queue with the first check-in time and priority. The visit's start
+   * must still be free for it (the LEFT released it) and the patient must
+   * not be in the clinic on another visit already.
+   */
+  async undoLeft(appointmentId: string, dto: StatusReasonDto, actor: JwtPayload) {
+    const appt = await this.requireAppointment(appointmentId);
+    if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
+      throw new AppointmentNotFoundException(appointmentId);
+    }
+    const reason = this.statusReason(dto.reason, 'Hoàn tác "đã về"');
+    if (appt.status !== AppointmentStatus.LEFT) {
+      throw new InvalidAppointmentStateException(
+        `Chỉ hoàn tác được lịch đang "đã về" (lịch đang ở trạng thái "${STATUS_LABEL[appt.status]}")`,
+      );
+    }
+    if (
+      !this.isClinicToday(appt.startAt) ||
+      !appt.leftAt ||
+      !this.isClinicToday(appt.leftAt) ||
+      !appt.checkedInAt
+    ) {
+      throw new InvalidAppointmentStateException(
+        'Chỉ hoàn tác "đã về" trong ngày hẹn — bệnh nhân quay lại ngày khác hãy đặt lịch mới',
+      );
+    }
+    const checkedInAt = appt.checkedInAt;
+    const dayStart = startOfClinicDay(clinicDateOnly());
+    return this.prisma.$transaction(async tx => {
+      await this.lockDentist(tx, appt.dentistId);
+      await this.lockPatient(tx, appt.patientId);
+      const encounter = await tx.encounter.findUnique({
+        where: { appointmentId },
+        select: { status: true },
+      });
+      if (encounter && encounter.status !== EncounterStatus.CANCELLED) {
+        throw new InvalidAppointmentStateException(
+          'Lượt này đã có phiên khám — không hoàn tác "đã về" được',
+        );
+      }
+      const elsewhere = await tx.appointment.findFirst({
+        where: {
+          patientId: appt.patientId,
+          id: { not: appointmentId },
+          status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+          startAt: { gte: dayStart, lt: new Date(dayStart.getTime() + DAY_MS) },
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (elsewhere) {
+        throw new InvalidAppointmentStateException(
+          'Bệnh nhân đang có lượt khác trong hàng chờ/đang khám hôm nay — dùng lượt đó, không hoàn tác "đã về"',
+        );
+      }
+      let res: Prisma.BatchPayload;
+      try {
+        res = await tx.appointment.updateMany({
+          where: this.unchangedSince(appt),
+          data: {
+            status: AppointmentStatus.CHECKED_IN,
+            leftAt: null,
+            leftReason: null,
+            updatedBy: actor.sub,
+          },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          throw new SlotConflictException(
+            'Giờ của lượt này đã được dùng cho lượt khác của bác sĩ — hãy tiếp nhận bệnh nhân như khách vãng lai',
+          );
+        }
+        throw e;
+      }
+      if (res.count === 0) {
+        throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
+      }
+      const row = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
+      // Same place in line as before; an entry that is gone is opened anew.
+      if ((await reopenLeftQueueEntry(tx, appointmentId, actor.sub)) === 0) {
+        await enqueue(tx, row, checkedInAt, actor.sub);
+      }
+      await this.audit.log(
+        this.historyEntry(actor, appointmentId, 'APPOINTMENT_LEFT_UNDONE', {
+          reason,
+          leftAt: appt.leftAt?.toISOString() ?? null,
+          leftReason: appt.leftReason,
+        }),
+        tx,
+      );
+      return row;
+    }, LOCKING_TX_OPTIONS);
   }
 
   /** BR-APPT-034: who did what to an appointment, oldest first. */
@@ -4365,6 +4643,72 @@ export class AppointmentsService {
     throw new DentistUnavailableException(problem.message);
   }
 
+  /**
+   * A3-01/02: where a patient joining a dentist's queue now (walk-in,
+   * transfer) is put. The queue orders patients, so other visits on the
+   * calendar do not block (the dentist may be busy or running late); the
+   * dentist must still be on duty: working hours, no closure, no leave.
+   * A visit that would run past the end of hours needs `overtimeReason`
+   * (A3-02c). The start moves past any visit of the dentist starting the
+   * same minute (idx_appointments_slot_active). Call under the dentist lock.
+   */
+  async queueSlot(
+    tx: Prisma.TransactionClient,
+    dentistId: string,
+    from: Date,
+    minutes: number,
+    opts: {
+      excludeAppointmentId?: string;
+      overtimeReason?: string | null;
+      buffers?: { bufferBeforeMin: number; bufferAfterMin: number } | null;
+    } = {},
+  ): Promise<{ startAt: Date; endAt: Date; overtime: boolean }> {
+    const taken = await tx.appointment.findMany({
+      where: {
+        dentistId,
+        startAt: { gte: from, lt: new Date(from.getTime() + 60 * 60_000) },
+        status: { notIn: [...ACTIVE_APPOINTMENT_EXCLUDED_STATUSES, AppointmentStatus.COMPLETED] },
+        deletedAt: null,
+        ...(opts.excludeAppointmentId ? { NOT: { id: opts.excludeAppointmentId } } : {}),
+      },
+      select: { startAt: true },
+    });
+    const used = new Set((taken ?? []).map(t => t.startAt.getTime()));
+    let start = from.getTime();
+    while (used.has(start)) start += 60_000;
+    const startAt = new Date(start);
+    const endAt = new Date(start + minutes * 60_000);
+    const check = (end: Date) =>
+      this.availability.checkSlot(dentistId, startAt, end, {
+        db: tx,
+        ignoreBookings: true,
+        buffers: opts.buffers
+          ? { beforeMin: opts.buffers.bufferBeforeMin, afterMin: opts.buffers.bufferAfterMin }
+          : undefined,
+      });
+    const problem = await check(endAt);
+    if (!problem) return { startAt, endAt, overtime: false };
+    if (problem.kind === 'OUTSIDE_WORKING_HOURS') {
+      // On duty now, but the visit runs past the end of hours.
+      const onDuty = !(await check(new Date(start + 60_000)));
+      if (onDuty) {
+        if ((opts.overtimeReason?.trim().length ?? 0) >= STATUS_REASON_MIN_LENGTH) {
+          return { startAt, endAt, overtime: true };
+        }
+        throw new BusinessRuleException(
+          `${problem.message} — nếu bác sĩ đồng ý khám quá giờ, hãy xác nhận "Khám ngoài giờ" và nhập lý do`,
+          HttpStatus.BAD_REQUEST,
+          { startAt, endAt },
+          'OVERTIME_CONFIRM_REQUIRED',
+        );
+      }
+      throw new OutsideWorkingHoursException(
+        `Bác sĩ không trong giờ làm lúc ${this.toClinicTimeString(startAt)} — ${problem.message}`,
+      );
+    }
+    throw new DentistUnavailableException(problem.message);
+  }
+
   /** Like ensureSlotAvailable but ignoring bookings, for impact checks. */
   private calendarProblem(
     dentistId: string,
@@ -4379,7 +4723,7 @@ export class AppointmentsService {
   }
 
   /** A patient can't be in two chairs at once, whichever dentists are involved. */
-  private async ensurePatientFree(
+  async ensurePatientFree(
     patientId: string,
     startAt: Date,
     endAt: Date,

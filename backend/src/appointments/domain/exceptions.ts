@@ -49,13 +49,14 @@ export class CalendarBusyException extends HttpException {
 }
 
 export class CheckInWindowException extends HttpException {
-  constructor(message: string) {
+  constructor(message: string, actions?: Array<{ code: string; label: string }>) {
     super(
       {
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'CHECK_IN_WINDOW',
         message,
+        ...(actions ? { details: { actions } } : {}),
       },
       HttpStatus.BAD_REQUEST,
     );
@@ -160,13 +161,13 @@ export class ScheduleOverlapException extends HttpException {
 }
 
 export class SlotConflictException extends HttpException {
-  constructor() {
+  constructor(message = 'Khung giờ này đã có lịch hẹn khác', code = 'SLOT_CONFLICT') {
     super(
       {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
-        code: 'SLOT_CONFLICT',
-        message: 'Khung giờ này đã có lịch hẹn khác',
+        code,
+        message,
       },
       HttpStatus.CONFLICT,
     );

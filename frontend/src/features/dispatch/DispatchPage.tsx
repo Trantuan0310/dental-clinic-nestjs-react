@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ListOrdered, RefreshCw, Users } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, ListOrdered, RefreshCw, Users } from 'lucide-react';
 import { Button, Card, DatePicker, EmptyState, Modal, Select, Textarea } from '@/components/ui';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { PageLoader } from '@/components/ui/Loading';
@@ -7,7 +8,9 @@ import { PermissionGuard } from '@/components/PermissionGuard';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { clinicParts, clinicToday } from '@/lib/clinicTime';
+import { formatDate } from '@/lib/format';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
+import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { QueueList } from './QueueList';
 import {
   type QueueEntry,
@@ -19,13 +22,22 @@ import {
 
 /**
  * Front-desk dispatch board (ADR-0009 phase 6): today's pre-exam queue of
- * every dentist, in dispatch order — emergency, on time, late, walk-in,
- * then check-in time (BR-DSP-001).
+ * every dentist, in dispatch order — emergency first, then by the time each
+ * patient is due (BR-DSP-001).
  */
 export default function DispatchPage() {
   const [dentistFilter, setDentistFilter] = useState('');
   const [reassignOpen, setReassignOpen] = useState(false);
-  const { data: dentists = [] } = useDentistOptions();
+  // 'schedule': a dentist suspended or on leave still has a queue to hand over (A3-22).
+  const { data: dentists = [] } = useDentistOptions('schedule');
+  const today = clinicToday();
+  // A3-16: exams left open on an earlier day — the visit has no invoice yet.
+  const { data: running } = useQuery({
+    queryKey: ['appointments', 'dispatch', 'in-progress', today],
+    queryFn: () => appointmentsApi.list({ status: ['in_progress'], to: today, pageSize: 50 }),
+    refetchInterval: 60_000,
+  });
+  const unfinished = (running?.data ?? []).filter((apt) => clinicParts(apt.startsAt).date < today);
   const { data: entries = [], isLoading, refetch, isFetching } = useQueue({
     dentistId: dentistFilter || undefined,
   });
@@ -62,6 +74,28 @@ export default function DispatchPage() {
           </div>
         }
       />
+
+      {unfinished.length > 0 && (
+        <Card>
+          <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-rose-700">
+            <AlertTriangle className="h-4 w-4" />
+            Ca khám chưa kết thúc từ ngày trước ({unfinished.length})
+          </h2>
+          <p className="mb-2 text-xs text-gray-500">
+            Bác sĩ chưa bấm kết thúc nên chưa có hóa đơn cho bệnh nhân. Hãy nhắc bác sĩ kết thúc (hoặc hủy) phiên khám.
+          </p>
+          <ul className="space-y-1 text-sm" aria-label="Ca khám chưa kết thúc">
+            {unfinished.map((apt) => (
+              <li key={apt.id} className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1">
+                <span className="font-medium text-gray-900">{apt.patientName}</span>
+                <span className="ml-2 text-xs text-gray-600">
+                  {formatDate(apt.startsAt, 'dd/MM/yyyy')} · {apt.dentistName}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Select
         aria-label="Lọc theo bác sĩ"
@@ -112,15 +146,16 @@ export default function DispatchPage() {
 }
 
 /**
- * BR-DSP-006: move a dentist's not-yet-arrived bookings on a date to a
- * substitute. The result lists what moved and what the substitute could
- * not take (and why) — those stay with the original dentist.
+ * BR-DSP-006: move a dentist's day on a date to a substitute: bookings not
+ * checked in yet (same time) and patients already waiting (to the
+ * substitute's queue). The result lists what moved and what the substitute
+ * could not take (and why) — those stay with the original dentist.
  */
 function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const today = clinicToday();
+  // The absent dentist may already be suspended or on leave (A3-22).
+  const { data: absentOptions = [] } = useDentistOptions('schedule');
   const { data: dentists = [] } = useDentistOptions();
-  // The absent dentist may already be suspended / on leave (A3-22).
-  const { data: absentees = [] } = useDentistOptions('schedule');
   const reassign = useReassignDay();
   const undo = useUndoReassignDay();
   const [form, setForm] = useState({ from: '', to: '', date: today, reason: '', closeDay: true });
@@ -144,7 +179,7 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
         closeFromDentist: form.closeDay,
       });
       setResult(r);
-      notify.success(`Đã chuyển ${r.moved.length} lịch hẹn`);
+      notify.success(`Đã chuyển ${r.moved.length + (r.transferred?.length ?? 0)} lượt`);
     } catch (err) {
       notify.error(getApiErrorMessage(err, 'Không thay được bác sĩ'));
     }
@@ -174,7 +209,7 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
       onClose={close}
       size="md"
       title="Thay bác sĩ cả ngày"
-      description="Chuyển các lịch hẹn chưa đến của một bác sĩ trong ngày sang bác sĩ khác, giữ nguyên giờ."
+      description="Chuyển các lịch hẹn chưa đến (giữ nguyên giờ, thời lượng theo bác sĩ thay) và bệnh nhân đang chờ của một bác sĩ trong ngày sang bác sĩ khác. Muốn khóa lịch của bác sĩ vắng, hãy tạo ngày nghỉ/đóng lịch riêng."
       footer={
         result ? (
           <>
@@ -204,11 +239,18 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
       {result ? (
         <div className="space-y-3 text-sm">
           <p>
-            Đã chuyển <strong>{result.moved.length}</strong> lịch hẹn.
+            Đã chuyển <strong>{result.moved.length}</strong> lịch hẹn
+            {(result.transferred?.length ?? 0) > 0 && (
+              <>
+                {' '}và <strong>{result.transferred?.length}</strong> bệnh nhân đang chờ sang hàng chờ bác sĩ thay
+              </>
+            )}
+            .
             {result.failed.length > 0 && (
               <>
                 {' '}
-                <strong>{result.failed.length}</strong> lịch hẹn không chuyển được, vẫn giữ ở bác sĩ cũ:
+                <strong>{result.failed.length}</strong> lượt không chuyển được, vẫn giữ ở bác sĩ cũ — hãy liên hệ
+                bệnh nhân hoặc chuyển từng người:
               </>
             )}
           </p>
@@ -216,7 +258,9 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
             <ul className="space-y-1" aria-label="Lịch hẹn không chuyển được">
               {result.failed.map((f) => (
                 <li key={f.appointmentId} className="rounded border border-amber-200 bg-amber-50 px-2 py-1">
-                  {clinicParts(f.startAt).time} · {f.patientName} — <span className="text-amber-800">{f.reason}</span>
+                  {clinicParts(f.startAt).time} · {f.patientName}
+                  {f.checkedIn && <span className="text-gray-600"> (đang chờ)</span>} —{' '}
+                  <span className="text-amber-800">{f.reason}</span>
                 </li>
               ))}
             </ul>
@@ -227,11 +271,8 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
               bác sĩ/ngày khác.
             </p>
           )}
-          {(result.waiting?.length ?? 0) > 0 && (
-            <p className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-800">
-              {result.waiting!.length} bệnh nhân đã check-in đang chờ bác sĩ vắng (
-              {result.waiting!.map((w) => w.patientName).join(', ')}) — dùng "Chuyển BS" trên hàng chờ.
-            </p>
+          {result.warning && (
+            <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">{result.warning}</p>
           )}
           {result.closedOverrideId && (
             <p className="text-gray-600">Lịch của bác sĩ vắng đã được đóng cho ngày này (không nhận đặt thêm).</p>
@@ -244,7 +285,7 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
             value={form.from}
             onChange={(e) => setForm({ ...form, from: e.target.value })}
             placeholder="Chọn bác sĩ"
-            options={absentees.map((d) => ({ value: d.id, label: d.fullName }))}
+            options={absentOptions.map((d) => ({ value: d.id, label: d.fullName }))}
           />
           <Select
             label="Bác sĩ thay"

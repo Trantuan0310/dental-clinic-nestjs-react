@@ -1,4 +1,4 @@
-import { AvailabilityService, slotStepMinutes } from './availability.service';
+import { AvailabilityService, finishedEarly, slotStepMinutes } from './availability.service';
 import { createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-mock';
 
 /**
@@ -142,5 +142,45 @@ describe('AvailabilityService slot grid', () => {
     const res = await service.dayAvailability('dentist-1', DATE, 30);
     expect(res.availableSlots).toEqual([]);
     expect(res.blockedReason).toBeNull();
+  });
+
+  // A5-04: the 08:00-09:00 visit was completed at 08:20.
+  it('gives back the rest of a visit completed early', async () => {
+    day([['08:00', '09:00']]);
+    (prisma.appointment.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 'done',
+        status: 'COMPLETED',
+        startAt: at('08:00'),
+        endAt: at('09:00'),
+        encounter: { closedAt: at('08:20') },
+      },
+    ]);
+    const res = await service.dayAvailability('dentist-1', DATE, 30);
+    expect(res.availableSlots).toEqual(['08:30']);
+    expect(await service.checkSlot('dentist-1', at('08:25'), at('08:55'))).toBeNull();
+  });
+});
+
+describe('finishedEarly (A5-04)', () => {
+  const t = (hhmm: string) => new Date(`2099-09-16T${hhmm}:00+07:00`);
+  const visit = (status: string, closedAt: Date | null) => ({
+    status: status as never,
+    startAt: t('09:00'),
+    endAt: t('10:00'),
+    encounter: closedAt ? { closedAt } : null,
+  });
+
+  it.each<[string, ReturnType<typeof visit>, Date]>([
+    ['completed early ends at the close', visit('COMPLETED', t('09:20')), t('09:20')],
+    [
+      'completed before its start holds nothing past the start',
+      visit('COMPLETED', t('08:40')),
+      t('09:00'),
+    ],
+    ['completed late keeps the booked end', visit('COMPLETED', t('10:30')), t('10:00')],
+    ['in progress keeps the booked end', visit('IN_PROGRESS', t('09:20')), t('10:00')],
+  ])('%s', (_name, b, end) => {
+    expect(finishedEarly(b).endAt).toEqual(end);
   });
 });

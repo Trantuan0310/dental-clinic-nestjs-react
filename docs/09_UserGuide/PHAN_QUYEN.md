@@ -13,7 +13,7 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Xem lịch hẹn | ✔ tất cả | Chỉ lịch của mình (menu "Lịch của tôi") | ✔ tất cả |
 | Điều phối hàng chờ, yêu cầu đặt lịch online | ✔ | — | ✔ |
 | **Khám bệnh**: bắt đầu, ghi bệnh án, điều trị, kê đơn, sơ đồ răng, đóng phiên khám | — (chỉ xem) | ✔ | — |
-| Hủy phiên khám tạo nhầm | ✔ | — | — |
+| Hủy phiên khám tạo nhầm (bệnh nhân quay lại hàng chờ) | ✔ | ✔ phiên của mình, khi chưa có điều trị hoặc đơn thuốc | — |
 | **Hóa đơn**: tạo, phát hành, thu tiền | ✔ | Xem hóa đơn phiên khám của mình | ✔ |
 | Hủy hóa đơn | ✔ | — | — |
 | **Báo cáo**: công nợ | ✔ | — | ✔ |

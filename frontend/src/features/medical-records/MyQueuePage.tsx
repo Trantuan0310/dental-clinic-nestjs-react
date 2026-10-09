@@ -13,7 +13,7 @@ import { useQueue } from '@/features/dispatch/dispatchApi';
 
 /**
  * The dentist's queue (ADR-0009 phase 6): patients waiting in dispatch
- * order — emergency, on time, late, walk-in, then check-in time. Call the
+ * order — emergency first, then by the time each is due (BR-DSP-001). Call the
  * next one, start the exam, or skip someone who does not answer. Exams
  * already running are listed below to resume.
  */
@@ -55,7 +55,7 @@ export default function MyQueuePage() {
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Hàng đợi của tôi</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Thứ tự: cấp cứu → đúng giờ → đến trễ → vãng lai, rồi theo giờ check-in
+            Thứ tự: cấp cứu trước, rồi theo giờ hẹn — đến trễ xếp sau 15 phút, vãng lai chờ tối đa khoảng 45 phút
           </p>
         </div>
         <Button variant="outline" onClick={() => void refetch()} isLoading={isFetching}>

@@ -16,6 +16,11 @@ test('front desk calls, prioritises, skips and closes a queued patient', async (
   await pick.click();
   await walkIn.getByLabel('Bác sĩ *').selectOption({ label: 'BS. Phạm Thị Dung' });
   await walkIn.getByRole('button', { name: 'Tiếp nhận' }).click();
+  // A3-08: a patient with a booking to come is asked about first.
+  await walkIn
+    .getByRole('button', { name: 'Vẫn tiếp nhận vãng lai' })
+    .click({ timeout: 3_000 })
+    .catch(() => undefined);
   await expect(walkIn).toBeHidden();
 
   await page.goto('/dispatch');

@@ -81,12 +81,34 @@ export interface RequestPlanRules {
   planVisit(dentistId: string, serviceIds: string[], date: string): Promise<VisitPlan | null>;
 }
 
-/** Statuses that no longer hold a slot (same as idx_appointments_slot_active). */
+/**
+ * Statuses that no longer hold a slot. idx_appointments_slot_active also
+ * leaves COMPLETED out (migration 042); a completed visit still counts here
+ * until its encounter closed (finishedEarly).
+ */
 export const SLOT_RELEASING_STATUSES: AppointmentStatus[] = [
   AppointmentStatus.CANCELLED,
   AppointmentStatus.NO_SHOW,
   AppointmentStatus.LEFT,
 ];
+
+/**
+ * A5-04: a visit completed before its booked end holds the dentist only
+ * until the encounter closed (never before its own start); the rest of the
+ * booked time is free again. Other visits keep their booked interval.
+ */
+export function finishedEarly<
+  T extends {
+    status?: AppointmentStatus;
+    startAt: Date;
+    endAt: Date;
+    encounter?: { closedAt: Date | null } | null;
+  },
+>(b: T): T {
+  const closedAt = b.encounter?.closedAt;
+  if (b.status !== AppointmentStatus.COMPLETED || !closedAt || closedAt >= b.endAt) return b;
+  return { ...b, endAt: closedAt > b.startAt ? closedAt : b.startAt };
+}
 
 /** Same lead time create() enforces: a start must be at least a minute ahead. */
 const LEAD_MS = 60_000;
@@ -165,10 +187,12 @@ export class AvailabilityService {
           },
           select: {
             id: true,
+            status: true,
             startAt: true,
             endAt: true,
             bufferBeforeMin: true,
             bufferAfterMin: true,
+            encounter: { select: { closedAt: true } },
           },
         }),
         // Migration 035: Tết/holidays close every dentist's day.
@@ -188,7 +212,7 @@ export class AvailabilityService {
       shifts: shifts ?? [],
       overrides: [...(overrides ?? []), ...terminationOverride(leaving?.terminationDate, date)],
       timeOffs: timeOffs ?? [],
-      bookings: bookings ?? [],
+      bookings: (bookings ?? []).map(finishedEarly),
       clinicClosures: closuresOnDay(clinicClosures ?? [], date),
     });
   }
