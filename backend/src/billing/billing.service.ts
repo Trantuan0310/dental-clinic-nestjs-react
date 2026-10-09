@@ -688,6 +688,18 @@ export class BillingService {
     return others === 0;
   }
 
+  /** Acting on one's own collection (sole holder): a fuller reason, like payroll self-approval. */
+  private assertSelfReason(reason: string) {
+    if (reason.trim().length < 10) {
+      throw new InvoiceCorrectionException(
+        'SELF_CORRECTION_REASON_REQUIRED',
+        'Bạn đang sửa tiền do chính mình thu: ghi lý do cụ thể, ít nhất 10 ký tự (được lưu riêng trong nhật ký).',
+        undefined,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
   // ==========================================================================
   // Lifecycle
   // ==========================================================================
@@ -835,16 +847,17 @@ export class BillingService {
           'Hóa đơn đã bị hủy nên không sửa phiếu thu của hóa đơn này được nữa.',
         );
       }
-      if (
-        payment.receivedBy === actor.sub &&
-        !(await this.isSoleHolder(tx, 'invoice.payment.void', actor.sub))
-      ) {
-        throw new InvoiceCorrectionException(
-          'PAYMENT_SELF_VOID_FORBIDDEN',
-          'Bạn không thể tự hủy phiếu do chính mình lập. Nhờ một quản trị viên khác hủy phiếu này.',
-          undefined,
-          HttpStatus.FORBIDDEN,
-        );
+      const selfVoid = payment.receivedBy === actor.sub;
+      if (selfVoid) {
+        if (!(await this.isSoleHolder(tx, 'invoice.payment.void', actor.sub))) {
+          throw new InvoiceCorrectionException(
+            'PAYMENT_SELF_VOID_FORBIDDEN',
+            'Bạn không thể tự hủy phiếu do chính mình lập. Nhờ một quản trị viên khác hủy phiếu này.',
+            undefined,
+            HttpStatus.FORBIDDEN,
+          );
+        }
+        this.assertSelfReason(dto.reason);
       }
 
       const amount = Number(payment.amount);
@@ -905,7 +918,8 @@ export class BillingService {
       });
       await this.audit.log(
         {
-          action: 'INVOICE_PAYMENT_VOIDED',
+          // Nobody else could do it: kept apart so the owner can review it.
+          action: selfVoid ? 'PAYMENT_SELF_VOIDED' : 'INVOICE_PAYMENT_VOIDED',
           actorUserId: actor.sub,
           targetType: 'invoice',
           targetId: inv.id,
@@ -915,6 +929,7 @@ export class BillingService {
             amount,
             receivedBy: payment.receivedBy,
             reason: dto.reason,
+            ...(selfVoid && { soleHolder: true }),
           },
         },
         tx,
@@ -965,13 +980,17 @@ export class BillingService {
           receivedBy: actor.sub,
         },
       });
-      if (ownCollection > 0 && !(await this.isSoleHolder(tx, 'invoice.refund', actor.sub))) {
-        throw new InvoiceCorrectionException(
-          'REFUND_SELF_FORBIDDEN',
-          'Bạn đã thu tiền hóa đơn này nên không tự lập phiếu hoàn. Nhờ một quản trị viên khác thực hiện.',
-          undefined,
-          HttpStatus.FORBIDDEN,
-        );
+      const selfRefund = ownCollection > 0;
+      if (selfRefund) {
+        if (!(await this.isSoleHolder(tx, 'invoice.refund', actor.sub))) {
+          throw new InvoiceCorrectionException(
+            'REFUND_SELF_FORBIDDEN',
+            'Bạn đã thu tiền hóa đơn này nên không tự lập phiếu hoàn. Nhờ một quản trị viên khác thực hiện.',
+            undefined,
+            HttpStatus.FORBIDDEN,
+          );
+        }
+        this.assertSelfReason(dto.reason);
       }
 
       const newPaid = paid - dto.amount;
@@ -1017,11 +1036,12 @@ export class BillingService {
       });
       await this.audit.log(
         {
-          action: 'INVOICE_REFUNDED',
+          action: selfRefund ? 'INVOICE_SELF_REFUND' : 'INVOICE_REFUNDED',
           actorUserId: actor.sub,
           targetType: 'invoice',
           targetId: invoiceId,
           metadata: {
+            ...(selfRefund && { soleHolder: true }),
             refundId: row.id,
             amount: dto.amount,
             method: dto.method,
@@ -1321,9 +1341,23 @@ export class BillingService {
       if (inv.status === InvoiceStatus.VOIDED) {
         throw new InvoiceVoidFailedException('Hóa đơn đã bị hủy trước đó.');
       }
-      if (Number(inv.paidAmount) > 0) {
+      // Only once no money is kept: every receipt was cancelled (entered by
+      // mistake) or handed back in full. Checked on the rows, not only on the
+      // paid_amount column, so a stale column cannot let money vanish.
+      const rows = await tx.payment.groupBy({
+        by: ['kind'],
+        where: { invoiceId, status: PaymentStatus.COMPLETED },
+        _sum: { amount: true },
+        _count: { _all: true },
+      });
+      const sumOf = (kind: PaymentKind) =>
+        Number(rows.find(r => r.kind === kind)?._sum.amount ?? 0);
+      const kept = sumOf(PaymentKind.PAYMENT) - sumOf(PaymentKind.REFUND);
+      if (kept > 0 || Number(inv.paidAmount) > 0) {
+        const openReceipts = rows.find(r => r.kind === PaymentKind.PAYMENT)?._count._all ?? 0;
         throw new InvoiceVoidFailedException(
-          `Hóa đơn còn ${vnd(Number(inv.paidAmount))} đã thu. Hủy phiếu thu ghi nhầm hoặc lập phiếu hoàn tiền trước, rồi mới hủy hóa đơn.`,
+          `Hóa đơn còn ${vnd(Math.max(kept, Number(inv.paidAmount)))} đã thu (${openReceipts} phiếu thu còn hiệu lực). ` +
+            'Làm trước một trong hai bước: thu nhầm thì "Hủy phiếu thu (ghi nhầm)"; đã trả lại tiền cho khách thì "Hoàn tiền" hết số đã thu. Sau đó mới hủy hóa đơn.',
         );
       }
       if (inv.version !== dto.version) {
@@ -1346,7 +1380,12 @@ export class BillingService {
           invoiceId,
           action: 'VOIDED',
           actorId: actor.sub,
-          before: { status: inv.status, outstanding: inv.outstandingAmount },
+          before: {
+            status: inv.status,
+            outstanding: inv.outstandingAmount,
+            // Fully refunded: receipts and refunds stay COMPLETED and net to 0.
+            refundedAmount: inv.refundedAmount,
+          },
           after: { status: 'VOIDED', reason: dto.reason },
         },
       });
