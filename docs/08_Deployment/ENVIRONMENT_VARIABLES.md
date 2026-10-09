@@ -114,8 +114,11 @@ Có hai file compose:
 Với `docker-compose.prod.yml`, compose tự dựng `DATABASE_URL` nội bộ
 (`postgresql://…@postgres:5432/…?sslmode=require`) từ `POSTGRES_DB`,
 `POSTGRES_USER`, `POSTGRES_PASSWORD`; không đặt `localhost` trong URL.
-`PUBLIC_APP_URL` (= `https://${DOMAIN}`) là gốc của link trong email đặt lịch
-online. Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
+`PUBLIC_APP_URL` (= `https://${DOMAIN}`, có ở cả hai file compose) là gốc của
+link trong email đặt lịch online; thiếu thì dùng `FRONTEND_URL`. Backend cũng
+nhận `CLINIC_ADDRESS` (ghi địa chỉ trong email xác nhận/nhắc lịch) và
+`BOOKING_PATIENT_CANCEL_MIN_HOURS` (mặc định 4: khách được tự hủy lịch đã xác
+nhận qua link trong email đến trước giờ hẹn bao nhiêu giờ). Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
 [VPS_UPGRADE.md](./VPS_UPGRADE.md).
 
 Cả hai file **không** có service Redis — `REDIS_URL` để trống trừ khi bạn tự

@@ -33,8 +33,35 @@ type RequestRow = {
   } | null;
   /** Why an open request can no longer be confirmed as it stands (server check). */
   slotIssue?: { kind: string; message: string } | null;
-  /** Open requests made with this phone (the public form refuses it at 3). */
+  /** Open requests made with this phone (the public form refuses it at 6). */
   openFromPhone?: number;
+  /** The front desk's own note (not shown to the patient). */
+  receptionistNote?: string | null;
+  /** The last email to the patient did not go out (or there was no email): call them. */
+  noticeFailedAt?: string | null;
+  noticeFailedSubject?: string | null;
+};
+/** Other open requests and upcoming visits of the same phone or person. */
+type Related = {
+  requests: Array<{ id: string; referenceCode: string; fullName: string; status: string; startAt: string }>;
+  visits: Array<{
+    id: string;
+    startAt: string;
+    status: string;
+    patient: { code: string; fullName: string };
+    dentist?: { fullName: string } | null;
+    bookingRequest?: { id: string } | null;
+  }>;
+};
+/** A visit in the next two days whose email reminder did not go out. */
+type ReminderIssue = {
+  appointmentId: string;
+  startAt: string;
+  reminderStatus: "BLOCKED" | "FAILED";
+  reminderNote: string | null;
+  patient: { fullName: string; primaryPhone: string | null };
+  dentist?: { fullName: string } | null;
+  referenceCode: string | null;
 };
 type PatientMatch = {
   id: string;
@@ -45,8 +72,11 @@ type PatientMatch = {
   contactPersonName?: string | null;
   contactPersonPhone?: string | null;
   /** Which of the record's phones is one of the request's phones. */
-  matchedBy?: Array<"primaryPhone" | "contactPersonPhone">;
+  matchedBy?: Array<"primaryPhone" | "contactPersonPhone" | "phoneHistory">;
   sameNameAndDob?: boolean;
+  /** On another phone: picking it needs the identity checked. */
+  differentPhone?: boolean;
+  email?: string | null;
 };
 /** Patient choice value meaning "create a new record for this request". */
 const NEW_PATIENT = "__new__";
@@ -59,7 +89,11 @@ const matchLabel = (p: PatientMatch) =>
       ? "khớp SĐT người giám hộ " +
         p.contactPersonPhone +
         (p.contactPersonName ? " (" + p.contactPersonName + ")" : "")
-      : "khớp SĐT " + (p.primaryPhone ?? ""),
+      : p.matchedBy?.includes("primaryPhone")
+        ? "khớp SĐT " + (p.primaryPhone ?? "")
+        : p.matchedBy?.includes("phoneHistory")
+          ? "SĐT cũ của hồ sơ, hiện là " + (p.primaryPhone ?? "—")
+          : "SĐT khác: " + (p.primaryPhone ?? "—"),
     p.sameNameAndDob ? "trùng tên và ngày sinh" : "",
   ]
     .filter(Boolean)
@@ -71,9 +105,30 @@ const stateLabel: Record<string, string> = {
   PATIENT_ACCEPTED: "Chờ lễ tân xác nhận",
   CONFIRMED: "Đã xác nhận",
   DECLINED: "Từ chối",
-  CANCELLED: "Đã rút",
+  CANCELLED: "Đã hủy / rút",
   EXPIRED: "Quá hạn",
 };
+const visitLabel: Record<string, string> = {
+  SCHEDULED: "Đã đặt",
+  CONFIRMED: "Đã xác nhận",
+  CHECKED_IN: "Đã đến",
+  IN_PROGRESS: "Đang khám",
+  COMPLETED: "Đã khám xong",
+  CANCELLED: "Đã hủy",
+  NO_SHOW: "Vắng mặt",
+  LEFT: "Đã về",
+};
+/** Age on the clinic's today from a "YYYY-MM-DD…" date of birth. */
+const ageOf = (dob: string) => {
+  const [y, m, d] = String(dob).slice(0, 10).split("-").map(Number);
+  const [ty, tm, td] = clinicParts(new Date()).date.split("-").map(Number);
+  return ty - y - (tm < m || (tm === m && td < d) ? 1 : 0);
+};
+/** The list's status: a confirmed request whose visit was cancelled says so. */
+const rowStatus = (row: RequestRow) =>
+  row.status === "CONFIRMED" && row.appointment && ["CANCELLED", "NO_SHOW", "LEFT"].includes(row.appointment.status)
+    ? "Đã xác nhận · lịch " + (visitLabel[row.appointment.status] ?? "").toLowerCase()
+    : (stateLabel[row.status] ?? row.status);
 const OPEN = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
 const CONFIRMABLE = ["PENDING_REVIEW", "PATIENT_ACCEPTED"];
 const PROPOSAL = ["PROPOSED", "PATIENT_ACCEPTED"];
@@ -114,7 +169,7 @@ function SlotIssueBadge({ issue }: { issue?: RequestRow["slotIssue"] }) {
   );
 }
 /** Open requests at which the public form refuses a phone (backend MAX_OPEN_PER_PHONE). */
-const MAX_OPEN_PER_PHONE = 3;
+const MAX_OPEN_PER_PHONE = 6;
 /**
  * A phone at the online limit: its owner cannot book online until some of
  * these are handled; possibly someone else used the number to block it.
@@ -162,6 +217,8 @@ const NOTIFIED: Record<string, string> = {
   propose: "Đã đề xuất giờ khác",
   decline: "Đã từ chối yêu cầu",
   "need-information": "Đã yêu cầu bổ sung thông tin",
+  "resend-link": "Đã gửi lại đường link cho khách",
+  contact: "Đã sửa thông tin liên hệ",
 };
 /** A patient who could not be emailed and must be called. */
 type CallNotice = { action: string; name: string; phone: string; noEmail: boolean };
@@ -177,6 +234,18 @@ export default function BookingRequestsPage() {
   const [proposeDentist, setProposeDentist] = useState("");
   const [error, setError] = useState("");
   const [callNotice, setCallNotice] = useState<CallNotice | null>(null);
+  // Search by reference code, phone or name (a patient at the desk).
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
+  // Picking a record on another phone: who checked it and how.
+  const [identityChecked, setIdentityChecked] = useState(false);
+  const [identityNote, setIdentityNote] = useState("");
+  const [updatePhone, setUpdatePhone] = useState(false);
+  const [updateEmail, setUpdateEmail] = useState(false);
+  const [spam, setSpam] = useState(false);
+  const [note, setNote] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [contact, setContact] = useState({ phone: "", email: "", fullName: "", dob: "", reason: "" });
   // Re-evaluated every minute so "Sắp đến giờ" / "Quá giờ" stay current.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -184,15 +253,29 @@ export default function BookingRequestsPage() {
     return () => window.clearInterval(timer);
   }, []);
   const query = useQuery({
-    queryKey: ["booking-requests", filter],
+    queryKey: ["booking-requests", filter, q],
     queryFn: async () =>
       (
         await api.get<{ data: RequestRow[] }>("/booking-requests", {
-          params: filter ? { status: filter } : {},
+          params: { ...(filter ? { status: filter } : {}), ...(q ? { q } : {}) },
         })
       ).data.data,
     // New online requests show up without a manual refresh.
     refetchInterval: 60_000,
+  });
+  // Visits whose email reminder did not go out: the front desk calls them.
+  const reminderIssues = useQuery({
+    queryKey: ["booking-requests", "reminder-issues"],
+    queryFn: async () =>
+      (await api.get<{ data: ReminderIssue[] }>("/booking-requests/reminder-issues")).data.data,
+    refetchInterval: 5 * 60_000,
+  });
+  const related = useQuery({
+    queryKey: ["booking-requests", selected?.id, "related"],
+    enabled: !!selected,
+    queryFn: async () =>
+      (await api.get<{ data: Related }>("/booking-requests/" + selected!.id + "/related")).data
+        .data,
   });
   // Dentists this request may be moved to (online booking or not).
   const dentistOptions = useQuery({
@@ -218,12 +301,32 @@ export default function BookingRequestsPage() {
     setPatientId("");
     setError("");
     setMessage("");
+    setIdentityChecked(false);
+    setIdentityNote("");
+    setUpdatePhone(false);
+    setUpdateEmail(false);
+    setSpam(false);
+    setEditing(false);
+    setNote(selected?.receptionistNote ?? "");
     if (!selected) return;
+    setContact({
+      phone: selected.phone,
+      email: selected.email ?? "",
+      fullName: selected.fullName,
+      dob: String(selected.dob).slice(0, 10),
+      reason: "",
+    });
     api
       .get<{ data: PatientMatch[] }>(
         "/booking-requests/" + selected.id + "/patient-matches",
       )
-      .then((r) => setMatches(r.data.data))
+      .then((r) => {
+        setMatches(r.data.data);
+        // A single record with the same name and date of birth is the
+        // likely one (a returning patient, maybe on a new phone): suggested.
+        const same = r.data.data.filter((p) => p.sameNameAndDob);
+        if (same.length === 1) setPatientId(same[0].id);
+      })
       .catch(() => setMatches([]));
     setProposeDentist(selected.preferredDentist.id);
     // Never suggest a time that has already passed.
@@ -235,15 +338,39 @@ export default function BookingRequestsPage() {
   }, [selected?.id]);
 
   const action = useMutation({
-    mutationFn: async ({ path, body }: { path: string; body?: unknown }) =>
-      api.post<{ notificationSent?: boolean }>(
+    mutationFn: async ({
+      path,
+      body,
+      method = "post",
+    }: {
+      path: string;
+      body?: unknown;
+      method?: "post" | "patch" | "put";
+    }) =>
+      api[method]<{
+        notificationSent?: boolean | null;
+        alreadyConfirmed?: boolean;
+        patientChangesNotApplied?: string[];
+      }>(
         "/booking-requests/" + selected?.id + "/" + path,
         body ?? {},
       ),
     onSuccess: async (response, { path }) => {
       setError("");
       const done = NOTIFIED[path];
-      if (done) {
+      if (response.data?.patientChangesNotApplied?.length) {
+        // Booked, but this account may not change patient records.
+        notify.error(
+          "Chưa cập nhật " +
+            response.data.patientChangesNotApplied
+              .map((f) => (f === "email" ? "email" : "số điện thoại"))
+              .join(", ") +
+            " của hồ sơ: tài khoản không có quyền sửa hồ sơ bệnh nhân. Nhờ người có quyền cập nhật.",
+        );
+      }
+      if (response.data?.alreadyConfirmed) {
+        notify.success("Yêu cầu đã được xác nhận trước đó, không tạo thêm lịch");
+      } else if (done) {
         notify.success(done);
         // No email went out (none given, or sending failed): the patient
         // must be called, so say it where it stays visible.
@@ -292,6 +419,29 @@ export default function BookingRequestsPage() {
     );
   }, [query.data]);
   const overdue = selected ? urgency(selected, now) === "overdue" : false;
+  const chosen = matches.find((p) => p.id === patientId);
+  /** The record choice and its options, as confirm takes them. */
+  const confirmBody = () =>
+    patientId === NEW_PATIENT
+      ? { createNewPatient: true }
+      : patientId
+        ? {
+            patientId,
+            ...(chosen?.differentPhone
+              ? {
+                  confirmIdentity: identityChecked,
+                  identityNote: identityNote.trim() || undefined,
+                  updatePatientPhone: updatePhone,
+                }
+              : {}),
+            ...(updateEmail ? { updatePatientEmail: true } : {}),
+          }
+        : {};
+  // Today's visits of this phone or person not yet linked to a request:
+  // the walk-in made for a patient who came with an unconfirmed code.
+  const todayVisits = (related.data?.visits ?? []).filter(
+    (v) => !v.bookingRequest && clinicParts(v.startAt).date === clinicParts(new Date(now)).date,
+  );
   // Any open request can get a (new) time or dentist, a standing proposal or
   // one waiting on details included.
   const canPropose = !!selected && OPEN.includes(selected.status);
@@ -330,6 +480,37 @@ export default function BookingRequestsPage() {
           </button>
         </div>
       )}
+      {!!reminderIssues.data?.length && (
+        <section
+          role="alert"
+          className="rounded-lg border border-orange-300 bg-orange-50 p-4 text-sm text-orange-900"
+        >
+          <h2 className="font-semibold">
+            {reminderIssues.data.length} lịch hẹn sắp tới chưa được nhắc qua email — hãy gọi khách
+          </h2>
+          <ul className="mt-2 space-y-1">
+            {reminderIssues.data.map((r) => (
+              <li key={r.appointmentId}>
+                <strong>{format(r.startAt)}</strong> · {r.patient.fullName}
+                {r.patient.primaryPhone ? (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <a href={"tel:" + r.patient.primaryPhone} className="underline">
+                      {r.patient.primaryPhone}
+                    </a>
+                  </>
+                ) : null}
+                {r.dentist ? " · " + r.dentist.fullName : ""}
+                {r.referenceCode ? " · " + r.referenceCode : ""} —{" "}
+                {r.reminderStatus === "BLOCKED"
+                  ? "không nhắc vì lịch không còn hợp lệ: " + (r.reminderNote ?? "") + ". Hãy dời hoặc hủy lịch và báo khách."
+                  : r.reminderNote}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="grid gap-3 sm:grid-cols-4">
         {["PENDING_REVIEW", "PROPOSED", "PATIENT_ACCEPTED", "CONFIRMED"].map(
           (k) => (
@@ -353,6 +534,34 @@ export default function BookingRequestsPage() {
             </option>
           ))}
         </select>
+        <form
+          className="flex flex-1 items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setQ(search.trim());
+          }}
+        >
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo mã đặt lịch, SĐT hoặc tên"
+            aria-label="Tìm yêu cầu"
+            className="w-full max-w-sm rounded-md border bg-white px-3 py-2 text-sm"
+          />
+          <button className="rounded-md border bg-white px-3 py-2 text-sm">Tìm</button>
+          {q && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setQ("");
+              }}
+              className="text-sm text-gray-500 underline"
+            >
+              Bỏ lọc
+            </button>
+          )}
+        </form>
         <button
           onClick={() => query.refetch()}
           className="rounded-md border bg-white px-3 py-2 text-sm"
@@ -395,7 +604,15 @@ export default function BookingRequestsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {stateLabel[row.status] ?? row.status}
+                    {rowStatus(row)}
+                    {row.noticeFailedAt && (
+                      <span
+                        title={"Chưa báo được khách: " + (row.noticeFailedSubject ?? "")}
+                        className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                      >
+                        Cần gọi báo khách
+                      </span>
+                    )}
                     <UrgencyBadge kind={urgency(row, now)} />
                     <SlotIssueBadge issue={row.slotIssue} />
                     <PhoneLimitBadge count={row.openFromPhone} phone={row.phone} />
@@ -503,8 +720,55 @@ export default function BookingRequestsPage() {
                 {selected.appointment.dentist
                   ? " · " + selected.appointment.dentist.fullName
                   : ""}{" "}
-                ({selected.appointment.status})
+                ({visitLabel[selected.appointment.status] ?? selected.appointment.status})
               </p>
+            )}
+            {ageOf(selected.dob) < 18 && (
+              <p className="mt-3 rounded bg-sky-50 p-2 text-xs text-sky-900">
+                Người khám {ageOf(selected.dob)} tuổi (vị thành niên): cần cha mẹ hoặc người giám hộ
+                đi cùng khi đến khám.
+              </p>
+            )}
+            {selected.noticeFailedAt && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                <span>
+                  Chưa báo được khách “{selected.noticeFailedSubject}”
+                  {selected.email ? " (gửi email lỗi)" : " (khách không có email)"}. Hãy gọi{" "}
+                  <a href={"tel:" + selected.phone} className="font-semibold underline">
+                    {selected.phone}
+                  </a>
+                  .
+                </span>
+                <button
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ path: "called" })}
+                  className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs"
+                >
+                  Đã gọi báo khách
+                </button>
+              </div>
+            )}
+            {(!!related.data?.requests.length || !!related.data?.visits.length) && (
+              <div className="mt-4 rounded bg-violet-50 p-3 text-sm text-violet-900">
+                <p className="font-medium">
+                  Cùng số điện thoại / cùng người — tránh đặt trùng hai lịch:
+                </p>
+                <ul className="mt-1 list-disc pl-5">
+                  {related.data?.requests.map((r) => (
+                    <li key={r.id}>
+                      Yêu cầu {r.referenceCode} ({r.fullName}) · {format(r.startAt)} ·{" "}
+                      {stateLabel[r.status] ?? r.status}
+                    </li>
+                  ))}
+                  {related.data?.visits.map((v) => (
+                    <li key={v.id}>
+                      Lịch hẹn {format(v.startAt)} · {v.patient.fullName} ({v.patient.code})
+                      {v.dentist ? " · " + v.dentist.fullName : ""} ·{" "}
+                      {visitLabel[v.status] ?? v.status}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {overdue && (
               <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
@@ -535,7 +799,7 @@ export default function BookingRequestsPage() {
                     className="mt-1 w-full rounded-md border bg-white px-3 py-2"
                   >
                     <option value="">
-                      Tự tạo hoặc ghép theo số điện thoại, tên và ngày sinh
+                      Tự ghép nếu trùng SĐT, tên và ngày sinh; không có thì tạo hồ sơ mới
                     </option>
                     <option value={NEW_PATIENT}>
                       Tạo hồ sơ mới cho {selected.fullName}
@@ -556,11 +820,65 @@ export default function BookingRequestsPage() {
                     mới”.
                   </p>
                 )}
+                {chosen?.differentPhone && (
+                  <div className="mt-2 space-y-2 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                    <p>
+                      Hồ sơ này dùng số điện thoại khác ({chosen.primaryPhone ?? "—"}). Chỉ chọn khi đã
+                      xác minh đúng người (khách đổi số, người nhà đặt hộ).
+                    </p>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={identityChecked}
+                        onChange={(e) => setIdentityChecked(e.target.checked)}
+                      />
+                      Đã xác minh danh tính
+                    </label>
+                    <input
+                      value={identityNote}
+                      onChange={(e) => setIdentityNote(e.target.value)}
+                      placeholder="Cách xác minh, ví dụ: khách đọc đúng ngày sinh và SĐT cũ"
+                      className="w-full rounded-md border px-3 py-1.5"
+                    />
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={updatePhone}
+                        onChange={(e) => setUpdatePhone(e.target.checked)}
+                      />
+                      Đổi SĐT hồ sơ thành {selected.phone} (giữ lịch sử số cũ)
+                    </label>
+                  </div>
+                )}
+                {chosen && selected.email && (
+                  <p className="mt-2 text-xs text-gray-600">
+                    {/* The email was typed on the public form: saved only when ticked (after checking with the patient). */}
+                    {!chosen.email || chosen.email.toLowerCase() !== selected.email.toLowerCase() ? (
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={updateEmail}
+                          onChange={(e) => setUpdateEmail(e.target.checked)}
+                        />
+                        {chosen.email
+                          ? `Thay email hồ sơ (${chosen.email}) bằng ${selected.email}`
+                          : `Lưu email ${selected.email} vào hồ sơ (để gửi nhắc lịch) — chỉ tick khi đã xác nhận với khách`}
+                      </label>
+                    ) : null}
+                  </p>
+                )}
               </div>
             )}
             {canPropose && (
               <div className="mt-5 rounded-lg bg-slate-50 p-4">
                 <h3 className="font-semibold">Giờ thay thế</h3>
+                {dentistOptions.isSuccess && dentists.length === 0 && (
+                  <p className="mt-2 rounded bg-orange-50 p-2 text-sm text-orange-900">
+                    Không còn bác sĩ nào thực hiện dịch vụ này (bác sĩ đã nghỉ hoặc dịch vụ đã
+                    ngừng). Hãy gọi khách để đặt dịch vụ khác qua điện thoại, rồi từ chối yêu cầu này
+                    kèm lời nhắn giải thích.
+                  </p>
+                )}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <label className="text-sm">
                     Bác sĩ
@@ -593,6 +911,131 @@ export default function BookingRequestsPage() {
               </div>
             )}
             {OPEN.includes(selected.status) && (
+              <details className="mt-4 rounded-lg border p-3 text-sm">
+                <summary className="cursor-pointer font-medium">
+                  Khách đang ở quầy với mã đặt lịch này
+                </summary>
+                <p className="mt-2 text-gray-600">
+                  Tạo lượt khám vãng lai cho khách (Hàng chờ / Lịch hẹn) rồi gắn vào yêu cầu, hoặc chỉ
+                  đóng yêu cầu. Không gửi email cho khách.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {todayVisits.map((v) => (
+                    <button
+                      key={v.id}
+                      disabled={action.isPending}
+                      onClick={() =>
+                        action.mutate({ path: "arrived", body: { appointmentId: v.id } })
+                      }
+                      className="rounded-md border border-teal-700 px-3 py-1.5 text-teal-800 disabled:opacity-50"
+                    >
+                      Gắn lượt {clinicParts(v.startAt).time} · {v.patient.fullName}
+                    </button>
+                  ))}
+                  <button
+                    disabled={action.isPending}
+                    onClick={() => action.mutate({ path: "arrived", body: {} })}
+                    className="rounded-md border px-3 py-1.5 disabled:opacity-50"
+                  >
+                    Đóng yêu cầu (khách đã đến)
+                  </button>
+                </div>
+              </details>
+            )}
+            {OPEN.includes(selected.status) && (
+              <details
+                className="mt-3 rounded-lg border p-3 text-sm"
+                open={editing}
+                onToggle={(e) => setEditing((e.target as HTMLDetailsElement).open)}
+              >
+                <summary className="cursor-pointer font-medium">
+                  Sửa thông tin khách (gõ sai SĐT, email, tên)
+                </summary>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      ["fullName", "Họ và tên"],
+                      ["dob", "Ngày sinh (YYYY-MM-DD)"],
+                      ["phone", "Số điện thoại"],
+                      ["email", "Email (để trống để xóa)"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="text-xs text-gray-600">
+                      {label}
+                      <input
+                        value={contact[key]}
+                        onChange={(e) => setContact((c) => ({ ...c, [key]: e.target.value }))}
+                        className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-gray-900"
+                      />
+                    </label>
+                  ))}
+                  <label className="text-xs text-gray-600 sm:col-span-2">
+                    Lý do sửa (ghi vào lịch sử)
+                    <input
+                      value={contact.reason}
+                      onChange={(e) => setContact((c) => ({ ...c, reason: e.target.value }))}
+                      className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-gray-900"
+                    />
+                  </label>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    disabled={action.isPending || contact.reason.trim().length < 3}
+                    onClick={() =>
+                      action.mutate({
+                        path: "contact",
+                        method: "patch",
+                        body: {
+                          reason: contact.reason.trim(),
+                          ...(contact.fullName.trim() !== selected.fullName
+                            ? { fullName: contact.fullName.trim() }
+                            : {}),
+                          ...(contact.dob !== String(selected.dob).slice(0, 10) ? { dob: contact.dob } : {}),
+                          ...(contact.phone.trim() !== selected.phone ? { phone: contact.phone.trim() } : {}),
+                          ...(contact.email.trim() !== (selected.email ?? "")
+                            ? { email: contact.email.trim() }
+                            : {}),
+                        },
+                      })
+                    }
+                    className="rounded-md bg-slate-700 px-3 py-1.5 text-white disabled:opacity-50"
+                  >
+                    Lưu thông tin
+                  </button>
+                  {selected.email && (
+                    <button
+                      disabled={action.isPending}
+                      onClick={() => action.mutate({ path: "resend-link" })}
+                      className="rounded-md border px-3 py-1.5 disabled:opacity-50"
+                    >
+                      Gửi lại đường link cho khách
+                    </button>
+                  )}
+                </div>
+              </details>
+            )}
+            <label className="mt-3 block text-sm font-medium">
+              Ghi chú nội bộ (khách không thấy)
+              <div className="mt-1 flex gap-2">
+                <textarea
+                  rows={1}
+                  value={note}
+                  maxLength={2000}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Ví dụ: đã gọi 2 lần, không nghe máy"
+                  className="w-full rounded-md border px-3 py-2 text-sm font-normal"
+                />
+                <button
+                  type="button"
+                  disabled={action.isPending || note === (selected.receptionistNote ?? "")}
+                  onClick={() => action.mutate({ path: "note", method: "put", body: { note } })}
+                  className="rounded-md border px-3 text-sm font-normal disabled:opacity-50"
+                >
+                  Lưu
+                </button>
+              </div>
+            </label>
+            {OPEN.includes(selected.status) && (
               <label className="mt-4 block text-sm font-medium">
                 Lời nhắn cho khách
                 <textarea
@@ -620,20 +1063,30 @@ export default function BookingRequestsPage() {
               {CONFIRMABLE.includes(selected.status) && !overdue && (
                 <button
                   disabled={action.isPending}
-                  onClick={() =>
-                    action.mutate({
-                      path: "confirm",
-                      body:
-                        patientId === NEW_PATIENT
-                          ? { createNewPatient: true }
-                          : patientId
-                            ? { patientId }
-                            : {},
-                    })
-                  }
+                  onClick={() => action.mutate({ path: "confirm", body: confirmBody() })}
                   className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
                 >
                   Xác nhận lịch
+                </button>
+              )}
+              {/* The patient asked for / agreed to the alternative time by phone: book it now. */}
+              {canPropose && (
+                <button
+                  disabled={action.isPending || !proposeAt || !proposeDentist}
+                  onClick={() =>
+                    action.mutate({
+                      path: "confirm",
+                      body: {
+                        ...confirmBody(),
+                        dentistId: proposeDentist,
+                        startAt: fromInputDate(proposeAt),
+                      },
+                    })
+                  }
+                  title="Khách đã đồng ý giờ thay thế qua điện thoại: tạo lịch ngay, chỉ gửi email xác nhận"
+                  className="rounded-md border border-teal-700 px-4 py-2 text-sm text-teal-800 disabled:opacity-50"
+                >
+                  Xác nhận luôn giờ thay thế
                 </button>
               )}
               {canPropose && (
@@ -706,15 +1159,40 @@ export default function BookingRequestsPage() {
               {!["CONFIRMED", "DECLINED", "CANCELLED", "EXPIRED"].includes(
                 selected.status,
               ) && (
-                <button
-                  disabled={action.isPending || !message.trim()}
-                  onClick={() =>
-                    action.mutate({ path: "decline", body: { message } })
-                  }
-                  className="rounded-md border border-red-200 px-4 py-2 text-sm text-red-700 disabled:opacity-50"
-                >
-                  Từ chối
-                </button>
+                <>
+                  <button
+                    disabled={action.isPending}
+                    onClick={() =>
+                      action.mutate({
+                        path: "cancelled-by-phone",
+                        body: message.trim() ? { note: message.trim() } : {},
+                      })
+                    }
+                    className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    Khách hủy qua điện thoại
+                  </button>
+                  <label className="flex items-center gap-1 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={spam}
+                      onChange={(e) => setSpam(e.target.checked)}
+                    />
+                    Yêu cầu rác (không gửi email)
+                  </label>
+                  <button
+                    disabled={action.isPending || !message.trim()}
+                    onClick={() =>
+                      action.mutate({
+                        path: "decline",
+                        body: { message, ...(spam ? { spam: true } : {}) },
+                      })
+                    }
+                    className="rounded-md border border-red-200 px-4 py-2 text-sm text-red-700 disabled:opacity-50"
+                  >
+                    Từ chối
+                  </button>
+                </>
               )}
               <button
                 onClick={() => setSelected(null)}

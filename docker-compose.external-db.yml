@@ -30,6 +30,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set random JWT secret}
       CORS_ORIGIN: https://${DOMAIN:?Set public domain}
       FRONTEND_URL: https://${DOMAIN}
+      # Root of the links in patient booking emails.
+      PUBLIC_APP_URL: https://${DOMAIN}
       TRUST_PROXY: '1'
       EMAIL_MOCK: 'false'
       SMTP_HOST: ${SMTP_HOST:?Set SMTP host}
@@ -41,8 +43,11 @@ services:
       # Patient emails: clinic hotline in every email; visit cancel/move/reminder switch.
       CLINIC_NAME: ${CLINIC_NAME:-}
       CLINIC_PHONE: ${CLINIC_PHONE:-}
+      CLINIC_ADDRESS: ${CLINIC_ADDRESS:-}
       APPOINTMENT_EMAIL_NOTICES: ${APPOINTMENT_EMAIL_NOTICES:-true}
       BOOKING_MIN_LEAD_MIN: ${BOOKING_MIN_LEAD_MIN:-120}
+      # Hours before a confirmed visit the patient may still cancel it from the email link.
+      BOOKING_PATIENT_CANCEL_MIN_HOURS: ${BOOKING_PATIENT_CANCEL_MIN_HOURS:-4}
       # Online booking horizon in days; slot grid step in minutes (see .env example).
       BOOKING_MAX_DAYS_AHEAD: ${BOOKING_MAX_DAYS_AHEAD:-60}
       SLOT_STEP_MIN: ${SLOT_STEP_MIN:-15}

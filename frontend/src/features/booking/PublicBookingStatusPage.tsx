@@ -37,6 +37,12 @@ type Status = {
   proposedStartAt?: string | null;
   /** Open, but its time has passed (server clock). */
   overdue?: boolean;
+  /** The time no longer works (clinic closed, dentist away): the front desk will call. */
+  slotIssue?: { kind: string; message: string } | null;
+  /** A confirmed visit the patient may cancel from the link until then. */
+  cancelUntil?: string | null;
+  /** Lookup by phone alone: who the request is for, masked ("N*** V** A*"). */
+  patientInitials?: string;
   responseMessage?: string | null;
   appointment?: {
     startAt: string;
@@ -199,6 +205,10 @@ const googleCalendarUrl = (status: Status) => {
   if (clinic.address) params.set("location", clinic.address);
   return "https://calendar.google.com/calendar/render?" + params.toString();
 };
+
+/** The server says the link was replaced by a newer email (ACCESS_ROTATED). */
+const rotated = (e: unknown) =>
+  (e as { response?: { data?: { code?: string } } })?.response?.data?.code === "ACCESS_ROTATED";
 
 const headers = (a: Access) => ({
   ...(a.token ? { "x-booking-access-token": a.token } : {}),
@@ -388,6 +398,10 @@ export default function PublicBookingStatusPage() {
   const [declining, setDeclining] = useState(false);
   // The requester's optional note (withdrawing, turning a proposal down).
   const [note, setNote] = useState("");
+  const [cancellingVisit, setCancellingVisit] = useState(false);
+  // Information that is not an error (an old link replaced by a newer email).
+  const [notice, setNotice] = useState("");
+  const mailFailed = params.get("mail") === "0";
 
   const open = useCallback(async (ref: string, a: Access, quiet = false) => {
     setBusy(true);
@@ -399,16 +413,22 @@ export default function PublicBookingStatusPage() {
       );
       const data = response.data.data;
       // A closed request cannot be changed any more: its token is not kept
-      // on this device (the phone still shows the status).
-      const kept = CLOSED.includes(data.status) ? { phone: a.phone, token: undefined } : a;
+      // on this device (the phone still shows the status). A confirmed visit
+      // the patient may still cancel keeps it.
+      const kept =
+        CLOSED.includes(data.status) && !data.cancelUntil ? { phone: a.phone, token: undefined } : a;
       setStatus(data);
       setAccess(a);
       saveBooking({ ref: data.referenceCode ?? ref, ...kept });
       return true;
     } catch (e: unknown) {
-      // A link replaced by a newer email: still show the status by phone.
-      if (a.token && a.phone) return open(ref, { phone: a.phone }, quiet);
-      if (!quiet) setError(bookingErrorMessage(e, "Mã đặt lịch hoặc số điện thoại không đúng."));
+      // A link replaced by a newer email: say so, and still show the status by phone.
+      if (a.token && a.phone) {
+        if (rotated(e)) setNotice(bookingErrorMessage(e, ""));
+        return open(ref, { phone: a.phone }, quiet);
+      }
+      if (!quiet || rotated(e))
+        setError(bookingErrorMessage(e, "Mã đặt lịch hoặc số điện thoại không đúng."));
       return false;
     } finally {
       setBusy(false);
@@ -480,13 +500,20 @@ export default function PublicBookingStatusPage() {
       setStatus((old) => ({ ...old, ...result.data.data }) as Status);
       // Withdrawn: nothing left to change, so the token is not kept.
       const ref = result.data.data.referenceCode ?? status?.referenceCode;
-      if (ref && CLOSED.includes(result.data.data.status))
+      if (ref && CLOSED.includes(result.data.data.status) && !result.data.data.cancelUntil)
         saveBooking({ ref, phone: access?.phone, token: undefined });
     } catch (e: unknown) {
       setError(bookingErrorMessage(e, fallback));
+      // The link was replaced while this page was open: from now on the page
+      // only shows the status (by phone), and says where the new link is.
+      if (rotated(e)) {
+        setAccess((old) => (old ? { phone: old.phone } : old));
+        setStatus((old) => (old ? { ...old, canManage: false } : old));
+      }
     } finally {
       setBusy(false);
       setConfirmCancel(false);
+      setCancellingVisit(false);
       setDeclining(false);
       setNote("");
     }
@@ -509,6 +536,7 @@ export default function PublicBookingStatusPage() {
     setAccess(null);
     setResults(null);
     setError("");
+    setNotice("");
     setParams({}, { replace: true });
   };
 
@@ -554,6 +582,12 @@ export default function PublicBookingStatusPage() {
                   link trong email xác nhận (nếu bạn có nhập email) hoặc lưu đường link bên dưới; tra
                   cứu bằng số điện thoại chỉ xem được tình trạng.
                 </p>
+                {mailFailed && (
+                  <p role="alert" className="mt-2 rounded-md bg-amber-100 p-2 text-sm text-amber-900">
+                    Chưa gửi được email xác nhận tới địa chỉ bạn nhập (có thể địa chỉ bị gõ sai). Hãy
+                    lưu đường link bên dưới; lễ tân sẽ gọi điện cho bạn.
+                  </p>
+                )}
                 {manageLink && (
                   <div className="mt-2">
                     <CopyCode code={manageLink} label="Sao chép đường link quản lý" />
@@ -598,8 +632,10 @@ export default function PublicBookingStatusPage() {
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-gray-600">
-                        {item.service?.name ?? "—"}
-                        {item.dentist?.fullName ? " · " + item.dentist.fullName : ""}
+                        {item.patientInitials
+                          ? "Người khám: " + item.patientInitials
+                          : (item.service?.name ?? "—") +
+                            (item.dentist?.fullName ? " · " + item.dentist.fullName : "")}
                       </p>
                     </button>
                   </li>
@@ -681,6 +717,15 @@ export default function PublicBookingStatusPage() {
               </div>
             </div>
 
+            {status.slotIssue && (ACTIVE.includes(current) || visitStands) && (
+              <p role="alert" className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
+                {status.slotIssue.message}
+              </p>
+            )}
+            {notice && (
+              <p className="mt-4 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">{notice}</p>
+            )}
+
             {(!visit || visitStands) && state && state.step > 0 && <Progress step={state.step} />}
 
             <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100">
@@ -688,19 +733,29 @@ export default function PublicBookingStatusPage() {
                 <dt className="text-sm text-gray-500">{timeLabel}</dt>
                 <dd className="font-semibold capitalize text-gray-900">{when(time)}</dd>
               </div>
-              <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                <dt className="text-sm text-gray-500">Dịch vụ</dt>
-                <dd className="font-medium text-gray-900">
-                  {status.service?.name ?? "—"}
-                  {status.service?.durationMinutes ? (
-                    <span className="font-normal text-gray-500"> · khoảng {status.service.durationMinutes} phút</span>
-                  ) : null}
-                </dd>
-              </div>
-              <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                <dt className="text-sm text-gray-500">Bác sĩ</dt>
-                <dd className="font-medium text-gray-900">{status.dentist?.fullName ?? "Phòng khám sắp xếp"}</dd>
-              </div>
+              {status.patientInitials ? (
+                // Shown by phone alone: who it is for, masked; no service or dentist.
+                <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
+                  <dt className="text-sm text-gray-500">Người khám</dt>
+                  <dd className="font-medium text-gray-900">{status.patientInitials}</dd>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
+                    <dt className="text-sm text-gray-500">Dịch vụ</dt>
+                    <dd className="font-medium text-gray-900">
+                      {status.service?.name ?? "—"}
+                      {status.service?.durationMinutes ? (
+                        <span className="font-normal text-gray-500"> · khoảng {status.service.durationMinutes} phút</span>
+                      ) : null}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
+                    <dt className="text-sm text-gray-500">Bác sĩ</dt>
+                    <dd className="font-medium text-gray-900">{status.dentist?.fullName ?? "Phòng khám sắp xếp"}</dd>
+                  </div>
+                </>
+              )}
               {status.status === "PROPOSED" && status.proposedStartAt && (
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
                   <dt className="text-sm text-gray-500">Giờ bạn chọn ban đầu</dt>
@@ -900,6 +955,70 @@ export default function PublicBookingStatusPage() {
                         className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
                       >
                         Giữ lại
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {visitStands && canManage && status.cancelUntil && (
+              <div className="mt-6 text-sm">
+                {new Date(status.cancelUntil).getTime() <= Date.now() ? (
+                  <p className="text-gray-600">
+                    Đã gần đến giờ hẹn nên không hủy trực tuyến được. Nếu không đến được, vui lòng gọi
+                    phòng khám.
+                  </p>
+                ) : !cancellingVisit ? (
+                  <button
+                    type="button"
+                    onClick={() => setCancellingVisit(true)}
+                    className="text-gray-500 underline-offset-2 hover:text-red-600 hover:underline"
+                  >
+                    Tôi không đến được, hủy lịch hẹn này
+                  </button>
+                ) : (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <p className="font-medium text-red-800">Hủy lịch hẹn {when(time)}?</p>
+                    <p className="mt-1 text-red-700">
+                      Giờ khám sẽ được nhường cho người khác. Muốn đổi sang giờ khác, hãy gọi phòng khám
+                      thay vì hủy.
+                    </p>
+                    <label className="mt-3 block text-red-800">
+                      Lý do (không bắt buộc)
+                      <textarea
+                        rows={2}
+                        maxLength={1000}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        className={inputClass}
+                      />
+                    </label>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void act(
+                            () =>
+                              api.post(
+                                path("/cancel-visit"),
+                                { message: note.trim() || undefined },
+                                { headers: headers(access!) },
+                              ),
+                            "Không hủy được lịch hẹn. Vui lòng gọi phòng khám.",
+                          )
+                        }
+                        className="rounded-full bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                      >
+                        Hủy lịch hẹn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCancellingVisit(false)}
+                        className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                      >
+                        Giữ lịch
                       </button>
                     </div>
                   </div>

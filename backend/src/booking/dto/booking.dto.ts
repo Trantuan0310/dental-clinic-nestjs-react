@@ -214,13 +214,34 @@ export class PublicSlotsQueryDto {
   @IsBoolean()
   next?: boolean;
 }
+// An absolute instant (Z or ±hh:mm): a zone-less time would be read in the
+// server's zone (UTC), 7 hours off the clinic's.
+const WITH_OFFSET = /(Z|[+-]\d{2}:?\d{2})$/;
+const STAFF_TIME = { message: 'Giờ hẹn không hợp lệ (cần có múi giờ)' };
+
 export class ProposeBookingTimeDto {
   @ApiProperty() @IsUUID() dentistId!: string;
-  @ApiProperty() @IsDateString() startAt!: string;
-  @ApiProperty() @IsString() @MinLength(5) @MaxLength(1000) message!: string;
+  @ApiProperty() @IsDateString({}, STAFF_TIME) @Matches(WITH_OFFSET, STAFF_TIME) startAt!: string;
+  @ApiProperty()
+  @Trim()
+  @Text('Lời nhắn')
+  @NoNul('Lời nhắn')
+  @Min(5, 'Lời nhắn')
+  @Max(1000, 'Lời nhắn')
+  message!: string;
 }
 export class BookingRequestMessageDto {
-  @ApiProperty() @IsString() @MinLength(3) @MaxLength(1000) message!: string;
+  @ApiProperty()
+  @Trim()
+  @Text('Lời nhắn')
+  @NoNul('Lời nhắn')
+  @Min(3, 'Lời nhắn')
+  @Max(1000, 'Lời nhắn')
+  message!: string;
+}
+/** Declining; `spam`: a junk request, closed without emailing the address it gives. */
+export class DeclineBookingRequestDto extends BookingRequestMessageDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() spam?: boolean;
 }
 export class ConfirmBookingRequestDto {
   @ApiPropertyOptional()
@@ -232,6 +253,92 @@ export class ConfirmBookingRequestDto {
   @IsOptional()
   @IsBoolean()
   createNewPatient?: boolean;
+  /** The picked record is on another phone and the front desk checked it is this person. */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() confirmIdentity?: boolean;
+  /** How the identity was checked (required with confirmIdentity). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @NoNul('Ghi chú xác minh')
+  @MaxLength(500)
+  identityNote?: string;
+  /** Replace the picked record's phone with the request's (phone history kept). */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() updatePatientPhone?: boolean;
+  /** Put the request's email on the record (replacing any): never without this tick. */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() updatePatientEmail?: boolean;
+  /** Book this time instead (the patient agreed to it by phone); `dentistId` optional. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString({}, STAFF_TIME)
+  @Matches(WITH_OFFSET, STAFF_TIME)
+  startAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() dentistId?: string;
+}
+/** The front desk corrects the requester's details; `reason` goes to the history. */
+export class UpdateBookingContactDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Text(PHONE)
+  @NoNul(PHONE)
+  @MinLength(9, PHONE_LENGTH)
+  @MaxLength(20, PHONE_LENGTH)
+  phone?: string;
+  /** '' removes the email. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Text('Email')
+  @NoNul('Email')
+  @MaxLength(255)
+  email?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Trim()
+  @Text('Họ và tên')
+  @NoNul('Họ và tên')
+  @Min(2, 'Họ và tên')
+  @Max(200, 'Họ và tên')
+  fullName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsCalendarDate('Ngày sinh không hợp lệ') dob?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Text(GUARDIAN)
+  @NoNul(GUARDIAN)
+  @Max(200, GUARDIAN)
+  contactPersonName?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Text(GUARDIAN_PHONE)
+  @NoNul(GUARDIAN_PHONE)
+  @MaxLength(20, { message: GUARDIAN_PHONE + ' không hợp lệ' })
+  contactPersonPhone?: string;
+  @ApiProperty()
+  @Trim()
+  @Text('Lý do sửa')
+  @NoNul('Lý do sửa')
+  @Min(3, 'Lý do sửa')
+  @Max(500, 'Lý do sửa')
+  reason!: string;
+}
+/** The front desk's internal note on a request ('' clears it). */
+export class ReceptionistNoteDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @NoNul('Ghi chú')
+  @Max(2000, 'Ghi chú')
+  note?: string;
+}
+/** The patient came to the desk: link today's visit (`appointmentId`) or just close the request. */
+export class BookingArrivedDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() appointmentId?: string;
+  @ApiPropertyOptional()
+  @BlankToUndefined()
+  @IsOptional()
+  @IsString()
+  @NoNul('Ghi chú')
+  @MaxLength(500)
+  note?: string;
 }
 /** Optional note for the history when the front desk records an answer given by phone. */
 export class BookingRequestNoteDto {
@@ -249,6 +356,14 @@ export class ListBookingRequestsDto {
   @IsOptional()
   @IsEnum(BookingRequestStatus)
   status?: BookingRequestStatus;
+  /** Reference code, phone or name (any status). */
+  @ApiPropertyOptional()
+  @BlankToUndefined()
+  @IsOptional()
+  @IsString()
+  @NoNul('Từ khóa')
+  @MaxLength(100)
+  q?: string;
 }
 
 /** Open requests for a dentist (or all) whose time falls in [from, to] (clinic dates). */

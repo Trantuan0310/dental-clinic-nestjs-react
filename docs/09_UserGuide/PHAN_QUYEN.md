@@ -59,6 +59,13 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 - "Thay bác sĩ cả ngày" (`queue.manage`) mặc định đóng lịch của bác sĩ vắng ngày đó và có nút hoàn tác.
 - Cho nghỉ việc với ngày trong tương lai là lên lịch: tài khoản vẫn hoạt động tới ngày đó rồi tự khóa.
 
+## Yêu cầu đặt lịch online
+
+- `booking_request.read`: xem hộp yêu cầu, hồ sơ có thể khớp (cùng SĐT, cùng họ tên + ngày sinh, SĐT cũ), các yêu cầu và lịch hẹn khác cùng SĐT hoặc cùng người, danh sách lịch hẹn chưa được nhắc qua email (`reminder-issues`). Các màn này hiện tên, SĐT và email bệnh nhân toàn phòng khám, nên chỉ cấp cho vai trò lễ tân hoặc quản lý.
+- `booking_request.manage`: xác nhận, đề xuất giờ, yêu cầu bổ sung, từ chối (có ô "yêu cầu rác", không gửi email), ghi nhận khách hủy qua điện thoại, sửa thông tin liên hệ của yêu cầu (bắt buộc ghi lý do, có audit), gửi lại đường link, ghi chú nội bộ, đánh dấu "đã gọi báo khách", và **gắn yêu cầu vào lượt khám hôm nay** khi khách đến quầy. Chỉ gắn được lượt khám của chính người gửi yêu cầu: hồ sơ cùng SĐT, hoặc cùng họ tên + ngày sinh.
+- Khi xác nhận, chọn hồ sơ dùng SĐT khác phải đánh dấu "Đã xác minh danh tính" và ghi cách xác minh. Muốn **đổi SĐT hoặc email trong hồ sơ bệnh nhân** thì lễ tân phải tick tùy chọn (mặc định không tick) **và** tài khoản phải có thêm `patient.update`. Không có quyền này thì lịch vẫn được tạo, hồ sơ giữ nguyên và màn hình báo cần nhờ người có quyền sửa. Email khách tự gõ trên trang công khai không bao giờ tự vào hồ sơ.
+- Không thêm mã quyền mới. Khách tự hủy lịch đã xác nhận qua đường link trong email (không cần đăng nhập), chỉ áp dụng với lịch sinh ra từ chính yêu cầu đó và phải hủy trước giờ hẹn `BOOKING_PATIENT_CANCEL_MIN_HOURS` giờ.
+
 ## Trong màn khám bệnh
 
 - Thẻ **Tiền sử & dị ứng** hiện ngay dưới tên bệnh nhân. Bác sĩ bấm **Sửa** để ghi thêm dị ứng hoặc bệnh nền mới phát hiện.
