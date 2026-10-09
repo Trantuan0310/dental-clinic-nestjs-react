@@ -97,6 +97,15 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   const lockBtn = page.getByRole('button', { name: /khóa kỳ/i });
   await expect(lockBtn).toBeVisible({ timeout: 5_000 });
   await lockBtn.click();
+  // Open warnings (old draft invoices, visits outside hours…) ask to confirm.
+  const lockAnyway = page.getByRole('button', { name: /^vẫn khóa$/i });
+  const asked = await lockAnyway
+    .waitFor({ state: 'visible', timeout: 2_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (asked) {
+    await lockAnyway.click();
+  }
   await expect(lockBtn).toBeHidden({ timeout: 10_000 });
 
   // ---- Approve: REVIEWING -> APPROVED ----

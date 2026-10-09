@@ -58,8 +58,8 @@ export const proRateBaseSalary = (
   const periodDays = daysBetweenInclusive(payPeriod.start, payPeriod.end);
   if (periodDays <= 0) return 0;
 
-  // Open-ended comp (no effective_to) covers the period entirely.
-  if (compensationRange.openEnded) return monthlySalary;
+  // Open-ended (no effective_to) only means no upper bound: a comp starting
+  // on the 25th still pays 25th..end, not the whole period (A1-08).
 
   // BR-PAY-013 (docs/03_Specification/Payroll/SPEC.md): pro-rate = actual_days / period_days.
   // Ratio is always overlap / periodDays, so a comp that fully covers the pay
@@ -67,6 +67,85 @@ export const proRateBaseSalary = (
   // long the comp's own effective range is.
   const ratio = overlap / periodDays;
   return Math.round(monthlySalary * ratio);
+};
+
+export interface CompensationTerm {
+  id: string;
+  monthlySalary: number;
+  commissionPct: number;
+  overtimeHourlyVnd: number;
+  /** DATE values (UTC midnight of the clinic date). */
+  effectiveFrom: Date;
+  effectiveTo: Date | null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Monthly salary earned over calendar days [from, to] of ONE month: the
+ * month's salary up to day `to` minus up to the day before `from`, each
+ * rounded. Being a difference of cumulative amounts, consecutive pieces of a
+ * month (weekly or half-month periods) add up to exactly one month's salary.
+ */
+const monthPiece = (monthlySalary: number, from: Date, to: Date): number => {
+  const daysInMonth = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const upTo = (day: number) => Math.round((monthlySalary * day) / daysInMonth);
+  return upTo(to.getUTCDate()) - upTo(from.getUTCDate() - 1);
+};
+
+/**
+ * Base salary of every compensation overlapping the period, each pro-rated
+ * by its own days (BR-PAY-013): a raise on the 16th pays the old rate for
+ * 1–15 and the new one for 16–end. Each day is worth salary / days of ITS
+ * month, so a weekly period pays ~7/30 of a month (not a whole month), a
+ * period crossing months splits by month, and a full month pays exactly the
+ * monthly salary. Days after `lastPaidDay` (termination date) are not paid.
+ */
+export const proRateBaseSalaryParts = (
+  terms: CompensationTerm[],
+  payPeriod: { start: Date; end: Date },
+  lastPaidDay: Date | null = null,
+): { total: number; parts: Array<{ compensationId: string; days: number; amount: number }> } => {
+  const periodDays = daysBetweenInclusive(payPeriod.start, payPeriod.end);
+  if (periodDays <= 0) return { total: 0, parts: [] };
+  const parts = terms.map(t => {
+    const from = Math.max(t.effectiveFrom.getTime(), payPeriod.start.getTime());
+    const to = Math.min(
+      (t.effectiveTo ?? payPeriod.end).getTime(),
+      payPeriod.end.getTime(),
+      (lastPaidDay ?? payPeriod.end).getTime(),
+    );
+    if (to < from) return { compensationId: t.id, days: 0, amount: 0 };
+    let amount = 0;
+    let cursor = new Date(from);
+    while (cursor.getTime() <= to) {
+      const monthEnd = Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0);
+      const pieceEnd = new Date(Math.min(monthEnd, to));
+      amount += monthPiece(t.monthlySalary, cursor, pieceEnd);
+      cursor = new Date(pieceEnd.getTime() + DAY_MS);
+    }
+    return {
+      compensationId: t.id,
+      days: daysBetweenInclusive(new Date(from), new Date(to)),
+      amount,
+    };
+  });
+  return { total: parts.reduce((s, p) => s + p.amount, 0), parts };
+};
+
+/** The compensation in force on a clinic date ("YYYY-MM-DD"), if any. */
+export const compensationOn = <T extends { effectiveFrom: Date; effectiveTo: Date | null }>(
+  terms: T[],
+  dateKey: string,
+): T | null => {
+  const day = new Date(dateKey).getTime();
+  return (
+    terms.find(
+      t => t.effectiveFrom.getTime() <= day && (!t.effectiveTo || t.effectiveTo.getTime() >= day),
+    ) ?? null
+  );
 };
 
 export const effectiveCommissionPct = (

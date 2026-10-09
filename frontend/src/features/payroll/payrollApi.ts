@@ -8,6 +8,7 @@ import type {
   UpdateCompensationPayload,
   PayrollPeriod,
   PayrollPeriodDetail,
+  PayrollPeriodWarnings,
   CreatePayrollPeriodPayload,
   PayrollHistoryItem,
   Payslip,
@@ -24,6 +25,7 @@ export const payrollKeys = {
   compensations: (filters?: Record<string, unknown>) => ['payroll', 'compensations', filters ?? {}] as const,
   periods: (filters?: Record<string, unknown>) => ['payroll', 'periods', filters ?? {}] as const,
   period: (id: string) => ['payroll', 'period', id] as const,
+  periodWarnings: (id: string) => ['payroll', 'period', id, 'warnings'] as const,
   myHistory: ['payroll', 'me', 'history'] as const,
   myPayslip: (periodId: string) => ['payroll', 'me', 'payslip', periodId] as const,
   myCompensation: ['payroll', 'me', 'compensation'] as const,
@@ -115,6 +117,7 @@ function toCompensationBody(payload: CreateCompensationPayload | UpdateCompensat
     }),
     ...(payload.overtimeHourlyRate !== undefined && { overtimeHourlyVnd: payload.overtimeHourlyRate }),
     ...(payload.notes !== undefined && { notes: payload.notes }),
+    ...(payload.selfApprovalReason && { selfApprovalReason: payload.selfApprovalReason }),
   };
 }
 
@@ -195,6 +198,15 @@ export function usePeriodDetail(id: string | undefined) {
   });
 }
 
+/** Old draft invoices, visits without pay terms, visits outside paid hours, leavers. */
+export function usePeriodWarnings(id: string | undefined, enabled = true) {
+  return useQuery({
+    enabled: !!id && enabled,
+    queryKey: payrollKeys.periodWarnings(id ?? ''),
+    queryFn: () => get<PayrollPeriodWarnings>(`/payroll/periods/${id}/warnings`),
+  });
+}
+
 export function useCreatePeriod() {
   const qc = useQueryClient();
   return useMutation({
@@ -230,6 +242,7 @@ export function useAddAdjustment(periodId: string) {
       type: 'BONUS' | 'PENALTY' | 'DEDUCTION' | 'MANUAL_OVERRIDE';
       amountVnd: number;
       reason: string;
+      selfApprovalReason?: string;
     }) => post<PayrollLineItem>(`/payroll/periods/${periodId}/adjustments`, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: payrollKeys.period(periodId) });
@@ -251,7 +264,14 @@ export function useLockPeriod() {
 export function useApprovePeriod() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => post<PayrollPeriod>(`/payroll/periods/${id}/approve`),
+    // `selfApprovalReason`: the sole admin approving a period with their own payslip.
+    mutationFn: (vars: string | { id: string; selfApprovalReason?: string }) => {
+      const { id, selfApprovalReason } = typeof vars === 'string' ? { id: vars } : vars;
+      return post<PayrollPeriod>(
+        `/payroll/periods/${id}/approve`,
+        selfApprovalReason ? { selfApprovalReason } : undefined,
+      );
+    },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: payrollKeys.period(data.id) });
       qc.invalidateQueries({ queryKey: ['payroll', 'periods'] });

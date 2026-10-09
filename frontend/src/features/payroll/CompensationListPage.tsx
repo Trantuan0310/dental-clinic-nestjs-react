@@ -4,13 +4,15 @@ import { vi } from 'date-fns/locale';
 import { DollarSign, Plus, AlertCircle } from 'lucide-react';
 import { useCompensations, useCreateCompensation } from './payrollApi';
 import { Modal, Input, Select, Button, Card, EmptyState } from '@/components/ui';
+import { Alert } from '@/components/ui/Alert';
+import { Textarea } from '@/components/ui/Textarea';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatCurrency } from '@/lib/format';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
-import type { DentistCompensation } from '@/types/payroll';
+import { SELF_APPROVAL_REASON_MIN, type DentistCompensation } from '@/types/payroll';
 
 export function CompensationListPage() {
   const canCreateCompensation = useAuthStore((s) => s.hasPermission('payroll.compensation.update'));
@@ -19,6 +21,10 @@ export function CompensationListPage() {
   const [baseSalary, setBaseSalary] = useState('');
   const [commission, setCommission] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState('');
+  const [selfReason, setSelfReason] = useState('');
+  const myId = useAuthStore((s) => s.user?.id);
+  // The only admin setting their own pay (owner who also practises).
+  const isSelf = !!selectedDentist && selectedDentist === myId;
 
   const { data: compensations, isLoading, isError, refetch } = useCompensations();
 
@@ -33,9 +39,11 @@ export function CompensationListPage() {
         effectiveFrom,
         baseSalary: parseInt(baseSalary, 10),
         commissionPercentage: parseFloat(commission),
+        ...(isSelf && { selfApprovalReason: selfReason.trim() }),
       });
       notify.success('Đã thêm chính sách lương');
       setShowAddModal(false);
+      setSelfReason('');
       setSelectedDentist('');
       setBaseSalary('');
       setCommission('');
@@ -161,6 +169,23 @@ export function CompensationListPage() {
             value={effectiveFrom}
             onChange={(e) => setEffectiveFrom(e.target.value)}
           />
+          {isSelf && (
+            <>
+              <Alert variant="warning" title="Bạn đang lập chế độ lương cho chính mình">
+                Chỉ được làm khi phòng khám không có quản trị viên nào khác. Thao tác được ghi nhật ký riêng
+                (PAYROLL_SELF_APPROVED).
+              </Alert>
+              <Textarea
+                label="Lý do tự duyệt"
+                placeholder="VD: Phòng khám chỉ có một quản trị viên"
+                rows={2}
+                value={selfReason}
+                onChange={(e) => setSelfReason(e.target.value)}
+                hint={`Ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự`}
+                required
+              />
+            </>
+          )}
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
               Hủy
@@ -168,7 +193,13 @@ export function CompensationListPage() {
             <Button
               onClick={handleCreate}
               isLoading={createMutation.isPending}
-              disabled={!selectedDentist || !baseSalary || !commission || !effectiveFrom}
+              disabled={
+                !selectedDentist ||
+                !baseSalary ||
+                !commission ||
+                !effectiveFrom ||
+                (isSelf && selfReason.trim().length < SELF_APPROVAL_REASON_MIN)
+              }
             >
               Thêm
             </Button>

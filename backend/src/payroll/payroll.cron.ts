@@ -6,6 +6,7 @@ import { PayrollService } from './payroll.service';
 import { ShiftRegistrationService } from './shift-registration.service';
 import { PayrollPeriodStatus } from '@prisma/client';
 import { computePeriodBounds } from './domain/payroll-state';
+import { clinicDateOnly } from '../common/date-range.util';
 
 /**
  * Cron jobs for the Payroll module.
@@ -34,7 +35,9 @@ export class PayrollCron {
     const config = await this.prisma.payrollConfig.findFirst();
     if (!config) return;
 
-    const today = new Date();
+    // The clinic's date (midnight VN is still "yesterday" in UTC), so the new
+    // month's period exists from its first clinic day.
+    const today = new Date(clinicDateOnly());
     // Try today + previous 3 days (backfill)
     for (let offset = 3; offset >= 0; offset--) {
       const anchor = new Date(today);

@@ -2,16 +2,109 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Calculator, Lock, CheckCircle, Wallet, SlidersHorizontal } from 'lucide-react';
 import { Card, Button, StatusBadge, EmptyState } from '@/components/ui';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { formatVnd, formatDate, formatNumber } from '@/lib/format';
+import { formatVnd, formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
-import { usePeriodDetail, useComputePeriod, useLockPeriod, useApprovePeriod } from './payrollApi';
+import {
+  usePeriodDetail,
+  usePeriodWarnings,
+  useComputePeriod,
+  useLockPeriod,
+  useApprovePeriod,
+} from './payrollApi';
 import { LineItemBreakdownDrawer } from './LineItemBreakdownDrawer';
 import { AdjustmentModal } from './AdjustmentModal';
 import { MarkPaidModal } from './MarkPaidModal';
-import type { PayrollLineItem } from '@/types/payroll';
+import { Textarea } from '@/components/ui/Textarea';
+import {
+  SELF_APPROVAL_REASON_MIN,
+  type PayrollLineItem,
+  type PayrollPeriodWarnings,
+} from '@/types/payroll';
+
+function warningCount(w: PayrollPeriodWarnings | undefined) {
+  if (!w) return 0;
+  return (
+    w.draftInvoices.length +
+    w.dentistsWithoutCompensation.length +
+    w.outsideHoursEncounters.length +
+    w.terminatedDentists.length
+  );
+}
+
+/** Things to settle before locking the period (H4/H5 warnings). */
+function PeriodWarningsCard({ warnings }: { warnings: PayrollPeriodWarnings }) {
+  return (
+    <Card title="Cần kiểm tra trước khi khóa kỳ">
+      <div className="space-y-4 text-sm">
+        {warnings.draftInvoices.length > 0 && (
+          <section>
+            <p className="font-medium text-amber-700">
+              {warnings.draftInvoices.length} hóa đơn nháp quá {warnings.draftInvoiceDays} ngày chưa phát hành
+            </p>
+            <p className="text-gray-500">
+              Hoa hồng chỉ tính trên hóa đơn đã phát hành. Nhờ lễ tân phát hành (hoặc hủy nếu sai), rồi bấm
+              "Tính lương" lại.
+            </p>
+            <ul className="mt-1 list-disc pl-5 text-gray-700">
+              {warnings.draftInvoices.slice(0, 20).map((d) => (
+                <li key={d.invoiceId}>
+                  {d.code} — {d.patientName} — BS {d.dentistName} — {formatVnd(d.totalVnd)} ({d.ageDays} ngày)
+                </li>
+              ))}
+              {warnings.draftInvoices.length > 20 && <li>… và {warnings.draftInvoices.length - 20} hóa đơn khác</li>}
+            </ul>
+          </section>
+        )}
+        {warnings.dentistsWithoutCompensation.length > 0 && (
+          <section>
+            <p className="font-medium text-amber-700">Bác sĩ có phiên khám nhưng chưa có cấu hình lương</p>
+            <p className="text-gray-500">
+              Không có lương cơ bản và hoa hồng. Thêm cấu hình lương (tab "Cấu hình lương") rồi tính lại.
+            </p>
+            <ul className="mt-1 list-disc pl-5 text-gray-700">
+              {warnings.dentistsWithoutCompensation.map((d) => (
+                <li key={d.dentistId}>
+                  {d.dentistName} — {d.encounterCount} phiên khám
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {warnings.outsideHoursEncounters.length > 0 && (
+          <section>
+            <p className="font-medium text-amber-700">Phiên khám ngoài giờ làm (chưa được tính giờ)</p>
+            <p className="text-gray-500">
+              Nếu là làm thêm thật, ghi "Đổi giờ làm" hoặc ca đăng ký cho ngày đó rồi tính lại.
+            </p>
+            <ul className="mt-1 list-disc pl-5 text-gray-700">
+              {warnings.outsideHoursEncounters.slice(0, 20).map((e) => (
+                <li key={e.encounterId}>
+                  {e.dentistName} — {formatDateTime(e.startedAt)} → {formatDateTime(e.closedAt)} ({e.minutes} phút ngoài giờ)
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {warnings.terminatedDentists.length > 0 && (
+          <section>
+            <p className="font-medium text-gray-700">Nghỉ việc trong kỳ (lương tính đến ngày nghỉ)</p>
+            <ul className="mt-1 list-disc pl-5 text-gray-700">
+              {warnings.terminatedDentists.map((d) => (
+                <li key={d.dentistId ?? d.dentistName}>
+                  {d.dentistName} — {d.terminationDate ? formatDate(d.terminationDate) : ''}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export default function PeriodDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +113,12 @@ export default function PeriodDetailPage() {
   const computePeriod = useComputePeriod();
   const lockPeriod = useLockPeriod();
   const approvePeriod = useApprovePeriod();
+  const isOpenPeriod = period?.status === 'DRAFT' || period?.status === 'REVIEWING';
+  const { data: warnings } = usePeriodWarnings(id, isOpenPeriod);
+  const [confirmLock, setConfirmLock] = useState(false);
+  const myId = useAuthStore((s) => s.user?.id);
+  const [confirmSelfApprove, setConfirmSelfApprove] = useState(false);
+  const [selfReason, setSelfReason] = useState('');
 
   const [breakdownItem, setBreakdownItem] = useState<PayrollLineItem | null>(null);
   const [adjustItem, setAdjustItem] = useState<PayrollLineItem | null>(null);
@@ -58,6 +157,7 @@ export default function PeriodDetailPage() {
   };
 
   const runLock = async () => {
+    setConfirmLock(false);
     try {
       await lockPeriod.mutateAsync(period.id);
       notify.success('Đã khóa kỳ lương (chuyển sang REVIEWING)');
@@ -66,11 +166,23 @@ export default function PeriodDetailPage() {
     }
   };
 
+  // The approver has their own payslip here (owner who also practises).
+  const ownLine = period.lineItems.find((li) => li.dentistId === myId);
+
   const runApprove = async () => {
+    if (ownLine && selfReason.trim().length < SELF_APPROVAL_REASON_MIN) {
+      notify.error(`Nhập lý do tự duyệt (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự).`);
+      return;
+    }
     try {
-      await approvePeriod.mutateAsync(period.id);
+      await approvePeriod.mutateAsync(
+        ownLine ? { id: period.id, selfApprovalReason: selfReason.trim() } : period.id,
+      );
+      setConfirmSelfApprove(false);
+      setSelfReason('');
       notify.success('Đã duyệt kỳ lương');
     } catch (err) {
+      setConfirmSelfApprove(false);
       notify.error(getApiErrorMessage(err, 'Không thể duyệt kỳ lương'));
     }
   };
@@ -106,12 +218,20 @@ export default function PeriodDetailPage() {
             </Button>
           )}
           {canLock && (
-            <Button variant="outline" onClick={runLock} isLoading={lockPeriod.isPending}>
+            <Button
+              variant="outline"
+              onClick={() => (warningCount(warnings) > 0 ? setConfirmLock(true) : runLock())}
+              isLoading={lockPeriod.isPending}
+            >
               <Lock className="h-4 w-4" /> Khóa kỳ
             </Button>
           )}
           {canApprove && (
-            <Button variant="outline" onClick={runApprove} isLoading={approvePeriod.isPending}>
+            <Button
+              variant="outline"
+              onClick={() => (ownLine ? setConfirmSelfApprove(true) : runApprove())}
+              isLoading={approvePeriod.isPending}
+            >
               <CheckCircle className="h-4 w-4" /> Duyệt
             </Button>
           )}
@@ -122,6 +242,13 @@ export default function PeriodDetailPage() {
           )}
         </div>
       </div>
+
+      {isOpenPeriod && warnings && warningCount(warnings) > 0 && <PeriodWarningsCard warnings={warnings} />}
+
+      <p className="text-xs text-gray-500">
+        Hoa hồng tính trên hóa đơn đã phát hành trong kỳ (theo ngày phát hành, sau giảm giá). Giờ làm theo lịch làm việc,
+        trừ ngày phòng khám nghỉ, ngày đóng lịch và nghỉ phép đã duyệt.
+      </p>
 
       <div className="grid gap-4 sm:grid-cols-4">
         <Card>
@@ -219,6 +346,42 @@ export default function PeriodDetailPage() {
         onClose={() => setAdjustItem(null)}
         periodId={period.id}
         lineItem={adjustItem}
+      />
+
+      <ConfirmDialog
+        open={confirmSelfApprove}
+        onClose={() => setConfirmSelfApprove(false)}
+        onConfirm={runApprove}
+        title="Bạn đang duyệt kỳ lương có phiếu của chính mình"
+        description={
+          <div className="space-y-2">
+            <p>
+              Kỳ này có phiếu lương của bạn ({formatVnd(ownLine?.netPayVnd ?? 0)} thực nhận). Chỉ được tự duyệt khi
+              phòng khám không có quản trị viên nào khác; thao tác được ghi nhật ký riêng (PAYROLL_SELF_APPROVED).
+            </p>
+            <Textarea
+              label="Lý do tự duyệt"
+              placeholder="VD: Phòng khám chỉ có một quản trị viên"
+              rows={2}
+              value={selfReason}
+              onChange={(e) => setSelfReason(e.target.value)}
+              hint={`Ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự`}
+              required
+            />
+          </div>
+        }
+        confirmLabel="Tự duyệt"
+        isLoading={approvePeriod.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmLock}
+        onClose={() => setConfirmLock(false)}
+        onConfirm={runLock}
+        title="Khóa kỳ lương khi còn cảnh báo?"
+        description={`Còn ${warningCount(warnings)} mục cần kiểm tra (xem khung "Cần kiểm tra trước khi khóa kỳ"). Sau khi khóa vẫn có thể tính lại khi kỳ ở trạng thái REVIEWING.`}
+        confirmLabel="Vẫn khóa"
+        isLoading={lockPeriod.isPending}
       />
 
       <MarkPaidModal open={showMarkPaid} onClose={() => setShowMarkPaid(false)} periodId={period.id} />

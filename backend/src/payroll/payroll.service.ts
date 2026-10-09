@@ -1,9 +1,16 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { mergeWindows } from '../appointments/domain/day-calendar';
+import { buildDayCalendar, Interval } from '../appointments/domain/day-calendar';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
-import { PayrollCycle, PayrollPeriodStatus, PayrollAdjustmentType, Prisma } from '@prisma/client';
+import { clinicDateOnly } from '../common/date-range.util';
+import {
+  PayrollCycle,
+  PayrollPeriodStatus,
+  PayrollAdjustmentType,
+  InvoiceStatus,
+  Prisma,
+} from '@prisma/client';
 import {
   PeriodOverlapException,
   PayrollStateException,
@@ -24,11 +31,21 @@ import {
   TaxBracketsConfig,
 } from './domain/tax-calculator';
 import {
-  proRateBaseSalary,
-  effectiveCommissionPct,
-  compRange,
+  proRateBaseSalaryParts,
+  compensationOn,
   daysBetweenInclusive,
+  CompensationTerm,
 } from './domain/prorate-calculator';
+import {
+  invoiceBasisByLine,
+  clinicDateValue,
+  dateKey,
+  minutesOf,
+  minutesOutside,
+  paidIntervals,
+  periodDateKeys,
+  periodInstantRange,
+} from './domain/pay-period';
 import {
   CreateCompensationDto,
   UpdateCompensationDto,
@@ -37,6 +54,45 @@ import {
   AddAdjustmentDto,
   MarkPaidDto,
 } from './dto/payroll.dto';
+
+/** Owner decision (round 4): commission is paid on issued invoices only. */
+export const COMMISSION_INVOICE_STATUSES: InvoiceStatus[] = [
+  InvoiceStatus.ISSUED,
+  InvoiceStatus.PARTIAL,
+  InvoiceStatus.PAID,
+];
+
+/** Periods whose numbers are final; a void after this is clawed back. */
+const CLOSED_PERIOD_STATUSES: PayrollPeriodStatus[] = [
+  PayrollPeriodStatus.APPROVED,
+  PayrollPeriodStatus.PAID,
+  PayrollPeriodStatus.LOCKED,
+];
+
+/** "Hóa đơn nháp quá X ngày" warning before locking a period. */
+export const DEFAULT_DRAFT_INVOICE_WARN_DAYS = 3;
+
+/** Minimum reason length when an owner-dentist approves their own pay. */
+export const SELF_APPROVAL_REASON_MIN = 10;
+
+/** bonus/penalty from a dentist's adjustments in one period. */
+export function sumAdjustments(rows: Array<{ type: string; amountVnd: Prisma.Decimal | number }>) {
+  let bonusVnd = 0;
+  let penaltyVnd = 0;
+  for (const adj of rows) {
+    const amount = Number(adj.amountVnd);
+    if (adj.type === 'BONUS' || (adj.type === 'MANUAL_OVERRIDE' && amount > 0)) {
+      bonusVnd += amount;
+    } else {
+      penaltyVnd += Math.abs(amount);
+    }
+  }
+  return { bonusVnd, penaltyVnd };
+}
+
+const isSerializationFailure = (err: unknown): boolean =>
+  (err as { code?: string })?.code === 'P2034' ||
+  /could not serialize|deadlock detected|write conflict/i.test((err as Error)?.message ?? '');
 
 /**
  * PayrollService â€” owns the computation, lifecycle, and audit of payroll periods.
@@ -172,7 +228,74 @@ export class PayrollService {
     return rows.map(r => ({ ...r, dentistName: r.dentist?.fullName ?? '' }));
   }
 
+  /**
+   * Owner who also practises acting on their own pay. With another active
+   * user able to do it, they must do it; when the actor is the only one (the
+   * usual one-admin clinic), it goes through with a stated reason and a
+   * separate PAYROLL_SELF_APPROVED audit entry. Returns the trimmed reason.
+   */
+  private async assertSelfAction(
+    actorUserId: string,
+    permission: string,
+    reason: string | undefined,
+    what: string,
+  ): Promise<string> {
+    const others = await this.prisma.user.count({
+      where: {
+        id: { not: actorUserId },
+        status: 'ACTIVE',
+        deletedAt: null,
+        userRoles: {
+          some: {
+            role: {
+              deletedAt: null,
+              rolePermissions: { some: { permission: { code: permission } } },
+            },
+          },
+        },
+      },
+    });
+    if (others > 0) {
+      throw new PayrollForbiddenException(
+        `Bạn không thể tự ${what} của chính mình vì phòng khám còn quản trị viên khác. Nhờ họ thực hiện.`,
+      );
+    }
+    const trimmed = reason?.trim() ?? '';
+    if (trimmed.length < SELF_APPROVAL_REASON_MIN) {
+      throw new PayrollValidationException(
+        `Bạn đang tự ${what} của chính mình. Nhập lý do (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự) để xác nhận.`,
+      );
+    }
+    return trimmed;
+  }
+
+  private async logSelfApproval(
+    actorUserId: string,
+    operation: string,
+    targetType: string,
+    targetId: string,
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    await this.audit.log({
+      actorUserId,
+      action: 'PAYROLL_SELF_APPROVED',
+      targetType,
+      targetId,
+      metadata: { operation, reason, ...extra },
+    });
+  }
+
   async createCompensation(dto: CreateCompensationDto, actorUserId: string) {
+    const selfReason =
+      dto.dentistId === actorUserId
+        ? await this.assertSelfAction(
+            actorUserId,
+            'payroll.compensation.update',
+            dto.selfApprovalReason,
+            'lập chế độ lương',
+          )
+        : null;
     // BR-PAY-022: prevent overlap. Postgres exclusion constraint will also enforce,
     // but pre-check for friendly error message.
     const overlap = await this.findCompensationOverlap(
@@ -211,11 +334,33 @@ export class PayrollService {
         commissionPct: created.commissionPct,
       },
     });
+    if (selfReason) {
+      await this.logSelfApproval(
+        actorUserId,
+        'COMPENSATION_CREATE',
+        'DENTIST_COMPENSATION',
+        created.id,
+        selfReason,
+      );
+    }
 
     return created;
   }
 
   async updateCompensation(id: string, dto: UpdateCompensationDto, actorUserId: string) {
+    const current = await this.prisma.dentistCompensation.findUnique({
+      where: { id },
+      select: { dentistId: true },
+    });
+    const selfReason =
+      current?.dentistId === actorUserId
+        ? await this.assertSelfAction(
+            actorUserId,
+            'payroll.compensation.update',
+            dto.selfApprovalReason,
+            'sửa chế độ lương',
+          )
+        : null;
     const updated = await this.prisma.dentistCompensation.update({
       where: { id },
       data: {
@@ -237,8 +382,18 @@ export class PayrollService {
       action: 'COMPENSATION_UPDATED',
       targetType: 'DENTIST_COMPENSATION',
       targetId: id,
-      metadata: { fields: Object.keys(dto) },
+      metadata: { fields: Object.keys(dto).filter(k => k !== 'selfApprovalReason') },
     });
+    if (selfReason) {
+      await this.logSelfApproval(
+        actorUserId,
+        'COMPENSATION_UPDATE',
+        'DENTIST_COMPENSATION',
+        id,
+        selfReason,
+        { fields: Object.keys(dto).filter(k => k !== 'selfApprovalReason') },
+      );
+    }
 
     return updated;
   }
@@ -388,9 +543,17 @@ export class PayrollService {
 
   /**
    * Compute or re-compute payroll for a period. Idempotent (BR-PAY-022).
-   * Replaces all existing line items.
+   *
+   * Line items are upserted per (period, dentist) and keep their id; bonus,
+   * penalty and clawbacks live in payroll_adjustments keyed by (period,
+   * dentist) and are summed back in, so a recompute never drops them (H2).
+   * `dentistIds` limits the run to those dentists (event listeners).
    */
-  async computePeriod(periodId: string, actorUserId: string) {
+  async computePeriod(
+    periodId: string,
+    actorUserId: string | null,
+    opts: { dentistIds?: string[] } = {},
+  ) {
     const period = await this.prisma.payrollPeriod.findUnique({
       where: { id: periodId },
     });
@@ -400,10 +563,157 @@ export class PayrollService {
         `Cannot compute period in status ${period.status}. Only DRAFT or REVIEWING allowed.`,
       );
     }
+    // An adjustment period copies a paid period's lines; recomputing it would
+    // pay the whole period a second time.
+    if (period.openedFromPeriodId) {
+      throw new PayrollStateException(
+        'Kỳ điều chỉnh không tính lại tự động — hãy thêm thưởng/phạt cho từng bác sĩ.',
+      );
+    }
 
+    const { config, taxConfig } = this.periodConfig(period.configSnapshot);
+    const payPeriod = { start: period.periodStart, end: period.periodEnd };
+
+    type LineItemComputed = Awaited<ReturnType<PayrollService['computeLineItemForDentist']>>;
+    const results = await this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async tx => {
+          const out: Array<{
+            dentistId: string;
+            dentistName: string;
+            lineItemId: string;
+            computed: LineItemComputed;
+          }> = [];
+          const dentistIds =
+            opts.dentistIds ?? (await this.payableDentistIds(tx, periodId, payPeriod));
+          const users = dentistIds.length
+            ? await tx.user.findMany({
+                where: { id: { in: dentistIds } },
+                select: { id: true, fullName: true },
+              })
+            : [];
+          const lastPaidDays = await this.lastPaidDays(tx, dentistIds);
+
+          const kept: string[] = [];
+          for (const dentist of users) {
+            const lineItem = await this.computeLineItemForDentist(
+              tx,
+              dentist.id,
+              payPeriod,
+              config,
+              taxConfig,
+              { periodId, lastPaidDay: lastPaidDays.get(dentist.id) ?? null },
+            );
+            const { _encounterDetails, _adjustmentCount, ...persistedFields } = lineItem;
+
+            // Nothing to pay and nothing recorded (e.g. a schedule left open
+            // after termination): no empty payslip.
+            if (
+              _adjustmentCount === 0 &&
+              _encounterDetails.length === 0 &&
+              persistedFields.grossPayVnd === 0 &&
+              persistedFields.totalHours === 0 &&
+              persistedFields.encountersCount === 0
+            ) {
+              continue;
+            }
+            kept.push(dentist.id);
+
+            const data = {
+              ...persistedFields,
+              computationLog: lineItem.computationLog as unknown as Prisma.InputJsonValue,
+              manuallyAdjusted: _adjustmentCount > 0,
+              adjustmentNote: _adjustmentCount > 0 ? `${_adjustmentCount} adjustment(s)` : null,
+              computedAt: new Date(),
+            };
+            const saved = await tx.payrollLineItem.upsert({
+              where: {
+                payrollPeriodId_dentistId: { payrollPeriodId: periodId, dentistId: dentist.id },
+              },
+              create: { payrollPeriodId: periodId, dentistId: dentist.id, ...data },
+              update: data,
+            });
+            // Adjustments (incl. rows whose line was removed earlier) point at
+            // the current line again for display.
+            await tx.payrollAdjustment.updateMany({
+              where: { payrollPeriodId: periodId, dentistId: dentist.id },
+              data: { payrollLineItemId: saved.id },
+            });
+
+            await tx.payrollEncounterDetail.deleteMany({ where: { payrollLineItemId: saved.id } });
+            if (_encounterDetails.length > 0) {
+              await tx.payrollEncounterDetail.createMany({
+                data: _encounterDetails.map(d => ({
+                  payrollLineItemId: saved.id,
+                  payrollPeriodId: periodId,
+                  encounterId: d.encounterId,
+                  treatmentId: d.treatmentId,
+                  treatmentRevenueVnd: d.basisAmountVnd,
+                  basisAmountVnd: d.basisAmountVnd,
+                  commissionPct: d.commissionPct,
+                  invoiceId: d.invoiceId,
+                  invoiceItemId: d.invoiceItemId,
+                  encounterStartAt: d.startedAt,
+                  encounterEndAt: d.closedAt,
+                  durationMinutes: d.durationMinutes,
+                  treatmentBreakdown: d.breakdown as unknown as Prisma.InputJsonValue,
+                })),
+              });
+            }
+
+            out.push({
+              dentistId: dentist.id,
+              dentistName: dentist.fullName,
+              lineItemId: saved.id,
+              computed: lineItem,
+            });
+          }
+
+          // Lines of dentists with nothing in this period any more; a line
+          // with adjustments always stays (its dentist is in the payable set).
+          const scope = opts.dentistIds ?? null;
+          await tx.payrollLineItem.deleteMany({
+            where: {
+              payrollPeriodId: periodId,
+              dentistId: scope ? { in: scope.filter(id => !kept.includes(id)) } : { notIn: kept },
+              adjustments: { none: {} },
+            },
+          });
+          return out;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+
+    if (actorUserId) {
+      await this.audit.log({
+        actorUserId,
+        action: 'PERIOD_COMPUTED',
+        targetType: 'PAYROLL_PERIOD',
+        targetId: periodId,
+        metadata: { dentistCount: results.length },
+      });
+    }
+
+    return { periodId, lineItems: results };
+  }
+
+  /** Re-runs a Serializable payroll transaction that lost a race (H2). */
+  private async withSerializableRetry<T>(run: () => Promise<T>, attempts = 3): Promise<T> {
+    for (let i = 1; ; i++) {
+      try {
+        return await run();
+      } catch (err) {
+        if (i >= attempts || !isSerializationFailure(err)) throw err;
+        await new Promise(r => setTimeout(r, 50 * i));
+      }
+    }
+  }
+
+  private periodConfig(rawSnapshot: Prisma.JsonValue) {
     // BR-PAY-023: Use the period's SNAPSHOT, not the live config, so admin edits
     // to PayrollConfig after the period was created do NOT change this period's numbers.
-    const snapshot = period.configSnapshot as unknown as {
+    const snapshot = rawSnapshot as unknown as {
       payrollCycle: PayrollCycle;
       overtimeMultiplier: Prisma.Decimal;
       bhxhPct: Prisma.Decimal;
@@ -413,10 +723,7 @@ export class PayrollService {
       probationSalaryPct: Prisma.Decimal;
       taxBrackets: TaxBracketsConfig;
     };
-
     const taxConfig: TaxBracketsConfig = snapshot.taxBrackets ?? DEFAULT_TAX_BRACKETS;
-
-    // Wrap snapshot as config-like object so compute code reads unchanged.
     const config = {
       payrollCycle: snapshot.payrollCycle,
       overtimeMultiplier: new Prisma.Decimal(snapshot.overtimeMultiplier.toString()),
@@ -426,105 +733,107 @@ export class PayrollService {
       minGrossForBhxh: new Prisma.Decimal(snapshot.minGrossForBhxh.toString()),
       probationSalaryPct: new Prisma.Decimal(snapshot.probationSalaryPct.toString()),
     };
+    return { config, taxConfig };
+  }
 
-    // All dentists with role=dentist and active status
-    const dentists = await this.prisma.user.findMany({
-      where: {
-        status: 'ACTIVE',
-        userRoles: { some: { role: { code: 'dentist' } } },
-        deletedAt: null,
-      },
-      select: { id: true, fullName: true },
+  /**
+   * Who gets a payslip (H4): anyone with pay terms, issued invoices, closed
+   * encounters, paid duty time or adjustments in the period — whatever their
+   * account status or roles today (PENDING_SETUP, deactivated mid-period,
+   * role removed). Empty lines are skipped later.
+   */
+  private async payableDentistIds(
+    tx: Prisma.TransactionClient,
+    periodId: string,
+    payPeriod: { start: Date; end: Date },
+  ): Promise<string[]> {
+    const range = periodInstantRange(payPeriod);
+    const [comps, invoices, encounters, schedules, shifts, overrides, adjustments] =
+      await Promise.all([
+        tx.dentistCompensation.findMany({
+          where: {
+            deletedAt: null,
+            effectiveFrom: { lte: payPeriod.end },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: payPeriod.start } }],
+          },
+          select: { dentistId: true },
+        }),
+        tx.invoice.findMany({
+          where: {
+            deletedAt: null,
+            status: { in: COMMISSION_INVOICE_STATUSES },
+            issuedAt: { gte: range.from, lt: range.toExclusive },
+          },
+          select: { encounter: { select: { dentistId: true } } },
+        }),
+        tx.encounter.findMany({
+          where: { status: 'COMPLETED', closedAt: { gte: range.from, lt: range.toExclusive } },
+          select: { dentistId: true },
+        }),
+        tx.workingSchedule.findMany({
+          where: {
+            deletedAt: null,
+            isPaidShift: true,
+            validFrom: { lte: payPeriod.end },
+            OR: [{ validTo: null }, { validTo: { gte: payPeriod.start } }],
+          },
+          select: { dentistId: true },
+        }),
+        tx.shiftRegistration.findMany({
+          where: {
+            deletedAt: null,
+            status: 'APPROVED',
+            date: { gte: payPeriod.start, lte: payPeriod.end },
+          },
+          select: { dentistId: true },
+        }),
+        tx.scheduleOverride.findMany({
+          where: {
+            deletedAt: null,
+            kind: 'CHANGED_HOURS',
+            date: { gte: payPeriod.start, lte: payPeriod.end },
+          },
+          select: { dentistId: true },
+        }),
+        tx.payrollAdjustment.findMany({
+          where: { payrollPeriodId: periodId },
+          select: { dentistId: true },
+        }),
+      ]);
+    return [
+      ...new Set([
+        ...comps.map(r => r.dentistId),
+        ...invoices.map(r => r.encounter?.dentistId).filter((x): x is string => !!x),
+        ...encounters.map(r => r.dentistId),
+        ...schedules.map(r => r.dentistId),
+        ...shifts.map(r => r.dentistId),
+        ...overrides.map(r => r.dentistId),
+        ...adjustments.map(r => r.dentistId),
+      ]),
+    ];
+  }
+
+  /** Termination date (last paid day, inclusive) per dentist, if any. */
+  private async lastPaidDays(
+    tx: Prisma.TransactionClient,
+    dentistIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (dentistIds.length === 0) return new Map();
+    const rows = await tx.employee.findMany({
+      where: { userId: { in: dentistIds }, deletedAt: null, terminationDate: { not: null } },
+      select: { userId: true, terminationDate: true },
     });
-
-    const payPeriod = { start: period.periodStart, end: period.periodEnd };
-
-    type LineItemComputed = Awaited<ReturnType<PayrollService['computeLineItemForDentist']>>;
-    const results: Array<{
-      dentistId: string;
-      dentistName: string;
-      lineItemId: string;
-      computed: LineItemComputed;
-    }> = [];
-
-    // Use a transaction so the entire compute is atomic (BR-PAY-022 idempotent).
-    // Serializable isolation prevents two concurrent recompute calls from
-    // producing duplicate PayrollEncounterDetail rows on the same treatment.
-    await this.prisma.$transaction(
-      async tx => {
-        // Clear existing line items (cascade deletes details + adjustments)
-        await tx.payrollLineItem.deleteMany({ where: { payrollPeriodId: periodId } });
-
-        for (const dentist of dentists) {
-          const lineItem = await this.computeLineItemForDentist(
-            tx,
-            dentist.id,
-            payPeriod,
-            config,
-            taxConfig,
-          );
-
-          const { _encounterDetails, ...persistedFields } = lineItem;
-
-          const created = await tx.payrollLineItem.create({
-            data: {
-              payrollPeriodId: periodId,
-              dentistId: dentist.id,
-              ...persistedFields,
-              computationLog: lineItem.computationLog as unknown as Prisma.InputJsonValue,
-              computedAt: new Date(),
-            },
-          });
-
-          // Persist PayrollEncounterDetail rows (one per treatment, not per encounter)
-          // Critical #2 fix: previously _encounterDetails was discarded â†’ data loss
-          if (_encounterDetails.length > 0) {
-            const detailRows = _encounterDetails.flatMap(enc =>
-              enc.treatments.map(t => ({
-                payrollLineItemId: created.id,
-                payrollPeriodId: periodId,
-                encounterId: enc.encounterId,
-                treatmentId: t.id,
-                treatmentRevenueVnd: t.revenue,
-                encounterStartAt: enc.startedAt,
-                encounterEndAt: enc.closedAt,
-                durationMinutes: enc.durationMinutes,
-                treatmentBreakdown: enc.treatments as unknown as Prisma.InputJsonValue,
-              })),
-            );
-
-            // Batch create with skipDuplicates for idempotency
-            await tx.payrollEncounterDetail.createMany({
-              data: detailRows,
-              skipDuplicates: true,
-            });
-          }
-
-          results.push({
-            dentistId: dentist.id,
-            dentistName: dentist.fullName,
-            lineItemId: created.id,
-            computed: lineItem,
-          });
-        }
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    return new Map(
+      (rows ?? [])
+        .filter(r => r.userId && r.terminationDate)
+        .map(r => [r.userId as string, r.terminationDate as Date]),
     );
-
-    await this.audit.log({
-      actorUserId,
-      action: 'PERIOD_COMPUTED',
-      targetType: 'PAYROLL_PERIOD',
-      targetId: periodId,
-      metadata: { dentistCount: dentists.length },
-    });
-
-    return { periodId, lineItems: results };
   }
 
   /**
    * Build (without saving) a line item for one dentist in a pay period.
-   * Pulled into its own method so event-listener can re-use for incremental updates.
+   * `ctx.periodId` enables the parts that need the saved period: clawbacks
+   * and adjustments.
    */
   private async computeLineItemForDentist(
     tx: Prisma.TransactionClient,
@@ -540,97 +849,167 @@ export class PayrollService {
       probationSalaryPct: Prisma.Decimal;
     },
     taxConfig: TaxBracketsConfig,
+    ctx: { periodId?: string; lastPaidDay?: Date | null } = {},
   ) {
-    // 1. Compensation effective in this period
-    const comp = await tx.dentistCompensation.findFirst({
+    const range = periodInstantRange(payPeriod);
+    const lastPaidDay = ctx.lastPaidDay ?? null;
+
+    // 1. Every compensation overlapping the period (H3, A6-04), each
+    //    pro-rated by its own days; nothing after the termination date.
+    const compRows = await tx.dentistCompensation.findMany({
       where: {
         dentistId,
         deletedAt: null,
         effectiveFrom: { lte: payPeriod.end },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: payPeriod.start } }],
       },
-      orderBy: { effectiveFrom: 'desc' },
+      orderBy: { effectiveFrom: 'asc' },
     });
+    const terms: CompensationTerm[] = (compRows ?? []).map(c => ({
+      id: c.id,
+      monthlySalary: Number(c.baseSalaryVnd),
+      commissionPct: Number(c.commissionPct),
+      overtimeHourlyVnd: Number(c.overtimeHourlyVnd),
+      effectiveFrom: c.effectiveFrom,
+      effectiveTo: c.effectiveTo,
+    }));
+    const base = proRateBaseSalaryParts(terms, payPeriod, lastPaidDay);
+    const baseSalaryVnd = base.total;
+    // OT rate: the latest terms in the period.
+    const overtimeHourlyVnd = terms.length ? terms[terms.length - 1].overtimeHourlyVnd : 0;
 
-    let baseSalaryVnd = 0;
-    let commissionPct = 0;
-    let overtimeHourlyVnd = 0;
-    const compensationLog: Record<string, unknown> = {};
-
-    if (comp) {
-      const cRange = compRange(comp.effectiveFrom, comp.effectiveTo);
-      baseSalaryVnd = proRateBaseSalary(Number(comp.baseSalaryVnd), cRange, payPeriod);
-      const commissionInfo = effectiveCommissionPct(Number(comp.commissionPct), cRange, payPeriod);
-      // Effective commission pct for the overlap portion (for sub-ranges, multiple comps)
-      commissionPct = commissionInfo.effectivePct;
-      overtimeHourlyVnd = Number(comp.overtimeHourlyVnd);
-      compensationLog.compensationId = comp.id;
-      compensationLog.compensationOverlapDays = commissionInfo.overlapDays;
-      compensationLog.compensationPeriodDays = commissionInfo.periodDays;
-    } else {
-      compensationLog.note = 'No compensation for this dentist in period';
-    }
-
-    // 2. Completed encounters in period
-    const encounters = await tx.encounter.findMany({
+    // 2. Commission on invoices issued in the period (H5, owner decision):
+    //    ISSUED/PARTIAL/PAID, line amount after the invoice discount pro rata.
+    //    Rate = the terms in force on the visit's clinic day (the work done),
+    //    so a dentist who left before the invoice was issued still earns it.
+    const invoices = await tx.invoice.findMany({
       where: {
-        dentistId,
-        status: 'COMPLETED',
-        closedAt: { gte: payPeriod.start, lte: payPeriod.end },
+        deletedAt: null,
+        status: { in: COMMISSION_INVOICE_STATUSES },
+        issuedAt: { gte: range.from, lt: range.toExclusive },
+        encounter: { dentistId },
       },
-      include: {
-        treatments: { where: { deletedAt: null } },
+      select: {
+        id: true,
+        code: true,
+        subtotal: true,
+        total: true,
+        issuedAt: true,
+        encounter: { select: { id: true, startedAt: true, closedAt: true } },
+        items: {
+          where: { deletedAt: null },
+          select: { id: true, treatmentId: true, description: true, lineTotal: true },
+          orderBy: { sequence: 'asc' },
+        },
+        // Refunds count on their own date: one made after this period is
+        // clawed back in the period it falls in (reconcileClawbacks).
+        payments: {
+          where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
+          select: { amount: true },
+        },
       },
+      orderBy: { issuedAt: 'asc' },
     });
 
     let totalRevenueVnd = 0;
+    let commissionRaw = 0;
+    const encounterIds = new Set<string>();
+    const invoicesWithoutTerms: string[] = [];
     const encounterDetails: Array<{
       encounterId: string;
-      treatments: Array<{ id: string; revenue: number }>;
+      treatmentId: string | null;
+      invoiceId: string;
+      invoiceItemId: string;
+      basisAmountVnd: number;
+      commissionPct: number;
       startedAt: Date;
       closedAt: Date;
       durationMinutes: number;
+      breakdown: Record<string, unknown>;
     }> = [];
 
-    for (const enc of encounters) {
-      let encRevenue = 0;
-      const treatmentBreakdown: Array<{ id: string; revenue: number }> = [];
-      for (const t of enc.treatments) {
-        const rev = Number(t.unitPrice) * (t.quantity ?? 1);
-        encRevenue += rev;
-        treatmentBreakdown.push({ id: t.id, revenue: rev });
+    for (const inv of invoices ?? []) {
+      if (!inv.encounter) continue;
+      const enc = inv.encounter;
+      encounterIds.add(enc.id);
+      const workDay = clinicDateOnly(enc.closedAt ?? enc.startedAt ?? inv.issuedAt ?? new Date());
+      const term = compensationOn(terms, workDay);
+      if (!term) invoicesWithoutTerms.push(inv.code);
+      const pct = term?.commissionPct ?? 0;
+      const refundedVnd = (inv.payments ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      const basis = invoiceBasisByLine(
+        inv.items.map(i => ({ id: i.id, lineTotal: Number(i.lineTotal) })),
+        Number(inv.total),
+        refundedVnd,
+      );
+      const startedAt = enc.startedAt ?? enc.closedAt ?? inv.issuedAt ?? new Date();
+      const closedAt = enc.closedAt ?? enc.startedAt ?? inv.issuedAt ?? new Date();
+      for (const item of inv.items) {
+        const amount = basis.get(item.id) ?? 0;
+        totalRevenueVnd += amount;
+        commissionRaw += amount * pct;
+        encounterDetails.push({
+          encounterId: enc.id,
+          treatmentId: item.treatmentId,
+          invoiceId: inv.id,
+          invoiceItemId: item.id,
+          basisAmountVnd: amount,
+          commissionPct: pct,
+          startedAt,
+          closedAt,
+          durationMinutes: Math.max(
+            0,
+            Math.round((closedAt.getTime() - startedAt.getTime()) / 60_000),
+          ),
+          breakdown: {
+            invoiceCode: inv.code,
+            issuedAt: inv.issuedAt,
+            description: item.description,
+            lineTotal: Number(item.lineTotal),
+            invoiceSubtotal: Number(inv.subtotal),
+            invoiceTotal: Number(inv.total),
+            invoiceRefundedVnd: refundedVnd,
+            basisAmountVnd: amount,
+            commissionPct: pct,
+          },
+        });
       }
-      totalRevenueVnd += encRevenue;
-
-      const durationMin =
-        enc.startedAt && enc.closedAt
-          ? Math.round((enc.closedAt.getTime() - enc.startedAt.getTime()) / 60_000)
-          : 0;
-      encounterDetails.push({
-        encounterId: enc.id,
-        treatments: treatmentBreakdown,
-        startedAt: enc.startedAt ?? enc.closedAt ?? new Date(),
-        closedAt: enc.closedAt ?? enc.startedAt ?? new Date(),
-        durationMinutes: durationMin,
-      });
     }
 
     // 3. Commission
-    const commissionVnd = Math.round(totalRevenueVnd * commissionPct);
+    const commissionVnd = Math.round(commissionRaw);
 
-    // 4. Worked shifts + hours: union of WorkingSchedule + ShiftRegistration.approved
-    const { workedShifts, totalHours, overtimeHours, overtimeThresholdHours } =
-      await this.resolveWorkedShifts(tx, dentistId, payPeriod);
+    // 4. Worked hours from the day calendar (H3) + visits outside them.
+    const visits = await tx.encounter.findMany({
+      where: {
+        dentistId,
+        status: 'COMPLETED',
+        closedAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { id: true, startedAt: true, closedAt: true },
+    });
+    const { workedShifts, totalHours, overtimeHours, overtimeThresholdHours, outsideHours, days } =
+      await this.resolveWorkedShifts(tx, dentistId, payPeriod, {
+        lastPaidDay,
+        visits: visits ?? [],
+      });
     const overtimePayVnd = Math.round(
       overtimeHours * overtimeHourlyVnd * Number(config.overtimeMultiplier),
     );
 
-    // 5. Bonus / penalty â€” fixed: was `payrollPeriodId: undefined` which Prisma
-    // silently ignores, causing adjustments to leak across periods.
-    // For first-time compute, there are no adjustments yet (they're added later
-    // via addAdjustment which re-aggregates). So this is 0 by design.
-    const bonusVnd = 0;
-    const penaltyVnd = 0;
+    // 5. Bonus / penalty: a clawback for invoices voided after their period
+    //    closed is recorded first, then every adjustment of (period, dentist).
+    let adjustmentRows: Array<{ type: string; amountVnd: Prisma.Decimal | number }> = [];
+    let clawbacks: Array<{ invoiceCode: string; amountVnd: number }> = [];
+    if (ctx.periodId) {
+      clawbacks = await this.reconcileClawbacks(tx, dentistId, ctx.periodId, payPeriod);
+      adjustmentRows =
+        (await tx.payrollAdjustment.findMany({
+          where: { payrollPeriodId: ctx.periodId, dentistId },
+          select: { type: true, amountVnd: true },
+        })) ?? [];
+    }
+    const { bonusVnd, penaltyVnd } = sumAdjustments(adjustmentRows);
 
     // 6. Gross pay
     const grossPayVnd = baseSalaryVnd + commissionVnd + overtimePayVnd + bonusVnd - penaltyVnd;
@@ -645,15 +1024,20 @@ export class PayrollService {
     const bhxhCap = config.minGrossForBhxh.mul(20);
     const bhxhBase = grossPayVnd < bhxhCap.toNumber() ? grossPayVnd : bhxhCap.toNumber();
     const bhxhRate = config.bhxhPct.add(config.bhytPct).add(config.bhtnPct);
-    const bhxhVnd = Math.round(bhxhBase * bhxhRate.toNumber());
+    const bhxhVnd = Math.round(Math.max(bhxhBase, 0) * bhxhRate.toNumber());
 
     // 9. Net pay
     const netPayVnd = grossPayVnd - taxTncnVnd - bhxhVnd;
 
-    // 10. Persist encounter details (will be done outside this method)
     const computationLog = {
-      compensation: compensationLog,
-      encountersCount: encounters.length,
+      compensation: terms.length
+        ? { parts: base.parts }
+        : { note: 'No compensation for this dentist in period' },
+      ...(lastPaidDay && { terminatedOn: dateKey(lastPaidDay) }),
+      commissionBasis: 'ISSUED_INVOICE_AFTER_DISCOUNT',
+      invoicesCount: (invoices ?? []).length,
+      ...(invoicesWithoutTerms.length && { invoicesWithoutCompensation: invoicesWithoutTerms }),
+      encountersCount: encounterIds.size,
       totalRevenueVnd,
       commissionVnd,
       workedShifts,
@@ -661,6 +1045,10 @@ export class PayrollService {
       overtimeHours,
       overtimeThresholdHours, // BR-PAY-011 SPEC formula trace
       overtimePayVnd,
+      hoursByDay: days,
+      ...(outsideHours.length && { outsideHoursEncounters: outsideHours }),
+      adjustmentsCount: adjustmentRows.length,
+      ...(clawbacks.length && { clawbacks }),
       taxBreakdown: taxResult.brackets,
       taxableIncomeVnd: taxResult.taxableIncomeVnd,
       bhxhCap,
@@ -673,7 +1061,7 @@ export class PayrollService {
     };
 
     return {
-      encountersCount: encounters.length,
+      encountersCount: encounterIds.size,
       totalRevenueVnd,
       workedShifts,
       totalHours,
@@ -689,23 +1077,152 @@ export class PayrollService {
       netPayVnd,
       computationLog,
       _encounterDetails: encounterDetails, // for caller to persist
+      _adjustmentCount: adjustmentRows.length,
     };
   }
 
   /**
-   * BR-PAY-011: worked shifts + hours, both resolved from the same duty
-   * schedule data — the recurring WorkingSchedule blocks valid that date
-   * joined with the approved ShiftRegistrations of that date (overlaps
-   * counted once, the hours the booking calendar opens), rather than
-   * clinical Encounter duration. Previously
-   * overtimeHours came from Encounter startedAt/closedAt, so a forgotten
-   * "close encounter" or a data-entry mistake there fed straight into
-   * pay with no relation to actually-approved duty time; workedShifts
-   * was computed separately (and could double-count a date matched by
-   * both a recurring schedule AND an ad-hoc registration) but was never
-   * consumed by grossPayVnd, only logged. commissionVnd intentionally
-   * still comes from Encounter revenue — that ties pay to output, not
-   * time, and isn't part of this concern.
+   * H5: commission already paid in a closed period (APPROVED/PAID/LOCKED) on
+   * an invoice whose basis has since dropped — voided, or refunded in part —
+   * is clawed back in this open period as a DEDUCTION, dated by the void /
+   * refund (only changes before this period's end count). A refund cancelled
+   * later raises the basis again and the difference is paid back as a BONUS.
+   * Idempotent: what was paid, minus what is owed now, minus what earlier and
+   * this period's adjustments already settled. Only rows written since
+   * migration 046 (with invoice_item_id) are considered.
+   */
+  private async reconcileClawbacks(
+    tx: Prisma.TransactionClient,
+    dentistId: string,
+    periodId: string,
+    payPeriod: { start: Date; end: Date },
+  ): Promise<Array<{ invoiceCode: string; amountVnd: number }>> {
+    const counted =
+      (await tx.payrollEncounterDetail.findMany({
+        where: {
+          payrollPeriodId: { not: periodId },
+          invoiceId: { not: null },
+          invoiceItemId: { not: null },
+          lineItem: { dentistId },
+          period: { status: { in: CLOSED_PERIOD_STATUSES } },
+        },
+        select: {
+          invoiceId: true,
+          invoiceItemId: true,
+          basisAmountVnd: true,
+          commissionPct: true,
+          period: { select: { periodStart: true, periodEnd: true } },
+        },
+      })) ?? [];
+    if (counted.length === 0) return [];
+
+    const range = periodInstantRange(payPeriod);
+    const countedIds = [...new Set(counted.map(c => c.invoiceId as string))];
+    // Only invoices that changed since: voided, refunded, or already adjusted
+    // (a refund cancelled later brings refundedAmount back to 0).
+    const touched =
+      (await tx.payrollAdjustment.findMany({
+        where: { dentistId, sourceInvoiceId: { in: countedIds } },
+        select: { sourceInvoiceId: true },
+      })) ?? [];
+    const invoices =
+      (await tx.invoice.findMany({
+        where: {
+          id: { in: countedIds },
+          OR: [
+            { status: InvoiceStatus.VOIDED },
+            { refundedAmount: { gt: 0 } },
+            { id: { in: touched.map(t => t.sourceInvoiceId as string) } },
+          ],
+        },
+        select: {
+          id: true,
+          code: true,
+          status: true,
+          voidedAt: true,
+          total: true,
+          items: {
+            where: { deletedAt: null },
+            select: { id: true, lineTotal: true },
+            orderBy: { sequence: 'asc' },
+          },
+          payments: {
+            where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
+            select: { amount: true },
+          },
+        },
+      })) ?? [];
+
+    // Settled so far by this and earlier periods (a later open period's
+    // clawback must not be undone when an earlier one recomputes).
+    const already =
+      (await tx.payrollAdjustment.findMany({
+        where: {
+          dentistId,
+          sourceInvoiceId: { in: invoices.map(v => v.id) },
+          period: { periodStart: { lte: payPeriod.start } },
+        },
+        select: { sourceInvoiceId: true, type: true, amountVnd: true },
+      })) ?? [];
+
+    const made: Array<{ invoiceCode: string; amountVnd: number }> = [];
+    for (const inv of invoices) {
+      const rows = counted.filter(c => c.invoiceId === inv.id);
+      const voided =
+        inv.status === InvoiceStatus.VOIDED &&
+        (!inv.voidedAt || inv.voidedAt.getTime() < range.toExclusive.getTime());
+      const refunded = (inv.payments ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      const basisNow = voided
+        ? new Map<string, number>()
+        : invoiceBasisByLine(
+            (inv.items ?? []).map(i => ({ id: i.id, lineTotal: Number(i.lineTotal) })),
+            Number(inv.total),
+            refunded,
+          );
+      const paid = Math.round(
+        rows.reduce((s, r) => s + Number(r.basisAmountVnd ?? 0) * Number(r.commissionPct ?? 0), 0),
+      );
+      const owedNow = Math.round(
+        rows.reduce(
+          (s, r) =>
+            s + (basisNow.get(r.invoiceItemId as string) ?? 0) * Number(r.commissionPct ?? 0),
+          0,
+        ),
+      );
+      const settled = already
+        .filter(a => a.sourceInvoiceId === inv.id)
+        .reduce((s, a) => s + (a.type === 'BONUS' ? -1 : 1) * Number(a.amountVnd), 0);
+      const due = paid - owedNow - settled;
+      if (due === 0) continue;
+      const p = rows[0].period;
+      const closed = `kỳ lương ${dateKey(p.periodStart)} – ${dateKey(p.periodEnd)} đã chốt`;
+      await tx.payrollAdjustment.create({
+        data: {
+          payrollPeriodId: periodId,
+          dentistId,
+          type: due > 0 ? PayrollAdjustmentType.DEDUCTION : PayrollAdjustmentType.BONUS,
+          amountVnd: Math.abs(due),
+          reason:
+            due > 0
+              ? `Truy thu hoa hồng: hóa đơn ${inv.code} ${voided ? 'đã hủy' : 'đã hoàn tiền'} sau khi ${closed}`
+              : `Trả lại hoa hồng: hóa đơn ${inv.code} — phiếu hoàn đã hủy sau khi ${closed}`,
+          adjustedByUserId: null,
+          sourceInvoiceId: inv.id,
+        },
+      });
+      made.push({ invoiceCode: inv.code, amountVnd: -due });
+    }
+    return made;
+  }
+
+  /**
+   * BR-PAY-011 / H3: worked hours come from the same day calendar the
+   * booking screens use (buildDayCalendar): weekly paid schedule or the
+   * day's CHANGED_HOURS, plus approved shifts — minus clinic closures,
+   * CLOSED days/ranges and approved time-off (owner decision: unpaid).
+   * Days after the termination date are not paid. Completed visits that ran
+   * outside those hours are reported (not paid automatically) so an admin
+   * can record the extra time as CHANGED_HOURS or a shift.
    *
    * SPEC formula: overtime threshold = `weeks_in_period × 5 workdays/week × 8 hours/day`
    * Overtime hours = max(0, total_hours_worked - threshold)
@@ -714,76 +1231,136 @@ export class PayrollService {
     tx: Prisma.TransactionClient,
     dentistId: string,
     payPeriod: { start: Date; end: Date },
+    opts: {
+      lastPaidDay?: Date | null;
+      visits?: Array<{ id: string; startedAt: Date | null; closedAt: Date | null }>;
+    } = {},
   ): Promise<{
     workedShifts: number;
     totalHours: number;
     overtimeHours: number;
     overtimeThresholdHours: number;
+    outsideHours: Array<{ encounterId: string; startedAt: Date; closedAt: Date; minutes: number }>;
+    days: Record<string, number>;
   }> {
-    const workingSchedules = await tx.workingSchedule.findMany({
-      where: {
-        dentistId,
-        deletedAt: null,
-        isPaidShift: true,
-        validFrom: { lte: payPeriod.end },
-        OR: [{ validTo: null }, { validTo: { gte: payPeriod.start } }],
-      },
-    });
+    const range = periodInstantRange(payPeriod);
+    const [workingSchedules, approvedShifts, overrides, timeOffs, closures] = await Promise.all([
+      tx.workingSchedule.findMany({
+        where: {
+          dentistId,
+          deletedAt: null,
+          isPaidShift: true,
+          validFrom: { lte: payPeriod.end },
+          OR: [{ validTo: null }, { validTo: { gte: payPeriod.start } }],
+        },
+      }),
+      tx.shiftRegistration.findMany({
+        where: {
+          dentistId,
+          deletedAt: null,
+          status: 'APPROVED',
+          date: { gte: payPeriod.start, lte: payPeriod.end },
+        },
+        select: { date: true, startTime: true, endTime: true },
+      }),
+      tx.scheduleOverride.findMany({
+        where: { dentistId, deletedAt: null, date: { gte: payPeriod.start, lte: payPeriod.end } },
+        select: { date: true, kind: true, startTime: true, endTime: true, reason: true },
+      }),
+      tx.timeOff.findMany({
+        where: {
+          dentistId,
+          deletedAt: null,
+          status: 'APPROVED',
+          startAt: { lt: range.toExclusive },
+          endAt: { gt: range.from },
+        },
+        select: { startAt: true, endAt: true },
+      }),
+      tx.clinicClosure.findMany({
+        where: {
+          deletedAt: null,
+          startDate: { lte: payPeriod.end },
+          endDate: { gte: payPeriod.start },
+        },
+        select: { startDate: true, endDate: true, reason: true },
+      }),
+    ]);
 
-    const approvedShifts = await tx.shiftRegistration.findMany({
-      where: {
-        dentistId,
-        deletedAt: null,
-        status: 'APPROVED',
-        date: { gte: payPeriod.start, lte: payPeriod.end },
-      },
-      select: { date: true, startTime: true, endTime: true },
-    });
-    // A date may have several approved registrations (morning + evening).
-    const approvedByDate = new Map<string, typeof approvedShifts>();
-    for (const s of approvedShifts) {
-      const key = s.date.toISOString().slice(0, 10);
-      approvedByDate.set(key, [...(approvedByDate.get(key) ?? []), s]);
-    }
+    const byDate = <T extends { date: Date }>(rows: T[] | undefined) => {
+      const m = new Map<string, T[]>();
+      for (const r of rows ?? []) {
+        const k = dateKey(r.date);
+        m.set(k, [...(m.get(k) ?? []), r]);
+      }
+      return m;
+    };
+    const shiftsByDate = byDate(approvedShifts);
+    const overridesByDate = byDate(overrides);
+    const lastPaidKey = opts.lastPaidDay ? dateKey(opts.lastPaidDay) : null;
 
     let workedShifts = 0;
     let totalMinutes = 0;
-    const days = daysBetweenInclusive(payPeriod.start, payPeriod.end);
-    for (let i = 0; i < days; i++) {
-      const d = new Date(payPeriod.start);
-      d.setUTCDate(d.getUTCDate() + i);
-      const dateKey = d.toISOString().slice(0, 10);
-
-      // Same hours as the booking calendar (AvailabilityService.loadDay):
-      // every weekly block valid on that very date (a schedule edited "from
-      // day X" leaves an old row ending X-1 and a new one starting X) plus the
-      // approved extra shifts, overlapping or touching ones joined so no
-      // minute is paid twice.
-      const blocks = [
-        ...workingSchedules.filter(
+    const days: Record<string, number> = {};
+    const paidByDay = new Map<string, Interval[]>();
+    const keys = periodDateKeys(payPeriod);
+    for (const key of keys) {
+      if (lastPaidKey && key > lastPaidKey) break;
+      const day = new Date(key);
+      const dayStart = new Date(`${key}T00:00:00+07:00`);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+      const cal = buildDayCalendar({
+        date: key,
+        schedules: (workingSchedules ?? []).filter(
           s =>
-            s.dayOfWeek === d.getUTCDay() &&
-            (!s.validFrom || s.validFrom.getTime() <= d.getTime()) &&
-            (!s.validTo || s.validTo.getTime() >= d.getTime()),
+            s.dayOfWeek === day.getUTCDay() &&
+            (!s.validFrom || s.validFrom.getTime() <= day.getTime()) &&
+            (!s.validTo || s.validTo.getTime() >= day.getTime()),
         ),
-        ...(approvedByDate.get(dateKey) ?? []),
-      ]
-        .map(b => ({
-          start: new Date(this.timeToMinutes(b.startTime) * 60_000),
-          end: new Date(this.timeToMinutes(b.endTime) * 60_000),
-        }))
-        .filter(b => b.end > b.start);
-      if (blocks.length === 0) continue;
+        shifts: shiftsByDate.get(key) ?? [],
+        overrides: overridesByDate.get(key) ?? [],
+        timeOffs: (timeOffs ?? []).filter(t => t.startAt < dayEnd && t.endAt > dayStart),
+        clinicClosures: (closures ?? []).filter(
+          c => dateKey(c.startDate) <= key && dateKey(c.endDate) >= key,
+        ),
+        bookings: [],
+      });
+      const paid = paidIntervals(cal);
+      paidByDay.set(key, paid);
+      const minutes = minutesOf(paid);
+      if (minutes <= 0) continue;
       workedShifts++;
-      for (const w of mergeWindows(blocks)) {
-        totalMinutes += (w.end.getTime() - w.start.getTime()) / 60_000;
+      totalMinutes += minutes;
+      days[key] = Math.round((minutes / 60) * 100) / 100;
+    }
+
+    const outsideHours: Array<{
+      encounterId: string;
+      startedAt: Date;
+      closedAt: Date;
+      minutes: number;
+    }> = [];
+    for (const v of opts.visits ?? []) {
+      if (!v.startedAt || !v.closedAt) continue;
+      const minutes = minutesOutside(paidByDay.get(clinicDateOnly(v.startedAt)) ?? [], {
+        start: v.startedAt,
+        end: v.closedAt,
+      });
+      // Under 15' is a visit running a little late, not extra duty.
+      if (minutes >= 15) {
+        outsideHours.push({
+          encounterId: v.id,
+          startedAt: v.startedAt,
+          closedAt: v.closedAt,
+          minutes,
+        });
       }
     }
 
     const totalHours = Math.round((totalMinutes / 60) * 100) / 100;
 
     // SPEC formula: weeks × 5 workdays × 8 hours
-    const weeksInPeriod = days / 7;
+    const weeksInPeriod = daysBetweenInclusive(payPeriod.start, payPeriod.end) / 7;
     const overtimeThresholdHours = weeksInPeriod * 5 * 8;
     // R2-6: epsilon prevents sub-cent rounding from showing 0.0 OT when actual
     // is 0.001-0.005h (due to floating-point). Threshold: 1 minute = 0.0167h.
@@ -796,16 +1373,145 @@ export class PayrollService {
       totalHours,
       overtimeHours,
       overtimeThresholdHours: Math.round(overtimeThresholdHours * 100) / 100,
+      outsideHours,
+      days,
     };
   }
 
-  /** Reads a Time column (Date, epoch date irrelevant) or an "HH:mm" string. */
-  private timeToMinutes(time: Date | string): number {
-    if (typeof time === 'string') {
-      const [h, m] = time.split(':').map(Number);
-      return h * 60 + m;
+  /**
+   * Things to settle before locking a period: draft invoices older than
+   * `draftDays` (no commission until issued), dentists with closed visits but
+   * no pay terms, visits outside paid hours, dentists who left mid-period.
+   */
+  async getPeriodWarnings(periodId: string, draftDays = DEFAULT_DRAFT_INVOICE_WARN_DAYS) {
+    const period = await this.prisma.payrollPeriod.findUnique({
+      where: { id: periodId },
+      include: {
+        lineItems: {
+          select: {
+            dentistId: true,
+            computationLog: true,
+            dentist: { select: { fullName: true } },
+          },
+        },
+      },
+    });
+    if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
+    const payPeriod = { start: period.periodStart, end: period.periodEnd };
+    const range = periodInstantRange(payPeriod);
+    const draftCutoff = new Date(Date.now() - draftDays * 24 * 60 * 60_000);
+
+    const [drafts, visits, comps, leavers] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: {
+          deletedAt: null,
+          status: InvoiceStatus.DRAFT,
+          createdAt: { lte: draftCutoff },
+          encounter: { closedAt: { lt: range.toExclusive } },
+        },
+        select: {
+          id: true,
+          code: true,
+          total: true,
+          createdAt: true,
+          patient: { select: { fullName: true, code: true } },
+          encounter: {
+            select: { closedAt: true, dentist: { select: { id: true, fullName: true } } },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 200,
+      }),
+      this.prisma.encounter.findMany({
+        where: { status: 'COMPLETED', closedAt: { gte: range.from, lt: range.toExclusive } },
+        select: { dentistId: true, dentist: { select: { fullName: true } } },
+      }),
+      this.prisma.dentistCompensation.findMany({
+        where: {
+          deletedAt: null,
+          effectiveFrom: { lte: payPeriod.end },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: payPeriod.start } }],
+        },
+        select: { dentistId: true },
+      }),
+      this.prisma.employee.findMany({
+        where: {
+          deletedAt: null,
+          userId: { not: null },
+          terminationDate: { gte: payPeriod.start, lte: payPeriod.end },
+        },
+        select: { userId: true, fullName: true, terminationDate: true },
+      }),
+    ]);
+
+    const withTerms = new Set((comps ?? []).map(c => c.dentistId));
+    const noTerms = new Map<
+      string,
+      { dentistId: string; dentistName: string; encounterCount: number }
+    >();
+    for (const v of visits ?? []) {
+      if (withTerms.has(v.dentistId)) continue;
+      const row = noTerms.get(v.dentistId) ?? {
+        dentistId: v.dentistId,
+        dentistName: v.dentist?.fullName ?? '',
+        encounterCount: 0,
+      };
+      row.encounterCount++;
+      noTerms.set(v.dentistId, row);
     }
-    return time.getUTCHours() * 60 + time.getUTCMinutes();
+
+    const outsideHoursEncounters = period.lineItems.flatMap(li => {
+      const log = li.computationLog as { outsideHoursEncounters?: unknown[] } | null;
+      return (log?.outsideHoursEncounters ?? []).map(e => ({
+        ...(e as object),
+        dentistId: li.dentistId,
+        dentistName: li.dentist?.fullName ?? '',
+      }));
+    });
+
+    return {
+      draftInvoiceDays: draftDays,
+      draftInvoices: (drafts ?? []).map(d => ({
+        invoiceId: d.id,
+        code: d.code,
+        totalVnd: Number(d.total),
+        createdAt: d.createdAt,
+        ageDays: Math.floor((Date.now() - d.createdAt.getTime()) / (24 * 60 * 60_000)),
+        patientName: d.patient?.fullName ?? '',
+        dentistId: d.encounter?.dentist?.id ?? null,
+        dentistName: d.encounter?.dentist?.fullName ?? '',
+      })),
+      dentistsWithoutCompensation: [...noTerms.values()],
+      outsideHoursEncounters,
+      terminatedDentists: (leavers ?? []).map(l => ({
+        dentistId: l.userId,
+        dentistName: l.fullName,
+        terminationDate: l.terminationDate ? dateKey(l.terminationDate) : null,
+      })),
+    };
+  }
+
+  /**
+   * Open (DRAFT/REVIEWING, not an adjustment period) period covering a
+   * clinic day, else the latest open one when `fallbackLatest`.
+   */
+  async findOpenPeriodFor(instant: Date, fallbackLatest = false) {
+    const day = clinicDateValue(instant);
+    const open = { in: [PayrollPeriodStatus.DRAFT, PayrollPeriodStatus.REVIEWING] };
+    const covering = await this.prisma.payrollPeriod.findFirst({
+      where: {
+        status: open,
+        openedFromPeriodId: null,
+        periodStart: { lte: day },
+        periodEnd: { gte: day },
+      },
+      orderBy: { periodStart: 'desc' },
+    });
+    if (covering || !fallbackLatest) return covering;
+    return this.prisma.payrollPeriod.findFirst({
+      where: { status: open, openedFromPeriodId: null },
+      orderBy: { periodStart: 'desc' },
+    });
   }
 
   // ============================================================================
@@ -847,9 +1553,19 @@ export class PayrollService {
     // ONLY their own line item (self-adjustment is a no-op; in practice for
     // MVP dentists never have permission for this, but guard anyway).
     const isAdmin = actorPermissions.includes('payroll.admin');
-    if (!isAdmin && lineItemPrecheck.dentistId !== actorUserId) {
+    if (!isAdmin) {
       throw new PayrollNotFoundException('PayrollLineItem', dto.lineItemId); // 404, don't leak
     }
+    // Own line (owner who also practises): only as the sole admin, with a reason.
+    const selfReason =
+      lineItemPrecheck.dentistId === actorUserId
+        ? await this.assertSelfAction(
+            actorUserId,
+            'payroll.admin',
+            dto.selfApprovalReason,
+            'điều chỉnh lương',
+          )
+        : null;
 
     // M#7: MANUAL_OVERRIDE requires elevated audit log (separate action so
     // it's easy to query for compliance review).
@@ -879,6 +1595,9 @@ export class PayrollService {
 
         const created = await tx.payrollAdjustment.create({
           data: {
+            // H2: owned by (period, dentist); survives any recompute.
+            payrollPeriodId: periodId,
+            dentistId: lineItem.dentistId,
             payrollLineItemId: dto.lineItemId,
             type: dto.type as PayrollAdjustmentType,
             amountVnd: dto.amountVnd,
@@ -889,19 +1608,9 @@ export class PayrollService {
 
         // Re-aggregate bonus/penalty and re-compute gross/net
         const allAdjustments = await tx.payrollAdjustment.findMany({
-          where: { payrollLineItemId: dto.lineItemId },
+          where: { payrollPeriodId: periodId, dentistId: lineItem.dentistId },
         });
-
-        let bonusVnd = 0;
-        let penaltyVnd = 0;
-        for (const adj of allAdjustments) {
-          const amount = Number(adj.amountVnd);
-          if (adj.type === 'BONUS' || (adj.type === 'MANUAL_OVERRIDE' && amount > 0)) {
-            bonusVnd += amount;
-          } else {
-            penaltyVnd += Math.abs(amount);
-          }
-        }
+        const { bonusVnd, penaltyVnd } = sumAdjustments(allAdjustments);
 
         const grossPayVnd =
           Number(lineItem.baseSalaryVnd) +
@@ -953,6 +1662,16 @@ export class PayrollService {
         severity: dto.type === 'MANUAL_OVERRIDE' ? 'HIGH' : 'NORMAL',
       },
     });
+    if (selfReason) {
+      await this.logSelfApproval(
+        actorUserId,
+        'ADJUSTMENT_ADD',
+        'PAYROLL_LINE_ITEM',
+        dto.lineItemId,
+        selfReason,
+        { periodId, type: dto.type, amountVnd: dto.amountVnd },
+      );
+    }
 
     return this.getPeriodDetail(periodId);
   }
@@ -1002,10 +1721,24 @@ export class PayrollService {
     return updated;
   }
 
-  async approvePeriod(periodId: string, actorUserId: string) {
+  async approvePeriod(periodId: string, actorUserId: string, selfApprovalReason?: string) {
     const period = await this.prisma.payrollPeriod.findUnique({ where: { id: periodId } });
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.APPROVED);
+
+    // The period holds the approver's own payslip (owner who also practises).
+    const ownLine = await this.prisma.payrollLineItem.findFirst({
+      where: { payrollPeriodId: periodId, dentistId: actorUserId },
+      select: { id: true, netPayVnd: true },
+    });
+    const selfReason = ownLine
+      ? await this.assertSelfAction(
+          actorUserId,
+          'payroll.period.approve',
+          selfApprovalReason,
+          'duyệt kỳ lương có phiếu lương',
+        )
+      : null;
 
     // See lockPeriod() above — same guarded-write race protection.
     const approved = await this.prisma.payrollPeriod.updateMany({
@@ -1031,6 +1764,16 @@ export class PayrollService {
       targetType: 'PAYROLL_PERIOD',
       targetId: periodId,
     });
+    if (selfReason && ownLine) {
+      await this.logSelfApproval(
+        actorUserId,
+        'PERIOD_APPROVE',
+        'PAYROLL_PERIOD',
+        periodId,
+        selfReason,
+        { lineItemId: ownLine.id, netPayVnd: Number(ownLine.netPayVnd) },
+      );
+    }
 
     return updated;
   }
