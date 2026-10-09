@@ -13,7 +13,7 @@ import {
   lockPatientCalendar,
 } from './domain/advisory-lock';
 import { compareQueue, priorityAtCheckIn } from './domain/queue';
-import { AppointmentNotFoundException } from './domain/exceptions';
+import { AppointmentNotFoundException, SlotConflictException } from './domain/exceptions';
 import {
   APPOINTMENT_RESCHEDULED_EVENT,
   AppointmentRescheduledEvent,
@@ -44,6 +44,20 @@ type ApptWithServices = Prisma.AppointmentGetPayload<{ include: { services: true
 
 /** reassignDay also takes bookings started this long ago (the check-in window, A3-05). */
 const REASSIGN_GRACE_MIN = 30;
+
+/** A start minute taken meanwhile (idx_appointments_slot_active) is a 409, not a 500. */
+async function slotSafe<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new SlotConflictException(
+        'Giờ bắt đầu vừa được dùng cho lượt khác của bác sĩ nhận — thử chuyển lại',
+      );
+    }
+    throw e;
+  }
+}
 
 const queueError = (message: string, code: string, status = HttpStatus.CONFLICT) =>
   new BusinessRuleException(message, status, undefined, code);
@@ -249,11 +263,29 @@ export class DispatchService {
   async clearEmergency(id: string, reason: string, actor: JwtPayload) {
     const entry = await this.openEntry(id, actor);
     if (entry.priority !== QueuePriority.EMERGENCY) return entry;
-    const appt = await this.prisma.appointment.findUniqueOrThrow({
-      where: { id: entry.appointmentId },
-      select: { visitKind: true, startAt: true },
+    // The class held before the flag, as recorded then: a transfer may have
+    // moved startAt since, so it is not recomputed from the visit.
+    const marked = await this.prisma.auditLog.findFirst({
+      where: {
+        action: 'QUEUE_EMERGENCY',
+        targetType: 'appointment',
+        targetId: entry.appointmentId,
+      },
+      orderBy: { occurredAt: 'desc' },
+      select: { metadata: true },
     });
-    const priority = priorityAtCheckIn(appt, entry.checkedInAt);
+    const recorded = (marked?.metadata as { previousPriority?: QueuePriority } | null)
+      ?.previousPriority;
+    let priority: QueuePriority;
+    if (recorded && recorded !== QueuePriority.EMERGENCY) {
+      priority = recorded;
+    } else {
+      const appt = await this.prisma.appointment.findUniqueOrThrow({
+        where: { id: entry.appointmentId },
+        select: { visitKind: true, startAt: true },
+      });
+      priority = priorityAtCheckIn(appt, entry.checkedInAt);
+    }
     const updated = await this.guardedUpdate(id, OPEN_STATUSES, {
       priority,
       emergencyReason: null,
@@ -359,18 +391,20 @@ export class DispatchService {
         tx,
       );
       const planData = await this.writePlan(tx, appt.id, plan);
-      const res = await tx.appointment.updateMany({
-        where: { id: appt.id, status: AppointmentStatus.CHECKED_IN, dentistId: entry.dentistId },
-        // A new reminder only matters for a later visit; cleared like a reschedule.
-        data: {
-          dentistId: dto.dentistId,
-          startAt: slot.startAt,
-          endAt: slot.endAt,
-          ...planData,
-          reminderSentAt: null,
-          updatedBy: actor.sub,
-        },
-      });
+      const res = await slotSafe(() =>
+        tx.appointment.updateMany({
+          where: { id: appt.id, status: AppointmentStatus.CHECKED_IN, dentistId: entry.dentistId },
+          // A new reminder only matters for a later visit; cleared like a reschedule.
+          data: {
+            dentistId: dto.dentistId,
+            startAt: slot.startAt,
+            endAt: slot.endAt,
+            ...planData,
+            reminderSentAt: null,
+            updatedBy: actor.sub,
+          },
+        }),
+      );
       if (res.count === 0) {
         throw queueError(STALE_APPOINTMENT_MSG, 'QUEUE_STALE');
       }
@@ -481,6 +515,7 @@ export class DispatchService {
         const endAt = new Date(appt.startAt.getTime() + minutes * 60_000);
         await this.prisma.$transaction(async tx => {
           await lockDentistCalendar(tx, dto.toDentistId);
+          await lockPatientCalendar(tx, appt.patientId);
           try {
             await this.appointments.ensureSlotAvailable(
               dto.toDentistId,
@@ -490,6 +525,14 @@ export class DispatchService {
               appt.id,
               tx,
               plan ?? appt,
+            );
+            // A longer visit must not run into the patient's own next one.
+            await this.appointments.ensurePatientFree(
+              appt.patientId,
+              appt.startAt,
+              endAt,
+              appt.id,
+              tx,
             );
           } catch (e) {
             const length = Math.round((appt.endAt.getTime() - appt.startAt.getTime()) / 60_000);

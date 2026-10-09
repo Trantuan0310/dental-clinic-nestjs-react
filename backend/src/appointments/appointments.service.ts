@@ -281,6 +281,7 @@ export class AppointmentsService {
           status: { notIn: ACTIVE_APPOINTMENT_EXCLUDED_STATUSES },
           deletedAt: null,
         },
+        include: { services: { select: { serviceId: true } } },
       });
       if (
         same &&
@@ -288,12 +289,23 @@ export class AppointmentsService {
         same.dentistId === dto.dentistId &&
         same.startAt?.getTime() === startAt.getTime()
       ) {
+        // The very same request: same end, services and visit details.
+        const sameServices = [...(same.services ?? []).map(sv => sv.serviceId)].sort().join();
+        const repeat =
+          same.endAt?.getTime() === endAt.getTime() &&
+          sameServices === [...(dto.serviceIds ?? [])].sort().join() &&
+          // The column has a default: only a type the request names must match.
+          (dto.appointmentType === undefined || same.appointmentType === dto.appointmentType) &&
+          (same.reason ?? null) === blankToNull(dto.reason) &&
+          (same.chiefComplaint ?? null) === blankToNull(dto.chiefComplaint);
         if (
+          repeat &&
           !fromBookingRequest &&
           same.createdBy === actor.sub &&
           Date.now() - same.createdAt.getTime() < REPEAT_SUBMIT_MS
         ) {
-          return same;
+          const { services: _services, ...first } = same;
+          return first;
         }
         throw new SlotConflictException(
           `Bệnh nhân này đã có lịch đúng giờ này với bác sĩ này (đặt lúc ${this.toClinicTimeString(same.createdAt)} ngày ${this.viDate(new Date(clinicDateOnly(same.createdAt)))}) — không cần đặt lại`,
@@ -1164,17 +1176,8 @@ export class AppointmentsService {
     if (this.isRowScopedDentist(actor) && appt.dentistId !== actor.sub) {
       throw new AppointmentNotFoundException(appointmentId);
     }
-    // A3-12 / A5-07: the same time and dentist again (a double submit or a
-    // slip) changes nothing and costs no reschedule; a client that saw an
-    // older version reloads first instead of overwriting a colleague.
-    if (
-      new Date(dto.newStartsAt).getTime() === appt.startAt.getTime() &&
-      new Date(dto.newEndsAt).getTime() === appt.endAt.getTime() &&
-      (dto.newDentistId ?? appt.dentistId) === appt.dentistId
-    ) {
-      const { services: _services, ...unchanged } = appt;
-      return unchanged;
-    }
+    // A3-12: a client that saw an older version reloads first instead of
+    // overwriting a colleague.
     if (
       (dto.rescheduleCount !== undefined && dto.rescheduleCount !== appt.rescheduleCount) ||
       (dto.updatedAt !== undefined &&
@@ -1192,6 +1195,16 @@ export class AppointmentsService {
       throw new InvalidAppointmentStateException(
         `Không thể đổi lịch hẹn ở trạng thái "${STATUS_LABEL[appt.status]}"`,
       );
+    }
+    // A5-07: the same time and dentist again (a double submit or a slip)
+    // changes nothing and costs no reschedule — only once the visit may move.
+    if (
+      new Date(dto.newStartsAt).getTime() === appt.startAt.getTime() &&
+      new Date(dto.newEndsAt).getTime() === appt.endAt.getTime() &&
+      (dto.newDentistId ?? appt.dentistId) === appt.dentistId
+    ) {
+      const { services: _services, ...unchanged } = appt;
+      return unchanged;
     }
     if (appt.rescheduleCount >= 3) {
       throw new RescheduleLimitReachedException();

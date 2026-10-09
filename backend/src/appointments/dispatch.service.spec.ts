@@ -42,6 +42,7 @@ describe('DispatchService.reassignDay', () => {
   const startAt = new Date(Date.now() + 3 * 86400000);
   const booking = {
     id: 'appt-1',
+    patientId: 'patient-1',
     dentistId: 'dentist-1',
     status: AppointmentStatus.SCHEDULED,
     startAt,
@@ -139,6 +140,29 @@ describe('DispatchService.reassignDay', () => {
       where: { appointmentId: 'appt-1', serviceId: 'svc-1' },
       data: { durationMin: 30, bufferBeforeMin: 0, bufferAfterMin: 5 },
     });
+  });
+
+  it("lists as not moved a longer visit that would overlap the patient's next one", async () => {
+    prisma.appointment.findMany.mockResolvedValue([
+      { ...booking, patientId: 'patient-1', services: [{ serviceId: 'svc-1' }] },
+    ]);
+    appointments.planVisit.mockResolvedValue(plan30);
+    appointments.ensurePatientFree.mockRejectedValue(
+      new Error('Bệnh nhân đã có lịch hẹn khác trùng khung giờ này'),
+    );
+
+    const res = await service.reassignDay(dto, adminPayload());
+
+    expect(appointments.ensurePatientFree).toHaveBeenCalledWith(
+      'patient-1',
+      startAt,
+      new Date(startAt.getTime() + 30 * 60_000),
+      'appt-1',
+      prisma,
+    );
+    expect(res.moved).toEqual([]);
+    expect(res.failed[0].reason).toContain('Bệnh nhân đã có lịch hẹn khác');
+    expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
   });
 
   it("says when it is the substitute's longer visit that does not fit", async () => {
@@ -313,6 +337,16 @@ describe('DispatchService.transfer', () => {
     );
   });
 
+  it('a start minute taken meanwhile is a slot conflict, not a server error', async () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    prisma.appointment.updateMany.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+    );
+    await expect(service.transfer('q-1', dto, adminPayload())).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'SLOT_CONFLICT' }),
+    });
+  });
+
   // A3-15: no fake "skip" first.
   it('moves a called patient straight away', async () => {
     prisma.queueEntry.findUnique.mockResolvedValue({ ...entry, status: QueueStatus.CALLED });
@@ -367,6 +401,17 @@ describe('DispatchService call / uncall / emergency', () => {
       where: { id: 'q-1', doneAt: null, status: { in: [QueueStatus.CALLED] } },
       data: { status: QueueStatus.WAITING, updatedBy: expect.any(String) },
     });
+  });
+
+  it('clearing an emergency restores the class recorded when it was flagged', async () => {
+    prisma.auditLog.findFirst.mockResolvedValue({ metadata: { previousPriority: 'WALK_IN' } });
+    await service.clearEmergency('q-1', 'Đánh nhầm cấp cứu', adminPayload());
+    expect(prisma.appointment.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ priority: QueuePriority.WALK_IN }),
+      }),
+    );
   });
 
   it('clearing an emergency restores the class from the check-in', async () => {
