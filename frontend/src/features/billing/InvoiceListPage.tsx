@@ -8,6 +8,7 @@ import { billingApi } from '@/features/billing/billingApi';
 import { Button, Card, InvoiceStatusBadge, SearchInput, Select } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 import type { Invoice, InvoiceStatus } from '@/types/billing';
+import { MissingInvoicesBanner } from './MissingInvoicesBanner';
 
 // 'unpaid' is a synthetic combined filter (ISSUED + PARTIAL) — the one thing
 // dashboard "công nợ" cards actually want to link to; there's no single
@@ -82,6 +83,8 @@ export default function InvoiceListPage() {
           Danh sách hóa đơn của phòng khám
         </p>
       </div>
+
+      <MissingInvoicesBanner />
 
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-3">

@@ -118,6 +118,7 @@ model User {
   voidedInvoices     Invoice[]      @relation("InvoiceVoidedBy")
   receivedPayments   Payment[]
   invoiceAuditActors InvoiceAudit[]
+  paymentsVoided     Payment[]      @relation("PaymentVoidedBy")
 
   // Inventory
   createdCategories  InventoryCategory[] @relation("InventoryCategoryCreator")
@@ -628,7 +629,9 @@ model Encounter {
   prescription   Prescription?
   dentalChart    DentalChartSnapshot?
   audits         EncounterAudit[]
-  invoice        Invoice?
+  // At most one non-VOIDED invoice per encounter (partial unique index,
+  // migration 045); voided ones stay as history next to their replacement.
+  invoices       Invoice[]
   payrollDetails PayrollEncounterDetail[]
 
   @@index([patientId, startedAt(sort: Desc)])
@@ -683,6 +686,11 @@ model Treatment {
   durationMinutes Int?      @map("duration_minutes")
   /// ADR-0009 D6: set when the treatment was picked from the catalogue.
   serviceId       String?   @map("service_id") @db.Uuid
+  /// Price the catalogue pick started from (booking snapshot, else the
+  /// dentist's assignment that day); null for a free-text line.
+  listPrice       Decimal?  @map("list_price") @db.Decimal(15, 0)
+  /// Why unitPrice differs from listPrice / was changed (decision 3, audited).
+  priceReason     String?   @map("price_reason")
   sequence        Int       @default(0)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
@@ -814,17 +822,29 @@ enum PaymentStatus {
   VOIDED
 }
 
+/// PAYMENT = money received; REFUND = money paid back to the patient
+/// (amount stays positive, paidAt is the refund date).
+enum PaymentKind {
+  PAYMENT
+  REFUND
+}
+
 model Invoice {
   id                String        @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   code              String        @db.VarChar(20)
-  encounterId       String        @unique @map("encounter_id") @db.Uuid
+  // Unique only among non-VOIDED rows: invoices_encounter_id_active_key
+  // (migration 045). A voided invoice can be replaced ("lập lại hóa đơn").
+  encounterId       String        @map("encounter_id") @db.Uuid
   patientId         String        @map("patient_id") @db.Uuid
   status            InvoiceStatus @default(DRAFT)
   subtotal          Decimal       @default(0) @db.Decimal(12, 2)
   discountType      DiscountType? @map("discount_type")
   discountValue     Decimal?      @map("discount_value") @db.Decimal(12, 2)
   total             Decimal       @default(0) @db.Decimal(12, 2)
+  /// Net money kept: payments minus refunds (voided rows excluded).
   paidAmount        Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
+  /// Σ refunds. A refund does not reopen the debt: outstanding = total − (paid + refunded).
+  refundedAmount    Decimal       @default(0) @map("refunded_amount") @db.Decimal(12, 2)
   outstandingAmount Decimal       @default(0) @map("outstanding_amount") @db.Decimal(12, 2)
   notes             String?
   issuedAt          DateTime?     @map("issued_at") @db.Timestamptz()
@@ -837,17 +857,22 @@ model Invoice {
   createdBy         String?       @map("created_by") @db.Uuid
   version           Int           @default(0)
   deletedAt         DateTime?     @map("deleted_at") @db.Timestamptz()
+  /// Set on an invoice re-made after this one was voided.
+  replacesInvoiceId String?       @unique @map("replaces_invoice_id") @db.Uuid
 
-  encounter Encounter      @relation(fields: [encounterId], references: [id])
-  patient   Patient        @relation(fields: [patientId], references: [id])
-  issuer    User?          @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
-  voider    User?          @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
-  creator   User?          @relation("InvoiceCreator", fields: [createdBy], references: [id])
-  items     InvoiceItem[]
-  payments  Payment[]
-  audits    InvoiceAudit[]
+  encounter  Encounter      @relation(fields: [encounterId], references: [id])
+  replaces   Invoice?       @relation("InvoiceReplacement", fields: [replacesInvoiceId], references: [id])
+  replacedBy Invoice?       @relation("InvoiceReplacement")
+  patient    Patient        @relation(fields: [patientId], references: [id])
+  issuer     User?          @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
+  voider     User?          @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
+  creator    User?          @relation("InvoiceCreator", fields: [createdBy], references: [id])
+  items      InvoiceItem[]
+  payments   Payment[]
+  audits     InvoiceAudit[]
 
   @@unique([code])
+  @@index([encounterId])
   @@index([patientId, createdAt(sort: Desc)])
   @@index([status])
   // Note: composite (status, createdAt DESC) created in migration 010.
@@ -877,14 +902,19 @@ model Payment {
   invoiceId  String        @map("invoice_id") @db.Uuid
   amount     Decimal       @db.Decimal(12, 2)
   method     PaymentMethod
+  kind       PaymentKind   @default(PAYMENT)
   status     PaymentStatus @default(COMPLETED)
   paidAt     DateTime      @default(now()) @map("paid_at") @db.Timestamptz()
   note       String?
   receivedBy String        @map("received_by") @db.Uuid
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+  voidedAt   DateTime?     @map("voided_at") @db.Timestamptz()
+  voidedBy   String?       @map("voided_by") @db.Uuid
+  voidReason String?       @map("void_reason")
 
   invoice        Invoice @relation(fields: [invoiceId], references: [id])
   receivedByUser User    @relation(fields: [receivedBy], references: [id])
+  voidedByUser   User?   @relation("PaymentVoidedBy", fields: [voidedBy], references: [id])
 
   @@index([invoiceId, paidAt(sort: Desc)])
   @@map("payments")

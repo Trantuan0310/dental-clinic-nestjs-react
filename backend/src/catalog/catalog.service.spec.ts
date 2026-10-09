@@ -431,6 +431,13 @@ describe('CatalogService', () => {
       await service.setServiceActive('svc-1', true, actor);
       expect(prisma.auditLog.findFirst).not.toHaveBeenCalled();
     });
+
+    it('asks to reopen a stopped group first (A2-24)', async () => {
+      prisma.serviceCategory.findUnique.mockResolvedValue({ name: 'Chỉnh nha', isActive: false });
+      await expect(service.setServiceActive('svc-1', true, actor)).rejects.toThrow(
+        'mở lại nhóm trước',
+      );
+    });
   });
 
   describe('assign (BR-SVC-004)', () => {
@@ -509,6 +516,42 @@ describe('CatalogService', () => {
   });
 
   describe('endAssignment (BR-SVC-005)', () => {
+    beforeEach(() => {
+      prisma.appointment.count.mockResolvedValue(0);
+      prisma.appointment.findMany.mockResolvedValue([]);
+    });
+
+    it('lists visits booked after the end and needs a confirmation (A2-13)', async () => {
+      prisma.dentistService.findFirst.mockResolvedValue(assignment());
+      prisma.appointment.count.mockResolvedValue(1);
+      prisma.appointment.findMany.mockResolvedValue([
+        {
+          id: 'appt-9',
+          startAt: new Date('2099-01-05T02:00:00Z'),
+          patient: { fullName: 'Nguyễn Văn A', code: 'BN001' },
+        },
+      ]);
+      await expect(
+        service.endAssignment('dentist-1', 'as-1', undefined, actor),
+      ).rejects.toMatchObject({
+        response: {
+          error: 'ASSIGNMENT_HAS_UPCOMING_VISITS',
+          details: { count: 1, appointments: [expect.objectContaining({ id: 'appt-9' })] },
+        },
+      });
+      expect(prisma.dentistService.update).not.toHaveBeenCalled();
+
+      prisma.dentistService.update.mockImplementation(
+        async ({ data }: { data: Record<string, unknown> }) => assignment(data),
+      );
+      const result = await service.endAssignment('dentist-1', 'as-1', undefined, actor, true);
+      expect(result.affectedAppointments).toBe(1);
+      expect(prisma.appointment.count.mock.calls[0][0].where).toMatchObject({
+        dentistId: 'dentist-1',
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+      });
+    });
+
     it('sets an end date instead of deleting a started assignment', async () => {
       prisma.dentistService.findFirst.mockResolvedValue(assignment());
       prisma.dentistService.update.mockImplementation(

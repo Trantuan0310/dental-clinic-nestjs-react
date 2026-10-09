@@ -1763,7 +1763,11 @@ describe('AppointmentsService', () => {
             }),
           }),
         );
-        expect(prisma.appointmentService.updateMany).not.toHaveBeenCalled();
+        // A5-18: per-service lengths follow the plan; the price is never touched.
+        expect(prisma.appointmentService.updateMany).toHaveBeenCalledWith({
+          where: { appointmentId: 'appt-1', serviceId: 'svc-1' },
+          data: { durationMin: 45, bufferBeforeMin: 0, bufferAfterMin: 10 },
+        });
       });
 
       it('stores an override reason for a different length', async () => {

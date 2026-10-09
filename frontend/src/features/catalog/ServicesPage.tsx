@@ -565,8 +565,9 @@ export default function ServicesPage() {
             <div className="space-y-2">
               {deactivateSummary(deactivating) ? (
                 <p className="font-medium text-amber-700">
-                  Đang có {deactivateSummary(deactivating)} dùng dịch vụ này. Chúng không bị hủy, nhưng lễ tân
-                  cần xử lý (đổi dịch vụ hoặc báo khách) vì dịch vụ sẽ không còn chọn được.
+                  Đang có {deactivateSummary(deactivating)} dùng dịch vụ này. Chúng không bị hủy: lịch đã đặt vẫn
+                  dời được và khi khám vẫn ghi được dịch vụ này theo giá đã chốt. Lịch hẹn không đổi được dịch vụ;
+                  nếu không làm dịch vụ này nữa, lễ tân báo khách và hủy rồi đặt lại lịch.
                 </p>
               ) : (
                 <p>Không có lịch hẹn sắp tới hay yêu cầu online đang chờ dùng dịch vụ này.</p>
