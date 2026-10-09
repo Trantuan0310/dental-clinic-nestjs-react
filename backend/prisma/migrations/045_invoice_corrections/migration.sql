@@ -93,4 +93,13 @@ JOIN permissions p ON p.code = 'treatment.price_override'
 WHERE r.code = 'dentist'
 ON CONFLICT DO NOTHING;
 
+-- Payments are whole đồng now: a sub-đồng balance left by the old percentage
+-- discount (e.g. 0.05đ) could never be paid, so it is written off as settled.
+UPDATE invoices
+SET outstanding_amount = 0, status = 'PAID', updated_at = NOW()
+WHERE status IN ('ISSUED', 'PARTIAL')
+  AND deleted_at IS NULL
+  AND outstanding_amount > 0
+  AND outstanding_amount < 1;
+
 COMMIT;
