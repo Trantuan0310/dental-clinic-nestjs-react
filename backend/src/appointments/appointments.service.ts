@@ -1454,6 +1454,18 @@ export class AppointmentsService {
       if (rescheduleResult.count === 0) {
         throw new InvalidAppointmentStateException(STALE_APPOINTMENT_MSG);
       }
+      // A5-18: the per-service lengths follow the re-plan like the visit's
+      // total does; the booked price stays (ADR-0009 D6).
+      for (const sv of replanned?.services ?? []) {
+        await tx.appointmentService.updateMany({
+          where: { appointmentId, serviceId: sv.serviceId },
+          data: {
+            durationMin: sv.durationMin,
+            bufferBeforeMin: sv.bufferBeforeMin,
+            bufferAfterMin: sv.bufferAfterMin,
+          },
+        });
+      }
       const updated = await tx.appointment.findUniqueOrThrow({ where: { id: appointmentId } });
 
       await tx.appointmentRescheduleLog.create({

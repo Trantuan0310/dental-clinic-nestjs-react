@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InvoiceStatus, PaymentMethod, Prisma } from '@prisma/client';
 import { BillingService } from './billing.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,22 +18,55 @@ import {
   InvoiceNotEditableException,
   PaymentExceedsOutstandingException,
   InvoiceDiscountInvalidException,
+  InvoiceVersionMismatchException,
 } from './domain/exceptions';
+
+const forEvent = (overrides: Partial<any> = {}) => ({
+  ...validInvoice(overrides),
+  encounter: { dentistId: 'dentist-1' },
+  items: [
+    {
+      id: 'ii-1',
+      treatmentId: 'tr-1',
+      description: 'Trám',
+      quantity: new Prisma.Decimal(1),
+      unitPrice: new Prisma.Decimal(300_000),
+      lineTotal: new Prisma.Decimal(300_000),
+      deletedAt: null,
+    },
+    {
+      id: 'ii-2',
+      treatmentId: 'tr-2',
+      description: 'Cạo vôi',
+      quantity: new Prisma.Decimal(1),
+      unitPrice: new Prisma.Decimal(200_000),
+      lineTotal: new Prisma.Decimal(200_000),
+      deletedAt: null,
+    },
+  ],
+});
 
 describe('BillingService', () => {
   let service: BillingService;
   let prisma: PrismaMockShape;
   let audit: { log: jest.Mock };
+  let events: { emit: jest.Mock };
   const adminActor = adminPayload();
 
   beforeEach(async () => {
     prisma = createPrismaMock();
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    events = { emit: jest.fn() };
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 1n }]);
     (prisma.invoice.aggregate as jest.Mock).mockResolvedValue({
       _sum: { total: 0, paidAmount: 0, outstandingAmount: 0 },
       _count: { _all: 0 },
     });
+    (prisma.payment.groupBy as jest.Mock).mockResolvedValue([]);
+    // Re-read after a change, for the domain event (loadForEvent).
+    (prisma.invoice.findUniqueOrThrow as jest.Mock).mockImplementation(async () =>
+      forEvent({ status: InvoiceStatus.ISSUED }),
+    );
 
     const mockExpenseService = {
       aggregateApproved: jest.fn().mockResolvedValue(0),
@@ -44,6 +78,7 @@ describe('BillingService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
         { provide: ExpenseService, useValue: mockExpenseService },
+        { provide: EventEmitter2, useValue: events },
       ],
     }).compile();
 
@@ -69,7 +104,7 @@ describe('BillingService', () => {
 
   describe('createDraftFromEncounter', () => {
     it('returns existing invoice if already created (idempotent)', async () => {
-      (prisma.invoice.findUnique as jest.Mock).mockResolvedValue(validInvoice());
+      (prisma.invoice.findFirst as jest.Mock).mockResolvedValue(validInvoice());
       const result = await service.createDraftFromEncounter('enc-1', [
         { treatmentId: 'tr-1', procedure: 'D1110', description: 'Cleaning', unitPrice: 500_000 },
       ]);
@@ -77,7 +112,7 @@ describe('BillingService', () => {
     });
 
     it('creates new draft invoice with line items', async () => {
-      (prisma.invoice.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.invoice.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ patientId: 'patient-1', dentistId: 'dentist-1' }),
       );
@@ -93,7 +128,7 @@ describe('BillingService', () => {
     });
 
     it('bills quantity × unit price per treatment line', async () => {
-      (prisma.invoice.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.invoice.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
         validEncounter({ patientId: 'patient-1', dentistId: 'dentist-1' }),
       );
@@ -316,7 +351,7 @@ describe('BillingService', () => {
           { version: 3, discountType: 'AMOUNT', discountValue: 50_000 } as any,
           adminActor,
         ),
-      ).rejects.toThrow(/version/i);
+      ).rejects.toThrow(InvoiceVersionMismatchException);
     });
 
     it('rejects percent > 100', async () => {

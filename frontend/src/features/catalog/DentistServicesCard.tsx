@@ -3,8 +3,9 @@ import { Plus } from 'lucide-react';
 import { Badge, Button, Card, DatePicker, Input, Modal, Select } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { useAuthStore } from '@/stores/authStore';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { clinicToday } from '@/lib/clinicTime';
+import { getApiErrorCode, getApiErrorDetails } from '@/lib/errors';
 import {
   catalogApi,
   catalogErrorMessage,
@@ -13,6 +14,11 @@ import {
   useDentistServices,
 } from './catalogApi';
 import type { DentistServiceAssignment } from './types';
+
+interface UpcomingVisits {
+  count: number;
+  appointments: { id: string; startAt: string; patientName: string; patientCode: string }[];
+}
 
 /** "YYYY-MM-DD" plus n days. */
 const addDays = (date: string, n: number) =>
@@ -38,7 +44,12 @@ export function DentistServicesCard({
   const tomorrow = addDays(today, 1);
   const [form, setForm] = useState({ serviceId: '', effectiveFrom: today, durationMin: '', price: '' });
   // Ending: pick the last day. Changing terms: from which day, and the new values.
-  const [ending, setEnding] = useState<{ row: DentistServiceAssignment; effectiveTo: string } | null>(null);
+  const [ending, setEnding] = useState<{
+    row: DentistServiceAssignment;
+    effectiveTo: string;
+    /** Visits still booked after the end (A2-13): shown, then confirmed. */
+    booked?: UpcomingVisits;
+  } | null>(null);
   const [changing, setChanging] = useState<{
     row: DentistServiceAssignment;
     effectiveFrom: string;
@@ -54,8 +65,8 @@ export function DentistServicesCard({
       ...(form.price ? { price: Number(form.price) } : {}),
     }),
   );
-  const end = useCatalogMutation((v: { id: string; effectiveTo?: string }) =>
-    catalogApi.endAssignment(dentistId, v.id, v.effectiveTo),
+  const end = useCatalogMutation((v: { id: string; effectiveTo?: string; confirm?: boolean }) =>
+    catalogApi.endAssignment(dentistId, v.id, v.effectiveTo, v.confirm),
   );
   const change = useCatalogMutation(
     (v: { id: string; effectiveFrom: string; durationMin: number | null; price: number | null }) =>
@@ -270,8 +281,8 @@ export function DentistServicesCard({
                     // Booked visits froze their price and length at booking.
                     if (res.affectedAppointments > 0)
                       notify.warning(
-                        `${res.affectedAppointments} lịch hẹn đã đặt từ ngày này vẫn giữ giá và thời lượng lúc đặt; ` +
-                          'kiểm tra lại nếu cần áp dụng mức mới.',
+                        `${res.affectedAppointments} lịch hẹn đã đặt từ ngày này vẫn giữ giá và thời lượng lúc đặt ` +
+                          '(hệ thống không đổi dịch vụ hay giá của lịch đã đặt). Muốn áp mức mới cho một lịch thì hủy và đặt lại lịch đó.',
                       );
                     setChanging(null);
                   },
@@ -341,7 +352,7 @@ export function DentistServicesCard({
             onSubmit={(e) => {
               e.preventDefault();
               end.mutate(
-                { id: ending.row.id, effectiveTo: ending.effectiveTo },
+                { id: ending.row.id, effectiveTo: ending.effectiveTo, confirm: !!ending.booked },
                 {
                   onSuccess: (res) => {
                     notify.success(
@@ -349,9 +360,22 @@ export function DentistServicesCard({
                         ? 'Đã hủy phân công chưa bắt đầu'
                         : `Phân công kết thúc ngày ${formatDate(ending.effectiveTo)}`,
                     );
+                    if (res.affectedAppointments > 0)
+                      notify.warning(
+                        `Còn ${res.affectedAppointments} lịch hẹn đã đặt với dịch vụ này; lễ tân cần dời lịch, đổi bác sĩ hoặc báo khách.`,
+                      );
                     setEnding(null);
                   },
-                  onError: (err) => notify.error(catalogErrorMessage(err, 'Không ngừng được phân công')),
+                  onError: (err) => {
+                    if (getApiErrorCode(err) === 'ASSIGNMENT_HAS_UPCOMING_VISITS') {
+                      const booked = getApiErrorDetails<UpcomingVisits>(err);
+                      if (booked) {
+                        setEnding({ ...ending, booked });
+                        return;
+                      }
+                    }
+                    notify.error(catalogErrorMessage(err, 'Không ngừng được phân công'));
+                  },
                 },
               );
             }}
@@ -367,15 +391,35 @@ export function DentistServicesCard({
                 min={today}
                 hint="Để đổi giá hoặc thời lượng, dùng “Đổi giá/thời lượng” thay vì ngừng rồi phân công lại"
                 value={ending.effectiveTo}
-                onChange={(value) => setEnding({ ...ending, effectiveTo: value })}
+                onChange={(value) => setEnding({ ...ending, effectiveTo: value, booked: undefined })}
               />
+            )}
+            {ending.booked && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                <p className="font-medium">
+                  Còn {ending.booked.count} lịch hẹn đã đặt với dịch vụ này sau ngày kết thúc:
+                </p>
+                <ul className="mt-1 list-disc pl-5">
+                  {ending.booked.appointments.map((a) => (
+                    <li key={a.id}>
+                      {formatDateTime(a.startAt)} — {a.patientName} ({a.patientCode})
+                    </li>
+                  ))}
+                  {ending.booked.count > ending.booked.appointments.length && (
+                    <li>… và {ending.booked.count - ending.booked.appointments.length} lịch khác</li>
+                  )}
+                </ul>
+                <p className="mt-1">
+                  Nên dời lịch hoặc đổi bác sĩ cho các lịch này trước. Nếu vẫn ngừng, lễ tân cần xử lý từng lịch.
+                </p>
+              </div>
             )}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEnding(null)}>
                 Hủy
               </Button>
               <Button type="submit" variant="danger" isLoading={end.isPending}>
-                Ngừng phân công
+                {ending.booked ? 'Vẫn ngừng phân công' : 'Ngừng phân công'}
               </Button>
             </div>
           </form>
