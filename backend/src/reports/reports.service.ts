@@ -8,7 +8,6 @@ import { clinicDateOnly, endOfClinicDay, startOfClinicDay } from '../common/date
 import {
   REVENUE_INVOICE_STATUSES,
   collectedPaymentWhere,
-  revenueInvoiceSql,
   revenueInvoiceWhere,
   revenueRefundWhere,
   revenueRowsSql,
