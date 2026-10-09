@@ -5,7 +5,7 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Loading';
-import { getApiErrorMessage } from '@/lib/errors';
+import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
 import {
   useBookableServices,
@@ -26,10 +26,12 @@ interface WalkInModalProps {
 const DURATION_OPTIONS = ['15', '30', '45', '60', '90'].map((v) => ({ value: v, label: `${v} phút` }));
 
 /**
- * BR-APPT-032: a patient walks in without a booking. The visit starts now
- * and is checked in at once, so the dentist must be working, free and not on
- * leave right now — the backend refuses otherwise and the message says why.
- * A patient without a record is created from the booking form first.
+ * BR-APPT-032: a patient walks in without a booking. The visit is checked in
+ * at once and joins the dentist's queue: the dentist must be working and not
+ * on leave right now, but may be busy (A3-02). Running past the end of hours
+ * needs an explicit overtime reason; a patient with a booking to come is
+ * asked about first (A3-08). A patient without a record is created from the
+ * booking form first.
  */
 export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
   const [patient, setPatient] = useState<PatientMini | null>(null);
@@ -40,6 +42,10 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
   const [duration, setDuration] = useState('30');
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Asked by the backend: past the end of hours / the patient has a booking.
+  const [overtimeAsked, setOvertimeAsked] = useState(false);
+  const [overtimeReason, setOvertimeReason] = useState('');
+  const [bookingAsked, setBookingAsked] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300);
@@ -55,7 +61,17 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
     setDuration('30');
     setChiefComplaint('');
     setError(null);
+    setOvertimeAsked(false);
+    setOvertimeReason('');
+    setBookingAsked(false);
   }, [open]);
+
+  // The questions were about this patient and this dentist.
+  useEffect(() => setBookingAsked(false), [patient]);
+  useEffect(() => {
+    setOvertimeAsked(false);
+    setOvertimeReason('');
+  }, [dentistId]);
 
   const today = clinicToday();
   const { data: results = [], isFetching } = usePatientSearch(patient ? '' : debounced);
@@ -69,10 +85,13 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
   const chosen = services.filter((sv) => serviceIds.includes(sv.serviceId));
   const total = chosen.reduce((sum, sv) => sum + sv.durationMin, 0);
 
-  const submit = async () => {
+  const submit = async (ignoreUpcomingBookings = false) => {
     setError(null);
     if (!patient) return setError('Vui lòng chọn bệnh nhân.');
     if (!dentistId) return setError('Vui lòng chọn bác sĩ.');
+    if (overtimeAsked && overtimeReason.trim().length < 5) {
+      return setError('Nhập lý do khám ngoài giờ (ít nhất 5 ký tự).');
+    }
     try {
       const created = await create.mutateAsync({
         patientId: patient.id,
@@ -80,11 +99,16 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
         serviceIds: serviceIds.filter((id) => services.some((sv) => sv.serviceId === id)),
         durationMin: Number(duration),
         chiefComplaint,
+        overtimeReason: overtimeAsked ? overtimeReason : undefined,
+        ignoreUpcomingBookings,
       });
       notify.success(`Đã tiếp nhận ${patient.fullName} — đang chờ khám`);
       onClose();
       onCreated?.(created.id);
     } catch (err) {
+      const code = getApiErrorCode(err);
+      if (code === 'OVERTIME_CONFIRM_REQUIRED') setOvertimeAsked(true);
+      setBookingAsked(code === 'PATIENT_HAS_BOOKING');
       setError(getApiErrorMessage(err, 'Không thể tiếp nhận khách vãng lai'));
     }
   };
@@ -95,15 +119,21 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
       onClose={onClose}
       size="md"
       title="Tiếp nhận khách vãng lai"
-      description="Khám ngay, không đặt trước: lịch hẹn bắt đầu từ bây giờ và được check-in luôn."
+      description="Không đặt trước: bệnh nhân được check-in luôn và vào hàng chờ của bác sĩ (bác sĩ có thể đang khám người khác)."
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={create.isPending}>
             Hủy
           </Button>
-          <Button onClick={submit} isLoading={create.isPending}>
-            Tiếp nhận
-          </Button>
+          {bookingAsked ? (
+            <Button onClick={() => void submit(true)} isLoading={create.isPending}>
+              Vẫn tiếp nhận vãng lai
+            </Button>
+          ) : (
+            <Button onClick={() => void submit()} isLoading={create.isPending}>
+              Tiếp nhận
+            </Button>
+          )}
         </>
       }
     >
@@ -223,6 +253,15 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             options={DURATION_OPTIONS}
+          />
+        )}
+
+        {overtimeAsked && (
+          <Input
+            label="Lý do khám ngoài giờ *"
+            value={overtimeReason}
+            onChange={(e) => setOvertimeReason(e.target.value)}
+            placeholder="VD: Bác sĩ đồng ý ở lại khám ca đau cấp"
           />
         )}
 

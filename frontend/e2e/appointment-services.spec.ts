@@ -45,6 +45,11 @@ test('a walk-in is checked in at once and can leave before the exam', async ({ p
   await dialog.getByLabel('Bác sĩ *').selectOption({ label: 'BS. Phạm Thị Dung' });
   await dialog.getByLabel(/Khám tổng quát/).check();
   await dialog.getByRole('button', { name: 'Tiếp nhận' }).click();
+  // A3-08: a patient with a booking to come is asked about first.
+  await dialog
+    .getByRole('button', { name: 'Vẫn tiếp nhận vãng lai' })
+    .click({ timeout: 3_000 })
+    .catch(() => undefined);
   await expect(dialog).toBeHidden();
 
   // The new visit's drawer opens: checked in, with its service.

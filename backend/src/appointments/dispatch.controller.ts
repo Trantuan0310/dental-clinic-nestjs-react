@@ -55,6 +55,14 @@ export class DispatchController {
     return { data: await this.dispatch.call(id, actor) };
   }
 
+  @Post(':id/uncall')
+  @RequirePermissions('queue.call')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Called by mistake: back to waiting in the same place (A3-15)' })
+  async uncall(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.dispatch.uncall(id, actor) };
+  }
+
   @Post(':id/skip')
   @RequirePermissions('queue.call')
   @HttpCode(HttpStatus.OK)
@@ -77,6 +85,18 @@ export class DispatchController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.dispatch.markEmergency(id, dto.reason, actor) };
+  }
+
+  @Post(':id/clear-emergency')
+  @RequirePermissions('queue.manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Undo an emergency marked by mistake (A3-15)' })
+  async clearEmergency(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: QueueEmergencyDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.dispatch.clearEmergency(id, dto.reason, actor) };
   }
 
   @Post(':id/transfer')

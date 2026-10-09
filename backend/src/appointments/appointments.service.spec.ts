@@ -809,6 +809,21 @@ describe('AppointmentsService', () => {
       expect(result.encounter.id).toBe('encounter-1');
       expect(prisma.appointment.update).toHaveBeenCalledTimes(1);
       expect(prisma.encounter.create).toHaveBeenCalledTimes(1);
+      // A3-15: the queue entry closes as DONE and anyone else called for
+      // this dentist that day waits again.
+      expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
+        where: { appointmentId: 'appt-1', doneAt: null },
+        data: expect.objectContaining({ closeReason: 'STARTED', status: 'DONE' }),
+      });
+      expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          dentistId: 'dentist-self',
+          status: 'CALLED',
+          doneAt: null,
+          NOT: { appointmentId: 'appt-1' },
+        }),
+        data: { status: 'WAITING', updatedBy: dentistActor.sub },
+      });
       // BR-APPT-034: the start is in the visit's history, in the same transaction.
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1723,7 +1738,8 @@ describe('AppointmentsService', () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue({ id: 'appt-other-dentist' });
 
       await expect(service.create(dto, actor)).rejects.toThrow(/Bệnh nhân đã có lịch hẹn khác/);
-      const patientWhere = (prisma.appointment.findFirst as jest.Mock).mock.calls[0][0].where;
+      // calls[0] is the same-visit lookup (A5-15); the overlap check comes next.
+      const patientWhere = (prisma.appointment.findFirst as jest.Mock).mock.calls.at(-1)![0].where;
       expect(patientWhere).toEqual(
         expect.objectContaining({
           patientId: 'patient-1',
@@ -1732,6 +1748,40 @@ describe('AppointmentsService', () => {
         }),
       );
       expect(prisma.appointment.create).not.toHaveBeenCalled();
+    });
+
+    // A5-15: the same booking sent twice.
+    it('answers a repeat of the same booking with the first one, and an older one by name', async () => {
+      const same = {
+        id: 'appt-first',
+        patientId: 'patient-1',
+        dentistId: dto.dentistId,
+        startAt: new Date(dto.startAt),
+        endAt: new Date('2027-03-15T02:30:00Z'),
+        services: [],
+        createdBy: actor.sub,
+        createdAt: new Date(),
+      };
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce(same);
+      await expect(service.create(dto, actor)).resolves.toMatchObject({ id: 'appt-first' });
+      expect(prisma.appointment.create).not.toHaveBeenCalled();
+
+      // Another request (different services) is not a repeat.
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce({
+        ...same,
+        services: [{ serviceId: 'svc-x' }],
+      });
+      await expect(service.create(dto, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'ALREADY_BOOKED' }),
+      });
+
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce({
+        ...same,
+        createdAt: new Date(Date.now() - 86400000),
+      });
+      await expect(service.create(dto, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'ALREADY_BOOKED' }),
+      });
     });
 
     it('lets a dentist book a follow-up only on their own calendar, for a patient they treated', async () => {
@@ -3391,6 +3441,393 @@ describe('AppointmentsService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('day-of-visit operations (round 4, FA)', () => {
+    // 10:00 clinic time on 2026-09-30.
+    const NOW = new Date('2026-09-30T03:00:00Z');
+    const at = (hhmm: string, day = '2026-09-30') => new Date(`${day}T${hhmm}:00+07:00`);
+    const hours = (start: string, end: string) => [
+      {
+        startTime: new Date(`1970-01-01T${start}:00Z`),
+        endTime: new Date(`1970-01-01T${end}:00Z`),
+      },
+    ];
+    const setNow = (d: Date) =>
+      jest.useFakeTimers({ now: d, doNotFake: ['nextTick', 'setImmediate'] });
+    /** appointment.findMany by caller: the patient's bookings, the start-minute probe, the day. */
+    const findMany = (o: { patient?: unknown[]; taken?: unknown[]; day?: unknown[] }) =>
+      (prisma.appointment.findMany as jest.Mock).mockImplementation(async ({ where }: any) => {
+        if (where.patientId) return o.patient ?? [];
+        if (where.startAt?.gte) return o.taken ?? [];
+        return o.day ?? [];
+      });
+    const walkIn = (over: Record<string, unknown> = {}) =>
+      service.createWalkIn(
+        { dentistId: 'dentist-1', patientId: 'patient-1', durationMin: 30, ...over } as any,
+        actor,
+      );
+    // Domain exceptions carry `code`, BusinessRuleException `error` (the filter reads both).
+    const errorCode = (e: { getResponse(): unknown }) => {
+      const r = e.getResponse() as { code?: string; error?: string };
+      return r.code ?? r.error;
+    };
+
+    beforeEach(() => {
+      setNow(NOW);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        id: 'dentist-1',
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+      });
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue({
+        id: 'patient-1',
+        deletedAt: null,
+      });
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue(hours('08:00', '17:00'));
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.appointment.create as jest.Mock).mockImplementation(async ({ data }: any) => ({
+        id: 'appt-new',
+        ...data,
+      }));
+      findMany({});
+    });
+    afterEach(() => jest.useRealTimers());
+
+    describe('walk-in joins the queue (A3-02)', () => {
+      it('is taken while the dentist is busy with a booking', async () => {
+        findMany({ day: [{ id: 'busy', startAt: at('09:45'), endAt: at('10:30') }] });
+        await walkIn();
+        const data = (prisma.appointment.create as jest.Mock).mock.calls[0][0].data;
+        expect(data.startAt).toEqual(at('10:00'));
+        expect(data.status).toBe(AppointmentStatus.CHECKED_IN);
+      });
+
+      it('moves to the next free minute when another visit starts this minute (mother and child)', async () => {
+        findMany({ taken: [{ startAt: at('10:00') }, { startAt: at('10:01') }] });
+        await walkIn();
+        expect((prisma.appointment.create as jest.Mock).mock.calls[0][0].data.startAt).toEqual(
+          at('10:02'),
+        );
+      });
+
+      it('past the end of hours needs an explicit overtime reason', async () => {
+        (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue(hours('08:00', '10:15'));
+        const err = await walkIn().catch(e => e);
+        expect(errorCode(err)).toBe('OVERTIME_CONFIRM_REQUIRED');
+        expect(prisma.appointment.create).not.toHaveBeenCalled();
+
+        await walkIn({ overtimeReason: 'BS đồng ý khám quá giờ' });
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'APPOINTMENT_WALK_IN',
+            metadata: expect.objectContaining({ overtime: true }),
+          }),
+        );
+      });
+
+      it('is refused outright when the dentist is not working now', async () => {
+        (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue(hours('13:00', '17:00'));
+        const err = await walkIn({ overtimeReason: 'BS đồng ý khám quá giờ' }).catch(e => e);
+        expect(errorCode(err)).toBe('OUTSIDE_WORKING_HOURS');
+      });
+
+      // A3-08
+      it('asks first when the patient has a booking to come', async () => {
+        findMany({
+          patient: [{ id: 'b1', startAt: at('09:00', '2026-10-02'), dentist: { fullName: 'An' } }],
+        });
+        const err = await walkIn().catch(e => e);
+        expect(errorCode(err)).toBe('PATIENT_HAS_BOOKING');
+        expect(err.message).toContain('ngày 02/10/2026');
+
+        await walkIn({ ignoreUpcomingBookings: true });
+        expect(prisma.appointment.create).toHaveBeenCalled();
+      });
+
+      // A3-21
+      it('a repeat of the same walk-in gets the first one; another visit in the clinic is refused', async () => {
+        const first = {
+          id: 'appt-first',
+          visitKind: 'WALK_IN',
+          dentistId: 'dentist-1',
+          status: AppointmentStatus.CHECKED_IN,
+          startAt: at('09:59'),
+          createdAt: new Date(NOW.getTime() - 30_000),
+          dentist: { fullName: 'An' },
+          services: [],
+        };
+        (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce(first);
+        const res = await walkIn();
+        expect(res.id).toBe('appt-first');
+        expect(prisma.appointment.create).not.toHaveBeenCalled();
+
+        (prisma.appointment.findFirst as jest.Mock).mockResolvedValueOnce({
+          ...first,
+          visitKind: 'BOOKED',
+        });
+        const err = await walkIn().catch(e => e);
+        expect(errorCode(err)).toBe('PATIENT_ALREADY_IN_CLINIC');
+      });
+    });
+
+    describe('check-in and its undos', () => {
+      const visit = (over: Record<string, unknown> = {}) => ({
+        id: 'appt-1',
+        status: AppointmentStatus.SCHEDULED,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        visitKind: 'BOOKED',
+        rescheduleCount: 0,
+        confirmedAt: null,
+        checkedInAt: null,
+        deletedAt: null,
+        startAt: at('11:00'),
+        endAt: at('11:30'),
+        ...over,
+      });
+
+      // A3-07
+      it('checks in early the same day with a reason, keeping the booked time', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(visit());
+        const err = await service.checkIn('appt-1', false, undefined, actor).catch(e => e);
+        expect(err.getResponse()).toEqual(
+          expect.objectContaining({
+            code: 'CHECK_IN_WINDOW',
+            details: { actions: [expect.objectContaining({ code: 'early_check_in' })] },
+          }),
+        );
+
+        (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+        (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+          visit({ status: AppointmentStatus.CHECKED_IN }),
+        );
+        await service.checkIn('appt-1', true, 'BS đang rảnh, khám sớm', actor);
+        const write = (prisma.appointment.updateMany as jest.Mock).mock.calls[0][0];
+        expect(write.data).not.toHaveProperty('startAt');
+        expect(prisma.queueEntry.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({ create: expect.objectContaining({ priority: 'ON_TIME' }) }),
+        );
+      });
+
+      // A3-08: the message names the day as dd/mm/yyyy.
+      it('a booking of another day cannot be checked in early', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(
+          visit({ startAt: at('09:00', '2026-10-02'), endAt: at('09:30', '2026-10-02') }),
+        );
+        await expect(service.checkIn('appt-1', true, 'Khách đến nhầm ngày', actor)).rejects.toThrow(
+          /ngày 02\/10\/2026, chưa phải hôm nay/,
+        );
+      });
+
+      // A3-03: cancelled with nothing recorded, the encounter does not hold the visit.
+      it('undoes a check-in whose exam was started by mistake and cancelled empty', async () => {
+        const appt = visit({ status: AppointmentStatus.CHECKED_IN, checkedInAt: at('09:50') });
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(appt);
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+          id: 'enc-1',
+          status: 'CANCELLED',
+          _count: { treatments: 0 },
+          prescription: null,
+        });
+        (prisma.queueEntry.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+        (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue(appt);
+
+        await service.undoCheckIn('appt-1', { reason: 'Check-in nhầm bệnh nhân' }, actor);
+        expect(prisma.appointment.updateMany).toHaveBeenCalled();
+
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+          id: 'enc-1',
+          status: 'CANCELLED',
+          _count: { treatments: 1 },
+          prescription: null,
+        });
+        await expect(
+          service.undoCheckIn('appt-1', { reason: 'Check-in nhầm bệnh nhân' }, actor),
+        ).rejects.toThrow(/Lượt khám đã từng được mở/);
+      });
+
+      // A3-19
+      it('refuses to undo the check-in of a transferred patient', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(
+          visit({ status: AppointmentStatus.CHECKED_IN, checkedInAt: at('09:50') }),
+        );
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.queueEntry.findFirst as jest.Mock).mockResolvedValue({ id: 'q-1' });
+        await expect(
+          service.undoCheckIn('appt-1', { reason: 'Check-in nhầm bệnh nhân' }, actor),
+        ).rejects.toThrow(/đã được chuyển sang bác sĩ khác/);
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    // A3-04 / A5-16
+    describe('undoLeft', () => {
+      const left = (over: Record<string, unknown> = {}) => ({
+        id: 'appt-1',
+        status: AppointmentStatus.LEFT,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        visitKind: 'BOOKED',
+        rescheduleCount: 0,
+        deletedAt: null,
+        startAt: at('09:30'),
+        endAt: at('10:00'),
+        checkedInAt: at('09:20'),
+        leftAt: at('09:55'),
+        leftReason: 'Chờ lâu, xin về',
+        ...over,
+      });
+
+      beforeEach(() => {
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.appointment.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      });
+
+      it('puts the patient back in line with the first check-in time', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(left());
+        (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+          left({ status: AppointmentStatus.CHECKED_IN }),
+        );
+        (prisma.queueEntry.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+        await service.undoLeft('appt-1', { reason: 'Bấm nhầm "Đã về"' }, actor);
+
+        expect(prisma.appointment.updateMany).toHaveBeenCalledWith({
+          where: expect.objectContaining({ id: 'appt-1', status: AppointmentStatus.LEFT }),
+          data: expect.objectContaining({
+            status: AppointmentStatus.CHECKED_IN,
+            leftAt: null,
+            leftReason: null,
+          }),
+        });
+        expect(prisma.queueEntry.updateMany).toHaveBeenCalledWith({
+          where: {
+            appointmentId: 'appt-1',
+            closeReason: 'LEFT',
+            queueDate: new Date('2026-09-30'),
+          },
+          data: expect.objectContaining({ status: 'WAITING', doneAt: null }),
+        });
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'APPOINTMENT_LEFT_UNDONE' }),
+          prisma,
+        );
+      });
+
+      it('opens a new entry with the old check-in time when none is left to reopen', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(left());
+        (prisma.appointment.findUniqueOrThrow as jest.Mock).mockResolvedValue(
+          left({ status: AppointmentStatus.CHECKED_IN }),
+        );
+        (prisma.queueEntry.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+        await service.undoLeft('appt-1', { reason: 'Bấm nhầm "Đã về"' }, actor);
+        expect(prisma.queueEntry.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({ checkedInAt: at('09:20'), priority: 'ON_TIME' }),
+          }),
+        );
+      });
+
+      it('refuses another day, a visit with an exam and a patient already back on another visit', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(
+          left({ leftAt: at('16:00', '2026-09-29'), startAt: at('15:00', '2026-09-29') }),
+        );
+        await expect(
+          service.undoLeft('appt-1', { reason: 'Bấm nhầm "Đã về"' }, actor),
+        ).rejects.toThrow(/trong ngày hẹn/);
+
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(left());
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({ status: 'COMPLETED' });
+        await expect(
+          service.undoLeft('appt-1', { reason: 'Bấm nhầm "Đã về"' }, actor),
+        ).rejects.toThrow(/đã có phiên khám/);
+
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.appointment.findFirst as jest.Mock).mockResolvedValue({ id: 'walk-in' });
+        await expect(
+          service.undoLeft('appt-1', { reason: 'Bấm nhầm "Đã về"' }, actor),
+        ).rejects.toThrow(/đang có lượt khác/);
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('markLeft sent twice answers with the first result (A3-21)', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(
+          left({ leftAt: new Date(NOW.getTime() - 20_000) }),
+        );
+        const res = await service.markLeft('appt-1', { reason: 'Chờ lâu, xin về' }, actor);
+        expect(res.status).toBe(AppointmentStatus.LEFT);
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
+    });
+
+    // A3-12 / A5-07
+    describe('reschedule guard', () => {
+      const booked = {
+        id: 'appt-1',
+        status: AppointmentStatus.CONFIRMED,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        rescheduleCount: 2,
+        deletedAt: null,
+        startAt: at('09:00', '2026-10-07'),
+        endAt: at('10:00', '2026-10-07'),
+        updatedAt: at('08:00'),
+        services: [],
+      };
+
+      beforeEach(() => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue(booked);
+      });
+
+      it('the same time and dentist again changes nothing and costs no reschedule', async () => {
+        const res = await service.reschedule(
+          'appt-1',
+          {
+            newStartsAt: booked.startAt.toISOString(),
+            newEndsAt: booked.endAt.toISOString(),
+          } as any,
+          actor,
+        );
+        expect(res.status).toBe(AppointmentStatus.CONFIRMED);
+        expect(res.rescheduleCount).toBe(2);
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+        expect(events.emit).not.toHaveBeenCalled();
+      });
+
+      it('the same time on a visit that may not move is still refused', async () => {
+        (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+          ...booked,
+          status: AppointmentStatus.CANCELLED,
+        });
+        await expect(
+          service.reschedule(
+            'appt-1',
+            {
+              newStartsAt: booked.startAt.toISOString(),
+              newEndsAt: booked.endAt.toISOString(),
+            } as any,
+            actor,
+          ),
+        ).rejects.toThrow(/Không thể đổi lịch hẹn/);
+      });
+
+      it('a client that saw an older version is told to reload', async () => {
+        await expect(
+          service.reschedule(
+            'appt-1',
+            {
+              newStartsAt: at('14:00', '2026-10-07').toISOString(),
+              newEndsAt: at('15:00', '2026-10-07').toISOString(),
+              rescheduleCount: 1,
+            } as any,
+            actor,
+          ),
+        ).rejects.toThrow('Lịch vừa được thay đổi, vui lòng tải lại');
+        expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+      });
     });
   });
 });

@@ -1,6 +1,7 @@
-import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsCalendarDate } from '../../common/validators/is-calendar-date';
+import { ReasonText } from '../../common/validators/reason-text';
 
 export class QueueListQueryDto {
   @ApiPropertyOptional()
@@ -16,17 +17,13 @@ export class QueueListQueryDto {
 
 export class QueueSkipDto {
   @ApiProperty({ example: 'Gọi 2 lần không thấy' })
-  @IsString()
-  @MinLength(3)
-  @MaxLength(300)
+  @ReasonText(3, 300)
   reason!: string;
 }
 
 export class QueueEmergencyDto {
   @ApiProperty({ example: 'Sưng mặt, sốt cao' })
-  @IsString()
-  @MinLength(5)
-  @MaxLength(300)
+  @ReasonText(5, 300)
   reason!: string;
 }
 
@@ -36,10 +33,15 @@ export class QueueTransferDto {
   dentistId!: string;
 
   @ApiProperty({ example: 'BS An quá tải, BS Bình đang trống' })
-  @IsString()
-  @MinLength(5)
-  @MaxLength(300)
+  @ReasonText(5, 300)
   reason!: string;
+
+  @ApiPropertyOptional({
+    description: "Confirms the visit may run past the new dentist's hours (A3-02c)",
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowOvertime?: boolean;
 }
 
 export class ReassignDayDto {
@@ -56,8 +58,6 @@ export class ReassignDayDto {
   date!: string;
 
   @ApiProperty({ example: 'BS An nghỉ ốm' })
-  @IsString()
-  @MinLength(5)
-  @MaxLength(300)
+  @ReasonText(5, 300)
   reason!: string;
 }

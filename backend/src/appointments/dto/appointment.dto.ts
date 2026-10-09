@@ -31,6 +31,7 @@ import {
 import { IsCalendarDate } from '../../common/validators/is-calendar-date';
 import { IsClinicTime } from '../../common/validators/is-clinic-time';
 import { IsAppointmentInstant, MAX_VISIT_MINUTES } from './is-appointment-instant';
+import { ReasonText } from '../../common/validators/reason-text';
 
 export class CreateAppointmentDto {
   @ApiProperty()
@@ -134,23 +135,33 @@ export class CreateWalkInDto {
   @IsOptional()
   @IsEnum(AppointmentType)
   appointmentType?: AppointmentType;
+
+  @ApiPropertyOptional({
+    description: "Confirms a visit running past the end of the dentist's hours (A3-02)",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  overtimeReason?: string;
+
+  @ApiPropertyOptional({
+    description: 'The patient has a booking to come and this is another visit (A3-08)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  ignoreUpcomingBookings?: boolean;
 }
 
 export class MarkLeftDto {
   @ApiProperty()
-  @IsString()
-  @MinLength(5)
-  @MaxLength(500)
+  @ReasonText(5, 500)
   reason!: string;
 }
 
-/** Undo of a check-in or a no-show: the reason is kept in the history. */
+/** Undo of a check-in, a no-show or a LEFT: the reason is kept in the history. */
 export class StatusReasonDto {
   @ApiProperty({ description: 'Why the status is undone (≥ 5 characters)' })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString({ message: 'Vui lòng nhập lý do' })
-  @MinLength(5, { message: 'Lý do cần ít nhất 5 ký tự' })
-  @MaxLength(500, { message: 'Lý do tối đa 500 ký tự' })
+  @ReasonText(5, 500)
   reason!: string;
 }
 
@@ -243,6 +254,19 @@ export class RescheduleAppointmentDto {
   @IsString()
   @MaxLength(500)
   durationOverrideReason?: string;
+
+  // Optimistic guard as on cancel (A3-12): a visit moved since the client
+  // read it is a 409, not moved again; older clients sending neither skip it.
+  @ApiPropertyOptional({ description: 'rescheduleCount the client last saw' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  rescheduleCount?: number;
+
+  @ApiPropertyOptional({ description: 'updatedAt the client last saw (ISO)' })
+  @IsOptional()
+  @IsCalendarDate()
+  updatedAt?: string;
 }
 
 export class ListAppointmentsQueryDto {

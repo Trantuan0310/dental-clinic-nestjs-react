@@ -18,32 +18,80 @@ describe('priority at check-in', () => {
 });
 
 describe('dispatch order', () => {
+  /** `bookedMin`/`checkedInMin` are minutes after 09:00. */
   const e = (
     name: string,
     priority: QueuePriority,
     checkedInMin: number,
     status: QueueStatus = 'WAITING',
-  ) => ({ name, priority, status, checkedInAt: plus(checkedInMin) });
+    bookedMin = checkedInMin,
+  ) => ({
+    name,
+    priority,
+    status,
+    checkedInAt: plus(checkedInMin),
+    appointment: { startAt: plus(bookedMin) },
+  });
   const order = (rows: Array<Orderable & { name: string }>) =>
     [...rows].sort(compareQueue).map(r => r.name);
 
-  it('emergency > on time > late > walk-in, whatever the check-in time', () => {
+  it('an emergency goes first whatever the check-in time', () => {
     expect(
       order([
         e('walk-in', 'WALK_IN', 0),
-        e('late', 'LATE', 1),
         e('on-time', 'ON_TIME', 2),
-        e('emergency', 'EMERGENCY', 3),
+        e('emergency', 'EMERGENCY', 30),
       ]),
-    ).toEqual(['emergency', 'on-time', 'late', 'walk-in']);
+    ).toEqual(['emergency', 'on-time', 'walk-in']);
   });
 
-  it('within a class, earlier check-in goes first', () => {
-    expect(order([e('b', 'ON_TIME', 5), e('a', 'ON_TIME', 1), e('c', 'ON_TIME', 9)])).toEqual([
-      'a',
-      'b',
-      'c',
+  it('on-time patients go by their booked time, not by who came first', () => {
+    expect(
+      order([
+        e('booked 10:00, came 09:45', 'ON_TIME', 45, 'WAITING', 60),
+        e('booked 09:30, came 09:20', 'ON_TIME', 20, 'WAITING', 30),
+      ]),
+    ).toEqual(['booked 09:30, came 09:20', 'booked 10:00, came 09:45']);
+  });
+
+  // A3-09: the dentist runs an hour late; the line was built by check-ins.
+  it('a late patient waits behind the bookings around their arrival, not the whole day', () => {
+    expect(
+      order([
+        e('booked 09:30', 'ON_TIME', 20, 'WAITING', 30),
+        e('booked 10:00', 'ON_TIME', 50, 'WAITING', 60),
+        e('booked 10:30', 'ON_TIME', 80, 'WAITING', 90),
+        e('booked 09:00, came 09:16', 'LATE', 16, 'WAITING', 0),
+        e('walk-in 09:05', 'WALK_IN', 5),
+      ]),
+    ).toEqual([
+      'booked 09:30',
+      'booked 09:00, came 09:16',
+      'walk-in 09:05',
+      'booked 10:00',
+      'booked 10:30',
     ]);
+  });
+
+  it('an early check-in does not jump bookings made for earlier', () => {
+    expect(
+      order([
+        e('booked 11:00, came 09:00', 'ON_TIME', 0, 'WAITING', 120),
+        e('booked 09:30, came 09:25', 'ON_TIME', 25, 'WAITING', 30),
+      ]),
+    ).toEqual(['booked 09:30, came 09:25', 'booked 11:00, came 09:00']);
+  });
+
+  it('a walk-in is not kept behind later bookings forever', () => {
+    expect(
+      order([e('booked 11:00', 'ON_TIME', 110, 'WAITING', 120), e('walk-in 09:00', 'WALK_IN', 0)]),
+    ).toEqual(['walk-in 09:00', 'booked 11:00']);
+  });
+
+  it('the same due time: earlier check-in goes first', () => {
+    expect(order([e('b', 'ON_TIME', 5, 'WAITING', 0), e('a', 'ON_TIME', 1, 'WAITING', 0)])).toEqual(
+      ['a', 'b'],
+    );
   });
 
   it('the called patient is on top and skipped patients wait at the end', () => {

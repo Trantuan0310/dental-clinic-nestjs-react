@@ -155,6 +155,11 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     const queueCard = dentistPage.getByRole('list', { name: 'Hàng đợi' }).getByRole('listitem').filter({ hasText: testName });
     await expect(queueCard).toBeVisible({ timeout: 15_000 });
     await queueCard.getByRole('button', { name: /bắt đầu khám/i }).click();
+    // A3-03: starting an exam asks to confirm the patient first.
+    await dentistPage
+      .getByRole('dialog', { name: 'Bắt đầu khám?' })
+      .getByRole('button', { name: 'Bắt đầu khám', exact: true })
+      .click();
     await dentistPage.waitForURL(/\/encounters\/[a-zA-Z0-9-]+$/, { timeout: 15_000 });
 
     await dentistPage.getByRole('tab', { name: /điều trị/i }).click();

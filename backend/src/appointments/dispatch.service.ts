@@ -6,10 +6,14 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
-import { AppointmentsService, STALE_APPOINTMENT_MSG } from './appointments.service';
-import { LOCKING_TX_OPTIONS, lockDentistCalendar } from './domain/advisory-lock';
-import { compareQueue } from './domain/queue';
-import { AppointmentNotFoundException } from './domain/exceptions';
+import { AppointmentsService, STALE_APPOINTMENT_MSG, VisitPlan } from './appointments.service';
+import {
+  LOCKING_TX_OPTIONS,
+  lockDentistCalendar,
+  lockPatientCalendar,
+} from './domain/advisory-lock';
+import { compareQueue, priorityAtCheckIn } from './domain/queue';
+import { AppointmentNotFoundException, SlotConflictException } from './domain/exceptions';
 import {
   APPOINTMENT_RESCHEDULED_EVENT,
   AppointmentRescheduledEvent,
@@ -36,6 +40,24 @@ const ENTRY_INCLUDE = {
 } satisfies Prisma.QueueEntryInclude;
 
 type EntryRow = Prisma.QueueEntryGetPayload<{ include: typeof ENTRY_INCLUDE }>;
+type ApptWithServices = Prisma.AppointmentGetPayload<{ include: { services: true } }>;
+
+/** reassignDay also takes bookings started this long ago (the check-in window, A3-05). */
+const REASSIGN_GRACE_MIN = 30;
+
+/** A start minute taken meanwhile (idx_appointments_slot_active) is a 409, not a 500. */
+async function slotSafe<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new SlotConflictException(
+        'Giờ bắt đầu vừa được dùng cho lượt khác của bác sĩ nhận — thử chuyển lại',
+      );
+    }
+    throw e;
+  }
+}
 
 const queueError = (message: string, code: string, status = HttpStatus.CONFLICT) =>
   new BusinessRuleException(message, status, undefined, code);
@@ -176,6 +198,8 @@ export class DispatchService {
   /** BR-DSP-002: call a waiting (or previously skipped) patient in. */
   async call(id: string, actor: JwtPayload) {
     const entry = await this.openEntry(id, actor);
+    // Sent twice (A3-21): the patient is already being called.
+    if (entry.status === QueueStatus.CALLED) return entry;
     const updated = await this.guardedUpdate(id, [QueueStatus.WAITING, QueueStatus.SKIPPED], {
       status: QueueStatus.CALLED,
       calledAt: new Date(),
@@ -184,6 +208,21 @@ export class DispatchService {
       updatedBy: actor.sub,
     });
     await this.log('QUEUE_CALLED', actor, entry.appointmentId, { callCount: updated.callCount });
+    return updated;
+  }
+
+  /**
+   * A3-15: called by mistake — back to waiting in the same place, without
+   * the skip count or a reason a "skip" would need.
+   */
+  async uncall(id: string, actor: JwtPayload) {
+    const entry = await this.openEntry(id, actor);
+    if (entry.status === QueueStatus.WAITING) return entry;
+    const updated = await this.guardedUpdate(id, [QueueStatus.CALLED], {
+      status: QueueStatus.WAITING,
+      updatedBy: actor.sub,
+    });
+    await this.log('QUEUE_UNCALLED', actor, entry.appointmentId, {});
     return updated;
   }
 
@@ -218,16 +257,108 @@ export class DispatchService {
   }
 
   /**
-   * BR-DSP-005: move a waiting patient to another dentist. The visit keeps
-   * its length and buffers and starts now (or at its booked time if that is
-   * still ahead); the new dentist must perform its services and be free.
-   * The patient keeps their priority and check-in time.
+   * A3-15: an emergency marked by mistake goes back to the class the
+   * patient had from their check-in (on time, late or walk-in).
    */
-  async transfer(id: string, dto: { dentistId: string; reason: string }, actor: JwtPayload) {
+  async clearEmergency(id: string, reason: string, actor: JwtPayload) {
     const entry = await this.openEntry(id, actor);
-    if (entry.status === QueueStatus.CALLED) {
-      throw queueError('Bệnh nhân đang được gọi — bỏ qua trước khi chuyển bác sĩ', 'QUEUE_CALLED');
+    if (entry.priority !== QueuePriority.EMERGENCY) return entry;
+    // The class held before the flag, as recorded then: a transfer may have
+    // moved startAt since, so it is not recomputed from the visit.
+    const marked = await this.prisma.auditLog.findFirst({
+      where: {
+        action: 'QUEUE_EMERGENCY',
+        targetType: 'appointment',
+        targetId: entry.appointmentId,
+      },
+      orderBy: { occurredAt: 'desc' },
+      select: { metadata: true },
+    });
+    const recorded = (marked?.metadata as { previousPriority?: QueuePriority } | null)
+      ?.previousPriority;
+    let priority: QueuePriority;
+    if (recorded && recorded !== QueuePriority.EMERGENCY) {
+      priority = recorded;
+    } else {
+      const appt = await this.prisma.appointment.findUniqueOrThrow({
+        where: { id: entry.appointmentId },
+        select: { visitKind: true, startAt: true },
+      });
+      priority = priorityAtCheckIn(appt, entry.checkedInAt);
     }
+    const updated = await this.guardedUpdate(id, OPEN_STATUSES, {
+      priority,
+      emergencyReason: null,
+      updatedBy: actor.sub,
+    });
+    await this.log('QUEUE_EMERGENCY_CLEARED', actor, entry.appointmentId, {
+      reason: reason.trim(),
+      emergencyReason: entry.emergencyReason,
+      priority,
+    });
+    return updated;
+  }
+
+  /**
+   * The visit as the new dentist would do it (A5-05): their durations and
+   * the services' buffers, unless the length was set by hand (BR-APPT-031).
+   * Booked prices stay (ADR-0009 D6).
+   */
+  private async planFor(appt: ApptWithServices, dentistId: string, date: string) {
+    const current = Math.round((appt.endAt.getTime() - appt.startAt.getTime()) / 60_000);
+    if (!appt.services.length) return { plan: null, minutes: current };
+    const plan = await this.appointments.planVisit(
+      dentistId,
+      appt.services.map(s => s.serviceId),
+      date,
+      // A booked visit keeps a service withdrawn since, as on reschedule.
+      { activeServicesOnly: false },
+    );
+    return {
+      plan,
+      minutes: plan && !appt.durationOverrideReason ? plan.durationMin : current,
+    };
+  }
+
+  /** Writes the new dentist's plan onto the visit and its service rows. */
+  private async writePlan(
+    tx: Prisma.TransactionClient,
+    appointmentId: string,
+    plan: VisitPlan | null,
+  ): Promise<Prisma.AppointmentUpdateManyMutationInput> {
+    if (!plan) return {};
+    for (const sv of plan.services) {
+      await tx.appointmentService.updateMany({
+        where: { appointmentId, serviceId: sv.serviceId },
+        data: {
+          durationMin: sv.durationMin,
+          bufferBeforeMin: sv.bufferBeforeMin,
+          bufferAfterMin: sv.bufferAfterMin,
+        },
+      });
+    }
+    return {
+      calculatedDurationMin: plan.durationMin,
+      bufferBeforeMin: plan.bufferBeforeMin,
+      bufferAfterMin: plan.bufferAfterMin,
+    };
+  }
+
+  /**
+   * BR-DSP-005: move a waiting (or called) patient to another dentist. They
+   * join that dentist's queue (A3-01): the new dentist must perform the
+   * services and be on duty, but may be busy — the queue orders patients,
+   * so several patients can be handed over at once. The visit is set from
+   * now (or its booked time if still ahead) with the new dentist's length;
+   * past the end of their hours needs `allowOvertime`. The patient keeps
+   * their priority and check-in time.
+   */
+  async transfer(
+    id: string,
+    dto: { dentistId: string; reason: string; allowOvertime?: boolean },
+    actor: JwtPayload,
+  ) {
+    const entry = await this.openEntry(id, actor);
     if (entry.dentistId === dto.dentistId) {
       throw queueError(
         'Bệnh nhân đã ở hàng đợi của bác sĩ này',
@@ -241,41 +372,40 @@ export class DispatchService {
       include: { services: { orderBy: { sortOrder: 'asc' } } },
     });
     const nowMin = new Date(Math.floor(Date.now() / 60_000) * 60_000);
-    const start = appt.startAt > nowMin ? appt.startAt : nowMin;
-    const end = new Date(start.getTime() + (appt.endAt.getTime() - appt.startAt.getTime()));
-    if (appt.services.length) {
-      await this.appointments.planVisit(
-        dto.dentistId,
-        appt.services.map(s => s.serviceId),
-        clinicDateOnly(start),
-        // A booked visit keeps a service withdrawn since, as on reschedule.
-        { activeServicesOnly: false },
-      );
-    }
+    const from = appt.startAt > nowMin ? appt.startAt : nowMin;
+    const { plan, minutes } = await this.planFor(appt, dto.dentistId, clinicDateOnly(from));
     const reason = dto.reason.trim();
-    await this.prisma.$transaction(async tx => {
+    const moved = await this.prisma.$transaction(async tx => {
       await lockDentistCalendar(tx, dto.dentistId);
-      await this.appointments.ensureSlotAvailable(
-        dto.dentistId,
-        start,
-        end,
-        actor,
+      await lockPatientCalendar(tx, appt.patientId);
+      const slot = await this.appointments.queueSlot(tx, dto.dentistId, from, minutes, {
+        excludeAppointmentId: appt.id,
+        overtimeReason: dto.allowOvertime ? reason : null,
+        buffers: plan ?? appt,
+      });
+      await this.appointments.ensurePatientFree(
+        appt.patientId,
+        slot.startAt,
+        slot.endAt,
         appt.id,
         tx,
-        appt,
       );
-      const moved = await tx.appointment.updateMany({
-        where: { id: appt.id, status: AppointmentStatus.CHECKED_IN, dentistId: entry.dentistId },
-        // A new reminder only matters for a later visit; cleared like a reschedule.
-        data: {
-          dentistId: dto.dentistId,
-          startAt: start,
-          endAt: end,
-          reminderSentAt: null,
-          updatedBy: actor.sub,
-        },
-      });
-      if (moved.count === 0) {
+      const planData = await this.writePlan(tx, appt.id, plan);
+      const res = await slotSafe(() =>
+        tx.appointment.updateMany({
+          where: { id: appt.id, status: AppointmentStatus.CHECKED_IN, dentistId: entry.dentistId },
+          // A new reminder only matters for a later visit; cleared like a reschedule.
+          data: {
+            dentistId: dto.dentistId,
+            startAt: slot.startAt,
+            endAt: slot.endAt,
+            ...planData,
+            reminderSentAt: null,
+            updatedBy: actor.sub,
+          },
+        }),
+      );
+      if (res.count === 0) {
         throw queueError(STALE_APPOINTMENT_MSG, 'QUEUE_STALE');
       }
       await tx.appointmentRescheduleLog.create({
@@ -285,24 +415,25 @@ export class DispatchService {
           oldStartAt: appt.startAt,
           oldEndAt: appt.endAt,
           newDentistId: dto.dentistId,
-          newStartAt: start,
-          newEndAt: end,
+          newStartAt: slot.startAt,
+          newEndAt: slot.endAt,
           reason,
           changedBy: actor.sub,
         },
       });
-      // Guarded like guardedUpdate: an entry called (or closed) since the read
-      // above must not be reset to WAITING under the new dentist.
+      // Guarded like guardedUpdate: an entry closed (or moved) since the
+      // read above must not be reopened under the new dentist. A called
+      // patient waits again, now in the new dentist's line.
       const requeued = await tx.queueEntry.updateMany({
         where: {
           id,
           doneAt: null,
           dentistId: entry.dentistId,
-          status: { in: [QueueStatus.WAITING, QueueStatus.SKIPPED] },
+          status: { in: OPEN_STATUSES },
         },
         data: {
           dentistId: dto.dentistId,
-          queueDate: new Date(clinicDateOnly(start)),
+          queueDate: new Date(clinicDateOnly(slot.startAt)),
           status: QueueStatus.WAITING,
           transferredFromId: entry.dentistId,
           transferReason: reason,
@@ -312,25 +443,31 @@ export class DispatchService {
       if (requeued.count === 0) {
         // Rolls back the appointment move above too.
         throw queueError(
-          'Bệnh nhân vừa được gọi hoặc đã rời hàng đợi — tải lại rồi thử lại',
+          'Bệnh nhân vừa bắt đầu khám hoặc đã rời hàng đợi — tải lại rồi thử lại',
           'QUEUE_STALE',
         );
       }
+      return slot;
     }, LOCKING_TX_OPTIONS);
     await this.log('APPOINTMENT_TRANSFERRED', actor, appt.id, {
       fromDentistId: entry.dentistId,
       toDentistId: dto.dentistId,
       reason,
+      startAt: moved.startAt.toISOString(),
+      ...(moved.overtime ? { overtime: true } : {}),
     });
     return this.prisma.queueEntry.findUniqueOrThrow({ where: { id } });
   }
 
   /**
-   * BR-DSP-006 (ADR-0009 D3 "thay bác sĩ"): move a dentist's not-yet-arrived
-   * bookings on a date to a substitute, keeping each time. Each booking is
-   * checked on its own; the ones the substitute cannot take are listed with
-   * the reason and stay where they are. Checked-in patients are moved one by
-   * one with transfer().
+   * BR-DSP-006 (ADR-0009 D3 "thay bác sĩ"): move a dentist's day to a
+   * substitute. Bookings not checked in yet keep their time (also those
+   * just started whose patient may still arrive, A3-05) and take the
+   * substitute's durations (A5-05); patients already waiting are moved to
+   * the substitute's queue as by transfer(). Each one is checked on its
+   * own; the ones the substitute cannot take are listed with the reason
+   * and stay where they are. Closing the absent dentist's calendar is a
+   * separate step (schedule override / time-off).
    */
   async reassignDay(
     dto: { fromDentistId: string; toDentistId: string; date: string; reason: string },
@@ -346,11 +483,14 @@ export class DispatchService {
     await this.appointments.validateDentist(dto.toDentistId);
     const dayStart = startOfClinicDay(dto.date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+    // A booking whose patient may still check in (within the check-in
+    // window after its start) still needs a dentist.
+    const notBefore = Math.max(dayStart.getTime(), Date.now() - REASSIGN_GRACE_MIN * 60_000);
     const candidates = await this.prisma.appointment.findMany({
       where: {
         dentistId: dto.fromDentistId,
         status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-        startAt: { gte: new Date(Math.max(dayStart.getTime(), Date.now())), lt: dayEnd },
+        startAt: { gte: new Date(notBefore), lt: dayEnd },
         deletedAt: null,
       },
       include: {
@@ -361,33 +501,48 @@ export class DispatchService {
     });
     const reason = dto.reason.trim();
     const moved: Array<{ appointmentId: string; startAt: Date; patientName: string }> = [];
+    const transferred: Array<{ appointmentId: string; startAt: Date; patientName: string }> = [];
     const failed: Array<{
       appointmentId: string;
       startAt: Date;
       patientName: string;
       reason: string;
+      checkedIn?: boolean;
     }> = [];
     for (const appt of candidates) {
       try {
-        if (appt.services.length) {
-          await this.appointments.planVisit(
-            dto.toDentistId,
-            appt.services.map(s => s.serviceId),
-            dto.date,
-            { activeServicesOnly: false },
-          );
-        }
+        const { plan, minutes } = await this.planFor(appt, dto.toDentistId, dto.date);
+        const endAt = new Date(appt.startAt.getTime() + minutes * 60_000);
         await this.prisma.$transaction(async tx => {
           await lockDentistCalendar(tx, dto.toDentistId);
-          await this.appointments.ensureSlotAvailable(
-            dto.toDentistId,
-            appt.startAt,
-            appt.endAt,
-            actor,
-            appt.id,
-            tx,
-            appt,
-          );
+          await lockPatientCalendar(tx, appt.patientId);
+          try {
+            await this.appointments.ensureSlotAvailable(
+              dto.toDentistId,
+              appt.startAt,
+              endAt,
+              actor,
+              appt.id,
+              tx,
+              plan ?? appt,
+            );
+            // A longer visit must not run into the patient's own next one.
+            await this.appointments.ensurePatientFree(
+              appt.patientId,
+              appt.startAt,
+              endAt,
+              appt.id,
+              tx,
+            );
+          } catch (e) {
+            const length = Math.round((appt.endAt.getTime() - appt.startAt.getTime()) / 60_000);
+            // Say why when it is the substitute's longer visit that does not fit.
+            if (e instanceof Error && minutes !== length) {
+              throw new Error(`Bác sĩ thay cần ${minutes} phút cho lượt này — ${e.message}`);
+            }
+            throw e;
+          }
+          const planData = await this.writePlan(tx, appt.id, plan);
           // The slot was checked for the time read above: a booking moved
           // meanwhile must not be carried over at its new time unchecked.
           const res = await tx.appointment.updateMany({
@@ -400,7 +555,13 @@ export class DispatchService {
               rescheduleCount: appt.rescheduleCount,
             },
             // The reminder names the dentist: the new one gets its own.
-            data: { dentistId: dto.toDentistId, reminderSentAt: null, updatedBy: actor.sub },
+            data: {
+              dentistId: dto.toDentistId,
+              endAt,
+              ...planData,
+              reminderSentAt: null,
+              updatedBy: actor.sub,
+            },
           });
           if (res.count === 0) throw new Error(STALE_APPOINTMENT_MSG);
           await tx.appointmentRescheduleLog.create({
@@ -411,7 +572,7 @@ export class DispatchService {
               oldEndAt: appt.endAt,
               newDentistId: dto.toDentistId,
               newStartAt: appt.startAt,
-              newEndAt: appt.endAt,
+              newEndAt: endAt,
               reason,
               changedBy: actor.sub,
             },
@@ -444,6 +605,36 @@ export class DispatchService {
         });
       }
     }
-    return { moved, failed };
+
+    // A3-05: patients already waiting for the absent dentist that day.
+    const waiting = await this.prisma.queueEntry.findMany({
+      where: {
+        dentistId: dto.fromDentistId,
+        queueDate: new Date(dto.date),
+        doneAt: null,
+        status: { in: OPEN_STATUSES },
+      },
+      include: ENTRY_INCLUDE,
+    });
+    for (const entry of waiting.sort(compareQueue)) {
+      const patientName = entry.appointment.patient.fullName;
+      try {
+        await this.transfer(entry.id, { dentistId: dto.toDentistId, reason }, actor);
+        transferred.push({
+          appointmentId: entry.appointmentId,
+          startAt: entry.appointment.startAt,
+          patientName,
+        });
+      } catch (e) {
+        failed.push({
+          appointmentId: entry.appointmentId,
+          startAt: entry.appointment.startAt,
+          patientName,
+          reason: e instanceof Error ? e.message : String(e),
+          checkedIn: true,
+        });
+      }
+    }
+    return { moved, transferred, failed };
   }
 }

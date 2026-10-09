@@ -1522,6 +1522,10 @@ enum QueueStatus {
   CALLED
   SKIPPED
   LEFT
+  /// Closed when the exam started (migration 042).
+  DONE
+  /// Closed by an undone check-in or a cancelled visit (migration 042).
+  CANCELLED
 }
 
 /// Declared in dispatch order: emergency first, walk-ins last.

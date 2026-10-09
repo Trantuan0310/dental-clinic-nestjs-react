@@ -3,7 +3,7 @@ import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 
 /** ADR-0009 phase 6 — the pre-exam dispatch queue. */
 
-export type QueueStatus = 'WAITING' | 'CALLED' | 'SKIPPED' | 'LEFT';
+export type QueueStatus = 'WAITING' | 'CALLED' | 'SKIPPED' | 'LEFT' | 'DONE' | 'CANCELLED';
 export type QueuePriority = 'EMERGENCY' | 'ON_TIME' | 'LATE' | 'WALK_IN';
 
 export interface QueueEntry {
@@ -38,8 +38,18 @@ export interface QueueEntry {
 }
 
 export interface ReassignDayResult {
+  /** Bookings not checked in yet, now with the substitute at the same time. */
   moved: Array<{ appointmentId: string; startAt: string; patientName: string }>;
-  failed: Array<{ appointmentId: string; startAt: string; patientName: string; reason: string }>;
+  /** Patients already waiting, moved to the substitute's queue. */
+  transferred?: Array<{ appointmentId: string; startAt: string; patientName: string }>;
+  failed: Array<{
+    appointmentId: string;
+    startAt: string;
+    patientName: string;
+    reason: string;
+    /** Already checked in (still waiting for the absent dentist). */
+    checkedIn?: boolean;
+  }>;
 }
 
 export const PRIORITY_LABEL: Record<QueuePriority, string> = {
@@ -54,6 +64,8 @@ export const STATUS_LABEL: Record<QueueStatus, string> = {
   CALLED: 'Đang gọi',
   SKIPPED: 'Đã bỏ qua',
   LEFT: 'Đã về',
+  DONE: 'Đã vào khám',
+  CANCELLED: 'Đã rời hàng chờ',
 };
 
 // Under the 'appointments' prefix so every appointment mutation (check-in,
@@ -93,6 +105,15 @@ function useQueueMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
 
 export const useCallPatient = () => useQueueMutation((id: string) => post(`/queue/${id}/call`));
 
+/** Called by mistake: back to waiting in the same place (A3-15). */
+export const useUncallPatient = () => useQueueMutation((id: string) => post(`/queue/${id}/uncall`));
+
+/** An emergency marked by mistake goes back to its check-in class (A3-15). */
+export const useClearEmergency = () =>
+  useQueueMutation(({ id, reason }: { id: string; reason: string }) =>
+    post(`/queue/${id}/clear-emergency`, { reason }),
+  );
+
 export const useSkipPatient = () =>
   useQueueMutation(({ id, reason }: { id: string; reason: string }) =>
     post(`/queue/${id}/skip`, { reason }),
@@ -104,8 +125,9 @@ export const useMarkEmergency = () =>
   );
 
 export const useTransferPatient = () =>
-  useQueueMutation(({ id, dentistId, reason }: { id: string; dentistId: string; reason: string }) =>
-    post(`/queue/${id}/transfer`, { dentistId, reason }),
+  useQueueMutation(
+    ({ id, dentistId, reason, allowOvertime }: { id: string; dentistId: string; reason: string; allowOvertime?: boolean }) =>
+      post(`/queue/${id}/transfer`, { dentistId, reason, allowOvertime: allowOvertime || undefined }),
   );
 
 export function useReassignDay() {

@@ -13,6 +13,7 @@ import {
   ListChecks,
   CalendarPlus,
   AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
 import { Alert, Button, Card, Modal, StatusBadge, Textarea } from '@/components/ui';
@@ -77,7 +78,11 @@ export default function EncounterDetailPage() {
   const canCloseEncounter = useAuthStore((s) => s.hasPermission('encounter.complete'));
   const canEditChart = useAuthStore((s) => s.hasPermission('dental_chart.write'));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
+  const canCancelEncounter = useAuthStore((s) => s.hasPermission('encounter.cancel'));
   const [booking, setBooking] = useState(false);
+  // A3-03: an exam started by mistake (wrong patient / wrong row).
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   // 409 PRESCRIPTION_ALLERGY_CONFLICT on close: an allergy recorded after the
   // prescription was saved. Non-null keeps the dialog open.
   const [closeConflicts, setCloseConflicts] = useState<PrescriptionAllergyConflict[] | null>(null);
@@ -107,6 +112,17 @@ export default function EncounterDetailPage() {
       }
       notifyCloseError(err);
     },
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (reason: string) => medicalRecordsApi.cancelEncounter(id!, reason),
+    onSuccess: () => {
+      setCancelOpen(false);
+      setCancelReason('');
+      queryClient.invalidateQueries({ queryKey: ['encounter', id] });
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      notify.success('Đã hủy phiên khám — bệnh nhân quay lại hàng chờ (nếu trong ngày)');
+    },
+    onError: (err) => notify.error(getApiErrorMessage(err, 'Không hủy được phiên khám')),
   });
   const dismissCloseConflicts = () => {
     setCloseConflicts(null);
@@ -189,8 +205,51 @@ export default function EncounterDetailPage() {
               Đóng Encounter
             </Button>
           )}
+          {encounter.status === 'in_progress' && canCancelEncounter && ownScope && (
+            <Button variant="ghost" onClick={() => setCancelOpen(true)}>
+              <XCircle className="h-4 w-4" />
+              Hủy phiên khám (mở nhầm)
+            </Button>
+          )}
         </div>
       </div>
+
+      <Modal
+        open={cancelOpen}
+        onClose={() => !cancelMutation.isPending && setCancelOpen(false)}
+        title="Hủy phiên khám mở nhầm"
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelMutation.isPending}>
+              Không hủy
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={cancelMutation.isPending}
+              disabled={cancelReason.trim().length < 10}
+              onClick={() => cancelMutation.mutate(cancelReason.trim())}
+            >
+              Hủy phiên khám
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-sm text-gray-600">
+          <p>
+            Dùng khi bắt đầu khám nhầm bệnh nhân hoặc nhầm lượt. Bệnh nhân quay lại hàng chờ (lịch trong ngày); sau
+            đó có thể hoàn tác check-in nếu check-in nhầm. Bác sĩ chỉ tự hủy được khi phiên chưa có điều trị hay đơn
+            thuốc — nếu đã có, xóa phần nhập nhầm trước hoặc nhờ quản trị viên.
+          </p>
+          <Textarea
+            label="Lý do (ít nhất 10 ký tự)"
+            rows={2}
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder="VD: Bắt đầu khám nhầm bệnh nhân"
+          />
+        </div>
+      </Modal>
 
       {encounter.status === 'in_progress' && encounter.reopenedFromCancel && (
         <Alert type="warning">

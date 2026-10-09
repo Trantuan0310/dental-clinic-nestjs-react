@@ -513,4 +513,16 @@ export class AppointmentsController {
   ) {
     return { data: await this.appointments.markLeft(id, dto, actor) };
   }
+
+  @Post(':id/undo-left')
+  @RequirePermissions('appointment.mark_left')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Undo "left" the same day: back to the queue (A3-04)' })
+  async undoLeft(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: StatusReasonDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.appointments.undoLeft(id, dto, actor) };
+  }
 }

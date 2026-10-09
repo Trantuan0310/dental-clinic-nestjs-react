@@ -11,7 +11,7 @@ import {
   useClinicToday,
   useNow,
 } from '@/features/appointments/liveStatus';
-import { Button, Card, EmptyState, FormSkeleton } from '@/components/ui';
+import { Button, Card, ConfirmDialog, EmptyState, FormSkeleton } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
 import { notify } from '@/components/ui/Toast';
@@ -33,6 +33,8 @@ export default function TodayPage() {
   };
   const startEncounter = useStartEncounter();
   const now = useNow();
+  // A3-03: confirm who is starting; a wrong start has no easy way back.
+  const [confirmStart, setConfirmStart] = useState<{ id: string; name: string; code: string } | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['appointments', 'all', { from: today, to: today }],
@@ -182,7 +184,9 @@ export default function TodayPage() {
                           <PermissionGuard permission="encounter.start" mode="hide">
                             <Button
                               size="sm"
-                              onClick={() => handleStart(apt.id)}
+                              onClick={() =>
+                                setConfirmStart({ id: apt.id, name: apt.patientName, code: apt.patientCode })
+                              }
                               isLoading={startEncounter.isPending && startEncounter.variables === apt.id}
                             >
                               <Play className="h-4 w-4" />
@@ -216,6 +220,25 @@ export default function TodayPage() {
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={confirmStart !== null}
+        onClose={() => setConfirmStart(null)}
+        onConfirm={() => {
+          if (confirmStart) void handleStart(confirmStart.id);
+          setConfirmStart(null);
+        }}
+        title="Bắt đầu khám?"
+        description={
+          confirmStart && (
+            <>
+              Mở phiên khám cho <strong>{confirmStart.name}</strong> ({confirmStart.code}). Kiểm tra đúng người
+              trước khi bắt đầu.
+            </>
+          )
+        }
+        confirmLabel="Bắt đầu khám"
+      />
     </div>
   );
 }

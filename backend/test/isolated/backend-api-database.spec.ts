@@ -477,12 +477,20 @@ describe('Real HTTP and PostgreSQL regression', () => {
       api('post', '/appointments').send(body),
       api('post', '/appointments').send(body),
     ]);
-    expect(results.map(r => r.status).sort()).toEqual([201, 409]);
+    // A5-15: the same booking sent twice by the same person is one booking;
+    // the repeat answers with it instead of "the slot is taken".
+    expect(results.map(r => r.status)).toEqual([201, 201]);
+    expect(results[0].body.data.id).toBe(results[1].body.data.id);
     expect(
       await db.appointment.count({
         where: { dentistId: users.dentist, startAt: new Date(s.startAt) },
       }),
     ).toBe(1);
+    // Another patient competing for the same slot is still refused.
+    const other = await api('post', '/appointments')
+      .send({ ...body, patientId: await patient() })
+      .expect(409);
+    expect(other.body.code).toBe('SLOT_CONFLICT');
   });
   it('allows a new booking after cancelling the same slot', async () => {
     const s = slot();
@@ -1239,9 +1247,9 @@ describe('Real HTTP and PostgreSQL regression', () => {
   });
 
   it("a custom role holding encounter.cancel cannot cancel another dentist's encounter", async () => {
-    // encounter.cancel is admin-only in the seeded roles; a custom role may be
-    // given it, and must then be limited to its own encounters like every
-    // other clinical write (404, not 403, so ids can't be probed).
+    // The seeded dentist holds encounter.cancel for its own encounters
+    // (migration 042); any role holding it is limited to its own encounters
+    // like every other clinical write (404, not 403, so ids can't be probed).
     const encounterId = await fixtureEncounter();
     // Permissions are reloaded from the database on every request
     // (JwtStrategy), so the custom role has to exist for real.
@@ -1529,13 +1537,26 @@ describe('Real HTTP and PostgreSQL regression', () => {
         .send({ reason: 'Bệnh nhân có việc gấp' })
         .expect(200);
       expect(left.body.data).toMatchObject({ status: 'LEFT', leftReason: 'Bệnh nhân có việc gấp' });
+      // Sent twice (A3-21): the first answer again, nothing changes.
       await api('post', `/appointments/${walkIn.body.data.id}/left`)
         .send({ reason: 'Lần thứ hai' })
-        .expect(409);
-      // The slot is free again: another walk-in right now is accepted.
-      await api('post', '/appointments/walk-in')
+        .expect(200);
+      // A3-04: "Đã về" by mistake is undone the same day, back in line.
+      const back = await api('post', `/appointments/${walkIn.body.data.id}/undo-left`)
+        .send({ reason: 'Bấm nhầm Đã về' })
+        .expect(200);
+      expect(back.body.data).toMatchObject({ status: 'CHECKED_IN', leftAt: null });
+      const reopened = await db.queueEntry.findUniqueOrThrow({
+        where: { appointmentId: walkIn.body.data.id },
+      });
+      expect(reopened).toMatchObject({ status: 'WAITING', doneAt: null });
+      // A3-02: a second walk-in for the busy dentist joins the queue.
+      const second = await api('post', '/appointments/walk-in')
         .send({ patientId: await patient(), dentistId: walkInDentist.id, durationMin: 5 })
         .expect(201);
+      expect(new Date(second.body.data.startAt).getTime()).not.toBe(
+        new Date(walkIn.body.data.startAt).getTime(),
+      );
     });
   });
 
@@ -1668,7 +1689,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
       });
       expect(closed.map(c => [c.closeReason, c.status])).toEqual([
         ['LEFT', 'LEFT'],
-        ['STARTED', 'CALLED'],
+        ['STARTED', 'DONE'],
       ]);
 
       const history = await api('get', `/appointments/${walkIn}/history`).expect(200);
