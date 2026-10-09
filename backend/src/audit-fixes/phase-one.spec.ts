@@ -184,6 +184,11 @@ describe('Phase one audit regressions', () => {
       db.workingSchedule.findMany.mockResolvedValue([]);
       db.shiftRegistration.findMany.mockResolvedValue([]);
       db.shiftRegistration.create.mockResolvedValue({ id: 's' });
+      // A1-17: the shift's day must be open for an active dentist.
+      db.user.findUnique.mockResolvedValue({
+        status: 'ACTIVE',
+        userRoles: [{ role: { code: 'dentist' } }],
+      });
       const service = new AppointmentsService(
         db as unknown as PrismaService,
         audit as unknown as AuditService,

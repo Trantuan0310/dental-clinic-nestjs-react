@@ -8,11 +8,23 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
-import { useTimeOffs, useCreateTimeOff, useDecideTimeOff } from './scheduleApi';
+import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
+import {
+  useTimeOffs,
+  useCreateTimeOff,
+  useDecideTimeOff,
+  useTimeOffImpact,
+  useUpdateTimeOff,
+} from './scheduleApi';
 import { useSchedulableDentists } from './useSchedulableDentists';
 import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { formatDateTime } from './format';
-import type { TimeOff, TimeOffAffectedAppointment, TimeOffStatus, TimeOffType } from '@/types/schedule';
+import type {
+  CreateTimeOffResult,
+  TimeOff,
+  TimeOffStatus,
+  TimeOffType,
+} from '@/types/schedule';
 
 const TIME_OFF_TYPE_LABELS: Record<TimeOffType, string> = {
   VACATION: 'Nghỉ phép',
@@ -41,7 +53,11 @@ export function TimeOffTab() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [rejecting, setRejecting] = useState<TimeOff | null>(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
+  const [approving, setApproving] = useState<TimeOff | null>(null);
+  const [cancelling, setCancelling] = useState<TimeOff | null>(null);
+  const [cancelNote, setCancelNote] = useState('');
+  const [extending, setExtending] = useState<TimeOff | null>(null);
+  const [affected, setAffected] = useState<CreateTimeOffResult | null>(null);
 
   const { data: dentists = [] } = useDentistOptions('schedule');
   const { data: timeOffs, isLoading } = useTimeOffs(dentistFilter || undefined, statusFilter || undefined);
@@ -50,6 +66,8 @@ export function TimeOffTab() {
   const userId = useAuthStore((s) => s.user?.id);
   const canApprove = hasPermission('time_off.approve');
   const canWrite = hasPermission('schedule.write');
+  // Front desk records a dentist's sudden absence today (A1-09).
+  const canRecordUrgent = !canApprove && !canWrite && hasPermission('time_off.record_urgent');
   const ownOnly = hasPermission('appointment.read.own') && !hasPermission('appointment.read.any');
 
   const dentistNameById = useMemo(() => {
@@ -68,23 +86,31 @@ export function TimeOffTab() {
               ? 'Đã duyệt nghỉ phép'
               : action === 'reject'
                 ? 'Đã từ chối đơn nghỉ phép'
-                : 'Đã hủy nghỉ phép',
+                : result.endedEarly
+                  ? `Đã kết thúc nghỉ phép lúc ${formatDateTime(result.endAt)} — thời gian đã nghỉ vẫn được ghi nhận`
+                  : 'Đã hủy nghỉ phép',
           );
           setRejecting(null);
           setRejectNote('');
-          if (action === 'approve' && result.affectedAppointments?.length) {
-            setAffected(result.affectedAppointments);
-          }
+          setApproving(null);
+          setCancelling(null);
+          setCancelNote('');
+          if (action === 'approve' && hasFollowUp(result)) setAffected(result);
         },
         onError: (err) => notify.error(getApiErrorMessage(err, 'Không thực hiện được')),
       },
     );
 
   const canCancel = (t: TimeOff) =>
-    canWrite &&
+    (canWrite || (canRecordUrgent && t.createdBy === userId)) &&
     (t.status === 'PENDING' || t.status === 'APPROVED') &&
     new Date(t.endAt).getTime() > Date.now() &&
     (!ownOnly || t.dentistId === userId);
+  const running = (t: TimeOff) => t.status === 'APPROVED' && new Date(t.startAt).getTime() < Date.now();
+  const canExtend = (t: TimeOff) =>
+    new Date(t.endAt).getTime() > Date.now() &&
+    ((t.status === 'APPROVED' && canApprove) ||
+      (t.status === 'PENDING' && canWrite && (!ownOnly || t.dentistId === userId)));
 
   return (
     <div className="space-y-4">
@@ -112,10 +138,10 @@ export function TimeOffTab() {
             ]}
           />
         </div>
-        <PermissionGuard permission="schedule.write">
+        <PermissionGuard anyOf={['schedule.write', 'time_off.record_urgent']}>
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" />
-            {canApprove ? 'Thêm nghỉ phép' : 'Xin nghỉ phép'}
+            {canApprove ? 'Thêm nghỉ phép' : canRecordUrgent ? 'Ghi bác sĩ vắng hôm nay' : 'Xin nghỉ phép'}
           </Button>
         </PermissionGuard>
       </div>
@@ -152,7 +178,9 @@ export function TimeOffTab() {
                     <td>{TIME_OFF_TYPE_LABELS[t.type]}</td>
                     <td>{formatDateTime(t.startAt)}</td>
                     <td>{formatDateTime(t.endAt)}</td>
-                    <td className="text-gray-500">{t.reason || '—'}</td>
+                    <td className="text-gray-500">
+                      {t.reasonHidden ? <span className="italic">Chỉ quản trị xem</span> : t.reason || '—'}
+                    </td>
                     <td>
                       <Badge variant={STATUS_VARIANT[t.status]}>{STATUS_LABEL[t.status]}</Badge>
                       {t.decisionNote && <p className="mt-1 text-xs text-gray-500">{t.decisionNote}</p>}
@@ -160,7 +188,7 @@ export function TimeOffTab() {
                     <td className="whitespace-nowrap text-right">
                       {t.status === 'PENDING' && canApprove && (
                         <>
-                          <Button size="sm" variant="ghost" onClick={() => run(t, 'approve')}>
+                          <Button size="sm" variant="ghost" onClick={() => setApproving(t)}>
                             Duyệt
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => setRejecting(t)}>
@@ -168,9 +196,18 @@ export function TimeOffTab() {
                           </Button>
                         </>
                       )}
+                      {canExtend(t) && (
+                        <Button size="sm" variant="ghost" onClick={() => setExtending(t)}>
+                          Sửa giờ kết thúc
+                        </Button>
+                      )}
                       {canCancel(t) && (
-                        <Button size="sm" variant="ghost" onClick={() => run(t, 'cancel')}>
-                          Hủy
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => (t.status === 'PENDING' ? run(t, 'cancel') : setCancelling(t))}
+                        >
+                          {running(t) ? 'Kết thúc sớm' : 'Hủy'}
                         </Button>
                       )}
                     </td>
@@ -211,56 +248,233 @@ export function TimeOffTab() {
         </form>
       </Modal>
 
+      <ApproveTimeOffModal
+        timeOff={approving}
+        dentistName={approving ? dentistNameById.get(approving.dentistId) : undefined}
+        isPending={decide.isPending}
+        onConfirm={() => approving && run(approving, 'approve')}
+        onClose={() => setApproving(null)}
+      />
+
+      <Modal
+        open={cancelling !== null}
+        onClose={() => setCancelling(null)}
+        title={cancelling && running(cancelling) ? 'Kết thúc nghỉ phép sớm' : 'Hủy nghỉ phép đã duyệt'}
+        size="sm"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (cancelling) run(cancelling, 'cancel', cancelNote.trim());
+          }}
+        >
+          <p className="text-sm text-gray-600 dark:text-surface-300">
+            {cancelling && running(cancelling)
+              ? 'Kỳ nghỉ đang diễn ra sẽ kết thúc từ bây giờ (làm tròn 15 phút); thời gian đã nghỉ vẫn được giữ. '
+              : 'Lịch của bác sĩ sẽ mở lại cho đặt hẹn. '}
+            Các lịch hẹn đã chuyển sang bác sĩ khác vẫn giữ nguyên.
+          </p>
+          <Textarea
+            label="Lý do"
+            required
+            minLength={5}
+            rows={2}
+            value={cancelNote}
+            onChange={(e) => setCancelNote(e.target.value)}
+            placeholder="VD: Bác sĩ khỏe lại, làm buổi chiều"
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setCancelling(null)}>
+              Đóng
+            </Button>
+            <Button type="submit" variant="danger" isLoading={decide.isPending} disabled={cancelNote.trim().length < 5}>
+              Xác nhận
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <ExtendTimeOffModal timeOff={extending} onClose={() => setExtending(null)} onImpact={setAffected} />
+
       <AffectedAppointmentsModal
         open={affected !== null}
-        appointments={affected ?? []}
+        appointments={affected?.affectedAppointments ?? []}
+        bookingRequests={affected?.affectedBookingRequests ?? []}
+        waitingPatients={affected?.waitingPatients ?? []}
         onClose={() => setAffected(null)}
       />
     </div>
   );
 }
 
+/** Something the front desk must still handle after a time-off took effect. */
+function hasFollowUp(r: CreateTimeOffResult): boolean {
+  return (
+    (r.affectedAppointments?.length ?? 0) > 0 ||
+    (r.affectedBookingRequests?.length ?? 0) > 0 ||
+    (r.waitingPatients?.length ?? 0) > 0
+  );
+}
+
+/** A1-10: approving shows first how many bookings it touches. */
+function ApproveTimeOffModal({
+  timeOff,
+  dentistName,
+  isPending,
+  onConfirm,
+  onClose,
+}: {
+  timeOff: TimeOff | null;
+  dentistName?: string;
+  isPending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const { data: preview, isLoading } = useTimeOffImpact(timeOff?.id ?? null);
+  return (
+    <Modal open={timeOff !== null} onClose={onClose} title="Duyệt nghỉ phép" size="sm">
+      {timeOff && (
+        <div className="space-y-4 text-sm">
+          <p>
+            {dentistName ?? 'Bác sĩ'} nghỉ từ <strong>{formatDateTime(timeOff.startAt)}</strong> đến{' '}
+            <strong>{formatDateTime(timeOff.endAt)}</strong>.
+          </p>
+          {isLoading ? (
+            <p className="text-gray-500">Đang kiểm tra lịch hẹn…</p>
+          ) : (
+            <p className={preview && preview.affectedAppointments.length > 0 ? 'text-amber-700' : 'text-gray-600'}>
+              {preview && preview.affectedAppointments.length > 0
+                ? `${preview.affectedAppointments.length} lịch hẹn đã đặt rơi vào khoảng nghỉ — sau khi duyệt cần gọi bệnh nhân dời lịch.`
+                : 'Không có lịch hẹn nào trong khoảng nghỉ.'}
+              {preview && preview.inClinic.length > 0 &&
+                ` Đang có ${preview.inClinic.length} bệnh nhân đã check-in/đang khám với bác sĩ này.`}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+            <Button variant="outline" onClick={onClose}>
+              Đóng
+            </Button>
+            <Button onClick={onConfirm} isLoading={isPending}>
+              Duyệt
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/** Shorten or extend a time-off: a new end, in clinic time (A1-11). */
+function ExtendTimeOffModal({
+  timeOff,
+  onClose,
+  onImpact,
+}: {
+  timeOff: TimeOff | null;
+  onClose: () => void;
+  onImpact: (r: CreateTimeOffResult) => void;
+}) {
+  const update = useUpdateTimeOff();
+  const end = timeOff ? clinicParts(timeOff.endAt) : null;
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [reason, setReason] = useState('');
+  const shownDate = date || end?.date || '';
+  const shownTime = time || end?.time || '';
+  const close = () => {
+    setDate('');
+    setTime('');
+    setReason('');
+    onClose();
+  };
+  return (
+    <Modal open={timeOff !== null} onClose={close} title="Sửa giờ kết thúc nghỉ phép" size="sm">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!timeOff) return;
+          update.mutate(
+            { id: timeOff.id, endAt: clinicIso(shownDate, shownTime), reason: reason.trim() },
+            {
+              onSuccess: (r) => {
+                notify.success('Đã cập nhật thời gian nghỉ');
+                close();
+                if (hasFollowUp(r)) onImpact(r);
+              },
+              onError: (err) => notify.error(getApiErrorMessage(err, 'Không cập nhật được')),
+            },
+          );
+        }}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Đến ngày" type="date" min={clinicToday()} value={shownDate} onChange={(e) => setDate(e.target.value)} required />
+          <Input label="Giờ (giờ phòng khám)" type="time" value={shownTime} onChange={(e) => setTime(e.target.value)} required />
+        </div>
+        <Textarea label="Lý do" required minLength={5} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={close}>
+            Đóng
+          </Button>
+          <Button type="submit" isLoading={update.isPending} disabled={reason.trim().length < 5}>
+            Lưu
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { dentists, defaultDentistId } = useSchedulableDentists();
   const createTimeOff = useCreateTimeOff();
-  const canApprove = useAuthStore((s) => s.hasPermission('time_off.approve'));
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canApprove = hasPermission('time_off.approve');
+  const urgentOnly = !canApprove && !hasPermission('schedule.write') && hasPermission('time_off.record_urgent');
 
   const [dentistId, setDentistId] = useState(defaultDentistId);
   // Appointments still booked inside approved time-off just recorded — shown
   // instead of closing, so front desk knows who to call and move.
-  const [affected, setAffected] = useState<TimeOffAffectedAppointment[] | null>(null);
-  const [startAt, setStartAt] = useState('');
-  const [endAt, setEndAt] = useState('');
-  const [type, setType] = useState<TimeOffType>('VACATION');
+  const [affected, setAffected] = useState<CreateTimeOffResult | null>(null);
+  // Clinic date + clinic "HH:mm" (A1-14): a workstation in another zone
+  // records the same instants as one in Vietnam.
+  const [startDate, setStartDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [type, setType] = useState<TimeOffType>(urgentOnly ? 'SICK' : 'VACATION');
   const [reason, setReason] = useState('');
 
+  const startAt = startDate && startTime ? clinicIso(startDate, startTime) : '';
+  const endAt = endDate && endTime ? clinicIso(endDate, endTime) : '';
   const isRangeValid = !startAt || !endAt || startAt < endAt;
 
   const resetForm = () => {
     setDentistId(defaultDentistId);
     setAffected(null);
-    setStartAt('');
-    setEndAt('');
-    setType('VACATION');
+    setStartDate('');
+    setStartTime('');
+    setEndDate('');
+    setEndTime('');
+    setType(urgentOnly ? 'SICK' : 'VACATION');
     setReason('');
   };
 
   const handleSubmit = async () => {
     try {
-      // datetime-local values carry no timezone; send real instants so the
-      // server doesn't interpret them in its own zone.
       const created = await createTimeOff.mutateAsync({
         dentistId,
-        startAt: new Date(startAt).toISOString(),
-        endAt: new Date(endAt).toISOString(),
+        startAt,
+        endAt,
         type,
         reason: reason || undefined,
       });
       notify.success(
         created.status === 'PENDING' ? 'Đã gửi đơn nghỉ phép — chờ quản trị duyệt' : 'Đã ghi nhận nghỉ phép',
       );
-      if (created.status === 'APPROVED' && created.affectedAppointments.length > 0) {
-        setAffected(created.affectedAppointments);
+      if (created.status === 'APPROVED' && hasFollowUp(created)) {
+        setAffected(created);
         return;
       }
       resetForm();
@@ -276,16 +490,32 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
   };
 
   if (affected) {
-    return <AffectedAppointmentsModal open={open} appointments={affected} onClose={close} />;
+    return (
+      <AffectedAppointmentsModal
+        open={open}
+        appointments={affected.affectedAppointments}
+        bookingRequests={affected.affectedBookingRequests ?? []}
+        waitingPatients={affected.waitingPatients ?? []}
+        onClose={close}
+      />
+    );
   }
 
+  const title = canApprove ? 'Thêm nghỉ phép' : urgentOnly ? 'Ghi bác sĩ vắng đột xuất' : 'Xin nghỉ phép';
   return (
-    <Modal open={open} onClose={close} title={canApprove ? 'Thêm nghỉ phép' : 'Xin nghỉ phép'} size="sm">
+    <Modal open={open} onClose={close} title={title} size="sm">
       <div className="space-y-4">
-        {!canApprove && (
+        {urgentOnly ? (
           <p className="text-sm text-gray-600 dark:text-surface-300">
-            Đơn sẽ ở trạng thái chờ duyệt và chưa chặn lịch hẹn cho tới khi quản trị duyệt.
+            Có hiệu lực ngay: bắt đầu trong hôm nay, kết thúc chậm nhất cuối ngày mai. Quản trị sẽ được thấy và có thể
+            kết thúc sớm hoặc gia hạn.
           </p>
+        ) : (
+          !canApprove && (
+            <p className="text-sm text-gray-600 dark:text-surface-300">
+              Đơn sẽ ở trạng thái chờ duyệt và chưa chặn lịch hẹn cho tới khi quản trị duyệt.
+            </p>
+          )
         )}
         <Select
           label="Bác sĩ"
@@ -306,21 +536,19 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
           }))}
         />
 
-        <Input
-          label="Từ"
-          type="datetime-local"
-          value={startAt}
-          onChange={(e) => setStartAt(e.target.value)}
-          required
-        />
-        <Input
-          label="Đến"
-          type="datetime-local"
-          value={endAt}
-          onChange={(e) => setEndAt(e.target.value)}
-          error={!isRangeValid ? 'Thời gian kết thúc phải sau thời gian bắt đầu' : undefined}
-          required
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Từ ngày" type="date" min={clinicToday()} value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          <Input label="Giờ (giờ phòng khám)" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+          <Input label="Đến ngày" type="date" min={startDate || clinicToday()} value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+          <Input
+            label="Giờ (giờ phòng khám)"
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            error={!isRangeValid ? 'Thời gian kết thúc phải sau thời gian bắt đầu' : undefined}
+            required
+          />
+        </div>
 
         <Textarea
           label="Lý do (không bắt buộc)"
@@ -339,7 +567,7 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
             isLoading={createTimeOff.isPending}
             disabled={!dentistId || !startAt || !endAt || !isRangeValid}
           >
-            {canApprove ? 'Thêm' : 'Gửi đơn'}
+            {canApprove ? 'Thêm' : urgentOnly ? 'Ghi nhận' : 'Gửi đơn'}
           </Button>
         </div>
       </div>

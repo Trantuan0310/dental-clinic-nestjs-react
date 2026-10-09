@@ -60,4 +60,30 @@ export class ReassignDayDto {
   @ApiProperty({ example: 'BS An nghỉ ốm' })
   @ReasonText(5, 300)
   reason!: string;
+
+  @ApiPropertyOptional({
+    description: "Close the absent dentist's day so nobody books them (default true)",
+  })
+  @IsOptional()
+  @IsBoolean()
+  closeFromDentist?: boolean;
+}
+
+/** Undo "thay bác sĩ cả ngày": reopen the day, move the untouched visits back. */
+export class UndoReassignDayDto {
+  @ApiProperty()
+  @IsUUID()
+  fromDentistId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  toDentistId!: string;
+
+  @ApiProperty({ example: '2026-10-01' })
+  @IsCalendarDate()
+  date!: string;
+
+  @ApiProperty({ example: 'BS An đã quay lại làm' })
+  @ReasonText(5, 300)
+  reason!: string;
 }

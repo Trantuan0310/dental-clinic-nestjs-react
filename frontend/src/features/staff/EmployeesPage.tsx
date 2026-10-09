@@ -20,6 +20,7 @@ import { notify } from '@/components/ui/Toast';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDate } from '@/lib/format';
+import { clinicToday } from '@/lib/clinicTime';
 import { staffApi, useEmployees, useLinkableAccounts, useStaffMutation } from './staffApi';
 import { TemporaryPasswordDialog } from '@/features/admin/TemporaryPasswordDialog';
 import { DentistProfileForm } from './DentistProfileForm';
@@ -312,7 +313,10 @@ function TerminateForm({
   onSubmit: (payload: { reason: string; terminationDate: string }) => void;
 }) {
   const [reason, setReason] = useState('');
-  const [terminationDate, setTerminationDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const today = clinicToday();
+  const [terminationDate, setTerminationDate] = useState(today);
+  // A5-12: a date ahead is a plan — the account stays open until then.
+  const planned = terminationDate > today;
   return (
     <form
       className="space-y-4"
@@ -322,10 +326,12 @@ function TerminateForm({
       }}
     >
       <p className="text-sm text-gray-600 dark:text-surface-300">
-        {employee.account
-          ? 'Tài khoản đăng nhập của nhân viên sẽ bị vô hiệu hóa và mọi phiên đăng nhập bị thu hồi.'
-          : 'Nhân viên này không có tài khoản đăng nhập.'}
-        {employee.dentistProfile && ' Hồ sơ bác sĩ chuyển sang “Ngừng hành nghề”.'}
+        {planned
+          ? `Lên lịch nghỉ việc: nhân viên vẫn làm và đăng nhập bình thường tới hết ngày trước ngày nghỉ; từ ngày ${formatDate(terminationDate)} hệ thống tự khóa tài khoản${employee.dentistProfile ? ' và không nhận lịch hẹn mới cho bác sĩ' : ''}. Các lịch hẹn và yêu cầu đặt online từ ngày đó phải được chuyển trước.`
+          : employee.account
+            ? 'Tài khoản đăng nhập của nhân viên sẽ bị vô hiệu hóa và mọi phiên đăng nhập bị thu hồi.'
+            : 'Nhân viên này không có tài khoản đăng nhập.'}
+        {!planned && employee.dentistProfile && ' Hồ sơ bác sĩ chuyển sang “Ngừng hành nghề”.'}
       </p>
       {blocking && <BlockingAppointmentsList appointments={blocking} />}
       <DatePicker
@@ -597,16 +603,19 @@ export default function EmployeesPage() {
                         <Badge variant={EMPLOYMENT_STATUS_VARIANT[e.employmentStatus]}>
                           {EMPLOYMENT_STATUS_LABEL[e.employmentStatus]}
                         </Badge>
+                        {!terminated && e.terminationDate && (
+                          <p className="mt-1 text-xs text-amber-700">Nghỉ việc từ {formatDate(e.terminationDate)}</p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        {terminated && (
+                        {(terminated || e.terminationDate) && (
                           <div className="flex justify-end">
                             <PermissionGuard permission="employee.deactivate" mode="hide">
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 aria-label={`Khôi phục ${e.fullName}`}
-                                title="Khôi phục (quay lại làm việc)"
+                                title={terminated ? 'Khôi phục (quay lại làm việc)' : 'Hủy kế hoạch nghỉ việc'}
                                 onClick={() => setDialog({ kind: 'reinstate', employee: e })}
                               >
                                 <RotateCcw className="h-4 w-4" />
@@ -859,8 +868,12 @@ export default function EmployeesPage() {
               terminate.mutate(
                 { id: dialog.employee.id, payload },
                 {
-                  onSuccess: () => {
-                    notify.success('Đã cho nhân viên nghỉ việc');
+                  onSuccess: (result) => {
+                    notify.success(
+                      (result as { terminationScheduled?: boolean }).terminationScheduled
+                        ? `Đã lên lịch nghỉ việc từ ngày ${formatDate(payload.terminationDate)}`
+                        : 'Đã cho nhân viên nghỉ việc',
+                    );
                     close();
                   },
                   onError: onError('Không cho nghỉ việc được'),

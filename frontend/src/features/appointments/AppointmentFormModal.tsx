@@ -750,6 +750,13 @@ export function AppointmentFormModal({
                 />
 
                 {slotIssue && <Alert variant="warning">{slotIssue}</Alert>}
+                {availability?.pendingTimeOffs && availability.pendingTimeOffs.length > 0 && (
+                  <Alert variant="info">
+                    Bác sĩ có đơn nghỉ đang chờ duyệt ngày này (
+                    {availability.pendingTimeOffs.map((t) => `${t.startTime}–${t.endTime}`).join(', ')}) — vẫn đặt
+                    được, nhưng lịch có thể phải dời nếu đơn được duyệt.
+                  </Alert>
+                )}
 
                 {dentistId && availability && suggestedStarts.length > 0 && (
                   <div>

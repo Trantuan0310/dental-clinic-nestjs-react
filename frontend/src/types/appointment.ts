@@ -199,6 +199,8 @@ export interface CancelAppointmentPayload {
   /** What the client last saw: a visit moved or edited since is a 409. */
   rescheduleCount?: number;
   updatedAt?: string;
+  /** The clinic cancels (absent dentist, closed day): never the patient's. */
+  byClinic?: boolean;
 }
 
 export interface RescheduleAppointmentPayload {
@@ -208,6 +210,8 @@ export interface RescheduleAppointmentPayload {
   reason: string;
   /** Required when the length differs from the services' total (BR-APPT-031). */
   durationOverrideReason?: string;
+  /** A clinic move: not counted in the patient's limit of 3. */
+  byClinic?: boolean;
   /** The version the client saw: a visit moved since is a 409 (A3-12). */
   rescheduleCount?: number;
   updatedAt?: string;
@@ -248,6 +252,8 @@ export interface DentistAvailability {
   busy: ClockInterval[];
   /** 'NO_SCHEDULE' when the dentist doesn't work that day. */
   blockedReason?: string | null;
+  /** Leave asked for but not decided yet: still bookable, worth a warning (A1-10). */
+  pendingTimeOffs?: ClockInterval[];
 }
 
 // =============================================================================

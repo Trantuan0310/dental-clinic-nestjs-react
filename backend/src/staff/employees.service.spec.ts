@@ -383,6 +383,20 @@ describe('EmployeesService', () => {
         ...overrides,
       });
 
+    it('A5-12: calls off a planned departure not reached yet', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', terminationDate: new Date('2099-10-31T00:00:00Z') }),
+      );
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-9' }));
+
+      await service.reinstate('emp-1', { reason: 'Ở lại làm tiếp' }, actor, meta);
+
+      expect(prisma.employee.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { terminationDate: null, updatedBy: 'admin-1' } }),
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
     it('refuses an employee who is not terminated', async () => {
       prisma.employee.findFirst.mockResolvedValue(employee());
       await expect(service.reinstate('emp-1', {}, actor, meta)).rejects.toBeInstanceOf(
@@ -505,6 +519,114 @@ describe('EmployeesService', () => {
       );
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: 'user-9', revokedAt: null } }),
+      );
+    });
+
+    it('A5-12: a date ahead is a plan — the account stays open, only visits from that day block', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', dentistProfile: { id: 'dp-1' } }),
+      );
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.bookingRequest.findMany.mockResolvedValue([]);
+      prisma.userRole.findFirst.mockResolvedValue(null);
+      prisma.employee.update.mockResolvedValue(employee({ userId: 'user-9' }));
+
+      const result = await service.terminate(
+        'emp-1',
+        { reason: 'Nghỉ việc cuối tháng', terminationDate: '2099-10-31' },
+        actor,
+        meta,
+      );
+
+      const where = prisma.appointment.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        expect.objectContaining({ startAt: { gte: new Date('2099-10-31T00:00:00+07:00') } }),
+      ]);
+      expect(prisma.employee.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { terminationDate: new Date('2099-10-31T00:00:00Z'), updatedBy: 'admin-1' },
+        }),
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.dentistProfile.update).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ terminationScheduled: true });
+    });
+
+    it('A5-13: blocks while an online request still waits on the dentist (the proposed one counts)', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', dentistProfile: { id: 'dp-1' } }),
+      );
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.encounter.count.mockResolvedValue(0);
+      prisma.bookingRequest.findMany.mockResolvedValue([
+        {
+          id: 'br-1',
+          referenceCode: 'GS-1',
+          fullName: 'Khách A',
+          status: 'PROPOSED',
+          preferredDentistId: 'user-other',
+          proposedDentistId: 'user-9',
+          requestedStartAt: new Date('2099-01-01T02:00:00Z'),
+          proposedStartAt: new Date('2099-01-02T02:00:00Z'),
+        },
+        // Proposed to someone else: no longer this dentist's.
+        {
+          id: 'br-2',
+          referenceCode: 'GS-2',
+          fullName: 'Khách B',
+          status: 'PROPOSED',
+          preferredDentistId: 'user-9',
+          proposedDentistId: 'user-other',
+          requestedStartAt: new Date('2099-01-01T02:00:00Z'),
+          proposedStartAt: new Date('2099-01-02T02:00:00Z'),
+        },
+      ]);
+
+      const error = await service
+        .terminate('emp-1', { reason: 'Nghỉ việc' }, actor, meta)
+        .catch(e => e);
+      expect(error.getResponse().error).toBe('DENTIST_HAS_OPEN_BOOKING_REQUESTS');
+      expect(error.getResponse().details.bookingRequests.map((r: any) => r.id)).toEqual(['br-1']);
+      expect(prisma.employee.update).not.toHaveBeenCalled();
+    });
+
+    it('A1-22: terminating now ends the weekly hours and withdraws pending leave and shifts', async () => {
+      prisma.employee.findFirst.mockResolvedValue(
+        employee({ userId: 'user-9', dentistProfile: { id: 'dp-1' } }),
+      );
+      prisma.appointment.findMany.mockResolvedValue([]);
+      prisma.encounter.count.mockResolvedValue(0);
+      prisma.bookingRequest.findMany.mockResolvedValue([]);
+      prisma.userRole.findFirst.mockResolvedValue(null);
+      prisma.employee.update.mockResolvedValue(employee({ employmentStatus: 'TERMINATED' }));
+
+      await service.terminate('emp-1', { reason: 'Hết hợp đồng' }, actor, meta);
+
+      expect(prisma.workingSchedule.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { validTo: expect.any(Date) } }),
+      );
+      expect(prisma.timeOff.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) }),
+      );
+      expect(prisma.shiftRegistration.updateMany).toHaveBeenCalled();
+    });
+
+    it('the daily job carries out a planned termination once its date is reached', async () => {
+      prisma.employee.findMany.mockResolvedValue([
+        employee({
+          id: 'emp-1',
+          userId: 'user-9',
+          dentistProfile: null,
+          terminationDate: new Date('2026-10-01T00:00:00Z'),
+        }),
+      ]);
+      prisma.employee.update.mockResolvedValue(employee({ employmentStatus: 'TERMINATED' }));
+
+      const result = await service.finalizeScheduledTerminations(new Date('2026-10-01T01:00:00Z'));
+
+      expect(result).toEqual({ terminated: 1 });
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'DEACTIVATED' }) }),
       );
     });
 

@@ -182,7 +182,17 @@ export function QueueList({
       );
     } else {
       void run(
-        () => transfer.mutateAsync({ id: entry.id, dentistId: targetDentist, reason: r, allowOvertime }),
+        async () => {
+          const res = (await transfer.mutateAsync({
+            id: entry.id,
+            dentistId: targetDentist,
+            reason: r,
+            allowOvertime,
+          })) as { warning?: string } | undefined;
+          // X-5: the new dentist has leave pending that day.
+          if (res?.warning) notify.warning(res.warning);
+          return res;
+        },
         `Đã chuyển ${name}`,
         'Không chuyển được',
       );

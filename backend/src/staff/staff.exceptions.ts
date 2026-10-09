@@ -83,6 +83,27 @@ export class DentistHasOpenEncountersException extends BusinessRuleException {
   }
 }
 
+export interface OpenBookingRequestRef {
+  id: string;
+  referenceCode: string;
+  fullName: string;
+  status: string;
+  startAt: Date;
+}
+
+/** A5-13 / C4: online requests still naming the dentist must be handled first. */
+export class DentistHasOpenBookingRequestsException extends BusinessRuleException {
+  constructor(bookingRequests: OpenBookingRequestRef[]) {
+    super(
+      `Còn ${bookingRequests.length} yêu cầu đặt lịch online đang chờ với bác sĩ này. ` +
+        'Hãy đề xuất bác sĩ khác hoặc từ chối các yêu cầu này trước.',
+      HttpStatus.CONFLICT,
+      { bookingRequests },
+      'DENTIST_HAS_OPEN_BOOKING_REQUESTS',
+    );
+  }
+}
+
 export class LastAdminTerminationException extends BusinessRuleException {
   constructor() {
     super(

@@ -135,7 +135,9 @@ export class RescheduleLimitReachedException extends HttpException {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'RESCHEDULE_LIMIT_REACHED',
-        message: 'Lịch hẹn này đã đổi tối đa 3 lần — hãy hủy và đặt lịch mới',
+        message:
+          'Bệnh nhân đã đổi lịch này tối đa 3 lần. Nếu lần dời này do phòng khám ' +
+          '(bác sĩ vắng, ngày nghỉ), lễ tân chọn "Phòng khám dời" — không tính vào giới hạn.',
       },
       HttpStatus.CONFLICT,
     );
@@ -185,5 +187,21 @@ export class PatientDoubleBookedException extends HttpException {
       HttpStatus.CONFLICT,
     );
     this.name = 'PatientDoubleBookedException';
+  }
+}
+
+/** The visit's dentist is away then (time-off, closed day, left the clinic). */
+export class DentistAbsentException extends HttpException {
+  constructor(message: string) {
+    super(
+      {
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'DENTIST_ABSENT',
+        message,
+      },
+      HttpStatus.CONFLICT,
+    );
+    this.name = 'DentistAbsentException';
   }
 }

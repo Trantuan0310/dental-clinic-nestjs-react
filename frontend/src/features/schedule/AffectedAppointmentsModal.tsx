@@ -14,12 +14,15 @@ export function AffectedAppointmentsModal({
   title = 'Lịch hẹn cần xử lý',
   appointments,
   bookingRequests = [],
+  waitingPatients = [],
   onClose,
 }: {
   open: boolean;
   title?: string;
   appointments: TimeOffAffectedAppointment[];
   bookingRequests?: AffectedBookingRequest[];
+  /** Patients already checked in with the absent dentist: move them in Điều phối. */
+  waitingPatients?: TimeOffAffectedAppointment[];
   onClose: () => void;
 }) {
   return (
@@ -28,8 +31,15 @@ export function AffectedAppointmentsModal({
         <Alert variant="warning">
           {appointments.length > 0 && <>Còn {appointments.length} lịch hẹn bị ảnh hưởng. </>}
           {bookingRequests.length > 0 && <>Có {bookingRequests.length} yêu cầu đặt lịch online đang chờ rơi vào giờ không còn làm việc. </>}
-          Vui lòng liên hệ bệnh nhân để đổi lịch hoặc hủy — hệ thống không tự dời các lịch này.
+          Vui lòng liên hệ bệnh nhân để đổi lịch hoặc hủy — hệ thống không tự dời các lịch này. Danh sách luôn có ở thẻ
+          "Lịch hẹn bị ảnh hưởng": tại đó chuyển bác sĩ thay, dời hàng loạt và đánh dấu đã gọi báo bệnh nhân.
         </Alert>
+        {waitingPatients.length > 0 && (
+          <Alert variant="danger">
+            {waitingPatients.length} bệnh nhân đã check-in đang chờ bác sĩ này (
+            {waitingPatients.map((w) => w.patient.fullName).join(', ')}) — hãy chuyển sang bác sĩ khác ở trang Điều phối.
+          </Alert>
+        )}
         {appointments.length > 0 && (
           <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-surface-800 dark:border-surface-700">
             {appointments.map((a) => (

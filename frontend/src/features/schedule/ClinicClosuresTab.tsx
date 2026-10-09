@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CalendarOff, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Alert, Button, Card, ConfirmDialog, DatePicker, EmptyState, Modal, Textarea } from '@/components/ui';
+import { Alert, Button, Card, ConfirmDialog, DatePicker, EmptyState, Input, Modal, Textarea } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useClinicClosures, useDeleteClinicClosure, useSaveClinicClosure } from './scheduleApi';
 import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { hasImpact } from './format';
-import type { ClinicClosure, ScheduleChangeImpact } from '@/types/schedule';
+import type { ClinicClosure, ClinicClosureResult } from '@/types/schedule';
 
 const viDate = (value: string) => value.slice(0, 10).split('-').reverse().join('/');
 
@@ -24,8 +24,10 @@ export function ClinicClosuresTab() {
   const remove = useDeleteClinicClosure();
   const [editing, setEditing] = useState<ClinicClosure | 'new' | null>(null);
   const [deleting, setDeleting] = useState<ClinicClosure | null>(null);
-  const [impact, setImpact] = useState<ScheduleChangeImpact | null>(null);
+  const [impact, setImpact] = useState<ClinicClosureResult | null>(null);
   const today = clinicToday();
+  // A1-23: a closure already begun is not erased — it ends yesterday.
+  const begun = deleting !== null && deleting.startDate < today;
 
   return (
     <div className="space-y-4">
@@ -66,7 +68,10 @@ export function ClinicClosuresTab() {
               <tbody>
                 {closures.map((c) => (
                   <tr key={c.id}>
-                    <td className="whitespace-nowrap font-medium text-gray-900">{viDate(c.startDate)}</td>
+                    <td className="whitespace-nowrap font-medium text-gray-900">
+                      {viDate(c.startDate)}
+                      {c.startTime && <span className="ml-1 text-xs text-gray-500">từ {c.startTime}</span>}
+                    </td>
                     <td className="whitespace-nowrap">{viDate(c.endDate)}</td>
                     <td>{c.reason}</td>
                     <td className="text-gray-500">{c.createdByName ?? '—'}</td>
@@ -97,20 +102,23 @@ export function ClinicClosuresTab() {
           onClose={() => setEditing(null)}
           onSaved={(result) => {
             setEditing(null);
-            if (hasImpact(result)) setImpact(result);
+            const leftovers = (result.waitingPatients?.length ?? 0) + (result.openEncounters?.length ?? 0);
+            if (leftovers > 0 || hasImpact(result)) setImpact(result);
           }}
         />
       )}
       <ConfirmDialog
         open={deleting !== null}
         onClose={() => setDeleting(null)}
-        title="Xóa ngày nghỉ phòng khám"
+        title={begun ? 'Mở lại phòng khám từ hôm nay' : 'Xóa ngày nghỉ phòng khám'}
         description={
           deleting
-            ? `Mở lại lịch ${viDate(deleting.startDate)}–${viDate(deleting.endDate)} (${deleting.reason})? Các bác sĩ sẽ nhận lịch hẹn theo lịch làm việc như bình thường.`
+            ? begun
+              ? `Đợt nghỉ ${viDate(deleting.startDate)}–${viDate(deleting.endDate)} (${deleting.reason}) đã bắt đầu: các ngày đã nghỉ được giữ làm lịch sử, phòng khám mở lại từ hôm nay.`
+              : `Mở lại lịch ${viDate(deleting.startDate)}–${viDate(deleting.endDate)} (${deleting.reason})? Các bác sĩ sẽ nhận lịch hẹn theo lịch làm việc như bình thường.`
             : undefined
         }
-        confirmText="Xóa"
+        confirmText={begun ? 'Mở lại từ hôm nay' : 'Xóa'}
         variant="danger"
         isLoading={remove.isPending}
         onConfirm={() => {
@@ -118,7 +126,11 @@ export function ClinicClosuresTab() {
           remove.mutate(deleting.id, {
             onSuccess: () => {
               setDeleting(null);
-              notify.success('Đã xóa ngày nghỉ; lịch làm việc trở lại bình thường');
+              notify.success(
+                begun
+                  ? 'Phòng khám mở lại từ hôm nay; các ngày đã nghỉ vẫn được ghi nhận'
+                  : 'Đã xóa ngày nghỉ; lịch làm việc trở lại bình thường',
+              );
             },
             onError: (err) => notify.error(getApiErrorMessage(err, 'Không xóa được ngày nghỉ')),
           });
@@ -129,8 +141,16 @@ export function ClinicClosuresTab() {
         title="Lịch hẹn rơi vào ngày nghỉ"
         appointments={impact?.affectedAppointments ?? []}
         bookingRequests={impact?.affectedBookingRequests ?? []}
+        waitingPatients={impact?.waitingPatients ?? []}
         onClose={() => setImpact(null)}
       />
+      {impact && (impact.openEncounters?.length ?? 0) > 0 && (
+        <Alert variant="warning" onClose={() => setImpact(null)}>
+          Còn {impact.openEncounters!.length} phiên khám chưa kết thúc (
+          {impact.openEncounters!.map((e) => `${e.patientName ?? '—'} – ${e.dentistName ?? '—'}`).join('; ')}). Nhắc
+          bác sĩ kết thúc trước khi nghỉ để lập hóa đơn kịp thời.
+        </Alert>
+      )}
     </div>
   );
 }
@@ -144,7 +164,7 @@ function ClosureModal({
   closure: ClinicClosure | null;
   today: string;
   onClose: () => void;
-  onSaved: (result: ScheduleChangeImpact) => void;
+  onSaved: (result: ClinicClosureResult) => void;
 }) {
   const save = useSaveClinicClosure();
   // A closure already running keeps its first day.
@@ -152,6 +172,8 @@ function ClosureModal({
   const [startDate, setStartDate] = useState(closure?.startDate ?? today);
   const [endDate, setEndDate] = useState(closure?.endDate ?? today);
   const [reason, setReason] = useState(closure?.reason ?? '');
+  // A1-15: closed from a time of day on the first day (power cut from 14:00).
+  const [startTime, setStartTime] = useState(closure?.startTime ?? '');
 
   return (
     <Modal open onClose={onClose} title={closure ? 'Sửa ngày nghỉ phòng khám' : 'Thêm ngày nghỉ phòng khám'} size="sm">
@@ -160,7 +182,7 @@ function ClosureModal({
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate(
-            { id: closure?.id, startDate, endDate, reason: reason.trim() },
+            { id: closure?.id, startDate, endDate, reason: reason.trim(), ...(startTime ? { startTime } : {}) },
             {
               onSuccess: (result) => {
                 notify.success('Đã lưu ngày nghỉ phòng khám');
@@ -192,6 +214,14 @@ function ClosureModal({
             error={endDate < startDate ? 'Phải từ ngày bắt đầu trở đi' : undefined}
           />
         </div>
+        <Input
+          label="Nghỉ từ giờ (ngày đầu, để trống = cả ngày)"
+          type="time"
+          disabled={started}
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+          hint="VD mất điện từ 14:00: buổi sáng vẫn làm, chỉ đóng từ giờ này."
+        />
         <Textarea
           label="Lý do (hiển thị cho khách)"
           hint="Bệnh nhân đặt lịch online thấy: “Phòng khám nghỉ: {lý do}”."

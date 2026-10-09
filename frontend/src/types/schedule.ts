@@ -33,6 +33,7 @@ export interface WorkingSchedule {
   isPaidShift: boolean;
   shiftType: ShiftType;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CreateWorkingSchedulePayload {
@@ -61,6 +62,8 @@ export interface TimeOff {
   decidedAt: string | null;
   decisionNote: string | null;
   createdAt: string;
+  /** The reason is private (A1-21): shown only to approvers and the dentist. */
+  reasonHidden?: boolean;
 }
 
 /** One block of a working day, "HH:mm". */
@@ -90,6 +93,8 @@ export interface UpdateWorkingSchedulePayload {
   endTime?: string;
   validTo?: string | null;
   effectiveFrom?: string;
+  /** updatedAt the form was opened with: a concurrent edit is refused (A1-25). */
+  expectedUpdatedAt?: string;
 }
 
 // Appointments still SCHEDULED/CONFIRMED inside a newly created time-off —
@@ -136,6 +141,8 @@ export interface PendingBookingRequest {
 export interface ScheduleChangeImpact {
   affectedAppointments: TimeOffAffectedAppointment[];
   affectedBookingRequests?: AffectedBookingRequest[];
+  /** Patients already checked in that the change leaves without a dentist. */
+  waitingPatients?: TimeOffAffectedAppointment[];
 }
 
 export interface UpdateWorkingScheduleResult extends ScheduleChangeImpact {
@@ -149,6 +156,8 @@ export interface ClinicClosure {
   id: string;
   startDate: string;
   endDate: string;
+  /** Closed from this clinic time on the first day (mid-day closure); null = all day. */
+  startTime?: string | null;
   reason: string;
   createdBy: string;
   createdByName: string | null;
@@ -159,12 +168,32 @@ export interface ClinicClosurePayload {
   startDate: string;
   endDate: string;
   reason: string;
+  startTime?: string;
 }
 
-export interface ClinicClosureResult extends ClinicClosure, ScheduleChangeImpact {}
+export interface OpenEncounterRef {
+  id: string;
+  startedAt: string;
+  patientName: string | null;
+  patientCode: string | null;
+  dentistName: string | null;
+}
 
-export interface CreateTimeOffResult extends TimeOff {
+export interface ClinicClosureResult extends ClinicClosure, ScheduleChangeImpact {
+  /** Exams still open on any day (they bill late if left over the closure). */
+  openEncounters?: OpenEncounterRef[];
+}
+
+export interface CreateTimeOffResult extends TimeOff, ScheduleChangeImpact {
   affectedAppointments: TimeOffAffectedAppointment[];
+  /** Set when an approved time-off already running was ended now instead of erased. */
+  endedEarly?: boolean;
+}
+
+/** GET /appointments/time-offs/:id/impact — preview before approving. */
+export interface TimeOffImpactPreview {
+  affectedAppointments: TimeOffAffectedAppointment[];
+  inClinic: TimeOffAffectedAppointment[];
 }
 
 export interface CreateTimeOffPayload {
@@ -208,6 +237,16 @@ export interface CreateScheduleOverrideResult extends ScheduleOverride, Schedule
 export interface ImpactedAppointment extends TimeOffAffectedAppointment {
   dentistId: string;
   dentistName: string;
-  reason: 'OUTSIDE_WORKING_HOURS' | 'CLOSED' | 'TIME_OFF';
+  reason: 'OUTSIDE_WORKING_HOURS' | 'CLOSED' | 'TIME_OFF' | 'DENTIST_UNAVAILABLE';
   message: string;
+  rescheduleCount?: number;
+  /** The front desk reached the patient about the change (A1-13). */
+  clinicContactedAt?: string | null;
+  clinicContactNote?: string | null;
+}
+
+/** POST /appointments/bulk-reschedule result. */
+export interface BulkRescheduleResult {
+  moved: Array<{ appointmentId: string; startAt: string; dentistId: string }>;
+  failed: Array<{ appointmentId: string; reason: string }>;
 }

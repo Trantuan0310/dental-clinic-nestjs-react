@@ -50,6 +50,20 @@ export class AppointmentsCron implements OnApplicationBootstrap {
     }
   }
 
+  // A1-26: time-off requests whose whole period went by undecided.
+  @Cron(CronExpression.EVERY_HOUR)
+  async expirePendingTimeOffs() {
+    try {
+      const result = await this.appointments.expirePendingTimeOffs();
+      if (result.updated > 0) {
+        this.logger.log(`Withdrew ${result.updated} expired PENDING time-off requests`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`expirePendingTimeOffs failed: ${msg}`);
+    }
+  }
+
   // 00:15 clinic time, so yesterday's leftovers are gone before the new day
   // starts; the job only ever touches days before "today", never the current one.
   @Cron('15 0 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })

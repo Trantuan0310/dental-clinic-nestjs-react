@@ -7,6 +7,7 @@ import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import { AppointmentsService, STALE_APPOINTMENT_MSG, VisitPlan } from './appointments.service';
+import { AvailabilityService } from './availability.service';
 import {
   LOCKING_TX_OPTIONS,
   lockDentistCalendar,
@@ -20,6 +21,8 @@ import {
 } from '../common/events/domain-events';
 
 const OPEN_STATUSES: QueueStatus[] = [QueueStatus.WAITING, QueueStatus.CALLED, QueueStatus.SKIPPED];
+/** Reason prefix of the CLOSED override "thay bác sĩ cả ngày" creates (undo finds it). */
+export const REASSIGN_CLOSE_PREFIX = 'Thay bác sĩ cả ngày:';
 
 const ENTRY_INCLUDE = {
   appointment: {
@@ -76,6 +79,7 @@ export class DispatchService {
     private readonly audit: AuditService,
     private readonly appointments: AppointmentsService,
     @Optional() private readonly events?: EventEmitter2,
+    @Optional() private readonly availability?: AvailabilityService,
   ) {}
 
   /** GET /queue — open entries for a clinic date, in dispatch order per dentist. */
@@ -456,7 +460,11 @@ export class DispatchService {
       startAt: moved.startAt.toISOString(),
       ...(moved.overtime ? { overtime: true } : {}),
     });
-    return this.prisma.queueEntry.findUniqueOrThrow({ where: { id } });
+    const row = await this.prisma.queueEntry.findUniqueOrThrow({ where: { id } });
+    return {
+      ...row,
+      ...(await this.pendingTimeOffWarning(dto.dentistId, clinicDateOnly(moved.startAt))),
+    };
   }
 
   /**
@@ -466,11 +474,19 @@ export class DispatchService {
    * substitute's durations (A5-05); patients already waiting are moved to
    * the substitute's queue as by transfer(). Each one is checked on its
    * own; the ones the substitute cannot take are listed with the reason
-   * and stay where they are. Closing the absent dentist's calendar is a
-   * separate step (schedule override / time-off).
+   * and stay where they are. A3-06 / B5: unless `closeFromDentist` is
+   * false, the absent dentist's day is then closed (CLOSED override, from
+   * now when today) so nobody books them again; undoReassignDay() reverses
+   * the closure and the untouched bookings.
    */
   async reassignDay(
-    dto: { fromDentistId: string; toDentistId: string; date: string; reason: string },
+    dto: {
+      fromDentistId: string;
+      toDentistId: string;
+      date: string;
+      reason: string;
+      closeFromDentist?: boolean;
+    },
     actor: JwtPayload,
   ) {
     if (dto.fromDentistId === dto.toDentistId) {
@@ -500,8 +516,158 @@ export class DispatchService {
       orderBy: { startAt: 'asc' },
     });
     const reason = dto.reason.trim();
-    const moved: Array<{ appointmentId: string; startAt: Date; patientName: string }> = [];
+    const { moved, failed } = await this.moveVisits(
+      candidates,
+      dto.fromDentistId,
+      dto.toDentistId,
+      reason,
+      actor,
+      'APPOINTMENT_REASSIGNED',
+    );
+
+    // A3-05: patients already waiting for the absent dentist that day.
     const transferred: Array<{ appointmentId: string; startAt: Date; patientName: string }> = [];
+    const waiting =
+      (await this.prisma.queueEntry.findMany({
+        where: {
+          dentistId: dto.fromDentistId,
+          queueDate: new Date(dto.date),
+          doneAt: null,
+          status: { in: OPEN_STATUSES },
+        },
+        include: ENTRY_INCLUDE,
+      })) ?? [];
+    for (const entry of waiting.sort(compareQueue)) {
+      const patientName = entry.appointment.patient.fullName;
+      try {
+        await this.transfer(entry.id, { dentistId: dto.toDentistId, reason }, actor);
+        transferred.push({
+          appointmentId: entry.appointmentId,
+          startAt: entry.appointment.startAt,
+          patientName,
+        });
+      } catch (e) {
+        failed.push({
+          appointmentId: entry.appointmentId,
+          startAt: entry.appointment.startAt,
+          patientName,
+          reason: e instanceof Error ? e.message : String(e),
+          checkedIn: true,
+        });
+      }
+    }
+    const closedOverrideId =
+      dto.closeFromDentist === false ? null : await this.closeDentistDay(dto, reason, actor);
+    return {
+      moved,
+      transferred,
+      failed,
+      closedOverrideId,
+      ...(await this.pendingTimeOffWarning(dto.toDentistId, dto.date)),
+    };
+  }
+
+  /**
+   * X-5: the dentist taking patients has leave asked for that day, not
+   * decided yet — the move is allowed, but the desk is told.
+   */
+  private async pendingTimeOffWarning(dentistId: string, date: string) {
+    const pending = (await this.availability?.pendingTimeOffs(dentistId, date)) ?? [];
+    if (!pending.length) return {};
+    return {
+      warning: `Bác sĩ nhận có đơn nghỉ đang chờ duyệt ngày này (${pending
+        .map(p => `${p.startTime}–${p.endTime}`)
+        .join(', ')}) — nếu đơn được duyệt, các lượt này phải chuyển tiếp.`,
+    };
+  }
+
+  /**
+   * Undo "thay bác sĩ cả ngày" (A3-06): reopen the absent dentist's day (the
+   * CLOSED override the reassignment created) and move back the bookings
+   * whose last move was that reassignment and that are still untouched on
+   * the substitute — the substitute's own patients never move. Patients
+   * already checked in stay in the substitute's queue (moved by hand).
+   */
+  async undoReassignDay(
+    dto: { fromDentistId: string; toDentistId: string; date: string; reason: string },
+    actor: JwtPayload,
+  ) {
+    const date = new Date(dto.date);
+    const overrides = await this.prisma.scheduleOverride.findMany({
+      where: {
+        dentistId: dto.fromDentistId,
+        date,
+        kind: 'CLOSED',
+        reason: { startsWith: REASSIGN_CLOSE_PREFIX },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (overrides.length) {
+      await this.prisma.$transaction(async tx => {
+        await lockDentistCalendar(tx, dto.fromDentistId);
+        await tx.scheduleOverride.updateMany({
+          where: { id: { in: overrides.map(o => o.id) } },
+          data: { deletedAt: new Date(), deletedBy: actor.sub },
+        });
+      }, LOCKING_TX_OPTIONS);
+    }
+    const dayStart = startOfClinicDay(dto.date);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+    const onSubstitute = await this.prisma.appointment.findMany({
+      where: {
+        dentistId: dto.toDentistId,
+        status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+        startAt: {
+          gte: new Date(Math.max(dayStart.getTime(), Date.now() - REASSIGN_GRACE_MIN * 60_000)),
+          lt: dayEnd,
+        },
+        deletedAt: null,
+      },
+      include: {
+        services: { orderBy: { sortOrder: 'asc' } },
+        patient: { select: { code: true, fullName: true } },
+        rescheduleLogs: { orderBy: { changedAt: 'desc' }, take: 1 },
+      },
+      orderBy: { startAt: 'asc' },
+    });
+    const ours = onSubstitute.filter(a => {
+      const last = a.rescheduleLogs[0];
+      return (
+        last &&
+        last.oldDentistId === dto.fromDentistId &&
+        last.newDentistId === dto.toDentistId &&
+        last.newStartAt.getTime() === a.startAt.getTime()
+      );
+    });
+    const { moved, failed } = await this.moveVisits(
+      ours,
+      dto.toDentistId,
+      dto.fromDentistId,
+      dto.reason.trim(),
+      actor,
+      'APPOINTMENT_REASSIGN_UNDONE',
+    );
+    return { moved, failed, reopened: overrides.length > 0 };
+  }
+
+  /**
+   * Move each booking to `toDentistId` at its own time with that dentist's
+   * plan (A5-05), one transaction each; a clinic move (by_clinic).
+   */
+  private async moveVisits(
+    visits: Array<
+      Prisma.AppointmentGetPayload<{
+        include: { services: true; patient: { select: { code: true; fullName: true } } };
+      }>
+    >,
+    fromDentistId: string,
+    toDentistId: string,
+    reason: string,
+    actor: JwtPayload,
+    action: string,
+  ) {
+    const moved: Array<{ appointmentId: string; startAt: Date; patientName: string }> = [];
     const failed: Array<{
       appointmentId: string;
       startAt: Date;
@@ -509,16 +675,20 @@ export class DispatchService {
       reason: string;
       checkedIn?: boolean;
     }> = [];
-    for (const appt of candidates) {
+    for (const appt of visits) {
       try {
-        const { plan, minutes } = await this.planFor(appt, dto.toDentistId, dto.date);
+        const { plan, minutes } = await this.planFor(
+          appt,
+          toDentistId,
+          clinicDateOnly(appt.startAt),
+        );
         const endAt = new Date(appt.startAt.getTime() + minutes * 60_000);
         await this.prisma.$transaction(async tx => {
-          await lockDentistCalendar(tx, dto.toDentistId);
+          await lockDentistCalendar(tx, toDentistId);
           await lockPatientCalendar(tx, appt.patientId);
           try {
             await this.appointments.ensureSlotAvailable(
-              dto.toDentistId,
+              toDentistId,
               appt.startAt,
               endAt,
               actor,
@@ -548,7 +718,7 @@ export class DispatchService {
           const res = await tx.appointment.updateMany({
             where: {
               id: appt.id,
-              dentistId: dto.fromDentistId,
+              dentistId: fromDentistId,
               status: appt.status,
               startAt: appt.startAt,
               endAt: appt.endAt,
@@ -556,7 +726,7 @@ export class DispatchService {
             },
             // The reminder names the dentist: the new one gets its own.
             data: {
-              dentistId: dto.toDentistId,
+              dentistId: toDentistId,
               endAt,
               ...planData,
               reminderSentAt: null,
@@ -567,29 +737,27 @@ export class DispatchService {
           await tx.appointmentRescheduleLog.create({
             data: {
               appointmentId: appt.id,
-              oldDentistId: dto.fromDentistId,
+              oldDentistId: fromDentistId,
               oldStartAt: appt.startAt,
               oldEndAt: appt.endAt,
-              newDentistId: dto.toDentistId,
+              newDentistId: toDentistId,
               newStartAt: appt.startAt,
               newEndAt: endAt,
               reason,
+              // The clinic's move: never counted against the patient.
+              byClinic: true,
               changedBy: actor.sub,
             },
           });
         }, LOCKING_TX_OPTIONS);
-        await this.log('APPOINTMENT_REASSIGNED', actor, appt.id, {
-          fromDentistId: dto.fromDentistId,
-          toDentistId: dto.toDentistId,
-          reason,
-        });
+        await this.log(action, actor, appt.id, { fromDentistId, toDentistId, reason });
         // The patient is told of the new dentist (booking notices).
         this.events?.emit(APPOINTMENT_RESCHEDULED_EVENT, {
           appointmentId: appt.id,
           oldStartAt: appt.startAt,
           newStartAt: appt.startAt,
-          oldDentistId: dto.fromDentistId,
-          newDentistId: dto.toDentistId,
+          oldDentistId: fromDentistId,
+          newDentistId: toDentistId,
         } satisfies AppointmentRescheduledEvent);
         moved.push({
           appointmentId: appt.id,
@@ -605,36 +773,70 @@ export class DispatchService {
         });
       }
     }
+    return { moved, failed };
+  }
 
-    // A3-05: patients already waiting for the absent dentist that day.
-    const waiting = await this.prisma.queueEntry.findMany({
-      where: {
-        dentistId: dto.fromDentistId,
-        queueDate: new Date(dto.date),
-        doneAt: null,
-        status: { in: OPEN_STATUSES },
-      },
-      include: ENTRY_INCLUDE,
-    });
-    for (const entry of waiting.sort(compareQueue)) {
-      const patientName = entry.appointment.patient.fullName;
-      try {
-        await this.transfer(entry.id, { dentistId: dto.toDentistId, reason }, actor);
-        transferred.push({
-          appointmentId: entry.appointmentId,
-          startAt: entry.appointment.startAt,
-          patientName,
-        });
-      } catch (e) {
-        failed.push({
-          appointmentId: entry.appointmentId,
-          startAt: entry.appointment.startAt,
-          patientName,
-          reason: e instanceof Error ? e.message : String(e),
-          checkedIn: true,
-        });
-      }
+  /**
+   * The absent dentist takes no more bookings that day: a CLOSED override
+   * for the whole day, or from now (to the quarter hour) when it is today.
+   * Nothing is created for a past day or a day already closed all day.
+   */
+  private async closeDentistDay(
+    dto: { fromDentistId: string; date: string },
+    reason: string,
+    actor: JwtPayload,
+  ): Promise<string | null> {
+    const today = clinicDateOnly();
+    if (dto.date < today) return null;
+    const date = new Date(dto.date);
+    let range: { startTime: Date; endTime: Date } | null = null;
+    if (dto.date === today) {
+      const now = new Date(Date.now() + 7 * 60 * 60_000);
+      const minutes = Math.floor((now.getUTCHours() * 60 + now.getUTCMinutes()) / 15) * 15;
+      if (minutes >= 23 * 60 + 45) return null;
+      range = {
+        startTime: new Date(Date.UTC(1970, 0, 1, Math.floor(minutes / 60), minutes % 60)),
+        endTime: new Date(Date.UTC(1970, 0, 1, 23, 59)),
+      };
     }
-    return { moved, transferred, failed };
+    return this.prisma.$transaction(async tx => {
+      await lockDentistCalendar(tx, dto.fromDentistId);
+      const closedAllDay = await tx.scheduleOverride.findFirst({
+        where: {
+          dentistId: dto.fromDentistId,
+          date,
+          kind: 'CLOSED',
+          startTime: null,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (closedAllDay) return null;
+      const created = await tx.scheduleOverride.create({
+        data: {
+          dentistId: dto.fromDentistId,
+          date,
+          kind: 'CLOSED',
+          startTime: range?.startTime ?? null,
+          endTime: range?.endTime ?? null,
+          reason: `${REASSIGN_CLOSE_PREFIX} ${reason}`.slice(0, 500),
+          createdBy: actor.sub,
+        },
+      });
+      await this.audit.log({
+        action: 'SCHEDULE_OVERRIDE_CREATED',
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'schedule_override',
+        targetId: created.id,
+        metadata: {
+          dentistId: dto.fromDentistId,
+          date: dto.date,
+          kind: 'CLOSED',
+          via: 'reassign_day',
+        },
+      });
+      return created.id;
+    }, LOCKING_TX_OPTIONS);
   }
 }

@@ -182,6 +182,8 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const [actionModal, setActionModal] = useState<ActionKey | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // "Phòng khám hủy/dời": the clinic's reason, never counted against the patient.
+  const [byClinic, setByClinic] = useState(false);
 
   const checkIn = useCheckInAppointment();
   const confirm = useConfirmAppointment();
@@ -336,6 +338,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     setActionModal(null);
     setReason('');
     setError(null);
+    setByClinic(false);
   };
 
   const handleCheckIn = async () => {
@@ -400,6 +403,8 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           // A visit moved or edited since this copy was loaded is a 409.
           rescheduleCount: appointment.rescheduleCount,
           updatedAt: appointment.updatedAt,
+          // After the start only the clinic may cancel a visit not arrived (A3-10).
+          ...(byClinic || clinicOnlyCancel ? { byClinic: true } : {}),
         },
       });
       notify.success('Đã hủy lịch hẹn');
@@ -488,6 +493,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           newStartsAt: start.toISOString(),
           newEndsAt: end.toISOString(),
           reason: reason || 'Đổi lịch',
+          ...(byClinic ? { byClinic: true } : {}),
           // A visit moved by a colleague since this copy was loaded is a 409 (A3-12).
           rescheduleCount: appointment.rescheduleCount,
           updatedAt: appointment.updatedAt,
@@ -536,12 +542,13 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
             : `${opens.time} ngày ${opens.date.slice(8, 10)}/${opens.date.slice(5, 7)}`;
         })()
       : null;
+  // A3-10: after the start, front desk may still cancel a visit not arrived
+  // when the clinic is at fault (absent dentist, closed day) — never a no-show.
+  const clinicOnlyCancel = !rowScopedDentist && started && appointment?.status !== 'checked_in';
   const cancelAllowed =
     !!appointment &&
     canCancel(appointment.status) &&
-    (rowScopedDentist
-      ? startMs - now >= 24 * 60 * 60_000 // BR-APPT-009
-      : !started || appointment.status === 'checked_in'); // BR-APPT-010 / 025
+    (rowScopedDentist ? startMs - now >= 24 * 60 * 60_000 : true); // BR-APPT-009 / 010 / 025
   // From +15 min, when the visit shows "Quá giờ" (backend MANUAL_NO_SHOW_AFTER_MIN).
   const noShowAllowed =
     !!appointment && canNoShow(appointment.status) && now >= startMs + OVERDUE_AFTER_MIN * 60_000;
@@ -1028,6 +1035,19 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         reason={reason}
         setReason={setReason}
         quickReasons={CANCEL_REASONS}
+        extra={
+          rowScopedDentist ? undefined : clinicOnlyCancel ? (
+            <p className="text-xs text-amber-700">
+              Đã qua giờ hẹn: chỉ hủy được với lý do "Phòng khám hủy" (bác sĩ vắng, phòng khám nghỉ) — không tính là
+              bệnh nhân vắng mặt. Nếu bệnh nhân không đến, hãy đánh vắng mặt.
+            </p>
+          ) : (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={byClinic} onChange={(e) => setByClinic(e.target.checked)} />
+              <span>Phòng khám hủy (bác sĩ vắng, phòng khám nghỉ) — không tính cho bệnh nhân</span>
+            </label>
+          )
+        }
         error={error}
         onConfirm={handleCancel}
         isLoading={cancel.isPending}
@@ -1263,6 +1283,15 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
             placeholder="VD: BS bận đột xuất, BN yêu cầu đổi..."
             rows={3}
           />
+          {!rowScopedDentist && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={byClinic} onChange={(e) => setByClinic(e.target.checked)} />
+              <span>
+                Phòng khám dời (bác sĩ vắng, đổi giờ làm, ngày nghỉ) — không tính vào giới hạn 3 lần đổi lịch của
+                bệnh nhân
+              </span>
+            </label>
+          )}
         </div>
       </Modal>
     </>
@@ -1321,6 +1350,8 @@ interface ActionDialogProps {
   reason: string;
   setReason: (v: string) => void;
   quickReasons?: string[];
+  /** Extra controls under the reason (e.g. "Phòng khám hủy"). */
+  extra?: React.ReactNode;
   error: string | null;
   onConfirm: () => void;
   isLoading: boolean;
@@ -1336,6 +1367,7 @@ function ActionDialog({
   reason,
   setReason,
   quickReasons,
+  extra,
   error,
   onConfirm,
   isLoading,
@@ -1378,6 +1410,7 @@ function ActionDialog({
             placeholder="Nhập lý do..."
             rows={3}
           />
+          {extra}
         </div>
       }
       confirmLabel={confirmLabel}

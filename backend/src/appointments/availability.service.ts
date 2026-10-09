@@ -7,11 +7,13 @@ import {
   DayCalendar,
   SlotProblem,
   Buffers,
+  blockedAllDay,
   buildDayCalendar,
   clinicHhmm,
   freeSlots,
   intervalProblem,
 } from './domain/day-calendar';
+import { closuresOnDay, terminationOverride } from './domain/day-calendar-loader';
 import type { VisitPlan } from './appointments.service';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -125,25 +127,8 @@ export function slotStepMinutes(): number {
   return Number.isInteger(value) && value >= 5 && value <= 60 ? value : DEFAULT_SLOT_STEP_MIN;
 }
 
-/**
- * Why a day with working hours still has no time: every window lies inside
- * time-off or closed ranges ('TIME_OFF' when any of it is time-off), else null.
- */
-export function blockedAllDay(cal: DayCalendar): 'TIME_OFF' | 'CLOSED' | null {
-  if (cal.windows.length === 0) return null;
-  const used = new Set<'TIME_OFF' | 'CLOSED'>();
-  for (const w of cal.windows) {
-    let reached = w.start.getTime();
-    for (const b of [...cal.blocked].sort((x, y) => x.start.getTime() - y.start.getTime())) {
-      if (b.end.getTime() <= reached || b.start.getTime() > reached) continue;
-      used.add(b.kind);
-      reached = b.end.getTime();
-      if (reached >= w.end.getTime()) break;
-    }
-    if (reached < w.end.getTime()) return null;
-  }
-  return used.has('TIME_OFF') ? 'TIME_OFF' : 'CLOSED';
-}
+// Moved to domain/day-calendar.ts (shared with the day-calendar loader).
+export { blockedAllDay };
 
 /**
  * The single source of "when can this dentist see a patient" (ADR-0009
@@ -159,70 +144,76 @@ export class AvailabilityService {
     const day = new Date(date);
     const dayStart = startOfClinicDay(date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
-    const [schedules, shifts, overrides, timeOffs, bookings, clinicClosures] = await Promise.all([
-      db.workingSchedule.findMany({
-        where: {
-          dentistId,
-          dayOfWeek: day.getUTCDay(),
-          validFrom: { lte: day },
-          OR: [{ validTo: null }, { validTo: { gte: day } }],
-          deletedAt: null,
-        },
-        orderBy: { startTime: 'asc' },
-        select: { startTime: true, endTime: true, slotDurationMin: true },
-      }),
-      // BR-APPT-027: an APPROVED shift registration opens hours that day.
-      db.shiftRegistration.findMany({
-        where: { dentistId, date: day, status: 'APPROVED', deletedAt: null },
-        select: { startTime: true, endTime: true },
-      }),
-      db.scheduleOverride.findMany({
-        where: { dentistId, date: day, deletedAt: null },
-        select: { kind: true, startTime: true, endTime: true, reason: true },
-      }),
-      // BR-SCH-001: only approved time-off blocks.
-      db.timeOff.findMany({
-        where: {
-          dentistId,
-          status: 'APPROVED',
-          startAt: { lt: dayEnd },
-          endAt: { gt: dayStart },
-          deletedAt: null,
-        },
-        select: { startAt: true, endAt: true },
-      }),
-      db.appointment.findMany({
-        where: {
-          dentistId,
-          status: { notIn: SLOT_RELEASING_STATUSES },
-          startAt: { lt: dayEnd },
-          endAt: { gt: dayStart },
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          status: true,
-          startAt: true,
-          endAt: true,
-          bufferBeforeMin: true,
-          bufferAfterMin: true,
-          encounter: { select: { closedAt: true } },
-        },
-      }),
-      // Migration 035: Tết/holidays close every dentist's day.
-      db.clinicClosure.findMany({
-        where: { startDate: { lte: day }, endDate: { gte: day }, deletedAt: null },
-        select: { reason: true },
-      }),
-    ]);
+    const [schedules, shifts, overrides, timeOffs, bookings, clinicClosures, leaving] =
+      await Promise.all([
+        db.workingSchedule.findMany({
+          where: {
+            dentistId,
+            dayOfWeek: day.getUTCDay(),
+            validFrom: { lte: day },
+            OR: [{ validTo: null }, { validTo: { gte: day } }],
+            deletedAt: null,
+          },
+          orderBy: { startTime: 'asc' },
+          select: { startTime: true, endTime: true, slotDurationMin: true },
+        }),
+        // BR-APPT-027: an APPROVED shift registration opens hours that day.
+        db.shiftRegistration.findMany({
+          where: { dentistId, date: day, status: 'APPROVED', deletedAt: null },
+          select: { startTime: true, endTime: true },
+        }),
+        db.scheduleOverride.findMany({
+          where: { dentistId, date: day, deletedAt: null },
+          select: { kind: true, startTime: true, endTime: true, reason: true },
+        }),
+        // BR-SCH-001: only approved time-off blocks.
+        db.timeOff.findMany({
+          where: {
+            dentistId,
+            status: 'APPROVED',
+            startAt: { lt: dayEnd },
+            endAt: { gt: dayStart },
+            deletedAt: null,
+          },
+          select: { startAt: true, endAt: true },
+        }),
+        db.appointment.findMany({
+          where: {
+            dentistId,
+            status: { notIn: SLOT_RELEASING_STATUSES },
+            startAt: { lt: dayEnd },
+            endAt: { gt: dayStart },
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            status: true,
+            startAt: true,
+            endAt: true,
+            bufferBeforeMin: true,
+            bufferAfterMin: true,
+            encounter: { select: { closedAt: true } },
+          },
+        }),
+        // Migration 035: Tết/holidays close every dentist's day.
+        db.clinicClosure.findMany({
+          where: { startDate: { lte: day }, endDate: { gte: day }, deletedAt: null },
+          select: { reason: true, startDate: true, startTime: true },
+        }),
+        // A planned departure (terminationDate ahead) closes the days from then.
+        db.employee.findFirst({
+          where: { userId: dentistId, deletedAt: null, terminationDate: { not: null } },
+          select: { terminationDate: true },
+        }),
+      ]);
     return buildDayCalendar({
       date,
       schedules: schedules ?? [],
       shifts: shifts ?? [],
-      overrides: overrides ?? [],
+      overrides: [...(overrides ?? []), ...terminationOverride(leaving?.terminationDate, date)],
       timeOffs: timeOffs ?? [],
       bookings: (bookings ?? []).map(finishedEarly),
-      clinicClosures: clinicClosures ?? [],
+      clinicClosures: closuresOnDay(clinicClosures ?? [], date),
     });
   }
 
@@ -258,7 +249,10 @@ export class AvailabilityService {
     buffers: Buffers = {},
     excludeAppointmentId?: string,
   ) {
-    const loaded = await this.loadDay(dentistId, date);
+    const [loaded, pendingTimeOffs] = await Promise.all([
+      this.loadDay(dentistId, date),
+      this.pendingTimeOffs(dentistId, date),
+    ]);
     // Rescheduling: the visit being moved does not block its own new time.
     const cal = excludeAppointmentId
       ? { ...loaded, bookings: loaded.bookings.filter(b => b.id !== excludeAppointmentId) }
@@ -279,6 +273,7 @@ export class AvailabilityService {
         ...(cal.closedAllDay ? { closedReason: cal.closedReason } : {}),
         // The whole clinic is closed (its reason is meant for patients too).
         clinicClosed: cal.clinicClosed,
+        pendingTimeOffs,
       };
     }
     const slotMin = slotDuration ?? cal.defaultSlotMin;
@@ -315,7 +310,30 @@ export class AvailabilityService {
       availableSlots,
       // Working hours, but all of them on time-off / closed ranges.
       blockedReason: availableSlots.length ? null : blockedAllDay(cal),
+      // Leave asked for but not decided yet: bookable, worth a warning (A1-10).
+      pendingTimeOffs,
     };
+  }
+
+  /** The dentist's PENDING time-off overlapping a clinic day (clinic "HH:mm"). */
+  async pendingTimeOffs(dentistId: string, date: string, db: Db = this.prisma) {
+    const dayStart = startOfClinicDay(date);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+    const rows =
+      (await db.timeOff.findMany({
+        where: {
+          dentistId,
+          status: 'PENDING',
+          startAt: { lt: dayEnd },
+          endAt: { gt: dayStart },
+          deletedAt: null,
+        },
+        select: { startAt: true, endAt: true },
+      })) ?? [];
+    return rows.map(r => ({
+      startTime: r.startAt <= dayStart ? '00:00' : clinicHhmm(r.startAt),
+      endTime: r.endAt >= dayEnd ? '24:00' : clinicHhmm(r.endAt),
+    }));
   }
 
   /**

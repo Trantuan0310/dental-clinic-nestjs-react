@@ -289,6 +289,14 @@ const PERMISSIONS = [
     action: 'approve',
     description: 'Duyệt/từ chối đơn nghỉ phép của bác sĩ',
   },
+  // Round 4 (migration 043 inserts the same row): front desk records a
+  // dentist's sudden absence today, effective at once.
+  {
+    code: 'time_off.record_urgent',
+    resource: 'time_off',
+    action: 'record_urgent',
+    description: 'Ghi nhận bác sĩ vắng đột xuất hôm nay (có hiệu lực ngay)',
+  },
 
   // ADR-0009 phase 5 (migration 023 inserts the same row)
   {
@@ -792,6 +800,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'queue.call',
     'queue.manage',
     'schedule.read',
+    'time_off.record_urgent',
     'dentist.read',
     'service.read',
     'booking_request.read',
