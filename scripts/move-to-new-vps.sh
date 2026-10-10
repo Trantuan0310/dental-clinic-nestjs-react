@@ -75,7 +75,11 @@ for d in "$TLS_DIR" "$PG_DIR"; do
   mkdir -p "$d"
   rsync -aL "root@$OLD:$d/" "$d/"   # -L: copy real files behind Let's Encrypt symlinks
 done
-chown 999:999 "$PG_DIR"/server.crt "$PG_DIR"/server.key
+# The key must belong to the user PostgreSQL runs as in the image we use.
+PG_IMAGE=$(awk '/^  postgres:/{f=1} f && /image:/{print $2; exit}' "$APP/docker-compose.prod.yml")
+PG_UID=$(docker run --rm --entrypoint id "${PG_IMAGE:-postgres:16-alpine}" -u postgres)
+PG_GID=$(docker run --rm --entrypoint id "${PG_IMAGE:-postgres:16-alpine}" -g postgres)
+chown "$PG_UID:$PG_GID" "$PG_DIR"/server.crt "$PG_DIR"/server.key
 chmod 644 "$PG_DIR"/server.crt
 chmod 600 "$PG_DIR"/server.key
 
@@ -101,9 +105,18 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 "${DC[@]}" stop backend web >/dev/null 2>&1 || true
-# Warnings about extensions that already exist are expected; the row check below decides.
+# A fresh, empty database each run, so nothing from a trial run can remain.
 "${DC[@]}" exec -T postgres sh -c \
-  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner 2>&1 | grep -v "already exists" || true' < "$DUMP"
+  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\" WITH (FORCE)" -c "CREATE DATABASE \"$POSTGRES_DB\""' >/dev/null \
+  || die "Không tạo lại được database trên máy mới"
+RESTORE_LOG=$BASE/restore.log
+"${DC[@]}" exec -T postgres sh -c \
+  'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner' < "$DUMP" > "$RESTORE_LOG" 2>&1 || true
+# Only "already exists" (e.g. the public schema) is expected; anything else stops here.
+if grep -E 'error:' "$RESTORE_LOG" | grep -v 'already exists' | grep -v 'errors ignored on restore' | grep -q .; then
+  cat "$RESTORE_LOG"
+  die "Nạp dữ liệu có lỗi (xem ở trên, lưu tại $RESTORE_LOG). Máy cũ không bị ảnh hưởng."
+fi
 users=$("${DC[@]}" exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM users"' | tr -d '[:space:]')
 [ "${users:-0}" -gt 0 ] 2>/dev/null || die "Nạp dữ liệu không thành công (không thấy tài khoản nào)"
 echo "Dữ liệu đã nạp: $users tài khoản"
@@ -121,6 +134,11 @@ done
 DOMAIN=$(envval DOMAIN)
 NEW_IP=$(curl -fsS -4 https://ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
 say "XONG. Máy mới đang chạy với dữ liệu mới nhất."
+CERT=$(ls "$TLS_DIR"/fullchain.pem "$TLS_DIR"/*.crt 2>/dev/null | head -1 || true)
+if [ -n "$CERT" ]; then
+  EXPIRES=$(openssl x509 -enddate -noout -in "$CERT" | cut -d= -f2)
+  printf '\n\033[1;33mLƯU Ý: script chỉ chép chứng chỉ HTTPS hiện tại, CHƯA cài tự gia hạn trên máy mới.\nChứng chỉ hết hạn: %s. Trước ngày đó phải cài gia hạn (hỏi lại người hỗ trợ).\033[0m\n' "$EXPIRES"
+fi
 if [ "${FINAL:-}" = 1 ]; then
   cat <<EOF
 
