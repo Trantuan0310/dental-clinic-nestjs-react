@@ -735,7 +735,9 @@ export class PatientsService {
 
     const items = await this.prisma.patient.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      // id breaks ties: patients created in the same instant (an import)
+      // must keep one order, or the cursor repeats or skips rows.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: pageSize + 1,
       ...(parsed.cursor ? { cursor: { id: parsed.cursor }, skip: 1 } : {}),
     });
