@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronLeft, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { buildNavGroups } from '@/lib/nav';
 import { BrandBadge } from '@/components/brand';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { usePendingBookingCount } from '@/features/booking/usePendingBookingCount';
 
 interface SidebarContentProps {
@@ -60,7 +61,7 @@ export function SidebarContent({
           {collapsed ? <BrandBadge collapsed /> : <BrandBadge />}
         </div>
       )}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin" aria-label={t('shell.menu.dialogLabel')}>
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 scrollbar-thin" aria-label={t('shell.menu.dialogLabel')}>
         {groups.map((group) => (
           <div key={group.titleKey} className="mb-5">
             {!collapsed && (
@@ -90,6 +91,7 @@ export function SidebarContent({
                               : 'text-gray-700 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800',
                           )
                         }
+                        aria-label={collapsed ? label : undefined}
                         title={collapsed ? (badge ? `${label} (${badge})` : label) : undefined}
                       >
                         <span className="relative shrink-0">
@@ -198,13 +200,20 @@ function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const panelRef = useRef<HTMLElement>(null);
 
   useFocusTrap({ active: open, containerRef: panelRef, onEscape: onClose });
+  useBodyScrollLock(open);
 
   useEffect(() => {
-    if (open) document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
+    if (!open) return;
+    const desktop = window.matchMedia('(min-width: 768px)');
+    const closeOnDesktop = () => {
+      if (desktop.matches) onClose();
     };
-  }, [open]);
+    closeOnDesktop();
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => {
+      desktop.removeEventListener('change', closeOnDesktop);
+    };
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -221,6 +230,7 @@ function MobileSidebar({ open, onClose }: MobileSidebarProps) {
       />
       {/* Panel */}
       <aside
+        id="mobile-navigation"
         ref={panelRef}
         className={cn(
           'absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col bg-white shadow-xl transition-transform duration-200 dark:bg-surface-900 dark:shadow-black/40',
@@ -236,12 +246,12 @@ function MobileSidebar({ open, onClose }: MobileSidebarProps) {
             type="button"
             onClick={onClose}
             aria-label={t('shell.menu.close')}
-            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 dark:text-surface-400 dark:hover:bg-surface-800"
+            className="rounded-md p-2.5 text-gray-500 hover:bg-gray-100 dark:text-surface-400 dark:hover:bg-surface-800"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <SidebarContent onNavigate={onClose} showBrand={false} />
         </div>
       </aside>
@@ -279,8 +289,9 @@ function NavItemWithChildren({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const childrenId = useId();
   const childPaths = children.map((c) => c.to);
-  const hasActiveChild = childPaths.some((p) => location.pathname.startsWith(p));
+  const hasActiveChild = childPaths.some((p) => location.pathname === p || location.pathname.startsWith(`${p}/`));
 
   // The comment above promises this auto-opens for an active child route,
   // but nothing ever synced `open` to `hasActiveChild` — a deep link or
@@ -293,7 +304,6 @@ function NavItemWithChildren({
   }, [hasActiveChild]);
   const ParentIcon = ParentIconProp ?? children[0]?.icon;
   const label = t(`nav.${labelKey}`, labelKey);
-  const childrenId = `nav-children-${to.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
   return (
     <li>

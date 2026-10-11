@@ -25,6 +25,14 @@
     a[role='button']:not(.no-touch-target) {
       min-height: 44px;
     }
+
+    /* Keep form fields easy to tap and prevent iOS from zooming on focus. */
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='range']):not([type='color']),
+    select,
+    textarea {
+      min-height: 44px;
+      font-size: 16px;
+    }
   }
 
   /* respect reduced motion */
@@ -69,6 +77,10 @@
       dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100
       dark:placeholder:text-surface-500
       dark:disabled:bg-surface-900 dark:disabled:text-surface-500;
+  }
+
+  .dark .input-base {
+    color-scheme: dark;
   }
 
   .table-base {

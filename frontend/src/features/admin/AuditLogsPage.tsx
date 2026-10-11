@@ -117,7 +117,7 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Nhật ký kiểm toán</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -143,6 +143,7 @@ export default function AuditLogsPage() {
             </div>
             <select
               className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Lọc theo hành động"
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
             >
@@ -155,6 +156,7 @@ export default function AuditLogsPage() {
             </select>
             <select
               className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Lọc theo đối tượng"
               value={entityFilter}
               onChange={(e) => setEntityFilter(e.target.value)}
             >
@@ -169,6 +171,8 @@ export default function AuditLogsPage() {
             <input
               type="date"
               className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Từ ngày"
+              max={dateTo || undefined}
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
@@ -176,6 +180,8 @@ export default function AuditLogsPage() {
             <input
               type="date"
               className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              aria-label="Đến ngày"
+              min={dateFrom || undefined}
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />

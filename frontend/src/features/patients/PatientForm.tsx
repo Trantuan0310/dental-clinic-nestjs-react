@@ -90,7 +90,7 @@ export function PatientForm() {
   const [tagsDirty, setTagsDirty] = useState(false);
   const saved = useRef(false);
 
-  const { data: patient, isLoading } = useQuery({
+  const { data: patient, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['patient', patientId],
     queryFn: () => patientsApi.get(patientId!),
     enabled: !!patientId,
@@ -269,13 +269,25 @@ export function PatientForm() {
     return <div>Đang tải...</div>;
   }
 
+  if (patientId && isError && !patient) {
+    return (
+      <Alert type="danger" title="Không thể tải hồ sơ bệnh nhân">
+        <p className="mb-3">Vui lòng tải lại hồ sơ trước khi chỉnh sửa.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => refetch()} isLoading={isFetching}>Thử lại</Button>
+          <Button variant="ghost" onClick={cancelForm}>Quay lại</Button>
+        </div>
+      </Alert>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" onClick={cancelForm} aria-label="Quay lại">
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
           {patientId ? 'Sửa thông tin bệnh nhân' : 'Tạo bệnh nhân mới'}
         </h1>
       </div>
@@ -316,7 +328,7 @@ export function PatientForm() {
               error={errors.fullName?.message}
               {...register('fullName')}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
               <Input
                 label="Ngày sinh"
                 type="date"
@@ -326,10 +338,10 @@ export function PatientForm() {
                 {...register('dateOfBirth')}
               />
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
                   Giới tính
                 </label>
-                <div className="mt-1.5 flex gap-4">
+                <div className="mt-1.5 flex min-h-10 flex-wrap items-center gap-4">
                   <label className="flex items-center gap-2">
                     <input type="radio" value="male" {...register('gender')} />
                     <span className="text-sm">Nam</span>
@@ -361,21 +373,19 @@ export function PatientForm() {
               error={errors.email?.message}
               {...register('email')}
             />
-            <p className="-mt-2 text-xs text-gray-500 sm:col-span-2">
+            <p className="-mt-2 text-xs text-gray-500 dark:text-surface-400 sm:col-span-2">
               Cần ít nhất SĐT chính hoặc SĐT người liên hệ.
             </p>
-            <Input
-              label="Địa chỉ"
-              className="sm:col-span-2"
-              {...register('address')}
-            />
+            <div className="sm:col-span-2">
+              <Input label="Địa chỉ" {...register('address')} />
+            </div>
             <Input
               label="Nghề nghiệp"
               {...register('occupation')}
             />
           </div>
           {age !== null && (
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-surface-400">
               Tuổi: {age} tuổi
             </p>
           )}
@@ -408,7 +418,7 @@ export function PatientForm() {
         <Card title="Thông tin y tế">
           {/* Allergies */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
               Dị ứng
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
@@ -429,7 +439,7 @@ export function PatientForm() {
                 </span>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
               <Input
                 label="Thêm dị ứng"
                 placeholder="VD: Penicillin"
@@ -459,7 +469,7 @@ export function PatientForm() {
 
           {/* Chronic Diseases */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
               Bệnh mãn tính
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
@@ -480,7 +490,7 @@ export function PatientForm() {
                 </span>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
               <Input
                 label="Thêm bệnh mãn tính"
                 placeholder="VD: Tăng huyết áp"
@@ -515,7 +525,7 @@ export function PatientForm() {
 
           {/* Current Medications */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
               Thuốc đang dùng
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
@@ -536,7 +546,7 @@ export function PatientForm() {
                 </span>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
               <Input
                 label="Thêm thuốc đang dùng"
                 placeholder="VD: Amlodipine 5mg"
@@ -587,7 +597,7 @@ export function PatientForm() {
           />
         </Card>
 
-        <div className="sticky bottom-4 z-10 flex justify-end gap-3 rounded-lg border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+        <div className="sticky bottom-4 z-10 flex justify-end gap-3 rounded-lg border border-gray-200 bg-white/95 dark:bg-surface-900/95 dark:border-surface-700 p-3 shadow-lg backdrop-blur">
           <Button variant="outline" type="button" onClick={cancelForm}>
             Hủy
           </Button>

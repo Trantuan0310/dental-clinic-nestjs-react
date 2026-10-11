@@ -20,7 +20,7 @@ export function TimeBlocksEditor({
     <div className="space-y-2">
       {blocks.map((b, i) => (
         <div key={i} className="flex items-end gap-2">
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <Input
               label={i === 0 ? startLabel : undefined}
               aria-label={`${startLabel} (khung ${i + 1})`}
@@ -31,7 +31,7 @@ export function TimeBlocksEditor({
               onChange={(e) => update(i, { startTime: e.target.value })}
             />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <Input
               label={i === 0 ? 'Đến' : undefined}
               aria-label={`Đến (khung ${i + 1})`}

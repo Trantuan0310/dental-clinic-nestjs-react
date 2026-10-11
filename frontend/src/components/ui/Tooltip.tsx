@@ -54,7 +54,15 @@ export function Tooltip({ label, children, side = 'top', className, id, delay = 
   };
 
   const trigger = cloneElement(children as ReactElement<Record<string, unknown>>, {
-    'aria-describedby': open ? tooltipId : undefined,
+    'aria-describedby': [(children.props as { 'aria-describedby'?: string })['aria-describedby'], open ? tooltipId : undefined].filter(Boolean).join(' ') || undefined,
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key === 'Escape' && open) {
+        hideNow();
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      (children.props as { onKeyDown?: (event: React.KeyboardEvent) => void }).onKeyDown?.(event);
+    },
     onMouseEnter: ((e: React.MouseEvent) => {
       showNow();
       const orig = (children.props as { onMouseEnter?: (e: React.MouseEvent) => void }).onMouseEnter;
@@ -85,7 +93,7 @@ export function Tooltip({ label, children, side = 'top', className, id, delay = 
           id={tooltipId}
           role="tooltip"
           className={cn(
-            'pointer-events-none absolute z-50 max-w-xs whitespace-nowrap rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg',
+            'pointer-events-none absolute z-50 w-max max-w-[min(20rem,calc(100vw-2rem))] whitespace-normal rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg',
             positionClass,
           )}
         >

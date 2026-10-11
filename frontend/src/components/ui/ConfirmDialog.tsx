@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useId, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './Button';
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { useFocusTrap } from '@/lib/useFocusTrap';
 
 export interface ConfirmDialogProps {
@@ -32,9 +33,11 @@ export function ConfirmDialog({
   confirmVariant,
   isLoading = false,
 }: ConfirmDialogProps) {
+  const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const resolvedOpen = open ?? isOpen ?? false;
+  useBodyScrollLock(resolvedOpen);
   const finalConfirmLabel = confirmLabel ?? confirmText ?? 'Xác nhận';
   const finalVariant = confirmVariant ?? (variant === 'danger' ? 'danger' : 'primary');
 
@@ -63,7 +66,7 @@ export function ConfirmDialog({
   if (!resolvedOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -74,10 +77,12 @@ export function ConfirmDialog({
       {/* Dialog */}
       <div
         ref={panelRef}
-        className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 duration-200"
+        className="relative z-10 max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-lg bg-white p-6 shadow-xl dark:bg-surface-900 animate-in fade-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-title"
+        aria-labelledby={titleId}
+        aria-describedby={description ? `${titleId}-desc` : undefined}
+        aria-busy={isLoading}
       >
         <button
           type="button"
@@ -90,17 +95,17 @@ export function ConfirmDialog({
         </button>
 
         <h2
-          id="confirm-title"
-          className="text-lg font-semibold text-gray-900"
+          id={titleId}
+          className="pr-8 text-lg font-semibold text-gray-900 dark:text-surface-100"
         >
           {title}
         </h2>
 
         {description && (
-          <div className="mt-2 text-sm text-gray-600">{description}</div>
+          <div id={`${titleId}-desc`} className="mt-2 text-sm text-gray-600 dark:text-surface-300">{description}</div>
         )}
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
           <Button ref={cancelRef} variant="outline" onClick={handleClose} disabled={isLoading}>
             {cancelText}
           </Button>

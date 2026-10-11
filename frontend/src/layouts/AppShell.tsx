@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn';
@@ -17,6 +17,7 @@ export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { t } = useTranslation();
   const breadcrumbs = useBreadcrumbs();
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   return (
     <div className="min-h-screen bg-surface-50 text-surface-900 dark:bg-surface-950 dark:text-surface-100">
@@ -35,7 +36,7 @@ export function AppShell() {
       <div className="md:flex md:flex-row">
         <Sidebar
           mobileOpen={mobileNavOpen}
-          onMobileClose={() => setMobileNavOpen(false)}
+          onMobileClose={closeMobileNav}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
         />

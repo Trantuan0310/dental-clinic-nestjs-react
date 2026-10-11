@@ -139,6 +139,8 @@ export default function PublicBookingPage() {
   }, [preselected]);
 
   useEffect(() => {
+    let active = true;
+    setSlotLoading(false);
     setSlots([]);
     setTime("");
     setEmptyReason(null);
@@ -153,6 +155,7 @@ export default function PublicBookingPage() {
         params: { serviceId, dentistId, date, next: 1 },
       })
       .then((r) => {
+        if (!active) return;
         const data = r.data.data;
         setSlots(data.availableSlots);
         setEmptyReason(data.emptyReason ?? null);
@@ -163,8 +166,13 @@ export default function PublicBookingPage() {
           setMinLead(data.minLeadMinutes);
       })
       // The server says what is wrong (a day too far ahead, for one).
-      .catch((e: unknown) => setSlotError(bookingErrorMessage(e, SLOT_ERROR)))
-      .finally(() => setSlotLoading(false));
+      .catch((e: unknown) => {
+        if (active) setSlotError(bookingErrorMessage(e, SLOT_ERROR));
+      })
+      .finally(() => {
+        if (active) setSlotLoading(false);
+      });
+    return () => { active = false; };
   }, [serviceId, dentistId, date]);
 
   const set = (key: keyof typeof form, value: string | boolean) =>
@@ -228,7 +236,7 @@ export default function PublicBookingPage() {
 
   if (loading)
     return (
-      <main className="mx-auto max-w-3xl p-6 text-gray-600">
+      <main role="status" className="mx-auto max-w-3xl p-6 text-gray-600">
         Đang tải lịch khám…
       </main>
     );
@@ -252,10 +260,12 @@ export default function PublicBookingPage() {
             Gửi yêu cầu để lễ tân kiểm tra. Lịch chỉ được giữ sau khi phòng khám
             xác nhận.
           </p>
+          {error && services.length === 0 && (
+            <p role="alert" className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
+          )}
           {services.length === 0 ? (
             <div className="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-              Phòng khám chưa mở dịch vụ đặt lịch trực tuyến. Vui lòng gọi trực
-              tiếp cho lễ tân.
+              {error ? "Vui lòng tải lại trang hoặc gọi trực tiếp cho lễ tân." : "Phòng khám chưa mở dịch vụ đặt lịch trực tuyến. Vui lòng gọi trực tiếp cho lễ tân."}
             </div>
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-6">
@@ -267,11 +277,12 @@ export default function PublicBookingPage() {
                   <label className="text-sm font-medium text-gray-700">
                     Dịch vụ
                     <select aria-label="Dịch vụ"
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                       value={serviceId}
                       onChange={(e) => {
                         setServiceId(e.target.value);
-                        setDentistId("");
+                        const dentists = services.find((s) => s.id === e.target.value)?.dentists;
+                        setDentistId(dentists?.length === 1 ? dentists[0].id : "");
                       }}
                       required
                     >
@@ -286,7 +297,7 @@ export default function PublicBookingPage() {
                   <label className="text-sm font-medium text-gray-700">
                     Bác sĩ
                     <select aria-label="Bác sĩ"
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                       value={dentistId}
                       onChange={(e) => setDentistId(e.target.value)}
                       required
@@ -331,7 +342,7 @@ export default function PublicBookingPage() {
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       required
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                     <span className="mt-1 block text-xs font-normal text-gray-500">
                       Nhận đặt trực tuyến đến ngày {showDate(lastDate)}.
@@ -344,10 +355,14 @@ export default function PublicBookingPage() {
                       onChange={(e) => setTime(e.target.value)}
                       required
                       disabled={!dentistId || slotLoading || slots.length === 0}
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                     >
                       <option value="">
-                        {slotLoading
+                        {!dentistId
+                          ? "Chọn bác sĩ trước"
+                          : !date
+                            ? "Chọn ngày trước"
+                            : slotLoading
                           ? "Đang tải giờ…"
                           : slots.length
                             ? "Chọn giờ"
@@ -425,9 +440,10 @@ export default function PublicBookingPage() {
                     <input
                       required
                       maxLength={100}
+                      autoComplete="name"
                       value={form.fullName}
                       onChange={(e) => set("fullName", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                   </label>
                   <label className="text-sm font-medium text-gray-700">
@@ -438,7 +454,7 @@ export default function PublicBookingPage() {
                       max={today()}
                       value={form.dob}
                       onChange={(e) => set("dob", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                   </label>
                   <label className="text-sm font-medium text-gray-700">
@@ -446,7 +462,7 @@ export default function PublicBookingPage() {
                     <select
                       value={form.gender}
                       onChange={(e) => set("gender", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                     >
                       <option value="UNDISCLOSED">Không muốn nêu</option>
                       <option value="FEMALE">Nữ</option>
@@ -466,25 +482,27 @@ export default function PublicBookingPage() {
                       required
                       type="tel"
                       maxLength={20}
+                      autoComplete="tel"
                       value={form.phone}
                       onChange={(e) => set("phone", e.target.value)}
                       placeholder="0901 234 567"
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                   </label>
                   <label className="text-sm font-medium text-gray-700">
                     Email (để nhận thông báo)
                     <input
                       type="email"
+                      autoComplete="email"
                       value={form.email}
                       onChange={(e) => set("email", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
                     <input
                       type="checkbox"
-                      checked={showContact}
+                      checked={onBehalf}
                       onChange={(e) => setOnBehalf(e.target.checked)}
                     />
                     Tôi đặt hộ người khác (người nhà, trẻ em, người lớn tuổi)
@@ -498,7 +516,7 @@ export default function PublicBookingPage() {
                           required={age !== null && age < 12}
                           value={form.contactPersonName}
                           onChange={(e) => set("contactPersonName", e.target.value)}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                         />
                       </label>
                       <label className="text-sm font-medium text-gray-700">
@@ -510,7 +528,7 @@ export default function PublicBookingPage() {
                           onChange={(e) =>
                             set("contactPersonPhone", e.target.value)
                           }
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                         />
                       </label>
                     </>
@@ -522,7 +540,7 @@ export default function PublicBookingPage() {
                       rows={3}
                       value={form.reason}
                       onChange={(e) => set("reason", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                   </label>
                 </div>
@@ -549,8 +567,8 @@ export default function PublicBookingPage() {
                 </p>
               )}
               <button
-                disabled={submitting}
-                className="w-full rounded-md bg-teal-700 px-4 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+                disabled={submitting || slotLoading || !time}
+                className="w-full rounded-md bg-brand-600 px-4 py-3 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? "Đang gửi…" : "Gửi yêu cầu đặt lịch"}
               </button>

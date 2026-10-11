@@ -195,7 +195,7 @@ export default function PeriodDetailPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           {/* Periods list lives in the "Kỳ lương" tab of the payroll dashboard. */}
           <Link
@@ -204,7 +204,7 @@ export default function PeriodDetailPage() {
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Danh sách kỳ lương
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold text-gray-900">
               Kỳ lương {formatDate(period.periodStart)} — {formatDate(period.periodEnd)}
             </h1>
@@ -250,7 +250,7 @@ export default function PeriodDetailPage() {
         trừ ngày phòng khám nghỉ, ngày đóng lịch và nghỉ phép đã duyệt.
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <p className="text-sm text-gray-500">Tổng gross</p>
           <p className="mt-1 text-xl font-semibold text-gray-900">{formatVnd(totals.gross)}</p>

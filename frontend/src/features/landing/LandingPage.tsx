@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -175,6 +175,20 @@ function PrimaryCta({ className = '' }: { className?: string }) {
 
 function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        menuButton.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
+
   return (
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
@@ -207,8 +221,10 @@ function SiteHeader() {
           </Link>
           <button
             type="button"
-            className="rounded-md p-2 text-gray-700 md:hidden"
+            ref={menuButton}
+            className="min-h-11 min-w-11 rounded-md p-2 text-gray-700 md:hidden"
             onClick={() => setOpen((v) => !v)}
+            aria-controls="public-mobile-navigation"
             aria-expanded={open}
             aria-label={open ? 'Đóng menu' : 'Mở menu'}
           >
@@ -217,7 +233,7 @@ function SiteHeader() {
         </div>
       </div>
       {open && (
-        <nav className="border-t border-gray-100 bg-white px-4 py-3 md:hidden" aria-label="Điều hướng">
+        <nav id="public-mobile-navigation" className="border-t border-gray-100 bg-white px-4 py-3 md:hidden" aria-label="Điều hướng">
           {NAV.map((item) => (
             <a
               key={item.href}
@@ -381,13 +397,12 @@ function Services({
           </div>
         ) : (
           <>
-            <div className="mt-8 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:justify-center" role="tablist" aria-label="Nhóm dịch vụ">
+            <div className="mt-8 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:justify-center" role="group" aria-label="Nhóm dịch vụ">
               {categories.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  role="tab"
-                  aria-selected={c === current}
+                  aria-pressed={c === current}
                   onClick={() => setActive(c)}
                   className={
                     'shrink-0 rounded-full px-4 py-2 text-sm font-medium transition ' +
@@ -400,9 +415,9 @@ function Services({
                 </button>
               ))}
             </div>
-            <ul className="mt-6 grid gap-3 md:grid-cols-2" role="tabpanel" aria-label={current}>
+            <ul className="mt-6 grid gap-3 md:grid-cols-2" aria-label={current}>
               {visible.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+                <li key={s.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
                   <div className="min-w-0">
                     <p className="font-medium text-gray-900">{s.name}</p>
                     <p className="mt-0.5 text-sm text-gray-500">khoảng {s.durationMinutes} phút</p>

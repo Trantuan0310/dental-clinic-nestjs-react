@@ -209,7 +209,7 @@ export default function ExpenseListPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Quản lý chi phí</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -425,7 +425,7 @@ export default function ExpenseListPage() {
 
         {/* Pagination */}
         {data && data.pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
             <p className="text-sm text-gray-500">
               Trang {data.pagination.page}/{data.pagination.totalPages} — {data.pagination.total} kết quả
             </p>

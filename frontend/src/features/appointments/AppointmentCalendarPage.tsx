@@ -374,6 +374,8 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
               {VIEW_MODES.map((mode) => (
                 <button
                   key={mode}
+                  type="button"
+                  aria-pressed={viewMode === mode}
                   onClick={() => setViewMode(mode)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     viewMode === mode

@@ -8,6 +8,7 @@ import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { buildNavGroups } from '@/lib/nav';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { useFocusTrap } from '@/lib/useFocusTrap';
 import type { LucideIcon } from 'lucide-react';
 
@@ -104,6 +105,7 @@ export function CommandPalette() {
   const [recentIds, setRecentIds] = useState<string[]>(() => loadRecent());
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  useBodyScrollLock(open);
   const closePalette = useCallback(() => setOpen(false), []);
   useFocusTrap({ active: open, containerRef: dialogRef, onEscape: closePalette, autoFocus: false });
   const navigate = useNavigate();
@@ -119,13 +121,11 @@ export function CommandPalette() {
       if (isK && meta) {
         event.preventDefault();
         setOpen((v) => !v);
-      } else if (event.key === 'Escape' && open) {
-        setOpen(false);
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, []);
 
   // Reset state on each open; focus input.
   useEffect(() => {
@@ -365,10 +365,19 @@ export function CommandPalette() {
     });
   }
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  useEffect(() => {
+    setActiveIdx((index) => Math.max(0, Math.min(index, filtered.length - 1)));
+  }, [filtered.length]);
+
+  useEffect(() => {
+    if (open) dialogRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [activeIdx, open]);
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
+      setActiveIdx((i) => Math.max(0, Math.min(i + 1, filtered.length - 1)));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
@@ -414,12 +423,11 @@ export function CommandPalette() {
           role="dialog"
           aria-modal="true"
           aria-label="Command Palette"
-          onKeyDown={onKeyDown}
         >
           <div className="absolute inset-0" onClick={() => setOpen(false)} aria-hidden />
           <div
             className={cn(
-              'relative z-10 w-full max-w-xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl',
+              'relative z-10 flex max-h-[80dvh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl',
               'dark:border-surface-700 dark:bg-surface-900 dark:shadow-black/60',
             )}
           >
@@ -427,13 +435,18 @@ export function CommandPalette() {
               <SearchIcon className="h-4 w-4 shrink-0 text-gray-400 dark:text-surface-500" aria-hidden="true" />
               <input
                 ref={inputRef}
+                onKeyDown={onKeyDown}
+                role="combobox"
+                aria-expanded={open}
+                aria-autocomplete="list"
+                aria-activedescendant={filtered[activeIdx] ? `command-option-${filtered[activeIdx].id}` : undefined}
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('command.placeholder')}
                 aria-label="Command Palette input"
                 aria-controls="command-palette-listbox"
-                className="flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-surface-100 dark:placeholder:text-surface-500"
+                className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-surface-100 dark:placeholder:text-surface-500"
               />
               <button
                 type="button"
@@ -449,7 +462,7 @@ export function CommandPalette() {
               id="command-palette-listbox"
               role="listbox"
               aria-label="Command Palette results"
-              className="max-h-[60vh] overflow-y-auto py-2"
+              className="min-h-0 max-h-[60vh] overflow-y-auto overscroll-contain py-2"
             >
               {isSearchingEntities && query.trim().length >= ENTITY_QUERY_MIN && (
                 <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-2 text-xs text-gray-500 dark:border-surface-700 dark:text-surface-400">
@@ -466,8 +479,8 @@ export function CommandPalette() {
               )}
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 px-3 py-2 text-[11px] text-gray-500 dark:border-surface-700 dark:text-surface-400">
-              <span className="inline-flex items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-3 py-2 text-[11px] text-gray-500 dark:border-surface-700 dark:text-surface-400">
+              <span className="inline-flex flex-wrap items-center gap-2">
                 <kbd className="rounded bg-gray-100 px-1.5 py-0.5 font-mono dark:bg-surface-700 dark:text-surface-300">↑↓</kbd>
                 {t('command.footer.navigate')}
                 <kbd className="rounded bg-gray-100 px-1.5 py-0.5 font-mono dark:bg-surface-700 dark:text-surface-300">Enter</kbd>
@@ -609,6 +622,8 @@ function Row({
     <li>
       <button
         type="button"
+        id={`command-option-${item.id}`}
+        tabIndex={-1}
         role="option"
         aria-selected={active}
         onMouseMove={onHover}
@@ -622,7 +637,7 @@ function Row({
       >
         <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
         <span className="flex-1 truncate">{label}</span>
-        {item.hint && <span className="text-xs text-gray-400 dark:text-surface-500">{item.hint}</span>}
+        {item.hint && <span className="max-w-[45%] truncate text-xs text-gray-400 dark:text-surface-500">{item.hint}</span>}
         {badge}
         {active && <ArrowRight className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />}
       </button>

@@ -150,7 +150,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Người dùng</h1>
           <p className="mt-0.5 text-sm text-gray-500">

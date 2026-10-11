@@ -8,12 +8,12 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, hint, id, ...props }, ref) => {
+  ({ className, label, error, hint, id, 'aria-describedby': ariaDescribedBy, ...props }, ref) => {
     const autoId = useId();
-    const textareaId = id ?? props.name ?? autoId;
-    const hintId = hint ? `${textareaId}-hint` : undefined;
+    const textareaId = id ?? autoId;
+    const hintId = hint && !error ? `${textareaId}-hint` : undefined;
     const errorId = error ? `${textareaId}-error` : undefined;
-    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
+    const describedBy = [ariaDescribedBy, hintId, errorId].filter(Boolean).join(' ') || undefined;
 
     return (
       <div className="space-y-1.5">
@@ -39,7 +39,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             'resize-y min-h-[80px]',
             'dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100',
             error &&
-              'border-red-500 focus:border-red-500 focus:ring-red-500',
+              'dark:border-red-500 border-red-500 focus:border-red-500 focus:ring-red-500',
             className,
           )}
           {...props}

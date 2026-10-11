@@ -49,11 +49,11 @@ export function Pagination({
   };
 
   return (
-    <div className={cn('flex items-center justify-between', className)}>
+    <nav aria-label="Phân trang" className={cn('flex flex-wrap items-center justify-between gap-3', className)}>
       <div className="text-sm text-gray-500 dark:text-surface-400">
         {totalItems !== undefined && pageSize !== undefined && (
           <span>
-            Hiển thị {(currentPage - 1) * pageSize + 1} -{' '}
+            Hiển thị {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1} -{' '}
             {Math.min(currentPage * pageSize, totalItems)} của {totalItems}
           </span>
         )}
@@ -64,13 +64,13 @@ export function Pagination({
           variant="ghost"
           size="sm"
           onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
+          disabled={currentPage <= 1 || totalPages === 0}
           aria-label="Trang trước"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        <div className="flex items-center gap-1">
+        <div className="hidden items-center gap-1 sm:flex">
           {getPageNumbers().map((page, index) =>
             page === '...' ? (
               <span key={`ellipsis-${index}`} className="px-2 text-gray-400">
@@ -92,16 +92,18 @@ export function Pagination({
           )}
         </div>
 
+        <span className="px-2 text-sm sm:hidden">Trang {totalPages === 0 ? 0 : currentPage} / {totalPages}</span>
+
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
+          disabled={currentPage >= totalPages}
           aria-label="Trang sau"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </nav>
   );
 }

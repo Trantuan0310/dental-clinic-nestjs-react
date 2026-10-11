@@ -1,7 +1,8 @@
-import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { type ReactNode, useId, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { useFocusTrap } from '@/lib/useFocusTrap';
 
 export interface ModalProps {
@@ -48,23 +49,12 @@ export function Modal({
     onEscape: onClose,
   });
 
-  // Escape handling lives in useFocusTrap above — a second document-level
-  // keydown listener here previously fired onClose() a second time on every
-  // Escape press (both listeners are on `document`, and stopPropagation()
-  // doesn't stop sibling listeners on the same target).
-  useEffect(() => {
-    if (resolvedOpen) {
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [resolvedOpen]);
+  useBodyScrollLock(resolvedOpen);
 
   if (!resolvedOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
@@ -76,7 +66,7 @@ export function Modal({
       <div
         ref={panelRef}
         className={cn(
-          'relative z-10 w-full rounded-lg bg-white shadow-xl dark:bg-surface-900 dark:shadow-black/40',
+          'relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-lg bg-white shadow-xl dark:bg-surface-900 dark:shadow-black/40',
           'animate-in fade-in zoom-in-95 duration-200',
           SIZES[size],
           className,
@@ -87,8 +77,8 @@ export function Modal({
         aria-describedby={description ? `${titleId}-desc` : undefined}
       >
         {/* Header */}
-        {(title || showClose) && (
-          <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4 dark:border-surface-700">
+        {(title || description || showClose) && (
+          <div className="flex shrink-0 items-start justify-between border-b border-gray-100 px-6 py-4 dark:border-surface-700">
             <div className="flex-1">
               {title && (
                 <h2 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-surface-100">
@@ -115,11 +105,11 @@ export function Modal({
         )}
 
         {/* Content */}
-        <div className="max-h-[calc(90vh-8rem)] overflow-y-auto px-6 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4 dark:border-surface-700">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-gray-100 px-6 py-4 dark:border-surface-700">
             {footer}
           </div>
         )}

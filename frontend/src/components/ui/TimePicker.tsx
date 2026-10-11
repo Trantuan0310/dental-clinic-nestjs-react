@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes } from 'react';
+import { useId, forwardRef, type InputHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface TimePickerProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> {
@@ -10,8 +10,10 @@ export interface TimePickerProps extends Omit<InputHTMLAttributes<HTMLInputEleme
 }
 
 export const TimePicker = forwardRef<HTMLInputElement, TimePickerProps>(
-  ({ className, label, error, hint, id, value, onChange, ...rest }, ref) => {
-    const inputId = id ?? rest.name;
+  ({ className, label, error, hint, id, value, onChange, 'aria-describedby': ariaDescribedBy, ...rest }, ref) => {
+    const generatedId = useId();
+    const inputId = id ?? generatedId;
+    const messageId = error || hint ? `${inputId}-message` : undefined;
     return (
       <div className="w-full">
         {label && (
@@ -22,13 +24,15 @@ export const TimePicker = forwardRef<HTMLInputElement, TimePickerProps>(
         <input
           ref={ref}
           id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={[ariaDescribedBy, messageId].filter(Boolean).join(' ') || undefined}
           type="time"
           value={value ?? ''}
           onChange={(e) => onChange?.(e.target.value)}
-          className={cn('input-base', error && 'border-red-400 focus:border-red-500 focus:ring-red-500', className)}
+          className={cn('input-base', error && 'dark:border-red-500 border-red-400 focus:border-red-500 focus:ring-red-500', className)}
           {...rest}
         />
-        {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : hint ? <p className="mt-1 text-xs text-gray-500">{hint}</p> : null}
+        {error ? <p id={messageId} role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p> : hint ? <p id={messageId} className="mt-1 text-xs text-gray-500 dark:text-surface-400">{hint}</p> : null}
       </div>
     );
   },

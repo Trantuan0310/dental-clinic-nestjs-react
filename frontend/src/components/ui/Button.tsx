@@ -1,4 +1,6 @@
 import {
+  cloneElement,
+  isValidElement,
   forwardRef,
   type ButtonHTMLAttributes,
   type ReactNode,
@@ -74,8 +76,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     if (_asChild) {
-      // Slot needs ONE child element. Compose leftIcon + children into a fragment
-      // so Slot picks the first valid element as the wrapper (e.g. <Link>).
+      // Slot must receive the actual link, not a Fragment, so styles reach the DOM.
       return (
         <Slot
           ref={ref}
@@ -83,10 +84,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           {...ariaProps}
           {...props}
         >
-          <>
-            {leftIcon}
-            {children}
-          </>
+          {isValidElement<{ children?: ReactNode }>(children)
+            ? cloneElement(children, {}, <>{leftIcon}{children.props.children}</>)
+            : children}
         </Slot>
       );
     }

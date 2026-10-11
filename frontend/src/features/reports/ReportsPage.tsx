@@ -256,7 +256,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Báo cáo doanh thu</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -264,7 +264,7 @@ export default function ReportsPage() {
             Đã thu tính theo <strong>ngày thu</strong>, đã trừ tiền hoàn.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0">
           {canSeeRevenue && (
             <Button variant="outline" onClick={handleExportRevenue} disabled={!dailyData?.length}>
               <Download className="h-4 w-4" />
@@ -284,8 +284,9 @@ export default function ReportsPage() {
       <Card noPadding className="p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Từ ngày</label>
+            <label htmlFor="report-from-date" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Từ ngày</label>
             <input
+              id="report-from-date"
               type="date"
               value={fromDate}
               max={toDate}
@@ -296,8 +297,9 @@ export default function ReportsPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Đến ngày</label>
+            <label htmlFor="report-to-date" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Đến ngày</label>
             <input
+              id="report-to-date"
               type="date"
               value={toDate}
               min={fromDate}
@@ -352,7 +354,7 @@ export default function ReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Doanh thu (theo ngày phát hành)</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-gray-900 dark:text-white">
                 {reportLoading ? '—' : formatCurrency(report?.totalInvoiced ?? 0)}
               </p>
             </div>
@@ -366,7 +368,7 @@ export default function ReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Đã thu (theo ngày thu)</p>
-              <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-green-600 dark:text-green-400">
                 {reportLoading ? '—' : formatCurrency(report?.totalCollected ?? 0)}
               </p>
               {!!report?.totalRefunded && (
@@ -383,7 +385,7 @@ export default function ReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Còn nợ (của hóa đơn trong kỳ)</p>
-              <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-amber-600 dark:text-amber-400">
                 {reportLoading ? '—' : formatCurrency(report?.totalOutstanding ?? 0)}
               </p>
             </div>
@@ -397,7 +399,7 @@ export default function ReportsPage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-gray-400">Số hóa đơn đã phát hành</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-gray-900 dark:text-white">
                 {reportLoading ? '—' : (report?.invoiceCount ?? 0).toLocaleString()}
               </p>
             </div>
@@ -408,7 +410,7 @@ export default function ReportsPage() {
       {/* Revenue by Status */}
       {report && (report.byStatus.length > 0 || report.excluded.draft.count + report.excluded.voided.count > 0) && (
         <Card title="Doanh thu theo trạng thái">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {report.byStatus.map((s) => (
               <div key={s.status} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
                 <p className="text-sm text-gray-500 dark:text-gray-400">{statusLabels[s.status] ?? s.status}</p>
@@ -584,7 +586,7 @@ export default function ReportsPage() {
         description={`${outstandingList.length} hóa đơn còn nợ (tính đến hôm nay, mọi thời điểm phát hành)`}
       >
         {/* Aging summary */}
-        <div className="grid grid-cols-5 gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {AGING_COLUMNS.map(({ bucket, label, color }) => {
             const items = byBucket(bucket);
             return (
@@ -602,7 +604,7 @@ export default function ReportsPage() {
         {/* Outstanding table */}
         {outstandingList.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Mã hóa đơn</th>

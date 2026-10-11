@@ -60,7 +60,7 @@ const SummaryTab = lazy(() =>
 const MIN_OVERRIDE_REASON = 10;
 
 const TabFallback = (
-  <div className="flex items-center justify-center py-8 text-sm text-gray-500">
+  <div className="flex items-center justify-center py-8 text-sm text-gray-500 dark:text-surface-400">
     <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
     <span className="ml-2">Đang tải…</span>
   </div>
@@ -148,7 +148,7 @@ export default function EncounterDetailPage() {
   if (!encounter) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500">Không tìm thấy hồ sơ khám</p>
+        <p className="text-gray-500 dark:text-surface-400">Không tìm thấy hồ sơ khám</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate(-1)}>
           Quay lại
         </Button>
@@ -169,18 +169,18 @@ export default function EncounterDetailPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Button variant="ghost" aria-label="Quay lại" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="break-words text-2xl font-semibold text-gray-900 dark:text-surface-100">
               Hồ sơ khám #{encounter.code}
             </h1>
             <StatusBadge status={encounter.status} />
           </div>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-surface-400">
             {/^BS\.?\s/i.test(encounter.dentistName) ? '' : 'BS. '}
             {encounter.dentistName} •{' '}
             {format(new Date(encounter.startedAt), 'HH:mm, dd/MM/yyyy', { locale: vi })}
@@ -192,7 +192,7 @@ export default function EncounterDetailPage() {
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canBook && (
             <Button variant="outline" onClick={() => setBooking(true)}>
               <CalendarPlus className="h-4 w-4" />
@@ -235,7 +235,7 @@ export default function EncounterDetailPage() {
           </>
         }
       >
-        <div className="space-y-3 text-sm text-gray-600">
+        <div className="space-y-3 text-sm text-gray-600 dark:text-surface-300">
           <p>
             Dùng khi bắt đầu khám nhầm bệnh nhân hoặc nhầm lượt. Bệnh nhân quay lại hàng chờ (lịch trong ngày); sau
             đó có thể hoàn tác check-in nếu check-in nhầm. Bác sĩ chỉ tự hủy được khi phiên chưa có điều trị hay đơn
@@ -260,7 +260,7 @@ export default function EncounterDetailPage() {
 
       {/* Patient Info */}
       <Card noPadding className="p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700">
               <span className="text-lg font-semibold">
@@ -268,12 +268,12 @@ export default function EncounterDetailPage() {
               </span>
             </div>
             <div>
-              <p className="font-medium text-gray-900">{encounter.patientName}</p>
-              <p className="text-sm text-gray-500">{encounter.patientCode}</p>
+              <p className="font-medium text-gray-900 dark:text-surface-100">{encounter.patientName}</p>
+              <p className="text-sm text-gray-500 dark:text-surface-400">{encounter.patientCode}</p>
             </div>
           </div>
           {encounter.chiefComplaint && (
-            <div className="text-sm text-gray-600">
+            <div className="min-w-0 break-words text-sm text-gray-600 dark:text-surface-300">
               <span className="font-medium">Lý do khám:</span> {encounter.chiefComplaint}
             </div>
           )}
@@ -284,8 +284,19 @@ export default function EncounterDetailPage() {
 
       {/* Tabs */}
       <Card noPadding>
-        <div className="border-b border-gray-100">
-          <div className="m-4 mb-0 inline-flex h-10 items-center justify-center gap-1 rounded-lg bg-gray-100 p-1">
+        <div className="overflow-x-auto border-b border-gray-100">
+          <div className="m-4 mb-0 inline-flex h-10 min-w-max items-center gap-1 rounded-lg bg-gray-100 dark:bg-surface-800 p-1" role="tablist" aria-label="Nội dung hồ sơ khám"
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+              const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+              if (current < 0) return;
+              event.preventDefault();
+              const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+              tabs[next].focus();
+              tabs[next].click();
+            }}>
             {[
               { id: 'notes', label: 'Ghi chú', icon: FileText },
               { id: 'treatments', label: 'Điều trị', icon: ListChecks },
@@ -299,12 +310,15 @@ export default function EncounterDetailPage() {
                   key={tabId}
                   type="button"
                   role="tab"
+                  id={`encounter-tab-${tabId}`}
+                  aria-controls={`encounter-panel-${tabId}`}
                   aria-selected={active}
+                  tabIndex={active ? 0 : -1}
                   onClick={() => setActiveTab(tabId)}
                   className={cn(
                     'inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-all',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2',
-                    active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:bg-white/50 hover:text-gray-900',
+                    active ? 'bg-white dark:bg-surface-700 text-gray-900 dark:text-surface-100 shadow-sm' : 'text-gray-600 dark:text-surface-300 hover:bg-white/50 hover:text-gray-900 dark:hover:bg-surface-700 dark:hover:text-surface-100',
                   )}
                 >
                   <Icon className="mr-2 h-4 w-4" />
@@ -316,13 +330,13 @@ export default function EncounterDetailPage() {
         </div>
 
         <div className="p-4">
-          <div hidden={activeTab !== 'notes'}>
+          <div role="tabpanel" id="encounter-panel-notes" aria-labelledby="encounter-tab-notes" tabIndex={0} hidden={activeTab !== 'notes'}>
             <Suspense fallback={TabFallback}>
               <ClinicalNotesTab encounter={encounter} />
             </Suspense>
           </div>
 
-          <div hidden={activeTab !== 'treatments'}>
+          <div role="tabpanel" id="encounter-panel-treatments" aria-labelledby="encounter-tab-treatments" tabIndex={0} hidden={activeTab !== 'treatments'}>
             <Suspense fallback={TabFallback}>
               <TreatmentsTab
                 encounter={encounter}
@@ -336,13 +350,13 @@ export default function EncounterDetailPage() {
             </Suspense>
           </div>
 
-          <div hidden={activeTab !== 'prescriptions'}>
+          <div role="tabpanel" id="encounter-panel-prescriptions" aria-labelledby="encounter-tab-prescriptions" tabIndex={0} hidden={activeTab !== 'prescriptions'}>
             <Suspense fallback={TabFallback}>
               <PrescriptionsTab encounter={encounter} />
             </Suspense>
           </div>
 
-          <div hidden={activeTab !== 'chart'}>
+          <div role="tabpanel" id="encounter-panel-chart" aria-labelledby="encounter-tab-chart" tabIndex={0} hidden={activeTab !== 'chart'}>
             <Suspense fallback={TabFallback}>
               <DentalChartPanel
                 encounter={encounter}
@@ -356,7 +370,7 @@ export default function EncounterDetailPage() {
           </div>
 
           {isEditable && (
-            <div hidden={activeTab !== 'summary'}>
+            <div role="tabpanel" id="encounter-panel-summary" aria-labelledby="encounter-tab-summary" tabIndex={0} hidden={activeTab !== 'summary'}>
               <Suspense fallback={TabFallback}>
                 <SummaryTab
                   encounter={encounter}
@@ -373,7 +387,7 @@ export default function EncounterDetailPage() {
       {treatmentToothNumbers.length > 0 && activeTab !== 'chart' && (
         <Card noPadding className="p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-gray-700">Răng đã điều trị:</span>
+            <span className="font-medium text-gray-700 dark:text-surface-200">Răng đã điều trị:</span>
             {treatmentToothNumbers.map((n) => (
               <button
                 key={n}

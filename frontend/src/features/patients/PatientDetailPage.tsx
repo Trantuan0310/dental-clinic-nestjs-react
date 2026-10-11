@@ -107,20 +107,20 @@ export default function PatientDetailPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/patients')}>
+      <div className="flex flex-wrap items-center gap-4">
+        <Button variant="ghost" aria-label="Quay lại danh sách bệnh nhân" onClick={() => navigate('/patients')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">{patient.fullName}</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="break-words text-2xl font-semibold text-gray-900">{patient.fullName}</h1>
             <StatusBadge status={patient.status} />
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
             {patient.code}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <PermissionGuard permission="patient.update">
             <Button variant="outline" onClick={() => navigate(`/patients/${id}/edit`)}>
               <Edit className="h-4 w-4" />
