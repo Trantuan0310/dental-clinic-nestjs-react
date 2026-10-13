@@ -9,6 +9,13 @@
  * never mixes with real records (DEMO_FORCE=1 adds on top anyway).
  *
  *   DEMO_MONTHS=6 DEMO_PATIENTS=500 npx ts-node --transpile-only prisma/seed-demo-clinic.ts
+ *
+ * Dentists without working hours or services get them (Mon–Sat 08:00–12:00,
+ * 13:30–19:00), and visits are only booked inside each dentist's hours.
+ * Upcoming demo visits are marked as reminded (demo emails are @example.com).
+ * A demo site seeded by an older version is fixed in place with:
+ *
+ *   DEMO_REPAIR=1 npx ts-node --transpile-only prisma/seed-demo-clinic.ts
  */
 import { Prisma, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -207,7 +214,116 @@ async function nextval(seq: string): Promise<number> {
   return Number(rows[0].n);
 }
 
+// ---------------------------------------------------------------- dentist setup
+/** Same week as prisma/clinic-setup.ts: Mon–Sat, SHIFTS. */
+const WORK_DAYS = [1, 2, 3, 4, 5, 6];
+/** A Postgres TIME value as Prisma reads it (clinic wall-clock at 1970-01-01Z). */
+const pgTime = (minutes: number) => new Date(Date.UTC(1970, 0, 1, 0, minutes));
+const minutesOf = (t: Date) => t.getUTCHours() * 60 + t.getUTCMinutes();
+
+/**
+ * Every dentist the demo books for needs working hours and services, or the
+ * app sees their visits as outside any schedule: reminders are BLOCKED
+ * ("Bác sĩ không có lịch làm việc ngày này") and the clinic inbox is flooded
+ * with "Lịch hẹn cần gọi khách". Dentists that already have them are left alone.
+ */
+async function ensureDentistSetup(dentistIds: string[], today: Date) {
+  const services = await prisma.service.findMany({ where: { isActive: true } });
+  for (const dentistId of dentistIds) {
+    const hasSchedule = await prisma.workingSchedule.count({
+      where: { dentistId, deletedAt: null },
+    });
+    if (!hasSchedule) {
+      await prisma.workingSchedule.createMany({
+        data: WORK_DAYS.flatMap(dayOfWeek =>
+          SHIFTS.map(([from, to]) => ({
+            dentistId,
+            dayOfWeek,
+            startTime: pgTime(from),
+            endTime: pgTime(to),
+            slotDurationMin: 15,
+            validFrom: today,
+            shiftType: from < 12 * 60 ? ('MORNING' as const) : ('AFTERNOON' as const),
+            isPaidShift: true,
+          })),
+        ),
+      });
+      console.log(`  + lịch làm việc T2–T7 cho bác sĩ ${dentistId}`);
+    }
+    const hasServices = await prisma.dentistService.count({
+      where: { dentistId, effectiveTo: null },
+    });
+    if (!hasServices) {
+      const profile = await prisma.dentistProfile.findFirst({ where: { userId: dentistId } });
+      const specialties = profile?.specialties ?? [];
+      await prisma.dentistService.createMany({
+        data: services
+          .filter(s => !s.requiredSpecialty || specialties.includes(s.requiredSpecialty))
+          .map(s => ({ dentistId, serviceId: s.id, effectiveFrom: today })),
+      });
+      console.log(`  + phân công dịch vụ cho bác sĩ ${dentistId}`);
+    }
+  }
+}
+
+/**
+ * A dentist's working windows (clinic minutes) on `day`, from their weekly
+ * schedule. Past days ignore validFrom so the history still has visits.
+ */
+async function windowsByDentist(dentistIds: string[]) {
+  const rows = await prisma.workingSchedule.findMany({
+    where: { dentistId: { in: dentistIds }, deletedAt: null },
+    select: {
+      dentistId: true,
+      dayOfWeek: true,
+      startTime: true,
+      endTime: true,
+      validFrom: true,
+      validTo: true,
+    },
+  });
+  return (dentistId: string, day: Date, isPast: boolean): Array<[number, number]> =>
+    rows
+      .filter(
+        r =>
+          r.dentistId === dentistId &&
+          r.dayOfWeek === day.getUTCDay() &&
+          (isPast || r.validFrom <= day) &&
+          (!r.validTo || r.validTo >= day),
+      )
+      .map(r => [minutesOf(r.startTime), minutesOf(r.endTime)] as [number, number])
+      .sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * DEMO_REPAIR=1: fix a demo database seeded before the above existed. Gives
+ * the dentists with upcoming demo visits hours and services, and marks the
+ * upcoming demo visits as reminded (demo patients have @example.com
+ * addresses), clearing the BLOCKED/FAILED flags they collected.
+ */
+async function repair() {
+  const now = new Date();
+  const today = clinicDay(now);
+  const upcoming = { startAt: { gt: now }, patient: { notes: NOTE } };
+  const dentistIds = (
+    await prisma.appointment.findMany({
+      where: { ...upcoming, deletedAt: null },
+      select: { dentistId: true },
+      distinct: ['dentistId'],
+    })
+  ).map(a => a.dentistId);
+  await ensureDentistSetup(dentistIds, today);
+  const fixed = await prisma.appointment.updateMany({
+    where: upcoming,
+    data: { reminderSentAt: now, reminderStatus: null, reminderNote: null },
+  });
+  console.log(
+    `✓ ${dentistIds.length} bác sĩ đã kiểm tra, ${fixed.count} lịch hẹn demo sắp tới không gửi nhắc`,
+  );
+}
+
 async function main() {
+  if (process.env.DEMO_REPAIR === '1') return repair();
   const now = new Date();
   const today = clinicDay(now);
   const start = new Date(today.getTime() - MONTHS * 30 * DAY_MS);
@@ -277,6 +393,11 @@ async function main() {
   await backfillStaffRecords(prisma);
   dentists = (await byRole('dentist')).slice(0, 6);
   receptionists = await byRole('receptionist');
+  await ensureDentistSetup(
+    dentists.map(d => d.id),
+    today,
+  );
+  const windowsOf = await windowsByDentist(dentists.map(d => d.id));
   console.log(`✓ ${dentists.length} bác sĩ, ${receptionists.length} lễ tân`);
 
   // ------------------------------------------------------------ catalogue
@@ -369,7 +490,8 @@ async function main() {
     for (const dentist of dentists) {
       if (!isPast && !isToday && chance(0.1)) continue;
       const busyToday = new Set<string>();
-      for (const [from, to] of SHIFTS) {
+      // Only inside the dentist's real working hours that day.
+      for (const [from, to] of windowsOf(dentist.id, day, isPast)) {
         let cursor = from + pick([0, 15, 30]);
         const target =
           isPast || isToday ? randInt(2, 4) : chance(0.5) ? randInt(1, 3) : randInt(0, 2);
@@ -434,6 +556,8 @@ async function main() {
                   : 'TREATMENT',
             reason: pick(COMPLAINTS),
             calculatedDurationMin: Math.round((v.endAt.getTime() - v.startAt.getTime()) / 60_000),
+            // Demo patients have @example.com addresses: no reminder emails.
+            reminderSentAt: v.past ? null : now,
             createdAt: createdAt < start ? start : createdAt,
             createdBy: recept.id,
             confirmedAt:
