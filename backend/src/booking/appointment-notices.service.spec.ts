@@ -111,6 +111,69 @@ describe('AppointmentNoticesService', () => {
       expect(sent.text).toContain('từ 16:00 thứ Năm 01/10/2026 sang 10:00 thứ Sáu 02/10/2026');
     });
 
+    it('says the clinic cancelled, with an apology, still without the staff reason', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onCancelled({
+        appointmentId: 'appt-1',
+        patientId: 'p1',
+        dentistId: 'd1',
+        cancelledAt: NOW,
+        cancelledBy: 'staff-1',
+        reason: 'BS Minh ốm, ghi chú nội bộ',
+        byClinic: true,
+      });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.subject).toBe('Phòng khám phải hủy lịch hẹn của bạn');
+      expect(sent.text).toContain('xin lỗi');
+      expect(sent.text).not.toContain('ghi chú nội bộ');
+    });
+
+    it('never claims the clinic moved a visit it did not (patient asked by phone)', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onRescheduled({
+        appointmentId: 'appt-1',
+        oldStartAt: new Date('2026-10-01T09:00:00Z'),
+        newStartAt: visitAt,
+        oldDentistId: 'd1',
+        newDentistId: 'd1',
+      });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.text).not.toContain('Phòng khám phải dời');
+      expect(sent.text).not.toContain('xin lỗi');
+    });
+
+    it('says the clinic moved the visit, with an apology, when it did', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onRescheduled({
+        appointmentId: 'appt-1',
+        oldStartAt: new Date('2026-10-01T09:00:00Z'),
+        newStartAt: visitAt,
+        oldDentistId: 'd1',
+        newDentistId: 'd1',
+        byClinic: true,
+      });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.subject).toBe('Phòng khám dời lịch hẹn của bạn');
+      expect(sent.text).toContain(
+        'Phòng khám phải dời lịch hẹn của bạn từ 16:00 thứ Năm 01/10/2026 sang 10:00 thứ Sáu 02/10/2026',
+      );
+      expect(sent.text).toContain('xin lỗi');
+    });
+
+    it('links an online-booked visit to its status page', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(
+        visit({ bookingRequest: { referenceCode: 'GS-ABC' } }),
+      );
+      await service.onCancelled({
+        appointmentId: 'appt-1',
+        patientId: 'p1',
+        dentistId: 'd1',
+        cancelledAt: NOW,
+        cancelledBy: 'staff-1',
+      });
+      expect(email.send.mock.calls[0][0].text).toContain('/booking/status?ref=GS-ABC');
+    });
+
     it('tells the patient about a new dentist at the same time', async () => {
       prisma.appointment.findUnique.mockResolvedValue(visit());
       await service.onRescheduled({

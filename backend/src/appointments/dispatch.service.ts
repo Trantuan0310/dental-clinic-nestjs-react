@@ -758,6 +758,7 @@ export class DispatchService {
           newStartAt: appt.startAt,
           oldDentistId: fromDentistId,
           newDentistId: toDentistId,
+          byClinic: true,
         } satisfies AppointmentRescheduledEvent);
         moved.push({
           appointmentId: appt.id,

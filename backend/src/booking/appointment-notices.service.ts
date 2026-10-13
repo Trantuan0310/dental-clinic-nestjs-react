@@ -93,13 +93,23 @@ export class AppointmentNoticesService {
       // A visit already under way or past (a late cancel of a checked-in
       // patient) is not news to the patient.
       if (!visit || visit.startAt.getTime() <= Date.now()) return;
+      const what =
+        'Lịch hẹn lúc ' +
+        formatVisitTime(visit.startAt) +
+        (visit.dentist?.fullName ? ' với bác sĩ ' + visit.dentist.fullName : '');
+      // Never the staff's reason: it is an internal note ("khách bom lịch").
+      // Not by the clinic does not mean the patient asked (a no-show
+      // policy), so that wording stays neutral.
       await this.send(
         visit,
-        'Lịch hẹn đã bị hủy',
-        'Lịch hẹn lúc ' +
-          formatVisitTime(visit.startAt) +
-          (visit.dentist?.fullName ? ' với bác sĩ ' + visit.dentist.fullName : '') +
-          ' đã được hủy. Nếu bạn vẫn muốn khám, vui lòng gọi phòng khám hoặc đặt lịch mới.',
+        event.byClinic ? 'Phòng khám phải hủy lịch hẹn của bạn' : 'Lịch hẹn đã bị hủy',
+        event.byClinic
+          ? what +
+              ' đã bị hủy vì phòng khám hoặc bác sĩ không thể tiếp đón vào thời gian này. ' +
+              'Phòng khám xin lỗi vì sự bất tiện. Vui lòng gọi phòng khám hoặc đặt lịch mới để được xếp giờ khác.'
+          : what +
+              ' đã được hủy. Nếu bạn vẫn muốn khám, vui lòng gọi phòng khám hoặc đặt lịch mới.',
+        this.statusLink(visit),
       );
     } catch (error) {
       this.logger.warn(
@@ -118,8 +128,11 @@ export class AppointmentNoticesService {
       const visit = await this.visit(event.appointmentId);
       if (!visit || visit.startAt.getTime() <= Date.now()) return;
       const dentist = visit.dentist?.fullName;
+      const byClinic = event.byClinic === true;
       const message = moved
-        ? 'Phòng khám đã dời lịch hẹn của bạn từ ' +
+        ? (byClinic
+            ? 'Phòng khám phải dời lịch hẹn của bạn từ '
+            : 'Lịch hẹn của bạn đã được dời từ ') +
           formatVisitTime(event.oldStartAt) +
           ' sang ' +
           formatVisitTime(visit.startAt) +
@@ -132,8 +145,16 @@ export class AppointmentNoticesService {
           '.';
       await this.send(
         visit,
-        moved ? 'Lịch hẹn đã được dời' : 'Lịch hẹn đổi bác sĩ',
-        message + ' Nếu thời gian này không phù hợp, vui lòng gọi phòng khám.',
+        moved
+          ? byClinic
+            ? 'Phòng khám dời lịch hẹn của bạn'
+            : 'Lịch hẹn đã được dời'
+          : 'Lịch hẹn đổi bác sĩ',
+        message +
+          (byClinic
+            ? ' Phòng khám xin lỗi vì sự thay đổi này. Nếu thời gian mới không phù hợp, vui lòng gọi phòng khám.'
+            : ' Nếu thời gian này không phù hợp, vui lòng gọi phòng khám.'),
+        this.statusLink(visit),
       );
     } catch (error) {
       this.logger.warn(`Could not email the change of ${event.appointmentId}: ${String(error)}`);
@@ -210,12 +231,11 @@ export class AppointmentNoticesService {
           AND start_at < ${new Date(visit.startAt.getTime() + 1)}
           AND status IN ('SCHEDULED', 'CONFIRMED') AND deleted_at IS NULL`;
       if (!claimed) continue;
-      const ref = visit.bookingRequest?.referenceCode;
       const ok = await this.send(
         visit,
         'Nhắc lịch khám ' + formatVisitTime(visit.startAt),
         this.reminderText(visit),
-        ref ? publicAppUrl() + '/booking/status?ref=' + encodeURIComponent(ref) : undefined,
+        this.statusLink(visit),
       );
       if (ok) {
         sent++;
@@ -327,6 +347,12 @@ export class AppointmentNoticesService {
       ignoreBookings: true,
     });
     return problem?.message ?? null;
+  }
+
+  /** The online booking's status page (lookup by phone), for visits booked online. */
+  private statusLink(visit: { bookingRequest?: { referenceCode: string } | null }) {
+    const ref = visit.bookingRequest?.referenceCode;
+    return ref ? publicAppUrl() + '/booking/status?ref=' + encodeURIComponent(ref) : undefined;
   }
 
   private reminderText(visit: ReminderVisit) {

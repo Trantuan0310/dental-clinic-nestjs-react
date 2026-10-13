@@ -1509,6 +1509,7 @@ export class AppointmentsService {
       newStartAt: newStart,
       oldDentistId: appt.dentistId,
       newDentistId,
+      ...(byClinic ? { byClinic: true } : {}),
     } satisfies AppointmentRescheduledEvent);
 
     return result;

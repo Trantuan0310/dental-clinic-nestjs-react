@@ -24,6 +24,8 @@ export interface AppointmentRescheduledEvent {
   newStartAt: Date;
   oldDentistId: string;
   newDentistId: string;
+  /** Moved for the clinic's reasons (closed day, absent dentist), not at the patient's request. */
+  byClinic?: boolean;
 }
 
 export const ENCOUNTER_CLOSED_EVENT = 'encounter.closed';
