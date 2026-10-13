@@ -159,7 +159,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="mt-10 text-center text-xs text-gray-500 dark:text-surface-500">© GENSMILE 2026 — Dental Clinic Management System</p>
+        <p className="mt-10 text-center text-xs text-gray-500 dark:text-surface-500">© GENSMILE {new Date().getFullYear()} — {t('uiEntry.account.loginFooter')}</p>
       </div>
     </div>
   );

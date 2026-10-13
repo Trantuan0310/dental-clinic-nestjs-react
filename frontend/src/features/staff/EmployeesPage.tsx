@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Plus, Pencil, KeyRound, Stethoscope, UserX, RotateCcw } from 'lucide-react';
@@ -58,11 +59,6 @@ type Dialog =
 
 type LinkPayload = { userId: string } | { loginEmail: string };
 
-const ACCOUNT_STATUS_HINT: Record<string, string> = {
-  PENDING_SETUP: 'Chờ thiết lập',
-  DEACTIVATED: 'Đã vô hiệu',
-};
-
 function EmployeeForm({
   employee,
   submitting,
@@ -74,6 +70,7 @@ function EmployeeForm({
   onCancel: () => void;
   onSubmit: (payload: EmployeePayload) => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     fullName: employee?.fullName ?? '',
     employeeType: employee?.employeeType ?? ('ASSISTANT' as EmployeeType),
@@ -110,7 +107,7 @@ function EmployeeForm({
       }}
     >
       <Input
-        label="Họ và tên"
+        label={t('uiWorkforce.fullName')}
         required
         minLength={2}
         maxLength={200}
@@ -119,78 +116,78 @@ function EmployeeForm({
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <Select
-          label="Loại nhân viên"
+          label={t('uiWorkforce.employeeTypeLabel')}
           value={form.employeeType}
           onChange={(e) => setForm({ ...form, employeeType: e.target.value as EmployeeType })}
-          options={TYPE_OPTIONS}
+          options={TYPE_OPTIONS.map((option) => ({ ...option, label: t(`uiWorkforce.employeeType_${option.value}`) }))}
           disabled={hasDentistProfile}
-          hint={hasDentistProfile ? 'Đã có hồ sơ bác sĩ' : undefined}
+          hint={hasDentistProfile ? t('uiWorkforce.dentistProfileExists') : undefined}
         />
         <DatePicker
-          label="Ngày vào làm"
+          label={t('uiWorkforce.hireDate')}
           required
           value={form.hireDate}
           onChange={(value) => setForm({ ...form, hireDate: value })}
         />
         <DatePicker
-          label="Ngày sinh"
+          label={t('uiWorkforce.dateOfBirth')}
           value={form.dob}
           onChange={(value) => setForm({ ...form, dob: value })}
         />
         <Select
-          label="Giới tính"
+          label={t('uiWorkforce.gender')}
           value={form.gender}
           onChange={(e) => setForm({ ...form, gender: e.target.value })}
-          options={GENDER_OPTIONS}
-          placeholder="-- Không chọn --"
+          options={GENDER_OPTIONS.map((option) => ({ ...option, label: t(`uiWorkforce.gender_${option.value}`) }))}
+          placeholder={t('uiWorkforce.noSelection')}
         />
         <Input
-          label="Số điện thoại"
+          label={t('uiWorkforce.phone')}
           type="tel"
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
           maxLength={20}
         />
         <Input
-          label="Email liên hệ"
+          label={t('uiWorkforce.contactEmail')}
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
-          hint="Khác email đăng nhập"
+          hint={t('uiWorkforce.differentFromLoginEmail')}
         />
       </div>
       <Input
-        label="Địa chỉ"
+        label={t('uiWorkforce.address')}
         value={form.address}
         onChange={(e) => setForm({ ...form, address: e.target.value })}
         maxLength={500}
       />
       {employee && (
         <Select
-          label="Trạng thái làm việc"
+          label={t('uiWorkforce.employmentStatus')}
           value={form.employmentStatus}
           onChange={(e) =>
             setForm({ ...form, employmentStatus: e.target.value as 'ACTIVE' | 'ON_LEAVE' })
           }
           options={[
-            { value: 'ACTIVE', label: EMPLOYMENT_STATUS_LABEL.ACTIVE },
-            { value: 'ON_LEAVE', label: EMPLOYMENT_STATUS_LABEL.ON_LEAVE },
+            { value: 'ACTIVE', label: t('uiWorkforce.employmentActive') },
+            { value: 'ON_LEAVE', label: t('uiWorkforce.employmentOnLeave') },
           ]}
-          hint="Cho nghỉ việc bằng nút “Cho nghỉ việc” trong danh sách"
+          hint={t('uiWorkforce.terminateFromListHint')}
         />
       )}
       <Textarea
-        label="Ghi chú"
+        label={t('uiWorkforce.notes')}
         rows={2}
         value={form.notes}
         onChange={(e) => setForm({ ...form, notes: e.target.value })}
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" isLoading={submitting}>
-          {employee ? 'Lưu' : 'Tạo nhân viên'}
+          {employee ? t('uiWorkforce.save') : t('uiWorkforce.createEmployee')}
         </Button>
       </div>
     </form>
@@ -208,15 +205,16 @@ function LinkAccountForm({
   onCancel: () => void;
   onSubmit: (payload: LinkPayload) => void;
 }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<'create' | 'existing'>('create');
   const [loginEmail, setLoginEmail] = useState(employee.email ?? '');
   const [userId, setUserId] = useState('');
   const { data: accounts = [], isLoading: loadingAccounts } = useLinkableAccounts(mode === 'existing');
   const role =
     employee.employeeType === 'DENTIST'
-      ? 'Bác sĩ'
+      ? t('uiWorkforce.employeeType_DENTIST')
       : employee.employeeType === 'RECEPTIONIST'
-        ? 'Lễ tân'
+        ? t('uiWorkforce.employeeType_RECEPTIONIST')
         : null;
   return (
     <form
@@ -228,7 +226,7 @@ function LinkAccountForm({
         );
       }}
     >
-      <div className="flex gap-2" role="group" aria-label="Cách gắn tài khoản">
+      <div className="flex gap-2" role="group" aria-label={t('uiWorkforce.accountLinkMethod')}>
         <Button
           type="button"
           size="sm"
@@ -236,7 +234,7 @@ function LinkAccountForm({
           aria-pressed={mode === 'create'}
           onClick={() => setMode('create')}
         >
-          Tạo tài khoản mới
+          {t('uiWorkforce.createNewAccount')}
         </Button>
         <Button
           type="button"
@@ -245,54 +243,52 @@ function LinkAccountForm({
           aria-pressed={mode === 'existing'}
           onClick={() => setMode('existing')}
         >
-          Gắn tài khoản có sẵn
+          {t('uiWorkforce.attachExistingAccount')}
         </Button>
       </div>
       {mode === 'create' ? (
         <>
           <Input
-            label="Email đăng nhập"
+            label={t('uiWorkforce.loginEmail')}
             type="email"
             required
             value={loginEmail}
             onChange={(e) => setLoginEmail(e.target.value)}
           />
           <p className="text-sm text-gray-500 dark:text-surface-400">
-            Hệ thống tạo tài khoản ở trạng thái chờ kích hoạt và gửi lời mời.{' '}
+            {t('uiWorkforce.accountActivationInvite')}{' '}
             {role
-              ? `Tài khoản được gán vai trò ${role}.`
-              : 'Tài khoản chưa có vai trò; gán vai trò ở trang Người dùng.'}
+              ? t('uiWorkforce.assignedRole', { role })
+              : t('uiWorkforce.assignRoleOnUsersPage')}
           </p>
         </>
       ) : (
         <>
           <Select
-            label="Tài khoản"
+            label={t('uiWorkforce.linkedAccount')}
             required
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
-            placeholder={loadingAccounts ? 'Đang tải…' : '-- Chọn tài khoản chưa gắn nhân viên --'}
+            placeholder={loadingAccounts ? t('uiCommon.loading') : t('uiWorkforce.selectUnlinkedAccount')}
             options={accounts.map((a) => ({
               value: a.id,
-              label: `${a.fullName} · ${a.email}${a.status === 'PENDING_SETUP' ? ' (chờ thiết lập)' : ''}`,
+              label: `${a.fullName} · ${a.email}${a.status === 'PENDING_SETUP' ? ` (${t('uiWorkforce.pendingSetup')})` : ''}`,
             }))}
           />
           <p className="text-sm text-gray-500 dark:text-surface-400">
-            Chỉ liệt kê tài khoản đang hoạt động chưa gắn với nhân viên nào (ví dụ tài khoản quản
-            trị của chủ phòng khám). Tên hiển thị của tài khoản đổi theo tên nhân viên; vai trò giữ
-            nguyên.
+            {t('uiWorkforce.linkableAccountsDescription')}
           </p>
           {!loadingAccounts && accounts.length === 0 && (
-            <p className="text-sm text-amber-700">Không có tài khoản nào chưa gắn nhân viên.</p>
+            <p className="text-sm text-amber-700">{t('uiWorkforce.noUnlinkedAccounts')}</p>
           )}
         </>
       )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" isLoading={submitting} disabled={mode === 'existing' && !userId}>
-          {mode === 'create' ? 'Tạo tài khoản' : 'Gắn tài khoản'}
+          {mode === 'create' ? t('uiWorkforce.createAccount') : t('uiWorkforce.attachAccount')}
         </Button>
       </div>
     </form>
@@ -312,6 +308,7 @@ function TerminateForm({
   onCancel: () => void;
   onSubmit: (payload: { reason: string; terminationDate: string }) => void;
 }) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState('');
   const today = clinicToday();
   const [terminationDate, setTerminationDate] = useState(today);
@@ -327,22 +324,22 @@ function TerminateForm({
     >
       <p className="text-sm text-gray-600 dark:text-surface-300">
         {planned
-          ? `Lên lịch nghỉ việc: nhân viên vẫn làm và đăng nhập bình thường tới hết ngày trước ngày nghỉ; từ ngày ${formatDate(terminationDate)} hệ thống tự khóa tài khoản${employee.dentistProfile ? ' và không nhận lịch hẹn mới cho bác sĩ' : ''}. Các lịch hẹn và yêu cầu đặt online từ ngày đó phải được chuyển trước.`
+          ? t(employee.dentistProfile ? 'uiWorkforce.plannedTerminationDentist' : 'uiWorkforce.plannedTermination', { date: formatDate(terminationDate) })
           : employee.account
-            ? 'Tài khoản đăng nhập của nhân viên sẽ bị vô hiệu hóa và mọi phiên đăng nhập bị thu hồi.'
-            : 'Nhân viên này không có tài khoản đăng nhập.'}
-        {!planned && employee.dentistProfile && ' Hồ sơ bác sĩ chuyển sang “Ngừng hành nghề”.'}
+            ? t('uiWorkforce.terminateAccountDescription')
+            : t('uiWorkforce.noEmployeeAccount')}
+        {!planned && employee.dentistProfile && ` ${t('uiWorkforce.dentistProfileInactive')}`}
       </p>
       {blocking && <BlockingAppointmentsList appointments={blocking} />}
       <DatePicker
-        label="Ngày nghỉ việc"
+        label={t('uiWorkforce.terminationDate')}
         required
         min={employee.hireDate}
         value={terminationDate}
         onChange={setTerminationDate}
       />
       <Textarea
-        label="Lý do"
+        label={t('uiWorkforce.reason')}
         required
         minLength={5}
         maxLength={500}
@@ -352,10 +349,10 @@ function TerminateForm({
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" variant="danger" isLoading={submitting}>
-          Cho nghỉ việc
+          {t('uiWorkforce.terminate')}
         </Button>
       </div>
     </form>
@@ -373,6 +370,7 @@ function ReinstateForm({
   onCancel: () => void;
   onSubmit: (payload: { reason?: string; reactivateAccount: boolean }) => void;
 }) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState('');
   // Reopening a login (old password, old roles) is a user-management right.
   const canReactivate = useAuthStore((s) => s.hasPermission('user.deactivate'));
@@ -386,25 +384,24 @@ function ReinstateForm({
       }}
     >
       <p className="text-sm text-gray-600 dark:text-surface-300">
-        Nhân viên trở lại trạng thái “Đang làm”, ngày nghỉ việc được xóa.
+        {t('uiWorkforce.reinstateDescription')}
         {employee.dentistProfile &&
-          ' Hồ sơ bác sĩ vẫn “Ngừng hành nghề” cho đến khi bấm “Cho hành nghề lại” ở trang bác sĩ (kiểm tra lịch làm việc và dịch vụ trước).'}
+          ` ${t('uiWorkforce.reinstateDentistNote')}`}
       </p>
       {employee.account &&
         (canReactivate ? (
           <Checkbox
             checked={reactivateAccount}
             onChange={setReactivateAccount}
-            label={`Kích hoạt lại tài khoản đăng nhập ${employee.account.email}`}
+            label={t('uiWorkforce.reactivateEmployeeAccount', { email: employee.account.email })}
           />
         ) : (
           <p className="text-sm text-amber-700">
-            Tài khoản {employee.account.email} vẫn bị vô hiệu hóa; nhờ quản trị viên kích hoạt lại ở
-            trang Người dùng.
+            {t('uiWorkforce.accountStillDeactivated', { email: employee.account.email })}
           </p>
         ))}
       <Textarea
-        label="Lý do (không bắt buộc)"
+        label={t('uiWorkforce.reasonOptionalUser')}
         maxLength={500}
         rows={2}
         value={reason}
@@ -412,10 +409,10 @@ function ReinstateForm({
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" isLoading={submitting}>
-          Khôi phục
+          {t('uiWorkforce.reinstate')}
         </Button>
       </div>
     </form>
@@ -423,6 +420,7 @@ function ReinstateForm({
 }
 
 export default function EmployeesPage() {
+  const { t } = useTranslation();
   const [filters, setFilters] = useState<EmployeeFilters>({ page: 1, pageSize: 20 });
   const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -465,12 +463,12 @@ export default function EmployeesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Nhân sự"
-        description="Hồ sơ nhân viên, tài khoản đăng nhập và hồ sơ bác sĩ"
+        title={t('uiWorkforce.employees')}
+        description={t('uiWorkforce.employeeDescription')}
         actions={
           <PermissionGuard permission="employee.create">
             <Button onClick={() => setDialog({ kind: 'create' })}>
-              <Plus className="h-4 w-4" /> Thêm nhân viên
+              <Plus className="h-4 w-4" /> {t('uiWorkforce.addEmployee')}
             </Button>
           </PermissionGuard>
         }
@@ -486,22 +484,22 @@ export default function EmployeesPage() {
         >
           <div className="min-w-[200px] flex-1">
             <Input
-              aria-label="Tìm nhân viên"
-              placeholder="Tìm theo mã, tên, SĐT, email…"
+              aria-label={t('uiWorkforce.searchEmployees')}
+              placeholder={t('uiWorkforce.searchEmployees')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <Select
-            aria-label="Lọc theo loại nhân viên"
+            aria-label={t('uiWorkforce.filterByEmployeeType')}
             value={filters.type ?? ''}
             onChange={(e) =>
               setFilters({ ...filters, type: (e.target.value || undefined) as EmployeeType, page: 1 })
             }
-            options={[{ value: '', label: 'Tất cả loại' }, ...TYPE_OPTIONS]}
+            options={[{ value: '', label: t('uiWorkforce.allTypes') }, ...TYPE_OPTIONS.map((option) => ({ ...option, label: t(`uiWorkforce.employeeType_${option.value}`) }))]}
           />
           <Select
-            aria-label="Lọc theo trạng thái"
+            aria-label={t('uiWorkforce.filterByEmploymentStatus')}
             value={filters.status ?? ''}
             onChange={(e) =>
               setFilters({
@@ -510,10 +508,10 @@ export default function EmployeesPage() {
                 page: 1,
               })
             }
-            options={[{ value: '', label: 'Tất cả trạng thái' }, ...STATUS_OPTIONS]}
+            options={[{ value: '', label: t('uiWorkforce.allStatusesEmployees') }, ...STATUS_OPTIONS.map((option) => ({ ...option, label: t(`uiWorkforce.employment_${option.value}`) }))]}
           />
           <Button type="submit" variant="outline">
-            Tìm
+            {t('uiWorkforce.search')}
           </Button>
         </form>
       </Card>
@@ -523,13 +521,13 @@ export default function EmployeesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-600 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-300">
-                <th className="px-4 py-3 font-medium">Mã</th>
-                <th className="px-4 py-3 font-medium">Họ tên</th>
-                <th className="px-4 py-3 font-medium">Loại</th>
-                <th className="px-4 py-3 font-medium">Liên hệ</th>
-                <th className="px-4 py-3 font-medium">Tài khoản</th>
-                <th className="whitespace-nowrap px-4 py-3 font-medium">Trạng thái</th>
-                <th className="px-4 py-3 text-right font-medium">Thao tác</th>
+                <th className="px-4 py-3 font-medium">{t('uiWorkforce.code')}</th>
+                <th className="px-4 py-3 font-medium">{t('uiWorkforce.fullName')}</th>
+                <th className="px-4 py-3 font-medium">{t('uiWorkforce.type')}</th>
+                <th className="px-4 py-3 font-medium">{t('uiWorkforce.contact')}</th>
+                <th className="px-4 py-3 font-medium">{t('uiWorkforce.account')}</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">{t('uiWorkforce.status')}</th>
+                <th className="px-4 py-3 text-right font-medium">{t('uiWorkforce.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -542,16 +540,16 @@ export default function EmployeesPage() {
               ) : isError ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-red-500">
-                    Không tải được danh sách nhân viên.{' '}
+                    {t('uiWorkforce.employeesLoadError')}{' '}
                     <button type="button" className="underline" onClick={() => refetch()}>
-                      Thử lại
+                      {t('uiWorkforce.retry')}
                     </button>
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-gray-400">
-                    Không có nhân viên phù hợp.
+                    {t('uiWorkforce.noEmployees')}
                   </td>
                 </tr>
               ) : (
@@ -580,9 +578,9 @@ export default function EmployeesPage() {
                             e.fullName
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">Vào làm {formatDate(e.hireDate)}</div>
+                        <div className="text-xs text-gray-500">{t('uiWorkforce.hiredOn')} {formatDate(e.hireDate)}</div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">{EMPLOYEE_TYPE_LABEL[e.employeeType]}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{t(`uiWorkforce.employeeType_${e.employeeType}`)}</td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-surface-300">
                         <div>{e.phone ?? '—'}</div>
                         <div>{e.email ?? ''}</div>
@@ -592,19 +590,19 @@ export default function EmployeesPage() {
                           <>
                             <span className="text-gray-700 dark:text-surface-200">{e.account.email}</span>
                             {ACCOUNT_STATUS_HINT[e.account.status] && (
-                              <div className="text-amber-700">{ACCOUNT_STATUS_HINT[e.account.status]}</div>
+                              <div className="text-amber-700">{t(`uiWorkforce.${e.account.status === 'PENDING_SETUP' ? 'pendingSetup' : 'deactivated'}`)}</div>
                             )}
                           </>
                         ) : (
-                          <span className="text-gray-400">Chưa có</span>
+                          <span className="text-gray-400">{t('uiWorkforce.noAccount')}</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <Badge variant={EMPLOYMENT_STATUS_VARIANT[e.employmentStatus]}>
-                          {EMPLOYMENT_STATUS_LABEL[e.employmentStatus]}
+                          {t(`uiWorkforce.employment_${e.employmentStatus}`)}
                         </Badge>
                         {!terminated && e.terminationDate && (
-                          <p className="mt-1 text-xs text-amber-700">Nghỉ việc từ {formatDate(e.terminationDate)}</p>
+                          <p className="mt-1 text-xs text-amber-700">{t('uiWorkforce.terminatedFrom')} {formatDate(e.terminationDate)}</p>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -614,8 +612,8 @@ export default function EmployeesPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                aria-label={`Khôi phục ${e.fullName}`}
-                                title={terminated ? 'Khôi phục (quay lại làm việc)' : 'Hủy kế hoạch nghỉ việc'}
+                                aria-label={t('uiWorkforce.reinstateEmployeeNamed', { name: e.fullName })}
+                                title={terminated ? t('uiWorkforce.reinstate') : t('uiWorkforce.cancelTerminationPlan')}
                                 onClick={() => setDialog({ kind: 'reinstate', employee: e })}
                               >
                                 <RotateCcw className="h-4 w-4" />
@@ -629,7 +627,7 @@ export default function EmployeesPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                aria-label={`Sửa ${e.fullName}`}
+                                aria-label={t('uiWorkforce.editEmployeeNamed', { name: e.fullName })}
                                 onClick={() => setDialog({ kind: 'edit', employee: e })}
                               >
                                 <Pencil className="h-4 w-4" />
@@ -640,7 +638,7 @@ export default function EmployeesPage() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  aria-label={`Tạo tài khoản cho ${e.fullName}`}
+                                  aria-label={t('uiWorkforce.createAccountFor', { name: e.fullName })}
                                   onClick={() => setDialog({ kind: 'account', employee: e })}
                                 >
                                   <KeyRound className="h-4 w-4" />
@@ -652,7 +650,7 @@ export default function EmployeesPage() {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  aria-label={`Tạo hồ sơ bác sĩ cho ${e.fullName}`}
+                                  aria-label={t('uiWorkforce.createDentistProfileFor', { name: e.fullName })}
                                   onClick={() => setDialog({ kind: 'dentist', employee: e })}
                                 >
                                   <Stethoscope className="h-4 w-4" />
@@ -663,7 +661,7 @@ export default function EmployeesPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                aria-label={`Cho ${e.fullName} nghỉ việc`}
+                                aria-label={t('uiWorkforce.terminateEmployeeNamed', { name: e.fullName })}
                                 onClick={() => setDialog({ kind: 'terminate', employee: e })}
                               >
                                 <UserX className="h-4 w-4 text-red-500" />
@@ -693,7 +691,7 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'create' || dialog?.kind === 'edit'}
         onClose={close}
-        title={dialog?.kind === 'edit' ? `Sửa ${dialog.employee.code}` : 'Thêm nhân viên'}
+        title={dialog?.kind === 'edit' ? t('uiWorkforce.editEmployeeCode', { code: dialog.employee.code }) : t('uiWorkforce.addEmployee')}
         size="lg"
       >
         {(dialog?.kind === 'create' || dialog?.kind === 'edit') && (
@@ -707,7 +705,7 @@ export default function EmployeesPage() {
                     { id: dialog.employee.id, payload },
                     {
                       onSuccess: (updated) => {
-                        notify.success('Đã cập nhật nhân viên');
+                        notify.success(t('uiWorkforce.employeeUpdated'));
                         close();
                         // Going on leave keeps existing bookings: show them.
                         if (updated.futureAppointments?.length) {
@@ -718,15 +716,15 @@ export default function EmployeesPage() {
                           });
                         }
                       },
-                      onError: onError('Không cập nhật được nhân viên'),
+                      onError: onError(t('uiWorkforce.employeeUpdateError')),
                     },
                   )
                 : create.mutate(payload, {
                     onSuccess: (created) => {
-                      notify.success(`Đã tạo nhân viên ${created.code}`);
+                      notify.success(t('uiWorkforce.employeeCreated', { code: created.code }));
                       close();
                     },
-                    onError: onError('Không tạo được nhân viên'),
+                    onError: onError(t('uiWorkforce.employeeCreateError')),
                   })
             }
           />
@@ -736,7 +734,7 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'account'}
         onClose={close}
-        title={dialog?.kind === 'account' ? `Tài khoản đăng nhập cho ${dialog.employee.fullName}` : ''}
+        title={dialog?.kind === 'account' ? t('uiWorkforce.loginAccountFor', { name: dialog.employee.fullName }) : ''}
       >
         {dialog?.kind === 'account' && (
           <LinkAccountForm
@@ -751,17 +749,17 @@ export default function EmployeesPage() {
                     close();
                     if (linked.inviteSent === false && linked.account) {
                       // Never claim an invite that did not leave the server.
-                      notify.warning('Đã tạo tài khoản. Chưa gửi được email — dùng Cấp mật khẩu tạm.');
+                      notify.warning(t('uiWorkforce.userCreatedEmailFailed'));
                       setTempPasswordFor({ id: linked.account.id, email: linked.account.email });
                     } else {
                       notify.success(
                         'userId' in payload
-                          ? 'Đã gắn tài khoản có sẵn'
-                          : 'Đã tạo tài khoản đăng nhập và gửi lời mời',
+                          ? t('uiWorkforce.accountAttached')
+                          : t('uiWorkforce.accountCreatedInvite'),
                       );
                     }
                   },
-                  onError: onError('Không gắn được tài khoản'),
+                  onError: onError(t('uiWorkforce.accountLinkError')),
                 },
               )
             }
@@ -778,7 +776,7 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'reinstate'}
         onClose={close}
-        title={dialog?.kind === 'reinstate' ? `Khôi phục ${dialog.employee.fullName}` : ''}
+        title={dialog?.kind === 'reinstate' ? t('uiWorkforce.reinstateEmployeeNamed', { name: dialog.employee.fullName }) : ''}
       >
         {dialog?.kind === 'reinstate' && (
           <ReinstateForm
@@ -792,12 +790,12 @@ export default function EmployeesPage() {
                   onSuccess: () => {
                     notify.success(
                       dialog.employee.dentistProfile
-                        ? 'Đã khôi phục nhân viên. Vào trang bác sĩ để cho hành nghề lại.'
-                        : 'Đã khôi phục nhân viên',
+                        ? t('uiWorkforce.employeeReinstatedDentist')
+                        : t('uiWorkforce.employeeReinstated'),
                     );
                     close();
                   },
-                  onError: onError('Không khôi phục được nhân viên'),
+                  onError: onError(t('uiWorkforce.employeeReinstateError')),
                 },
               )
             }
@@ -808,17 +806,16 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'onLeave'}
         onClose={close}
-        title={dialog?.kind === 'onLeave' ? `${dialog.employee.fullName} tạm nghỉ` : ''}
+        title={dialog?.kind === 'onLeave' ? t('uiWorkforce.employeeOnLeaveNamed', { name: dialog.employee.fullName }) : ''}
       >
         {dialog?.kind === 'onLeave' && (
           <div className="space-y-4">
             <Alert type="info">
-              Bác sĩ không còn nhận lịch hẹn mới (đặt tại quầy và đặt online). Các lịch đã đặt dưới
-              đây vẫn giữ nguyên — hãy chuyển sang bác sĩ khác hoặc báo bệnh nhân.
+              {t('uiWorkforce.onLeaveBookingWarning')}
             </Alert>
             <BlockingAppointmentsList appointments={dialog.appointments} />
             <div className="flex justify-end">
-              <Button onClick={close}>Đã hiểu</Button>
+              <Button onClick={close}>{t('uiWorkforce.understood')}</Button>
             </div>
           </div>
         )}
@@ -827,14 +824,14 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'dentist'}
         onClose={close}
-        title={dialog?.kind === 'dentist' ? `Hồ sơ bác sĩ — ${dialog.employee.fullName}` : ''}
-        description="Tài khoản sẽ được gán vai trò Bác sĩ và xuất hiện trong form đặt lịch."
+        title={dialog?.kind === 'dentist' ? t('uiWorkforce.dentistProfileFor', { name: dialog.employee.fullName }) : ''}
+        description={t('uiWorkforce.dentistProfileCreationDescription')}
         size="lg"
       >
         {dialog?.kind === 'dentist' && (
           <DentistProfileForm
             mode="admin"
-            submitLabel="Tạo hồ sơ bác sĩ"
+            submitLabel={t('uiWorkforce.createDentistProfile')}
             submitting={makeDentist.isPending}
             onCancel={close}
             onSubmit={(payload) =>
@@ -842,10 +839,10 @@ export default function EmployeesPage() {
                 { id: dialog.employee.id, payload },
                 {
                   onSuccess: () => {
-                    notify.success('Đã tạo hồ sơ bác sĩ');
+                    notify.success(t('uiWorkforce.dentistProfileCreated'));
                     close();
                   },
-                  onError: onError('Không tạo được hồ sơ bác sĩ'),
+                  onError: onError(t('uiWorkforce.dentistProfileCreateError')),
                 },
               )
             }
@@ -856,7 +853,7 @@ export default function EmployeesPage() {
       <Modal
         open={dialog?.kind === 'terminate'}
         onClose={close}
-        title={dialog?.kind === 'terminate' ? `Cho ${dialog.employee.fullName} nghỉ việc` : ''}
+        title={dialog?.kind === 'terminate' ? t('uiWorkforce.terminateEmployeeNamed', { name: dialog.employee.fullName }) : ''}
       >
         {dialog?.kind === 'terminate' && (
           <TerminateForm
@@ -871,12 +868,12 @@ export default function EmployeesPage() {
                   onSuccess: (result) => {
                     notify.success(
                       (result as { terminationScheduled?: boolean }).terminationScheduled
-                        ? `Đã lên lịch nghỉ việc từ ngày ${formatDate(payload.terminationDate)}`
-                        : 'Đã cho nhân viên nghỉ việc',
+                        ? t('uiWorkforce.terminationScheduled', { date: formatDate(payload.terminationDate) })
+                        : t('uiWorkforce.employeeTerminated'),
                     );
                     close();
                   },
-                  onError: onError('Không cho nghỉ việc được'),
+                  onError: onError(t('uiWorkforce.terminationError')),
                 },
               )
             }

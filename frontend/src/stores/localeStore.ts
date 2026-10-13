@@ -17,24 +17,25 @@ interface LocaleState {
   setLocale: (code: string) => void;
 }
 
+function normalizeLocale(language: string | undefined): string {
+  const code = language?.split('-')[0];
+  return LOCALES.find((locale) => locale.code === code)?.code || LOCALES[0].code;
+}
+
 function readCurrent(): string {
-  if (typeof document !== 'undefined') {
-    const html = document.documentElement.lang;
-    if (html) return html;
-  }
-  return i18n.language || LOCALES[0].code;
+  return normalizeLocale(i18n.resolvedLanguage || i18n.language);
 }
 
 export const useLocaleStore = create<LocaleState>((set) => {
   // Sync to current i18n state on init.
-  i18n.on('languageChanged', (lng) => set({ locale: lng }));
+  i18n.on('languageChanged', (lng) => set({ locale: normalizeLocale(lng) }));
   return {
     locale: readCurrent(),
     setLocale: (code) => {
       if (!LOCALES.some((l) => l.code === code)) return;
+      // The languageChanged event updates this store only after i18next has
+      // completed the change, keeping subscribers aligned with rendered text.
       void i18n.changeLanguage(code);
-      // localStorage write is handled by i18next-browser-languagedetector.
-      set({ locale: code });
     },
   };
 });

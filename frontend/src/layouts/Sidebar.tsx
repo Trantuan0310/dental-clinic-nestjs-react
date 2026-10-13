@@ -104,7 +104,7 @@ export function SidebarContent({
                         {!collapsed && badge > 0 && (
                           <span
                             className="ml-auto min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
-                            aria-label={`${badge} yêu cầu chờ xử lý`}
+                            aria-label={t('uiCommon.action.pendingRequests', { count: badge })}
                           >
                             {badge > 99 ? '99+' : badge}
                           </span>

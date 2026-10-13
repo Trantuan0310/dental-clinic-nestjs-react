@@ -2,6 +2,7 @@ import { cn } from '@/lib/cn';
 import type { AppointmentStatus } from '@/types/appointment';
 import type { InvoiceStatus } from '@/types/billing';
 import type { ExpenseStatus } from '@/features/expense/types';
+import { useTranslation } from 'react-i18next';
 
 export type StatusType =
   | 'success'
@@ -86,9 +87,10 @@ export function StatusBadge({
   label,
   className,
 }: StatusBadgeProps) {
+  const { t } = useTranslation();
   const config = statusConfig[status] || { type: type || 'neutral', label: label || status };
   const finalType = type || config.type;
-  const finalLabel = label || config.label;
+  const finalLabel = label || t(`uiCommon.status.${status.toLowerCase()}`, { defaultValue: config.label });
 
   return (
     <span
@@ -116,7 +118,8 @@ export function AppointmentStatusBadge({
   status: AppointmentStatus;
   overdue?: boolean;
 }) {
-  if (overdue) return <StatusBadge status={status} type="danger" label="Quá giờ – chưa đến" />;
+  const { t } = useTranslation();
+  if (overdue) return <StatusBadge status={status} type="danger" label={t('uiCommon.status.overdueAppointment')} />;
   return <StatusBadge status={status} />;
 }
 
@@ -136,8 +139,9 @@ const INVOICE_STATUS_CONFIG: Record<InvoiceStatus, { type: StatusType; label: st
 };
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
+  const { t } = useTranslation();
   const config = INVOICE_STATUS_CONFIG[status];
-  return <StatusBadge status={status} type={config?.type} label={config?.label} />;
+  return <StatusBadge status={status} type={config?.type} label={t(`uiCommon.status.${status.toLowerCase()}`, { defaultValue: config?.label })} />;
 }
 
 // Same collision as Invoice above: DRAFT/APPROVED happen to already have an
@@ -152,8 +156,9 @@ const EXPENSE_STATUS_CONFIG: Record<ExpenseStatus, { type: StatusType; label: st
 };
 
 export function ExpenseStatusBadge({ status }: { status: ExpenseStatus }) {
+  const { t } = useTranslation();
   const config = EXPENSE_STATUS_CONFIG[status];
-  return <StatusBadge status={status} type={config?.type} label={config?.label} />;
+  return <StatusBadge status={status} type={config?.type} label={t(`uiCommon.status.${status.toLowerCase()}`, { defaultValue: config?.label })} />;
 }
 
 export function ShiftStatusBadge({ status }: { status: string }) {
@@ -161,12 +166,8 @@ export function ShiftStatusBadge({ status }: { status: string }) {
 }
 
 export function AdjustmentTypeBadge({ type }: { type: string }) {
-  const labelMap: Record<string, string> = {
-    BONUS: 'Thưởng',
-    PENALTY: 'Phạt',
-    DEDUCTION: 'Khấu trừ',
-    MANUAL_OVERRIDE: 'Sửa tay',
-  };
+  const { t } = useTranslation();
+  const labelMap: Record<string, string> = { BONUS: 'bonus', PENALTY: 'penalty', DEDUCTION: 'deduction', MANUAL_OVERRIDE: 'manualOverride' };
   const typeMap: Record<string, StatusType> = {
     BONUS: 'success',
     PENALTY: 'danger',
@@ -177,7 +178,7 @@ export function AdjustmentTypeBadge({ type }: { type: string }) {
     <StatusBadge
       status={type}
       type={typeMap[type] ?? 'neutral'}
-      label={labelMap[type] ?? type}
+      label={labelMap[type] ? t(`uiCommon.status.${labelMap[type]}`) : type}
     />
   );
 }

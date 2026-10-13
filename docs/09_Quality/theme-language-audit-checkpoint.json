@@ -1,0 +1,2288 @@
+[
+  {
+    "name": "login",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": true,
+    "leaks": [],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "encounter",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": true,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": [
+      "t is not defined",
+      "t is not defined"
+    ]
+  },
+  {
+    "name": "encounter",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "vi",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "vi",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": true,
+    "leaks": [],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [
+      {
+        "text": "Patient Example",
+        "ratio": 1.06,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(11, 18, 32)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [
+      {
+        "text": "Patient Example",
+        "ratio": 1.06,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(11, 18, 32)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "encounter",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [
+      {
+        "text": "Tiền sử & dị ứng",
+        "ratio": 1,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(17, 24, 39)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "encounter",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [
+      {
+        "text": "Tiền sử & dị ứng",
+        "ratio": 1,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(17, 24, 39)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "vi",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Nha khoa thẩm mỹ · Online booking",
+      "Thứ Hai – Thứ Bảy: 08:00 – 12:00 · 13:30 – 19:00",
+      "Thứ Hai – Thứ Bảy\t08:00 – 12:00 · 13:30 – 19:00",
+      "Chủ nhật\tNghỉ",
+      "Nha khoa thẩm mỹ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Nha khoa thẩm mỹ · Online booking",
+      "Thứ Hai – Thứ Bảy: 08:00 – 12:00 · 13:30 – 19:00",
+      "Thứ Hai – Thứ Bảy\t08:00 – 12:00 · 13:30 – 19:00",
+      "Chủ nhật\tNghỉ",
+      "Nha khoa thẩm mỹ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Book online at least 2 hours in advance 2 giờ; call the clinic if you need an earlier time."
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Book online at least 2 hours in advance 2 giờ; call the clinic if you need an earlier time."
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.viewAppointments",
+      "uiScheduling.bookingPrivacyNote"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.viewAppointments",
+      "uiScheduling.bookingPrivacyNote"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": true,
+    "leaks": [
+      "Sửa",
+      "Đặt lịch hẹn",
+      "36 tuổi • Nữ",
+      "Ngày sinh: 15/01/1990",
+      "Ngày tạo: 01/10/2026 08:00",
+      "Hóa đơn",
+      "Chưa có",
+      "Tái khám gần nhất",
+      "Dị ứng",
+      "Bệnh mãn tính"
+    ],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên",
+      "Sửa",
+      "Đặt lịch hẹn",
+      "36 tuổi • Nữ",
+      "Ngày sinh: 15/01/1990",
+      "Ngày tạo: 01/10/2026 08:00",
+      "Hóa đơn",
+      "Chưa có",
+      "Tái khám gần nhất",
+      "Dị ứng",
+      "Bệnh mãn tính"
+    ],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "encounter",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": true,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": [
+      "Failed to fetch dynamically imported module: http://localhost:5173/src/features/medical-records/DentalChartPanel.tsx?t=1791737056251",
+      "Failed to fetch dynamically imported module: http://localhost:5173/src/features/medical-records/DentalChartPanel.tsx?t=1791737056251"
+    ]
+  },
+  {
+    "name": "encounter",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên",
+      "Hiển thị 0 / 0 lịch hẹn"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Tất cả bác sĩ",
+      "Hiện lịch đã kết thúc",
+      "Thêm lịch làm việc",
+      "Chưa có lịch làm việc cố định",
+      "Thêm lịch làm việc hàng tuần cho bác sĩ để hệ thống biết khi nào có thể đặt lịch hẹn.",
+      "Lọc theo bác sĩ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên",
+      "Tất cả bác sĩ",
+      "Hiện lịch đã kết thúc",
+      "Thêm lịch làm việc",
+      "Chưa có lịch làm việc cố định",
+      "Thêm lịch làm việc hàng tuần cho bác sĩ để hệ thống biết khi nào có thể đặt lịch hẹn.",
+      "Lọc theo bác sĩ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Lọc theo loại nhân viên",
+      "Lọc theo trạng thái"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên",
+      "Lọc theo loại nhân viên",
+      "Lọc theo trạng thái"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "en",
+    "theme": "light",
+    "width": 375,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "en",
+    "theme": "light",
+    "width": 1440,
+    "dark": false,
+    "overflow": false,
+    "leaks": [
+      "Quản trị viên"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "login",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Nha khoa thẩm mỹ · Online booking",
+      "Thứ Hai – Thứ Bảy: 08:00 – 12:00 · 13:30 – 19:00",
+      "Thứ Hai – Thứ Bảy\t08:00 – 12:00 · 13:30 – 19:00",
+      "Chủ nhật\tNghỉ",
+      "Nha khoa thẩm mỹ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "landing",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Nha khoa thẩm mỹ · Online booking",
+      "Thứ Hai – Thứ Bảy: 08:00 – 12:00 · 13:30 – 19:00",
+      "Thứ Hai – Thứ Bảy\t08:00 – 12:00 · 13:30 – 19:00",
+      "Chủ nhật\tNghỉ",
+      "Nha khoa thẩm mỹ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Book online at least 2 hours in advance 2 giờ; call the clinic if you need an earlier time."
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Book online at least 2 hours in advance 2 giờ; call the clinic if you need an earlier time."
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "booking-status",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "dashboard",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patients",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-form",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": true,
+    "leaks": [
+      "Sửa",
+      "Đặt lịch hẹn",
+      "36 tuổi • Nữ",
+      "Ngày sinh: 15/01/1990",
+      "Ngày tạo: 01/10/2026 08:00",
+      "Hóa đơn",
+      "Chưa có",
+      "Tái khám gần nhất",
+      "Dị ứng",
+      "Bệnh mãn tính"
+    ],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [
+      {
+        "text": "Patient Example",
+        "ratio": 1.06,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(11, 18, 32)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "patient-detail",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Sửa",
+      "Đặt lịch hẹn",
+      "36 tuổi • Nữ",
+      "Ngày sinh: 15/01/1990",
+      "Ngày tạo: 01/10/2026 08:00",
+      "Hóa đơn",
+      "Chưa có",
+      "Tái khám gần nhất",
+      "Dị ứng",
+      "Bệnh mãn tính"
+    ],
+    "rawKeys": [
+      "uiClinical.encounterHistory"
+    ],
+    "contrast": [
+      {
+        "text": "Patient Example",
+        "ratio": 1.06,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(11, 18, 32)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "encounter",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "2 phút",
+      "Tiền sử & dị ứng",
+      "Sửa",
+      "Dị ứng",
+      "Chưa ghi nhận",
+      "Bệnh nền",
+      "Không",
+      "Thuốc đang dùng"
+    ],
+    "rawKeys": [],
+    "contrast": [
+      {
+        "text": "Tiền sử & dị ứng",
+        "ratio": 1,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(17, 24, 39)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "encounter",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "2 phút",
+      "Tiền sử & dị ứng",
+      "Sửa",
+      "Dị ứng",
+      "Chưa ghi nhận",
+      "Bệnh nền",
+      "Không",
+      "Thuốc đang dùng"
+    ],
+    "rawKeys": [],
+    "contrast": [
+      {
+        "text": "Tiền sử & dị ứng",
+        "ratio": 1,
+        "color": "rgb(17, 24, 39)",
+        "bg": "rgb(17, 24, 39)"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointments",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [
+      "uiScheduling.overdueNotArrived",
+      "uiScheduling.over15Minutes"
+    ],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Hiển thị 0 / 0 lịch hẹn"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "appointment-list",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Hiển thị 0 / 0 lịch hẹn"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Tất cả bác sĩ",
+      "Hiện lịch đã kết thúc",
+      "Thêm lịch làm việc",
+      "Chưa có lịch làm việc cố định",
+      "Thêm lịch làm việc hàng tuần cho bác sĩ để hệ thống biết khi nào có thể đặt lịch hẹn.",
+      "Lọc theo bác sĩ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "schedule",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [
+      "Tất cả bác sĩ",
+      "Hiện lịch đã kết thúc",
+      "Thêm lịch làm việc",
+      "Chưa có lịch làm việc cố định",
+      "Thêm lịch làm việc hàng tuần cho bác sĩ để hệ thống biết khi nào có thể đặt lịch hẹn.",
+      "Lọc theo bác sĩ"
+    ],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "inventory",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "invoices",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "reports",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "expenses",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "staff",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "users",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "payroll",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "services",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "en",
+    "theme": "dark",
+    "width": 375,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  },
+  {
+    "name": "account",
+    "locale": "en",
+    "theme": "dark",
+    "width": 1440,
+    "dark": true,
+    "overflow": false,
+    "leaks": [],
+    "rawKeys": [],
+    "contrast": [],
+    "errors": []
+  }
+]

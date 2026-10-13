@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -34,6 +35,7 @@ import {
 } from './InvoiceCorrections';
 
 export default function InvoiceDetailPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -59,7 +61,7 @@ export default function InvoiceDetailPage() {
     mutationFn: () => billingApi.issueInvoice(id!, invoice!.version),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
-      notify.success('Phát hành hóa đơn thành công');
+      notify.success(t('uiOperations.invoiceIssued'));
     },
     onError: (err) => {
       // A stale `invoice.version` (another tab already issued/paid/voided
@@ -67,7 +69,7 @@ export default function InvoiceDetailPage() {
       // never updates, so every retry fails identically until a manual
       // page refresh.
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
-      notify.error(getApiErrorMessage(err, 'Không thể phát hành hóa đơn. Vui lòng thử lại.'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.issueInvoiceFailed')));
     },
   });
 
@@ -76,11 +78,11 @@ export default function InvoiceDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       setShowVoidModal(false);
-      notify.success('Hủy hóa đơn thành công');
+      notify.success(t('uiOperations.invoiceVoided'));
     },
     onError: (err) => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
-      notify.error(getApiErrorMessage(err, 'Không thể hủy hóa đơn. Vui lòng thử lại.'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.voidInvoiceFailed')));
     },
   });
 
@@ -95,9 +97,9 @@ export default function InvoiceDetailPage() {
   if (!invoice) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500">Không tìm thấy hóa đơn</p>
+        <p className="text-gray-500">{t('uiOperations.invoiceNotFound')}</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate('/billing/list')}>
-          Quay lại danh sách
+          {t('uiOperations.backToList')}
         </Button>
       </div>
     );
@@ -119,11 +121,11 @@ export default function InvoiceDetailPage() {
     <div className="print-document space-y-3">
       <div className="hidden text-center print:block">
         <ClinicPrintHeading />
-        <p>HÓA ĐƠN DỊCH VỤ</p>
+        <p>{t('uiOperations.serviceInvoice').toUpperCase()}</p>
       </div>
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" aria-label="Quay lại danh sách hóa đơn" onClick={() => navigate('/billing/list')}>
+        <Button variant="ghost" aria-label={t('uiOperations.backToInvoiceList')} onClick={() => navigate('/billing/list')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
@@ -144,7 +146,7 @@ export default function InvoiceDetailPage() {
                 isLoading={issueMutation.isPending}
               >
                 <Send className="h-4 w-4" />
-                Phát hành
+                {t('uiOperations.issue')}
               </Button>
             </PermissionGuard>
           )}
@@ -152,7 +154,7 @@ export default function InvoiceDetailPage() {
             <PermissionGuard permission="invoice.payment.create">
               <Button onClick={() => setShowPaymentModal(true)}>
                 <Plus className="h-4 w-4" />
-                Thu tiền
+                {t('uiOperations.payment')}
               </Button>
             </PermissionGuard>
           )}
@@ -160,7 +162,7 @@ export default function InvoiceDetailPage() {
             <PermissionGuard permission="invoice.update">
               <Button variant="outline" onClick={() => setShowDiscount(true)}>
                 <Percent className="h-4 w-4" />
-                Giảm giá
+                {t('uiOperations.discount')}
               </Button>
             </PermissionGuard>
           )}
@@ -168,7 +170,7 @@ export default function InvoiceDetailPage() {
             <PermissionGuard permission="invoice.refund">
               <Button variant="outline" onClick={() => setShowRefund(true)}>
                 <Undo2 className="h-4 w-4" />
-                Hoàn tiền
+                {t('uiOperations.refund')}
               </Button>
             </PermissionGuard>
           )}
@@ -176,7 +178,7 @@ export default function InvoiceDetailPage() {
             <PermissionGuard permission="invoice.void">
               <Button variant="ghost" onClick={() => setShowVoidModal(true)}>
                 <XCircle className="h-4 w-4" />
-                Hủy HĐ
+                {t('uiOperations.voidShort')}
               </Button>
             </PermissionGuard>
           )}
@@ -184,13 +186,13 @@ export default function InvoiceDetailPage() {
             <PermissionGuard permission="invoice.reissue">
               <Button variant="outline" onClick={() => setShowReissue(true)}>
                 <FilePlus2 className="h-4 w-4" />
-                Lập lại hóa đơn
+                {t('uiOperations.reissueInvoice')}
               </Button>
             </PermissionGuard>
           )}
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="h-4 w-4" />
-            In
+            {t('uiOperations.print')}
           </Button>
         </div>
       </div>
@@ -203,14 +205,14 @@ export default function InvoiceDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <div>
-                  <p className="text-gray-500">Ngày tạo</p>
+                  <p className="text-gray-500 dark:text-gray-400">{t('uiOperations.createdDate')}</p>
                   <p className="font-medium">
                     {format(new Date(invoice.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                   </p>
                 </div>
                 {invoice.issuedAt && (
                   <div>
-                    <p className="text-gray-500">Ngày phát hành</p>
+                    <p className="text-gray-500 dark:text-gray-400">{t('uiOperations.issuedDate')}</p>
                     <p className="font-medium">
                       {format(new Date(invoice.issuedAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                     </p>
@@ -218,7 +220,7 @@ export default function InvoiceDetailPage() {
                 )}
                 {invoice.voidedAt && (
                   <div>
-                    <p className="text-gray-500">Ngày hủy</p>
+                    <p className="text-gray-500 dark:text-gray-400">{t('uiOperations.voidedDate')}</p>
                     <p className="font-medium">
                       {format(new Date(invoice.voidedAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                     </p>
@@ -227,13 +229,13 @@ export default function InvoiceDetailPage() {
               </div>
 
               {invoice.voidReason && (
-                <Alert type="danger" title="Lý do hủy">
+                <Alert type="danger" title={t('uiOperations.voidReason')}>
                   {invoice.voidReason}
                 </Alert>
               )}
               {invoice.replacedBy && (
                 <Alert type="info">
-                  Đã lập lại thành hóa đơn{' '}
+                  {t('uiOperations.reissuedAsInvoice')}{' '}
                   <Link className="font-medium underline" to={`/billing/invoices/${invoice.replacedBy.id}`}>
                     {invoice.replacedBy.code}
                   </Link>
@@ -242,7 +244,7 @@ export default function InvoiceDetailPage() {
               )}
               {invoice.replaces && (
                 <Alert type="info">
-                  Lập lại thay cho hóa đơn đã hủy{' '}
+                  {t('uiOperations.reissuedForVoidedInvoice')}{' '}
                   <Link className="font-medium underline" to={`/billing/invoices/${invoice.replaces.id}`}>
                     {invoice.replaces.code}
                   </Link>
@@ -251,23 +253,23 @@ export default function InvoiceDetailPage() {
               )}
               {keepsMoney && hasPermission('invoice.void') && (
                 <p className="text-xs text-gray-500 print:hidden">
-                  Muốn hủy hóa đơn này: hủy phiếu thu ghi nhầm hoặc hoàn tiền cho khách trước, rồi chọn "Hủy HĐ".
+                  {t('uiOperations.voidInvoicePrerequisite')}
                 </p>
               )}
             </div>
           </Card>
 
           {/* Line Items */}
-          <Card title="Chi tiết hóa đơn">
+          <Card title={t('uiOperations.invoiceDetails')}>
             {invoice.items && invoice.items.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
                     <th className="py-2 font-medium text-gray-600">#</th>
-                    <th className="py-2 font-medium text-gray-600">Mô tả</th>
-                    <th className="py-2 font-medium text-gray-600 text-right">SL</th>
-                    <th className="py-2 font-medium text-gray-600 text-right">Đơn giá</th>
-                    <th className="py-2 font-medium text-gray-600 text-right">Tổng</th>
+                    <th className="py-2 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.description')}</th>
+                    <th className="py-2 font-medium text-gray-600 dark:text-gray-300 text-right">{t('uiOperations.quantityShort')}</th>
+                    <th className="py-2 font-medium text-gray-600 dark:text-gray-300 text-right">{t('uiOperations.unitPrice')}</th>
+                    <th className="py-2 font-medium text-gray-600 dark:text-gray-300 text-right">{t('uiOperations.total')}</th>
                     {editLines && <th className="py-2 print:hidden" />}
                   </tr>
                 </thead>
@@ -283,7 +285,7 @@ export default function InvoiceDetailPage() {
                         <td className="py-2 text-right print:hidden">
                           <button
                             type="button"
-                            aria-label={`Sửa dòng ${item.description}`}
+                            aria-label={t('uiOperations.editInvoiceLine', { description: item.description })}
                             onClick={() => setEditingItem(item)}
                             className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                           >
@@ -296,18 +298,18 @@ export default function InvoiceDetailPage() {
                 </tbody>
               </table>
             ) : (
-              <p className="text-sm text-gray-500">Chưa có dịch vụ nào</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.noInvoiceItems')}</p>
             )}
 
             <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Tổng cộng</span>
+                <span className="text-gray-600 dark:text-gray-300">{t('uiOperations.subtotal')}</span>
                 <span className="font-medium">{formatCurrency(invoice.subtotal)}</span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
                   <span>
-                    Giảm giá
+                    {t('uiOperations.discount')}
                     {invoice.discountType === 'PERCENT' && invoice.discountValue
                       ? ` (${invoice.discountValue}%)`
                       : ''}
@@ -316,22 +318,22 @@ export default function InvoiceDetailPage() {
                 </div>
               )}
               <div className="flex justify-between text-sm font-medium border-t border-gray-100 pt-2">
-                <span>Phải thu</span>
+                <span>{t('uiOperations.amountDue')}</span>
                 <span>{formatCurrency(invoice.total)}</span>
               </div>
               <div className="flex justify-between text-sm text-green-600">
-                <span>{refunded > 0 ? 'Đã thu (sau hoàn)' : 'Đã thu'}</span>
+                <span>{refunded > 0 ? t('uiOperations.collectedAfterRefund') : t('uiOperations.collected')}</span>
                 <span>{formatCurrency(invoice.paidAmount)}</span>
               </div>
               {refunded > 0 && (
                 <div className="flex justify-between text-sm text-red-600">
-                  <span>Đã hoàn cho khách</span>
+                  <span>{t('uiOperations.refundedToPatient')}</span>
                   <span>{formatCurrency(refunded)}</span>
                 </div>
               )}
               {invoice.outstandingAmount > 0 && (
                 <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-100 pt-2">
-                  <span>Còn nợ</span>
+                  <span>{t('uiOperations.outstanding')}</span>
                   <span>{formatCurrency(invoice.outstandingAmount)}</span>
                 </div>
               )}
@@ -342,7 +344,7 @@ export default function InvoiceDetailPage() {
         {/* Sidebar */}
         <div className="space-y-3">
           <Card>
-            <h3 className="font-medium text-gray-900">Bệnh nhân</h3>
+            <h3 className="font-medium text-gray-900 dark:text-gray-100">{t('uiOperations.patient')}</h3>
             <Link
               to={`/patients/${invoice.patientId}`}
               className="mt-1.5 block text-sm text-brand-600 hover:underline"
@@ -353,7 +355,7 @@ export default function InvoiceDetailPage() {
           </Card>
 
           {/* Payment History */}
-          <Card title="Lịch sử thanh toán">
+          <Card title={t('uiOperations.paymentHistory')}>
             {invoice.payments && invoice.payments.length > 0 ? (
               <div className="space-y-2">
                 {invoice.payments.map((payment) => {
@@ -372,21 +374,21 @@ export default function InvoiceDetailPage() {
                         >
                           {isRefund ? '−' : '+'}
                           {formatCurrency(payment.amount)}
-                          {isRefund && ' (hoàn)'}
+                          {isRefund && ` (${t('uiOperations.refundShort')})`}
                         </span>
                         <span className="text-gray-500">
                           {format(new Date(payment.paidAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
                         </span>
                       </div>
                       <div className="mt-0.5 text-xs text-gray-500">
-                        {payment.method === 'CASH' && 'Tiền mặt'}
-                        {payment.method === 'BANK_TRANSFER' && 'Chuyển khoản'}
+                        {payment.method === 'CASH' && t('uiOperations.cash')}
+                        {payment.method === 'BANK_TRANSFER' && t('uiOperations.bankTransfer')}
                         {payment.note && <span> • {payment.note}</span>}
                       </div>
-                      <p className="text-xs text-gray-400">Bởi: {payment.receivedByUser?.fullName ?? '-'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('uiOperations.receivedBy')}: {payment.receivedByUser?.fullName ?? '-'}</p>
                       {voided && (
                         <p className="text-xs text-red-600">
-                          Đã hủy{payment.voidedByUser ? ` bởi ${payment.voidedByUser.fullName}` : ''}
+                          {t('uiOperations.voided')}{payment.voidedByUser ? ` ${t('uiOperations.by')} ${payment.voidedByUser.fullName}` : ''}
                           {payment.voidReason ? `: ${payment.voidReason}` : ''}
                         </p>
                       )}
@@ -397,12 +399,12 @@ export default function InvoiceDetailPage() {
                           onClick={() => setVoidingPayment(payment)}
                           title={
                             payment.receivedBy === myId
-                              ? 'Phiếu do bạn lập: cần một quản trị viên khác hủy (trừ khi chỉ có mình bạn có quyền này)'
+                              ? t('uiOperations.paymentVoidNeedsOtherAdmin')
                               : undefined
                           }
                         >
                           <RotateCcw className="h-3 w-3" />
-                          {isRefund ? 'Hủy phiếu hoàn (lập nhầm)' : 'Hủy phiếu thu (ghi nhầm)'}
+                          {isRefund ? t('uiOperations.voidRefund') : t('uiOperations.voidPayment')}
                         </button>
                       )}
                     </div>
@@ -410,7 +412,7 @@ export default function InvoiceDetailPage() {
                 })}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Chưa có thanh toán nào</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.noPayments')}</p>
             )}
           </Card>
         </div>
@@ -433,29 +435,28 @@ export default function InvoiceDetailPage() {
       <Modal
         isOpen={showVoidModal}
         onClose={() => setShowVoidModal(false)}
-        title="Hủy hóa đơn"
+        title={t('uiOperations.voidInvoice')}
         size="sm"
       >
         <div className="space-y-4">
           <Alert type="warning">
-            Hóa đơn sẽ bị hủy và không còn tính doanh thu. Nếu lập sai, sau khi hủy có thể chọn "Lập lại hóa đơn"
-            để tạo hóa đơn mới cho phiên khám này.
+            {t('uiOperations.voidInvoiceWarning')}
           </Alert>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-              Lý do hủy <span className="text-red-500">*</span>
+              {t('uiOperations.voidReason')} <span className="text-red-500">*</span>
             </label>
             <Textarea
               value={voidReason}
               onChange={(e) => setVoidReason(e.target.value)}
               className="mt-1"
               rows={3}
-              placeholder="Nhập lý do hủy hóa đơn..."
+              placeholder={t('uiOperations.voidReasonPlaceholder')}
             />
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowVoidModal(false)}>
-              Hủy
+              {t('uiOperations.cancel')}
             </Button>
             <Button
               variant="danger"
@@ -463,7 +464,7 @@ export default function InvoiceDetailPage() {
               isLoading={voidMutation.isPending}
               disabled={voidReason.trim().length < 5}
             >
-              Hủy hóa đơn
+              {t('uiOperations.voidInvoice')}
             </Button>
           </div>
         </div>

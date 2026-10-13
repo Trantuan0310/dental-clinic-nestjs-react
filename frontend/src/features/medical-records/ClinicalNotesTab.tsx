@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { formatDateTime } from '@/lib/format';
@@ -30,10 +31,6 @@ const NOTE_TYPE_TO_FIELD: Record<NoteType, NoteField> = {
   other: 'notes',
 };
 
-const NOTE_TYPE_LABEL: Partial<Record<NoteType, string>> = {
-  treatment_plan: 'Kế hoạch điều trị',
-  progress_note: 'Ghi chú tiến triển',
-};
 
 // "Thêm" never replaces what is already written: the server appends the text
 // to that section with a time + author stamp (under the encounter lock, so
@@ -46,6 +43,7 @@ function buildNotePayload(type: NoteType, content: string, mode: 'add' | 'edit')
 }
 
 export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -72,7 +70,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
       setNoteType('progress_note');
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể lưu ghi chú lâm sàng'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.noteSaveError')));
     },
   });
 
@@ -114,7 +112,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
       {/* Chief Complaint */}
       {chiefComplaintNotes.length > 0 && (
         <div>
-          <h4 className="mb-2 text-sm font-medium text-gray-700">Lý do khám</h4>
+          <h4 className="mb-2 text-sm font-medium text-gray-700">{t('uiClinical.reasonForVisit')}</h4>
           <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
             <p className="whitespace-pre-wrap text-sm text-gray-900">{chiefComplaintNotes[0].content}</p>
             <p className="mt-2 text-xs text-gray-500">
@@ -128,7 +126,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
       {/* Diagnosis */}
       {diagnosisNotes.length > 0 && (
         <div>
-          <h4 className="mb-2 text-sm font-medium text-gray-700">Chẩn đoán</h4>
+          <h4 className="mb-2 text-sm font-medium text-gray-700">{t('uiClinical.diagnosis')}</h4>
           {diagnosisNotes.map((note) => (
             <div
               key={note.id}
@@ -145,7 +143,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
                     onClick={() => openEditModal(note)}
                     className="text-xs text-brand-600 hover:text-brand-700"
                   >
-                    Sửa
+                    {t('uiClinical.edit')}
                   </button>
                 </div>
               )}
@@ -157,14 +155,14 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
       {/* Other Notes */}
       {otherNotes.length > 0 && (
         <div>
-          <h4 className="mb-2 text-sm font-medium text-gray-700">Ghi chú khác</h4>
+          <h4 className="mb-2 text-sm font-medium text-gray-700">{t('uiClinical.noteOther')}</h4>
           {otherNotes.map((note) => (
             <div
               key={note.id}
               className="mb-2 rounded-lg border border-gray-100 bg-white p-4"
             >
-              {NOTE_TYPE_LABEL[note.type] && (
-                <p className="mb-1 text-xs font-medium text-gray-500">{NOTE_TYPE_LABEL[note.type]}</p>
+              {(note.type === 'treatment_plan' || note.type === 'progress_note') && (
+                <p className="mb-1 text-xs font-medium text-gray-500">{t(note.type === 'treatment_plan' ? 'uiClinical.plan' : 'uiClinical.progressNote')}</p>
               )}
               <p className="whitespace-pre-wrap text-sm text-gray-900">{note.content}</p>
               <p className="mt-2 text-xs text-gray-500">
@@ -177,7 +175,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
                     onClick={() => openEditModal(note)}
                     className="text-xs text-brand-600 hover:text-brand-700"
                   >
-                    Sửa
+                    {t('uiClinical.edit')}
                   </button>
                 </div>
               )}
@@ -188,7 +186,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
 
       {encounter.clinicalNote?.addendums?.map((addendum) => (
         <div key={addendum.id} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-          <h4 className="mb-2 text-sm font-medium text-gray-700">Ghi chú bổ sung</h4>
+          <h4 className="mb-2 text-sm font-medium text-gray-700">{t('uiClinical.noteAdditional')}</h4>
           <p className="whitespace-pre-wrap text-sm text-gray-900">{addendum.content}</p>
           <p className="mt-2 text-xs text-gray-500">
             {formatDateTime(addendum.addedAt)}
@@ -201,10 +199,10 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
         <div className="flex gap-2">
           <Select
             options={[
-              { value: 'chief_complaint', label: 'Lý do khám' },
-              { value: 'diagnosis', label: 'Chẩn đoán' },
-              { value: 'treatment_plan', label: 'Kế hoạch điều trị' },
-              { value: 'progress_note', label: 'Ghi chú tiến triển' },
+              { value: 'chief_complaint', label: t('uiClinical.reasonForVisit') },
+              { value: 'diagnosis', label: t('uiClinical.diagnosis') },
+              { value: 'treatment_plan', label: t('uiClinical.plan') },
+              { value: 'progress_note', label: t('uiClinical.progressNote') },
             ]}
             value={noteType}
             onChange={(e) => setNoteType(e.target.value as NoteType)}
@@ -239,15 +237,15 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
           setShowAddModal(false);
           setNoteContent('');
         }}
-        title="Thêm ghi chú"
+        title={t('uiClinical.noteAdd')}
       >
         <div className="space-y-4">
           <Textarea
-            label="Nội dung"
+            label={t('uiClinical.noteContent')}
             value={noteContent}
             onChange={(e) => setNoteContent(e.target.value)}
             rows={4}
-            placeholder="Nhập nội dung ghi chú..."
+            placeholder={t('uiClinical.notePlaceholder')}
           />
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
@@ -271,11 +269,11 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
           setShowEditModal(false);
           setEditingNote(null);
         }}
-        title="Sửa ghi chú"
+        title={t('uiClinical.noteEdit')}
       >
         <div className="space-y-4">
           <Textarea
-            label="Nội dung"
+            label={t('uiClinical.noteContent')}
             value={noteContent}
             onChange={(e) => setNoteContent(e.target.value)}
             rows={4}

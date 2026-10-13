@@ -14,6 +14,8 @@ import {
 } from 'date-fns';
 import { clinicParts, clinicWallClock } from '@/lib/clinicTime';
 import { vi } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, Plus, ChevronLeft, ChevronRight, UserRoundPlus } from 'lucide-react';
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
@@ -31,7 +33,7 @@ import type { ClinicClosure } from '@/types/schedule';
 import { MonthView } from './MonthView';
 import { DayView, WeekView } from './CalendarViews';
 import { closedDaysInRange, visibleHourRange } from './calendarLayout';
-import { liveAppointmentQuery, OVERDUE_DOT_CLASS, OVERDUE_LABEL } from './liveStatus';
+import { liveAppointmentQuery, OVERDUE_DOT_CLASS } from './liveStatus';
 
 // Heavy modals — only loaded when user opens create/edit dialog.
 const AppointmentFormModal = lazy(() =>
@@ -58,16 +60,11 @@ const STATUS_DOT: Record<AppointmentStatus, string> = {
   left: 'bg-orange-400',
 };
 
-const STATUS_LEGEND: { status: AppointmentStatus; label: string }[] = [
-  { status: 'scheduled', label: 'Đã đặt' },
-  { status: 'confirmed', label: 'Đã xác nhận' },
-  { status: 'checked_in', label: 'Đã check-in' },
-  { status: 'in_progress', label: 'Đang khám' },
-  { status: 'completed', label: 'Hoàn thành' },
-  { status: 'cancelled', label: 'Đã hủy' },
-  { status: 'no_show', label: 'Vắng mặt' },
-  { status: 'left', label: 'Đã về' },
-];
+const STATUS_TRANSLATION: Record<AppointmentStatus, string> = {
+  scheduled: 'statusScheduled', confirmed: 'statusConfirmed', checked_in: 'statusCheckedIn',
+  in_progress: 'statusInProgress', completed: 'statusCompleted', cancelled: 'statusCancelled',
+  no_show: 'statusNoShow', left: 'statusLeft',
+};
 
 /** Hidden unless "Hiện lịch đã hủy/vắng" is on or the status filter asks for them. */
 const HIDDEN_BY_DEFAULT = new Set<AppointmentStatus>(['cancelled', 'no_show']);
@@ -78,6 +75,8 @@ interface AppointmentCalendarPageProps {
 }
 
 export default function AppointmentCalendarPage({ mine = false }: AppointmentCalendarPageProps) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.resolvedLanguage?.startsWith('en') ? enUS : vi;
   const [searchParams] = useSearchParams();
   // Dentists hold appointment.create too (follow-ups on their own calendar,
   // see PHAN_QUYEN.md); a role without it gets no create modal and no
@@ -269,27 +268,27 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {mine ? 'Lịch của tôi' : 'Lịch hẹn — dạng lịch'}
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
+            {mine ? t('uiScheduling.myCalendar') : t('uiScheduling.calendarView')}
           </h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            {mine ? 'Lịch hẹn của bạn theo ngày/tuần/tháng' : 'Xem lịch hẹn theo ngày/tuần/tháng'}
+            {mine ? t('uiScheduling.myAppointmentsByPeriod') : t('uiScheduling.viewAppointmentsByPeriod')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link to="/appointments/list">
-            <Button variant="outline">Xem dạng bảng</Button>
+            <Button variant="outline">{t('uiScheduling.tableView')}</Button>
           </Link>
           <PermissionGuard permission="appointment.check_in">
             <Button variant="outline" onClick={() => setShowWalkIn(true)}>
               <UserRoundPlus className="h-4 w-4" />
-              Khách vãng lai
+              {t('uiScheduling.walkIn')}
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="appointment.create">
             <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="h-4 w-4" />
-              Tạo lịch hẹn
+              {t('uiScheduling.createAppointment')}
             </Button>
           </PermissionGuard>
         </div>
@@ -297,20 +296,20 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
 
       {data?.pagination?.hasMore && (
         <Alert type="warning">
-          Còn lịch chưa hiển thị (chỉ tải {LIST_ALL_LIMIT} lịch đầu), hãy thu hẹp bộ lọc.
+          {t('uiScheduling.moreAppointments', { count: LIST_ALL_LIMIT })}
         </Alert>
       )}
 
       {isError && data && (
         <Alert type="warning">
-          <span>Không cập nhật được lịch hẹn, đang hiện dữ liệu cũ. </span>
+          <span>{t('uiScheduling.staleAppointments')}</span>
           <button
             type="button"
             className="font-medium underline"
             onClick={() => refetch()}
             disabled={isFetching}
           >
-            Thử lại
+            {t('uiScheduling.retry')}
           </button>
         </Alert>
       )}
@@ -319,42 +318,42 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" size="sm" aria-label="Kỳ trước" onClick={() => handleDateChange('prev')}>
+            <Button variant="ghost" size="sm" aria-label={t('uiScheduling.previousPeriod')} onClick={() => handleDateChange('prev')}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" onClick={() => handleDateChange('today')}>
-              Hôm nay
+              {t('uiScheduling.today')}
             </Button>
-            <Button variant="ghost" size="sm" aria-label="Kỳ sau" onClick={() => handleDateChange('next')}>
+            <Button variant="ghost" size="sm" aria-label={t('uiScheduling.nextPeriod')} onClick={() => handleDateChange('next')}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <span className="ml-2 text-lg font-medium text-gray-900">
-              {viewMode === 'day' && format(currentDate, 'EEEE, dd/MM/yyyy', { locale: vi })}
+              <span className="ml-2 text-lg font-medium text-gray-900 dark:text-surface-100">
+              {viewMode === 'day' && format(currentDate, 'EEEE, dd/MM/yyyy', { locale: dateLocale })}
               {viewMode === 'week' && `${format(dateRange.start, 'dd/MM')} - ${format(dateRange.end, 'dd/MM/yyyy')}`}
-              {viewMode === 'month' && format(currentDate, 'MMMM yyyy', { locale: vi })}
+              {viewMode === 'month' && format(currentDate, 'MMMM yyyy', { locale: dateLocale })}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {!mine && (
               <Select
-                aria-label="Lọc theo bác sĩ"
+                aria-label={t('uiScheduling.dentist')}
                 value={selectedDentistId}
                 onChange={(e) => setSelectedDentistId(e.target.value)}
                 options={[
-                  { value: '', label: 'Tất cả bác sĩ' },
+                  { value: '', label: t('uiScheduling.allDentists') },
                   ...(dentists ?? []).map((d) => ({ value: d.id, label: d.fullName })),
                 ]}
                 className="min-w-[160px] py-1.5"
               />
             )}
             <Select
-              aria-label="Lọc theo trạng thái"
+              aria-label={t('uiScheduling.status')}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | 'all')}
               options={[
-                { value: 'all', label: 'Tất cả trạng thái' },
-                ...STATUS_LEGEND.map((s) => ({ value: s.status, label: s.label })),
+                { value: 'all', label: t('uiScheduling.allStatuses') },
+                ...Object.keys(STATUS_TRANSLATION).map((status) => ({ value: status, label: t(`uiScheduling.${STATUS_TRANSLATION[status as AppointmentStatus]}`) })),
               ]}
               className="min-w-[150px] py-1.5"
             />
@@ -363,8 +362,8 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
                 checked={showCancelled}
                 onChange={setShowCancelled}
                 label={
-                  <span className="whitespace-nowrap text-gray-700">
-                    Hiện lịch đã hủy/vắng
+                    <span className="whitespace-nowrap text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.showCancelled')}
                     {hiddenCancelledCount > 0 && ` (${hiddenCancelledCount})`}
                   </span>
                 }
@@ -379,11 +378,11 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
                   onClick={() => setViewMode(mode)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     viewMode === mode
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white text-gray-900 shadow-sm dark:bg-surface-800 dark:text-surface-100'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-surface-300 dark:hover:text-surface-100'
                   }`}
                 >
-                  {mode === 'day' ? 'Ngày' : mode === 'week' ? 'Tuần' : 'Tháng'}
+                  {t(`uiScheduling.${mode}`)}
                 </button>
               ))}
             </div>
@@ -394,7 +393,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
         <div className="overflow-x-auto">
           {isLoading ? (
             <div className="space-y-2 p-4" aria-busy="true">
-              <span className="sr-only">Đang tải lịch hẹn…</span>
+              <span className="sr-only">{t('uiScheduling.loadingAppointments')}</span>
               {Array.from({ length: 8 }).map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
@@ -403,9 +402,9 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
             // An error must not look like an empty calendar.
             <EmptyState
               icon={<AlertCircle className="h-10 w-10 text-red-400" />}
-              title="Không thể tải lịch hẹn"
-              description="Đã có lỗi khi tải dữ liệu. Vui lòng thử lại."
-              action={{ label: 'Thử lại', onClick: () => refetch() }}
+              title={t('uiScheduling.cannotLoadAppointments')}
+              description={t('uiScheduling.loadError')}
+              action={{ label: t('uiScheduling.retry'), onClick: () => refetch() }}
             />
           ) : (
             <>
@@ -453,28 +452,31 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
       </Card>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs">
-        <span className="font-semibold text-gray-500">Trạng thái:</span>
-        {STATUS_LEGEND.map((s) => (
-          <div key={s.status} className="inline-flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[s.status]}`} />
-            <span className="text-gray-700">{s.label}</span>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-xs dark:border-surface-700 dark:bg-surface-900">
+        <span className="font-semibold text-gray-500 dark:text-surface-400">{t('uiScheduling.status')}:</span>
+        {Object.keys(STATUS_TRANSLATION).map((status) => {
+          const s = status as AppointmentStatus;
+          return (
+          <div key={s} className="inline-flex items-center gap-1.5">
+            <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[s]}`} />
+            <span className="text-gray-700 dark:text-surface-200">{t(`uiScheduling.${STATUS_TRANSLATION[s]}`)}</span>
           </div>
-        ))}
+          );
+        })}
         <div className="inline-flex items-center gap-1.5">
           <span className={`h-2.5 w-2.5 rounded-full ${OVERDUE_DOT_CLASS}`} />
-          <span className="text-gray-700">{OVERDUE_LABEL} (quá 15 phút)</span>
+          <span className="text-gray-700 dark:text-surface-200">{t('uiScheduling.overdueNotArrived')} ({t('uiScheduling.over15Minutes')})</span>
         </div>
         {workingWindows && (
           <div className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-4 rounded-sm border border-emerald-200 bg-emerald-50" />
-            <span className="text-gray-700">Giờ làm{dentistName ? ` của ${dentistName}` : ''}</span>
+            <span className="text-gray-700 dark:text-surface-200">{t('uiScheduling.workingHours')}{dentistName ? ` ${t('uiScheduling.dentist').toLowerCase()} ${dentistName}` : ''}</span>
           </div>
         )}
         {Object.keys(closedDays).length > 0 && (
           <div className="inline-flex items-center gap-1.5">
             <span className="h-2.5 w-4 rounded-sm bg-gray-200" />
-            <span className="text-gray-700">Phòng khám nghỉ</span>
+            <span className="text-gray-700 dark:text-surface-200">{t('uiScheduling.clinicClosed')}</span>
           </div>
         )}
       </div>
@@ -483,7 +485,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
           internally (title/footer/size included), so it's rendered
           directly here, not re-wrapped in another one. */}
       {showCreateModal && (
-        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">Đang tải…</div>}>
+        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">{t('uiScheduling.loading')}</div>}>
           <AppointmentFormModal
             open={showCreateModal}
             onClose={() => {
@@ -510,7 +512,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
 
       {/* Edit modal — opened via the detail drawer's "Sửa" action */}
       {editingAppointment && (
-        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">Đang tải…</div>}>
+        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">{t('uiScheduling.loading')}</div>}>
           <AppointmentFormModal
             open={!!editingAppointment}
             onClose={() => setEditingAppointment(null)}

@@ -7,6 +7,7 @@ import { saveBooking } from "./savedBookings";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
+import { useTranslation } from "react-i18next";
 
 type Dentist = {
   id: string;
@@ -83,6 +84,7 @@ const emptyReasonText = (
 };
 
 export default function PublicBookingPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
@@ -249,16 +251,15 @@ export default function PublicBookingPage() {
             to="/booking/status"
             className="text-brand-600 hover:underline"
           >
-            Tra cứu lịch hẹn
+            {t('uiScheduling.bookingLookup')}
           </Link>
         </PublicTopBar>
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
           <h1 className="text-2xl font-semibold text-gray-900">
-            Đặt lịch khám
+            {t('uiScheduling.publicBooking')}
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Gửi yêu cầu để lễ tân kiểm tra. Lịch chỉ được giữ sau khi phòng khám
-            xác nhận.
+            {t('uiScheduling.bookingIntro')}
           </p>
           {error && services.length === 0 && (
             <p role="alert" className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
@@ -271,12 +272,12 @@ export default function PublicBookingPage() {
             <form onSubmit={submit} className="mt-6 space-y-6">
               <div>
                 <h2 className="mb-3 font-semibold text-gray-900">
-                  1. Chọn dịch vụ và giờ mong muốn
+                  1. {t('uiScheduling.bookingChooseTime')}
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-medium text-gray-700">
-                    Dịch vụ
-                    <select aria-label="Dịch vụ"
+                    {t('uiScheduling.service')}
+                    <select aria-label={t('uiScheduling.service')}
                       className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                       value={serviceId}
                       onChange={(e) => {
@@ -286,7 +287,7 @@ export default function PublicBookingPage() {
                       }}
                       required
                     >
-                      <option value="">Chọn dịch vụ</option>
+                      <option value="">{t('uiScheduling.bookingServiceSelect')}</option>
                       {services.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
@@ -295,15 +296,15 @@ export default function PublicBookingPage() {
                     </select>
                   </label>
                   <label className="text-sm font-medium text-gray-700">
-                    Bác sĩ
-                    <select aria-label="Bác sĩ"
+                    {t('uiScheduling.dentist')}
+                    <select aria-label={t('uiScheduling.dentist')}
                       className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                       value={dentistId}
                       onChange={(e) => setDentistId(e.target.value)}
                       required
                       disabled={!service}
                     >
-                      <option value="">Chọn bác sĩ</option>
+                      <option value="">{t('uiScheduling.bookingDentistSelect')}</option>
                       {service?.dentists.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.fullName}
@@ -333,10 +334,10 @@ export default function PublicBookingPage() {
                     })()}
                   </label>
                   <label className="text-sm font-medium text-gray-700">
-                    Ngày
+                    {t('uiScheduling.bookingDate')}
                     <input
                       type="date"
-                      aria-label="Ngày"
+                      aria-label={t('uiScheduling.bookingDate')}
                       min={today()}
                       max={lastDate}
                       value={date}
@@ -345,12 +346,12 @@ export default function PublicBookingPage() {
                       className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
                     />
                     <span className="mt-1 block text-xs font-normal text-gray-500">
-                      Nhận đặt trực tuyến đến ngày {showDate(lastDate)}.
+                      {t('uiScheduling.onlineBookingUntil')} {showDate(lastDate)}.
                     </span>
                   </label>
                   <label className="text-sm font-medium text-gray-700">
-                    Giờ còn trống
-                    <select aria-label="Giờ còn trống"
+                    {t('uiScheduling.availableTime')}
+                    <select aria-label={t('uiScheduling.availableTime')}
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                       required
@@ -359,14 +360,14 @@ export default function PublicBookingPage() {
                     >
                       <option value="">
                         {!dentistId
-                          ? "Chọn bác sĩ trước"
+                          ? t('uiScheduling.bookingChooseDentistFirst')
                           : !date
-                            ? "Chọn ngày trước"
+                            ? t('uiScheduling.bookingChooseDateFirst')
                             : slotLoading
-                          ? "Đang tải giờ…"
+                          ? t('uiScheduling.loading')
                           : slots.length
-                            ? "Chọn giờ"
-                            : "Không có giờ trống"}
+                            ? t('uiScheduling.bookingChooseTimeSlot')
+                            : t('uiScheduling.noAvailableTime')}
                       </option>
                       {slots.map((slot) => (
                         <option key={slot} value={slot}>
@@ -376,11 +377,11 @@ export default function PublicBookingPage() {
                     </select>
                     {minLead > 0 && (
                       <span className="mt-1 block text-xs font-normal text-gray-500">
-                        Đặt trực tuyến trước ít nhất{" "}
+                        {t('uiScheduling.bookingLeadTime', { lead: minLead % 60 === 0 ? `${minLead / 60} hours` : `${minLead} minutes` })}{" "}
                         {minLead % 60 === 0
                           ? minLead / 60 + " giờ"
                           : minLead + " phút"}
-                        ; cần sớm hơn vui lòng gọi phòng khám
+                        {t('uiScheduling.bookingLeadContact')}
                         {clinic.phone ? (
                           <>
                             {" "}
@@ -415,10 +416,10 @@ export default function PublicBookingPage() {
                               onClick={() => setDate(nextDate)}
                               className="font-medium text-brand-600 underline"
                             >
-                              Ngày gần nhất còn giờ trống: {showDate(nextDate)}
+                              {t('uiScheduling.nextAvailableDate')}: {showDate(nextDate)}
                             </button>
                           ) : (
-                            "Chưa thấy giờ trống trong 2 tuần tới, vui lòng chọn bác sĩ khác hoặc gọi phòng khám."
+                            t('uiScheduling.noSlotsTwoWeeks')
                           )}
                         </span>
                       )}
@@ -428,15 +429,14 @@ export default function PublicBookingPage() {
               </div>
               <div>
                 <h2 className="mb-3 font-semibold text-gray-900">
-                  2. Thông tin người đến khám
+                  2. {t('uiScheduling.bookingPatientInfo')}
                 </h2>
                 <p className="-mt-2 mb-3 text-xs text-gray-500">
-                  Điền họ tên và ngày sinh của chính người sẽ khám (không phải người đặt hộ). Số
-                  điện thoại là của người khám, hoặc của người liên hệ nếu người khám không có.
+                  {t('uiScheduling.bookingPatientInfoHint')}
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-                    Họ và tên người đến khám
+                    {t('uiScheduling.bookingFullName')}
                     <input
                       required
                       maxLength={100}
@@ -447,7 +447,7 @@ export default function PublicBookingPage() {
                     />
                   </label>
                   <label className="text-sm font-medium text-gray-700">
-                    Ngày sinh
+                    {t('uiScheduling.bookingDob')}
                     <input
                       required
                       type="date"
@@ -458,26 +458,25 @@ export default function PublicBookingPage() {
                     />
                   </label>
                   <label className="text-sm font-medium text-gray-700">
-                    Giới tính
+                    {t('uiScheduling.gender')}
                     <select
                       value={form.gender}
                       onChange={(e) => set("gender", e.target.value)}
                       className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
                     >
-                      <option value="UNDISCLOSED">Không muốn nêu</option>
-                      <option value="FEMALE">Nữ</option>
-                      <option value="MALE">Nam</option>
-                      <option value="OTHER">Khác</option>
+                      <option value="UNDISCLOSED">{t('uiScheduling.genderUndisclosed')}</option>
+                      <option value="FEMALE">{t('uiScheduling.genderFemale')}</option>
+                      <option value="MALE">{t('uiScheduling.genderMale')}</option>
+                      <option value="OTHER">{t('uiScheduling.genderOther')}</option>
                     </select>
                   </label>
                   {age !== null && age < 18 && (
                     <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2">
-                      Người khám dưới 18 tuổi: vui lòng có cha mẹ hoặc người giám hộ đi cùng khi đến
-                      khám{age < 12 ? " và nhập thông tin người giám hộ bên dưới" : ""}.
+                      {t('uiScheduling.minorBookingNotice')}{age < 12 ? ` ${t('uiScheduling.minorGuardianDetails')}` : ''}
                     </p>
                   )}
                   <label className="text-sm font-medium text-gray-700">
-                    Số điện thoại
+                    {t('uiScheduling.phoneNumber')}
                     <input
                       required
                       type="tel"
@@ -490,7 +489,7 @@ export default function PublicBookingPage() {
                     />
                   </label>
                   <label className="text-sm font-medium text-gray-700">
-                    Email (để nhận thông báo)
+                    {t('uiScheduling.bookingEmail')}
                     <input
                       type="email"
                       autoComplete="email"
@@ -505,12 +504,12 @@ export default function PublicBookingPage() {
                       checked={onBehalf}
                       onChange={(e) => setOnBehalf(e.target.checked)}
                     />
-                    Tôi đặt hộ người khác (người nhà, trẻ em, người lớn tuổi)
+                    {t('uiScheduling.bookingOnBehalf')}
                   </label>
                   {showContact && (
                     <>
                       <label className="text-sm font-medium text-gray-700">
-                        Người liên hệ / giám hộ{age !== null && age < 12 ? " (bắt buộc)" : ""}
+                        {t('uiScheduling.bookingContactPerson')}{age !== null && age < 12 ? ` (${t('uiScheduling.required')})` : ""}
                         <input
                           maxLength={100}
                           required={age !== null && age < 12}
@@ -520,7 +519,7 @@ export default function PublicBookingPage() {
                         />
                       </label>
                       <label className="text-sm font-medium text-gray-700">
-                        SĐT người liên hệ / giám hộ
+                        {t('uiScheduling.bookingContactPhone')}
                         <input
                           type="tel"
                           required={age !== null && age < 12}
@@ -534,7 +533,7 @@ export default function PublicBookingPage() {
                     </>
                   )}
                   <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-                    Lý do khám (không nhập thông tin khẩn cấp)
+                    {t('uiScheduling.bookingReason')}
                     <textarea
                       maxLength={1000}
                       rows={3}
@@ -553,10 +552,7 @@ export default function PublicBookingPage() {
                   onChange={(e) => set("consent", e.target.checked)}
                   className="mt-1"
                 />
-                <span>
-                  Tôi đồng ý để phòng khám sử dụng thông tin trên nhằm xử lý yêu
-                  cầu đặt lịch và liên hệ về lịch khám.
-                </span>
+                <span>{t('uiScheduling.consent')}</span>
               </label>
               {error && (
                 <p
@@ -570,13 +566,12 @@ export default function PublicBookingPage() {
                 disabled={submitting || slotLoading || !time}
                 className="w-full rounded-md bg-brand-600 px-4 py-3 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? "Đang gửi…" : "Gửi yêu cầu đặt lịch"}
+                {submitting ? t('uiScheduling.sending') : t('uiScheduling.bookingSubmit')}
               </button>
             </form>
           )}
           <p className="mt-5 text-xs text-gray-500">
-            Nếu cần hỗ trợ, hãy gọi trực tiếp phòng khám. Không gửi thông tin
-            cấp cứu qua biểu mẫu này.
+            {t('uiScheduling.bookingHelp')}
           </p>
         </section>
       </div>

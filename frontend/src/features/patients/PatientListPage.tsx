@@ -20,6 +20,7 @@ import {
 import { notify } from '@/components/ui/Toast';
 import type { PatientFilters, Patient } from '@/types/patients';
 import { formatPhone } from '@/lib/format';
+import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 20;
 
@@ -27,6 +28,7 @@ export default function PatientListPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const [filters, setFilters] = useState<PatientFilters>({
     pageSize: PAGE_SIZE,
@@ -74,10 +76,10 @@ export default function PatientListPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       setDeleteId(null);
-      notify.success('Xóa bệnh nhân thành công');
+      notify.success(t('uiClinical.patientDeleted'));
     },
     onError: () => {
-      notify.error('Không thể xóa bệnh nhân. Vui lòng thử lại.');
+      notify.error(t('uiClinical.patientDeleteError'));
     },
   });
 
@@ -108,14 +110,14 @@ export default function PatientListPage() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Bệnh nhân</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiClinical.patients')}</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            Quản lý danh sách bệnh nhân của phòng khám
+            {t('uiClinical.patientManagement')}
           </p>
         </div>
         <Button onClick={() => navigate('/patients/new')} className="sm:ml-auto">
           <Plus className="h-4 w-4" />
-          Tạo bệnh nhân
+          {t('uiClinical.createPatient')}
         </Button>
       </div>
 
@@ -124,7 +126,7 @@ export default function PatientListPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <SearchInput
-                placeholder="Tìm theo tên, mã BN, SĐT..."
+                placeholder={t('uiClinical.searchPatients')}
                 value={search}
                 onChange={(e) => handleSearch(e.target.value)}
                 onClear={() => handleSearch('')}
@@ -132,12 +134,12 @@ export default function PatientListPage() {
             </div>
             <div className="flex gap-2">
               <Select
-                aria-label="Trạng thái"
+                aria-label={t('uiClinical.status')}
                 value={filters.status || 'all'}
                 onChange={(e) => handleStatusFilter(e.target.value)}
                 options={[
-                  { value: 'all', label: 'Tất cả' },
-                  { value: 'active', label: 'Hoạt động' },
+                  { value: 'all', label: t('uiClinical.all') },
+                  { value: 'active', label: t('uiClinical.active') },
                 ]}
                 className="min-w-[160px]"
               />
@@ -152,19 +154,19 @@ export default function PatientListPage() {
         ) : isError && patients.length === 0 ? (
           <EmptyState
             icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
-            title="Không thể tải danh sách bệnh nhân"
-            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
+            title={t('uiClinical.patientListLoadError')}
+            description={t('uiClinical.loadErrorRetry')}
             action={{
-              label: 'Thử lại',
+              label: t('uiClinical.retry'),
               onClick: () => refetch(),
             }}
           />
         ) : patients.length === 0 ? (
           <EmptyState
-            title="Chưa có bệnh nhân nào"
-            description="Bắt đầu bằng việc tạo bệnh nhân đầu tiên"
+            title={t('uiClinical.noPatients')}
+            description={t('uiClinical.createFirstPatient')}
             action={{
-              label: 'Tạo bệnh nhân',
+              label: t('uiClinical.createPatient'),
               onClick: () => navigate('/patients/new'),
             }}
           />
@@ -174,12 +176,12 @@ export default function PatientListPage() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="px-4 py-3 font-medium text-gray-600">Mã BN</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Họ tên</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Giới tính</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">SĐT</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Ngày sinh</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Trạng thái</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.patientCode')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.fullName')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.gender')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.phone')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.dateOfBirth')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.status')}</th>
                     <th className="px-4 py-3 font-medium text-gray-600 w-12"></th>
                   </tr>
                 </thead>
@@ -197,7 +199,7 @@ export default function PatientListPage() {
                         {patient.fullName}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {patient.gender === 'male' ? 'Nam' : patient.gender === 'female' ? 'Nữ' : 'Khác'}
+                        {patient.gender === 'male' ? t('uiClinical.male') : patient.gender === 'female' ? t('uiClinical.female') : t('uiClinical.other')}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {patient.phone ? formatPhone(patient.phone) : '-'}
@@ -217,7 +219,7 @@ export default function PatientListPage() {
                             icon={<Trash2 className="h-4 w-4" />}
                             onClick={() => setDeleteId(patient.id)}
                           >
-                            Xóa
+                            {t('uiClinical.delete')}
                           </DropdownMenuItem>
                         </DropdownMenu>
                       </td>
@@ -236,7 +238,7 @@ export default function PatientListPage() {
                   isLoading={isFetching}
                 >
                   {!isFetching && <Loader2 className="h-4 w-4" />}
-                  Tải thêm
+                  {t('uiClinical.loadMore')}
                 </Button>
               </div>
             )}
@@ -248,22 +250,22 @@ export default function PatientListPage() {
       <Modal
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}
-        title="Xác nhận xóa bệnh nhân"
+        title={t('uiClinical.confirmDeletePatient')}
         size="sm"
       >
         <p className="text-sm text-gray-600">
-          Bạn có chắc muốn xóa bệnh nhân này? Hành động này không thể hoàn tác.
+          {t('uiClinical.confirmDeletePatientText')}
         </p>
         <div className="mt-4 flex justify-end gap-3">
           <Button variant="outline" onClick={() => setDeleteId(null)}>
-            Hủy
+            {t('uiClinical.cancel')}
           </Button>
           <Button
             variant="danger"
             isLoading={deleteMutation.isPending}
             onClick={() => deleteId && deleteMutation.mutate(deleteId)}
           >
-            Xóa
+            {t('uiClinical.delete')}
           </Button>
         </div>
       </Modal>

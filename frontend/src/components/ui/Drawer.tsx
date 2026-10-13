@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { useTranslation } from 'react-i18next';
 
 interface DrawerProps {
   open: boolean;
@@ -30,6 +31,7 @@ export function Drawer({
   width = 'lg',
   description,
 }: DrawerProps) {
+  const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -59,7 +61,7 @@ export function Drawer({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng"
+            aria-label={t('uiCommon.action.close')}
             className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-surface-800 dark:hover:text-surface-200"
           >
             <X className="h-4 w-4" aria-hidden="true" />

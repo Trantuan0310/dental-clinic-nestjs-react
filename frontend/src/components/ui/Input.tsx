@@ -1,5 +1,6 @@
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { useTranslation } from 'react-i18next';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -11,6 +12,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, hint, leftAddon, rightAddon, id, required, 'aria-describedby': ariaDescribedBy, ...props }, ref) => {
+    const { t } = useTranslation();
     // Always generate a stable id so we can wire aria-describedby for hint/error
     // even when the caller doesn't pass an explicit id.
     const autoId = useId();
@@ -29,7 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 <span className="ml-1 text-red-500" aria-hidden="true">
                   *
                 </span>
-                <span className="sr-only"> (bắt buộc)</span>
+                <span className="sr-only"> {t('uiCommon.form.required')}</span>
               </>
             )}
           </label>

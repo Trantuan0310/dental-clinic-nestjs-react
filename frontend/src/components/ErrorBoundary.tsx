@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -42,7 +43,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return this.props.fallback(error, this.reset);
     }
 
-    return (
+    return <DefaultErrorFallback error={error} onRetry={this.reset} />;
+  }
+}
+
+function DefaultErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
       <div
         role="alert"
         className="m-4 flex flex-col items-center justify-center gap-3 rounded-lg border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/50 dark:bg-red-950/30"
@@ -50,21 +57,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <AlertTriangle className="h-10 w-10 text-red-500" aria-hidden="true" />
         <div>
           <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">
-            Đã xảy ra lỗi
+            {t('common.error')}
           </h2>
           <p className="mt-1 max-w-md text-sm text-red-600 dark:text-red-300">
-            {error.message || 'Lỗi không xác định. Vui lòng thử lại hoặc liên hệ quản trị viên.'}
+            {error.message || t('common.error')}
           </p>
         </div>
         <button
           type="button"
-          onClick={this.reset}
+          onClick={onRetry}
           className="inline-flex items-center gap-2 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 dark:border-red-700 dark:bg-surface-900 dark:text-red-300 dark:hover:bg-red-950/40"
         >
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Thử lại
+          {t('common.retry')}
         </button>
       </div>
     );
   }
-}

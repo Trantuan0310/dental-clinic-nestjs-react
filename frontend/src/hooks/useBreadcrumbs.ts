@@ -1,65 +1,66 @@
 import { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { BreadcrumbItem } from '@/components/ui/Breadcrumb';
 
 // Route → breadcrumb label mapping
 const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Tổng quan',
-  '/patients': 'Bệnh nhân',
-  '/patients/new': 'Thêm bệnh nhân',
-  '/appointments': 'Lịch hẹn',
-  '/appointments/list': 'Danh sách',
-  '/reports': 'Báo cáo',
-  '/invoices': 'Hóa đơn',
+  '/': 'overview',
+  '/patients': 'patients',
+  '/patients/new': 'addPatient',
+  '/appointments': 'appointments',
+  '/appointments/list': 'list',
+  '/reports': 'reports',
+  '/invoices': 'invoices',
   // Real route is `expenses` (plural, see AppRoutes.tsx) — this key used to
   // say `/expense`, which never matched, so the crumb fell back to
   // capitalizing the raw segment ("Expenses").
-  '/expenses': 'Chi phí',
-  '/inventory': 'Tồn kho',
-  '/inventory/items': 'Danh sách vật tư',
-  '/my-queue': 'Hàng chờ của tôi',
-  '/my-appointments': 'Lịch của tôi',
-  '/dispatch': 'Điều phối',
-  '/booking-requests': 'Yêu cầu đặt lịch',
-  '/today': 'Hôm nay',
-  '/queue': 'Hàng chờ',
+  '/expenses': 'expenses',
+  '/inventory': 'inventory',
+  '/inventory/items': 'supplyList',
+  '/my-queue': 'myQueue',
+  '/my-appointments': 'mySchedule',
+  '/dispatch': 'dispatch',
+  '/booking-requests': 'bookingRequests',
+  '/today': 'today',
+  '/queue': 'queue',
   // Below: every route added for the medical-records redirect, billing
   // list, and Working Schedule/Time-off/self-service features — none of
   // these were ever added here, so real users (not just admins hitting
   // the API) saw raw English path segments in the breadcrumb ("Schedule",
   // "My-shifts", "My-payroll / History").
-  '/medical-records': 'Bệnh án',
-  '/my-patients': 'Bệnh nhân của tôi',
-  '/encounters': 'Lượt khám',
-  '/billing': 'Hóa đơn',
-  '/billing/list': 'Danh sách',
-  '/billing/invoices': 'Hóa đơn',
-  '/payroll': 'Bảng lương',
-  '/payroll/config': 'Cấu hình lương',
-  '/payroll/compensations': 'Đãi ngộ',
-  '/payroll/shifts/approval': 'Duyệt ca làm việc',
-  '/my-payroll': 'Lương của tôi',
-  '/my-payroll/history': 'Lịch sử',
-  '/my-payroll/payslip': 'Phiếu lương',
-  '/my-payroll/compensation': 'Đãi ngộ của tôi',
-  '/my-shifts': 'Ca của tôi',
-  '/schedule': 'Lịch làm việc',
-  '/staff': 'Nhân sự',
-  '/dentists': 'Bác sĩ',
-  '/services': 'Dịch vụ',
-  '/shifts': 'Ca làm việc',
-  '/shifts/pending': 'Duyệt ca làm việc',
-  '/me': 'Tài khoản của tôi',
-  '/admin': 'Quản trị',
-  '/admin/users': 'Người dùng',
-  '/admin/roles': 'Vai trò',
-  '/admin/site-media': 'Ảnh trang chủ',
-  '/admin/settings': 'Cài đặt',
+  '/medical-records': 'medicalRecords',
+  '/my-patients': 'myPatients',
+  '/encounters': 'encounters',
+  '/billing': 'invoices',
+  '/billing/list': 'list',
+  '/billing/invoices': 'invoices',
+  '/payroll': 'payroll',
+  '/payroll/config': 'payrollConfig',
+  '/payroll/compensations': 'compensation',
+  '/payroll/shifts/approval': 'shiftApproval',
+  '/my-payroll': 'myPayroll',
+  '/my-payroll/history': 'history',
+  '/my-payroll/payslip': 'payslip',
+  '/my-payroll/compensation': 'myCompensation',
+  '/my-shifts': 'myShifts',
+  '/schedule': 'schedule',
+  '/staff': 'staff',
+  '/dentists': 'dentists',
+  '/services': 'services',
+  '/shifts': 'shifts',
+  '/shifts/pending': 'shiftApproval',
+  '/me': 'myAccount',
+  '/admin': 'admin',
+  '/admin/users': 'users',
+  '/admin/roles': 'roles',
+  '/admin/site-media': 'homepageImages',
+  '/admin/settings': 'settings',
   // Real route is `admin/audit` (see AppRoutes.tsx) — this key used to say
   // `/admin/audit-logs`, which never matched, so both breadcrumb segments
   // fell back to the parent label and rendered "Quản trị / Quản trị".
-  '/admin/audit': 'Nhật ký kiểm toán',
-  '/admin/shifts/pending': 'Duyệt ca làm việc',
+  '/admin/audit': 'auditLog',
+  '/admin/shifts/pending': 'shiftApproval',
 };
 
 function getLabel(pathname: string): string {
@@ -81,6 +82,7 @@ function getLabel(pathname: string): string {
 
 export function useBreadcrumbs(): BreadcrumbItem[] {
   const location = useLocation();
+  const { t } = useTranslation();
 
   return useMemo(() => {
     const segments = location.pathname.split('/').filter(Boolean);
@@ -97,24 +99,24 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
       if (segments[i] === 'v1') continue;
 
       // Try to extract readable label
-      let label = getLabel(accumulated);
+      let labelKey = getLabel(accumulated);
 
       // For dynamic segments (UUIDs, IDs), show abbreviated form
       const segment = segments[i];
       if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(segment)) {
-        label = isLast ? 'Chi tiết' : 'ID';
+        labelKey = isLast ? 'details' : 'id';
       } else if (/^\d+$/.test(segment)) {
-        label = isLast ? 'Chi tiết' : 'ID';
+        labelKey = isLast ? 'details' : 'id';
       } else if (isLast && ROUTE_LABELS[accumulated] === undefined) {
-        label = getLabel(accumulated);
+        labelKey = getLabel(accumulated);
       }
 
       breadcrumbs.push({
-        label,
+        label: t(`uiCommon.breadcrumbRoutes.${labelKey}`, { defaultValue: labelKey }),
         href: isLast ? undefined : accumulated,
       });
     }
 
     return breadcrumbs;
-  }, [location.pathname]);
+  }, [location.pathname, t]);
 }

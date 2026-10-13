@@ -33,8 +33,10 @@ import {
 import { formatPhone, formatCurrency, formatDate, formatTimeOnly } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { useTranslation } from 'react-i18next';
 
 export default function PatientDetailPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
@@ -87,9 +89,9 @@ export default function PatientDetailPage() {
   if (!patient) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500">Không tìm thấy bệnh nhân</p>
+        <p className="text-gray-500 dark:text-surface-400">{t('uiClinical.patientNotFound')}</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate('/patients')}>
-          Quay lại danh sách
+          {t('uiClinical.backToPatients')}
         </Button>
       </div>
     );
@@ -108,7 +110,7 @@ export default function PatientDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-4">
-        <Button variant="ghost" aria-label="Quay lại danh sách bệnh nhân" onClick={() => navigate('/patients')}>
+        <Button variant="ghost" aria-label={t('uiClinical.backToPatients')} onClick={() => navigate('/patients')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
@@ -143,7 +145,7 @@ export default function PatientDetailPage() {
             <Alert type="danger">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                <span className="font-medium">Dị ứng:</span>
+                <span className="font-medium">{t('uiClinical.allergies')}:</span>
                 {patient.allergies?.join(', ')}
               </div>
             </Alert>
@@ -152,7 +154,7 @@ export default function PatientDetailPage() {
             <Alert type="warning">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                <span className="font-medium">Bệnh mãn tính:</span>
+                <span className="font-medium">{t('uiClinical.chronicConditions')}:</span>
                 {patient.chronicDiseases?.join(', ')}
               </div>
             </Alert>
@@ -219,7 +221,7 @@ export default function PatientDetailPage() {
 
           {/* Current Medications */}
           {patient.currentMedications && patient.currentMedications.length > 0 && (
-            <Card title="Thuốc đang dùng">
+            <Card title={t('uiClinical.currentMedications')}>
               <ul className="space-y-1.5">
                 {patient.currentMedications.map((med, index) => (
                   <li key={index} className="flex items-center gap-2 text-sm">
@@ -236,20 +238,20 @@ export default function PatientDetailPage() {
         <div className="lg:col-span-2">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
-              <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-              <TabsTrigger value="appointments">Lịch hẹn</TabsTrigger>
-              <TabsTrigger value="encounters">Lịch sử khám</TabsTrigger>
+              <TabsTrigger value="overview">{t('uiClinical.overview')}</TabsTrigger>
+              <TabsTrigger value="appointments">{t('uiClinical.appointments')}</TabsTrigger>
+              <TabsTrigger value="encounters">{t('uiClinical.encounterHistory')}</TabsTrigger>
               <TabsTrigger value="invoices">Hóa đơn</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
-              <Card title="Thống kê">
+              <Card title={t('uiClinical.statistics')}>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-lg bg-gray-50 p-3">
                     <p className="text-xl font-semibold text-gray-900">
                       {patient.summary?.totalEncounters ?? 0}
                     </p>
-                    <p className="text-sm text-gray-500">Tổng lượt khám</p>
+                    <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.totalVisits')}</p>
                   </div>
                   <div className="rounded-lg bg-gray-50 p-3">
                     <p className="text-xl font-semibold text-gray-900">
@@ -277,7 +279,7 @@ export default function PatientDetailPage() {
               </Card>
 
               {patient.notes && (
-                <Card title="Ghi chú" className="mt-3">
+                <Card title={t('uiClinical.patientNotes')} className="mt-3">
                   <p className="text-sm text-gray-600 whitespace-pre-wrap">{patient.notes}</p>
                 </Card>
               )}
@@ -285,7 +287,7 @@ export default function PatientDetailPage() {
 
             <TabsContent value="appointments">
               <Card
-                title="Lịch hẹn gần đây"
+                title={t('uiClinical.recentAppointments')}
                 actions={
                   <PermissionGuard permission="appointment.create">
                     <Button
@@ -306,7 +308,7 @@ export default function PatientDetailPage() {
                     ))}
                   </div>
                 ) : recentAppointments.length === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa có lịch hẹn nào</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.noAppointments')}</p>
                 ) : (
                   <div className="space-y-2">
                     {recentAppointments.map((apt) => (
@@ -347,7 +349,7 @@ export default function PatientDetailPage() {
 
             <TabsContent value="encounters">
               <Card
-                title="Lịch sử khám"
+                title={t('uiClinical.encounterHistory')}
                 actions={
                   <Button variant="outline" size="sm" onClick={() => navigate(`/medical-records/${id}`)}>
                     Xem tất cả
@@ -355,7 +357,7 @@ export default function PatientDetailPage() {
                 }
               >
                 {!patient.summary || patient.summary.totalEncounters === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa có lịch sử khám</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.noVisitHistory')}</p>
                 ) : (
                   <div
                     className={`flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 ${
@@ -380,7 +382,7 @@ export default function PatientDetailPage() {
                           {patient.summary.lastVisitBy ? ` — ${patient.summary.lastVisitBy}` : ''}
                         </p>
                       )}
-                      <p className="mt-0.5 text-sm text-brand-500">Xem chi tiết từng lượt khám →</p>
+                      <p className="mt-0.5 text-sm text-brand-500">{t('uiClinical.viewEncounterDetails')}</p>
                     </div>
                   </div>
                 )}
@@ -403,7 +405,7 @@ export default function PatientDetailPage() {
                     ))}
                   </div>
                 ) : recentInvoices.length === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa có hóa đơn nào</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.noInvoices')}</p>
                 ) : (
                   <div className="space-y-2">
                     {recentInvoices.map((inv) => (

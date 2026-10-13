@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { Button } from './Button';
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { useTranslation } from 'react-i18next';
 
 export interface ConfirmDialogProps {
   isOpen?: boolean;
@@ -28,17 +29,19 @@ export function ConfirmDialog({
   description,
   confirmText,
   confirmLabel,
-  cancelText = 'Hủy',
+  cancelText,
   variant = 'primary',
   confirmVariant,
   isLoading = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   const titleId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const resolvedOpen = open ?? isOpen ?? false;
   useBodyScrollLock(resolvedOpen);
-  const finalConfirmLabel = confirmLabel ?? confirmText ?? 'Xác nhận';
+  const finalConfirmLabel = confirmLabel ?? confirmText ?? t('uiCommon.dialog.confirm');
+  const finalCancelLabel = cancelText ?? t('uiCommon.dialog.cancel');
   const finalVariant = confirmVariant ?? (variant === 'danger' ? 'danger' : 'primary');
 
   // Block dismissal while a submit is in flight — otherwise the user can
@@ -89,7 +92,7 @@ export function ConfirmDialog({
           onClick={handleClose}
           disabled={isLoading}
           className="absolute right-4 top-4 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:pointer-events-none disabled:opacity-50"
-          aria-label="Đóng"
+          aria-label={t('uiCommon.action.close')}
         >
           <X className="h-5 w-5" />
         </button>
@@ -107,7 +110,7 @@ export function ConfirmDialog({
 
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <Button ref={cancelRef} variant="outline" onClick={handleClose} disabled={isLoading}>
-            {cancelText}
+            {finalCancelLabel}
           </Button>
           <Button
             variant={finalVariant}

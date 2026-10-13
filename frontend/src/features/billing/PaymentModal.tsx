@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, Input, Select } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -14,6 +15,7 @@ interface PaymentModalProps {
 }
 
 export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [amount, setAmount] = useState(String(Math.floor(invoice.outstandingAmount)));
   const [method, setMethod] = useState<PaymentMethod>('CASH');
@@ -45,7 +47,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
       onClose();
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể ghi nhận thanh toán'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.paymentFailed')));
     },
   });
 
@@ -58,32 +60,32 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   };
 
   const paymentMethods: { value: PaymentMethod; label: string }[] = [
-    { value: 'CASH', label: 'Tiền mặt' },
-    { value: 'BANK_TRANSFER', label: 'Chuyển khoản' },
+    { value: 'CASH', label: t('uiOperations.cash') },
+    { value: 'BANK_TRANSFER', label: t('uiOperations.bankTransfer') },
   ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Thu tiền" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiOperations.payment')} size="sm">
       <div className="space-y-4">
         {/* Invoice Summary */}
-        <div className="rounded-lg bg-gray-50 p-4 space-y-2">
+        <div className="rounded-lg bg-gray-50 p-4 space-y-2 dark:bg-surface-800">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Tổng hóa đơn</span>
+            <span className="text-gray-600 dark:text-gray-300">{t('uiOperations.invoiceTotal')}</span>
             <span className="font-medium">{formatCurrency(invoice.total)}</span>
           </div>
-          <div className="flex justify-between text-sm text-green-600">
-            <span>Đã thu</span>
+          <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+            <span>{t('uiOperations.collected')}</span>
             <span>{formatCurrency(invoice.paidAmount)}</span>
           </div>
-          <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-200 pt-2">
-            <span>Còn nợ</span>
+          <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-200 pt-2 dark:border-surface-700 dark:text-amber-400">
+            <span>{t('uiOperations.outstanding')}</span>
             <span>{formatCurrency(invoice.outstandingAmount)}</span>
           </div>
         </div>
 
         {/* Amount */}
         <Input
-          label="Số tiền thu (VND)"
+          label={t('uiOperations.amountReceivedVnd')}
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -95,14 +97,14 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
         <button
           type="button"
           onClick={handlePayAll}
-          className="text-sm text-brand-600 hover:text-brand-700 hover:underline"
+          className="text-sm text-brand-600 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
         >
-          Thu hết ({formatCurrency(invoice.outstandingAmount)})
+          {t('uiOperations.payAll', { amount: formatCurrency(invoice.outstandingAmount) })}
         </button>
 
         {/* Payment Method */}
         <Select
-          label="Phương thức thanh toán"
+          label={t('uiOperations.paymentMethod')}
           value={method}
           onChange={(e) => setMethod(e.target.value as PaymentMethod)}
           options={paymentMethods}
@@ -111,20 +113,20 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
 
         {/* Notes */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">Ghi chú</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">{t('uiOperations.note')}</label>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800 dark:text-gray-100"
             rows={2}
-            placeholder="VD: Khách trả trước một phần..."
+            placeholder={t('uiOperations.paymentNoteExample')}
           />
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <Button variant="outline" onClick={onClose}>
-            Hủy
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-surface-700">
+            <Button variant="outline" onClick={onClose}>
+            {t('uiOperations.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
@@ -138,7 +140,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
               parsedAmount > invoice.outstandingAmount
             }
           >
-            Xác nhận
+            {t('uiOperations.confirm')}
           </Button>
         </div>
       </div>

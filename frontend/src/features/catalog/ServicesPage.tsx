@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FolderPlus, Pencil, Plus } from 'lucide-react';
 import {
   Alert,
@@ -45,6 +46,7 @@ function ServiceForm({
   onCancel: () => void;
   onSubmit: (payload: ServicePayload) => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     code: service?.code ?? '',
     categoryId: service?.category.id ?? categories.find((c) => c.isActive)?.id ?? '',
@@ -84,7 +86,7 @@ function ServiceForm({
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Input
-          label="Mã dịch vụ"
+          label={t('uiWorkforce.serviceCode')}
           required
           disabled={!!service}
           pattern="[A-Za-z0-9][A-Za-z0-9_\-]{1,29}"
@@ -93,7 +95,7 @@ function ServiceForm({
           onChange={(e) => setForm({ ...form, code: e.target.value })}
         />
         <Select
-          label="Nhóm dịch vụ"
+          label={t('uiWorkforce.category')}
           required
           value={form.categoryId}
           onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
@@ -103,7 +105,7 @@ function ServiceForm({
         />
       </div>
       <Input
-        label="Tên dịch vụ"
+        label={t('uiWorkforce.serviceName')}
         required
         minLength={2}
         maxLength={200}
@@ -112,19 +114,19 @@ function ServiceForm({
       />
       <div className="grid gap-4 sm:grid-cols-3">
         <Select
-          label="Thời lượng"
+          label={t('uiWorkforce.duration')}
           value={form.defaultDurationMin}
           onChange={(e) => setForm({ ...form, defaultDurationMin: e.target.value })}
           options={DURATION_OPTIONS}
         />
         <Select
-          label="Chuẩn bị trước"
+          label={t('uiWorkforce.preparationTime')}
           value={form.bufferBeforeMin}
           onChange={(e) => setForm({ ...form, bufferBeforeMin: e.target.value })}
           options={BUFFER_OPTIONS}
         />
         <Select
-          label="Dọn dẹp sau"
+          label={t('uiWorkforce.cleanupTime')}
           value={form.bufferAfterMin}
           onChange={(e) => setForm({ ...form, bufferAfterMin: e.target.value })}
           options={BUFFER_OPTIONS}
@@ -133,7 +135,7 @@ function ServiceForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Input
-            label="Giá niêm yết (VND)"
+            label={t('uiWorkforce.listPrice')}
             type="number"
             min={0}
             max={999_999_999_999_999}
@@ -150,45 +152,45 @@ function ServiceForm({
           />
           <Checkbox
             className="mt-1"
-            label="Dịch vụ miễn phí"
+            label={t('uiWorkforce.freeService')}
             checked={form.isFree}
             onChange={(isFree) => setForm({ ...form, isFree })}
           />
         </div>
         <Select
-          label="Chuyên môn bắt buộc"
+          label={t('uiWorkforce.requiredSpecialty')}
           value={form.requiredSpecialty}
           onChange={(e) => setForm({ ...form, requiredSpecialty: e.target.value })}
           options={[
-            { value: '', label: 'Không yêu cầu' },
+            { value: '', label: t('uiWorkforce.noRequirement') },
             ...Object.entries(SPECIALTY_LABEL).map(([value, label]) => ({ value, label })),
           ]}
         />
       </div>
       <Textarea
-        label="Mô tả"
+        label={t('uiWorkforce.serviceDescription')}
         rows={2}
         value={form.description}
         onChange={(e) => setForm({ ...form, description: e.target.value })}
       />
       <div className="flex flex-wrap gap-x-6">
         <Checkbox
-          label="Cho đặt lịch online"
+          label={t('uiWorkforce.onlineBooking')}
           checked={form.bookableOnline}
           onChange={(bookableOnline) => setForm({ ...form, bookableOnline })}
         />
         <Checkbox
-          label="Hiện trên bảng giá trang chủ"
+          label={t('uiWorkforce.showOnPriceList')}
           checked={form.showPublicPrice}
           onChange={(showPublicPrice) => setForm({ ...form, showPublicPrice })}
         />
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" isLoading={submitting}>
-          {service ? 'Lưu' : 'Tạo dịch vụ'}
+          {service ? t('uiWorkforce.save') : t('uiWorkforce.addService')}
         </Button>
       </div>
     </form>
@@ -207,6 +209,7 @@ function CategoryForm({
   onCancel: () => void;
   onSubmit: (payload: { code: string; name: string; sortOrder: number }) => void;
 }) {
+  const { t } = useTranslation();
   const [code, setCode] = useState(category?.code ?? '');
   const [name, setName] = useState(category?.name ?? '');
   const [sortOrder, setSortOrder] = useState(String(category?.sortOrder ?? 100));
@@ -219,7 +222,7 @@ function CategoryForm({
       }}
     >
       <Input
-        label="Mã nhóm"
+        label={t('uiWorkforce.groupCode')}
         required
         disabled={!!category}
         pattern="[A-Za-z0-9][A-Za-z0-9_\-]{1,29}"
@@ -227,9 +230,9 @@ function CategoryForm({
         value={code}
         onChange={(e) => setCode(e.target.value)}
       />
-      <Input label="Tên nhóm" required minLength={2} value={name} onChange={(e) => setName(e.target.value)} />
+      <Input label={t('uiWorkforce.groupName')} required minLength={2} value={name} onChange={(e) => setName(e.target.value)} />
       <Input
-        label="Thứ tự hiển thị"
+        label={t('uiWorkforce.displayOrder')}
         type="number"
         min={0}
         max={999}
@@ -239,27 +242,18 @@ function CategoryForm({
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" isLoading={submitting}>
-          {category ? 'Lưu' : 'Tạo nhóm'}
+          {category ? t('uiWorkforce.save') : t('uiWorkforce.addCategory')}
         </Button>
       </div>
     </form>
   );
 }
 
-/** "3 lịch hẹn sắp tới, 1 yêu cầu đặt lịch online đang chờ và 2 phân công". */
-function deactivateSummary(impact: Extract<ServiceImpact, { isActive: true }>) {
-  const parts = [
-    impact.upcomingAppointments > 0 && `${impact.upcomingAppointments} lịch hẹn sắp tới`,
-    impact.pendingBookingRequests > 0 &&
-      `${impact.pendingBookingRequests} yêu cầu đặt lịch online đang chờ xử lý`,
-  ].filter(Boolean);
-  return parts.join(' và ');
-}
-
 export default function ServicesPage() {
+  const { t } = useTranslation();
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<CatalogService | 'new' | null>(null);
   const [categoryForm, setCategoryForm] = useState<ServiceCategory | 'new' | null>(null);
@@ -301,7 +295,7 @@ export default function ServicesPage() {
     try {
       setPending({ service, impact: await catalogApi.impact(service.id) });
     } catch (e) {
-      notify.error(catalogErrorMessage(e, 'Không kiểm tra được dịch vụ'));
+      notify.error(catalogErrorMessage(e, t('uiWorkforce.serviceImpactError')));
     } finally {
       setChecking(null);
     }
@@ -317,13 +311,13 @@ export default function ServicesPage() {
           setPending(null);
           notify.success(
             service.isActive
-              ? 'Đã ngừng dịch vụ; các phân công đang chạy kết thúc hôm nay'
+              ? t('uiWorkforce.serviceDeactivated')
               : res.restoredAssignments > 0
-                ? `Đã mở lại dịch vụ và khôi phục ${res.restoredAssignments} phân công`
-                : 'Đã mở lại dịch vụ',
+                ? t('uiWorkforce.serviceRestoredAssignments', { count: res.restoredAssignments })
+                : t('uiWorkforce.serviceReactivated'),
           );
         },
-        onError: (e) => notify.error(catalogErrorMessage(e, 'Không đổi được trạng thái')),
+        onError: (e) => notify.error(catalogErrorMessage(e, t('uiWorkforce.serviceStatusError'))),
       },
     );
   };
@@ -334,25 +328,25 @@ export default function ServicesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Dịch vụ"
-        description="Danh mục dịch vụ, thời lượng, thời gian chuẩn bị và giá niêm yết"
+        title={t('uiWorkforce.services')}
+        description={t('uiWorkforce.serviceCatalogDescription')}
         actions={
           <PermissionGuard permission="service.manage" mode="hide">
             <Button variant="outline" onClick={() => setCategoryForm('new')}>
-              <FolderPlus className="h-4 w-4" /> Thêm nhóm
+              <FolderPlus className="h-4 w-4" /> {t('uiWorkforce.addCategory')}
             </Button>
             <Button
               onClick={() => setEditing('new')}
               disabled={activeCategories.length === 0}
-              title={activeCategories.length === 0 ? 'Tạo nhóm dịch vụ trước' : undefined}
+              title={activeCategories.length === 0 ? t('uiWorkforce.createCategoryFirst') : undefined}
             >
-              <Plus className="h-4 w-4" /> Thêm dịch vụ
+              <Plus className="h-4 w-4" /> {t('uiWorkforce.addService')}
             </Button>
           </PermissionGuard>
         }
       />
       <Checkbox
-        label="Hiện cả dịch vụ đã ngừng"
+        label={t('uiWorkforce.includeInactiveServices')}
         checked={showInactive}
         onChange={setShowInactive}
       />
@@ -361,17 +355,16 @@ export default function ServicesPage() {
         <p className="text-sm text-gray-400">Đang tải…</p>
       ) : isError ? (
         <p className="text-sm text-red-500">
-          Không tải được danh mục dịch vụ.{' '}
+          {t('uiWorkforce.servicesLoadError')}{' '}
           <button type="button" className="underline" onClick={() => refetch()}>
-            Thử lại
+            {t('uiWorkforce.retry')}
           </button>
         </p>
       ) : (
         <>
           {activeCategories.length === 0 && (
             <Alert type="info">
-              Chưa có nhóm dịch vụ nào đang dùng. Mỗi dịch vụ thuộc một nhóm (VD: Khám, Điều trị,
-              Phục hình): bấm <strong>Thêm nhóm</strong> để tạo nhóm trước, rồi mới thêm dịch vụ.
+              {t('uiWorkforce.noServiceGroups')}
             </Alert>
           )}
           {grouped.map(({ category, services: rows }) => (
@@ -380,7 +373,7 @@ export default function ServicesPage() {
               title={
                 <span className="flex flex-wrap items-center gap-2">
                   {category.name}
-                  {!category.isActive && <Badge>Nhóm đã ngừng</Badge>}
+                  {!category.isActive && <Badge>{t('uiWorkforce.stoppedGroup')}</Badge>}
                 </span>
               }
               actions={
@@ -402,13 +395,13 @@ export default function ServicesPage() {
                         { id: category.id, isActive: !category.isActive },
                         {
                           onSuccess: () =>
-                            notify.success(category.isActive ? 'Đã ngừng nhóm dịch vụ' : 'Đã mở lại nhóm dịch vụ'),
-                          onError: (e) => notify.error(catalogErrorMessage(e, 'Không đổi được trạng thái nhóm')),
+                            notify.success(category.isActive ? t('uiWorkforce.stopGroup') : t('uiWorkforce.reopenGroup')),
+                          onError: (e) => notify.error(catalogErrorMessage(e, t('uiWorkforce.groupStatusError'))),
                         },
                       )
                     }
                   >
-                    {category.isActive ? 'Ngừng nhóm' : 'Mở lại nhóm'}
+                    {category.isActive ? t('uiWorkforce.stopGroup') : t('uiWorkforce.reopenGroup')}
                   </Button>
                 </PermissionGuard>
               }
@@ -418,11 +411,11 @@ export default function ServicesPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 text-left text-gray-500 dark:border-surface-800">
-                      <th className="px-4 py-2 font-medium">Mã</th>
-                      <th className="px-4 py-2 font-medium">Dịch vụ</th>
-                      <th className="whitespace-nowrap px-4 py-2 font-medium">Thời lượng</th>
-                      <th className="whitespace-nowrap px-4 py-2 text-right font-medium">Giá</th>
-                      <th className="whitespace-nowrap px-4 py-2 font-medium">Bác sĩ</th>
+                      <th className="px-4 py-2 font-medium">{t('uiWorkforce.code')}</th>
+                      <th className="px-4 py-2 font-medium">{t('uiWorkforce.services')}</th>
+                      <th className="whitespace-nowrap px-4 py-2 font-medium">{t('uiWorkforce.duration')}</th>
+                      <th className="whitespace-nowrap px-4 py-2 text-right font-medium">{t('uiWorkforce.price')}</th>
+                      <th className="whitespace-nowrap px-4 py-2 font-medium">{t('uiWorkforce.dentists')}</th>
                       <th className="px-4 py-2" />
                     </tr>
                   </thead>
@@ -430,7 +423,7 @@ export default function ServicesPage() {
                     {rows.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-4 py-3 text-gray-400">
-                          Chưa có dịch vụ trong nhóm này.
+                          {t('uiWorkforce.noServicesInGroup')}
                         </td>
                       </tr>
                     )}
@@ -440,19 +433,19 @@ export default function ServicesPage() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2 font-medium text-gray-900 dark:text-surface-100">
                             {s.name}
-                            {!s.isActive && <Badge>Đã ngừng</Badge>}
+                            {!s.isActive && <Badge>{t('uiWorkforce.discontinued')}</Badge>}
                             {s.requiredSpecialty && (
                               <Badge variant="info">
                                 {SPECIALTY_LABEL[s.requiredSpecialty] ?? s.requiredSpecialty}
                               </Badge>
                             )}
-                            {!s.bookableOnline && <Badge>Không đặt online</Badge>}
+                            {!s.bookableOnline && <Badge>{t('uiWorkforce.noOnlineBooking')}</Badge>}
                           {s.isFree && !!s.paidAssignments && (
                             <Badge variant="warning">
-                              {s.paidAssignments} phân công có giá riêng &gt; 0: trang chủ sẽ hiện giá đó
+                              {t('uiWorkforce.paidAssignmentsWarning', { count: s.paidAssignments })}
                             </Badge>
                           )}
-                            {!s.showPublicPrice && <Badge>Ẩn trên bảng giá</Badge>}
+                            {!s.showPublicPrice && <Badge>{t('uiWorkforce.hiddenPrice')}</Badge>}
                           </div>
                           {s.description && <p className="text-xs text-gray-500">{s.description}</p>}
                         </td>
@@ -465,7 +458,7 @@ export default function ServicesPage() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
-                          {s.isFree ? 'Miễn phí' : formatCurrency(s.basePrice)}
+                          {s.isFree ? t('uiWorkforce.noCharge') : formatCurrency(s.basePrice)}
                         </td>
                         <td className="px-4 py-3">{s.assignedDentists}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
@@ -473,7 +466,7 @@ export default function ServicesPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              aria-label={`Sửa ${s.name}`}
+                              aria-label={t('uiWorkforce.editServiceNamed', { name: s.name })}
                               onClick={() => setEditing(s)}
                             >
                               <Pencil className="h-4 w-4" />
@@ -484,7 +477,7 @@ export default function ServicesPage() {
                               isLoading={checking === s.id}
                               onClick={() => askToggle(s)}
                             >
-                              {s.isActive ? 'Ngừng' : 'Mở lại'}
+                              {s.isActive ? t('uiWorkforce.discontinue') : t('uiWorkforce.reopen')}
                             </Button>
                           </PermissionGuard>
                         </td>
@@ -501,7 +494,7 @@ export default function ServicesPage() {
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing === 'new' ? 'Thêm dịch vụ' : editing ? `Sửa ${editing.code}` : ''}
+        title={editing === 'new' ? t('uiWorkforce.addService') : editing ? t('uiWorkforce.editServiceNamed', { name: editing.code }) : ''}
         size="lg"
       >
         {editing !== null && (
@@ -515,10 +508,10 @@ export default function ServicesPage() {
                 { id: editing === 'new' ? undefined : editing.id, payload },
                 {
                   onSuccess: () => {
-                    notify.success('Đã lưu dịch vụ');
+                    notify.success(t('uiWorkforce.saveService'));
                     setEditing(null);
                   },
-                  onError: (e) => notify.error(catalogErrorMessage(e, 'Không lưu được dịch vụ')),
+                  onError: (e) => notify.error(catalogErrorMessage(e, t('uiWorkforce.saveServiceError'))),
                 },
               )
             }
@@ -529,7 +522,7 @@ export default function ServicesPage() {
       <Modal
         open={categoryForm !== null}
         onClose={() => setCategoryForm(null)}
-        title={categoryForm === 'new' ? 'Thêm nhóm dịch vụ' : categoryForm ? `Sửa nhóm ${categoryForm.code}` : ''}
+        title={categoryForm === 'new' ? t('uiWorkforce.addCategory') : categoryForm ? t('uiWorkforce.editGroupNamed', { name: categoryForm.code }) : ''}
       >
         {categoryForm !== null && (
           <CategoryForm
@@ -541,10 +534,10 @@ export default function ServicesPage() {
                 { id: categoryForm === 'new' ? undefined : categoryForm.id, payload },
                 {
                   onSuccess: () => {
-                    notify.success(categoryForm === 'new' ? 'Đã tạo nhóm dịch vụ' : 'Đã lưu nhóm dịch vụ');
+                    notify.success(categoryForm === 'new' ? t('uiWorkforce.categoryCreated') : t('uiWorkforce.saveGroup'));
                     setCategoryForm(null);
                   },
-                  onError: (e) => notify.error(catalogErrorMessage(e, 'Không lưu được nhóm')),
+                  onError: (e) => notify.error(catalogErrorMessage(e, t('uiWorkforce.saveGroupError'))),
                 },
               )
             }
@@ -558,24 +551,25 @@ export default function ServicesPage() {
         onConfirm={() => runToggle()}
         isLoading={toggle.isPending}
         variant="danger"
-        title={`Ngừng dịch vụ ${pending?.service.name ?? ''}?`}
-        confirmLabel="Ngừng dịch vụ"
+        title={t('uiWorkforce.confirmDiscontinueService', { name: pending?.service.name ?? '' })}
+        confirmLabel={t('uiWorkforce.discontinueService')}
         description={
           deactivating && (
             <div className="space-y-2">
-              {deactivateSummary(deactivating) ? (
+              {deactivating.upcomingAppointments > 0 || deactivating.pendingBookingRequests > 0 ? (
                 <p className="font-medium text-amber-700">
-                  Đang có {deactivateSummary(deactivating)} dùng dịch vụ này. Chúng không bị hủy: lịch đã đặt vẫn
-                  dời được và khi khám vẫn ghi được dịch vụ này theo giá đã chốt. Lịch hẹn không đổi được dịch vụ;
-                  nếu không làm dịch vụ này nữa, lễ tân báo khách và hủy rồi đặt lại lịch.
+                  {t('uiWorkforce.serviceHasBookings')}{' '}
+                  {deactivating.upcomingAppointments > 0 && t('uiWorkforce.upcomingAppointmentCount', { count: deactivating.upcomingAppointments })}
+                  {deactivating.upcomingAppointments > 0 && deactivating.pendingBookingRequests > 0 ? ' ' + t('uiWorkforce.and') + ' ' : ''}
+                  {deactivating.pendingBookingRequests > 0 && t('uiWorkforce.pendingBookingCount', { count: deactivating.pendingBookingRequests })}{' '}
+                  {t('uiWorkforce.serviceBookingsWarning')}
                 </p>
               ) : (
-                <p>Không có lịch hẹn sắp tới hay yêu cầu online đang chờ dùng dịch vụ này.</p>
+                <p>{t('uiWorkforce.noServiceBookings')}</p>
               )}
               {deactivating.openAssignments > 0 && (
                 <p>
-                  {deactivating.openAssignments} phân công bác sĩ sẽ kết thúc hôm nay (phân công chưa bắt đầu bị
-                  hủy). Khi mở lại dịch vụ, bạn có thể khôi phục chúng.
+                  {t('uiWorkforce.openAssignmentCount', { count: deactivating.openAssignments })} {t('uiWorkforce.assignmentEndToday')}
                 </p>
               )}
             </div>
@@ -586,23 +580,22 @@ export default function ServicesPage() {
       <Modal
         open={!!reactivating}
         onClose={() => setPending(null)}
-        title={`Mở lại dịch vụ ${pending?.service.name ?? ''}?`}
+        title={t('uiWorkforce.confirmReopenService', { name: pending?.service.name ?? '' })}
       >
         {reactivating && (
           <div className="space-y-4">
             {reactivating.restorableAssignments > 0 ? (
               <p className="text-sm text-gray-700 dark:text-surface-200">
-                Lần ngừng trước đã kết thúc {reactivating.restorableAssignments} phân công bác sĩ vẫn có thể khôi
-                phục (từ hôm nay, giữ giá và thời lượng riêng). Khôi phục luôn, hay để phân công lại sau?
+                {t('uiWorkforce.restorableAssignments', { count: reactivating.restorableAssignments })}
               </p>
             ) : (
               <p className="text-sm text-gray-700 dark:text-surface-200">
-                Không có phân công nào để khôi phục; sau khi mở lại, hãy phân công bác sĩ ở trang Bác sĩ.
+                {t('uiWorkforce.noRestorableAssignments')}
               </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setPending(null)}>
-                Hủy
+                {t('uiWorkforce.cancel')}
               </Button>
               <Button
                 type="button"
@@ -610,7 +603,7 @@ export default function ServicesPage() {
                 isLoading={toggle.isPending && !toggle.variables?.restore}
                 onClick={() => runToggle(false)}
               >
-                {reactivating.restorableAssignments > 0 ? 'Chỉ mở lại dịch vụ' : 'Mở lại'}
+                {reactivating.restorableAssignments > 0 ? t('uiWorkforce.reopenOnly') : t('uiWorkforce.reopen')}
               </Button>
               {reactivating.restorableAssignments > 0 && (
                 <Button
@@ -618,7 +611,7 @@ export default function ServicesPage() {
                   isLoading={toggle.isPending && !!toggle.variables?.restore}
                   onClick={() => runToggle(true)}
                 >
-                  Mở lại và khôi phục phân công
+                  {t('uiWorkforce.reopenRestoreAssignments')}
                 </Button>
               )}
             </div>

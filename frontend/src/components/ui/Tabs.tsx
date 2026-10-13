@@ -122,7 +122,7 @@ export function TabsList({ children, className, 'aria-label': ariaLabel, 'aria-l
   return (
     <div
       className={cn(
-        'inline-flex h-10 items-center justify-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-surface-800',
+        'inline-flex max-w-full items-center justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-lg bg-gray-100 p-1 dark:bg-surface-800',
         className,
       )}
       role="tablist"
@@ -162,7 +162,7 @@ export function TabsTrigger({ value, children, disabled, className }: TabsTrigge
       disabled={disabled}
       onClick={() => context.onChange(value)}
       className={cn(
-        'inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition-all',
+        'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-surface-900',
         'disabled:pointer-events-none disabled:opacity-50',
         isActive

@@ -21,6 +21,7 @@ export default {
           50:  '#E6FAF8',  // lightest teal — surface, hover bg
           100: '#C5EFEC',  // very light — selected row
           200: '#A8D8D6',  // light — borders, badges
+          300: '#82CBC7',  // dark-mode text and selected controls
           400: '#5CBDB9',  // accent
           500: '#2BA3A0',  // PRIMARY teal — buttons, links, icon (logotype)
           600: '#1B7A78',  // dark teal — wordmark text, hover

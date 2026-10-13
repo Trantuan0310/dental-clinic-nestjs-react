@@ -24,6 +24,7 @@ import { PatientHistoryCard } from './PatientHistoryCard';
 import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/authStore';
 import { useIsOwnEncounterScope } from './encounterUtils';
+import { useTranslation } from 'react-i18next';
 
 /** Close failures (thiếu kho, thiếu giá…) carry a Vietnamese server message. */
 function notifyCloseError(err: unknown) {
@@ -67,6 +68,7 @@ const TabFallback = (
 );
 
 export default function EncounterDetailPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -148,7 +150,7 @@ export default function EncounterDetailPage() {
   if (!encounter) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500 dark:text-surface-400">Không tìm thấy hồ sơ khám</p>
+        <p className="text-gray-500 dark:text-surface-400">{t('uiClinical.encounterNotFound')}</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate(-1)}>
           Quay lại
         </Button>
@@ -170,13 +172,13 @@ export default function EncounterDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-4">
-        <Button variant="ghost" aria-label="Quay lại" onClick={() => navigate(-1)}>
+        <Button variant="ghost" aria-label={t('uiClinical.backToPatients')} onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="break-words text-2xl font-semibold text-gray-900 dark:text-surface-100">
-              Hồ sơ khám #{encounter.code}
+              {t('uiClinical.encounterRecord', { code: encounter.code })}
             </h1>
             <StatusBadge status={encounter.status} />
           </div>
@@ -196,19 +198,19 @@ export default function EncounterDetailPage() {
           {canBook && (
             <Button variant="outline" onClick={() => setBooking(true)}>
               <CalendarPlus className="h-4 w-4" />
-              Đặt lịch tái khám
+              {t('uiClinical.bookFollowUp')}
             </Button>
           )}
           {isEditable && activeTab !== 'summary' && (
             <Button variant="outline" onClick={() => setActiveTab('summary')}>
               <CheckCircle className="h-4 w-4" />
-              Đóng Encounter
+              {t('uiClinical.closeEncounter')}
             </Button>
           )}
           {encounter.status === 'in_progress' && canCancelEncounter && ownScope && (
             <Button variant="ghost" onClick={() => setCancelOpen(true)}>
               <XCircle className="h-4 w-4" />
-              Hủy phiên khám (mở nhầm)
+              {t('uiClinical.cancelEncounterWrong')}
             </Button>
           )}
         </div>
@@ -217,7 +219,7 @@ export default function EncounterDetailPage() {
       <Modal
         open={cancelOpen}
         onClose={() => !cancelMutation.isPending && setCancelOpen(false)}
-        title="Hủy phiên khám mở nhầm"
+        title={t('uiClinical.cancelWrongEncounterTitle')}
         size="sm"
         footer={
           <>
@@ -285,7 +287,7 @@ export default function EncounterDetailPage() {
       {/* Tabs */}
       <Card noPadding>
         <div className="overflow-x-auto border-b border-gray-100">
-          <div className="m-4 mb-0 inline-flex h-10 min-w-max items-center gap-1 rounded-lg bg-gray-100 dark:bg-surface-800 p-1" role="tablist" aria-label="Nội dung hồ sơ khám"
+          <div className="m-4 mb-0 inline-flex h-10 min-w-max items-center gap-1 rounded-lg bg-gray-100 dark:bg-surface-800 p-1" role="tablist" aria-label={t('uiClinical.encounterContent')}
             onKeyDown={(event) => {
               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
               const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
@@ -298,11 +300,11 @@ export default function EncounterDetailPage() {
               tabs[next].click();
             }}>
             {[
-              { id: 'notes', label: 'Ghi chú', icon: FileText },
-              { id: 'treatments', label: 'Điều trị', icon: ListChecks },
-              { id: 'prescriptions', label: 'Đơn thuốc', icon: Pill },
-              { id: 'chart', label: 'Dental Chart', icon: BarChart3 },
-              ...(isEditable ? [{ id: 'summary', label: 'Tóm tắt', icon: ListChecks }] : []),
+              { id: 'notes', label: t('uiClinical.clinicalNotes'), icon: FileText },
+              { id: 'treatments', label: t('uiClinical.treatments'), icon: ListChecks },
+              { id: 'prescriptions', label: t('uiClinical.prescriptions'), icon: Pill },
+              { id: 'chart', label: t('uiClinical.toothChart'), icon: BarChart3 },
+              ...(isEditable ? [{ id: 'summary', label: t('uiClinical.summary'), icon: ListChecks }] : []),
             ].map(({ id: tabId, label, icon: Icon }) => {
               const active = activeTab === tabId;
               return (

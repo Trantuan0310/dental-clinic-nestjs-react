@@ -11,6 +11,7 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useTranslation } from 'react-i18next';
 
 function rowInteractionProps<TData>(onRowClick: ((row: TData) => void) | undefined, row: TData) {
   if (!onRowClick) return {};
@@ -56,6 +57,7 @@ export function DataTable<TData>({
   virtual = false,
   estimatedRowHeight = 44,
 }: DataTableProps<TData>) {
+  const { t } = useTranslation();
   const [sorting, setSorting] = useState<SortingState>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -129,13 +131,13 @@ export function DataTable<TData>({
               {isLoading ? (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">
-                    Đang tải...
+                    {t('uiCommon.table.loading')}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="p-0">
-                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">Không có dữ liệu</div>}
+                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiCommon.table.empty')}</div>}
                   </td>
                 </tr>
               ) : (
@@ -172,13 +174,13 @@ export function DataTable<TData>({
               {isLoading ? (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">
-                    Đang tải...
+                    {t('uiCommon.table.loading')}
                   </td>
                 </tr>
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="p-0">
-                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">Không có dữ liệu</div>}
+                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiCommon.table.empty')}</div>}
                   </td>
                 </tr>
               ) : (
@@ -208,7 +210,7 @@ export function DataTable<TData>({
       {!virtual && table.getPageCount() > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-surface-700 dark:text-surface-300">
           <div>
-            Trang {table.getState().pagination.pageIndex + 1} / {table.getPageCount()} — {data.length} dòng
+            {t('uiCommon.table.page', { page: table.getState().pagination.pageIndex + 1, total: table.getPageCount(), count: data.length })}
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -217,7 +219,7 @@ export function DataTable<TData>({
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
-              Trước
+              {t('uiCommon.table.previous')}
             </button>
             <button
               type="button"
@@ -225,7 +227,7 @@ export function DataTable<TData>({
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
-              Sau
+              {t('uiCommon.table.next')}
             </button>
           </div>
         </div>

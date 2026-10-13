@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import { enUS } from 'date-fns/locale';
 import { vi } from 'date-fns/locale';
 import { Plus, Calculator, Calendar, CheckCircle, Wallet, AlertCircle } from 'lucide-react';
 import { Button, Card, StatusBadge, EmptyState, Modal, Input, Select } from '@/components/ui';
@@ -15,6 +17,7 @@ import {
 import { MarkPaidModal } from './MarkPaidModal';
 
 export function PayrollListPage() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -38,30 +41,30 @@ export function PayrollListPage() {
         periodEnd: newPeriodEnd,
         payrollCycle: newPeriodCycle,
       });
-      notify.success('Đã tạo kỳ lương mới');
+      notify.success(t('uiWorkforce.createNewPeriod'));
       setShowCreateModal(false);
       setNewPeriodStart('');
       setNewPeriodEnd('');
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể tạo kỳ lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.createNewPeriod')));
     }
   };
 
   const handleCompute = async (id: string) => {
     try {
       await computePeriod.mutateAsync(id);
-      notify.success('Đã tính lương cho kỳ này');
+      notify.success(t('uiWorkforce.computePayroll'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể tính lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.computePayroll')));
     }
   };
 
   const handleApprove = async (id: string) => {
     try {
       await approvePeriod.mutateAsync(id);
-      notify.success('Đã duyệt kỳ lương');
+      notify.success(t('uiWorkforce.approve'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể duyệt kỳ lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.approve')));
     }
   };
 
@@ -72,21 +75,21 @@ export function PayrollListPage() {
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex gap-2">
           <select
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="DRAFT">Bản nháp</option>
-            <option value="REVIEWING">Đang xem xét</option>
-            <option value="APPROVED">Đã duyệt</option>
-            <option value="PAID">Đã trả lương</option>
-            <option value="LOCKED">Đã khóa</option>
+            <option value="all">{t('uiWorkforce.allStatuses')}</option>
+            <option value="DRAFT">{t('uiWorkforce.draft')}</option>
+            <option value="REVIEWING">{t('uiWorkforce.reviewing')}</option>
+            <option value="APPROVED">{t('uiWorkforce.approved')}</option>
+            <option value="PAID">{t('uiWorkforce.paid')}</option>
+            <option value="LOCKED">{t('uiWorkforce.locked')}</option>
           </select>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4" />
-          Tạo kỳ lương
+          {t('uiWorkforce.createPeriod')}
         </Button>
       </div>
 
@@ -102,17 +105,17 @@ export function PayrollListPage() {
         ) : isError && rows.length === 0 ? (
           <EmptyState
             icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
-            title="Không thể tải danh sách kỳ lương"
-            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
-            action={{ label: 'Thử lại', onClick: () => refetch() }}
+            title={t('uiWorkforce.payrollLoadError')}
+            description={t('uiWorkforce.loadErrorDescription')}
+            action={{ label: t('uiWorkforce.retry'), onClick: () => refetch() }}
           />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Calendar className="h-10 w-10 text-gray-400" />}
-            title="Chưa có kỳ lương nào"
-            description="Tạo kỳ lương đầu tiên để bắt đầu tính lương"
+            title={t('uiWorkforce.noPayrollPeriods')}
+            description={t('uiWorkforce.createFirstPeriod')}
             action={{
-              label: 'Tạo kỳ lương',
+              label: t('uiWorkforce.createPeriod'),
               onClick: () => setShowCreateModal(true),
             }}
           />
@@ -120,10 +123,10 @@ export function PayrollListPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 font-medium text-gray-600">Kỳ</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Chu kỳ</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Trạng thái</th>
+                <tr className="border-b border-gray-100 bg-gray-50 text-gray-600 dark:border-surface-800 dark:bg-surface-800 dark:text-surface-300">
+                  <th className="px-4 py-3 font-medium">{t('uiWorkforce.period')}</th>
+                  <th className="px-4 py-3 font-medium">{t('uiWorkforce.cycle')}</th>
+                  <th className="px-4 py-3 font-medium">{t('uiWorkforce.status')}</th>
                   <th className="px-4 py-3 font-medium text-gray-600 w-32"></th>
                 </tr>
               </thead>
@@ -131,14 +134,14 @@ export function PayrollListPage() {
                 {rows.map((period) => (
                   <tr
                     key={period.id}
-                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
+                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer dark:border-surface-800 dark:hover:bg-surface-800/60"
                     onClick={() => navigate(`/payroll/periods/${period.id}`)}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-surface-100">
                       {format(new Date(period.periodStart), 'dd/MM/yyyy')} —{' '}
-                      {format(new Date(period.periodEnd), 'dd/MM/yyyy', { locale: vi })}
+                      {format(new Date(period.periodEnd), 'dd/MM/yyyy', { locale: i18n.language === 'vi' ? vi : enUS })}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{period.payrollCycle}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-surface-300">{t(`uiWorkforce.${period.payrollCycle.toLowerCase()}`)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={period.status} />
                     </td>
@@ -150,7 +153,7 @@ export function PayrollListPage() {
                             size="sm"
                             onClick={() => handleCompute(period.id)}
                             isLoading={computePeriod.isPending && computePeriod.variables === period.id}
-                            title="Tính lương"
+                            title={t('uiWorkforce.computePayroll')}
                           >
                             <Calculator className="h-4 w-4" />
                           </Button>
@@ -161,7 +164,7 @@ export function PayrollListPage() {
                             size="sm"
                             onClick={() => handleApprove(period.id)}
                             isLoading={approvePeriod.isPending && approvePeriod.variables === period.id}
-                            title="Duyệt"
+                            title={t('uiWorkforce.approve')}
                           >
                             <CheckCircle className="h-4 w-4" />
                           </Button>
@@ -171,7 +174,7 @@ export function PayrollListPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setMarkPaidPeriodId(period.id)}
-                            title="Đánh dấu đã trả"
+                            title={t('uiWorkforce.markPaid')}
                           >
                             <Wallet className="h-4 w-4" />
                           </Button>
@@ -190,42 +193,42 @@ export function PayrollListPage() {
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Tạo kỳ lương mới"
+        title={t('uiWorkforce.createNewPeriod')}
         size="sm"
       >
         <div className="space-y-4">
           <Input
-            label="Ngày bắt đầu"
+            label={t('uiWorkforce.startDate')}
             type="date"
             value={newPeriodStart}
             onChange={(e) => setNewPeriodStart(e.target.value)}
           />
           <Input
-            label="Ngày kết thúc"
+            label={t('uiWorkforce.endDate')}
             type="date"
             value={newPeriodEnd}
             onChange={(e) => setNewPeriodEnd(e.target.value)}
           />
           <Select
-            label="Chu kỳ"
+            label={t('uiWorkforce.cycle')}
             value={newPeriodCycle}
             onChange={(e) => setNewPeriodCycle(e.target.value as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY')}
             options={[
-              { value: 'MONTHLY', label: 'Hàng tháng' },
-              { value: 'BIWEEKLY', label: 'Hàng 2 tuần' },
-              { value: 'WEEKLY', label: 'Hàng tuần' },
+              { value: 'MONTHLY', label: t('uiWorkforce.monthly') },
+              { value: 'BIWEEKLY', label: t('uiWorkforce.biweekly') },
+              { value: 'WEEKLY', label: t('uiWorkforce.weekly') },
             ]}
           />
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-              Hủy
+              {t('uiWorkforce.cancel')}
             </Button>
             <Button
               onClick={handleCreate}
               isLoading={createPeriod.isPending}
               disabled={!newPeriodStart || !newPeriodEnd}
             >
-              Tạo
+              {t('uiWorkforce.create')}
             </Button>
           </div>
         </div>

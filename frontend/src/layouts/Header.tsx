@@ -13,7 +13,7 @@ import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { formatDate } from '@/lib/format';
 import { clinicWallClock } from '@/lib/clinicTime';
-import { NAV_ROLE_HINT } from '@/lib/nav';
+import { getRoleLabel } from '@/lib/nav';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -68,7 +68,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const roleLabel = user.roles.map((role) => NAV_ROLE_HINT[role] ?? role).join(', ');
+  const roleLabel = user.roles.map((role) => getRoleLabel(role)).join(', ');
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,9 +117,9 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
               // (as opposed to plain strings) rendered the literal text
               // "[object Object]" for each placeholder instead of bold text.
               label={t('shell.search.tooltip', {
-                name: 'tên',
-                code: 'mã BN',
-                phone: 'số điện thoại',
+                name: t('uiCommon.search.name'),
+                code: t('uiCommon.search.code'),
+                phone: t('uiCommon.search.phone'),
               })}
               side="bottom"
             >
@@ -140,7 +140,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
                 aria-label={t('shell.search.clearLabel')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-surface-500 dark:hover:bg-surface-700 dark:hover:text-surface-200"
               >
-                <span className="sr-only">Xóa</span>
+                <span className="sr-only">{t('uiCommon.action.close')}</span>
                 <span aria-hidden="true">&times;</span>
               </button>
             )}

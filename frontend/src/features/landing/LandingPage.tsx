@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
@@ -52,82 +53,20 @@ type PublicPrice = {
   priceFrom: boolean;
 };
 
-const NAV = [
-  { href: '#dich-vu', label: 'Dịch vụ & bảng giá' },
-  { href: '#bac-si', label: 'Bác sĩ' },
-  { href: '#quy-trinh', label: 'Đặt lịch' },
-  { href: '#lien-he', label: 'Liên hệ' },
-];
+const NAV_KEYS = ['navServices', 'navDentists', 'navBooking', 'navContact'] as const;
+const NAV_HREFS = ['#dich-vu', '#bac-si', '#quy-trinh', '#lien-he'];
+const HIGHLIGHT_ICONS = [Stethoscope, BadgeDollarSign, ShieldCheck, CalendarClock];
+const STEP_ICONS = [CalendarCheck, Phone, ClipboardCheck];
 
-const HIGHLIGHTS = [
-  {
-    icon: Stethoscope,
-    title: 'Đúng bác sĩ, đúng chuyên môn',
-    text: 'Nội nha, phục hình, chỉnh nha, Implant hay nha khoa trẻ em: mỗi ca do bác sĩ phụ trách đúng lĩnh vực đảm nhận.',
-  },
-  {
-    icon: BadgeDollarSign,
-    title: 'Giá rõ ràng trước khi làm',
-    text: 'Bảng giá công khai ngay trên trang. Bác sĩ báo chi phí cụ thể sau khi khám, bạn đồng ý rồi mới điều trị.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Vô khuẩn từng ca',
-    text: 'Dụng cụ được làm sạch, đóng gói và hấp tiệt trùng sau mỗi lượt dùng; vật tư tiêu hao dùng một lần.',
-  },
-  {
-    icon: CalendarClock,
-    title: 'Đặt lịch online, ít phải chờ',
-    text: 'Chọn giờ theo lịch trống thật của bác sĩ và theo dõi trạng thái yêu cầu bằng mã tra cứu.',
-  },
-];
 
-const STEPS = [
-  {
-    icon: CalendarCheck,
-    title: 'Chọn dịch vụ, bác sĩ và giờ',
-    text: 'Trang đặt lịch chỉ hiện những giờ bác sĩ còn trống. Điền họ tên và số điện thoại là xong.',
-  },
-  {
-    icon: Phone,
-    title: 'Lễ tân xác nhận',
-    text: 'Phòng khám kiểm tra và xác nhận lịch. Bạn tra cứu trạng thái bất cứ lúc nào bằng mã đặt lịch.',
-  },
-  {
-    icon: ClipboardCheck,
-    title: 'Đến khám đúng giờ',
-    text: 'Mang theo giấy tờ tùy thân, phim X-quang hoặc đơn thuốc cũ nếu có để bác sĩ tư vấn chính xác hơn.',
-  },
-];
-
-const FAQ = [
-  {
-    q: 'Đặt lịch online có mất phí không?',
-    a: 'Không. Đặt lịch hoàn toàn miễn phí; bạn chỉ thanh toán cho dịch vụ đã thực hiện sau khi khám.',
-  },
-  {
-    q: 'Giá trên trang đã là giá cuối cùng chưa?',
-    a: 'Đây là giá tham khảo cho một đơn vị dịch vụ (một răng, một hàm hoặc một liệu trình như ghi trong tên). Bác sĩ sẽ báo chi phí chính xác sau khi khám và bạn đồng ý mới bắt đầu điều trị.',
-  },
-  {
-    q: 'Muốn đổi hoặc hủy lịch thì làm thế nào?',
-    a: 'Gọi hotline hoặc nhắn Zalo cho lễ tân, kèm mã đặt lịch bạn nhận được sau khi gửi yêu cầu.',
-  },
-  {
-    q: 'Trẻ em có khám được không?',
-    a: 'Có. Phòng khám nhận khám răng cho trẻ em; người giám hộ đặt lịch và đi cùng bé khi đến khám.',
-  },
-];
-
-const money = new Intl.NumberFormat('vi-VN');
+const money = (locale: string) => new Intl.NumberFormat(locale === 'en' ? 'en-US' : 'vi-VN');
 // "Miễn phí" only for a service the clinic marked free: a 0 left unset
 // reads "Liên hệ", not a promise.
-const formatPrice = (p: PublicPrice) => {
-  if (p.isFree) return 'Miễn phí';
-  if (p.price === null || !Number.isFinite(p.price)) return 'Liên hệ';
-  // Free with some dentists, paid with others (price 0, "from").
-  if (p.price === 0 && p.priceFrom) return 'Miễn phí (tùy bác sĩ)';
-  return `${p.priceFrom ? 'từ ' : ''}${money.format(p.price)} đ`;
+const formatPrice = (p: PublicPrice, t: (key: string) => string, locale: string) => {
+  if (p.isFree) return t('uiEntry.landing.free');
+  if (p.price === null || !Number.isFinite(p.price)) return t('uiEntry.landing.contact');
+  if (p.price === 0 && p.priceFrom) return t('uiEntry.landing.freeSomeDentists');
+  return `${p.priceFrom ? t('uiEntry.landing.from') + ' ' : ''}${money(locale).format(p.price)} ${locale === 'en' ? 'VND' : 'đ'}`;
 };
 
 const initials = (fullName: string) =>
@@ -159,6 +98,7 @@ function usePriceList() {
 }
 
 function PrimaryCta({ className = '' }: { className?: string }) {
+  const { t } = useTranslation();
   return (
     <Link
       to="/booking"
@@ -168,12 +108,14 @@ function PrimaryCta({ className = '' }: { className?: string }) {
       }
     >
       <CalendarCheck className="h-5 w-5" aria-hidden />
-      Đặt lịch khám
+      {t('uiEntry.landing.bookVisit')}
     </Link>
   );
 }
 
 function SiteHeader() {
+  const { t } = useTranslation();
+  const NAV = NAV_HREFS.map((href, i) => ({ href, label: t(`uiEntry.landing.${NAV_KEYS[i]}`) }));
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
 
@@ -190,13 +132,13 @@ function SiteHeader() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-gray-100 dark:border-surface-700 bg-white/90 dark:bg-surface-900/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <a href="#top" className="flex items-center gap-2" aria-label={clinic.name}>
           <img src="/logo-icon.svg" alt="" className="h-9 w-9" />
           <span className="text-lg font-bold tracking-wide text-brand-600">GENSMILE</span>
         </a>
-        <nav className="hidden items-center gap-6 text-sm font-medium text-gray-700 md:flex" aria-label="Điều hướng chính">
+        <nav className="hidden items-center gap-6 text-sm font-medium text-gray-700 dark:text-surface-200 md:flex" aria-label={t('uiEntry.landing.mainNav')}>
           {NAV.map((item) => (
             <a key={item.href} href={item.href} className="hover:text-brand-600">
               {item.label}
@@ -217,38 +159,38 @@ function SiteHeader() {
             to="/booking"
             className="hidden rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 sm:inline-flex"
           >
-            Đặt lịch
+            {t('uiEntry.landing.booking')}
           </Link>
           <button
             type="button"
             ref={menuButton}
-            className="min-h-11 min-w-11 rounded-md p-2 text-gray-700 md:hidden"
+            className="min-h-11 min-w-11 rounded-md p-2 text-gray-700 dark:text-surface-200 md:hidden"
             onClick={() => setOpen((v) => !v)}
             aria-controls="public-mobile-navigation"
             aria-expanded={open}
-            aria-label={open ? 'Đóng menu' : 'Mở menu'}
+            aria-label={t(open ? 'uiEntry.landing.closeMenu' : 'uiEntry.landing.openMenu')}
           >
             {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
       </div>
       {open && (
-        <nav id="public-mobile-navigation" className="border-t border-gray-100 bg-white px-4 py-3 md:hidden" aria-label="Điều hướng">
+        <nav id="public-mobile-navigation" className="border-t border-gray-100 dark:border-surface-700 bg-white dark:bg-surface-900 px-4 py-3 md:hidden" aria-label={t('uiEntry.landing.nav')}>
           {NAV.map((item) => (
             <a
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
-              className="block rounded-md px-2 py-2.5 font-medium text-gray-700 hover:bg-brand-50"
+              className="block rounded-md px-2 py-2.5 font-medium text-gray-700 dark:text-surface-200 hover:bg-brand-50"
             >
               {item.label}
             </a>
           ))}
           <Link
             to="/booking/status"
-            className="block rounded-md px-2 py-2.5 font-medium text-gray-700 hover:bg-brand-50"
+            className="block rounded-md px-2 py-2.5 font-medium text-gray-700 dark:text-surface-200 hover:bg-brand-50"
           >
-            Tra cứu lịch đã đặt
+            {t('uiEntry.landing.lookup')}
           </Link>
         </nav>
       )}
@@ -257,44 +199,44 @@ function SiteHeader() {
 }
 
 function Hero({ media }: { media?: SiteMedia }) {
+  const { t } = useTranslation();
   return (
-    <section id="top" className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white">
+    <section id="top" className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white dark:from-surface-900 dark:to-surface-950">
       <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:py-20 md:grid-cols-[1.15fr_1fr]">
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm font-medium text-brand-600 shadow-sm ring-1 ring-brand-100">
+          <p className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-surface-900 px-3 py-1 text-sm font-medium text-brand-600 shadow-sm ring-1 ring-brand-100">
             <span className="h-2 w-2 rounded-full bg-accent" aria-hidden />
-            {clinic.tagline} · Đặt lịch online
+            {clinic.tagline} · {t('uiEntry.landing.onlineBooking')}
           </p>
-          <h1 className="mt-5 text-4xl font-bold leading-tight text-gray-900 sm:text-5xl">
-            Nụ cười khỏe đẹp, <span className="text-brand-600">bắt đầu từ một lần khám</span>
+          <h1 className="mt-5 text-4xl font-bold leading-tight text-gray-900 dark:text-surface-100 sm:text-5xl">
+            {t('uiEntry.landing.heroTitle')} <span className="text-brand-600">{t('uiEntry.landing.heroHighlight')}</span>
           </h1>
-          <p className="mt-5 max-w-xl text-lg text-gray-600">
-            Khám, tư vấn và điều trị răng miệng cho cả gia đình tại {clinic.name}. Chọn dịch vụ,
-            bác sĩ và giờ phù hợp ngay trên điện thoại, lễ tân sẽ xác nhận lịch cho bạn.
+          <p className="mt-5 max-w-xl text-lg text-gray-600 dark:text-surface-300">
+            {t('uiEntry.landing.heroBody', { clinic: clinic.name })}
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <PrimaryCta />
             {clinic.phone ? (
               <a
                 href={`tel:${clinic.phoneHref}`}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-6 py-3 font-semibold text-brand-600 hover:bg-brand-50"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 bg-white dark:bg-surface-900 px-6 py-3 font-semibold text-brand-600 hover:bg-brand-50"
               >
                 <Phone className="h-5 w-5" aria-hidden />
-                Gọi {clinic.phone}
+                {t('uiEntry.landing.call', { phone: clinic.phone })}
               </a>
             ) : (
               <a
                 href="#dich-vu"
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 bg-white px-6 py-3 font-semibold text-brand-600 hover:bg-brand-50"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-brand-200 bg-white dark:bg-surface-900 px-6 py-3 font-semibold text-brand-600 hover:bg-brand-50"
               >
-                Xem bảng giá
+                {t('uiEntry.landing.viewPrices')}
               </a>
             )}
           </div>
-          <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-3 text-sm text-gray-600">
+          <dl className="mt-8 flex flex-wrap gap-x-8 gap-y-3 text-sm text-gray-600 dark:text-surface-300">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-brand-500" aria-hidden />
-              <dt className="sr-only">Giờ làm việc</dt>
+              <dt className="sr-only">{t('uiEntry.landing.workingHours')}</dt>
               <dd>
                 {clinic.hours[0].days}: {clinic.hours[0].time}
               </dd>
@@ -302,7 +244,7 @@ function Hero({ media }: { media?: SiteMedia }) {
             {clinic.address && (
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-brand-500" aria-hidden />
-                <dt className="sr-only">Địa chỉ</dt>
+                <dt className="sr-only">{t('uiEntry.landing.address')}</dt>
                 <dd>{clinic.address}</dd>
               </div>
             )}
@@ -313,14 +255,14 @@ function Hero({ media }: { media?: SiteMedia }) {
             <div className="absolute -inset-3 -z-0 rounded-[2.5rem] bg-brand-100 blur-2xl" aria-hidden />
             <img
               src={mediaUrl(media.hero.id)}
-              alt={media.hero.caption ?? `Không gian ${clinic.name}`}
+              alt={media.hero.caption ?? t('uiEntry.landing.clinicImage', { clinic: clinic.name })}
               className="relative aspect-[4/3] w-full rounded-[2rem] object-cover shadow-xl ring-1 ring-brand-100"
             />
           </div>
         ) : (
           <div className="relative mx-auto w-full max-w-sm" aria-hidden>
             <div className="absolute inset-0 -z-0 rounded-full bg-brand-100 blur-3xl" />
-            <div className="relative rounded-[2.5rem] bg-white p-10 shadow-xl ring-1 ring-brand-100">
+            <div className="relative rounded-[2.5rem] bg-white dark:bg-surface-900 p-10 shadow-xl ring-1 ring-brand-100">
               <img src="/logo-full.svg" alt="" className="mx-auto w-full max-w-[260px]" />
             </div>
           </div>
@@ -331,19 +273,20 @@ function Hero({ media }: { media?: SiteMedia }) {
 }
 
 function Highlights() {
+  const { t } = useTranslation();
   return (
     <section className="mx-auto max-w-6xl px-4 py-14" aria-labelledby="vi-sao">
-      <h2 id="vi-sao" className="text-center text-3xl font-bold text-gray-900">
-        Vì sao chọn GENSMILE
+      <h2 id="vi-sao" className="text-center text-3xl font-bold text-gray-900 dark:text-surface-100">
+        {t('uiEntry.landing.whyChoose')}
       </h2>
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {HIGHLIGHTS.map(({ icon: Icon, title, text }) => (
-          <div key={title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        {HIGHLIGHT_ICONS.map((Icon, i) => (
+          <div key={i} className="rounded-2xl border border-gray-100 dark:border-surface-700 bg-white dark:bg-surface-900 p-6 shadow-sm">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
               <Icon className="h-6 w-6" aria-hidden />
             </span>
-            <h3 className="mt-4 font-semibold text-gray-900">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-gray-600">{text}</p>
+            <h3 className="mt-4 font-semibold text-gray-900 dark:text-surface-100">{(t('uiEntry.landing.highlightTitles', { returnObjects: true }) as string[])[i]}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-surface-300">{(t('uiEntry.landing.highlightTexts', { returnObjects: true }) as string[])[i]}</p>
           </div>
         ))}
       </div>
@@ -363,41 +306,42 @@ function Services({
   isLoading: boolean;
   isError: boolean;
 }) {
+  const { t, i18n } = useTranslation();
   const categories = useMemo(() => [...new Set(services.map((s) => s.category))], [services]);
   const [active, setActive] = useState('');
   const current = categories.includes(active) ? active : categories[0] ?? '';
   const visible = services.filter((s) => s.category === current);
 
   return (
-    <section id="dich-vu" className="scroll-mt-20 bg-slate-50 py-14" aria-labelledby="dich-vu-title">
+    <section id="dich-vu" className="scroll-mt-20 bg-slate-50 dark:bg-surface-950 py-14" aria-labelledby="dich-vu-title">
       <div className="mx-auto max-w-6xl px-4">
-        <h2 id="dich-vu-title" className="text-center text-3xl font-bold text-gray-900">
-          Dịch vụ & bảng giá
+        <h2 id="dich-vu-title" className="text-center text-3xl font-bold text-gray-900 dark:text-surface-100">
+          {t('uiEntry.landing.services')}
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600">
-          Giá tham khảo cho từng dịch vụ. Chi phí cụ thể được bác sĩ báo sau khi khám.
+        <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600 dark:text-surface-300">
+          {t('uiEntry.landing.priceNote')}
         </p>
 
         {isLoading ? (
-          <p className="mt-10 text-center text-gray-500">Đang tải bảng giá…</p>
+          <p className="mt-10 text-center text-gray-500 dark:text-surface-400">{t('uiEntry.landing.loadingPrices')}</p>
         ) : isError || services.length === 0 ? (
-          <div className="mx-auto mt-10 max-w-xl rounded-xl bg-white p-6 text-center text-gray-600 shadow-sm">
-            Bảng giá đang được cập nhật.{' '}
+          <div className="mx-auto mt-10 max-w-xl rounded-xl bg-white dark:bg-surface-900 p-6 text-center text-gray-600 dark:text-surface-300 shadow-sm">
+            {t('uiEntry.landing.pricesUpdating')}{' '}
             {clinic.phone ? (
               <>
-                Gọi{' '}
+                {t('uiEntry.landing.callShort')}{' '}
                 <a className="font-semibold text-brand-600" href={`tel:${clinic.phoneHref}`}>
                   {clinic.phone}
                 </a>{' '}
-                để được tư vấn.
+                {t('uiEntry.landing.toConsult')}
               </>
             ) : (
-              'Vui lòng liên hệ lễ tân để được tư vấn.'
+              t('uiEntry.landing.contactReception')
             )}
           </div>
         ) : (
           <>
-            <div className="mt-8 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:justify-center" role="group" aria-label="Nhóm dịch vụ">
+            <div className="mt-8 flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:justify-center" role="group" aria-label={t('uiEntry.landing.serviceGroup')}>
               {categories.map((c) => (
                 <button
                   key={c}
@@ -408,7 +352,7 @@ function Services({
                     'shrink-0 rounded-full px-4 py-2 text-sm font-medium transition ' +
                     (c === current
                       ? 'bg-brand-500 text-white shadow-sm'
-                      : 'bg-white text-gray-700 ring-1 ring-gray-200 hover:ring-brand-200')
+                      : 'bg-white dark:bg-surface-900 text-gray-700 dark:text-surface-200 ring-1 ring-gray-200 hover:ring-brand-200')
                   }
                 >
                   {c}
@@ -417,29 +361,29 @@ function Services({
             </div>
             <ul className="mt-6 grid gap-3 md:grid-cols-2" aria-label={current}>
               {visible.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+                <li key={s.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white dark:bg-surface-900 p-4 shadow-sm ring-1 ring-gray-100">
                   <div className="min-w-0">
-                    <p className="font-medium text-gray-900">{s.name}</p>
-                    <p className="mt-0.5 text-sm text-gray-500">khoảng {s.durationMinutes} phút</p>
+                    <p className="font-medium text-gray-900 dark:text-surface-100">{s.name}</p>
+                    <p className="mt-0.5 text-sm text-gray-500 dark:text-surface-400">{t('uiEntry.landing.minutes', { count: s.durationMinutes })}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className="font-semibold text-brand-600">{formatPrice(s)}</span>
+                    <span className="font-semibold text-brand-600">{formatPrice(s, t, i18n.language)}</span>
                     {bookable.has(s.id) ? (
                       <Link
                         to={`/booking?service=${encodeURIComponent(s.id)}`}
                         className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100"
-                        aria-label={`Đặt lịch ${s.name}`}
+                        aria-label={t('uiEntry.landing.bookService', { service: s.name })}
                       >
-                        Đặt <ArrowRight className="h-4 w-4" aria-hidden />
+                        {t('uiEntry.landing.bookShort')} <ArrowRight className="h-4 w-4" aria-hidden />
                       </Link>
                     ) : (
                       clinic.phone && (
                         <a
                           href={`tel:${clinic.phoneHref}`}
-                          className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                          aria-label={`Gọi phòng khám để đặt ${s.name}`}
+                          className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-surface-200 hover:bg-gray-100"
+                          aria-label={t('uiEntry.landing.callToBook', { service: s.name })}
                         >
-                          <Phone className="h-4 w-4" aria-hidden /> Gọi
+                          <Phone className="h-4 w-4" aria-hidden /> {t('uiEntry.landing.callShort')}
                         </a>
                       )
                     )}
@@ -455,6 +399,7 @@ function Services({
 }
 
 function Dentists({ services, photos }: { services: PublicService[]; photos: Record<string, string> }) {
+  const { t } = useTranslation();
   const dentists = useMemo(() => {
     const byId = new Map<string, PublicDentist>();
     for (const s of services) for (const d of s.dentists) byId.set(d.id, d);
@@ -464,15 +409,15 @@ function Dentists({ services, photos }: { services: PublicService[]; photos: Rec
 
   return (
     <section id="bac-si" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-14" aria-labelledby="bac-si-title">
-      <h2 id="bac-si-title" className="text-center text-3xl font-bold text-gray-900">
-        Đội ngũ bác sĩ
+      <h2 id="bac-si-title" className="text-center text-3xl font-bold text-gray-900 dark:text-surface-100">
+        {t('uiEntry.landing.dentists')}
       </h2>
-      <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600">
-        Bạn có thể chọn bác sĩ khi đặt lịch, hoặc để phòng khám sắp xếp người phù hợp.
+      <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600 dark:text-surface-300">
+        {t('uiEntry.landing.dentistDescription')}
       </p>
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {dentists.map((d) => (
-          <div key={d.id} className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm">
+          <div key={d.id} className="rounded-2xl border border-gray-100 dark:border-surface-700 bg-white dark:bg-surface-900 p-6 text-center shadow-sm">
             {photos[d.id] ? (
               <img
                 src={mediaUrl(photos[d.id])}
@@ -485,8 +430,8 @@ function Dentists({ services, photos }: { services: PublicService[]; photos: Rec
                 {initials(d.fullName) || <UserRound className="h-8 w-8" aria-hidden />}
               </span>
             )}
-            <h3 className="mt-4 font-semibold text-gray-900">{d.fullName}</h3>
-            {d.bio && <p className="mt-2 line-clamp-4 text-sm text-gray-600">{d.bio}</p>}
+            <h3 className="mt-4 font-semibold text-gray-900 dark:text-surface-100">{d.fullName}</h3>
+            {d.bio && <p className="mt-2 line-clamp-4 text-sm text-gray-600 dark:text-surface-300">{d.bio}</p>}
             {d.specialties.length > 0 && (
               <ul className="mt-3 flex flex-wrap justify-center gap-1.5">
                 {d.specialties.map((code) => (
@@ -504,11 +449,12 @@ function Dentists({ services, photos }: { services: PublicService[]; photos: Rec
 }
 
 function Gallery({ items }: { items: SiteMedia['gallery'] }) {
+  const { t } = useTranslation();
   if (items.length === 0) return null;
   return (
     <section className="mx-auto max-w-6xl px-4 py-14" aria-labelledby="khong-gian-title">
-      <h2 id="khong-gian-title" className="text-center text-3xl font-bold text-gray-900">
-        Không gian phòng khám
+      <h2 id="khong-gian-title" className="text-center text-3xl font-bold text-gray-900 dark:text-surface-100">
+        {t('uiEntry.landing.gallery')}
       </h2>
       <ul
         className={
@@ -520,7 +466,7 @@ function Gallery({ items }: { items: SiteMedia['gallery'] }) {
           <li key={g.id} className="relative overflow-hidden rounded-2xl bg-gray-100">
             <img
               src={mediaUrl(g.id)}
-              alt={g.caption ?? 'Ảnh phòng khám'}
+              alt={g.caption ?? t('uiEntry.landing.galleryImage')}
               loading="lazy"
               className="aspect-[4/3] w-full object-cover"
             />
@@ -537,40 +483,41 @@ function Gallery({ items }: { items: SiteMedia['gallery'] }) {
 }
 
 function Steps() {
+  const { t } = useTranslation();
   return (
     <section id="quy-trinh" className="scroll-mt-20 bg-brand-600 py-14 text-white" aria-labelledby="quy-trinh-title">
       <div className="mx-auto max-w-6xl px-4">
         <h2 id="quy-trinh-title" className="text-center text-3xl font-bold">
-          Đặt lịch trong 3 bước
+          {t('uiEntry.landing.stepsTitle')}
         </h2>
         <ol className="mt-10 grid gap-6 md:grid-cols-3">
-          {STEPS.map(({ icon: Icon, title, text }, i) => (
-            <li key={title} className="rounded-2xl bg-white/10 p-6 ring-1 ring-white/15">
+          {STEP_ICONS.map((Icon, i) => (
+            <li key={i} className="rounded-2xl bg-white/10 p-6 ring-1 ring-white/15">
               <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-bold text-gray-900">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-bold text-gray-900 dark:text-surface-100">
                   {i + 1}
                 </span>
                 <Icon className="h-6 w-6 text-brand-100" aria-hidden />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-brand-50">{text}</p>
+              <h3 className="mt-4 text-lg font-semibold">{(t('uiEntry.landing.stepTitles', { returnObjects: true }) as string[])[i]}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-brand-50">{(t('uiEntry.landing.stepTexts', { returnObjects: true }) as string[])[i]}</p>
             </li>
           ))}
         </ol>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             to="/booking"
-            className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 font-semibold text-brand-700 shadow-sm hover:bg-brand-50"
+            className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-surface-900 px-6 py-3 font-semibold text-brand-700 shadow-sm hover:bg-brand-50"
           >
             <CalendarCheck className="h-5 w-5" aria-hidden />
-            Đặt lịch ngay
+            {t('uiEntry.landing.bookNow')}
           </Link>
           <Link
             to="/booking/status"
             className="inline-flex items-center gap-2 rounded-full px-6 py-3 font-semibold text-white ring-1 ring-white/40 hover:bg-white/10"
           >
             <Search className="h-5 w-5" aria-hidden />
-            Tra cứu lịch đã đặt
+            {t('uiEntry.landing.lookup')}
           </Link>
         </div>
       </div>
@@ -579,21 +526,22 @@ function Steps() {
 }
 
 function Faq() {
+  const { t } = useTranslation();
   return (
     <section className="mx-auto max-w-3xl px-4 py-14" aria-labelledby="faq-title">
-      <h2 id="faq-title" className="text-center text-3xl font-bold text-gray-900">
-        Câu hỏi thường gặp
+      <h2 id="faq-title" className="text-center text-3xl font-bold text-gray-900 dark:text-surface-100">
+        {t('uiEntry.landing.faqTitle')}
       </h2>
-      <div className="mt-8 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-sm">
-        {FAQ.map(({ q, a }) => (
+      <div className="mt-8 divide-y divide-gray-100 rounded-2xl border border-gray-100 dark:border-surface-700 bg-white dark:bg-surface-900 shadow-sm">
+        {(t('uiEntry.landing.faqQuestions', { returnObjects: true }) as string[]).map((q, i) => (
           <details key={q} className="group p-5">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-gray-900">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium text-gray-900 dark:text-surface-100">
               {q}
               <span className="text-xl leading-none text-brand-500 transition group-open:rotate-45" aria-hidden>
                 +
               </span>
             </summary>
-            <p className="mt-3 text-sm leading-relaxed text-gray-600">{a}</p>
+            <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-surface-300">{(t('uiEntry.landing.faqAnswers', { returnObjects: true }) as string[])[i]}</p>
           </details>
         ))}
       </div>
@@ -602,6 +550,7 @@ function Faq() {
 }
 
 function Contact() {
+  const { t } = useTranslation();
   const mapEmbed = clinic.address
     ? `https://www.google.com/maps?q=${encodeURIComponent(clinic.address)}&output=embed`
     : '';
@@ -610,25 +559,25 @@ function Contact() {
     (clinic.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clinic.address)}` : '');
 
   return (
-    <section id="lien-he" className="scroll-mt-20 bg-slate-50 py-14" aria-labelledby="lien-he-title">
+    <section id="lien-he" className="scroll-mt-20 bg-slate-50 dark:bg-surface-950 py-14" aria-labelledby="lien-he-title">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-2">
         <div>
-          <h2 id="lien-he-title" className="text-3xl font-bold text-gray-900">
-            Giờ làm việc & liên hệ
+          <h2 id="lien-he-title" className="text-3xl font-bold text-gray-900 dark:text-surface-100">
+            {t('uiEntry.landing.contactTitle')}
           </h2>
-          <table className="mt-6 w-full overflow-hidden rounded-xl bg-white text-left shadow-sm ring-1 ring-gray-100">
+          <table className="mt-6 w-full overflow-hidden rounded-xl bg-white dark:bg-surface-900 text-left shadow-sm ring-1 ring-gray-100">
             <tbody className="divide-y divide-gray-100">
               {clinic.hours.map((h) => (
                 <tr key={h.days}>
-                  <th scope="row" className="px-4 py-3 font-medium text-gray-900">
+                  <th scope="row" className="px-4 py-3 font-medium text-gray-900 dark:text-surface-100">
                     {h.days}
                   </th>
-                  <td className="px-4 py-3 text-gray-600">{h.time}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-surface-300">{h.time}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <ul className="mt-6 space-y-3 text-gray-700">
+          <ul className="mt-6 space-y-3 text-gray-700 dark:text-surface-200">
             {clinic.address && (
               <li className="flex gap-3">
                 <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" aria-hidden />
@@ -653,7 +602,7 @@ function Contact() {
               <li className="flex gap-3">
                 <MessageCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" aria-hidden />
                 <a href={clinic.zaloHref} target="_blank" rel="noreferrer" className="hover:text-brand-600">
-                  Nhắn Zalo cho lễ tân
+                  {t('uiEntry.landing.messageReception')}
                 </a>
               </li>
             )}
@@ -669,7 +618,7 @@ function Contact() {
               <li className="flex gap-3">
                 <UserRound className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" aria-hidden />
                 <a href={clinic.facebookUrl} target="_blank" rel="noreferrer" className="hover:text-brand-600">
-                  Fanpage Facebook
+                  {t('uiEntry.landing.facebook')}
                 </a>
               </li>
             )}
@@ -678,17 +627,17 @@ function Contact() {
         </div>
         {mapEmbed ? (
           <iframe
-            title={`Bản đồ đường đến ${clinic.name}`}
+            title={t('uiEntry.landing.mapTitle', { clinic: clinic.name })}
             src={mapEmbed}
             className="h-80 w-full rounded-2xl border-0 shadow-sm md:h-full md:min-h-[22rem]"
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
           />
         ) : (
-          <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-gray-100">
+          <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-2xl bg-white dark:bg-surface-900 p-8 text-center shadow-sm ring-1 ring-gray-100">
             <img src="/logo-icon.svg" alt="" className="h-16 w-16" />
-            <p className="mt-4 font-semibold text-gray-900">{clinic.name}</p>
-            <p className="mt-1 text-sm text-gray-500">{clinic.tagline}</p>
+            <p className="mt-4 font-semibold text-gray-900 dark:text-surface-100">{clinic.name}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{clinic.tagline}</p>
           </div>
         )}
       </div>
@@ -697,18 +646,19 @@ function Contact() {
 }
 
 function SiteFooter() {
+  const { t } = useTranslation();
   return (
-    <footer className="border-t border-gray-100 bg-white">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-gray-500 sm:flex-row">
+    <footer className="border-t border-gray-100 dark:border-surface-700 bg-white dark:bg-surface-900">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-gray-500 dark:text-surface-400 sm:flex-row">
         <p>
           © {new Date().getFullYear()} {clinic.name}
         </p>
         <div className="flex gap-5">
           <Link to="/booking/status" className="hover:text-brand-600">
-            Tra cứu lịch đã đặt
+            {t('uiEntry.landing.lookup')}
           </Link>
           <Link to="/login" className="hover:text-brand-600">
-            Nhân viên đăng nhập
+            {t('uiEntry.landing.staffLogin')}
           </Link>
         </div>
       </div>
@@ -717,6 +667,7 @@ function SiteFooter() {
 }
 
 export default function LandingPage() {
+  const { t } = useTranslation();
   const { data: services = [] } = useBookingOptions();
   const { data: prices = [], isLoading, isError } = usePriceList();
   const bookable = useMemo(() => new Set(services.map((s) => s.id)), [services]);
@@ -724,14 +675,14 @@ export default function LandingPage() {
 
   useEffect(() => {
     const previous = document.title;
-    document.title = `${clinic.name} — Đặt lịch khám răng online`;
+    document.title = t('uiEntry.landing.pageTitle', { clinic: clinic.name });
     return () => {
       document.title = previous;
     };
-  }, []);
+  }, [t]);
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-white dark:bg-surface-900 text-gray-900 dark:text-surface-100">
       <SiteHeader />
       <main>
         <Hero media={media} />
@@ -748,7 +699,7 @@ export default function LandingPage() {
         <a
           href={`tel:${clinic.phoneHref}`}
           className="fixed bottom-5 right-5 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg hover:bg-brand-600 md:hidden"
-          aria-label={`Gọi ${clinic.phone}`}
+          aria-label={t('uiEntry.landing.call', { phone: clinic.phone })}
         >
           <Phone className="h-6 w-6" aria-hidden />
         </a>

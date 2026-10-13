@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { clinicToday } from '@/lib/clinicTime';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,6 +23,7 @@ interface TreatmentsTabProps {
 }
 
 export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialTooth, onViewToothDetail }: TreatmentsTabProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTreatment, setEditingTreatment] = useState<Treatment | null>(null);
@@ -289,13 +291,13 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           </div>
         ))
       ) : (
-        <p className="text-sm text-gray-500">Chưa có điều trị nào</p>
+        <p className="text-sm text-gray-500">{t('uiClinical.treatmentEmpty')}</p>
       )}
 
       {/* Total */}
       {treatments.length > 0 && (
         <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <span className="font-medium text-gray-900">Tổng điều trị</span>
+          <span className="font-medium text-gray-900">{t('uiClinical.treatmentTotal')}</span>
           <span className="text-xl font-semibold text-gray-900">
             {formatCurrency(totalTreatment)}
           </span>
@@ -306,7 +308,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       {isEditable && (
         <Button onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4" />
-          Thêm điều trị
+          {t('uiClinical.treatmentAddButton')}
         </Button>
       )}
 
@@ -314,19 +316,19 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       <Modal
         isOpen={showAddModal || !!editingTreatment}
         onClose={resetForm}
-        title={editingTreatment ? 'Sửa điều trị' : 'Thêm điều trị'}
+        title={editingTreatment ? t('uiClinical.treatmentEdit') : t('uiClinical.treatmentAdd')}
       >
         <div className="space-y-4">
           <Input
-            label="Số răng"
+            label={t('uiClinical.toothNumber')}
             value={toothNumber}
             onChange={(e) => setToothNumber(String(e.target.value))}
-            placeholder="VD: 16 (răng sữa: 51–85)"
-            hint="Để trống nếu không gắn răng (khám, cạo vôi, X-quang toàn hàm…)"
+            placeholder={t('uiClinical.toothNumberExample')}
+            hint={t('uiClinical.toothNumberHint')}
           />
           {!editingTreatment && pickable.length > 0 && (
             <Select
-              label="Dịch vụ từ danh mục"
+              label={t('uiClinical.serviceCatalog')}
               value={serviceId}
               onChange={(e) => {
                 const sv = pickable.find((x) => x.serviceId === e.target.value);
@@ -344,7 +346,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                 }
               }}
               options={[
-                { value: '', label: '— Nhập tay —' },
+                { value: '', label: t('uiClinical.manualEntry') },
                 ...pickable.map((sv) => ({
                   value: sv.serviceId,
                   label: `${sv.name} (${sv.code})${sv.offCatalog ? ' — theo lịch hẹn, đã ngừng/không còn phân công' : ''}`,
@@ -353,14 +355,14 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             />
           )}
           <Input
-            label="Tên thủ thuật"
+            label={t('uiClinical.procedureName')}
             value={procedureName}
             onChange={(e) => setProcedureName(e.target.value)}
-            placeholder="VD: Hàn răng Composite"
+            placeholder={t('uiClinical.procedureExample')}
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Số lượng"
+              label={t('uiClinical.quantity')}
               type="number"
               min="1"
               max="100"
@@ -368,7 +370,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
               onChange={(e) => setQuantity(e.target.value)}
             />
             <Input
-              label="Đơn giá (VND)"
+              label={t('uiClinical.unitPrice')}
               type="number"
               step={1000}
               hint={
@@ -384,15 +386,15 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           </div>
           {needsReason && (
             <Input
-              label="Lý do đổi đơn giá *"
+              label={t('uiClinical.priceChangeReason')}
               value={priceReason}
               onChange={(e) => setPriceReason(e.target.value)}
-              placeholder="VD: Răng sữa, làm nhỏ hơn bình thường"
-              hint="Bắt buộc; được ghi vào nhật ký"
+              placeholder={t('uiClinical.priceReasonExample')}
+              hint={t('uiClinical.priceReasonHint')}
             />
           )}
           <Textarea
-            label="Ghi chú"
+            label={t('uiClinical.treatmentNote')}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
@@ -404,7 +406,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           {!editingTreatment && (
             <div className="space-y-2 border-t border-gray-100 pt-4">
               <label htmlFor="treatment-inventory-item" className="block text-sm font-medium text-gray-700">
-                Vật tư sử dụng
+                {t('uiClinical.suppliesUsed')}
               </label>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
@@ -412,7 +414,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                     id="treatment-inventory-item"
                     value={pickedItemId}
                     onChange={(e) => setPickedItemId(e.target.value)}
-                    placeholder="-- Chọn vật tư --"
+                    placeholder={t('uiClinical.selectSupply')}
                     options={inventoryItems.map((item) => ({
                       value: item.id,
                       label: `${item.name} (còn ${item.quantityOnHand} ${item.unit})`,
@@ -425,7 +427,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                     type="number"
                     min="0.01"
                     step="0.01"
-                    aria-label="Số lượng vật tư sử dụng"
+                    aria-label={t('uiClinical.supplyQuantity')}
                     value={pickedQty}
                     onChange={(e) => setPickedQty(e.target.value)}
                   />
@@ -433,7 +435,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                 <Button
                   type="button"
                   variant="outline"
-                  aria-label="Thêm vật tư vào danh sách"
+                  aria-label={t('uiClinical.addSupply')}
                   onClick={addInventoryUsage}
                   disabled={!pickedItemId}
                 >
@@ -478,7 +480,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                 (needsReason && priceReason.trim().length < 3)
               }
             >
-              {editingTreatment ? 'Lưu' : 'Thêm'}
+              {editingTreatment ? t('uiClinical.save') : t('uiClinical.add')}
             </Button>
           </div>
         </div>
@@ -488,13 +490,13 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && deleteMutation.mutate(confirmDelete.id)}
-        title="Xoá dịch vụ?"
+        title={t('uiClinical.deleteService')}
         description={
           confirmDelete
-            ? `Dịch vụ "${confirmDelete.procedureName}" sẽ bị xoá khỏi phiếu điều trị. Hành động này không thể hoàn tác.`
+            ? t('uiClinical.confirmDeleteServiceText', { name: confirmDelete.procedureName })
             : ''
         }
-        confirmLabel="Xoá"
+        confirmLabel={t('uiClinical.deleteServiceConfirm')}
         confirmVariant="danger"
         isLoading={deleteMutation.isPending}
       />

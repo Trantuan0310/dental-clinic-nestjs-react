@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Pencil, Plus, Printer } from 'lucide-react';
@@ -23,6 +24,7 @@ interface PrescriptionsTabProps {
 }
 
 export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [diagnosis, setDiagnosis] = useState('');
@@ -146,7 +148,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
           <div key={prescription.id} className="print-document rounded-lg border border-gray-200 p-4">
             <div className="mb-4 hidden border-b border-gray-300 pb-3 text-center print:block">
               <ClinicPrintHeading />
-              <p className="text-sm">ĐƠN THUỐC</p>
+              <p className="text-sm">{t('uiClinical.prescriptionTitle')}</p>
               <p className="mt-2 text-left text-sm">
                 Bệnh nhân: <strong>{encounter.patientName}</strong> ({encounter.patientCode})
               </p>
@@ -168,7 +170,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  aria-label="In đơn thuốc"
+                  aria-label={t('uiClinical.printPrescription')}
                   className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 >
                   <Printer className="h-4 w-4" />
@@ -180,11 +182,11 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
               <table className="mt-4 w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
-                    <th className="pb-2 font-medium text-gray-600">Thuốc</th>
-                    <th className="pb-2 font-medium text-gray-600">Liều</th>
-                    <th className="pb-2 font-medium text-gray-600">Tần suất</th>
-                    <th className="pb-2 font-medium text-gray-600">Số lượng</th>
-                    <th className="pb-2 font-medium text-gray-600">Thời gian</th>
+                    <th className="pb-2 font-medium text-gray-600">{t('uiClinical.medication')}</th>
+                    <th className="pb-2 font-medium text-gray-600">{t('uiClinical.dose')}</th>
+                    <th className="pb-2 font-medium text-gray-600">{t('uiClinical.frequency')}</th>
+                    <th className="pb-2 font-medium text-gray-600">{t('uiClinical.quantity')}</th>
+                    <th className="pb-2 font-medium text-gray-600">{t('uiClinical.duration')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -207,19 +209,19 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
 
             {prescription.instructions && (
               <p className="mt-3 text-sm text-gray-600">
-                <span className="font-medium">Hướng dẫn:</span> {prescription.instructions}
+                <span className="font-medium">{t('uiClinical.instructions')}:</span> {prescription.instructions}
               </p>
             )}
 
             {prescription.followUpNote && (
               <p className="mt-2 text-sm text-amber-600">
-                <span className="font-medium">Tái khám:</span> {prescription.followUpNote}
+                <span className="font-medium">{t('uiClinical.followUp')}:</span> {prescription.followUpNote}
               </p>
             )}
           </div>
         ))
       ) : (
-        <p className="text-sm text-gray-500">Chưa có đơn thuốc nào</p>
+        <p className="text-sm text-gray-500">{t('uiClinical.prescriptionEmpty')}</p>
       )}
 
       {/* Add Button */}
@@ -234,12 +236,12 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
       <Modal
         isOpen={showAddModal && allergyConflicts === null}
         onClose={resetForm}
-        title={editingVersion !== undefined ? 'Sửa đơn thuốc' : 'Tạo đơn thuốc'}
+        title={editingVersion !== undefined ? t('uiClinical.prescriptionEdit') : t('uiClinical.prescriptionCreate')}
         size="lg"
       >
         <div className="space-y-4">
           <Input
-            label="Chẩn đoán"
+            label={t('uiClinical.diagnosisLabel')}
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
             placeholder="VD: Viêm quanh răng"
@@ -253,21 +255,21 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
               <div key={index} className="mb-3 rounded border border-gray-200 p-3">
                 <div className="grid grid-cols-2 gap-3">
                   <Input
-                    label="Tên thuốc"
+                    label={t('uiClinical.medicationName')}
                     value={item.drugName}
                     maxLength={255}
                     onChange={(e) => updateItem(index, 'drugName', e.target.value)}
                     placeholder="VD: Amoxicillin 500mg"
                   />
                   <Input
-                    label="Liều"
+                    label={t('uiClinical.dose')}
                     value={item.dosage}
                     maxLength={100}
                     onChange={(e) => updateItem(index, 'dosage', e.target.value)}
                     placeholder="VD: 500mg"
                   />
                   <Input
-                    label="Tần suất"
+                    label={t('uiClinical.frequency')}
                     value={item.frequency}
                     maxLength={100}
                     onChange={(e) => updateItem(index, 'frequency', e.target.value)}
@@ -275,7 +277,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                   />
                   <div className="grid grid-cols-3 gap-2">
                     <Input
-                      label="Số lượng"
+                      label={t('uiClinical.quantity')}
                       type="number"
                       min="1"
                       max="10000"
@@ -286,14 +288,14 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                       placeholder="15"
                     />
                     <Input
-                      label="Đơn vị"
+                      label={t('uiClinical.unit')}
                       value={item.unit || ''}
                       maxLength={50}
                       onChange={(e) => updateItem(index, 'unit', e.target.value)}
                       placeholder="viên"
                     />
                     <Input
-                      label="Số ngày"
+                      label={t('uiClinical.days')}
                       type="number"
                       min="1"
                       max="365"
@@ -321,7 +323,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
           </div>
 
           <Textarea
-            label="Hướng dẫn sử dụng"
+            label={t('uiClinical.instructions')}
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="VD: Uống sau ăn..."
@@ -329,7 +331,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
           />
 
           <Input
-            label="Ghi chú tái khám"
+            label={t('uiClinical.followUpNote')}
             value={followUpNote}
             onChange={(e) => setFollowUpNote(e.target.value)}
             placeholder="VD: Sau 1 tuần nếu không giảm"
@@ -344,7 +346,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
               isLoading={createMutation.isPending}
               disabled={items.length === 0 || items.some((item) => !item.drugName.trim())}
             >
-              {editingVersion !== undefined ? 'Lưu đơn thuốc' : 'Tạo đơn thuốc'}
+              {editingVersion !== undefined ? t('uiClinical.prescriptionSave') : t('uiClinical.prescriptionCreate')}
             </Button>
           </div>
         </div>
@@ -357,14 +359,14 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
         title={
           <span className="flex items-center gap-2 text-red-700">
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />
-            Cảnh báo dị ứng thuốc
+            {t('uiClinical.allergyAlertTitle')}
           </span>
         }
         size="md"
       >
         <div className="space-y-4">
           <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-            <p className="font-medium">Bệnh nhân có ghi nhận dị ứng trùng với thuốc trong đơn:</p>
+            <p className="font-medium">{t('uiClinical.allergyConflict')}</p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {(allergyConflicts ?? []).map((c, i) => (
                 <li key={`${c.lineIndex}-${c.allergy}-${i}`}>
@@ -375,16 +377,16 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             </ul>
           </div>
           <Textarea
-            label="Lý do vẫn kê đơn"
+            label={t('uiClinical.keepPrescriptionReasonLabel')}
             value={overrideReason}
             onChange={(e) => setOverrideReason(e.target.value)}
             placeholder="VD: Đã test da âm tính, bệnh nhân đồng ý và được theo dõi"
             rows={3}
-            hint={`Tối thiểu ${MIN_OVERRIDE_REASON} ký tự. Lý do được ghi vào nhật ký kiểm toán.`}
+            hint={t('uiClinical.minAuditHint', { count: MIN_OVERRIDE_REASON })}
           />
           <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
             <Button variant="outline" onClick={backToForm}>
-              Quay lại sửa đơn
+              {t('uiClinical.returnToEditPrescription')}
             </Button>
             <Button
               variant="danger"
@@ -392,7 +394,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
               isLoading={createMutation.isPending}
               disabled={overrideReason.trim().length < MIN_OVERRIDE_REASON}
             >
-              Vẫn kê đơn
+              {t('uiClinical.prescribeAnyway')}
             </Button>
           </div>
         </div>

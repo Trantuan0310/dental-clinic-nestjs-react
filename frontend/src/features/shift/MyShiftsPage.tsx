@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, CalendarPlus } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -42,6 +43,7 @@ function canCancel(s: ShiftRegistration): { allowed: boolean; reason?: string } 
 }
 
 export default function MyShiftsPage() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<'upcoming' | 'past' | 'cancelled'>('upcoming');
   const currentUserId = useAuthStore((s) => s.user?.id);
   // Backend treats any actor holding shift.read.any (e.g. receptionist, for
@@ -86,7 +88,7 @@ export default function MyShiftsPage() {
     setActionError(null);
     try {
       await cancel.mutateAsync(confirmCancel.id);
-      notify.success('Đã hủy ca');
+      notify.success(t('uiWorkforce.shiftCancelled'));
       setConfirmCancel(null);
     } catch (err) {
       setActionError(getApiErrorMessage(err, 'Không thể hủy ca'));
@@ -96,12 +98,12 @@ export default function MyShiftsPage() {
   const columns: ColumnDef<ShiftRegistration>[] = [
     {
       accessorKey: 'date',
-      header: 'Ngày',
+      header: t('uiWorkforce.date'),
       cell: ({ row }) => <span className="font-medium">{formatDate(row.original.date)}</span>,
     },
     {
       id: 'time',
-      header: 'Khung giờ',
+      header: t('uiWorkforce.timeSlot'),
       cell: ({ row }) => (
         <span className="font-mono text-xs">
           {row.original.startTime} – {row.original.endTime}
@@ -110,7 +112,7 @@ export default function MyShiftsPage() {
     },
     {
       accessorKey: 'maxEncounters',
-      header: 'Số ca tối đa',
+      header: t('uiWorkforce.maxShifts'),
       cell: ({ row }) =>
         row.original.maxEncounters ? (
           <span className="font-mono">{row.original.maxEncounters}</span>
@@ -120,12 +122,12 @@ export default function MyShiftsPage() {
     },
     {
       accessorKey: 'status',
-      header: 'Trạng thái',
+      header: t('uiWorkforce.status'),
       cell: ({ row }) => <ShiftStatusBadge status={row.original.status} />,
     },
     {
       accessorKey: 'notes',
-      header: 'Ghi chú',
+      header: t('uiWorkforce.notes'),
       cell: ({ row }) =>
         row.original.notes ? <span className="line-clamp-2 max-w-xs text-xs text-gray-600">{row.original.notes}</span> : <span className="text-gray-400">—</span>,
     },
@@ -144,7 +146,7 @@ export default function MyShiftsPage() {
               onClick={() => setConfirmCancel(row.original)}
               title={check.reason}
             >
-              Hủy
+              {t('uiWorkforce.cancel')}
             </Button>
           </PermissionGuard>
         );
@@ -153,20 +155,20 @@ export default function MyShiftsPage() {
   ];
 
   const tabs: TabItem[] = [
-    { id: 'upcoming', label: 'Sắp tới' },
-    { id: 'past', label: 'Đã qua' },
-    { id: 'cancelled', label: 'Đã hủy' },
+    { id: 'upcoming', label: t('uiWorkforce.upcoming') },
+    { id: 'past', label: t('uiWorkforce.past') },
+    { id: 'cancelled', label: t('uiWorkforce.cancelled') },
   ];
 
   return (
     <div>
       <PageHeader
-        title="Ca đăng ký của tôi"
-        description="Lịch sử các ca tự đăng ký (ngoài lịch cố định)"
+        title={t('uiWorkforce.myShifts')}
+        description={t('uiWorkforce.myShiftsDescription')}
         actions={
           <PermissionGuard permission="shift.register">
             <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
-              Đăng ký ca mới
+              {t('uiWorkforce.registerShift')}
             </Button>
           </PermissionGuard>
         }
@@ -186,19 +188,19 @@ export default function MyShiftsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={<CalendarPlus className="h-6 w-6" />}
-            title="Chưa có ca nào"
+            title={t('uiWorkforce.noShifts')}
             description={
               tab === 'upcoming'
-                ? 'Bạn chưa đăng ký ca nào sắp tới.'
+                ? t('uiWorkforce.noUpcomingShifts')
                 : tab === 'past'
-                  ? 'Chưa có ca nào trong quá khứ.'
-                  : 'Chưa hủy ca nào.'
+                  ? t('uiWorkforce.noPastShifts')
+                  : t('uiWorkforce.noCancelledShifts')
             }
             action={
               tab === 'upcoming' && (
                 <PermissionGuard permission="shift.register">
                   <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowRegisterModal(true)}>
-                    Đăng ký ca mới
+                    {t('uiWorkforce.registerShift')}
                   </Button>
                 </PermissionGuard>
               )
@@ -213,18 +215,18 @@ export default function MyShiftsPage() {
         open={!!confirmCancel}
         onClose={() => setConfirmCancel(null)}
         onConfirm={handleCancel}
-        title="Hủy ca đăng ký?"
+        title={t('uiWorkforce.cancelShiftQuestion')}
         description={
           confirmCancel ? (
             <span>
-              Ca ngày <strong>{formatDate(confirmCancel.date)}</strong> ({confirmCancel.startTime}–
-              {confirmCancel.endTime}) sẽ bị hủy. Hành động này không thể hoàn tác.
+              {t('uiWorkforce.shiftCancelConfirmation')} <strong>{formatDate(confirmCancel.date)}</strong> ({confirmCancel.startTime}–
+              {confirmCancel.endTime}) {t('uiWorkforce.irreversible')}
             </span>
           ) : (
             ''
           )
         }
-        confirmLabel="Xác nhận hủy"
+        confirmLabel={t('uiWorkforce.confirmCancel')}
         confirmVariant="danger"
         isLoading={cancel.isPending}
       />

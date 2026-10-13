@@ -49,13 +49,14 @@ export const useThemeStore = create<ThemeState>()(
     {
       name: 'gensmile.theme',
       partialize: (state) => ({ mode: state.mode }),
-      onRehydrateStorage: () => (state) => {
-        // After rehydration, sync DOM with stored preference.
-        if (state) {
-          const resolved = state.mode === 'system' ? getSystemPref() : state.mode;
-          applyDomClass(resolved);
-          state.resolved = resolved;
-        }
+      merge: (persisted, current) => {
+        const stored = persisted as Partial<ThemeState> | undefined;
+        const mode = stored?.mode === 'light' || stored?.mode === 'dark' || stored?.mode === 'system'
+          ? stored.mode
+          : current.mode;
+        const resolved = mode === 'system' ? getSystemPref() : mode;
+        applyDomClass(resolved);
+        return { ...current, ...stored, mode, resolved };
       },
     },
   ),

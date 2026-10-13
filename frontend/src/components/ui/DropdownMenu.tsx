@@ -2,6 +2,7 @@ import { cn } from '@/lib/cn';
 import { type ReactNode } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 import { useState, useRef, useEffect, useId } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface DropdownMenuProps {
   trigger?: ReactNode;
@@ -16,6 +17,7 @@ export function DropdownMenu({
   align = 'right',
   className,
 }: DropdownMenuProps) {
+  const { t } = useTranslation();
   const menuId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ export function DropdownMenu({
     >
       <button
         ref={triggerRef}
-        aria-label="Tùy chọn"
+        aria-label={t('uiCommon.action.options')}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={isOpen ? menuId : undefined}
@@ -84,7 +86,7 @@ export function DropdownMenu({
         <div
           id={menuId}
           role="menu"
-          aria-label="Tùy chọn"
+          aria-label={t('uiCommon.action.options')}
           // Close on any click inside (item onClick fires first, then this
           // bubbles) — without this, the menu stays visually open after
           // picking an action, e.g. behind a modal it just triggered.
