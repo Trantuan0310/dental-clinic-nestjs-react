@@ -28,6 +28,18 @@ export interface AppointmentRescheduledEvent {
   byClinic?: boolean;
 }
 
+/**
+ * A visit booked by staff (phone, desk) — not one confirmed from an online
+ * request, which the booking module emails itself. Emitted after commit;
+ * listeners must not throw.
+ */
+export const APPOINTMENT_CREATED_EVENT = 'appointment.created';
+
+export interface AppointmentCreatedEvent {
+  appointmentId: string;
+  source: string;
+}
+
 export const ENCOUNTER_CLOSED_EVENT = 'encounter.closed';
 
 export interface InventoryUsageSnapshot {

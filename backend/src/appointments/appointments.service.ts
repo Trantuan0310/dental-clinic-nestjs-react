@@ -29,6 +29,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AppointmentCancelledEvent,
   APPOINTMENT_CANCELLED_EVENT,
+  APPOINTMENT_CREATED_EVENT,
+  AppointmentCreatedEvent,
   APPOINTMENT_RESCHEDULED_EVENT,
   AppointmentRescheduledEvent,
   PATIENT_CLINICAL_DATA_CHANGED_EVENT,
@@ -388,9 +390,16 @@ export class AppointmentsService {
 
       return created;
     };
-    return fromBookingRequest?.tx
-      ? write(fromBookingRequest.tx)
-      : this.prisma.$transaction(write, LOCKING_TX_OPTIONS);
+    if (fromBookingRequest?.tx) return write(fromBookingRequest.tx);
+    const created = await this.prisma.$transaction(write, LOCKING_TX_OPTIONS);
+    // An online request's confirmation is emailed by the booking module.
+    if (!fromBookingRequest) {
+      this.events.emit(APPOINTMENT_CREATED_EVENT, {
+        appointmentId: created.id,
+        source: created.source,
+      } satisfies AppointmentCreatedEvent);
+    }
+    return created;
   }
 
   // See domain/advisory-lock.ts.
