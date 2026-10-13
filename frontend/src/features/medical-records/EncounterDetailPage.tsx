@@ -189,7 +189,7 @@ export default function EncounterDetailPage() {
             {encounter.status === 'in_progress' && (
               <span className="ml-2 flex items-center gap-1 text-amber-600">
                 <Clock className="h-4 w-4" />
-                {elapsedMinutes} phút
+                {t('uiClinical.encounterMinutes', { count: elapsedMinutes })}
               </span>
             )}
           </p>
@@ -427,7 +427,7 @@ export default function EncounterDetailPage() {
         title={
           <span className="flex items-center gap-2 text-red-700">
             <AlertTriangle className="h-5 w-5" aria-hidden="true" />
-            Cảnh báo dị ứng thuốc
+            {t('uiClinical.allergyAlertTitle')}
           </span>
         }
         size="md"
@@ -435,24 +435,24 @@ export default function EncounterDetailPage() {
         <div className="space-y-4">
           <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
             <p className="font-medium">
-              Dị ứng ghi nhận sau khi kê đơn trùng với thuốc trong đơn hiện tại:
+              {t('uiClinical.allergyPrescriptionWarning')}
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {(closeConflicts ?? []).map((c, i) => (
                 <li key={`${c.lineIndex}-${c.allergy}-${i}`}>
-                  <strong>{c.drugName}</strong> — dị ứng: <strong>{c.allergy}</strong>
+                  <strong>{c.drugName}</strong> — {t('uiClinical.allergyLabel')} <strong>{c.allergy}</strong>
                   {c.drugClass ? ` (${c.drugClass})` : ''}
                 </li>
               ))}
             </ul>
           </div>
           <Textarea
-            label="Lý do vẫn giữ đơn thuốc"
+            label={t('uiClinical.keepPrescriptionReason')}
             value={closeOverrideReason}
             onChange={(e) => setCloseOverrideReason(e.target.value)}
-            placeholder="VD: Đã hỏi lại bệnh nhân, từng dùng thuốc này không phản ứng"
+            placeholder={t('uiClinical.keepPrescriptionExample')}
             rows={3}
-            hint={`Tối thiểu ${MIN_OVERRIDE_REASON} ký tự. Lý do được ghi vào nhật ký kiểm toán.`}
+            hint={t('uiClinical.minAuditReason', { count: MIN_OVERRIDE_REASON })}
           />
           <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
             <Button
@@ -462,7 +462,7 @@ export default function EncounterDetailPage() {
                 setActiveTab('prescriptions');
               }}
             >
-              Sửa đơn thuốc
+              {t('uiClinical.editPrescription')}
             </Button>
             <Button
               variant="danger"
@@ -475,7 +475,7 @@ export default function EncounterDetailPage() {
               isLoading={closeMutation.isPending}
               disabled={closeOverrideReason.trim().length < MIN_OVERRIDE_REASON}
             >
-              Vẫn đóng phiên
+              {t('uiClinical.closeAnyway')}
             </Button>
           </div>
         </div>

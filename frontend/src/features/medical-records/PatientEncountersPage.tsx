@@ -1,14 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText, ArrowRight } from 'lucide-react';
 import { Button, Card, StatusBadge, EmptyState, PageLoader } from '@/components/ui';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { formatDate } from '@/lib/format';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { usePatientEncounters } from './medicalRecordsApi';
 
 export default function PatientEncountersPage() {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { data: encounters, isLoading } = usePatientEncounters(patientId);
 
   // GET /patients/:id/encounters accepts encounter.read.any/.own/.basic and
@@ -27,8 +28,8 @@ export default function PatientEncountersPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Lịch sử khám</h1>
-          <p className="mt-1 text-sm text-gray-500">Mã BN: {patientId}</p>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiClinical.encounterHistory')}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.patientCode')}: {patientId}</p>
         </div>
       </div>
 
@@ -40,8 +41,8 @@ export default function PatientEncountersPage() {
         ) : !encounters || encounters.length === 0 ? (
           <EmptyState
             icon={<FileText className="h-10 w-10 text-gray-400" />}
-            title="Chưa có lịch sử khám"
-            description="Bệnh nhân này chưa từng được khám"
+            title={t('uiClinical.encounterHistoryEmpty')}
+            description={t('uiClinical.patientNotSeen')}
           />
         ) : (
           <div className="divide-y divide-gray-100">
@@ -60,7 +61,7 @@ export default function PatientEncountersPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-gray-900">
-                        {format(new Date(encounter.startedAt), 'dd/MM/yyyy', { locale: vi })}
+                        {formatDate(encounter.startedAt)}
                       </p>
                       <StatusBadge status={encounter.status} />
                     </div>

@@ -98,7 +98,7 @@ export function PayrollListPage() {
           <div className="p-6">
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-12 animate-pulse rounded bg-gray-100" />
+                <div key={i} className="h-12 animate-pulse rounded bg-gray-100 dark:bg-surface-800" />
               ))}
             </div>
           </div>
@@ -111,7 +111,7 @@ export function PayrollListPage() {
           />
         ) : rows.length === 0 ? (
           <EmptyState
-            icon={<Calendar className="h-10 w-10 text-gray-400" />}
+            icon={<Calendar className="h-10 w-10 text-gray-400 dark:text-surface-500" />}
             title={t('uiWorkforce.noPayrollPeriods')}
             description={t('uiWorkforce.createFirstPeriod')}
             action={{
@@ -219,7 +219,7 @@ export function PayrollListPage() {
               { value: 'WEEKLY', label: t('uiWorkforce.weekly') },
             ]}
           />
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-surface-700">
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>
               {t('uiWorkforce.cancel')}
             </Button>

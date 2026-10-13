@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { Phone } from 'lucide-react';
 import { clinic } from '@/config/clinic';
+import { useTranslation } from 'react-i18next';
 
 /** Header shared by the public booking pages: logo back to the home page, hotline. */
 export function PublicTopBar({ children }: { children?: React.ReactNode }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-      <Link to="/" className="flex items-center gap-2" aria-label={`${clinic.name} — Trang chủ`}>
+      <Link to="/" className="flex items-center gap-2" aria-label={`${clinic.name} — ${t('uiCommon.home')}`}>
         <img src="/logo-icon.svg" alt="" className="h-8 w-8" />
         <span className="text-lg font-bold tracking-wide text-brand-600">GENSMILE</span>
       </Link>
@@ -16,7 +18,7 @@ export function PublicTopBar({ children }: { children?: React.ReactNode }) {
           <a href={`tel:${clinic.phoneHref}`} className="inline-flex items-center gap-1.5 text-brand-600">
             <Phone className="h-4 w-4" aria-hidden />
             <span className="hidden sm:inline">{clinic.phone}</span>
-            <span className="sm:hidden">Gọi</span>
+            <span className="sm:hidden">{t('uiScheduling.call')}</span>
           </a>
         )}
       </div>

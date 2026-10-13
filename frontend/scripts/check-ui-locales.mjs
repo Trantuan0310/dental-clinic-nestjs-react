@@ -1,5 +1,4 @@
 // Run from frontend. Validate resource parity, interpolation, and literal key uses.
-import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
@@ -14,16 +13,18 @@ function flatten(value,prefix='',out={}) {
  return out;
 }
 const resources={};
+const issues=[];
 for(const name of modules) {
  const source=readFileSync(`src/locales/${name}.ts`,'utf8');
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
  const {vi,en}=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
  const a=flatten(vi),b=flatten(en);
- assert.deepEqual(Object.keys(a).sort(),Object.keys(b).sort(),`${name}: language key mismatch`);
+ for(const key of Object.keys(a))if(!(key in b))issues.push(`${name}: missing en ${key}`);
+ for(const key of Object.keys(b))if(!(key in a))issues.push(`${name}: missing vi ${key}`);
  for(const key of Object.keys(a)) {
   const params=s=>[...String(s).matchAll(/{{\s*([^}]+)\s*}}/g)].map(m=>m[1].trim()).sort();
-  assert.deepEqual(params(a[key]),params(b[key]),`${name}.${key}: interpolation mismatch`);
-  assert.ok(String(b[key]).trim(),`${name}.${key}: empty English translation`);
+  if(key in b && params(a[key]).join('|')!==params(b[key]).join('|'))issues.push(`${name}.${key}: interpolation mismatch`);
+  if(key in b && !String(b[key]).trim())issues.push(`${name}.${key}: empty English translation`);
  }
  resources[name]={vi,en};
 }
@@ -36,7 +37,7 @@ for(const file of walk('src').filter(p=>/\.(ts|tsx)$/.test(p)&&!p.includes('/loc
    const key=node.arguments[0].text;
    if(/^ui(Common|Clinical|Entry|Operations|Scheduling|Workforce)\./.test(key)) {
     const [module,...parts]=key.split('.');
-    for(const locale of ['vi','en'])assert.notEqual(parts.reduce((o,p)=>o?.[p],resources[module][locale]),undefined,`${file}: missing ${locale} ${key}`);
+    for(const locale of ['vi','en'])if(parts.reduce((o,p)=>o?.[p],resources[module][locale])===undefined)issues.push(`${file}: missing ${locale} ${key}`);
     checked++;
    }
   }
@@ -44,4 +45,5 @@ for(const file of walk('src').filter(p=>/\.(ts|tsx)$/.test(p)&&!p.includes('/loc
  }
  visit(source);
 }
-console.log(`PASS ${modules.length} locale pairs, interpolation parity, ${checked} literal key references`);
+if(issues.length){console.error([...new Set(issues)].join('\n'));process.exitCode=1;}
+else console.log(`PASS ${modules.length} locale pairs, interpolation parity, ${checked} literal key references`);

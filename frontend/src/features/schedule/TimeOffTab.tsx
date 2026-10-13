@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Plus, CalendarOff } from 'lucide-react';
 import { Badge, Button, Card, Select, Input, Textarea, Modal, EmptyState } from '@/components/ui';
 import type { BadgeProps } from '@/components/ui';
+import { useTranslation } from 'react-i18next';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -26,19 +27,8 @@ import type {
   TimeOffType,
 } from '@/types/schedule';
 
-const TIME_OFF_TYPE_LABELS: Record<TimeOffType, string> = {
-  VACATION: 'Nghỉ phép',
-  SICK: 'Nghỉ ốm',
-  TRAINING: 'Đào tạo',
-  OTHER: 'Khác',
-};
-
-const STATUS_LABEL: Record<TimeOffStatus, string> = {
-  PENDING: 'Chờ duyệt',
-  APPROVED: 'Đã duyệt',
-  REJECTED: 'Từ chối',
-  CANCELLED: 'Đã hủy',
-};
+const TIME_OFF_TYPE_KEYS: Record<TimeOffType, string> = { VACATION: 'vacation', SICK: 'sickLeave', TRAINING: 'training', OTHER: 'other' };
+const STATUS_KEYS: Record<TimeOffStatus, string> = { PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected', CANCELLED: 'cancelled' };
 
 const STATUS_VARIANT: Record<TimeOffStatus, BadgeProps['variant']> = {
   PENDING: 'warning',
@@ -48,6 +38,7 @@ const STATUS_VARIANT: Record<TimeOffStatus, BadgeProps['variant']> = {
 };
 
 export function TimeOffTab() {
+  const { t: tr } = useTranslation();
   const [dentistFilter, setDentistFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<TimeOffStatus | ''>('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -83,12 +74,12 @@ export function TimeOffTab() {
         onSuccess: (result) => {
           notify.success(
             action === 'approve'
-              ? 'Đã duyệt nghỉ phép'
+              ? tr('uiScheduling.timeOffApprovedToast')
               : action === 'reject'
-                ? 'Đã từ chối đơn nghỉ phép'
+                ? tr('uiScheduling.timeOffRejectedToast')
                 : result.endedEarly
-                  ? `Đã kết thúc nghỉ phép lúc ${formatDateTime(result.endAt)} — thời gian đã nghỉ vẫn được ghi nhận`
-                  : 'Đã hủy nghỉ phép',
+                  ? tr('uiScheduling.timeOffEndedToast', { time: formatDateTime(result.endAt) })
+                  : tr('uiScheduling.timeOffCancelledToast'),
           );
           setRejecting(null);
           setRejectNote('');
@@ -97,7 +88,7 @@ export function TimeOffTab() {
           setCancelNote('');
           if (action === 'approve' && hasFollowUp(result)) setAffected(result);
         },
-        onError: (err) => notify.error(getApiErrorMessage(err, 'Không thực hiện được')),
+        onError: (err) => notify.error(getApiErrorMessage(err, tr('uiScheduling.timeOffActionError'))),
       },
     );
 
@@ -117,23 +108,23 @@ export function TimeOffTab() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <Select
-            aria-label="Lọc theo bác sĩ"
+            aria-label={tr('uiScheduling.filterByDentist')}
             value={dentistFilter}
             onChange={(e) => setDentistFilter(e.target.value)}
             options={[
-              { value: '', label: 'Tất cả bác sĩ' },
+              { value: '', label: tr('uiScheduling.allDentists') },
               ...dentists.map((d) => ({ value: d.id, label: d.fullName })),
             ]}
           />
           <Select
-            aria-label="Lọc theo trạng thái"
+            aria-label={tr('uiScheduling.filterByStatus')}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as TimeOffStatus | '')}
             options={[
-              { value: '', label: 'Mọi trạng thái' },
-              ...(Object.keys(STATUS_LABEL) as TimeOffStatus[]).map((v) => ({
+              { value: '', label: tr('uiScheduling.allStatuses') },
+              ...(Object.keys(STATUS_KEYS) as TimeOffStatus[]).map((v) => ({
                 value: v,
-                label: STATUS_LABEL[v],
+                label: tr(`uiScheduling.timeOffStatus_${STATUS_KEYS[v]}`),
               })),
             ]}
           />
@@ -141,7 +132,7 @@ export function TimeOffTab() {
         <PermissionGuard anyOf={['schedule.write', 'time_off.record_urgent']}>
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" />
-            {canApprove ? 'Thêm nghỉ phép' : canRecordUrgent ? 'Ghi bác sĩ vắng hôm nay' : 'Xin nghỉ phép'}
+            {canApprove ? tr('uiScheduling.addTimeOff') : canRecordUrgent ? tr('uiScheduling.recordAbsenceToday') : tr('uiScheduling.requestTimeOff')}
           </Button>
         </PermissionGuard>
       </div>
@@ -151,9 +142,9 @@ export function TimeOffTab() {
       ) : !timeOffs || timeOffs.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<CalendarOff className="h-10 w-10 text-gray-400" />}
-            title="Chưa có lịch nghỉ nào"
-            description="Nghỉ phép đã duyệt sẽ chặn đặt lịch hẹn trong khoảng thời gian đó; đơn chờ duyệt thì chưa chặn."
+            icon={<CalendarOff className="h-10 w-10 text-gray-400 dark:text-surface-500" />}
+            title={tr('uiScheduling.noTimeOff')}
+            description={tr('uiScheduling.noTimeOffHint')}
           />
         </Card>
       ) : (
@@ -162,43 +153,43 @@ export function TimeOffTab() {
             <table className="table-base">
               <thead>
                 <tr>
-                  <th>Bác sĩ</th>
-                  <th>Loại</th>
-                  <th>Từ</th>
-                  <th>Đến</th>
-                  <th>Lý do</th>
-                  <th>Trạng thái</th>
+                  <th>{tr('uiScheduling.dentist')}</th>
+                  <th>{tr('uiScheduling.type')}</th>
+                  <th>{tr('uiScheduling.from')}</th>
+                  <th>{tr('uiScheduling.to')}</th>
+                  <th>{tr('uiScheduling.reason')}</th>
+                  <th>{tr('uiScheduling.status')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {timeOffs.map((t) => (
                   <tr key={t.id}>
-                    <td className="font-medium text-gray-900">{dentistNameById.get(t.dentistId) ?? '—'}</td>
-                    <td>{TIME_OFF_TYPE_LABELS[t.type]}</td>
+                    <td className="font-medium text-gray-900 dark:text-surface-100">{dentistNameById.get(t.dentistId) ?? '—'}</td>
+                    <td>{tr(`uiScheduling.timeOffType_${TIME_OFF_TYPE_KEYS[t.type]}`)}</td>
                     <td>{formatDateTime(t.startAt)}</td>
                     <td>{formatDateTime(t.endAt)}</td>
-                    <td className="text-gray-500">
-                      {t.reasonHidden ? <span className="italic">Chỉ quản trị xem</span> : t.reason || '—'}
+                    <td className="text-gray-500 dark:text-surface-400">
+                      {t.reasonHidden ? <span className="italic">{tr('uiScheduling.adminOnly')}</span> : t.reason || '—'}
                     </td>
                     <td>
-                      <Badge variant={STATUS_VARIANT[t.status]}>{STATUS_LABEL[t.status]}</Badge>
-                      {t.decisionNote && <p className="mt-1 text-xs text-gray-500">{t.decisionNote}</p>}
+                      <Badge variant={STATUS_VARIANT[t.status]}>{tr(`uiScheduling.timeOffStatus_${STATUS_KEYS[t.status]}`)}</Badge>
+                      {t.decisionNote && <p className="mt-1 text-xs text-gray-500 dark:text-surface-400">{t.decisionNote}</p>}
                     </td>
                     <td className="whitespace-nowrap text-right">
                       {t.status === 'PENDING' && canApprove && (
                         <>
                           <Button size="sm" variant="ghost" onClick={() => setApproving(t)}>
-                            Duyệt
+                            {tr('uiScheduling.approve')}
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => setRejecting(t)}>
-                            Từ chối
+                            {tr('uiScheduling.reject')}
                           </Button>
                         </>
                       )}
                       {canExtend(t) && (
                         <Button size="sm" variant="ghost" onClick={() => setExtending(t)}>
-                          Sửa giờ kết thúc
+                          {tr('uiScheduling.editTimeOffEnd')}
                         </Button>
                       )}
                       {canCancel(t) && (
@@ -207,7 +198,7 @@ export function TimeOffTab() {
                           variant="ghost"
                           onClick={() => (t.status === 'PENDING' ? run(t, 'cancel') : setCancelling(t))}
                         >
-                          {running(t) ? 'Kết thúc sớm' : 'Hủy'}
+                          {running(t) ? tr('uiScheduling.endEarly') : tr('uiScheduling.cancel')}
                         </Button>
                       )}
                     </td>
@@ -221,7 +212,7 @@ export function TimeOffTab() {
 
       <CreateTimeOffModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
 
-      <Modal open={rejecting !== null} onClose={() => setRejecting(null)} title="Từ chối nghỉ phép" size="sm">
+      <Modal open={rejecting !== null} onClose={() => setRejecting(null)} title={tr('uiScheduling.rejectTimeOff')} size="sm">
         <form
           className="space-y-4"
           onSubmit={(e) => {
@@ -230,7 +221,7 @@ export function TimeOffTab() {
           }}
         >
           <Textarea
-            label="Lý do từ chối"
+            label={tr('uiScheduling.rejectionReason')}
             required
             minLength={5}
             rows={3}
@@ -239,10 +230,10 @@ export function TimeOffTab() {
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setRejecting(null)}>
-              Hủy
+              {tr('uiScheduling.cancel')}
             </Button>
             <Button type="submit" variant="danger" isLoading={decide.isPending}>
-              Từ chối
+              {tr('uiScheduling.reject')}
             </Button>
           </div>
         </form>
@@ -259,7 +250,7 @@ export function TimeOffTab() {
       <Modal
         open={cancelling !== null}
         onClose={() => setCancelling(null)}
-        title={cancelling && running(cancelling) ? 'Kết thúc nghỉ phép sớm' : 'Hủy nghỉ phép đã duyệt'}
+        title={cancelling && running(cancelling) ? tr('uiScheduling.endTimeOffEarly') : tr('uiScheduling.cancelApprovedTimeOff')}
         size="sm"
       >
         <form
@@ -271,25 +262,25 @@ export function TimeOffTab() {
         >
           <p className="text-sm text-gray-600 dark:text-surface-300">
             {cancelling && running(cancelling)
-              ? 'Kỳ nghỉ đang diễn ra sẽ kết thúc từ bây giờ (làm tròn 15 phút); thời gian đã nghỉ vẫn được giữ. '
-              : 'Lịch của bác sĩ sẽ mở lại cho đặt hẹn. '}
-            Các lịch hẹn đã chuyển sang bác sĩ khác vẫn giữ nguyên.
+              ? tr('uiScheduling.endTimeOffHint')
+              : tr('uiScheduling.cancelTimeOffHint')}{' '}
+            {tr('uiScheduling.reassignedAppointmentsRemain')}
           </p>
           <Textarea
-            label="Lý do"
+            label={tr('uiScheduling.reason')}
             required
             minLength={5}
             rows={2}
             value={cancelNote}
             onChange={(e) => setCancelNote(e.target.value)}
-            placeholder="VD: Bác sĩ khỏe lại, làm buổi chiều"
+            placeholder={tr('uiScheduling.timeOffCancelExample')}
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setCancelling(null)}>
-              Đóng
+              {tr('uiScheduling.close')}
             </Button>
             <Button type="submit" variant="danger" isLoading={decide.isPending} disabled={cancelNote.trim().length < 5}>
-              Xác nhận
+              {tr('uiScheduling.confirm')}
             </Button>
           </div>
         </form>
@@ -331,32 +322,32 @@ function ApproveTimeOffModal({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: preview, isLoading } = useTimeOffImpact(timeOff?.id ?? null);
   return (
-    <Modal open={timeOff !== null} onClose={onClose} title="Duyệt nghỉ phép" size="sm">
+    <Modal open={timeOff !== null} onClose={onClose} title={t('uiScheduling.approveTimeOff')} size="sm">
       {timeOff && (
         <div className="space-y-4 text-sm">
           <p>
-            {dentistName ?? 'Bác sĩ'} nghỉ từ <strong>{formatDateTime(timeOff.startAt)}</strong> đến{' '}
-            <strong>{formatDateTime(timeOff.endAt)}</strong>.
+            {t('uiScheduling.timeOffPeriod', { dentist: dentistName ?? t('uiScheduling.dentist'), start: formatDateTime(timeOff.startAt), end: formatDateTime(timeOff.endAt) })}
           </p>
           {isLoading ? (
-            <p className="text-gray-500">Đang kiểm tra lịch hẹn…</p>
+            <p className="text-gray-500 dark:text-surface-400">{t('uiScheduling.checkingAppointments')}</p>
           ) : (
-            <p className={preview && preview.affectedAppointments.length > 0 ? 'text-amber-700' : 'text-gray-600'}>
+            <p className={preview && preview.affectedAppointments.length > 0 ? 'text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-surface-300'}>
               {preview && preview.affectedAppointments.length > 0
-                ? `${preview.affectedAppointments.length} lịch hẹn đã đặt rơi vào khoảng nghỉ — sau khi duyệt cần gọi bệnh nhân dời lịch.`
-                : 'Không có lịch hẹn nào trong khoảng nghỉ.'}
+                ? t('uiScheduling.timeOffAffectedCount', { count: preview.affectedAppointments.length })
+                : t('uiScheduling.noAppointmentsInTimeOff')}
               {preview && preview.inClinic.length > 0 &&
-                ` Đang có ${preview.inClinic.length} bệnh nhân đã check-in/đang khám với bác sĩ này.`}
+                ` ${t('uiScheduling.patientsInClinicCount', { count: preview.inClinic.length })}`}
             </p>
           )}
-          <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-surface-700">
             <Button variant="outline" onClick={onClose}>
-              Đóng
+              {t('uiScheduling.close')}
             </Button>
             <Button onClick={onConfirm} isLoading={isPending}>
-              Duyệt
+              {t('uiScheduling.approve')}
             </Button>
           </div>
         </div>
@@ -375,6 +366,7 @@ function ExtendTimeOffModal({
   onClose: () => void;
   onImpact: (r: CreateTimeOffResult) => void;
 }) {
+  const { t } = useTranslation();
   const update = useUpdateTimeOff();
   const end = timeOff ? clinicParts(timeOff.endAt) : null;
   const [date, setDate] = useState('');
@@ -389,7 +381,7 @@ function ExtendTimeOffModal({
     onClose();
   };
   return (
-    <Modal open={timeOff !== null} onClose={close} title="Sửa giờ kết thúc nghỉ phép" size="sm">
+    <Modal open={timeOff !== null} onClose={close} title={t('uiScheduling.editTimeOffEnd')} size="sm">
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -399,26 +391,26 @@ function ExtendTimeOffModal({
             { id: timeOff.id, endAt: clinicIso(shownDate, shownTime), reason: reason.trim() },
             {
               onSuccess: (r) => {
-                notify.success('Đã cập nhật thời gian nghỉ');
+                notify.success(t('uiScheduling.timeOffUpdatedToast'));
                 close();
                 if (hasFollowUp(r)) onImpact(r);
               },
-              onError: (err) => notify.error(getApiErrorMessage(err, 'Không cập nhật được')),
+              onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.updateError'))),
             },
           );
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Đến ngày" type="date" min={clinicToday()} value={shownDate} onChange={(e) => setDate(e.target.value)} required />
-          <Input label="Giờ (giờ phòng khám)" type="time" value={shownTime} onChange={(e) => setTime(e.target.value)} required />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input label={t('uiScheduling.endDate')} type="date" min={clinicToday()} value={shownDate} onChange={(e) => setDate(e.target.value)} required />
+          <Input label={t('uiScheduling.clinicTime')} type="time" value={shownTime} onChange={(e) => setTime(e.target.value)} required />
         </div>
-        <Textarea label="Lý do" required minLength={5} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <Textarea label={t('uiScheduling.reason')} required minLength={5} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={close}>
-            Đóng
+            {t('uiScheduling.close')}
           </Button>
           <Button type="submit" isLoading={update.isPending} disabled={reason.trim().length < 5}>
-            Lưu
+            {t('uiScheduling.saveChanges')}
           </Button>
         </div>
       </form>
@@ -427,6 +419,7 @@ function ExtendTimeOffModal({
 }
 
 function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const { dentists, defaultDentistId } = useSchedulableDentists();
   const createTimeOff = useCreateTimeOff();
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -471,7 +464,7 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
         reason: reason || undefined,
       });
       notify.success(
-        created.status === 'PENDING' ? 'Đã gửi đơn nghỉ phép — chờ quản trị duyệt' : 'Đã ghi nhận nghỉ phép',
+        created.status === 'PENDING' ? t('uiScheduling.timeOffSubmittedToast') : t('uiScheduling.timeOffRecordedToast'),
       );
       if (created.status === 'APPROVED' && hasFollowUp(created)) {
         setAffected(created);
@@ -480,7 +473,7 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
       resetForm();
       onClose();
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể ghi nhận nghỉ phép'));
+      notify.error(getApiErrorMessage(err, t('uiScheduling.recordTimeOffError')));
     }
   };
 
@@ -501,73 +494,72 @@ function CreateTimeOffModal({ open, onClose }: { open: boolean; onClose: () => v
     );
   }
 
-  const title = canApprove ? 'Thêm nghỉ phép' : urgentOnly ? 'Ghi bác sĩ vắng đột xuất' : 'Xin nghỉ phép';
+  const title = canApprove ? t('uiScheduling.addTimeOff') : urgentOnly ? t('uiScheduling.recordUnexpectedAbsence') : t('uiScheduling.requestTimeOff');
   return (
     <Modal open={open} onClose={close} title={title} size="sm">
       <div className="space-y-4">
         {urgentOnly ? (
           <p className="text-sm text-gray-600 dark:text-surface-300">
-            Có hiệu lực ngay: bắt đầu trong hôm nay, kết thúc chậm nhất cuối ngày mai. Quản trị sẽ được thấy và có thể
-            kết thúc sớm hoặc gia hạn.
+            {t('uiScheduling.urgentAbsenceHint')}
           </p>
         ) : (
           !canApprove && (
             <p className="text-sm text-gray-600 dark:text-surface-300">
-              Đơn sẽ ở trạng thái chờ duyệt và chưa chặn lịch hẹn cho tới khi quản trị duyệt.
+              {t('uiScheduling.timeOffPendingHint')}
             </p>
           )
         )}
         <Select
-          label="Bác sĩ"
+          label={t('uiScheduling.dentist')}
           value={dentistId}
           onChange={(e) => setDentistId(e.target.value)}
-          placeholder="-- Chọn bác sĩ --"
+          placeholder={t('uiScheduling.selectDentist')}
           options={dentists.map((d) => ({ value: d.id, label: d.fullName }))}
           required
         />
 
         <Select
-          label="Loại nghỉ"
+          label={t('uiScheduling.timeOffType')}
           value={type}
           onChange={(e) => setType(e.target.value as TimeOffType)}
-          options={(Object.keys(TIME_OFF_TYPE_LABELS) as TimeOffType[]).map((v) => ({
+          options={(Object.keys(TIME_OFF_TYPE_KEYS) as TimeOffType[]).map((v) => ({
             value: v,
-            label: TIME_OFF_TYPE_LABELS[v],
+            label: t(`uiScheduling.timeOffType_${TIME_OFF_TYPE_KEYS[v]}`),
           }))}
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Từ ngày" type="date" min={clinicToday()} value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-          <Input label="Giờ (giờ phòng khám)" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
-          <Input label="Đến ngày" type="date" min={startDate || clinicToday()} value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input label={t('uiScheduling.startDate')} type="date" min={clinicToday()} value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          <Input label={t('uiScheduling.clinicTime')} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
+          <Input label={t('uiScheduling.endDate')} type="date" min={startDate || clinicToday()} value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
           <Input
-            label="Giờ (giờ phòng khám)"
+            label={t('uiScheduling.clinicTime')}
             type="time"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
-            error={!isRangeValid ? 'Thời gian kết thúc phải sau thời gian bắt đầu' : undefined}
+            error={!isRangeValid ? t('uiScheduling.endAfterStartError') : undefined}
             required
           />
         </div>
 
         <Textarea
-          label="Lý do (không bắt buộc)"
+          label={t('uiScheduling.optionalReason')}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
-          placeholder="VD: Nghỉ phép năm"
+          placeholder={t('uiScheduling.timeOffReasonExample')}
         />
 
-        <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
+        <div className="flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-surface-700">
           <Button variant="outline" onClick={close}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             isLoading={createTimeOff.isPending}
             disabled={!dentistId || !startAt || !endAt || !isRangeValid}
           >
-            {canApprove ? 'Thêm' : urgentOnly ? 'Ghi nhận' : 'Gửi đơn'}
+            {canApprove ? t('uiScheduling.add') : urgentOnly ? t('uiScheduling.record') : t('uiScheduling.submitRequest')}
           </Button>
         </div>
       </div>

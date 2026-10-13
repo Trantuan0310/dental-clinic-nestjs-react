@@ -61,48 +61,6 @@ const SOURCE_KEYS: Record<AppointmentSource | 'all', string> = {
   all: 'allSources', walk_in: 'sourceWalkIn', phone: 'sourcePhone', online: 'sourceOnline', returning: 'sourceReturning',
 };
 
-const SOURCE_LABEL: Record<AppointmentSource, string> = {
-  walk_in: 'Vãng lai',
-  phone: 'Điện thoại',
-  online: 'Trực tuyến',
-  returning: 'Quay lại',
-};
-
-const TYPE_LABEL: Record<AppointmentType, string> = {
-  consultation: 'Khám / Tư vấn',
-  treatment: 'Điều trị',
-  follow_up: 'Tái khám',
-};
-
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  scheduled: 'Đã đặt',
-  confirmed: 'Đã xác nhận',
-  checked_in: 'Đã check-in',
-  in_progress: 'Đang khám',
-  completed: 'Hoàn thành',
-  cancelled: 'Đã hủy',
-  no_show: 'Vắng mặt',
-  left: 'Đã về (chưa khám)',
-};
-
-const CSV_COLUMNS: CsvColumn<Appointment>[] = [
-  { header: 'Mã lịch hẹn', accessor: (r) => r.id },
-  { header: 'Ngày', accessor: (r) => formatDate(r.startsAt, 'dd/MM/yyyy') },
-  { header: 'Giờ bắt đầu', accessor: (r) => formatTimeOnly(r.startsAt) },
-  { header: 'Giờ kết thúc', accessor: (r) => formatTimeOnly(r.endsAt) },
-  { header: 'Thời lượng (phút)', accessor: (r) => r.durationMinutes },
-  { header: 'Mã BN', accessor: (r) => r.patientCode },
-  { header: 'Tên bệnh nhân', accessor: (r) => r.patientName },
-  { header: 'Số điện thoại', accessor: (r) => r.patientPhone ?? '' },
-  { header: 'Bác sĩ', accessor: (r) => r.dentistName },
-  { header: 'Loại lịch hẹn', accessor: (r) => (r.appointmentType ? TYPE_LABEL[r.appointmentType] : '') },
-  { header: 'Nguồn', accessor: (r) => (r.source ? SOURCE_LABEL[r.source] : '') },
-  { header: 'Lý do khám', accessor: (r) => r.reason ?? '' },
-  { header: 'Triệu chứng', accessor: (r) => r.chiefComplaint ?? '' },
-  { header: 'Trạng thái', accessor: (r) => STATUS_LABEL[r.status] ?? r.status },
-  { header: 'Check-in lúc', accessor: (r) => (r.checkInAt ? formatDateTime(r.checkInAt) : '') },
-];
-
 type StatusTab =
   | 'all'
   | 'scheduled'
@@ -137,6 +95,23 @@ function statusToTabBucket(status: AppointmentStatus): StatusTab {
 
 export default function AppointmentsListPage() {
   const { t } = useTranslation();
+  const csvColumns: CsvColumn<Appointment>[] = [
+    { header: t('uiScheduling.appointmentId'), accessor: (r) => r.id },
+    { header: t('uiScheduling.appointmentDate'), accessor: (r) => formatDate(r.startsAt, 'dd/MM/yyyy') },
+    { header: t('uiScheduling.startTime'), accessor: (r) => formatTimeOnly(r.startsAt) },
+    { header: t('uiScheduling.endTime'), accessor: (r) => formatTimeOnly(r.endsAt) },
+    { header: t('uiScheduling.totalDuration'), accessor: (r) => r.durationMinutes },
+    { header: t('uiScheduling.patientCode'), accessor: (r) => r.patientCode },
+    { header: t('uiScheduling.patientName'), accessor: (r) => r.patientName },
+    { header: t('uiScheduling.phoneNumber'), accessor: (r) => r.patientPhone ?? '' },
+    { header: t('uiScheduling.dentist'), accessor: (r) => r.dentistName },
+    { header: t('uiScheduling.appointmentType'), accessor: (r) => r.appointmentType ? t(`uiScheduling.${APPOINTMENT_TYPE_KEYS[r.appointmentType]}`) : '' },
+    { header: t('uiScheduling.source'), accessor: (r) => r.source ? t(`uiScheduling.${SOURCE_KEYS[r.source]}`) : '' },
+    { header: t('uiScheduling.reason'), accessor: (r) => r.reason ?? '' },
+    { header: t('uiScheduling.symptoms'), accessor: (r) => r.chiefComplaint ?? '' },
+    { header: t('uiScheduling.status'), accessor: (r) => t(`uiScheduling.status${r.status.replace(/(^|_)([a-z])/g, (_, __, letter: string) => letter.toUpperCase())}`) },
+    { header: t('uiScheduling.checkInAt'), accessor: (r) => r.checkInAt ? formatDateTime(r.checkInAt) : '' },
+  ];
   const VIEW_OPTIONS: { id: AppointmentViewMode; label: string }[] = [
     { id: 'day', label: t('uiScheduling.day') },
     { id: 'week', label: t('uiScheduling.week') },
@@ -252,7 +227,7 @@ export default function AppointmentsListPage() {
     }
     const today = clinicToday();
     const filename = `appointments_${today}_${visibleRows.length}_rows`;
-    exportCsv(filename, visibleRows, CSV_COLUMNS);
+    exportCsv(filename, visibleRows, csvColumns);
     notify.success(t('uiScheduling.exportedAppointments', { count: visibleRows.length }));
   };
 
@@ -516,7 +491,7 @@ export default function AppointmentsListPage() {
                       <p className="font-medium text-gray-900 dark:text-surface-100">
                         {r.patientName}
                         {r.patientDeleted && (
-                          <span className="ml-1 text-xs font-normal text-gray-500">(hồ sơ đã xóa)</span>
+                          <span className="ml-1 text-xs font-normal text-gray-500 dark:text-surface-400">{t('uiScheduling.patientDeleted')}</span>
                         )}
                       </p>
                       <p className="text-xs text-gray-500">{r.patientCode}</p>
@@ -531,7 +506,7 @@ export default function AppointmentsListPage() {
                         <p className="text-xs text-gray-500">{r.chiefComplaint}</p>
                       )}
                     </td>
-                    <td className="text-sm text-gray-700">{r.durationMinutes} phút</td>
+                    <td className="text-sm text-gray-700 dark:text-surface-200">{t('uiScheduling.minutesValue', { count: r.durationMinutes })}</td>
                     <td>
                       <AppointmentStatusBadge
                         status={r.status}
@@ -548,7 +523,7 @@ export default function AppointmentsListPage() {
                         }}
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        Xem
+                        {t('uiScheduling.view')}
                       </button>
                     </td>
                   </tr>
@@ -560,14 +535,14 @@ export default function AppointmentsListPage() {
 
         <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-xs text-gray-500">
           <span>
-            Hiển thị {visibleRows.length} / {rows.length} lịch hẹn
+            {t('uiScheduling.appointmentListCount', { visible: visibleRows.length, total: rows.length })}
             {(typeFilter !== 'all' || sourceFilter !== 'all' || dentistFilter) && (
-              <span className="ml-2 italic">(đang lọc)</span>
+              <span className="ml-2 italic">{t('uiScheduling.filtering')}</span>
             )}
           </span>
           {isLoading && (
             <span className="inline-flex items-center gap-1.5 text-primary-600">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang đồng bộ...
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('uiScheduling.syncing')}
             </span>
           )}
         </div>

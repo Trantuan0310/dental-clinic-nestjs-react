@@ -173,12 +173,12 @@ const TONE_STYLE: Record<Tone, { box: string; icon: typeof Clock }> = {
   wait: { box: "border-amber-200 bg-amber-50 text-amber-900", icon: Clock },
   action: { box: "border-sky-200 bg-sky-50 text-sky-900", icon: AlertCircle },
   good: { box: "border-emerald-200 bg-emerald-50 text-emerald-900", icon: CheckCircle2 },
-  bad: { box: "border-gray-200 bg-gray-50 text-gray-800", icon: XCircle },
+  bad: { box: "border-gray-200 dark:border-surface-700 bg-gray-50 text-gray-800 dark:text-surface-200", icon: XCircle },
 };
 
-const when = (value?: string | null) =>
+const when = (value?: string | null, language = "vi") =>
   value
-    ? new Date(value).toLocaleString("vi-VN", {
+    ? new Date(value).toLocaleString(language.toLowerCase().startsWith("en") ? "en-US" : "vi-VN", {
         weekday: "long",
         day: "2-digit",
         month: "2-digit",
@@ -217,7 +217,7 @@ const headers = (a: Access) => ({
 });
 
 const inputClass =
-  "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
+  "mt-1 block w-full rounded-lg border border-gray-300 dark:border-surface-600 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
 
 function CopyCode({ code, label }: { code: string; label?: string }) {
   const { t } = useTranslation();
@@ -234,7 +234,7 @@ function CopyCode({ code, label }: { code: string; label?: string }) {
           () => undefined,
         );
       }}
-      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+      className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 px-2 py-1 text-xs font-medium text-gray-700 dark:text-surface-200 hover:bg-gray-50"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
       {copied ? t('uiScheduling.copied') : label ?? t('uiScheduling.copy')}
@@ -261,7 +261,7 @@ function Progress({ step }: { step: number }) {
             <p
               className={
                 "mt-2 text-xs sm:text-sm " +
-                (done || current ? "font-medium text-gray-900" : "text-gray-400")
+                (done || current ? "font-medium text-gray-900 dark:text-surface-100" : "text-gray-400")
               }
               aria-current={current ? "step" : undefined}
             >
@@ -333,18 +333,18 @@ function DetailsForm({
         e.preventDefault();
         onSubmit(filled);
       }}
-      className="mt-6 space-y-4 border-t border-gray-100 pt-5"
+      className="mt-6 space-y-4 border-t border-gray-100 dark:border-surface-700 pt-5"
     >
-      <h3 className="font-semibold text-gray-900">{t('uiScheduling.supplementDetails')}</h3>
-      <p className="text-sm text-gray-600">
+      <h3 className="font-semibold text-gray-900 dark:text-surface-100">{t('uiScheduling.supplementDetails')}</h3>
+      <p className="text-sm text-gray-600 dark:text-surface-300">
         {t('uiScheduling.detailsFormHint')}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
           {t('uiScheduling.bookingFullName')}
           <input maxLength={200} value={d.fullName} onChange={set("fullName")} className={inputClass} />
         </label>
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
           {t('uiScheduling.bookingDob')}
           <input
             type="date"
@@ -354,9 +354,9 @@ function DetailsForm({
             className={inputClass}
           />
         </label>
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
           {t('uiScheduling.gender')}
-          <select value={d.gender} onChange={set("gender")} className={inputClass + " bg-white"}>
+          <select value={d.gender} onChange={set("gender")} className={inputClass + " bg-white dark:bg-surface-900"}>
             <option value="">{t('uiScheduling.keepUnchanged')}</option>
             <option value="UNDISCLOSED">{t('uiScheduling.genderUndisclosed')}</option>
             <option value="FEMALE">{t('uiScheduling.genderFemale')}</option>
@@ -364,15 +364,15 @@ function DetailsForm({
             <option value="OTHER">{t('uiScheduling.genderOther')}</option>
           </select>
         </label>
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
           {t('uiScheduling.guardianIfChild')}
           <input value={d.contactPersonName} onChange={set("contactPersonName")} className={inputClass} />
         </label>
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
           {t('uiScheduling.guardianPhone')}
           <input type="tel" inputMode="tel" value={d.contactPersonPhone} onChange={set("contactPersonPhone")} className={inputClass} />
         </label>
-        <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
           {t('uiScheduling.bookingReason')}
           <textarea rows={3} value={d.reason} onChange={set("reason")} className={inputClass} />
         </label>
@@ -388,7 +388,8 @@ function DetailsForm({
 }
 
 export default function PublicBookingStatusPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language;
   const [params, setParams] = useSearchParams();
   const justBooked = params.get("new") === "1";
   // Prefill the phone this device last booked or looked up with.
@@ -569,7 +570,7 @@ export default function PublicBookingStatusPage() {
       : t('uiScheduling.bookingRequestedTime');
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 sm:py-10">
+    <main className="min-h-screen bg-slate-50 dark:bg-surface-950 px-4 py-6 sm:py-10">
       <div className="mx-auto max-w-2xl">
         <PublicTopBar>
           <Link to="/booking" className="text-brand-600 hover:underline">
@@ -602,9 +603,9 @@ export default function PublicBookingStatusPage() {
         )}
 
         {!status && results && results.length > 1 ? (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-            <h1 className="text-2xl font-semibold text-gray-900">{t('uiScheduling.yourAppointment')}</h1>
-            <p className="mt-2 text-gray-600">
+          <section className="rounded-2xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiScheduling.yourAppointment')}</h1>
+            <p className="mt-2 text-gray-600 dark:text-surface-300">
               {t('uiScheduling.bookingResultsFor', { phone, count: results.length })}
             </p>
             <ul className="mt-6 space-y-3">
@@ -620,10 +621,10 @@ export default function PublicBookingStatusPage() {
                     <button
                       type="button"
                       onClick={() => choose(item)}
-                      className="w-full rounded-xl border border-gray-200 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
+                      className="w-full rounded-xl border border-gray-200 dark:border-surface-700 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-semibold capitalize text-gray-900">{when(itemTime)}</span>
+                        <span className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(itemTime, language)}</span>
                         <span
                           className={
                             "rounded-full border px-2.5 py-0.5 text-xs font-medium " +
@@ -633,7 +634,7 @@ export default function PublicBookingStatusPage() {
                           {itemState ? t(`uiScheduling.bookingState_${item.status}`) : item.status}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-gray-600">
+                      <p className="mt-1 text-sm text-gray-600 dark:text-surface-300">
                         {item.patientInitials
                           ? t('uiScheduling.bookingPatientInitials', { initials: item.patientInitials })
                           : (item.service?.name ?? "—") +
@@ -649,11 +650,11 @@ export default function PublicBookingStatusPage() {
             </button>
           </section>
         ) : !status ? (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-            <h1 className="text-2xl font-semibold text-gray-900">{t('uiScheduling.bookingLookup')}</h1>
-            <p className="mt-2 text-gray-600">{t('uiScheduling.bookingLookupHint')}</p>
+          <section className="rounded-2xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiScheduling.bookingLookup')}</h1>
+            <p className="mt-2 text-gray-600 dark:text-surface-300">{t('uiScheduling.bookingLookupHint')}</p>
             <form onSubmit={lookup} className="mt-6 space-y-4">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
                 {t('uiScheduling.phoneNumber')}
                 <input
                   required
@@ -679,7 +680,7 @@ export default function PublicBookingStatusPage() {
               </button>
             </form>
 
-            <div className="mt-8 border-t border-gray-100 pt-5 text-sm text-gray-600">
+            <div className="mt-8 border-t border-gray-100 dark:border-surface-700 pt-5 text-sm text-gray-600 dark:text-surface-300">
               <p>{t('uiScheduling.noAppointmentLookup')}</p>
               <div className="mt-3">
                 <ContactButtons />
@@ -687,13 +688,13 @@ export default function PublicBookingStatusPage() {
             </div>
           </section>
         ) : (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
+          <section className="rounded-2xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
             {!justBooked && <h1 className="sr-only">{t('uiScheduling.bookingStatus')}</h1>}
             {status.referenceCode && access && (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-surface-400">
                   {t('uiScheduling.bookingReference')}{" "}
-                  <span className="font-mono text-base font-semibold text-gray-900">{status.referenceCode}</span>
+                  <span className="font-mono text-base font-semibold text-gray-900 dark:text-surface-100">{status.referenceCode}</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <CopyCode code={status.referenceCode} />
@@ -701,7 +702,7 @@ export default function PublicBookingStatusPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => void open(status.referenceCode!, access)}
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-surface-700 px-2 py-1 text-xs font-medium text-gray-700 dark:text-surface-200 hover:bg-gray-50 disabled:opacity-60"
                   >
                     <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} aria-hidden /> {t('uiScheduling.refresh')}
                   </button>
@@ -730,52 +731,52 @@ export default function PublicBookingStatusPage() {
 
             {(!visit || visitStands) && state && state.step > 0 && <Progress step={state.step} />}
 
-            <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100">
+            <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100 dark:border-surface-700">
               <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                <dt className="text-sm text-gray-500">{timeLabel}</dt>
-                <dd className="font-semibold capitalize text-gray-900">{when(time)}</dd>
+                <dt className="text-sm text-gray-500 dark:text-surface-400">{timeLabel}</dt>
+                <dd className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(time, language)}</dd>
               </div>
               {status.patientInitials ? (
                 // Shown by phone alone: who it is for, masked; no service or dentist.
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                  <dt className="text-sm text-gray-500">{t('uiScheduling.bookingPatient')}</dt>
-                  <dd className="font-medium text-gray-900">{status.patientInitials}</dd>
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingPatient')}</dt>
+                  <dd className="font-medium text-gray-900 dark:text-surface-100">{status.patientInitials}</dd>
                 </div>
               ) : (
                 <>
                   <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                    <dt className="text-sm text-gray-500">{t('uiScheduling.service')}</dt>
-                    <dd className="font-medium text-gray-900">
+                    <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.service')}</dt>
+                    <dd className="font-medium text-gray-900 dark:text-surface-100">
                       {status.service?.name ?? "—"}
                       {status.service?.durationMinutes ? (
-                        <span className="font-normal text-gray-500"> · {t('uiScheduling.approximatelyMinutes', { minutes: status.service.durationMinutes })}</span>
+                        <span className="font-normal text-gray-500 dark:text-surface-400"> · {t('uiScheduling.approximatelyMinutes', { minutes: status.service.durationMinutes })}</span>
                       ) : null}
                     </dd>
                   </div>
                   <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                    <dt className="text-sm text-gray-500">{t('uiScheduling.dentist')}</dt>
-                    <dd className="font-medium text-gray-900">{status.dentist?.fullName ?? t('uiScheduling.clinicWillArrange')}</dd>
+                    <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.dentist')}</dt>
+                    <dd className="font-medium text-gray-900 dark:text-surface-100">{status.dentist?.fullName ?? t('uiScheduling.clinicWillArrange')}</dd>
                   </div>
                 </>
               )}
               {status.status === "PROPOSED" && status.proposedStartAt && (
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                  <dt className="text-sm text-gray-500">{t('uiScheduling.bookingOriginalTime')}</dt>
-                  <dd className="capitalize text-gray-500 line-through">{when(status.requestedStartAt)}</dd>
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingOriginalTime')}</dt>
+                  <dd className="capitalize text-gray-500 dark:text-surface-400 line-through">{when(status.requestedStartAt, language)}</dd>
                 </div>
               )}
               {clinic.address && (
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                  <dt className="text-sm text-gray-500">{t('uiScheduling.bookingAddress')}</dt>
-                  <dd className="text-gray-900 sm:text-right">{clinic.address}</dd>
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingAddress')}</dt>
+                  <dd className="text-gray-900 dark:text-surface-100 sm:text-right">{clinic.address}</dd>
                 </div>
               )}
             </dl>
 
             {status.responseMessage && (
-              <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{t('uiScheduling.clinicMessage')}</p>
-                <p className="mt-1 text-gray-800">{status.responseMessage}</p>
+              <div className="mt-4 rounded-xl bg-slate-50 dark:bg-surface-950 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.clinicMessage')}</p>
+                <p className="mt-1 text-gray-800 dark:text-surface-200">{status.responseMessage}</p>
               </div>
             )}
 
@@ -817,7 +818,7 @@ export default function PublicBookingStatusPage() {
                   type="button"
                   disabled={busy}
                   onClick={() => setDeclining(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-gray-300 dark:border-surface-600 px-5 py-3 font-semibold text-gray-700 dark:text-surface-200 hover:bg-gray-50 disabled:opacity-60"
                 >
                   {t('uiScheduling.declineNewTime')}
                 </button>
@@ -843,8 +844,8 @@ export default function PublicBookingStatusPage() {
             </div>
 
             {current === "PROPOSED" && canManage && declining && (
-              <div className="mt-4 rounded-xl border border-gray-200 bg-slate-50 p-4 text-sm">
-                <label className="block font-medium text-gray-700">
+              <div className="mt-4 rounded-xl border border-gray-200 dark:border-surface-700 bg-slate-50 dark:bg-surface-950 p-4 text-sm">
+                <label className="block font-medium text-gray-700 dark:text-surface-200">
                   {t('uiScheduling.bookingPreferredTimeHint')}
                   <textarea
                     rows={2}
@@ -880,7 +881,7 @@ export default function PublicBookingStatusPage() {
                   <button
                     type="button"
                     onClick={() => setDeclining(false)}
-                    className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                    className="rounded-full border border-gray-300 dark:border-surface-600 bg-white dark:bg-surface-900 px-4 py-2 font-medium text-gray-700 dark:text-surface-200"
                   >
                     {t('uiScheduling.back')}
                   </button>
@@ -900,8 +901,8 @@ export default function PublicBookingStatusPage() {
               />
             )}
 
-            <div className="mt-8 border-t border-gray-100 pt-5">
-              <p className="text-sm text-gray-600">{t('uiScheduling.bookingContactHint')}</p>
+            <div className="mt-8 border-t border-gray-100 dark:border-surface-700 pt-5">
+              <p className="text-sm text-gray-600 dark:text-surface-300">{t('uiScheduling.bookingContactHint')}</p>
               <div className="mt-3">
                 <ContactButtons />
               </div>
@@ -913,7 +914,7 @@ export default function PublicBookingStatusPage() {
                   <button
                     type="button"
                     onClick={() => setConfirmCancel(true)}
-                    className="text-gray-500 underline-offset-2 hover:text-red-600 hover:underline"
+                    className="text-gray-500 dark:text-surface-400 underline-offset-2 hover:text-red-600 hover:underline"
                   >
                     {t('uiScheduling.withdrawRequest')}
                   </button>
@@ -953,7 +954,7 @@ export default function PublicBookingStatusPage() {
                       <button
                         type="button"
                         onClick={() => setConfirmCancel(false)}
-                        className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                        className="rounded-full border border-gray-300 dark:border-surface-600 bg-white dark:bg-surface-900 px-4 py-2 font-medium text-gray-700 dark:text-surface-200"
                       >
                         {t('uiScheduling.keepRequest')}
                       </button>
@@ -966,20 +967,20 @@ export default function PublicBookingStatusPage() {
             {visitStands && canManage && status.cancelUntil && (
               <div className="mt-6 text-sm">
                 {new Date(status.cancelUntil).getTime() <= Date.now() ? (
-                  <p className="text-gray-600">
+                  <p className="text-gray-600 dark:text-surface-300">
                     {t('uiScheduling.cannotCancelOnline')}
                   </p>
                 ) : !cancellingVisit ? (
                   <button
                     type="button"
                     onClick={() => setCancellingVisit(true)}
-                    className="text-gray-500 underline-offset-2 hover:text-red-600 hover:underline"
+                    className="text-gray-500 dark:text-surface-400 underline-offset-2 hover:text-red-600 hover:underline"
                   >
                     {t('uiScheduling.cancelAppointmentRequest')}
                   </button>
                 ) : (
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <p className="font-medium text-red-800">{t('uiScheduling.confirmCancelVisit', { time: when(time) })}</p>
+                    <p className="font-medium text-red-800">{t('uiScheduling.confirmCancelVisit', { time: when(time, language) })}</p>
                     <p className="mt-1 text-red-700">
                       {t('uiScheduling.cancelVisitNotice')}
                     </p>
@@ -1015,7 +1016,7 @@ export default function PublicBookingStatusPage() {
                       <button
                         type="button"
                         onClick={() => setCancellingVisit(false)}
-                        className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                        className="rounded-full border border-gray-300 dark:border-surface-600 bg-white dark:bg-surface-900 px-4 py-2 font-medium text-gray-700 dark:text-surface-200"
                       >
                         {t('uiScheduling.keepAppointment')}
                       </button>
@@ -1045,7 +1046,7 @@ export default function PublicBookingStatusPage() {
           </section>
         )}
 
-        <p className="mt-6 text-center text-xs text-gray-500">
+        <p className="mt-6 text-center text-xs text-gray-500 dark:text-surface-400">
           {t('uiScheduling.bookingPrivacyNote')}
         </p>
       </div>

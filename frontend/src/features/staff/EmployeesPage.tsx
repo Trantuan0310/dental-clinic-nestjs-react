@@ -269,7 +269,7 @@ function LinkAccountForm({
             required
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
-            placeholder={loadingAccounts ? t('uiCommon.loading') : t('uiWorkforce.selectUnlinkedAccount')}
+            placeholder={loadingAccounts ? t('common.loading') : t('uiWorkforce.selectUnlinkedAccount')}
             options={accounts.map((a) => ({
               value: a.id,
               label: `${a.fullName} · ${a.email}${a.status === 'PENDING_SETUP' ? ` (${t('uiWorkforce.pendingSetup')})` : ''}`,
@@ -589,8 +589,10 @@ export default function EmployeesPage() {
                         {e.account ? (
                           <>
                             <span className="text-gray-700 dark:text-surface-200">{e.account.email}</span>
-                            {ACCOUNT_STATUS_HINT[e.account.status] && (
-                              <div className="text-amber-700">{t(`uiWorkforce.${e.account.status === 'PENDING_SETUP' ? 'pendingSetup' : 'deactivated'}`)}</div>
+                            {e.account.status !== 'ACTIVE' && (
+                              <div className="text-amber-700">
+                                {t(`uiWorkforce.${e.account.status === 'PENDING_SETUP' ? 'pendingSetup' : 'deactivated'}`)}
+                              </div>
                             )}
                           </>
                         ) : (

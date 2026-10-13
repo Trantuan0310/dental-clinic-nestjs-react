@@ -47,6 +47,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 }
 
+// ErrorBoundary renders this local fallback; it is not a separate refresh boundary.
+// eslint-disable-next-line react-refresh/only-export-components
 function DefaultErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }) {
   const { t } = useTranslation();
   return (

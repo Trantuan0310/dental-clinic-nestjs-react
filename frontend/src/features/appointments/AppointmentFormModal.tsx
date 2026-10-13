@@ -35,6 +35,10 @@ import { notify } from '@/components/ui/Toast';
 import { Search, UserPlus } from 'lucide-react';
 import { clinicIso, clinicMinutes, clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useAuthStore } from '@/stores/authStore';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+
+const DURATION_VALUES = ['15', '30', '45', '60', '90', '120'];
 
 interface AppointmentFormModalProps {
   open: boolean;
@@ -47,34 +51,6 @@ interface AppointmentFormModalProps {
   /** e.g. 'follow_up' when a dentist books the next visit from an encounter. */
   defaultType?: AppointmentType;
 }
-
-const APPOINTMENT_TYPE_OPTIONS: { value: AppointmentType; label: string }[] = [
-  { value: 'consultation', label: 'Khám / Tư vấn' },
-  { value: 'treatment', label: 'Điều trị' },
-  { value: 'follow_up', label: 'Tái khám' },
-];
-
-const GENDER_OPTIONS: { value: Gender; label: string }[] = [
-  { value: 'female', label: 'Nữ' },
-  { value: 'male', label: 'Nam' },
-  { value: 'other', label: 'Khác' },
-];
-
-const SOURCE_OPTIONS: { value: AppointmentSource; label: string }[] = [
-  { value: 'phone', label: 'Điện thoại' },
-  { value: 'walk_in', label: 'Khách vãng lai' },
-  { value: 'online', label: 'Online' },
-  { value: 'returning', label: 'Tái khám (hẹn tại quầy)' },
-];
-
-const DURATION_OPTIONS = [
-  { value: '15', label: '15 phút' },
-  { value: '30', label: '30 phút' },
-  { value: '45', label: '45 phút' },
-  { value: '60', label: '60 phút' },
-  { value: '90', label: '90 phút' },
-  { value: '120', label: '120 phút' },
-];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -95,6 +71,23 @@ export function AppointmentFormModal({
   defaultStartTime,
   defaultType,
 }: AppointmentFormModalProps) {
+  const { t } = useTranslation();
+  const appointmentTypeOptions = [
+    { value: 'consultation', label: t('uiScheduling.typeConsultation') },
+    { value: 'treatment', label: t('uiScheduling.typeTreatment') },
+    { value: 'follow_up', label: t('uiScheduling.typeFollowUp') },
+  ];
+  const genderOptions = [
+    { value: 'female', label: t('uiScheduling.genderFemale') },
+    { value: 'male', label: t('uiScheduling.genderMale') },
+    { value: 'other', label: t('uiScheduling.genderOther') },
+  ];
+  const sourceOptions = [
+    { value: 'phone', label: t('uiScheduling.sourcePhone') },
+    { value: 'walk_in', label: t('uiScheduling.sourceWalkIn') },
+    { value: 'online', label: t('uiScheduling.sourceOnline') },
+    { value: 'returning', label: t('uiScheduling.sourceReturning') },
+  ];
   const isEdit = !!appointment;
   // A dentist (own appointments only) books on their own calendar, for
   // patients they have treated (enforced by the API); front desk books for
@@ -219,10 +212,10 @@ export function AppointmentFormModal({
   const patientLabel = shownPatient
     ? `${shownPatient.fullName} — ${shownPatient.code}`
     : patientId && isLoadingDefaultPatient
-      ? 'Đang tải thông tin bệnh nhân…'
+      ? t('uiScheduling.loadingPatientInfo')
       : patientId && defaultPatientFailed
-        ? 'Không tải được tên bệnh nhân đã chọn sẵn'
-        : 'Chưa chọn bệnh nhân';
+        ? t('uiScheduling.prefilledPatientLoadError')
+        : t('uiScheduling.noPatientSelected');
 
   const queryClient = useQueryClient();
   const createPatient = useMutation({
@@ -237,10 +230,10 @@ export function AppointmentFormModal({
       });
       setTab('info');
       resetNewPatient();
-      notify.success(`Đã tạo hồ sơ ${created.fullName}`);
+      notify.success(t('uiScheduling.patientCreated', { name: created.fullName }));
     },
     onError: (err) => {
-      setNewPatientError(getApiErrorMessage(err, 'Không thể tạo bệnh nhân'));
+      setNewPatientError(getApiErrorMessage(err, t('uiScheduling.createPatientError')));
     },
   });
 
@@ -265,23 +258,23 @@ export function AppointmentFormModal({
   const handleCreatePatient = async (skipDuplicateCheck = false) => {
     setNewPatientError(null);
     if (!newPatientName.trim()) {
-      setNewPatientError('Vui lòng nhập họ tên.');
+      setNewPatientError(t('uiScheduling.patientNameRequiredError'));
       return;
     }
     if (!newPatientDob) {
-      setNewPatientError('Vui lòng chọn ngày sinh.');
+      setNewPatientError(t('uiScheduling.dateOfBirthRequiredError'));
       return;
     }
     if (!isValidDob(newPatientDob)) {
-      setNewPatientError('Ngày sinh không hợp lệ (phải trong quá khứ, cách đây không quá 150 năm).');
+      setNewPatientError(t('uiScheduling.invalidDateOfBirthError'));
       return;
     }
     if (!newPatientPhone.trim()) {
-      setNewPatientError('Vui lòng nhập số điện thoại (cần ít nhất 1 cách liên lạc).');
+      setNewPatientError(t('uiScheduling.phoneRequiredError'));
       return;
     }
     if (newPatientIsMinor && (!newPatientContactName.trim() || !newPatientContactPhone.trim())) {
-      setNewPatientError('Bệnh nhân dưới 12 tuổi cần tên và số điện thoại người liên hệ.');
+      setNewPatientError(t('uiScheduling.minorContactRequiredError'));
       return;
     }
 
@@ -301,7 +294,7 @@ export function AppointmentFormModal({
           return;
         }
       } catch (err) {
-        setNewPatientError(getApiErrorMessage(err, 'Không kiểm tra được hồ sơ trùng'));
+        setNewPatientError(getApiErrorMessage(err, t('uiScheduling.duplicatePatientCheckError')));
         return;
       } finally {
         setIsCheckingDuplicates(false);
@@ -366,12 +359,12 @@ export function AppointmentFormModal({
   const slotIssue = useMemo(
     () =>
       availability
-        ? describeSlotIssue(availability, date, timeStringToMinutes(startTime), durationMin, {
+        ? describeSlotIssue(availability, date, timeStringToMinutes(startTime), durationMin, t, {
             before: bufferBeforeMin,
             after: bufferAfterMin,
           })
         : null,
-    [availability, date, startTime, durationMin, bufferBeforeMin, bufferAfterMin],
+    [availability, date, startTime, durationMin, bufferBeforeMin, bufferAfterMin, t],
   );
 
   const suggestedStarts = useMemo(() => {
@@ -380,46 +373,46 @@ export function AppointmentFormModal({
       .map((s) => clinicMinutes(s.startTime))
       .filter(
         (m) =>
-          describeSlotIssue(availability, date, m, durationMin, {
+          describeSlotIssue(availability, date, m, durationMin, t, {
             before: bufferBeforeMin,
             after: bufferAfterMin,
           }) === null,
       )
       .map(minutesToTime);
-  }, [availability, date, durationMin, bufferBeforeMin, bufferAfterMin]);
+  }, [availability, date, durationMin, bufferBeforeMin, bufferAfterMin, t]);
   // Every free time, grouped morning / afternoon (not only the first few).
   const suggestedGroups = useMemo(
     () =>
       [
-        { label: 'Sáng', times: suggestedStarts.filter((t) => t < '12:00') },
-        { label: 'Chiều', times: suggestedStarts.filter((t) => t >= '12:00') },
+        { label: t('uiScheduling.morning'), times: suggestedStarts.filter((t) => t < '12:00') },
+        { label: t('uiScheduling.afternoon'), times: suggestedStarts.filter((t) => t >= '12:00') },
       ].filter((g) => g.times.length > 0),
-    [suggestedStarts],
+    [suggestedStarts, t],
   );
 
   const durationOptions = useMemo(
     () =>
-      DURATION_OPTIONS.some((o) => o.value === duration)
-        ? DURATION_OPTIONS
-        : [...DURATION_OPTIONS, { value: duration, label: `${duration} phút` }].sort(
+      (DURATION_VALUES.includes(duration) ? DURATION_VALUES : [...DURATION_VALUES, duration])
+        .map((value) => ({ value, label: t('uiScheduling.minutesValue', { count: Number(value) }) }))
+        .sort(
             (a, b) => Number(a.value) - Number(b.value),
           ),
-    [duration],
+    [duration, t],
   );
 
   const handleSubmit = async () => {
     setServerError(null);
     if (!patientId) {
-      setServerError('Vui lòng chọn bệnh nhân.');
+      setServerError(t('uiScheduling.selectPatientError'));
       return;
     }
     if (!dentistId) {
-      setServerError('Vui lòng chọn bác sĩ.');
+      setServerError(t('uiScheduling.selectDentistError'));
       return;
     }
     if (!isEdit && durationOverridden && durationOverrideReason.trim().length < 5) {
       setServerError(
-        `Các dịch vụ đã chọn cần ${servicesTotal} phút — nhập lý do (ít nhất 5 ký tự) nếu muốn đặt ${durationMin} phút.`,
+        t('uiScheduling.durationOverrideReasonRequired', { services: servicesTotal, duration: durationMin }),
       );
       return;
     }
@@ -433,7 +426,7 @@ export function AppointmentFormModal({
           appointmentType,
           notes,
         });
-        notify.success('Đã cập nhật lịch hẹn');
+      notify.success(t('uiScheduling.appointmentUpdated'));
       } else {
         const payload: CreateAppointmentPayload = {
           patientId,
@@ -449,11 +442,11 @@ export function AppointmentFormModal({
           durationOverrideReason: durationOverridden ? durationOverrideReason : undefined,
         };
         await create.mutateAsync(payload);
-        notify.success('Đã tạo lịch hẹn mới');
+        notify.success(t('uiScheduling.appointmentCreated'));
       }
       onClose();
     } catch (err) {
-      setServerError(getApiErrorMessage(err, 'Không thể lưu lịch hẹn'));
+      setServerError(getApiErrorMessage(err, t('uiScheduling.saveAppointmentError')));
     }
   };
 
@@ -464,19 +457,19 @@ export function AppointmentFormModal({
       open={open}
       onClose={onClose}
       size="lg"
-      title={isEdit ? 'Cập nhật lịch hẹn' : 'Tạo lịch hẹn mới'}
+      title={isEdit ? t('uiScheduling.updateAppointment') : t('uiScheduling.appointmentCreateTitle')}
       description={
         isEdit
           ? `${appointment?.patientName} • ${appointment?.patientCode}`
-          : 'Chọn bệnh nhân, bác sĩ, ngày và giờ trống phù hợp.'
+          : t('uiScheduling.appointmentFormHint')
       }
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           <Button onClick={handleSubmit} isLoading={isPending}>
-            {isEdit ? 'Lưu thay đổi' : 'Tạo lịch hẹn'}
+            {isEdit ? t('uiScheduling.saveChanges') : t('uiScheduling.createAppointment')}
           </Button>
         </>
       }
@@ -487,9 +480,9 @@ export function AppointmentFormModal({
             value={tab}
             onChange={(id) => setTab(id as 'info' | 'lookup' | 'new-patient')}
             tabs={[
-              { id: 'info', label: 'Chọn bệnh nhân' },
-              { id: 'lookup', label: 'Tra cứu nhanh' },
-              ...(canCreatePatient ? [{ id: 'new-patient', label: 'Bệnh nhân mới' }] : []),
+              { id: 'info', label: t('uiScheduling.selectPatient') },
+              { id: 'lookup', label: t('uiScheduling.quickSearch') },
+              ...(canCreatePatient ? [{ id: 'new-patient', label: t('uiScheduling.newPatient') }] : []),
             ]}
           />
         </div>
@@ -501,22 +494,22 @@ export function AppointmentFormModal({
         {!isEdit && tab === 'new-patient' ? (
           <div className="space-y-3">
             <p className="text-xs text-gray-500">
-              Khách vãng lai chưa có hồ sơ — tạo nhanh rồi tiếp tục đặt lịch, không cần thoát khỏi form này.
+              {t('uiScheduling.newPatientTabHint')}
             </p>
             {newPatientError && <Alert variant="error">{newPatientError}</Alert>}
             <Input
-              label="Họ tên *"
+              label={t('uiScheduling.patientNameRequired')}
               value={newPatientName}
               onChange={(e) => {
                 setNewPatientName(e.target.value);
                 setDuplicateCandidates(null);
               }}
-              placeholder="Nguyễn Văn A"
+              placeholder={t('uiScheduling.patientNameExample')}
             />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Input
                 type="date"
-                label="Ngày sinh *"
+                label={t('uiScheduling.dateOfBirthRequired')}
                 value={newPatientDob}
                 onChange={(e) => {
                   setNewPatientDob(e.target.value);
@@ -525,19 +518,19 @@ export function AppointmentFormModal({
                 max={clinicToday()}
               />
               <div>
-                <label className="label">Giới tính *</label>
+              <label className="label">{t('uiScheduling.gender')}</label>
                 <Select
                   value={newPatientGender}
                   onChange={(e) => {
                     setNewPatientGender(e.target.value as Gender);
                     setDuplicateCandidates(null);
                   }}
-                  options={GENDER_OPTIONS}
+                  options={genderOptions}
                 />
               </div>
             </div>
             <Input
-              label="Số điện thoại *"
+              label={t('uiScheduling.phoneNumberRequired')}
               value={newPatientPhone}
               onChange={(e) => {
                 setNewPatientPhone(e.target.value);
@@ -548,13 +541,13 @@ export function AppointmentFormModal({
             {newPatientIsMinor && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Input
-                  label="Người liên hệ *"
+                  label={t('uiScheduling.contactPersonRequired')}
                   value={newPatientContactName}
                   onChange={(e) => setNewPatientContactName(e.target.value)}
-                  placeholder="Bố/mẹ/người giám hộ"
+                  placeholder={t('uiScheduling.guardianExample')}
                 />
                 <Input
-                  label="SĐT người liên hệ *"
+                  label={t('uiScheduling.contactPhoneRequired')}
                   value={newPatientContactPhone}
                   onChange={(e) => setNewPatientContactPhone(e.target.value)}
                   placeholder="09xxxxxxxx"
@@ -564,8 +557,7 @@ export function AppointmentFormModal({
             {duplicateCandidates ? (
               <div className="space-y-2">
                 <Alert variant="warning">
-                  Đã có {duplicateCandidates.length} hồ sơ trùng số điện thoại hoặc trùng họ tên + ngày
-                  sinh. Chọn hồ sơ có sẵn nếu đúng người để tránh tạo hồ sơ trùng.
+                  {t('uiScheduling.duplicateCandidatesFound', { count: duplicateCandidates.length })}
                 </Alert>
                 <ul className="rounded-md border border-gray-200">
                   {duplicateCandidates.map((c) => (
@@ -589,7 +581,7 @@ export function AppointmentFormModal({
                             {c.code} • {c.primaryPhone ?? '—'} • {c.dob ? c.dob.slice(0, 10) : '—'}
                           </p>
                         </div>
-                        <span className="text-xs text-primary-600">Chọn hồ sơ này →</span>
+                        <span className="text-xs text-primary-600">{t('uiScheduling.selectThisPatient')}</span>
                       </button>
                     </li>
                   ))}
@@ -600,7 +592,7 @@ export function AppointmentFormModal({
                   onClick={() => handleCreatePatient(true)}
                   isLoading={createPatient.isPending}
                 >
-                  Không phải — vẫn tạo hồ sơ mới
+                  {t('uiScheduling.createNewPatientAnyway')}
                 </Button>
               </div>
             ) : (
@@ -609,15 +601,15 @@ export function AppointmentFormModal({
                 onClick={() => handleCreatePatient()}
                 isLoading={createPatient.isPending || isCheckingDuplicates}
               >
-                Tạo hồ sơ & chọn bệnh nhân này
+                {t('uiScheduling.createPatientAndSelect')}
               </Button>
             )}
           </div>
         ) : !isEdit && tab === 'lookup' ? (
           <div className="space-y-3">
             <Input
-              label="Tìm bệnh nhân"
-              placeholder="Nhập tên, mã BN hoặc SĐT..."
+              label={t('uiScheduling.findPatient')}
+              placeholder={t('uiScheduling.patientSearch')}
               value={patientSearch}
               onChange={(e) => setPatientSearch(e.target.value)}
               leftAddon={<Search className="h-3.5 w-3.5" />}
@@ -625,15 +617,15 @@ export function AppointmentFormModal({
             <div className="max-h-56 overflow-y-auto rounded-md border border-gray-200">
               {debouncedSearch.trim().length < 2 ? (
                 <div className="p-6 text-center text-sm text-gray-500">
-                  Nhập ít nhất 2 ký tự để tìm trong toàn bộ hồ sơ bệnh nhân.
+                  {t('uiScheduling.patientSearchMinChars')}
                 </div>
               ) : isSearchingPatients && searchResults.length === 0 ? (
                 <div className="flex items-center justify-center p-6 text-sm text-gray-500">
                   <Spinner size="sm" />
-                  <span className="ml-2">Đang tìm...</span>
+                  <span className="ml-2">{t('uiScheduling.searching')}</span>
                 </div>
               ) : searchResults.length === 0 ? (
-                <div className="p-6 text-center text-sm text-gray-500">Không tìm thấy bệnh nhân.</div>
+                <div className="p-6 text-center text-sm text-gray-500">{t('uiScheduling.noPatientFound')}</div>
               ) : (
                 <ul>
                   {searchResults.map((p) => (
@@ -649,7 +641,7 @@ export function AppointmentFormModal({
                             {p.code} • {p.primaryPhone ?? '—'}
                           </p>
                         </div>
-                        <span className="text-xs text-primary-600">Chọn →</span>
+                        <span className="text-xs text-primary-600">{t('uiScheduling.choose')}</span>
                       </button>
                     </li>
                   ))}
@@ -663,7 +655,7 @@ export function AppointmentFormModal({
               <>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
-                    <label className="label">Bệnh nhân *</label>
+                    <label className="label">{t('uiScheduling.patientRequired')}</label>
                     <div className="input-base flex items-center justify-between gap-2">
                       <span className={shownPatient ? 'truncate text-gray-900' : 'text-gray-400'}>
                         {patientLabel}
@@ -673,14 +665,14 @@ export function AppointmentFormModal({
                         onClick={() => setTab('lookup')}
                         className="shrink-0 text-xs font-medium text-primary-600 hover:underline"
                       >
-                        {patientId ? 'Đổi' : 'Tìm bệnh nhân'}
+                        {patientId ? t('uiScheduling.change') : t('uiScheduling.findPatient')}
                       </button>
                     </div>
                   </div>
                   <div>
-                    <label className="label">Bác sĩ *</label>
+                    <label className="label">{t('uiScheduling.dentistRequired')}</label>
                     <Select
-                      aria-label="Bác sĩ"
+                      aria-label={t('uiScheduling.dentist')}
                       value={dentistId}
                       disabled={!!lockedDentistId}
                       onChange={(e) => {
@@ -693,7 +685,7 @@ export function AppointmentFormModal({
                           value: d.id,
                           label: d.fullName + (d.specialization ? ` (${d.specialization})` : ''),
                         }))}
-                      placeholder={isLoadingDentists ? 'Đang tải...' : 'Chọn bác sĩ'}
+                      placeholder={isLoadingDentists ? t('uiScheduling.loading') : t('uiScheduling.chooseDentist')}
                     />
                   </div>
                 </div>
@@ -701,24 +693,24 @@ export function AppointmentFormModal({
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <Input
                     type="date"
-                    label="Ngày *"
+                    label={t('uiScheduling.appointmentDateRequired')}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                   />
                   <Input
                     type="time"
-                    label="Giờ bắt đầu *"
+                    label={t('uiScheduling.startTimeRequired')}
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                   />
                   <Select
-                    label="Thời lượng"
+                    label={t('uiScheduling.duration')}
                     value={duration}
                     onChange={(e) => setDuration(e.target.value)}
                     options={durationOptions}
                   />
                   <div>
-                    <label className="label">Kết thúc</label>
+                    <label className="label">{t('uiScheduling.endTime')}</label>
                     <div className="input-base flex items-center bg-gray-50 text-gray-700">
                       {endTime}
                     </div>
@@ -739,33 +731,31 @@ export function AppointmentFormModal({
 
                 {durationOverridden && (
                   <Input
-                    label={`Lý do đổi thời lượng (dịch vụ cần ${servicesTotal} phút) *`}
+                    label={t('uiScheduling.durationOverrideReasonLabel', { minutes: servicesTotal })}
                     value={durationOverrideReason}
                     onChange={(e) => setDurationOverrideReason(e.target.value)}
-                    placeholder="VD: Bệnh nhân nhạy cảm, cần thêm thời gian gây tê"
+                    placeholder={t('uiScheduling.durationOverrideExample')}
                   />
                 )}
 
                 <Select
-                  label="Nguồn đặt lịch"
+                  label={t('uiScheduling.source')}
                   value={source}
                   onChange={(e) => setSource(e.target.value as AppointmentSource)}
-                  options={SOURCE_OPTIONS}
+                options={sourceOptions}
                 />
 
                 {slotIssue && <Alert variant="warning">{slotIssue}</Alert>}
                 {availability?.pendingTimeOffs && availability.pendingTimeOffs.length > 0 && (
                   <Alert variant="info">
-                    Bác sĩ có đơn nghỉ đang chờ duyệt ngày này (
-                    {availability.pendingTimeOffs.map((t) => `${t.startTime}–${t.endTime}`).join(', ')}) — vẫn đặt
-                    được, nhưng lịch có thể phải dời nếu đơn được duyệt.
+                    {t('uiScheduling.pendingTimeOffWarning', { times: availability.pendingTimeOffs.map((timeOff) => `${timeOff.startTime}–${timeOff.endTime}`).join(', ') })}
                   </Alert>
                 )}
 
                 {dentistId && availability && suggestedStarts.length > 0 && (
                   <div>
                     <p className="mb-1 text-xs text-gray-500">
-                      Giờ trống phù hợp với thời lượng {durationMin} phút ({suggestedStarts.length} giờ):
+                      {t('uiScheduling.availableStartsForDuration', { minutes: durationMin, count: suggestedStarts.length })}
                     </p>
                     <div className="max-h-40 space-y-1.5 overflow-y-auto">
                       {suggestedGroups.map((g) => (
@@ -795,41 +785,40 @@ export function AppointmentFormModal({
 
             {isEdit && (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Để đổi ngày/giờ/bác sĩ, vui lòng dùng chức năng <strong>“Đổi lịch”</strong> trong chi tiết lịch hẹn.
-                Form này chỉ cập nhật <strong>lý do khám, triệu chứng và ghi chú</strong>.
+                {t('uiScheduling.editAppointmentHint')}
               </div>
             )}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Select
-                label="Loại lịch hẹn"
+                label={t('uiScheduling.appointmentType')}
                 value={appointmentType}
                 onChange={(e) => setAppointmentType(e.target.value as AppointmentType)}
-                options={APPOINTMENT_TYPE_OPTIONS}
+                options={appointmentTypeOptions}
               />
               <Input
-                label="Lý do khám"
+                label={t('uiScheduling.reason')}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="VD: Tái khám sau nhổ răng"
+                placeholder={t('uiScheduling.reasonExample')}
               />
             </div>
 
             <Input
-              label="Triệu chứng / Lý do chính"
+              label={t('uiScheduling.symptoms')}
               value={chiefComplaint}
               onChange={(e) => setChiefComplaint(e.target.value)}
-              placeholder="VD: Đau răng 26 kèm sưng nướu"
+              placeholder={t('uiScheduling.symptomsExample')}
             />
 
             <div>
-              <label className="label">Ghi chú nội bộ</label>
+              <label className="label">{t('uiScheduling.internalNote')}</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
                 className="input-base resize-none"
-                placeholder="VD: BN dị ứng penicillin, yêu cầu bác sĩ nữ..."
+                placeholder={t('uiScheduling.internalNoteExample')}
               />
             </div>
           </>
@@ -865,23 +854,24 @@ function describeSlotIssue(
   date: string,
   startMin: number,
   durationMin: number,
+  t: TFunction,
   buffers: { before: number; after: number } = { before: 0, after: 0 },
 ): string | null {
   const endMin = startMin + durationMin;
   const now = new Date();
   const today = clinicToday(now);
   if (date < today || (date === today && startMin <= clinicMinutes(now))) {
-    return 'Giờ bắt đầu đã qua — vui lòng chọn giờ khác.';
+    return t('uiScheduling.startTimePassed');
   }
   if (availability.blockedReason === 'NO_SCHEDULE' || availability.windows.length === 0) {
-    return 'Bác sĩ không có lịch làm việc ngày này.';
+    return t('uiScheduling.dentistNoSchedule');
   }
   const inWindow = availability.windows.some(
     (w) => startMin >= timeStringToMinutes(w.startTime) && endMin <= timeStringToMinutes(w.endTime),
   );
   if (!inWindow) {
     const hours = availability.windows.map((w) => `${w.startTime}–${w.endTime}`).join(', ');
-    return `Khung ${minutesToTime(startMin)}–${minutesToTime(endMin)} nằm ngoài giờ làm việc của bác sĩ (${hours}).`;
+    return t('uiScheduling.outsideWorkingHours', { start: minutesToTime(startMin), end: minutesToTime(endMin), hours });
   }
   // `busy` already includes other bookings' buffers; add this visit's own
   // prep/clean-up time (ADR-0009 D4).
@@ -891,8 +881,7 @@ function describeSlotIssue(
     (b) => busyFrom < timeStringToMinutes(b.endTime) && timeStringToMinutes(b.startTime) < busyTo,
   );
   if (clash) {
-    const withBuffers = buffers.before || buffers.after ? ' (tính cả thời gian chuẩn bị/dọn dẹp)' : '';
-    return `Khung ${minutesToTime(startMin)}–${minutesToTime(endMin)}${withBuffers} trùng lịch hẹn khác hoặc lịch nghỉ của bác sĩ.`;
+    return t('uiScheduling.timeSlotUnavailable', { start: minutesToTime(startMin), end: minutesToTime(endMin), withBuffers: buffers.before || buffers.after ? t('uiScheduling.includingBuffers') : '' });
   }
   return null;
 }
@@ -914,14 +903,15 @@ function ServicePicker({
   bufferBeforeMin: number;
   bufferAfterMin: number;
 }) {
+  const { t } = useTranslation();
   return (
     <fieldset>
-      <legend className="label">Dịch vụ</legend>
+      <legend className="label">{t('uiScheduling.service')}</legend>
       {isLoading ? (
-        <p className="text-xs text-gray-500">Đang tải dịch vụ của bác sĩ…</p>
+        <p className="text-xs text-gray-500">{t('uiScheduling.loadingDentistServices')}</p>
       ) : services.length === 0 ? (
         <p className="text-xs text-gray-500">
-          Bác sĩ chưa được gán dịch vụ nào cho ngày này — thời lượng chọn tay.
+          {t('uiScheduling.dentistNoServicesForDay')}
         </p>
       ) : (
         <>
@@ -952,9 +942,9 @@ function ServicePicker({
           </div>
           {selected.length > 0 && (
             <p className="mt-1 text-xs text-gray-500">
-              Tổng {totalMin} phút
+              {t('uiScheduling.totalMinutes', { count: totalMin })}
               {bufferBeforeMin || bufferAfterMin
-                ? ` · chuẩn bị ${bufferBeforeMin}′ trước, dọn dẹp ${bufferAfterMin}′ sau`
+                ? t('uiScheduling.serviceBuffers', { before: bufferBeforeMin, after: bufferAfterMin })
                 : ''}
             </p>
           )}

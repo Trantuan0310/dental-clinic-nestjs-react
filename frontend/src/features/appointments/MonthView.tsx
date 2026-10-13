@@ -10,6 +10,7 @@ import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/ap
 import { formatTimeOnly, getWeekdayLabel } from '@/lib/format';
 import { clinicToday, clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
+import { useTranslation } from 'react-i18next';
 import { isOverdueNotArrived, OVERDUE_DOT_CLASS, OVERDUE_LABEL, useNow } from './liveStatus';
 
 interface MonthViewProps {
@@ -34,12 +35,6 @@ const STATUS_DOT_COLORS: Record<AppointmentStatus, string> = {
   left: 'bg-orange-400',
 };
 
-const APPOINTMENT_TYPE_LABEL: Record<AppointmentType, string> = {
-  consultation: 'Khám / Tư vấn',
-  treatment: 'Điều trị',
-  follow_up: 'Tái khám',
-};
-
 const TYPE_DOT: Record<AppointmentType, string> = {
   consultation: 'ring-blue-300',
   treatment: 'ring-amber-300',
@@ -57,6 +52,10 @@ export function MonthView({
   onCreateAtSlot,
   closedDays,
 }: MonthViewProps) {
+  const { t, i18n } = useTranslation();
+  const weekdayLabels = i18n.resolvedLanguage?.startsWith('en')
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    : ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const now = useNow();
 
@@ -99,7 +98,7 @@ export function MonthView({
     <div className="flex flex-col">
       {/* Weekday header */}
       <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((d) => (
+        {weekdayLabels.map((d) => (
           <div
             key={d}
             className="border-r border-gray-100 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 last:border-r-0"
@@ -145,7 +144,7 @@ export function MonthView({
                         ? 'text-gray-700 hover:bg-gray-200'
                         : 'text-gray-400 hover:bg-gray-200',
                   )}
-                  title={`Xem ngày ${format(cell.date, 'dd/MM/yyyy')}`}
+                  title={t('uiScheduling.viewDate', { date: format(cell.date, 'dd/MM/yyyy') })}
                 >
                   {format(cell.date, 'd')}
                 </button>
@@ -153,9 +152,9 @@ export function MonthView({
                 {cell.inMonth && closedReason !== undefined && (
                   <span
                     className="truncate rounded bg-gray-200 px-1 text-[10px] font-medium text-gray-600"
-                    title={`Phòng khám nghỉ: ${closedReason}`}
+                    title={t('uiScheduling.clinicClosedReason', { reason: closedReason })}
                   >
-                    Nghỉ
+                    {t('uiScheduling.closed')}
                   </span>
                 )}
 
@@ -164,8 +163,8 @@ export function MonthView({
                     type="button"
                     onClick={() => onCreateAtSlot(cell.date, '09:00')}
                     className="rounded p-0.5 text-gray-300 opacity-0 transition-all hover:bg-brand-100 hover:text-brand-600 group-hover:opacity-100"
-                    aria-label={`Tạo lịch hẹn ngày ${format(cell.date, 'dd/MM')}`}
-                    title="Tạo lịch hẹn"
+                    aria-label={t('uiScheduling.createAppointmentDate', { date: format(cell.date, 'dd/MM') })}
+                    title={t('uiScheduling.createAppointment')}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
@@ -190,13 +189,13 @@ export function MonthView({
                     className="inline-flex w-full items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
                   >
                     <MoreHorizontal className="h-3 w-3" />
-                    <span>+{overflow} khác</span>
+                    <span>{t('uiScheduling.moreCount', { count: overflow })}</span>
                   </button>
                 )}
 
                 {cell.inMonth && dayAppointments.length === 0 && (
                   <div className="flex h-6 items-center justify-center text-[10px] text-gray-300 opacity-0 transition-opacity group-hover:opacity-100">
-                    Trống
+                    {t('uiScheduling.empty')}
                   </div>
                 )}
               </div>
@@ -212,12 +211,12 @@ export function MonthView({
         size="md"
         title={
           selectedDay
-            ? `Lịch hẹn — ${getWeekdayLabel(selectedDay)}, ${format(selectedDay, 'dd/MM/yyyy')}`
-            : 'Lịch hẹn'
+            ? `${t('uiScheduling.appointments')} — ${getWeekdayLabel(selectedDay)}, ${format(selectedDay, 'dd/MM/yyyy')}`
+            : t('uiScheduling.appointments')
         }
         description={
           selectedDayAppointments.length > 0
-            ? `${selectedDayAppointments.length} lịch hẹn trong ngày`
+            ? t('uiScheduling.appointmentsThatDay', { count: selectedDayAppointments.length })
             : undefined
         }
       >
@@ -255,16 +254,17 @@ interface AppointmentBlockProps {
 }
 
 function AppointmentBlock({ appointment, onClick, overdue = false }: AppointmentBlockProps) {
+  const { t } = useTranslation();
   const type = appointment.appointmentType ?? 'consultation';
   const tooltipContent = (
     <div className="space-y-0.5 text-left">
       <p className="font-semibold">{appointment.patientName}</p>
-      {overdue && <p className="text-[11px] font-semibold">{OVERDUE_LABEL}</p>}
+      {overdue && <p className="text-[11px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>}
       <p className="text-[11px] opacity-90">
         {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} •{' '}
-        {appointment.durationMinutes}p
+        {t('uiScheduling.minutesValue', { count: appointment.durationMinutes })}
       </p>
-      <p className="text-[11px] opacity-90">{APPOINTMENT_TYPE_LABEL[type]}</p>
+      <p className="text-[11px] opacity-90">{t(`uiScheduling.type${type === 'follow_up' ? 'FollowUp' : type === 'consultation' ? 'Consultation' : 'Treatment'}`)}</p>
       {appointment.reason && (
         <p className="max-w-[200px] truncate text-[11px] opacity-75">{appointment.reason}</p>
       )}
@@ -281,12 +281,12 @@ function AppointmentBlock({ appointment, onClick, overdue = false }: Appointment
         }}
         className={cn(
           'group/apt flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[11px] font-medium transition-all',
-          'bg-white/70 ring-1 ring-inset hover:bg-white',
-          'text-gray-700 hover:text-gray-900',
+          'bg-white/70 ring-1 ring-inset hover:bg-white dark:bg-surface-800/80 dark:hover:bg-surface-700',
+          'text-gray-700 hover:text-gray-900 dark:text-surface-100 dark:hover:text-white',
           TYPE_DOT[type],
           appointment.status === 'cancelled' && 'opacity-60 line-through',
           appointment.status === 'no_show' && 'opacity-60',
-          overdue && 'bg-rose-50 text-rose-800',
+          overdue && 'bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200',
         )}
       >
         <span
@@ -297,7 +297,7 @@ function AppointmentBlock({ appointment, onClick, overdue = false }: Appointment
           aria-hidden
         />
         {overdue && <span className="sr-only">{OVERDUE_LABEL}</span>}
-        <span className="shrink-0 tabular-nums text-[10px] text-gray-500">
+          <span className="shrink-0 tabular-nums text-[10px] text-gray-500 dark:text-surface-300">
           {formatTimeOnly(appointment.startsAt)}
         </span>
         <span className="truncate">{appointment.patientName}</span>
@@ -323,15 +323,16 @@ function DayAppointmentsList({
   onAppointmentClick,
   onCreateAtSlot,
 }: DayAppointmentsListProps) {
+  const { t } = useTranslation();
   if (appointments.length === 0) {
     return (
       <EmptyState
-        title="Chưa có lịch hẹn"
-        description="Không có lịch hẹn nào trong ngày này."
+        title={t('uiScheduling.calendarNoAppointments')}
+        description={t('uiScheduling.noAppointmentsThatDay')}
         action={
           onCreateAtSlot ? (
             <Button leftIcon={<Plus className="h-4 w-4" />} onClick={onCreateAtSlot}>
-              Tạo lịch hẹn
+              {t('uiScheduling.createAppointment')}
             </Button>
           ) : undefined
         }
@@ -348,7 +349,7 @@ function DayAppointmentsList({
             <button
               type="button"
               onClick={() => onAppointmentClick(apt)}
-              className="flex w-full items-center gap-3 rounded-md px-2 py-3 text-left transition-colors hover:bg-gray-50"
+                    className="flex w-full items-center gap-3 rounded-md px-2 py-3 text-left text-gray-900 transition-colors hover:bg-gray-50 dark:text-surface-100 dark:hover:bg-surface-800"
             >
               <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-md bg-gray-50 px-2 py-1">
                 <Clock className="h-3.5 w-3.5 text-gray-400" />
@@ -375,11 +376,11 @@ function DayAppointmentsList({
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
                   <span className="inline-flex items-center gap-1">
                     <Stethoscope className="h-3 w-3" />
-                    {APPOINTMENT_TYPE_LABEL[type]}
+                    {t(`uiScheduling.type${type === 'follow_up' ? 'FollowUp' : type === 'consultation' ? 'Consultation' : 'Treatment'}`)}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <CalendarIcon className="h-3 w-3" />
-                    {apt.durationMinutes} phút
+                    {t('uiScheduling.minutesValue', { count: apt.durationMinutes })}
                   </span>
                   <span>{apt.dentistName}</span>
                 </div>

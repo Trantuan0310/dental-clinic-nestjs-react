@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,8 +12,8 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
 
 const schema = z.object({
-  paymentReference: z.string().min(1, 'Bắt buộc').max(200),
-  paymentDate: z.string().min(1, 'Bắt buộc'),
+  paymentReference: z.string().min(1, 'uiWorkforce.payrollFieldRequired').max(200),
+  paymentDate: z.string().min(1, 'uiWorkforce.payrollFieldRequired'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function MarkPaidModal({ open, onClose, periodId }: Props) {
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
@@ -43,11 +45,11 @@ export function MarkPaidModal({ open, onClose, periodId }: Props) {
     setServerError(null);
     try {
       await markPaid.mutateAsync({ id: periodId, payload: values });
-      notify.success('Đã đánh dấu trả lương');
+      notify.success(t('uiWorkforce.payrollPaidToast'));
       reset();
       onClose();
     } catch (err) {
-      setServerError(getApiErrorMessage(err, 'Không thể cập nhật'));
+      setServerError(getApiErrorMessage(err, t('uiWorkforce.payrollPaymentUpdateError')));
     }
   });
 
@@ -55,16 +57,16 @@ export function MarkPaidModal({ open, onClose, periodId }: Props) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Xác nhận đã trả lương"
-      description="Chuyển trạng thái APPROVED → PAID. Sau 7 ngày sẽ tự động LOCKED (BR-PAY-017)."
+      title={t('uiWorkforce.payrollMarkPaidTitle')}
+      description={t('uiWorkforce.payrollMarkPaidDescription')}
       size="md"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiWorkforce.payrollCancel')}
           </Button>
           <Button variant="success" onClick={onSubmit} isLoading={isSubmitting || markPaid.isPending}>
-            Xác nhận đã trả
+            {t('uiWorkforce.payrollConfirmPaid')}
           </Button>
         </>
       }
@@ -72,17 +74,17 @@ export function MarkPaidModal({ open, onClose, periodId }: Props) {
       <form onSubmit={onSubmit} className="space-y-3">
         {serverError && <Alert variant="error">{serverError}</Alert>}
         <Input
-          label="Mã tham chiếu thanh toán"
-          placeholder="VD: VCB-2026-08-31-001"
+          label={t('uiWorkforce.payrollPaymentReference')}
+          placeholder="VCB-2026-08-31-001"
           {...register('paymentReference')}
-          error={errors.paymentReference?.message}
+          error={errors.paymentReference?.message ? t(errors.paymentReference.message) : undefined}
           required
         />
         <Input
           type="date"
-          label="Ngày trả"
+          label={t('uiWorkforce.payrollPaymentDate')}
           {...register('paymentDate')}
-          error={errors.paymentDate?.message}
+          error={errors.paymentDate?.message ? t(errors.paymentDate.message) : undefined}
           required
         />
       </form>

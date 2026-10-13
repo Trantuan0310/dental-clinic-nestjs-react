@@ -1,5 +1,6 @@
 import { format, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useDentistOptions } from './appointmentApi';
@@ -8,6 +9,8 @@ import type { Appointment, AppointmentStatus, AppointmentType, ClockInterval } f
 import { formatTimeOnly } from '@/lib/format';
 import { clinicWallClock } from '@/lib/clinicTime';
 import { cn } from '@/lib/cn';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   appointmentSpan,
   HOUR_HEIGHT_PX,
@@ -25,14 +28,14 @@ const PX_PER_MIN = HOUR_HEIGHT_PX / 60;
 const MIN_BLOCK_MIN = Math.ceil(MIN_BLOCK_PX / PX_PER_MIN);
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-gray-100 border-gray-300 text-gray-800',
-  confirmed: 'bg-blue-50 border-blue-300 text-blue-800',
-  checked_in: 'bg-cyan-50 border-cyan-300 text-cyan-800',
-  in_progress: 'bg-amber-50 border-amber-400 text-amber-900',
-  completed: 'bg-emerald-50 border-emerald-300 text-emerald-800',
-  cancelled: 'bg-red-50 border-red-300 text-red-700',
-  no_show: 'bg-red-100 border-red-300 text-red-800',
-  left: 'bg-orange-50 border-orange-300 text-orange-800',
+  scheduled: 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-surface-700 dark:border-surface-500 dark:text-surface-100',
+  confirmed: 'bg-blue-50 border-blue-300 text-blue-800 dark:bg-blue-950 dark:border-blue-700 dark:text-blue-100',
+  checked_in: 'bg-cyan-50 border-cyan-300 text-cyan-800 dark:bg-cyan-950 dark:border-cyan-700 dark:text-cyan-100',
+  in_progress: 'bg-amber-50 border-amber-400 text-amber-900 dark:bg-amber-950 dark:border-amber-700 dark:text-amber-100',
+  completed: 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-950 dark:border-emerald-700 dark:text-emerald-100',
+  cancelled: 'bg-red-50 border-red-300 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-200',
+  no_show: 'bg-red-100 border-red-300 text-red-800 dark:bg-red-950 dark:border-red-800 dark:text-red-100',
+  left: 'bg-orange-50 border-orange-300 text-orange-800 dark:bg-orange-950 dark:border-orange-700 dark:text-orange-100',
 };
 
 const TYPE_DOT: Record<AppointmentType, string> = {
@@ -41,11 +44,8 @@ const TYPE_DOT: Record<AppointmentType, string> = {
   follow_up: 'bg-emerald-500',
 };
 
-const TYPE_LABEL: Record<AppointmentType, string> = {
-  consultation: 'Khám',
-  treatment: 'Điều trị',
-  follow_up: 'Tái khám',
-};
+const typeLabel = (t: TFunction, type: AppointmentType) =>
+  t(`uiScheduling.${type === 'follow_up' ? 'typeFollowUp' : type === 'consultation' ? 'typeConsultation' : 'typeTreatment'}`);
 
 const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 const hhmmToMin = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
@@ -106,6 +106,7 @@ function DayColumn({
   onSlotClick,
   onAppointmentClick,
 }: DayColumnProps) {
+  const { t } = useTranslation();
   const dateKey = format(day, 'yyyy-MM-dd');
   const gridStartMin = hourStart * 60;
   const lanes = layoutLanes(appointments, MIN_BLOCK_MIN);
@@ -115,7 +116,7 @@ function DayColumn({
     <div
       className={cn('relative', closed && 'bg-gray-100/80', className)}
       style={{ height: hours.length * HOUR_HEIGHT_PX }}
-      title={closed ? `Phòng khám nghỉ: ${closedReason}` : undefined}
+      title={closed ? t('uiScheduling.clinicClosedReason', { reason: closedReason }) : undefined}
     >
       {/* Working hours of the filtered dentist */}
       {!closed &&
@@ -141,7 +142,7 @@ function DayColumn({
             onClick={() => onSlotClick(day, hhmm(hour))}
             className="absolute left-0 right-0 border-b border-gray-50 px-1 text-left text-[10px] text-transparent hover:bg-brand-50/40 hover:text-brand-500"
             style={style}
-            title={`Tạo lịch ${format(day, 'dd/MM')} ${hhmm(hour)}`}
+            title={t('uiScheduling.createAppointmentDateTime', { date: format(day, 'dd/MM'), time: hhmm(hour) })}
           >
             +
           </button>
@@ -196,6 +197,7 @@ export function DayView({
   onSlotClick,
   onAppointmentClick,
 }: DayViewProps) {
+  const { t } = useTranslation();
   const now = useNow();
   const dateKey = format(date, 'yyyy-MM-dd');
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
@@ -205,7 +207,7 @@ export function DayView({
     <div>
       {closedReason !== undefined && (
         <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-          Phòng khám nghỉ cả ngày: {closedReason}
+          {t('uiScheduling.clinicClosedAllDay', { reason: closedReason })}
         </div>
       )}
       <div className="flex">
@@ -246,6 +248,8 @@ export function WeekView({
   onSlotClick,
   onAppointmentClick,
 }: WeekViewProps) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.resolvedLanguage?.startsWith('en') ? enUS : vi;
   const today = clinicWallClock();
   const now = useNow();
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
@@ -269,7 +273,7 @@ export function WeekView({
               )}
             >
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                {format(day, 'EEE', { locale: vi })}
+                {format(day, 'EEE', { locale: dateLocale })}
               </p>
               <p
                 className={cn(
@@ -281,7 +285,7 @@ export function WeekView({
               </p>
               {closedReason !== undefined && (
                 <p className="truncate text-[10px] font-medium text-gray-500" title={closedReason}>
-                  Nghỉ: {closedReason}
+                  {t('uiScheduling.clinicClosedReason', { reason: closedReason })}
                 </p>
               )}
             </div>
@@ -344,6 +348,7 @@ function AppointmentBlock({
   compact = false,
   overdue = false,
 }: AppointmentBlockProps) {
+  const { t } = useTranslation();
   const type = appointment.appointmentType ?? 'consultation';
   // Status keeps the block colour; the dentist's profile colour marks whose it is.
   const { data: dentists } = useDentistOptions();
@@ -351,12 +356,12 @@ function AppointmentBlock({
   const tooltipContent = (
     <div className="space-y-0.5 text-left">
       <p className="font-semibold">{appointment.patientName}</p>
-      {overdue && <p className="text-[11px] font-semibold">{OVERDUE_LABEL}</p>}
+      {overdue && <p className="text-[11px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>}
       <p className="text-[11px] opacity-90">
-        {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} • {appointment.durationMinutes}p
+        {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} • {t('uiScheduling.minutesValue', { count: appointment.durationMinutes })}
       </p>
       <p className="text-[11px] opacity-90">
-        {TYPE_LABEL[type]} • {appointment.dentistName}
+        {typeLabel(t, type)} • {appointment.dentistName}
       </p>
       {appointment.reason && (
         <p className="max-w-[220px] truncate text-[11px] opacity-75">{appointment.reason}</p>
@@ -392,7 +397,7 @@ function AppointmentBlock({
           }}
           className={cn(
             'h-full w-full overflow-hidden rounded-md border-l-4 px-2 py-1 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
-            overdue ? OVERDUE_BLOCK_CLASS : STATUS_BG[appointment.status],
+            overdue ? `${OVERDUE_BLOCK_CLASS} dark:bg-rose-950 dark:border-rose-700 dark:text-rose-100` : STATUS_BG[appointment.status],
             appointment.status === 'cancelled' && 'opacity-60 line-through',
             (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
           )}
@@ -405,14 +410,14 @@ function AppointmentBlock({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 truncate text-[11px] font-semibold">
                 {overdue ? (
-                  <AlertTriangle className="h-3 w-3 shrink-0" aria-label={OVERDUE_LABEL} />
+                  <AlertTriangle className="h-3 w-3 shrink-0" aria-label={t(`uiScheduling.${OVERDUE_LABEL}`)} />
                 ) : (
                   showDetails && <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                 )}
                 <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
               </div>
               {overdue && showDetails && !compact && (
-                <p className="truncate text-[10px] font-semibold">{OVERDUE_LABEL}</p>
+                <p className="truncate text-[10px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>
               )}
               <p className={cn('truncate text-xs font-medium', compact ? 'text-[11px]' : 'text-xs')}>
                 {appointment.patientName}

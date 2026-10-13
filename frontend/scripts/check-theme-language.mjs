@@ -38,7 +38,7 @@ async function fixtures(context, staff) {
 const pages = [
  ['login','/login',false],['landing','/',false],['booking','/booking',false],['booking-status','/booking/status',false],
  ['dashboard','/',true],['patients','/patients',true],['patient-form','/patients/new',true],['patient-detail','/patients/patient-ui',true],['encounter','/encounters/encounter-ui',true],
- ['appointments','/appointments',true],['appointment-list','/appointments/list',true],['schedule','/schedule',true],['inventory','/inventory',true],['invoices','/billing/list',true],['reports','/reports',true],['expenses','/expenses',true],['staff','/staff',true],['users','/admin/users',true],['payroll','/payroll',true],['services','/services',true],['account','/me',true],
+ ['appointments','/appointments',true],['appointment-list','/appointments/list',true],['schedule','/schedule',true],['inventory','/inventory',true],['invoices','/billing/list',true],['reports','/reports',true],['expenses','/expenses',true],['staff','/staff',true],['dentists','/dentists',true],['users','/admin/users',true],['roles','/admin/roles',true],['audit-logs','/admin/audit',true],['clinic-settings','/admin/settings',true],['payroll','/payroll',true],['payroll-config','/payroll/config',true],['compensations','/payroll/compensations',true],['shift-approval','/payroll/shifts/approval',true],['my-shifts','/my-shifts',true],['services','/services',true],['account','/me',true],
 ];
 const reportRows=[];
 try {

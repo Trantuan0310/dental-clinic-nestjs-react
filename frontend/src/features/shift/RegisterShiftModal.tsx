@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, Button, Input, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -10,6 +11,7 @@ interface RegisterShiftModalProps {
 }
 
 export function RegisterShiftModal({ open, onClose }: RegisterShiftModalProps) {
+  const { t } = useTranslation();
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
@@ -37,19 +39,19 @@ export function RegisterShiftModal({ open, onClose }: RegisterShiftModalProps) {
         maxEncounters: maxEncounters ? parseInt(maxEncounters, 10) : undefined,
         notes: notes || undefined,
       });
-      notify.success('Đã đăng ký ca làm việc');
+      notify.success(t('uiWorkforce.shiftRegisterSuccess'));
       resetForm();
       onClose();
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể đăng ký ca làm việc'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.shiftRegisterError')));
     }
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Đăng ký ca làm việc" size="sm">
+    <Modal open={open} onClose={onClose} title={t('uiWorkforce.shiftRegisterTitle')} size="sm">
       <div className="space-y-4">
         <Input
-          label="Ngày"
+          label={t('uiWorkforce.shiftDate')}
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
@@ -59,49 +61,49 @@ export function RegisterShiftModal({ open, onClose }: RegisterShiftModalProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <Input
-            label="Giờ bắt đầu"
+            label={t('uiWorkforce.shiftStartTime')}
             type="time"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
             required
           />
           <Input
-            label="Giờ kết thúc"
+            label={t('uiWorkforce.shiftEndTime')}
             type="time"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
-            error={!isTimeRangeValid ? 'Giờ kết thúc phải sau giờ bắt đầu' : undefined}
+            error={!isTimeRangeValid ? t('uiWorkforce.shiftTimeRangeInvalid') : undefined}
             required
           />
         </div>
 
         <Input
-          label="Số bệnh nhân tối đa (không bắt buộc)"
+          label={t('uiWorkforce.shiftOptionalMaxPatients')}
           type="number"
           min="1"
           value={maxEncounters}
           onChange={(e) => setMaxEncounters(e.target.value)}
-          placeholder="VD: 10"
+          placeholder="10"
         />
 
         <Textarea
-          label="Ghi chú (không bắt buộc)"
+          label={t('uiWorkforce.shiftOptionalNotes')}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          placeholder="VD: Ca đặc biệt cho ngày nghỉ lễ"
+          placeholder={t('uiWorkforce.shiftNotesPlaceholder')}
         />
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiWorkforce.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             isLoading={createShift.isPending}
             disabled={!date || !startTime || !endTime || !isTimeRangeValid}
           >
-            Đăng ký
+            {t('uiWorkforce.registerShift')}
           </Button>
         </div>
       </div>

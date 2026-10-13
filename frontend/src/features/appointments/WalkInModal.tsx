@@ -15,6 +15,7 @@ import {
 } from './appointmentApi';
 import type { PatientMini } from '@/types/appointment';
 import { clinicToday } from '@/lib/clinicTime';
+import { useTranslation } from 'react-i18next';
 
 interface WalkInModalProps {
   open: boolean;
@@ -23,7 +24,6 @@ interface WalkInModalProps {
   onCreated?: (appointmentId: string) => void;
 }
 
-const DURATION_OPTIONS = ['15', '30', '45', '60', '90'].map((v) => ({ value: v, label: `${v} phút` }));
 
 /**
  * BR-APPT-032: a patient walks in without a booking. The visit is checked in
@@ -34,6 +34,10 @@ const DURATION_OPTIONS = ['15', '30', '45', '60', '90'].map((v) => ({ value: v, 
  * booking form first.
  */
 export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
+  const { t } = useTranslation();
+  const durationOptions = ['15', '30', '45', '60', '90'].map((value) => ({
+    value, label: t('uiScheduling.minutesValue', { count: Number(value) }),
+  }));
   const [patient, setPatient] = useState<PatientMini | null>(null);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -87,10 +91,10 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
 
   const submit = async (ignoreUpcomingBookings = false) => {
     setError(null);
-    if (!patient) return setError('Vui lòng chọn bệnh nhân.');
-    if (!dentistId) return setError('Vui lòng chọn bác sĩ.');
+    if (!patient) return setError(t('uiScheduling.selectPatientError'));
+    if (!dentistId) return setError(t('uiScheduling.selectDentistError'));
     if (overtimeAsked && overtimeReason.trim().length < 5) {
-      return setError('Nhập lý do khám ngoài giờ (ít nhất 5 ký tự).');
+      return setError(t('uiScheduling.overtimeReasonRequired'));
     }
     try {
       const created = await create.mutateAsync({
@@ -102,14 +106,14 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
         overtimeReason: overtimeAsked ? overtimeReason : undefined,
         ignoreUpcomingBookings,
       });
-      notify.success(`Đã tiếp nhận ${patient.fullName} — đang chờ khám`);
+      notify.success(t('uiScheduling.walkInCreated', { name: patient.fullName }));
       onClose();
       onCreated?.(created.id);
     } catch (err) {
       const code = getApiErrorCode(err);
       if (code === 'OVERTIME_CONFIRM_REQUIRED') setOvertimeAsked(true);
       setBookingAsked(code === 'PATIENT_HAS_BOOKING');
-      setError(getApiErrorMessage(err, 'Không thể tiếp nhận khách vãng lai'));
+      setError(getApiErrorMessage(err, t('uiScheduling.walkInError')));
     }
   };
 
@@ -118,20 +122,20 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
       open={open}
       onClose={onClose}
       size="md"
-      title="Tiếp nhận khách vãng lai"
-      description="Không đặt trước: bệnh nhân được check-in luôn và vào hàng chờ của bác sĩ (bác sĩ có thể đang khám người khác)."
+      title={t('uiScheduling.walkInTitle')}
+      description={t('uiScheduling.walkInDescription')}
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={create.isPending}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           {bookingAsked ? (
             <Button onClick={() => void submit(true)} isLoading={create.isPending}>
-              Vẫn tiếp nhận vãng lai
+              {t('uiScheduling.walkInConfirmWithBooking')}
             </Button>
           ) : (
             <Button onClick={() => void submit()} isLoading={create.isPending}>
-              Tiếp nhận
+              {t('uiScheduling.walkInSubmit')}
             </Button>
           )}
         </>
@@ -142,7 +146,7 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
 
         {patient ? (
           <div>
-            <label className="label">Bệnh nhân *</label>
+            <label className="label">{t('uiScheduling.patientRequired')}</label>
             <div className="input-base flex items-center justify-between gap-2">
               <span className="truncate text-gray-900">
                 {patient.fullName} — {patient.code}
@@ -152,21 +156,21 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
                 onClick={() => setPatient(null)}
                 className="shrink-0 text-xs font-medium text-primary-600 hover:underline"
               >
-                Đổi
+                {t('uiScheduling.change')}
               </button>
             </div>
           </div>
         ) : (
           <div>
             <Input
-              label="Tìm bệnh nhân *"
+              label={t('uiScheduling.patientSearchRequired')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tên, số điện thoại hoặc mã bệnh nhân"
+              placeholder={t('uiScheduling.patientSearch')}
             />
             {isFetching && (
               <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                <Spinner size="sm" /> Đang tìm…
+                <Spinner size="sm" /> {t('uiScheduling.searching')}
               </p>
             )}
             {results.length > 0 && (
@@ -184,7 +188,7 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
                           {p.code} • {p.primaryPhone ?? '—'}
                         </span>
                       </span>
-                      <span className="text-xs text-primary-600">Chọn →</span>
+                      <span className="text-xs text-primary-600">{t('uiScheduling.choose')}</span>
                     </button>
                   </li>
                 ))}
@@ -192,30 +196,30 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
             )}
             {debounced.trim().length >= 2 && !isFetching && results.length === 0 && (
               <p className="mt-1 text-xs text-gray-500">
-                Không tìm thấy — tạo hồ sơ ở “Tạo lịch hẹn → Bệnh nhân mới” trước.
+                {t('uiScheduling.walkInPatientMissing')}
               </p>
             )}
           </div>
         )}
 
         <Select
-          label="Bác sĩ *"
+          label={t('uiScheduling.dentistRequired')}
           value={dentistId}
           onChange={(e) => {
             setDentistId(e.target.value);
             setServiceIds([]);
           }}
-          placeholder="Chọn bác sĩ"
+          placeholder={t('uiScheduling.chooseDentist')}
           options={dentists.map((d) => ({ value: d.id, label: d.fullName }))}
         />
 
         {dentistId && (
           <fieldset>
-            <legend className="label">Dịch vụ</legend>
+            <legend className="label">{t('uiScheduling.service')}</legend>
             {isLoadingServices ? (
-              <p className="text-xs text-gray-500">Đang tải dịch vụ…</p>
+              <p className="text-xs text-gray-500">{t('uiScheduling.loadingServices')}</p>
             ) : services.length === 0 ? (
-              <p className="text-xs text-gray-500">Bác sĩ chưa được gán dịch vụ — chọn thời lượng.</p>
+              <p className="text-xs text-gray-500">{t('uiScheduling.dentistNoServices')}</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {services.map((sv) => (
@@ -246,30 +250,30 @@ export function WalkInModal({ open, onClose, onCreated }: WalkInModalProps) {
         )}
 
         {chosen.length > 0 ? (
-          <p className="text-xs text-gray-500">Thời lượng theo dịch vụ: {total} phút.</p>
+          <p className="text-xs text-gray-500">{t('uiScheduling.durationByService', { minutes: total })}</p>
         ) : (
           <Select
-            label="Thời lượng"
+            label={t('uiScheduling.duration')}
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
-            options={DURATION_OPTIONS}
+            options={durationOptions}
           />
         )}
 
         {overtimeAsked && (
           <Input
-            label="Lý do khám ngoài giờ *"
+            label={t('uiScheduling.overtimeReasonLabel')}
             value={overtimeReason}
             onChange={(e) => setOvertimeReason(e.target.value)}
-            placeholder="VD: Bác sĩ đồng ý ở lại khám ca đau cấp"
+            placeholder={t('uiScheduling.walkInNoteExample')}
           />
         )}
 
         <Input
-          label="Triệu chứng / Lý do đến"
+          label={t('uiScheduling.symptoms')}
           value={chiefComplaint}
           onChange={(e) => setChiefComplaint(e.target.value)}
-          placeholder="VD: Đau răng hàm dưới từ tối qua"
+          placeholder={t('uiScheduling.reasonExample')}
         />
       </div>
     </Modal>

@@ -2,8 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, MoreHorizontal, Loader2, Trash2, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
 import { patientsApi } from '@/features/patients/imperativeApi';
 import {
   Button,
@@ -19,7 +17,7 @@ import {
 } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import type { PatientFilters, Patient } from '@/types/patients';
-import { formatPhone } from '@/lib/format';
+import { formatPhone, formatDate } from '@/lib/format';
 import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 20;
@@ -206,7 +204,7 @@ export default function PatientListPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-600">
                         {patient.dateOfBirth
-                          ? format(new Date(patient.dateOfBirth), 'dd/MM/yyyy', { locale: vi })
+                          ? formatDate(patient.dateOfBirth)
                           : '-'}
                       </td>
                       <td className="px-4 py-3">

@@ -35,7 +35,7 @@ function canCancel(s: ShiftRegistration): { allowed: boolean; reason?: string } 
     shiftStart.setUTCHours(hh, mm, 0, 0);
     const hoursUntil = (shiftStart.getTime() - Date.now()) / (1000 * 60 * 60);
     if (hoursUntil < HOURS_24) {
-      return { allowed: false, reason: 'Phải hủy ca trước 24h' };
+      return { allowed: false, reason: 'shiftCancelTooLate' };
     }
     return { allowed: true };
   }
@@ -91,7 +91,7 @@ export default function MyShiftsPage() {
       notify.success(t('uiWorkforce.shiftCancelled'));
       setConfirmCancel(null);
     } catch (err) {
-      setActionError(getApiErrorMessage(err, 'Không thể hủy ca'));
+      setActionError(getApiErrorMessage(err, t('uiWorkforce.shiftCancelError')));
     }
   };
 
@@ -144,7 +144,7 @@ export default function MyShiftsPage() {
               variant="outline"
               disabled={!check.allowed}
               onClick={() => setConfirmCancel(row.original)}
-              title={check.reason}
+              title={check.reason ? t(`uiWorkforce.${check.reason}`) : undefined}
             >
               {t('uiWorkforce.cancel')}
             </Button>

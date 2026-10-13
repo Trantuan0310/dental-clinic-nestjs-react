@@ -55,6 +55,9 @@ type PublicPrice = {
 
 const NAV_KEYS = ['navServices', 'navDentists', 'navBooking', 'navContact'] as const;
 const NAV_HREFS = ['#dich-vu', '#bac-si', '#quy-trinh', '#lien-he'];
+// Weekday names are interface labels; clinic-configured opening times stay verbatim.
+const weekdayLabel = (day: number, locale: string) =>
+  new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, day === 0 ? 7 : day)));
 const HIGHLIGHT_ICONS = [Stethoscope, BadgeDollarSign, ShieldCheck, CalendarClock];
 const STEP_ICONS = [CalendarCheck, Phone, ClipboardCheck];
 
@@ -199,14 +202,14 @@ function SiteHeader() {
 }
 
 function Hero({ media }: { media?: SiteMedia }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <section id="top" className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white dark:from-surface-900 dark:to-surface-950">
       <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:py-20 md:grid-cols-[1.15fr_1fr]">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full bg-white dark:bg-surface-900 px-3 py-1 text-sm font-medium text-brand-600 shadow-sm ring-1 ring-brand-100">
             <span className="h-2 w-2 rounded-full bg-accent" aria-hidden />
-            {clinic.tagline} · {t('uiEntry.landing.onlineBooking')}
+            {(clinic.taglineIsDefault ? t('uiEntry.landing.defaultTagline') : clinic.tagline)} · {t('uiEntry.landing.onlineBooking')}
           </p>
           <h1 className="mt-5 text-4xl font-bold leading-tight text-gray-900 dark:text-surface-100 sm:text-5xl">
             {t('uiEntry.landing.heroTitle')} <span className="text-brand-600">{t('uiEntry.landing.heroHighlight')}</span>
@@ -238,7 +241,7 @@ function Hero({ media }: { media?: SiteMedia }) {
               <Clock className="h-4 w-4 text-brand-500" aria-hidden />
               <dt className="sr-only">{t('uiEntry.landing.workingHours')}</dt>
               <dd>
-                {clinic.hours[0].days}: {clinic.hours[0].time}
+                {weekdayLabel(1, i18n.resolvedLanguage ?? i18n.language)} – {weekdayLabel(6, i18n.resolvedLanguage ?? i18n.language)}: {clinic.hours[0].time}
               </dd>
             </div>
             {clinic.address && (
@@ -550,7 +553,7 @@ function Faq() {
 }
 
 function Contact() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const mapEmbed = clinic.address
     ? `https://www.google.com/maps?q=${encodeURIComponent(clinic.address)}&output=embed`
     : '';
@@ -567,12 +570,16 @@ function Contact() {
           </h2>
           <table className="mt-6 w-full overflow-hidden rounded-xl bg-white dark:bg-surface-900 text-left shadow-sm ring-1 ring-gray-100">
             <tbody className="divide-y divide-gray-100">
-              {clinic.hours.map((h) => (
-                <tr key={h.days}>
+              {clinic.hours.map((h, i) => (
+                <tr key={i}>
                   <th scope="row" className="px-4 py-3 font-medium text-gray-900 dark:text-surface-100">
-                    {h.days}
+                    {i === 0
+                      ? `${weekdayLabel(1, i18n.resolvedLanguage ?? i18n.language)} – ${weekdayLabel(6, i18n.resolvedLanguage ?? i18n.language)}`
+                      : weekdayLabel(0, i18n.resolvedLanguage ?? i18n.language)}
                   </th>
-                  <td className="px-4 py-3 text-gray-600 dark:text-surface-300">{h.time}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-surface-300">
+                    {i === 1 && clinic.sundayHoursIsDefault ? t('uiEntry.landing.sundayClosed') : h.time}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -637,7 +644,9 @@ function Contact() {
           <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-2xl bg-white dark:bg-surface-900 p-8 text-center shadow-sm ring-1 ring-gray-100">
             <img src="/logo-icon.svg" alt="" className="h-16 w-16" />
             <p className="mt-4 font-semibold text-gray-900 dark:text-surface-100">{clinic.name}</p>
-            <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{clinic.tagline}</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
+              {clinic.taglineIsDefault ? t('uiEntry.landing.defaultTagline') : clinic.tagline}
+            </p>
           </div>
         )}
       </div>

@@ -1,4 +1,5 @@
 export const vi = {
+  home: 'Trang chủ',
   roles: { clinic_admin: 'Quản trị viên', receptionist: 'Lễ tân', dentist: 'Bác sĩ' },
   pagination: {
     label: 'Phân trang',
@@ -96,9 +97,12 @@ export const vi = {
     auditLog: 'Nhật ký kiểm toán', details: 'Chi tiết', id: 'ID',
   },
   dialog: { cancel: 'Hủy', confirm: 'Xác nhận' },
+  exporting: 'Đang xuất…',
+  yes: 'Có', no: 'Không'
 };
 
 export const en = {
+  home: 'Home',
   roles: { clinic_admin: 'Administrator', receptionist: 'Receptionist', dentist: 'Dentist' },
   pagination: {
     label: 'Pagination',
@@ -196,4 +200,6 @@ export const en = {
     auditLog: 'Audit log', details: 'Details', id: 'ID',
   },
   dialog: { cancel: 'Cancel', confirm: 'Confirm' },
+  exporting: 'Exporting…',
+  yes: 'Yes', no: 'No'
 };

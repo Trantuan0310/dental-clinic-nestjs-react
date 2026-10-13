@@ -1,12 +1,13 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import type { TimeBlock } from '@/types/schedule';
+import { useTranslation } from 'react-i18next';
 
 /** Editable list of "from – to" blocks of one day. */
 export function TimeBlocksEditor({
   blocks,
   onChange,
-  startLabel = 'Từ',
+  startLabel,
   max = 6,
 }: {
   blocks: TimeBlock[];
@@ -14,16 +15,18 @@ export function TimeBlocksEditor({
   startLabel?: string;
   max?: number;
 }) {
+  const { t } = useTranslation();
+  const fromLabel = startLabel ?? t('uiScheduling.from');
   const update = (i: number, patch: Partial<TimeBlock>) =>
     onChange(blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)));
   return (
     <div className="space-y-2">
       {blocks.map((b, i) => (
-        <div key={i} className="flex items-end gap-2">
+        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
           <div className="min-w-0 flex-1">
             <Input
-              label={i === 0 ? startLabel : undefined}
-              aria-label={`${startLabel} (khung ${i + 1})`}
+              label={i === 0 ? fromLabel : undefined}
+              aria-label={t('uiScheduling.timeBlockStartLabel', { label: fromLabel, index: i + 1 })}
               type="time"
               step={300}
               required
@@ -33,8 +36,8 @@ export function TimeBlocksEditor({
           </div>
           <div className="min-w-0 flex-1">
             <Input
-              label={i === 0 ? 'Đến' : undefined}
-              aria-label={`Đến (khung ${i + 1})`}
+              label={i === 0 ? t('uiScheduling.to') : undefined}
+              aria-label={t('uiScheduling.timeBlockEndLabel', { index: i + 1 })}
               type="time"
               step={300}
               required
@@ -46,7 +49,7 @@ export function TimeBlocksEditor({
             type="button"
             variant="ghost"
             size="sm"
-            aria-label={`Bỏ khung ${i + 1}`}
+            aria-label={t('uiScheduling.removeTimeBlock', { index: i + 1 })}
             disabled={blocks.length <= 1}
             onClick={() => onChange(blocks.filter((_, j) => j !== i))}
           >
@@ -65,7 +68,7 @@ export function TimeBlocksEditor({
             onChange([...blocks, { startTime: start, endTime: start < '23:00' ? `${String(Number(start.slice(0, 2)) + 1).padStart(2, '0')}${start.slice(2)}` : '23:59' }]);
           }}
         >
-          <Plus className="h-4 w-4" /> Thêm khung giờ
+          <Plus className="h-4 w-4" /> {t('uiScheduling.addTimeBlock')}
         </Button>
       )}
     </div>

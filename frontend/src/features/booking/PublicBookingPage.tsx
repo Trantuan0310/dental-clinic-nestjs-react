@@ -84,7 +84,7 @@ const emptyReasonText = (
 };
 
 export default function PublicBookingPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
@@ -238,13 +238,13 @@ export default function PublicBookingPage() {
 
   if (loading)
     return (
-      <main role="status" className="mx-auto max-w-3xl p-6 text-gray-600">
+      <main role="status" className="mx-auto max-w-3xl p-6 text-gray-600 dark:text-surface-300">
         Đang tải lịch khám…
       </main>
     );
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:py-12">
+    <main className="min-h-screen bg-slate-50 dark:bg-surface-950 px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-3xl">
         <PublicTopBar>
           <Link
@@ -254,11 +254,11 @@ export default function PublicBookingPage() {
             {t('uiScheduling.bookingLookup')}
           </Link>
         </PublicTopBar>
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-          <h1 className="text-2xl font-semibold text-gray-900">
+        <section className="rounded-xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
             {t('uiScheduling.publicBooking')}
           </h1>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-gray-600 dark:text-surface-300">
             {t('uiScheduling.bookingIntro')}
           </p>
           {error && services.length === 0 && (
@@ -271,14 +271,14 @@ export default function PublicBookingPage() {
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-6">
               <div>
-                <h2 className="mb-3 font-semibold text-gray-900">
+                <h2 className="mb-3 font-semibold text-gray-900 dark:text-surface-100">
                   1. {t('uiScheduling.bookingChooseTime')}
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.service')}
                     <select aria-label={t('uiScheduling.service')}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                       value={serviceId}
                       onChange={(e) => {
                         setServiceId(e.target.value);
@@ -295,10 +295,10 @@ export default function PublicBookingPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.dentist')}
                     <select aria-label={t('uiScheduling.dentist')}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                       value={dentistId}
                       onChange={(e) => setDentistId(e.target.value)}
                       required
@@ -320,20 +320,20 @@ export default function PublicBookingPage() {
                     {(() => {
                       const bio = service?.dentists.find((d) => d.id === dentistId)?.bio;
                       return bio ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500">{bio}</span>
+                        <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">{bio}</span>
                       ) : null;
                     })()}
                     {/* The length depends on the dentist (their own duration first). */}
                     {(() => {
                       const minutes = service?.dentists.find((d) => d.id === dentistId)?.durationMinutes;
                       return minutes ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500">
+                        <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
                           Thời gian khám dự kiến khoảng {minutes} phút.
                         </span>
                       ) : null;
                     })()}
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.bookingDate')}
                     <input
                       type="date"
@@ -343,20 +343,20 @@ export default function PublicBookingPage() {
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       required
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
-                    <span className="mt-1 block text-xs font-normal text-gray-500">
+                    <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
                       {t('uiScheduling.onlineBookingUntil')} {showDate(lastDate)}.
                     </span>
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.availableTime')}
                     <select aria-label={t('uiScheduling.availableTime')}
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                       required
                       disabled={!dentistId || slotLoading || slots.length === 0}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                     >
                       <option value="">
                         {!dentistId
@@ -376,11 +376,10 @@ export default function PublicBookingPage() {
                       ))}
                     </select>
                     {minLead > 0 && (
-                      <span className="mt-1 block text-xs font-normal text-gray-500">
-                        {t('uiScheduling.bookingLeadTime', { lead: minLead % 60 === 0 ? `${minLead / 60} hours` : `${minLead} minutes` })}{" "}
-                        {minLead % 60 === 0
-                          ? minLead / 60 + " giờ"
-                          : minLead + " phút"}
+                      <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-300">
+                        {t('uiScheduling.bookingLeadTime', { lead: i18n.language.startsWith('en')
+                          ? minLead % 60 === 0 ? `${minLead / 60} hours` : `${minLead} minutes`
+                          : minLead % 60 === 0 ? `${minLead / 60} giờ` : `${minLead} phút` })}
                         {t('uiScheduling.bookingLeadContact')}
                         {clinic.phone ? (
                           <>
@@ -428,14 +427,14 @@ export default function PublicBookingPage() {
                 </div>
               </div>
               <div>
-                <h2 className="mb-3 font-semibold text-gray-900">
+                <h2 className="mb-3 font-semibold text-gray-900 dark:text-surface-100">
                   2. {t('uiScheduling.bookingPatientInfo')}
                 </h2>
-                <p className="-mt-2 mb-3 text-xs text-gray-500">
+                <p className="-mt-2 mb-3 text-xs text-gray-500 dark:text-surface-400">
                   {t('uiScheduling.bookingPatientInfoHint')}
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
                     {t('uiScheduling.bookingFullName')}
                     <input
                       required
@@ -443,10 +442,10 @@ export default function PublicBookingPage() {
                       autoComplete="name"
                       value={form.fullName}
                       onChange={(e) => set("fullName", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.bookingDob')}
                     <input
                       required
@@ -454,15 +453,15 @@ export default function PublicBookingPage() {
                       max={today()}
                       value={form.dob}
                       onChange={(e) => set("dob", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.gender')}
                     <select
                       value={form.gender}
                       onChange={(e) => set("gender", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                     >
                       <option value="UNDISCLOSED">{t('uiScheduling.genderUndisclosed')}</option>
                       <option value="FEMALE">{t('uiScheduling.genderFemale')}</option>
@@ -475,7 +474,7 @@ export default function PublicBookingPage() {
                       {t('uiScheduling.minorBookingNotice')}{age < 12 ? ` ${t('uiScheduling.minorGuardianDetails')}` : ''}
                     </p>
                   )}
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.phoneNumber')}
                     <input
                       required
@@ -485,20 +484,20 @@ export default function PublicBookingPage() {
                       value={form.phone}
                       onChange={(e) => set("phone", e.target.value)}
                       placeholder="0901 234 567"
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.bookingEmail')}
                     <input
                       type="email"
                       autoComplete="email"
                       value={form.email}
                       onChange={(e) => set("email", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-surface-200 sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={onBehalf}
@@ -508,17 +507,17 @@ export default function PublicBookingPage() {
                   </label>
                   {showContact && (
                     <>
-                      <label className="text-sm font-medium text-gray-700">
+                      <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                         {t('uiScheduling.bookingContactPerson')}{age !== null && age < 12 ? ` (${t('uiScheduling.required')})` : ""}
                         <input
                           maxLength={100}
                           required={age !== null && age < 12}
                           value={form.contactPersonName}
                           onChange={(e) => set("contactPersonName", e.target.value)}
-                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                         />
                       </label>
-                      <label className="text-sm font-medium text-gray-700">
+                      <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                         {t('uiScheduling.bookingContactPhone')}
                         <input
                           type="tel"
@@ -527,24 +526,24 @@ export default function PublicBookingPage() {
                           onChange={(e) =>
                             set("contactPersonPhone", e.target.value)
                           }
-                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                         />
                       </label>
                     </>
                   )}
-                  <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
                     {t('uiScheduling.bookingReason')}
                     <textarea
                       maxLength={1000}
                       rows={3}
                       value={form.reason}
                       onChange={(e) => set("reason", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 disabled:text-gray-500 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
                 </div>
               </div>
-              <label className="flex gap-3 rounded-lg bg-slate-50 p-3 text-sm text-gray-700">
+              <label className="flex gap-3 rounded-lg bg-slate-50 dark:bg-surface-950 p-3 text-sm text-gray-700 dark:text-surface-200">
                 <input
                   required
                   type="checkbox"
@@ -570,7 +569,7 @@ export default function PublicBookingPage() {
               </button>
             </form>
           )}
-          <p className="mt-5 text-xs text-gray-500">
+          <p className="mt-5 text-xs text-gray-500 dark:text-surface-400">
             {t('uiScheduling.bookingHelp')}
           </p>
         </section>

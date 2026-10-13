@@ -16,12 +16,10 @@ import {
 } from './scheduleApi';
 import { formatDateTime } from './format';
 import type { BulkRescheduleResult, ImpactedAppointment } from '@/types/schedule';
+import { useTranslation } from 'react-i18next';
 
-const REASON_LABEL: Record<ImpactedAppointment['reason'], string> = {
-  TIME_OFF: 'Bác sĩ nghỉ phép',
-  CLOSED: 'Lịch đã đóng / phòng khám nghỉ',
-  OUTSIDE_WORKING_HOURS: 'Ngoài giờ làm',
-  DENTIST_UNAVAILABLE: 'Bác sĩ tạm ngưng / nghỉ',
+const REASON_KEY: Record<ImpactedAppointment['reason'], string> = {
+  TIME_OFF: 'impactTimeOff', CLOSED: 'impactClosed', OUTSIDE_WORKING_HOURS: 'impactOutsideHours', DENTIST_UNAVAILABLE: 'impactDentistUnavailable',
 };
 
 type BulkAction = { kind: 'dentist' } | { kind: 'date' };
@@ -33,6 +31,7 @@ type BulkAction = { kind: 'dentist' } | { kind: 'date' };
  * clinic moves, and marked once the patient has been told.
  */
 export function ImpactTab() {
+  const { t } = useTranslation();
   const [dentistFilter, setDentistFilter] = useState('');
   // Suspended / on-leave dentists are the ones whose visits need moving (A1-16).
   const { data: dentists = [] } = useDentistOptions('schedule');
@@ -61,28 +60,28 @@ export function ImpactTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Select
-          aria-label="Lọc theo bác sĩ"
+          aria-label={t('uiScheduling.filterByDentist')}
           value={dentistFilter}
           onChange={(e) => setDentistFilter(e.target.value)}
           options={[
-            { value: '', label: 'Tất cả bác sĩ' },
+            { value: '', label: t('uiScheduling.allDentists') },
             ...dentists.map((d) => ({ value: d.id, label: d.fullName })),
           ]}
         />
         {canAct && rows.length > 0 && (
           <>
             <Button size="sm" variant="outline" disabled={chosen.length === 0} onClick={() => setBulk({ kind: 'dentist' })}>
-              Chuyển bác sĩ thay ({chosen.length})
+              {t('uiScheduling.moveToSubstituteCount', { count: chosen.length })}
             </Button>
             <Button size="sm" variant="outline" disabled={chosen.length === 0} onClick={() => setBulk({ kind: 'date' })}>
-              Dời sang ngày khác ({chosen.length})
+              {t('uiScheduling.moveToAnotherDayCount', { count: chosen.length })}
             </Button>
           </>
         )}
       </div>
       {lastResult && lastResult.failed.length > 0 && (
         <Alert variant="warning" onClose={() => setLastResult(null)}>
-          Đã chuyển {lastResult.moved.length} lịch. Không chuyển được {lastResult.failed.length}:{' '}
+          {t('uiScheduling.bulkMoveFailures', { moved: lastResult.moved.length, failed: lastResult.failed.length })}{' '}
           {lastResult.failed.map((f) => `${patientOf(f.appointmentId)} (${f.reason})`).join('; ')}
         </Alert>
       )}
@@ -92,8 +91,8 @@ export function ImpactTab() {
         <Card>
           <EmptyState
             icon={<CheckCircle2 className="h-10 w-10 text-green-500" />}
-            title="Không có lịch hẹn bị ảnh hưởng"
-            description="Mọi lịch hẹn sắp tới (60 ngày) đều nằm trong giờ làm của bác sĩ."
+            title={t('uiScheduling.noAffectedAppointments')}
+            description={t('uiScheduling.noAffectedAppointmentsHint')}
           />
         </Card>
       ) : (
@@ -106,17 +105,17 @@ export function ImpactTab() {
                     <th>
                       <input
                         type="checkbox"
-                        aria-label="Chọn tất cả"
+                        aria-label={t('uiScheduling.selectAll')}
                         checked={chosen.length === rows.length}
                         onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())}
                       />
                     </th>
                   )}
-                  <th>Giờ hẹn</th>
-                  <th>Bệnh nhân</th>
-                  <th>Bác sĩ</th>
-                  <th>Lý do</th>
-                  <th>Đã báo bệnh nhân</th>
+                  <th>{t('uiScheduling.appointmentTime')}</th>
+                  <th>{t('uiScheduling.patient')}</th>
+                  <th>{t('uiScheduling.dentist')}</th>
+                  <th>{t('uiScheduling.reason')}</th>
+                  <th>{t('uiScheduling.patientContacted')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,7 +125,7 @@ export function ImpactTab() {
                       <td>
                         <input
                           type="checkbox"
-                          aria-label={`Chọn ${r.patient.fullName}`}
+                          aria-label={t('uiScheduling.selectPatientNamed', { name: r.patient.fullName })}
                           checked={selected.has(r.id)}
                           onChange={() => toggle(r.id)}
                         />
@@ -137,29 +136,29 @@ export function ImpactTab() {
                       <Link to={`/appointments/list?open=${r.id}`} className="font-medium hover:underline">
                         {r.patient.fullName}
                       </Link>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 dark:text-surface-400">
                         {r.patient.code}
                         {r.patient.primaryPhone ? ` · ${r.patient.primaryPhone}` : ''}
                       </p>
                     </td>
                     <td>{r.dentistName}</td>
                     <td>
-                      <Badge variant="warning">{REASON_LABEL[r.reason]}</Badge>
-                      <p className="mt-1 text-xs text-gray-500">{r.message}</p>
+                      <Badge variant="warning">{t(`uiScheduling.${REASON_KEY[r.reason]}`)}</Badge>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-surface-400">{r.message}</p>
                     </td>
                     <td className="whitespace-nowrap">
                       {r.clinicContactedAt ? (
                         <div className="text-xs">
-                          <Badge variant="success">Đã gọi {formatDateTime(r.clinicContactedAt)}</Badge>
-                          {r.clinicContactNote && <p className="mt-1 text-gray-500">{r.clinicContactNote}</p>}
+                          <Badge variant="success">{t('uiScheduling.calledAt', { time: formatDateTime(r.clinicContactedAt) })}</Badge>
+                          {r.clinicContactNote && <p className="mt-1 text-gray-500 dark:text-surface-400">{r.clinicContactNote}</p>}
                         </div>
                       ) : (
-                        r.clinicContactNote && <p className="text-xs text-amber-700">{r.clinicContactNote}</p>
+                        r.clinicContactNote && <p className="text-xs text-amber-700 dark:text-amber-300">{r.clinicContactNote}</p>
                       )}
                       {canAct && (
                         <Button size="sm" variant="ghost" onClick={() => setContacting(r)}>
                           <PhoneCall className="h-4 w-4" />
-                          {r.clinicContactedAt ? 'Sửa' : 'Ghi nhận'}
+                          {r.clinicContactedAt ? t('uiScheduling.edit') : t('uiScheduling.record')}
                         </Button>
                       )}
                     </td>
@@ -183,15 +182,15 @@ export function ImpactTab() {
       />
       <ContactModal row={contacting} onClose={() => setContacting(null)} />
       {requests.length > 0 && (
-        <Card title="Yêu cầu đặt lịch online không còn xác nhận được" noPadding>
+        <Card title={t('uiScheduling.unconfirmableOnlineRequests')} noPadding>
           <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
-                  <th>Giờ yêu cầu</th>
-                  <th>Người đặt</th>
-                  <th>Bác sĩ</th>
-                  <th>Lý do</th>
+                  <th>{t('uiScheduling.requestedTime')}</th>
+                  <th>{t('uiScheduling.booker')}</th>
+                  <th>{t('uiScheduling.dentist')}</th>
+                  <th>{t('uiScheduling.reason')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,12 +205,12 @@ export function ImpactTab() {
                         <Link to="/booking-requests" className="font-medium hover:underline">
                           {r.fullName}
                         </Link>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-surface-400">
                           {r.referenceCode} · {r.phone}
                         </p>
                       </td>
                       <td>{(proposal && r.proposedDentist?.fullName) || r.preferredDentist.fullName}</td>
-                      <td className="text-xs text-gray-600">{r.slotIssue?.message}</td>
+                      <td className="text-xs text-gray-600 dark:text-surface-300">{r.slotIssue?.message}</td>
                     </tr>
                   );
                 })}
@@ -242,6 +241,7 @@ function BulkMoveModal({
   onClose: () => void;
   onDone: (r: BulkRescheduleResult) => void;
 }) {
+  const { t } = useTranslation();
   const move = useBulkReschedule();
   const [dentistId, setDentistId] = useState('');
   const [date, setDate] = useState('');
@@ -257,7 +257,7 @@ function BulkMoveModal({
     <Modal
       open={action !== null}
       onClose={close}
-      title={action?.kind === 'dentist' ? 'Chuyển sang bác sĩ thay' : 'Dời sang ngày khác (giữ giờ)'}
+      title={action?.kind === 'dentist' ? t('uiScheduling.moveToSubstitute') : t('uiScheduling.moveToAnotherDay')}
       size="sm"
     >
       <form
@@ -276,37 +276,37 @@ function BulkMoveModal({
             },
             {
               onSuccess: (result) => {
-                notify.success(`Đã chuyển ${result.moved.length}/${rows.length} lịch — bệnh nhân được báo qua email`);
+                notify.success(t('uiScheduling.bulkMoveSuccess', { moved: result.moved.length, total: rows.length }));
                 close();
                 onDone(result);
               },
-              onError: (err) => notify.error(getApiErrorMessage(err, 'Không chuyển được')),
+              onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.moveAppointmentsError'))),
             },
           );
         }}
       >
         <p className="text-sm text-gray-600 dark:text-surface-300">
-          {rows.length} lịch được chọn. Đây là "phòng khám dời": không tính vào giới hạn 3 lần đổi lịch của bệnh nhân.
+          {t('uiScheduling.clinicMoveHint', { count: rows.length })}
         </p>
         {action?.kind === 'dentist' ? (
           <Select
-            label="Bác sĩ thay"
+            label={t('uiScheduling.substituteDentist')}
             value={dentistId}
             onChange={(e) => setDentistId(e.target.value)}
-            placeholder="-- Chọn bác sĩ --"
+            placeholder={t('uiScheduling.selectDentist')}
             options={dentists.map((d) => ({ value: d.id, label: d.fullName }))}
             required
           />
         ) : (
-          <Input label="Ngày mới" type="date" min={clinicToday()} value={date} onChange={(e) => setDate(e.target.value)} required />
+          <Input label={t('uiScheduling.newDate')} type="date" min={clinicToday()} value={date} onChange={(e) => setDate(e.target.value)} required />
         )}
-        <Textarea label="Lý do" required minLength={5} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="VD: Bác sĩ nghỉ ốm" />
+        <Textarea label={t('uiScheduling.reason')} required minLength={5} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('uiScheduling.moveReasonExample')} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={close}>
-            Đóng
+            {t('uiScheduling.close')}
           </Button>
           <Button type="submit" isLoading={move.isPending} disabled={!ready}>
-            Chuyển
+            {t('uiScheduling.move')}
           </Button>
         </div>
       </form>
@@ -316,6 +316,7 @@ function BulkMoveModal({
 
 /** Mark that the patient was told (or note why not yet). */
 function ContactModal({ row, onClose }: { row: ImpactedAppointment | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const contact = useClinicContact();
   const [note, setNote] = useState('');
   const save = (contacted: boolean) => {
@@ -324,35 +325,35 @@ function ContactModal({ row, onClose }: { row: ImpactedAppointment | null; onClo
       { id: row.id, contacted, note: note.trim() || undefined },
       {
         onSuccess: () => {
-          notify.success(contacted ? 'Đã ghi nhận đã gọi báo bệnh nhân' : 'Đã lưu ghi chú');
+          notify.success(contacted ? t('uiScheduling.patientContactRecorded') : t('uiScheduling.noteSaved'));
           setNote('');
           onClose();
         },
-        onError: (err) => notify.error(getApiErrorMessage(err, 'Không lưu được')),
+        onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.saveError'))),
       },
     );
   };
   return (
-    <Modal open={row !== null} onClose={onClose} title="Liên hệ bệnh nhân" size="sm">
+    <Modal open={row !== null} onClose={onClose} title={t('uiScheduling.contactPatient')} size="sm">
       {row && (
         <div className="space-y-4 text-sm">
           <p>
             {row.patient.fullName}
-            {row.patient.primaryPhone ? ` · ${row.patient.primaryPhone}` : ''} — hẹn {formatDateTime(row.startAt)}
+            {row.patient.primaryPhone ? ` · ${row.patient.primaryPhone}` : ''} — {t('uiScheduling.appointmentAt', { time: formatDateTime(row.startAt) })}
           </p>
           <Textarea
-            label="Ghi chú"
+            label={t('uiScheduling.note')}
             rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder={row.clinicContactNote ?? 'VD: Khách đồng ý dời sang thứ Sáu / chưa nghe máy'}
+            placeholder={row.clinicContactNote ?? t('uiScheduling.contactNoteExample')}
           />
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => save(false)} isLoading={contact.isPending}>
-              Chưa liên lạc được
+              {t('uiScheduling.notReached')}
             </Button>
             <Button onClick={() => save(true)} isLoading={contact.isPending}>
-              Đã gọi báo
+              {t('uiScheduling.calledPatient')}
             </Button>
           </div>
         </div>

@@ -36,7 +36,7 @@ try {
   staff = true;
   await page.setViewportSize({width:375,height:812});
   await page.goto(base+'/patients/new');
-  await expect(page.getByLabel(/họ và tên/i)).toBeVisible();
+  await expect(page.getByLabel(/họ tên/i)).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   for (const width of [320,375,768,1440]) {
     await page.setViewportSize({width,height:900});
@@ -62,7 +62,7 @@ try {
   await expect(drawer).toBeHidden();
   await expect.poll(()=>page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
   await page.keyboard.press('Control+k');
-  const palette = page.getByRole('dialog',{name:/command palette/i});
+  const palette = page.getByRole('dialog',{name:/bảng lệnh|command palette/i});
   await expect(palette).toBeVisible();
   await palette.getByRole('button',{name:/hủy|cancel/i}).focus();
   await page.keyboard.press('Enter');

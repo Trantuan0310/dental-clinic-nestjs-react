@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Alert, Button, Modal } from '@/components/ui';
 import type { AffectedBookingRequest, TimeOffAffectedAppointment } from '@/types/schedule';
 import { formatDateTime } from './format';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Bookings still SCHEDULED/CONFIRMED that a calendar change no longer allows
@@ -11,7 +12,7 @@ import { formatDateTime } from './format';
  */
 export function AffectedAppointmentsModal({
   open,
-  title = 'Lịch hẹn cần xử lý',
+  title,
   appointments,
   bookingRequests = [],
   waitingPatients = [],
@@ -25,19 +26,18 @@ export function AffectedAppointmentsModal({
   waitingPatients?: TimeOffAffectedAppointment[];
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <Modal open={open} onClose={onClose} title={title} size="sm">
+    <Modal open={open} onClose={onClose} title={title ?? t('uiScheduling.affectedAppointmentsTitle')} size="sm">
       <div className="space-y-4">
         <Alert variant="warning">
-          {appointments.length > 0 && <>Còn {appointments.length} lịch hẹn bị ảnh hưởng. </>}
-          {bookingRequests.length > 0 && <>Có {bookingRequests.length} yêu cầu đặt lịch online đang chờ rơi vào giờ không còn làm việc. </>}
-          Vui lòng liên hệ bệnh nhân để đổi lịch hoặc hủy — hệ thống không tự dời các lịch này. Danh sách luôn có ở thẻ
-          "Lịch hẹn bị ảnh hưởng": tại đó chuyển bác sĩ thay, dời hàng loạt và đánh dấu đã gọi báo bệnh nhân.
+          {appointments.length > 0 && <>{t('uiScheduling.affectedAppointmentCount', { count: appointments.length })} </>}
+          {bookingRequests.length > 0 && <>{t('uiScheduling.affectedBookingRequestCount', { count: bookingRequests.length })} </>}
+          {t('uiScheduling.affectedAppointmentsInstructions')}
         </Alert>
         {waitingPatients.length > 0 && (
           <Alert variant="danger">
-            {waitingPatients.length} bệnh nhân đã check-in đang chờ bác sĩ này (
-            {waitingPatients.map((w) => w.patient.fullName).join(', ')}) — hãy chuyển sang bác sĩ khác ở trang Điều phối.
+            {t('uiScheduling.checkedInWaitingPatients', { count: waitingPatients.length, names: waitingPatients.map((w) => w.patient.fullName).join(', ') })}
           </Alert>
         )}
         {appointments.length > 0 && (
@@ -58,7 +58,7 @@ export function AffectedAppointmentsModal({
         )}
         {bookingRequests.length > 0 && (
           <div className="space-y-1">
-            <p className="text-sm font-medium text-gray-700 dark:text-surface-200">Yêu cầu đặt lịch online đang chờ</p>
+          <p className="text-sm font-medium text-gray-700 dark:text-surface-200">{t('uiScheduling.pendingOnlineBookingRequests')}</p>
             <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-surface-800 dark:border-surface-700">
               {bookingRequests.map((r) => (
                 <li key={r.id} className="px-3 py-2 text-sm">
@@ -68,14 +68,14 @@ export function AffectedAppointmentsModal({
                   <p className="text-gray-600 dark:text-surface-300">
                     {formatDateTime(r.startAt)} • {r.phone}
                   </p>
-                  {r.slotIssue && <p className="text-xs text-amber-700">{r.slotIssue.message}</p>}
+                  {r.slotIssue && <p className="text-xs text-amber-700 dark:text-amber-300">{r.slotIssue.message}</p>}
                 </li>
               ))}
             </ul>
           </div>
         )}
         <div className="flex justify-end border-t border-gray-100 pt-4 dark:border-surface-800">
-          <Button onClick={onClose}>Đã hiểu</Button>
+          <Button onClick={onClose}>{t('uiScheduling.understood')}</Button>
         </div>
       </div>
     </Modal>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { enUS, vi } from 'date-fns/locale';
 import { DollarSign, Plus, AlertCircle } from 'lucide-react';
 import { useCompensations, useCreateCompensation } from './payrollApi';
 import { Modal, Input, Select, Button, Card, EmptyState } from '@/components/ui';
@@ -15,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { SELF_APPROVAL_REASON_MIN, type DentistCompensation } from '@/types/payroll';
 
 export function CompensationListPage() {
+  const { t, i18n } = useTranslation();
   const canCreateCompensation = useAuthStore((s) => s.hasPermission('payroll.compensation.update'));
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDentist, setSelectedDentist] = useState('');
@@ -41,7 +43,7 @@ export function CompensationListPage() {
         commissionPercentage: parseFloat(commission),
         ...(isSelf && { selfApprovalReason: selfReason.trim() }),
       });
-      notify.success('Đã thêm chính sách lương');
+      notify.success(t('uiWorkforce.payrollCompensationCreated'));
       setShowAddModal(false);
       setSelfReason('');
       setSelectedDentist('');
@@ -49,7 +51,7 @@ export function CompensationListPage() {
       setCommission('');
       setEffectiveFrom('');
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể thêm chính sách lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollCompensationCreateError')));
     }
   };
 
@@ -68,7 +70,7 @@ export function CompensationListPage() {
         <PermissionGuard permission="payroll.compensation.update">
           <Button onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4" />
-            Thêm chính sách
+            {t('uiWorkforce.payrollAddCompensation')}
           </Button>
         </PermissionGuard>
       </div>
@@ -78,25 +80,25 @@ export function CompensationListPage() {
           <div className="p-6">
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-16 animate-pulse rounded bg-gray-100" />
+                <div key={i} className="h-16 animate-pulse rounded bg-gray-100 dark:bg-surface-800" />
               ))}
             </div>
           </div>
         ) : isError && !compensations?.length ? (
           <EmptyState
             icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
-            title="Không thể tải chính sách lương"
-            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
-            action={{ label: 'Thử lại', onClick: () => refetch() }}
+            title={t('uiWorkforce.payrollLoadError')}
+            description={t('uiWorkforce.loadErrorDescription')}
+            action={{ label: t('uiWorkforce.retry'), onClick: () => refetch() }}
           />
         ) : !compensationsByDentist || Object.keys(compensationsByDentist).length === 0 ? (
           <EmptyState
-            icon={<DollarSign className="h-10 w-10 text-gray-400" />}
-            title="Chưa có chính sách lương nào"
-            description="Thêm chính sách lương cho bác sĩ"
+            icon={<DollarSign className="h-10 w-10 text-gray-400 dark:text-surface-500" />}
+            title={t('uiWorkforce.payrollNoCompensation')}
+            description={t('uiWorkforce.payrollMissingCompensation')}
             action={
               canCreateCompensation
-                ? { label: 'Thêm chính sách', onClick: () => setShowAddModal(true) }
+                ? { label: t('uiWorkforce.payrollAddCompensation'), onClick: () => setShowAddModal(true) }
                 : undefined
             }
           />
@@ -105,21 +107,21 @@ export function CompensationListPage() {
             {Object.entries(compensationsByDentist).map(([dentistId, dentistCompensations]) => {
               const latestComp = dentistCompensations[0];
               return (
-                <div key={dentistId} className="p-4 hover:bg-gray-50">
+                <div key={dentistId} className="p-4 hover:bg-gray-50 dark:hover:bg-surface-800/60">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-900">{latestComp.dentistName}</p>
-                      <p className="text-sm text-gray-500">
-                        Hiệu lực từ: {format(new Date(latestComp.effectiveFrom), 'dd/MM/yyyy', { locale: vi })}
+                      <p className="font-medium text-gray-900 dark:text-surface-100">{latestComp.dentistName}</p>
+                      <p className="text-sm text-gray-500 dark:text-surface-400">
+                        {t('uiWorkforce.payrollEffectiveFrom')}: {format(new Date(latestComp.effectiveFrom), 'dd/MM/yyyy', { locale: i18n.language === 'vi' ? vi : enUS })}
                       </p>
                     </div>
                     <div className="flex gap-6 text-right">
                       <div>
-                        <p className="text-sm text-gray-500">Lương cơ bản</p>
+                        <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollBaseSalary')}</p>
                         <p className="font-medium">{formatCurrency(latestComp.baseSalary)}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">Hoa hồng</p>
+                        <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollCommission')}</p>
                         <p className="font-medium">{latestComp.commissionPercentage}%</p>
                       </div>
                     </div>
@@ -135,60 +137,59 @@ export function CompensationListPage() {
       <Modal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        title="Thêm chính sách lương"
+        title={t('uiWorkforce.payrollAddCompensation')}
         size="sm"
       >
         <div className="space-y-4">
           <Select
-            label="Bác sĩ"
+            label={t('uiWorkforce.payrollDentist')}
             value={selectedDentist}
             onChange={(e) => setSelectedDentist(e.target.value)}
             options={[
-              { value: '', label: '-- Chọn bác sĩ --' },
+              { value: '', label: t('uiWorkforce.noSelection') },
               ...(dentists ?? []).map((d) => ({ value: d.id, label: d.fullName })),
             ]}
           />
           <Input
-            label="Lương cơ bản (VND)"
+            label={t('uiWorkforce.payrollBaseSalaryVnd')}
             type="number"
             value={baseSalary}
             onChange={(e) => setBaseSalary(e.target.value)}
-            placeholder="VD: 15000000"
+            placeholder="15000000"
           />
           <Input
-            label="% Hoa hồng"
+            label={t('uiWorkforce.payrollCommissionPercentage')}
             type="number"
             step="0.1"
             value={commission}
             onChange={(e) => setCommission(e.target.value)}
-            placeholder="VD: 30"
+            placeholder="30"
           />
           <Input
-            label="Hiệu lực từ ngày"
+            label={t('uiWorkforce.payrollEffectiveFrom')}
             type="date"
             value={effectiveFrom}
             onChange={(e) => setEffectiveFrom(e.target.value)}
           />
           {isSelf && (
             <>
-              <Alert variant="warning" title="Bạn đang lập chế độ lương cho chính mình">
-                Chỉ được làm khi phòng khám không có quản trị viên nào khác. Thao tác được ghi nhật ký riêng
-                (PAYROLL_SELF_APPROVED).
+              <Alert variant="warning" title={t('uiWorkforce.payrollSelfApprovalTitle')}>
+                {t('uiWorkforce.payrollSelfApprovalDescription')}
               </Alert>
               <Textarea
-                label="Lý do tự duyệt"
-                placeholder="VD: Phòng khám chỉ có một quản trị viên"
+                label={t('uiWorkforce.payrollSelfApprovalReason')}
+                placeholder={t('uiWorkforce.payrollSelfApprovalPlaceholder')}
                 rows={2}
                 value={selfReason}
                 onChange={(e) => setSelfReason(e.target.value)}
-                hint={`Ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự`}
+                hint={t('uiWorkforce.payrollSelfApprovalRequired', { count: SELF_APPROVAL_REASON_MIN })}
                 required
               />
             </>
           )}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-surface-700">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
-              Hủy
+              {t('uiWorkforce.cancel')}
             </Button>
             <Button
               onClick={handleCreate}
@@ -201,7 +202,7 @@ export function CompensationListPage() {
                 (isSelf && selfReason.trim().length < SELF_APPROVAL_REASON_MIN)
               }
             >
-              Thêm
+              {t('uiWorkforce.create')}
             </Button>
           </div>
         </div>

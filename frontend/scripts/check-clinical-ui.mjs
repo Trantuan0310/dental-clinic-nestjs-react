@@ -39,11 +39,11 @@ try {
   await expect(treatments).toBeFocused(); await expect(treatments).toHaveAttribute('aria-selected','true');
   await expect(page.getByRole('tabpanel',{name:'Điều trị',exact:true})).toBeVisible();
   await page.keyboard.press('End');
-  await expect(tabs.getByRole('tab',{name:'Tóm tắt',exact:true})).toBeFocused();
+  await expect(tabs.getByRole('tab',{name:'Tổng quan',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowRight'); await expect(notes).toBeFocused();
-  await page.keyboard.press('ArrowLeft'); await expect(tabs.getByRole('tab',{name:'Tóm tắt',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowLeft'); await expect(tabs.getByRole('tab',{name:'Tổng quan',exact:true})).toBeFocused();
   await page.keyboard.press('Home'); await expect(notes).toBeFocused();
-  await tabs.getByRole('tab',{name:'Dental Chart',exact:true}).click();
+  await tabs.getByRole('tab',{name:'Sơ đồ răng',exact:true}).click();
   await expect(page.getByTestId('dental-chart-panel')).toBeVisible();
   await fits(`encounter chart ${width}`);
   await page.screenshot({path:`${artifacts}/encounter-chart-${width}.png`,fullPage:true});
@@ -51,7 +51,7 @@ try {
   await expect(page.getByRole('heading',{name:patient.fullName,exact:true})).toBeVisible();
   await fits(`patient detail ${width}`);
   await page.goto(base+'/patients/patient-ui/edit');
-  await expect(page.getByLabel('Họ và tên')).toHaveValue(patient.fullName);
+  await expect(page.getByLabel(/họ tên/i)).toHaveValue(patient.fullName);
   await fits(`patient edit ${width}`);
   await page.screenshot({path:`${artifacts}/patient-edit-${width}.png`,fullPage:true});
  }
@@ -60,7 +60,7 @@ try {
  await expect(page.getByText('Không thể tải hồ sơ bệnh nhân',{exact:true})).toBeVisible({timeout:15000});
  patientFails=false;
  await page.getByRole('button',{name:'Thử lại',exact:true}).click();
- await expect(page.getByLabel('Họ và tên')).toHaveValue(patient.fullName);
+ await expect(page.getByLabel(/họ tên/i)).toHaveValue(patient.fullName);
  await page.getByRole('button',{name:'Chuyển sang giao diện tối'}).click();
  await expect(page.locator('html')).toHaveClass(/dark/);
  await expect(page.getByRole('heading',{name:'Sửa thông tin bệnh nhân'})).toHaveCSS('color','rgb(243, 244, 246)');

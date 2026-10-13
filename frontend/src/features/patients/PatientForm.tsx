@@ -116,15 +116,22 @@ export function PatientForm() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting, isDirty },
     watch,
     reset,
+    trigger,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<PatientFormData>({
     resolver: zodResolver(patientSchema),
     defaultValues: {
       gender: 'male',
     },
   });
+
+  const invalidFieldNames = Object.keys(errors).join('|');
+  useEffect(() => {
+    const invalidFields = invalidFieldNames.split('|').filter(Boolean) as Array<keyof PatientFormData>;
+    if (invalidFields.length > 0) void trigger(invalidFields);
+  }, [invalidFieldNames, patientSchema, trigger]);
 
   useEffect(() => {
     if (patient) {
@@ -301,7 +308,7 @@ export function PatientForm() {
                   size="sm"
                   onClick={() => navigate(`/patients/${p.id}`)}
                 >
-                  Mở bệnh nhân
+                  {t('uiClinical.openPatient')}
                 </Button>
               </div>
             ))}

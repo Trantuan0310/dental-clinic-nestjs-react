@@ -1,5 +1,8 @@
 # Bàn giao WIP: dark mode và giao diện tiếng Anh
 
+> Bản WIP này là mốc lịch sử. Công việc tiếp tục và kết quả nghiệm thu được ghi tại
+> [theme-language-completion.md](theme-language-completion.md).
+
 Ngày chốt: 2026-10-13. Dừng phát triển theo yêu cầu người dùng để chuyển sang công việc khác.
 Đây là bản lưu tiến độ, **chưa sẵn sàng merge hoặc triển khai**.
 

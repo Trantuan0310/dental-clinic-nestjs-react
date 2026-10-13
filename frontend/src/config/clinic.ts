@@ -16,14 +16,20 @@ export function parseHourBlocks(text: string): Array<{ startTime: string; endTim
   return blocks;
 }
 
-const weekdayHours = clean(env.VITE_CLINIC_HOURS) || '08:00 – 12:00 · 13:30 – 19:00';
-const sundayHours = clean(env.VITE_CLINIC_SUNDAY_HOURS) || 'Nghỉ';
+const configuredWeekdayHours = clean(env.VITE_CLINIC_HOURS);
+const configuredSundayHours = clean(env.VITE_CLINIC_SUNDAY_HOURS);
+const configuredTagline = clean(env.VITE_CLINIC_TAGLINE);
+const weekdayHours = configuredWeekdayHours || '08:00 – 12:00 · 13:30 – 19:00';
+const sundayHours = configuredSundayHours || 'Nghỉ';
 const phone = clean(env.VITE_CLINIC_PHONE);
 const zalo = clean(env.VITE_CLINIC_ZALO);
 
 export const clinic = {
   name: clean(env.VITE_CLINIC_NAME) || 'Nha khoa GENSMILE',
-  tagline: clean(env.VITE_CLINIC_TAGLINE) || 'Nha khoa thẩm mỹ',
+  tagline: configuredTagline || 'Nha khoa thẩm mỹ',
+  /** True when the value is a built-in fallback that may be localized in UI. */
+  taglineIsDefault: !configuredTagline,
+  sundayHoursIsDefault: !configuredSundayHours,
   phone,
   /** Digits only, for tel: links. */
   phoneHref: phone.replace(/[^\d+]/g, ''),

@@ -87,10 +87,10 @@ try {
   await pagination.getByRole('button', { name: 'Trang trước' }).click();
   await expect(pagination.getByText('Trang 5 / 100')).toBeVisible();
   const empty = page.getByTestId('empty-pagination');
-  await expect(empty.getByText('Hiển thị 0 - 0 của 0')).toBeVisible();
+  await expect(empty.getByText('Hiển thị 0–0 của 0')).toBeVisible();
   for (const name of ['Trang trước', 'Trang sau']) await expect(empty.getByRole('button', { name })).toBeDisabled();
   await page.getByRole('button', { name: 'Show loading' }).click();
-  await expect(virtual.getByText('Đang tải...')).toBeVisible();
+  await expect(virtual.getByText('Đang tải…')).toBeVisible();
   await page.getByRole('button', { name: 'Show empty' }).click();
   await expect(virtual.getByText('Không có dữ liệu')).toBeVisible();
   expect(errors).toEqual([]);

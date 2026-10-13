@@ -94,7 +94,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
         <Link
           to="/"
           className="flex shrink-0 items-center gap-2"
-          aria-label={`${t('shell.brand')} — Home`}
+          aria-label={`${t('shell.brand')} — ${t('uiCommon.home')}`}
         >
           <Logo variant="icon" size="sm" />
           <span className="hidden text-lg font-bold tracking-wide text-brand-700 sm:inline dark:text-brand-400">

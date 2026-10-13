@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Button, Card, EmptyState, Modal, Textarea, StatusBadge } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { enUS, vi } from 'date-fns/locale';
 import { useShiftRegistrations, useApproveShift, useRejectShift } from '@/features/payroll/payrollApi';
 import type { ShiftRegistration } from '@/types/payroll';
 
@@ -14,6 +15,8 @@ interface ShiftApprovalInboxProps {
 }
 
 export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalInboxProps) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'vi' ? vi : enUS;
   const { data, isLoading } = useShiftRegistrations({ status: 'PENDING' });
   const approveShift = useApproveShift();
   const rejectShift = useRejectShift();
@@ -28,9 +31,9 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
   const handleApprove = async (id: string) => {
     try {
       await approveShift.mutateAsync(id);
-      notify.success('Đã duyệt đăng ký ca');
+      notify.success(t('uiWorkforce.shiftApproved'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể duyệt đăng ký ca'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.shiftApproveError')));
     }
   };
 
@@ -40,9 +43,9 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
       const results = await Promise.allSettled(selectedIds.map((id) => approveShift.mutateAsync(id)));
       const failed = results.filter((r) => r.status === 'rejected').length;
       if (failed > 0) {
-        notify.error(`Duyệt thành công ${results.length - failed}/${results.length}, ${failed} ca lỗi`);
+        notify.error(t('uiWorkforce.shiftBulkApproveResult', { approved: results.length - failed, total: results.length, failed }));
       } else {
-        notify.success(`Đã duyệt ${results.length} ca`);
+        notify.success(t('uiWorkforce.shiftBulkApproved', { count: results.length }));
       }
       setSelectedIds([]);
     } finally {
@@ -53,11 +56,11 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
   const handleReject = async (request: ShiftRegistration) => {
     try {
       await rejectShift.mutateAsync({ id: request.id, payload: { reason: rejectReason } });
-      notify.success('Đã từ chối đăng ký ca');
+      notify.success(t('uiWorkforce.shiftRejected'));
       setRejectModal(null);
       setRejectReason('');
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể từ chối đăng ký ca'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.shiftRejectError')));
     }
   };
 
@@ -71,17 +74,17 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {variant === 'admin' ? 'Duyệt đăng ký ca (Admin)' : 'Duyệt đăng ký ca'}
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
+            {variant === 'admin' ? t('uiWorkforce.shiftApprovalAdminTitle') : t('uiWorkforce.shiftApprovalTitle')}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {pendingRequests.length} đăng ký đang chờ duyệt
+            {t('uiWorkforce.shiftRequestsWaiting', { count: pendingRequests.length })}
           </p>
         </div>
         {selectedIds.length > 0 && (
           <Button onClick={handleBulkApprove} isLoading={bulkApproving}>
             <CheckCircle className="h-4 w-4" />
-            Duyệt {selectedIds.length} ca
+            {t('uiWorkforce.shiftApproveSelected', { count: selectedIds.length })}
           </Button>
         )}
       </div>
@@ -90,15 +93,15 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
         {pendingRequests.length === 0 ? (
           <EmptyState
             icon={<Clock className="h-10 w-10 text-gray-400" />}
-            title="Không có đăng ký nào chờ duyệt"
-            description="Tất cả đăng ký ca đã được xử lý"
+            title={t('uiWorkforce.shiftNoPendingRequests')}
+            description={t('uiWorkforce.shiftAllProcessed')}
           />
         ) : (
           <div className="divide-y divide-gray-100">
             {pendingRequests.map((request) => (
               <div
                 key={request.id}
-                className="flex items-start gap-4 p-4 hover:bg-gray-50"
+                className="flex items-start gap-4 p-4 hover:bg-gray-50 dark:hover:bg-surface-800/60"
               >
                 <input
                   type="checkbox"
@@ -108,29 +111,29 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900">{request.dentistName}</p>
+                    <p className="font-medium text-gray-900 dark:text-surface-100">{request.dentistName}</p>
                     <StatusBadge status="pending" />
                   </div>
-                  <div className="mt-1 space-y-1 text-sm text-gray-600">
+                  <div className="mt-1 space-y-1 text-sm text-gray-600 dark:text-surface-300">
                     <p>
-                      <span className="font-medium">Ngày:</span>{' '}
-                      {format(new Date(request.date), 'EEEE, dd/MM/yyyy', { locale: vi })}
+                      <span className="font-medium">{t('uiWorkforce.shiftDate')}:</span>{' '}
+                      {format(new Date(request.date), 'EEEE, dd/MM/yyyy', { locale: dateLocale })}
                     </p>
                     <p>
-                      <span className="font-medium">Giờ:</span>{' '}
+                      <span className="font-medium">{t('uiWorkforce.shiftTime')}:</span>{' '}
                       {request.startTime} - {request.endTime}
                     </p>
                     {request.maxEncounters && (
                       <p>
-                        <span className="font-medium">Số bệnh nhân tối đa:</span>{' '}
+                        <span className="font-medium">{t('uiWorkforce.shiftMaxPatients')}:</span>{' '}
                         {request.maxEncounters}
                       </p>
                     )}
                     {request.notes && (
-                      <p className="text-gray-500 italic">{request.notes}</p>
+                      <p className="text-gray-500 italic dark:text-surface-400">{request.notes}</p>
                     )}
                     <p className="text-xs text-gray-400">
-                      Đăng ký: {format(new Date(request.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
+                      {t('uiWorkforce.shiftRegisteredAt')}: {format(new Date(request.createdAt), 'dd/MM/yyyy HH:mm', { locale: dateLocale })}
                     </p>
                   </div>
                 </div>
@@ -142,13 +145,13 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
                     isLoading={approveShift.isPending && approveShift.variables === request.id}
                   >
                     <CheckCircle className="h-4 w-4 text-green-600" />
-                    Duyệt
+                    {t('uiWorkforce.shiftApprove')}
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setRejectModal(request)}
-                    aria-label="Từ chối"
+                    aria-label={t('uiWorkforce.shiftReject')}
                   >
                     <XCircle className="h-4 w-4 text-red-600" />
                   </Button>
@@ -166,7 +169,7 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
           setRejectModal(null);
           setRejectReason('');
         }}
-        title="Từ chối đăng ký ca"
+        title={t('uiWorkforce.shiftRejectTitle')}
         size="sm"
       >
         {rejectModal && (
@@ -174,16 +177,16 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
             <div className="rounded bg-gray-50 p-3 text-sm">
               <p className="font-medium">{rejectModal.dentistName}</p>
               <p className="text-gray-500">
-                {format(new Date(rejectModal.date), 'EEEE, dd/MM/yyyy', { locale: vi })} •{' '}
+                {format(new Date(rejectModal.date), 'EEEE, dd/MM/yyyy', { locale: dateLocale })} •{' '}
                 {rejectModal.startTime} - {rejectModal.endTime}
               </p>
             </div>
             <Textarea
-              label="Lý do từ chối"
+              label={t('uiWorkforce.shiftRejectReason')}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
-              placeholder="Nhập lý do từ chối (tối thiểu 5 ký tự)..."
+              placeholder={t('uiWorkforce.shiftRejectPlaceholder')}
               required
             />
             <div className="flex justify-end gap-3">
@@ -194,7 +197,7 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
                   setRejectReason('');
                 }}
               >
-                Hủy
+                {t('uiWorkforce.cancel')}
               </Button>
               <Button
                 variant="danger"
@@ -202,7 +205,7 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
                 disabled={rejectReason.trim().length < 5}
                 isLoading={rejectShift.isPending}
               >
-                Từ chối
+                {t('uiWorkforce.shiftReject')}
               </Button>
             </div>
           </div>
