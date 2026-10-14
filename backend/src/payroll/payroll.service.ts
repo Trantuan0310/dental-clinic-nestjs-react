@@ -1,4 +1,5 @@
 ﻿import { Injectable, Logger } from '@nestjs/common';
+import { LOCKING_TX_OPTIONS, lockPayroll } from '../appointments/domain/advisory-lock';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildDayCalendar, Interval } from '../appointments/domain/day-calendar';
 import { closuresOnDay } from '../appointments/domain/day-calendar-loader';
@@ -297,32 +298,28 @@ export class PayrollService {
             'lập chế độ lương',
           )
         : null;
-    // BR-PAY-022: prevent overlap. Postgres exclusion constraint will also enforce,
-    // but pre-check for friendly error message.
-    const overlap = await this.findCompensationOverlap(
-      dto.dentistId,
-      new Date(dto.effectiveFrom),
-      dto.effectiveTo ? new Date(dto.effectiveTo) : null,
-    );
-    if (overlap) {
-      throw new PeriodOverlapException(
-        `Compensation already exists for this dentist in [${overlap.effectiveFrom.toISOString().slice(0, 10)}, ${overlap.effectiveTo?.toISOString().slice(0, 10) ?? 'âˆž'}]`,
-      );
-    }
-
-    const created = await this.prisma.dentistCompensation.create({
-      data: {
-        dentistId: dto.dentistId,
-        effectiveFrom: new Date(dto.effectiveFrom),
-        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
-        baseSalaryVnd: dto.baseSalaryVnd,
-        commissionPct: dto.commissionPct,
-        overtimeHourlyVnd: dto.overtimeHourlyVnd ?? 0,
-        notes: dto.notes,
-        approvedByUserId: actorUserId,
-        approvedAt: new Date(),
-      },
-    });
+    const effectiveFrom = new Date(dto.effectiveFrom);
+    const effectiveTo = dto.effectiveTo ? new Date(dto.effectiveTo) : null;
+    this.assertCompensationRange(effectiveFrom, effectiveTo);
+    // BR-PAY-022: no two terms of one dentist overlap. There is no database
+    // constraint for it, so the check and the insert run under one lock.
+    const created = await this.prisma.$transaction(async tx => {
+      await lockPayroll(tx, dto.dentistId);
+      await this.assertNoCompensationOverlap(tx, dto.dentistId, effectiveFrom, effectiveTo);
+      return tx.dentistCompensation.create({
+        data: {
+          dentistId: dto.dentistId,
+          effectiveFrom,
+          effectiveTo,
+          baseSalaryVnd: dto.baseSalaryVnd,
+          commissionPct: dto.commissionPct,
+          overtimeHourlyVnd: dto.overtimeHourlyVnd ?? 0,
+          notes: dto.notes,
+          approvedByUserId: actorUserId,
+          approvedAt: new Date(),
+        },
+      });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       actorUserId,
@@ -351,10 +348,12 @@ export class PayrollService {
   async updateCompensation(id: string, dto: UpdateCompensationDto, actorUserId: string) {
     const current = await this.prisma.dentistCompensation.findUnique({
       where: { id },
-      select: { dentistId: true },
+      select: { dentistId: true, effectiveFrom: true, deletedAt: true },
     });
+    if (!current || current.deletedAt)
+      throw new PayrollNotFoundException('DentistCompensation', id);
     const selfReason =
-      current?.dentistId === actorUserId
+      current.dentistId === actorUserId
         ? await this.assertSelfAction(
             actorUserId,
             'payroll.compensation.update',
@@ -362,21 +361,37 @@ export class PayrollService {
             'sửa chế độ lương',
           )
         : null;
-    const updated = await this.prisma.dentistCompensation.update({
-      where: { id },
-      data: {
-        effectiveTo:
-          dto.effectiveTo === undefined
-            ? undefined
-            : dto.effectiveTo
-              ? new Date(dto.effectiveTo)
-              : null,
-        baseSalaryVnd: dto.baseSalaryVnd,
-        commissionPct: dto.commissionPct,
-        overtimeHourlyVnd: dto.overtimeHourlyVnd,
-        notes: dto.notes,
-      },
-    });
+    const effectiveTo =
+      dto.effectiveTo === undefined
+        ? undefined
+        : dto.effectiveTo
+          ? new Date(dto.effectiveTo)
+          : null;
+    const updated = await this.prisma.$transaction(async tx => {
+      if (effectiveTo !== undefined) {
+        // PAY-09: a new end date must not precede the start, nor reach into
+        // the dentist's next term (two salaries for the same days).
+        this.assertCompensationRange(current.effectiveFrom, effectiveTo);
+        await lockPayroll(tx, current.dentistId);
+        await this.assertNoCompensationOverlap(
+          tx,
+          current.dentistId,
+          current.effectiveFrom,
+          effectiveTo,
+          id,
+        );
+      }
+      return tx.dentistCompensation.update({
+        where: { id },
+        data: {
+          effectiveTo,
+          baseSalaryVnd: dto.baseSalaryVnd,
+          commissionPct: dto.commissionPct,
+          overtimeHourlyVnd: dto.overtimeHourlyVnd,
+          notes: dto.notes,
+        },
+      });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       actorUserId,
@@ -419,21 +434,42 @@ export class PayrollService {
     return updated;
   }
 
-  private async findCompensationOverlap(
+  private assertCompensationRange(effectiveFrom: Date, effectiveTo: Date | null) {
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      throw new PayrollValidationException(
+        'Ngày kết thúc chế độ lương không được trước ngày bắt đầu (' +
+          effectiveFrom.toISOString().slice(0, 10) +
+          ').',
+      );
+    }
+  }
+
+  /**
+   * BR-PAY-022: another live term of the dentist sharing a day with
+   * [effectiveFrom, effectiveTo]. effectiveTo is inclusive (payroll pays that
+   * day), so terms ending and starting on the same date overlap.
+   */
+  private async assertNoCompensationOverlap(
+    db: Prisma.TransactionClient,
     dentistId: string,
     effectiveFrom: Date,
     effectiveTo: Date | null,
+    excludeId?: string,
   ) {
-    // effectiveTo is inclusive (payroll pays that day), so terms ending and
-    // starting on the same date overlap: A.start <= B.end AND B.start <= A.end.
-    return this.prisma.dentistCompensation.findFirst({
+    const overlap = await db.dentistCompensation.findFirst({
       where: {
         dentistId,
         deletedAt: null,
+        ...(excludeId && { id: { not: excludeId } }),
         effectiveFrom: { lte: effectiveTo ?? new Date('9999-12-31') },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }],
       },
     });
+    if (overlap) {
+      throw new PeriodOverlapException(
+        `Bác sĩ đã có chế độ lương khác trong khoảng [${overlap.effectiveFrom.toISOString().slice(0, 10)}, ${overlap.effectiveTo?.toISOString().slice(0, 10) ?? 'không thời hạn'}]`,
+      );
+    }
   }
 
   // ============================================================================
@@ -464,20 +500,6 @@ export class PayrollService {
       throw new PayrollValidationException('periodEnd must be after periodStart');
     }
 
-    // BR-PAY-003: prevent overlap
-    const overlap = await this.prisma.payrollPeriod.findFirst({
-      where: {
-        status: { not: PayrollPeriodStatus.LOCKED },
-        periodStart: { lt: end },
-        periodEnd: { gt: start },
-      },
-    });
-    if (overlap) {
-      throw new PeriodOverlapException(
-        `Period [${overlap.periodStart.toISOString().slice(0, 10)}, ${overlap.periodEnd.toISOString().slice(0, 10)}] already exists`,
-      );
-    }
-
     // BR-PAY-023: snapshot PayrollConfig at creation time. Future computes for this
     // period always use this snapshot, not the live config (so admin edits to
     // config later don't retroactively change historical payroll).
@@ -493,16 +515,33 @@ export class PayrollService {
       snapshottedAt: new Date().toISOString(),
     };
 
-    const created = await this.prisma.payrollPeriod.create({
-      data: {
-        periodStart: start,
-        periodEnd: end,
-        payrollCycle: config.payrollCycle,
-        configSnapshot: configSnapshot as unknown as Prisma.InputJsonValue,
-        status: PayrollPeriodStatus.DRAFT,
-        createdByUserId: actorUserId,
-      },
-    });
+    // BR-PAY-003: no two live periods overlap. No database constraint backs
+    // it (PAY-08), so the check and the insert run under one lock.
+    const created = await this.prisma.$transaction(async tx => {
+      await lockPayroll(tx, 'periods');
+      const overlap = await tx.payrollPeriod.findFirst({
+        where: {
+          status: { not: PayrollPeriodStatus.LOCKED },
+          periodStart: { lt: end },
+          periodEnd: { gt: start },
+        },
+      });
+      if (overlap) {
+        throw new PeriodOverlapException(
+          `Period [${overlap.periodStart.toISOString().slice(0, 10)}, ${overlap.periodEnd.toISOString().slice(0, 10)}] already exists`,
+        );
+      }
+      return tx.payrollPeriod.create({
+        data: {
+          periodStart: start,
+          periodEnd: end,
+          payrollCycle: config.payrollCycle,
+          configSnapshot: configSnapshot as unknown as Prisma.InputJsonValue,
+          status: PayrollPeriodStatus.DRAFT,
+          createdByUserId: actorUserId,
+        },
+      });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       actorUserId,
@@ -580,6 +619,18 @@ export class PayrollService {
     const results = await this.withSerializableRetry(() =>
       this.prisma.$transaction(
         async tx => {
+          // PAY-06: the status read above may be stale (an approval in
+          // between). Read inside the Serializable transaction, so an
+          // approval racing this compute aborts one of the two.
+          const current = await tx.payrollPeriod.findUnique({
+            where: { id: periodId },
+            select: { status: true },
+          });
+          if (!current || !isComputable(current.status)) {
+            throw new PayrollStateException(
+              `Kỳ lương vừa chuyển sang ${current?.status ?? 'đã xóa'}: không tính lại được nữa.`,
+            );
+          }
           const out: Array<{
             dentistId: string;
             dentistName: string;

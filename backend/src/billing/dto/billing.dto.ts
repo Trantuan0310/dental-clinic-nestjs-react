@@ -47,6 +47,17 @@ export class RecordPaymentDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  /**
+   * One key per payment the cashier means to record (a new one each time the
+   * payment dialog opens). Sending the same request again — a double click,
+   * a retry after a lost response — returns the payment already recorded.
+   */
+  @ApiPropertyOptional({ maxLength: 64 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  requestKey?: string;
 }
 
 export class UpdateDiscountDto {

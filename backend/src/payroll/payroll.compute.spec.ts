@@ -50,6 +50,8 @@ const fn = (value: unknown = []) => jest.fn().mockResolvedValue(value);
 
 function makeTx(over: Record<string, Record<string, jest.Mock>> = {}) {
   const base: Record<string, Record<string, jest.Mock>> = {
+    // The period's status, re-read inside the compute transaction (PAY-06).
+    payrollPeriod: { findUnique: fn({ status: 'DRAFT' }) },
     dentistCompensation: { findMany: fn([comp]) },
     invoice: { findMany: fn([]) },
     encounter: { findMany: fn([]) },
@@ -84,7 +86,20 @@ function makeService(tx: ReturnType<typeof makeTx>, p = period()) {
     payrollPeriod: { findUnique: fn(p), findFirst: fn(null) },
     payrollLineItem: { findFirst: fn(null) },
     dentistCompensation: { findUnique: fn(null) },
-    $transaction: jest.fn(async (cb: any) => cb(tx)),
+    // The transaction client: the tx mocks first, else the outer ones (the
+    // period re-read, compensation writes), plus the advisory lock calls.
+    $transaction: jest.fn(async (cb: any) =>
+      cb(
+        new Proxy(
+          { $executeRaw: fn(1), $executeRawUnsafe: fn(1) },
+          {
+            // Per model: the tx's methods over the outer ones.
+            get: (locks: any, k: string) =>
+              k in locks ? locks[k] : { ...prisma[k], ...(tx as any)[k] },
+          },
+        ),
+      ),
+    ),
   };
   const audit = { log: jest.fn() };
   return { service: new PayrollService(prisma, audit as any), prisma, audit };
@@ -568,5 +583,61 @@ describe('PayrollEventListener — round 4', () => {
     const { listener, prisma } = make();
     prisma.invoice.findUnique.mockRejectedValue(new Error('db down'));
     await expect(listener.handleInvoiceChanged({ invoiceId: 'x' })).resolves.toBeUndefined();
+  });
+});
+
+describe('PayrollService — audit 2026-09-14 follow-ups', () => {
+  it('PAY-06: does not rewrite a period approved while the compute started', async () => {
+    const tx = makeTx({ payrollPeriod: { findUnique: fn({ status: 'APPROVED' }) } });
+    const { service } = makeService(tx);
+    await expect(service.computePeriod('p-sep', 'admin-1')).rejects.toThrow(/APPROVED/);
+    expect(tx.payrollLineItem.upsert).not.toHaveBeenCalled();
+    expect(tx.payrollLineItem.deleteMany).not.toHaveBeenCalled();
+  });
+
+  describe('PAY-09: changing a pay term end date', () => {
+    const setup = (next: unknown) => {
+      const { service, prisma } = makeService(makeTx());
+      prisma.dentistCompensation = {
+        findUnique: fn({
+          dentistId: 'd1',
+          effectiveFrom: new Date('2026-09-01'),
+          deletedAt: null,
+        }),
+        findFirst: fn(next),
+        update: jest.fn().mockImplementation(({ data }) => ({ id: 'c1', ...data })),
+      };
+      return { service, prisma };
+    };
+
+    it('refuses an end date before the start', async () => {
+      const { service, prisma } = setup(null);
+      await expect(
+        service.updateCompensation('c1', { effectiveTo: '2026-08-31' } as any, 'admin-1'),
+      ).rejects.toThrow(/không được trước ngày bắt đầu/);
+      expect(prisma.dentistCompensation.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses an end date reaching into the next term, other terms only', async () => {
+      const nextTerm = {
+        id: 'c2',
+        effectiveFrom: new Date('2026-10-01'),
+        effectiveTo: null,
+      };
+      const { service, prisma } = setup(nextTerm);
+      await expect(
+        service.updateCompensation('c1', { effectiveTo: '2026-10-15' } as any, 'admin-1'),
+      ).rejects.toThrow(/chế độ lương khác/);
+      expect(prisma.dentistCompensation.findFirst.mock.calls[0][0].where.id).toEqual({
+        not: 'c1',
+      });
+      expect(prisma.dentistCompensation.update).not.toHaveBeenCalled();
+    });
+
+    it('accepts an end date that stays clear of other terms', async () => {
+      const { service, prisma } = setup(null);
+      await service.updateCompensation('c1', { effectiveTo: '2026-09-30' } as any, 'admin-1');
+      expect(prisma.dentistCompensation.update).toHaveBeenCalled();
+    });
   });
 });

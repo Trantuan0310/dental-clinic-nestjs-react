@@ -222,6 +222,59 @@ describe('BillingService', () => {
   });
 
   describe('recordPayment', () => {
+    describe('BILL-02: the same payment request sent twice', () => {
+      const dto = {
+        amount: 100_000,
+        method: PaymentMethod.CASH,
+        requestKey: 'k-1',
+      } as any;
+      const setPayment = (fn: jest.Mock) => {
+        (prisma as any).payment = { ...(prisma as any).payment, findUnique: fn };
+      };
+
+      it('returns the invoice without recording the money again', async () => {
+        setPayment(
+          jest.fn().mockResolvedValue({ amount: new Prisma.Decimal(100_000), method: 'CASH' }),
+        );
+        (prisma.invoice as any).findUniqueOrThrow = jest
+          .fn()
+          .mockResolvedValue(validInvoice({ status: InvoiceStatus.PARTIAL }));
+        const result = await service.recordPayment('inv-1', dto, adminActor);
+        expect(result.status).toBe(InvoiceStatus.PARTIAL);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+
+      it('answers the losing copy of a race with the payment the other recorded', async () => {
+        setPayment(
+          jest
+            .fn()
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce({ amount: new Prisma.Decimal(100_000), method: 'CASH' }),
+        );
+        (prisma.$transaction as jest.Mock).mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('dup', {
+            code: 'P2002',
+            clientVersion: 'test',
+          }),
+        );
+        (prisma.invoice as any).findUniqueOrThrow = jest
+          .fn()
+          .mockResolvedValue(validInvoice({ status: InvoiceStatus.PAID }));
+        const result = await service.recordPayment('inv-1', dto, adminActor);
+        expect(result.status).toBe(InvoiceStatus.PAID);
+      });
+
+      it('refuses a key reused for another amount', async () => {
+        setPayment(
+          jest.fn().mockResolvedValue({ amount: new Prisma.Decimal(50_000), method: 'CASH' }),
+        );
+        await expect(service.recordPayment('inv-1', dto, adminActor)).rejects.toThrow(
+          /đã được ghi với/,
+        );
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
+    });
+
     it('throws when invoice not found', async () => {
       (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
       (prisma.invoice.findUnique as jest.Mock).mockResolvedValue(null);

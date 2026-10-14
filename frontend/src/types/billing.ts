@@ -140,6 +140,8 @@ export interface CreatePaymentPayload {
   amount: number;
   method: PaymentMethod;
   note?: string;
+  /** One per payment meant: a resent request returns the payment already recorded. */
+  requestKey?: string;
 }
 
 export interface RevenueReportByMonthEntry {

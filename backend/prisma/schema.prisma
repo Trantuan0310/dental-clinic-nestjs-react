@@ -912,11 +912,15 @@ model Payment {
   voidedAt   DateTime?     @map("voided_at") @db.Timestamptz()
   voidedBy   String?       @map("voided_by") @db.Uuid
   voidReason String?       @map("void_reason")
+  /// Client key of the request that recorded it (BILL-02): a resent request
+  /// returns this payment instead of recording the money twice.
+  requestKey String?       @map("request_key") @db.VarChar(64)
 
   invoice        Invoice @relation(fields: [invoiceId], references: [id])
   receivedByUser User    @relation(fields: [receivedBy], references: [id])
   voidedByUser   User?   @relation("PaymentVoidedBy", fields: [voidedBy], references: [id])
 
+  @@unique([invoiceId, requestKey])
   @@index([invoiceId, paidAt(sort: Desc)])
   @@map("payments")
 }

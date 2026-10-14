@@ -8,6 +8,14 @@ import { formatCurrency } from '@/lib/format';
 import { billingApi } from '@/features/billing/billingApi';
 import type { Invoice, PaymentMethod } from '@/types/billing';
 
+/** A key for one payment the cashier means to record (see requestKey). */
+function newRequestKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -20,6 +28,10 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   const [amount, setAmount] = useState(String(Math.floor(invoice.outstandingAmount)));
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [note, setNote] = useState('');
+  // Kept for the whole time the dialog is open: a double click or a retry
+  // after a lost response sends the same key, and the server records the
+  // money once (BILL-02). A fresh key each time the dialog opens.
+  const [requestKey, setRequestKey] = useState(newRequestKey);
 
   // This modal never unmounts between opens (only Modal's `isOpen` toggles),
   // so state from a previous payment (e.g. a partial amount + note) would
@@ -30,6 +42,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
       setAmount(String(Math.floor(invoice.outstandingAmount)));
       setMethod('CASH');
       setNote('');
+      setRequestKey(newRequestKey());
     }
   }, [isOpen, invoice.outstandingAmount]);
 
@@ -41,6 +54,7 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
         amount: parsedAmount,
         method,
         note: note || undefined,
+        requestKey,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });

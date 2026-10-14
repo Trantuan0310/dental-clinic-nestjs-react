@@ -705,6 +705,55 @@ export class BillingService {
   // ==========================================================================
 
   async recordPayment(invoiceId: string, dto: RecordPaymentDto, actor: JwtPayload) {
+    const requestKey = dto.requestKey?.trim() || null;
+    // BILL-02: the same request again returns what it recorded the first time.
+    if (requestKey) {
+      const replay = await this.replayedPayment(invoiceId, requestKey, dto);
+      if (replay) return replay;
+    }
+    let result;
+    try {
+      result = await this.recordPaymentOnce(invoiceId, dto, actor, requestKey);
+    } catch (err) {
+      // Two copies of the request raced: the other one recorded it (this one
+      // lost on the unique key, the invoice version or serialization).
+      // Answer with what it recorded; any other failure stands.
+      if (requestKey) {
+        const replay = await this.replayedPayment(invoiceId, requestKey, dto);
+        if (replay) return replay;
+      }
+      throw err;
+    }
+    return result;
+  }
+
+  /**
+   * The invoice as it stands, when a payment with this request key is already
+   * recorded; null otherwise. A key reused for a different amount or method
+   * is a client error, not a repeat.
+   */
+  private async replayedPayment(invoiceId: string, requestKey: string, dto: RecordPaymentDto) {
+    const done = await this.prisma.payment.findUnique({
+      where: { invoiceId_requestKey: { invoiceId, requestKey } },
+      select: { amount: true, method: true },
+    });
+    if (!done) return null;
+    if (Number(done.amount) !== Number(dto.amount) || done.method !== dto.method) {
+      throw new InvoiceCorrectionException(
+        'PAYMENT_REQUEST_REUSED',
+        `Phiếu thu của lần bấm này đã được ghi với ${vnd(Number(done.amount))}. Tải lại hóa đơn để xem số còn phải thu.`,
+      );
+    }
+    const inv = await this.prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+    return inv;
+  }
+
+  private async recordPaymentOnce(
+    invoiceId: string,
+    dto: RecordPaymentDto,
+    actor: JwtPayload,
+    requestKey: string | null,
+  ) {
     const { updated, event } = await this.prisma.$transaction(async tx => {
       const inv = await tx.invoice.findUnique({ where: { id: invoiceId } });
       if (!inv) throw new InvoiceNotFoundException(invoiceId);
@@ -766,6 +815,7 @@ export class BillingService {
           status: PaymentStatus.COMPLETED,
           note: dto.note ?? null,
           receivedBy: actor.sub,
+          requestKey,
         },
       });
 

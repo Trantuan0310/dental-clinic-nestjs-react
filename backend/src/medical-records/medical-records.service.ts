@@ -638,7 +638,8 @@ export class MedicalRecordsService {
                 type: 'STOCK_OUT',
                 refType: 'ENCOUNTER',
                 refId: encounter.id,
-                quantityBefore: before.quantityOnHand,
+                // INV-02: from the row our decrement locked, not the first read.
+                quantityBefore: new Prisma.Decimal(after?.quantityOnHand ?? 0).plus(requested),
                 quantityAfter: after?.quantityOnHand ?? 0,
                 diff: -requested,
                 reason: `Encounter ${encounter.id}`,

@@ -5,11 +5,12 @@ import { CalendarBusyException } from './exceptions';
 // pg_advisory_xact_lock(int4, int4)), kept in this one place so two kinds of
 // key can never hash onto the same lock:
 //   1 dentist calendar · 2 patient calendar · 3 online-booking phone ·
-//   4 clinic-wide closures
+//   4 clinic-wide closures · 5 payroll (periods, a dentist's pay terms)
 const LOCK_NS_DENTIST = 1;
 const LOCK_NS_PATIENT = 2;
 const LOCK_NS_BOOKING_PHONE = 3;
 const LOCK_NS_CLINIC = 4;
+const LOCK_NS_PAYROLL = 5;
 
 /** How long a transaction waits for one of these locks before CALENDAR_BUSY (409). */
 export const LOCK_TIMEOUT_MS = 5_000;
@@ -81,6 +82,14 @@ export function lockDentistCalendar(tx: Prisma.TransactionClient, dentistId: str
  */
 export function lockPatientCalendar(tx: Prisma.TransactionClient, patientId: string) {
   return advisoryLock(tx, LOCK_NS_PATIENT, patientId);
+}
+
+/**
+ * Serialize payroll writes whose overlap check and insert must be atomic:
+ * `periods` for pay periods, a dentist id for that dentist's pay terms.
+ */
+export function lockPayroll(tx: Prisma.TransactionClient, key: string) {
+  return advisoryLock(tx, LOCK_NS_PAYROLL, key);
 }
 
 /** Serialize changes to clinic-wide closed days (overlap check + insert). */

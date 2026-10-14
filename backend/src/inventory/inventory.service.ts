@@ -154,10 +154,12 @@ export class InventoryService {
           { name: { contains: query.q, mode: 'insensitive' } },
         ],
       }),
-      // BR-INV-005: low-stock filter applied at DB level so pagination is correct
-      // even when the total inventory exceeds the page cap. The previous
-      // post-fetch filter only saw the first 200 items.
-      ...(query.lowStockOnly === 'true' && { minStockLevel: { gt: 0 } }),
+      // BR-INV-005 (INV-01): the low-stock comparison runs in the database,
+      // before the 200-row cap, so an item past row 200 is not missed.
+      ...(query.lowStockOnly === 'true' && {
+        minStockLevel: { gt: 0 },
+        quantityOnHand: { lte: this.prisma.inventoryItem.fields.minStockLevel },
+      }),
     };
 
     const items = await this.prisma.inventoryItem.findMany({
@@ -169,9 +171,6 @@ export class InventoryService {
       },
     });
 
-    if (query.lowStockOnly === 'true') {
-      return items.filter(i => Number(i.quantityOnHand) <= Number(i.minStockLevel));
-    }
     return items;
   }
 
@@ -198,14 +197,18 @@ export class InventoryService {
         select: { quantityOnHand: true },
       });
 
+      // INV-02: the row is locked by our update until commit, so `after` is
+      // exact and `before` follows from it (the first read may be stale).
+      const quantityAfter = new Prisma.Decimal(updated?.quantityOnHand ?? 0);
+      const quantityBefore = quantityAfter.minus(requested);
       await tx.stockMovement.create({
         data: {
           inventoryItemId: itemId,
           type: MovementType.STOCK_IN,
           refType: (dto.refType as MovementRefType | undefined) ?? null,
           refId: dto.refId ?? null,
-          quantityBefore: item.quantityOnHand,
-          quantityAfter: updated?.quantityOnHand ?? 0,
+          quantityBefore,
+          quantityAfter,
           diff: requested,
           reason: dto.reason ?? null,
           performedBy: actor.sub,
@@ -220,8 +223,8 @@ export class InventoryService {
           targetId: itemId,
           metadata: {
             quantity: requested,
-            before: item.quantityOnHand,
-            after: updated?.quantityOnHand ?? 0,
+            before: quantityBefore,
+            after: quantityAfter,
           },
         },
         tx,
@@ -257,13 +260,15 @@ export class InventoryService {
       });
 
       const updated = { ...item, quantityOnHand: after?.quantityOnHand ?? 0 };
+      // INV-02: `before` from the locked row, not from the first read.
+      const quantityBefore = new Prisma.Decimal(updated.quantityOnHand).plus(requested);
       await tx.stockMovement.create({
         data: {
           inventoryItemId: itemId,
           type: MovementType.STOCK_OUT,
           refType: (dto.refType as MovementRefType | undefined) ?? null,
           refId: dto.refId ?? null,
-          quantityBefore: item.quantityOnHand,
+          quantityBefore,
           quantityAfter: updated.quantityOnHand,
           diff: -requested,
           reason: dto.reason ?? null,
@@ -279,7 +284,7 @@ export class InventoryService {
           targetId: itemId,
           metadata: {
             quantity: requested,
-            before: item.quantityOnHand,
+            before: quantityBefore,
             after: updated.quantityOnHand,
           },
         },

@@ -132,6 +132,9 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
                 encounter: prisma.encounter,
                 shiftRegistration: prisma.shiftRegistration,
                 workingSchedule: prisma.workingSchedule,
+                payrollPeriod: prisma.payrollPeriod,
+                $executeRaw: jest.fn(),
+                $executeRawUnsafe: jest.fn(),
               };
               return cb(tx);
             }),
