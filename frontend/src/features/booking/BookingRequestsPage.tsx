@@ -688,7 +688,7 @@ export default function BookingRequestsPage() {
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.reason')}</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.visitReason')}</dt>
                 <dd>{selected.reason || "—"}</dd>
               </div>
               {selected.patientMessage && (

@@ -14,8 +14,8 @@ test('a dentist requests leave, sees it pending and withdraws it', async ({ page
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText(/chờ duyệt và chưa chặn lịch hẹn/)).toBeVisible();
   // Clinic date + clinic time, whatever zone the browser is in (A1-14).
-  await dialog.getByLabel('Từ ngày').fill(date);
-  await dialog.getByLabel('Đến ngày').fill(date);
+  await dialog.getByLabel('Ngày bắt đầu').fill(date);
+  await dialog.getByLabel('Ngày kết thúc').fill(date);
   const times = dialog.getByLabel('Giờ phòng khám');
   await times.nth(0).fill('08:00');
   await times.nth(1).fill('12:00');
