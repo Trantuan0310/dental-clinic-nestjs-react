@@ -8,9 +8,11 @@
 #
 # The staff file is optional (without it no accounts are created); copy
 # backend/prisma/clinic-setup/staff.example.json and fill in real people.
-# RESET_SCHEDULES=1 replaces dentists' existing working hours with the
-# standard Mon–Sat 08:00–12:00 / 13:30–19:00 schedule from today (past days
-# keep their hours for payroll).
+# Dentists without working hours get CLINIC_HOURS (Mon–Sat) and
+# CLINIC_SUNDAY_HOURS from the env file, the same hours the web app shows
+# (default Mon–Sat 08:00–12:00 / 13:30–19:00, Sunday closed).
+# RESET_SCHEDULES=1 replaces dentists' existing working hours with that
+# schedule from today (past days keep their hours for payroll).
 # RESET_PASSWORDS=a@x,b@y issues new temporary passwords for those accounts.
 set -euo pipefail
 

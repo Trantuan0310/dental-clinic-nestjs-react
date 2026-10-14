@@ -686,7 +686,7 @@ export class EmployeesService {
           specialties: dto.specialties ?? [],
           calendarColor: dto.calendarColor ?? nextCalendarColor(existing),
           defaultSlotMinutes: dto.defaultSlotMinutes ?? 30,
-          acceptsOnlineBooking: dto.acceptsOnlineBooking ?? false,
+          acceptsOnlineBooking: dto.acceptsOnlineBooking ?? true,
           acceptsNewPatients: dto.acceptsNewPatients ?? true,
           bio: dto.bio ?? null,
           createdBy: actor.sub,
