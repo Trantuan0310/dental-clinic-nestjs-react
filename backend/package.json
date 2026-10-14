@@ -30,9 +30,9 @@
     "prisma:seed:clinical": "ts-node prisma/seed-clinical.ts",
     "prisma:seed:demo": "ts-node --transpile-only prisma/seed-demo-clinic.ts",
     "postinstall": "prisma generate",
-    "db:up": "docker compose up -d",
+    "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d && sleep 5 && prisma migrate dev && prisma db seed",
+    "db:reset": "docker compose down -v && docker compose up -d postgres && sleep 5 && prisma migrate dev && prisma db seed",
     "db:setup": "npm run db:up && timeout 5 && prisma migrate deploy && npx ts-node prisma/seed.ts",
     "db:baseline": "prisma migrate resolve --applied 001_init && npx ts-node prisma/seed.ts",
     "prisma": {

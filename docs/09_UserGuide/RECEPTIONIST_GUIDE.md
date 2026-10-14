@@ -136,6 +136,8 @@ Lễ tân **không** làm được các việc sau; nhờ quản trị:
 
 Với mỗi yêu cầu: xác nhận, đề xuất giờ khác, yêu cầu bổ sung, từ chối, ghi nhận khách hủy qua điện thoại, gắn vào lượt khám hôm nay khi khách đến quầy. Chi tiết và lưu ý về khớp hồ sơ: [PHAN_QUYEN.md](PHAN_QUYEN.md#yêu-cầu-đặt-lịch-online).
 
+Nhãn **"BN mới, BS không nhận"**: bác sĩ khách chọn đang tắt "Nhận bệnh nhân mới" và số điện thoại này chưa từng khám xong với bác sĩ đó. Gọi khách để chuyển sang bác sĩ khác, hoặc xác nhận nếu bác sĩ đồng ý nhận.
+
 ---
 
 ## 7. Bác sĩ vắng đột xuất

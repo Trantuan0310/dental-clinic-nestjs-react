@@ -8,9 +8,16 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ### Đang chờ / bước tiếp theo
 
-- PR cập nhật hướng dẫn sử dụng: chờ người dùng xem và merge.
-- PR sửa 2 lỗi cấu hình lịch (mục ngay dưới) cùng `CLAUDE.md` và nhật ký này: chờ CI xanh rồi người dùng merge.
+- PR #45 (lỗi cấu hình lịch), #46 (hướng dẫn sử dụng), #47 (giờ làm từ `CLINIC_HOURS`, bác sĩ mới bật đặt lịch online): đã merge vào `main`.
+- PR "Nhận bệnh nhân mới" + cấu hình dev (nhánh `claude/project-thread-8oz60c`): chờ CI và người dùng merge, rồi deploy lại.
 - Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` trên VPS (môi trường của Claude không có quyền SSH).
+
+### "Nhận bệnh nhân mới" ở đặt lịch online, sửa cấu hình dev
+
+- Người dùng chọn cách "để lễ tân quyết". Bác sĩ tắt "Nhận bệnh nhân mới" vẫn hiện trên `/booking` (bệnh nhân cũ đặt được). Trang công khai không tiết lộ số điện thoại có phải bệnh nhân hay không.
+- Hộp Yêu cầu đặt lịch gắn nhãn "BN mới, BS không nhận" cho yêu cầu đang mở mà số điện thoại chưa có lần khám hoàn tất với bác sĩ đó (`booking.service.ts`, `newPatientsForClosedDentists`).
+- `backend/.env.example` dùng cổng 15432; `npm run db:up` / `db:reset` chỉ dựng PostgreSQL.
+- Tài liệu: PHAN_QUYEN, RECEPTIONIST_GUIDE, QUICK_START.
 
 ### Cập nhật hướng dẫn sử dụng (`docs/09_UserGuide/`)
 

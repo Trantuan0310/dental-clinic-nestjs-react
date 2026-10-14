@@ -37,6 +37,8 @@ type RequestRow = {
   slotIssue?: { kind: string; message: string } | null;
   /** Open requests made with this phone (the public form refuses it at 6). */
   openFromPhone?: number;
+  /** The dentist is not taking new patients and this phone has no finished visit with them. */
+  newPatientForDentist?: boolean;
   /** The front desk's own note (not shown to the patient). */
   receptionistNote?: string | null;
   /** The last email to the patient did not go out (or there was no email): call them. */
@@ -601,6 +603,14 @@ export default function BookingRequestsPage() {
                     <UrgencyBadge kind={urgency(row, now)} />
                     <SlotIssueBadge issue={row.slotIssue} />
                     <PhoneLimitBadge count={row.openFromPhone} phone={row.phone} />
+                    {row.newPatientForDentist && (
+                      <span
+                        title={t('uiScheduling.newPatientForDentistTitle')}
+                        className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800"
+                      >
+                        {t('uiScheduling.newPatientForDentist')}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
