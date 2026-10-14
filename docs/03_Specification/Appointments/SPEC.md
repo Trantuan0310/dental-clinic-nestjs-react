@@ -47,16 +47,17 @@ Phòng khám cần:
 - Auto no-show cron job (mỗi 15 phút).
 - Status state machine đầy đủ.
 - Tính slot available theo working schedule − time-off − appointment đã đặt.
+- Email cho bệnh nhân: xác nhận lịch đặt tại quầy, báo hủy/dời lịch, nhắc lịch trước khoảng 24 giờ (bổ sung sau MVP; chi tiết trong [`online-booking.md`](../../04_Database/schema-per-module/online-booking.md#emails-to-the-patient)).
+- Bệnh nhân gửi yêu cầu đặt lịch online, lễ tân xác nhận (bổ sung sau MVP, migration 025; không có tài khoản bệnh nhân).
+- Ngày nghỉ của cả phòng khám: Tết, lễ (bổ sung sau MVP, migration 035).
 
 #### ❌ Không có ở MVP
 
-- SMS / email reminder tự động.
-- Patient tự đặt lịch online (patient portal).
+- SMS reminder.
+- Patient portal (bệnh nhân đăng nhập tài khoản riêng).
 - Recurring schedule phức tạp (theo pattern "mỗi 2 tuần").
-- Holiday/tet calendar tự động.
 - Multi-BS appointment (1 ca khám nhiều BS cùng lúc).
 - Reschedule tự động khi BS cancel (chỉ manual).
-- Audit khách hàng "đã gửi reminder" (sẽ có khi tích hợp SMS).
 
 ---
 

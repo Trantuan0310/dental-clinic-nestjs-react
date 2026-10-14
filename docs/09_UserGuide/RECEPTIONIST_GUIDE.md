@@ -73,6 +73,18 @@ Bước 3: Nhấn **Tạo** → hệ thống sinh mã bệnh nhân tự động 
 
 ### Cancel / Reschedule
 - Click vào lịch → menu **⋮** → **Hủy** (nhập lý do) hoặc **Đổi lịch** (chọn slot mới).
+- Nếu **phòng khám** là bên phải hủy hoặc dời (bác sĩ vắng, đổi giờ làm, phòng khám nghỉ), tích ô **"Phòng khám hủy"** / **"Phòng khám dời"**. Khi đó:
+  - lần đổi không tính vào giới hạn 3 lần đổi lịch của bệnh nhân;
+  - email gửi khách (nếu hồ sơ có email) nói rõ phòng khám phải hủy/dời và xin lỗi.
+- Không tích khi bệnh nhân tự xin hủy hoặc đổi: email sẽ chỉ báo lịch đã hủy hoặc đã dời sang giờ mới.
+- Lý do bạn nhập là ghi chú nội bộ, **không** được gửi cho khách.
+
+### Email hệ thống tự gửi cho bệnh nhân
+Chỉ gửi khi hồ sơ bệnh nhân có email:
+- **Đặt lịch** qua điện thoại hoặc cho bệnh nhân tái khám: email xác nhận giờ, bác sĩ, dịch vụ, địa chỉ. Khách vãng lai đang ở quầy thì không gửi.
+- **Hủy / dời lịch / đổi bác sĩ**: email báo thay đổi.
+- **Nhắc lịch** trước khoảng 24 giờ (không gửi từ 21h đến 7h).
+- Lịch không gửi được email nhắc (bác sĩ nghỉ, phòng khám đóng cửa, ngoài giờ làm, gửi lỗi) hiện trong danh sách **"Lịch hẹn cần gọi khách"** để lễ tân gọi điện.
 
 ### No-show
 - Bệnh nhân không đến sau 15 phút → click **Đánh dấu vắng**.
