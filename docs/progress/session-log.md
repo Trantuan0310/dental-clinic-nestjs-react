@@ -79,3 +79,29 @@ Lỗi:
 - Bỏ `@types/ioredis`.
 - Vite tách chunk: file chính từ 542 kB xuống 182 kB.
 - Chưa làm: nâng `argon2` (0.45 đổi API mã hoá mật khẩu), Jest 29 và ESLint 8.
+
+### Kiểm toán cấu hình nghiệp vụ phòng khám (14/10) — nhánh `claude/trusting-gauss-8544yk`
+
+Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày nghỉ phòng khám, dịch vụ, giá, thông tin phòng khám. Kiểm bằng gọi API thật trên DB `auditrbac`.
+
+**Hai lỗi đã sửa (2 commit trên nhánh này):**
+
+1. `hireDate` không có giới hạn trên (`@IsDateString()` đơn thuần). Gõ nhầm năm (2099 thay vì 2019) thì hồ sơ **không thể cho nghỉ việc nữa**: `terminate()` từ chối ngày nghỉ trước ngày vào làm, kể cả khi không ghi ngày:
+   ```
+   cho nghỉ việc HÔM NAY          -> 400 Termination date is before the hire date
+   cho nghỉ việc (không ghi ngày) -> 400 Termination date is before the hire date
+   ```
+   Sửa: `validateHireDate()` giới hạn tối đa 1 năm tới. Áp khi tạo mới; khi sửa thì chỉ kiểm nếu `dto.hireDate` được truyền, để hồ sơ cũ có ngày sai vẫn chỉnh được. Thêm 3 test trong `employees.service.spec.ts`.
+2. `parseHourBlocks` ở frontend không kiểm giá trị (nhận cả `25:99`, giờ kết thúc trước giờ bắt đầu, khung chồng nhau). Sửa: bỏ qua khung sai thay vì ném lỗi — hàm chạy lúc nạp module, ném lỗi là trắng màn hình. Thêm `prisma/clinic-setup/hours.spec.ts` (13 test) và `roots` trong cấu hình Jest để quét `prisma/`.
+
+**Đã kiểm, không có lỗi:**
+
+- Cho nghỉ việc chặn khi bác sĩ còn hẹn phía trước (`DENTIST_HAS_FUTURE_APPOINTMENTS`, 50 ca chưa xong).
+- Hồ sơ bác sĩ: chuyên khoa theo enum, màu `#RRGGBB`, thời lượng slot 15–120.
+- Lịch làm việc: giờ kết thúc sau giờ bắt đầu, `dayOfWeek` 0–6, phút theo bội số 5, slot ≥15, `validTo` ≥ `validFrom`, `SCHEDULE_OVERLAP` cả khi chồng khít và chồng một phần. Lịch đang có hiệu lực không xoá được (ràng buộc lương).
+- Ngày nghỉ phòng khám: thứ tự ngày và chồng nhau đều bị chặn.
+- Dịch vụ: mã không trùng, giá âm bị chặn, thời lượng 5–480, nhóm phải tồn tại, chuyên khoa theo enum, `isFree` buộc giá 0.
+- **Đổi giá dịch vụ không làm thay đổi hoá đơn đã phát hành** (kiểm: nhân đôi giá, tổng hoá đơn và `unit_price` giữ nguyên).
+- Tắt dịch vụ có `/impact` (74 hẹn phía trước, 4 chỉ định đang mở) và giao diện gọi trước khi xác nhận.
+
+**Kết quả kiểm tra:** backend `tsc` sạch, `lint` sạch, 1362 test/56 bộ xanh; frontend `typecheck`, `lint`, `build` sạch.
