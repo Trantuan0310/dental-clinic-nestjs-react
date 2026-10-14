@@ -109,7 +109,7 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   await expect(lockBtn).toBeHidden({ timeout: 10_000 });
 
   // ---- Approve: REVIEWING -> APPROVED ----
-  const approveBtn = page.getByRole('button', { name: /^duyệt$/i });
+  const approveBtn = page.getByRole('button', { name: /^duyệt kỳ lương$/i });
   await expect(approveBtn).toBeVisible({ timeout: 10_000 });
   await approveBtn.click();
   await expect(approveBtn).toBeHidden({ timeout: 10_000 });
