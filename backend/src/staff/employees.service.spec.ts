@@ -104,6 +104,35 @@ describe('EmployeesService', () => {
       ).rejects.toBeInstanceOf(EmployeeValidationException);
     });
 
+    it('rejects a hire date far in the future — a mistyped year', async () => {
+      await expect(
+        service.create(
+          { fullName: 'Trần B', employeeType: 'OTHER' as never, hireDate: '2099-01-01' },
+          actor,
+          meta,
+        ),
+      ).rejects.toBeInstanceOf(EmployeeValidationException);
+      expect(prisma.employee.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a start date already agreed within the year ahead', async () => {
+      const start = new Date();
+      start.setUTCMonth(start.getUTCMonth() + 6);
+      const hireDate = start.toISOString().slice(0, 10);
+      prisma.$queryRaw.mockResolvedValue([{ nextval: BigInt(7) }]);
+      prisma.employee.create.mockImplementation(
+        async ({ data }: { data: Record<string, unknown> }) => employee(data),
+      );
+
+      const result = await service.create(
+        { fullName: 'Trần B', employeeType: 'RECEPTIONIST' as never, hireDate },
+        actor,
+        meta,
+      );
+
+      expect(result.hireDate).toBe(hireDate);
+    });
+
     it('rejects a date of birth after the hire date', async () => {
       await expect(
         service.create(
@@ -362,6 +391,18 @@ describe('EmployeesService', () => {
       });
       expect(prisma.appointment.update).not.toHaveBeenCalled();
       expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a hire date far in the future, while leaving such a record editable', async () => {
+      const far = employee({ hireDate: new Date('2099-01-01T00:00:00Z') });
+      prisma.employee.findFirst.mockResolvedValue(far);
+      prisma.employee.update.mockResolvedValue(far);
+
+      await expect(
+        service.update('emp-1', { hireDate: '2099-01-01' }, actor, meta),
+      ).rejects.toBeInstanceOf(EmployeeValidationException);
+      // The hire date is left alone, so the rest of the record can be fixed.
+      await expect(service.update('emp-1', { notes: 'x' }, actor, meta)).resolves.toBeDefined();
     });
 
     it('does not look up bookings for other edits', async () => {
