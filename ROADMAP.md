@@ -10,7 +10,7 @@
 | 4 | Sprint 4 — Xây dựng phiên bản đầu tiên | 5 đầu việc | 01/09/2026 | 14/09/2026 | Hoàn thành |
 | 5 | Sprint 5 — Hoàn thiện các chức năng | 5 đầu việc | 15/09/2026 | 28/09/2026 | Hoàn thành |
 | 6 | Sprint 6 — Kiểm thử và sửa lỗi | 5 đầu việc | 29/09/2026 | 12/10/2026 | Hoàn thành |
-| 7 | Sprint 7 — Hoàn thiện sản phẩm và tài liệu | 5 đầu việc | 13/10/2026 | 26/10/2026 | Đang thực hiện (2/5) |
+| 7 | Sprint 7 — Hoàn thiện sản phẩm và tài liệu | 5 đầu việc | 13/10/2026 | 26/10/2026 | Đang thực hiện (4/5) |
 | 8 | Sprint 8 — Chuẩn bị nghiệm thu và bảo vệ | 5 đầu việc | 27/10/2026 | 09/11/2026 | Chưa bắt đầu |
 
 *Cập nhật ngày 14/10/2026, theo lịch sử commit (303 commit từ 30/08/2026) và tài liệu trong `docs/`. Lịch sử Git bắt đầu từ 30/08/2026, nên Sprint 1–3 được đối chiếu bằng tài liệu đã viết trong giai đoạn đó.*
@@ -97,13 +97,15 @@
 
 - [x] Hoàn thiện giao diện và trải nghiệm sử dụng.
 - [x] Xử lý các lỗi và vấn đề còn tồn đọng.
-- [ ] Rà soát nội dung, cách trình bày và tính nhất quán của sản phẩm.
+- [x] Rà soát nội dung, cách trình bày và tính nhất quán của sản phẩm.
 - [ ] Viết và hoàn thiện tài liệu hướng dẫn sử dụng.
-- [ ] Tổng hợp kết quả thực hiện và cập nhật báo cáo đồ án.
+- [x] Tổng hợp kết quả thực hiện và cập nhật báo cáo đồ án.
 
 **Đã làm (13–14/10):** hoàn thiện dark mode và giao diện tiếng Anh; sửa email đặt lịch (dữ liệu demo thiếu lịch làm việc, nội dung hủy/dời lịch, xác nhận lịch đặt tại quầy, nhắc lịch buổi sáng); chuyển báo cáo cũ vào `docs/audits/legacy/`.
 
-**Còn lại:** rà các luồng thanh toán, lương, kho; đối chiếu hướng dẫn sử dụng (`docs/09_UserGuide/`) và báo cáo đồ án (`docs/10_Thesis/`) với sản phẩm hiện tại.
+**Đã làm (14/10):** rà lại 16 lỗi tiền, lương, kho của đợt audit 14/09 (6 lỗi còn tồn được sửa kèm test, migration 048); tài liệu email đặt lịch; số liệu báo cáo đồ án đo lại từ mã nguồn; slide bảo vệ 19 trang có ảnh chụp sản phẩm thật.
+
+**Còn lại:** đối chiếu hướng dẫn sử dụng (`docs/09_UserGuide/`) với sản phẩm; bổ sung số liệu khảo sát có nguồn cho chương 1.
 
 ### Sprint 8 — Chuẩn bị nghiệm thu và bảo vệ
 
