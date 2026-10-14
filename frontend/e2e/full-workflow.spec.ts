@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { ACCOUNTS, loginAs } from './flow-helpers';
 
 /**
  * Full workflow smoke test.
@@ -43,18 +44,19 @@ test.describe('Full workflow', () => {
     await expect(main).toBeVisible({ timeout: 10_000 });
   });
 
-  test('logout works', async ({ page }) => {
-    await page.goto('/');
-
-    // Find logout button (usually in user menu)
-    const trigger = page.locator('header button:has(svg)').last();
-    if (await trigger.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await trigger.click();
-      const logoutBtn = page.getByRole('button', { name: /đăng xuất/i });
-      if (await logoutBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await logoutBtn.click();
-        await page.waitForURL('**/login', { timeout: 10_000 });
-      }
+  // Signs out a receptionist in a context of its own. Signing out revokes
+  // that session, so doing it on the shared admin session would log every
+  // later test out.
+  test('logout works', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await context.newPage();
+    try {
+      await loginAs(page, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password);
+      await page.getByRole('button', { name: 'Lễ tân Lê Thị Hạnh' }).click();
+      await page.getByRole('button', { name: /đăng xuất/i }).click();
+      await page.waitForURL('**/login', { timeout: 10_000 });
+    } finally {
+      await context.close();
     }
   });
 });
