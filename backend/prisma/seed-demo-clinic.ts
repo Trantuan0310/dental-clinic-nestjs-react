@@ -227,7 +227,7 @@ const minutesOf = (t: Date) => t.getUTCHours() * 60 + t.getUTCMinutes();
  * ("Bác sĩ không có lịch làm việc ngày này") and the clinic inbox is flooded
  * with "Lịch hẹn cần gọi khách". Dentists that already have them are left alone.
  */
-async function ensureDentistSetup(dentistIds: string[], today: Date) {
+async function ensureDentistSetup(dentistIds: string[], since: Date) {
   const services = await prisma.service.findMany({ where: { isActive: true } });
   for (const dentistId of dentistIds) {
     const hasSchedule = await prisma.workingSchedule.count({
@@ -242,7 +242,9 @@ async function ensureDentistSetup(dentistIds: string[], today: Date) {
             startTime: pgTime(from),
             endTime: pgTime(to),
             slotDurationMin: 15,
-            validFrom: today,
+            // From the first demo day: past visits must sit inside the hours
+            // too, or payroll flags every one as outside working hours.
+            validFrom: since,
             shiftType: from < 12 * 60 ? ('MORNING' as const) : ('AFTERNOON' as const),
             isPaidShift: true,
           })),
@@ -259,7 +261,7 @@ async function ensureDentistSetup(dentistIds: string[], today: Date) {
       await prisma.dentistService.createMany({
         data: services
           .filter(s => !s.requiredSpecialty || specialties.includes(s.requiredSpecialty))
-          .map(s => ({ dentistId, serviceId: s.id, effectiveFrom: today })),
+          .map(s => ({ dentistId, serviceId: s.id, effectiveFrom: since })),
       });
       console.log(`  + phân công dịch vụ cho bác sĩ ${dentistId}`);
     }
@@ -312,7 +314,34 @@ async function repair() {
       distinct: ['dentistId'],
     })
   ).map(a => a.dentistId);
-  await ensureDentistSetup(dentistIds, today);
+  const first = await prisma.appointment.findFirst({
+    where: { patient: { notes: NOTE } },
+    orderBy: { startAt: 'asc' },
+    select: { startAt: true },
+  });
+  const from = first ? clinicDay(first.startAt) : today;
+  await ensureDentistSetup(dentistIds, from);
+  // Hours and services an older run started "today": reach back to the
+  // first demo visit, so the demo history is not outside working hours.
+  // Only open-ended rows of dentists with no dated history of their own.
+  for (const dentistId of dentistIds) {
+    const dated = await prisma.workingSchedule.count({
+      where: { dentistId, deletedAt: null, validTo: { not: null } },
+    });
+    if (dated) continue;
+    const moved = await prisma.workingSchedule.updateMany({
+      where: { dentistId, deletedAt: null, validTo: null, validFrom: { gt: from } },
+      data: { validFrom: from },
+    });
+    await prisma.dentistService.updateMany({
+      where: { dentistId, effectiveTo: null, effectiveFrom: { gt: from } },
+      data: { effectiveFrom: from },
+    });
+    if (moved.count)
+      console.log(
+        `  ~ lịch làm việc của bác sĩ ${dentistId} có hiệu lực từ ${from.toISOString().slice(0, 10)}`,
+      );
+  }
   const fixed = await prisma.appointment.updateMany({
     where: upcoming,
     data: { reminderSentAt: now, reminderStatus: null, reminderNote: null },
@@ -395,7 +424,7 @@ async function main() {
   receptionists = await byRole('receptionist');
   await ensureDentistSetup(
     dentists.map(d => d.id),
-    today,
+    start,
   );
   const windowsOf = await windowsByDentist(dentists.map(d => d.id));
   console.log(`✓ ${dentists.length} bác sĩ, ${receptionists.length} lễ tân`);
