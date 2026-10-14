@@ -45,11 +45,7 @@ cp .env.example .env
 docker compose up -d postgres
 ```
 
-PostgreSQL trong Docker mở ở cổng **15432** trên máy. Sửa `DATABASE_URL` trong `.env` cho khớp:
-
-```
-DATABASE_URL=postgresql://postgres:postgres@localhost:15432/dental_clinic
-```
+PostgreSQL trong Docker mở ở cổng **15432** trên máy; `DATABASE_URL` trong `.env.example` đã dùng cổng này. `npm run db:up` cũng chỉ dựng PostgreSQL.
 
 ```bash
 # Áp dụng migration

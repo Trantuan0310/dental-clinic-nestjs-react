@@ -59,6 +59,7 @@ describe('BookingService public request security and validation', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       patientPhoneHistory: { create: jest.fn() },
+      dentistProfile: { findMany: jest.fn().mockResolvedValue([]) },
       auditLog: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
@@ -486,9 +487,10 @@ describe('BookingService public request security and validation', () => {
     expect(where.dentist.dentistProfile.is.acceptsOnlineBooking).toBe(true);
     // The service itself must be offered online too.
     expect(where.service).toEqual({ isActive: true, bookableOnline: true });
-    // Online booking also needs a dentist taking new patients and not on
-    // leave; a PENDING_SETUP account still qualifies.
-    expect(where.dentist.dentistProfile.is.acceptsNewPatients).toBe(true);
+    // Online booking also needs a dentist not on leave; a PENDING_SETUP
+    // account still qualifies. "Not taking new patients" does not hide the
+    // dentist: returning patients may still book (the inbox flags the rest).
+    expect(where.dentist.dentistProfile.is).not.toHaveProperty('acceptsNewPatients');
     expect(where.dentist.dentistProfile.is.employee).toEqual({ employmentStatus: 'ACTIVE' });
     expect(where.dentist.status).toEqual({ not: 'DEACTIVATED' });
     expect(prisma.bookingRequest.create).not.toHaveBeenCalled();
@@ -2511,6 +2513,43 @@ describe('BookingService public request security and validation', () => {
         );
         expect(email.send.mock.calls[0][0].text).not.toContain('#token=');
       });
+    });
+
+    it('flags a request for a dentist not taking new patients from a phone they have not seen', async () => {
+      prisma.bookingRequest.findMany
+        .mockResolvedValueOnce([
+          request(),
+          request({ id: 'request-2', phone: '0907654321' }),
+          request({ id: 'request-3', preferredDentistId: 'dentist-2' }),
+        ])
+        .mockResolvedValueOnce([]);
+      prisma.dentistProfile.findMany.mockResolvedValue([{ userId: 'dentist-1' }]);
+      // 0907654321 has a finished visit with dentist-1; 0901234567 has none.
+      prisma.$queryRaw.mockImplementation(async (_sql: unknown, phones: string[]) =>
+        phones.includes('0907654321') ? [{ id: 'patient-2' }] : [],
+      );
+      prisma.appointment.findFirst.mockImplementation(async ({ where }: any) =>
+        where.patient.id.in.includes('patient-2') ? { id: 'visit-1' } : null,
+      );
+
+      const rows = await service.listForStaff({});
+
+      expect(rows.map(r => [r.id, r.newPatientForDentist])).toEqual([
+        ['request-1', true],
+        ['request-2', false],
+        ['request-3', false],
+      ]);
+      expect(prisma.dentistProfile.findMany.mock.calls[0][0].where).toEqual({
+        userId: { in: ['dentist-1', 'dentist-2'] },
+        acceptsNewPatients: false,
+      });
+      expect(prisma.appointment.findFirst.mock.calls[0][0].where).toMatchObject({
+        dentistId: 'dentist-1',
+        status: 'COMPLETED',
+        deletedAt: null,
+      });
+      // Only the closed dentist's requests are looked up.
+      expect(prisma.appointment.findFirst).toHaveBeenCalledTimes(2);
     });
 
     it('tells the front desk how many open requests each phone holds', async () => {

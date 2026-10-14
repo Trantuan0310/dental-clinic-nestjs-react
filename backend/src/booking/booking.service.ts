@@ -8,7 +8,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { BookingRequestStatus, Gender, Prisma } from '@prisma/client';
+import { AppointmentStatus, BookingRequestStatus, Gender, Prisma } from '@prisma/client';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentsService, VisitPlan } from '../appointments/appointments.service';
@@ -1117,10 +1117,12 @@ export class BookingService {
         include,
       });
       const openByPhone = await this.openCountByPhone(found.map(r => r.phone));
+      const newPatients = await this.newPatientsForClosedDentists(found);
       return found.map(r => ({
         ...this.toStaff(r),
         slotIssue: null,
         openFromPhone: openByPhone.get(r.phone) ?? 0,
+        newPatientForDentist: newPatients.has(r.id),
       }));
     }
     const activeStatuses = q.status ? ACTIVE.filter(s => s === q.status) : ACTIVE;
@@ -1155,13 +1157,58 @@ export class BookingService {
         .slice(0, ISSUE_CHECK_LIMIT),
     );
     const openByPhone = await this.openCountByPhone([...active, ...rest].map(r => r.phone));
+    const newPatients = await this.newPatientsForClosedDentists(active);
     return [...active, ...rest].map(r => ({
       ...this.toStaff(r),
       slotIssue: issues.get(r.id) ?? null,
       // At MAX_OPEN_PER_PHONE the public form refuses that phone: the front
       // desk sees it (possibly someone else's number used to block it).
       openFromPhone: openByPhone.get(r.phone) ?? 0,
+      newPatientForDentist: newPatients.has(r.id),
     }));
+  }
+
+  /**
+   * Ids of open, unbooked requests for a dentist who is not taking new
+   * patients ("Nhận bệnh nhân mới" off), made from phones with no completed
+   * visit with that dentist: the front desk calls to move them to another
+   * dentist. Only these dentists' requests cost a lookup each.
+   */
+  private async newPatientsForClosedDentists(
+    rows: Array<{
+      id: string;
+      status: BookingRequestStatus;
+      appointmentId: string | null;
+      phone: string;
+      contactPersonPhone: string | null;
+      preferredDentistId: string;
+      proposedDentistId: string | null;
+    }>,
+  ) {
+    const open = rows.filter(r => ACTIVE.includes(r.status) && !r.appointmentId);
+    const dentistOf = (r: (typeof open)[number]) => r.proposedDentistId ?? r.preferredDentistId;
+    const result = new Set<string>();
+    if (!open.length) return result;
+    const closed = await this.prisma.dentistProfile.findMany({
+      where: { userId: { in: [...new Set(open.map(dentistOf))] }, acceptsNewPatients: false },
+      select: { userId: true },
+    });
+    const closedIds = new Set(closed.map(d => d.userId));
+    for (const r of open) {
+      const dentistId = dentistOf(r);
+      if (!closedIds.has(dentistId)) continue;
+      const seen = await this.prisma.appointment.findFirst({
+        where: {
+          dentistId,
+          status: AppointmentStatus.COMPLETED,
+          deletedAt: null,
+          patient: await this.patientsByPhone(this.requestPhones(r)),
+        },
+        select: { id: true },
+      });
+      if (!seen) result.add(r.id);
+    }
+    return result;
   }
 
   /** Requests matching a reference code, a phone (own or guardian) or a name. */
@@ -2412,7 +2459,11 @@ export class BookingService {
       OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
       // Same dentists as the staff booking form (PENDING_SETUP accounts
       // included, on-leave employees excluded), narrowed to those who take
-      // online bookings from new patients.
+      // online bookings. A dentist not taking new patients stays listed so
+      // returning patients can still book; the inbox flags requests from
+      // phones the dentist has not seen (newPatientForDentist), and the
+      // front desk decides. The public page never says which, so it does not
+      // reveal whether a phone belongs to a patient.
       dentist: {
         ...SCHEDULABLE_ACCOUNT_WHERE,
         userRoles: { some: { role: { code: 'dentist' } } },
@@ -2420,7 +2471,6 @@ export class BookingService {
           is: {
             ...dentistProfileFilter('booking'),
             acceptsOnlineBooking: true,
-            acceptsNewPatients: true,
           },
         },
       },
