@@ -97,11 +97,11 @@ export function MonthView({
   return (
     <div className="flex flex-col">
       {/* Weekday header */}
-      <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+      <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800">
         {weekdayLabels.map((d) => (
           <div
             key={d}
-            className="border-r border-gray-100 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 last:border-r-0"
+            className="border-r border-gray-100 py-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 last:border-r-0 dark:border-surface-700 dark:text-surface-400"
           >
             {d}
           </div>
@@ -123,11 +123,11 @@ export function MonthView({
             <div
               key={dateKey}
               className={cn(
-                'group relative min-h-[112px] border-b border-r border-gray-100 p-1.5 transition-colors last:border-r-0',
-                !cell.inMonth && 'bg-gray-50/60',
-                cell.inMonth && isWeekend && 'bg-gray-50/40',
-                cell.inMonth && closedReason !== undefined && 'bg-gray-100',
-                cell.inMonth && 'hover:bg-brand-50/30',
+                'group relative min-h-[112px] border-b border-r border-gray-100 p-1.5 transition-colors last:border-r-0 dark:border-surface-700',
+                !cell.inMonth && 'bg-gray-50/60 dark:bg-surface-900/60',
+                cell.inMonth && isWeekend && 'bg-gray-50/40 dark:bg-surface-800/40',
+                cell.inMonth && closedReason !== undefined && 'bg-gray-100 dark:bg-surface-800',
+                cell.inMonth && 'hover:bg-brand-50/30 dark:hover:bg-brand-500/10',
                 isToday && 'ring-1 ring-inset ring-brand-400',
               )}
             >
@@ -141,8 +141,8 @@ export function MonthView({
                     isToday
                       ? 'bg-brand-500 text-white hover:bg-brand-600'
                       : cell.inMonth
-                        ? 'text-gray-700 hover:bg-gray-200'
-                        : 'text-gray-400 hover:bg-gray-200',
+                        ? 'text-gray-700 hover:bg-gray-200 dark:text-surface-200 dark:hover:bg-surface-700'
+                        : 'text-gray-400 hover:bg-gray-200 dark:text-surface-500 dark:hover:bg-surface-700',
                   )}
                   title={t('uiScheduling.viewDate', { date: format(cell.date, 'dd/MM/yyyy') })}
                 >
@@ -151,7 +151,7 @@ export function MonthView({
 
                 {cell.inMonth && closedReason !== undefined && (
                   <span
-                    className="truncate rounded bg-gray-200 px-1 text-[10px] font-medium text-gray-600"
+                    className="truncate rounded bg-gray-200 px-1 text-[10px] font-medium text-gray-600 dark:bg-surface-700 dark:text-surface-200"
                     title={t('uiScheduling.clinicClosedReason', { reason: closedReason })}
                   >
                     {t('uiScheduling.closed')}
@@ -162,7 +162,7 @@ export function MonthView({
                   <button
                     type="button"
                     onClick={() => onCreateAtSlot(cell.date, '09:00')}
-                    className="rounded p-0.5 text-gray-300 opacity-0 transition-all hover:bg-brand-100 hover:text-brand-600 group-hover:opacity-100"
+                    className="rounded p-0.5 text-gray-400 opacity-0 transition-all hover:bg-brand-100 hover:text-brand-600 group-hover:opacity-100 dark:text-surface-500 dark:hover:bg-brand-500/20 dark:hover:text-brand-300"
                     aria-label={t('uiScheduling.createAppointmentDate', { date: format(cell.date, 'dd/MM') })}
                     title={t('uiScheduling.createAppointment')}
                   >
@@ -186,7 +186,7 @@ export function MonthView({
                   <button
                     type="button"
                     onClick={() => setSelectedDay(cell.date)}
-                    className="inline-flex w-full items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                    className="inline-flex w-full items-center gap-1 rounded px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-surface-400 dark:hover:bg-surface-700 dark:hover:text-surface-100"
                   >
                     <MoreHorizontal className="h-3 w-3" />
                     <span>{t('uiScheduling.moreCount', { count: overflow })}</span>
@@ -194,7 +194,7 @@ export function MonthView({
                 )}
 
                 {cell.inMonth && dayAppointments.length === 0 && (
-                  <div className="flex h-6 items-center justify-center text-[10px] text-gray-300 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex h-6 items-center justify-center text-[10px] text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 dark:text-surface-500">
                     {t('uiScheduling.empty')}
                   </div>
                 )}
@@ -341,7 +341,7 @@ function DayAppointmentsList({
   }
 
   return (
-    <ul className="-mx-2 divide-y divide-gray-100">
+    <ul className="-mx-2 divide-y divide-gray-100 dark:divide-surface-700">
       {appointments.map((apt) => {
         const type = apt.appointmentType ?? 'consultation';
         return (
@@ -351,9 +351,9 @@ function DayAppointmentsList({
               onClick={() => onAppointmentClick(apt)}
                     className="flex w-full items-center gap-3 rounded-md px-2 py-3 text-left text-gray-900 transition-colors hover:bg-gray-50 dark:text-surface-100 dark:hover:bg-surface-800"
             >
-              <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-md bg-gray-50 px-2 py-1">
-                <Clock className="h-3.5 w-3.5 text-gray-400" />
-                <span className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900">
+              <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-md bg-gray-50 px-2 py-1 dark:bg-surface-800">
+                <Clock className="h-3.5 w-3.5 text-gray-400 dark:text-surface-400" />
+                <span className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900 dark:text-surface-100">
                   {formatTimeOnly(apt.startsAt)}
                 </span>
               </div>
@@ -362,7 +362,7 @@ function DayAppointmentsList({
                 <div className="flex items-center gap-2">
                   <p
                     className={cn(
-                      'truncate text-sm font-medium text-gray-900',
+                      'truncate text-sm font-medium text-gray-900 dark:text-surface-100',
                       (apt.status === 'cancelled' || apt.status === 'no_show') && 'line-through',
                     )}
                   >
@@ -373,7 +373,7 @@ function DayAppointmentsList({
                     overdue={isOverdueNotArrived(apt, now)}
                   />
                 </div>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
+                <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500 dark:text-surface-400">
                   <span className="inline-flex items-center gap-1">
                     <Stethoscope className="h-3 w-3" />
                     {t(`uiScheduling.type${type === 'follow_up' ? 'FollowUp' : type === 'consultation' ? 'Consultation' : 'Treatment'}`)}
@@ -385,11 +385,11 @@ function DayAppointmentsList({
                   <span>{apt.dentistName}</span>
                 </div>
                 {apt.reason && (
-                  <p className="mt-0.5 truncate text-xs text-gray-500">{apt.reason}</p>
+                  <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-surface-400">{apt.reason}</p>
                 )}
               </div>
 
-              <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 dark:text-surface-500" />
             </button>
           </li>
         );

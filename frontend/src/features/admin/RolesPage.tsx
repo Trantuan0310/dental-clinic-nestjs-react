@@ -102,7 +102,7 @@ export default function RolesPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       {role.isSystem ? (
-                        <Lock className="h-4 w-4 text-gray-400 mx-auto" />
+                        <Lock className="h-4 w-4 text-gray-400 dark:text-surface-400 mx-auto" />
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
@@ -114,7 +114,7 @@ export default function RolesPage() {
                             className="rounded p-1 hover:bg-gray-100 dark:hover:bg-surface-700"
                             onClick={() => setEditingRole(role)}
                           >
-                            <Edit className="h-4 w-4 text-gray-400" />
+                            <Edit className="h-4 w-4 text-gray-400 dark:text-surface-400" />
                           </button>
                           <button
                             className="rounded p-1 hover:bg-red-50"

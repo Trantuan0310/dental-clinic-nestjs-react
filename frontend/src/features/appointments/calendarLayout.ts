@@ -4,7 +4,14 @@ import { clinicIso, clinicMinutes } from '@/lib/clinicTime';
 /** Default day/week grid, widened to fit bookings or working hours outside it. */
 export const DEFAULT_HOUR_START = 7;
 export const DEFAULT_HOUR_END = 19;
-export const HOUR_HEIGHT_PX = 56; // visual height of a 1-hour row
+/**
+ * Visual height of a 1-hour row. A 15-minute visit has to be at least
+ * MIN_BLOCK_PX tall to stay clickable, so an hour must be at least four
+ * times that — otherwise back-to-back short visits are padded past their
+ * real end, count as overlapping, and layoutLanes splits the day into
+ * narrow side-by-side columns.
+ */
+export const HOUR_HEIGHT_PX = 96;
 /** Blocks are at least this tall (px) so short visits stay clickable. */
 export const MIN_BLOCK_PX = 24;
 

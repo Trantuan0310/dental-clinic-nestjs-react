@@ -68,7 +68,7 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {showPatientPicker && (
             <div className="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 dark:border-surface-700 dark:bg-surface-800 py-1 text-xs shadow-sm">
-              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+              <ChevronDown className="h-3.5 w-3.5 text-gray-400 dark:text-surface-400" />
               <select
                 aria-label={t('uiEntry.dashboard.choosePatient')}
                 value={selectedPatientId ?? ''}

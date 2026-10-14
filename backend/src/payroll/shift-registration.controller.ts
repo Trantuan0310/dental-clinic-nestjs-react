@@ -21,6 +21,7 @@ import {
   CreateShiftRegistrationDto,
   RejectShiftDto,
   ListShiftRegistrationsQueryDto,
+  DetectNoShowShiftsDto,
 } from './dto/shift-registration.dto';
 
 @ApiTags('ShiftRegistrations')
@@ -105,7 +106,7 @@ export class ShiftRegistrationController {
     summary:
       'BR-PAY-015: Detect BS no-show shifts in a date range. Returns shifts with 0 completed encounters.',
   })
-  async detectNoShow(@Body() body: { from: string; to: string }) {
+  async detectNoShow(@Body() body: DetectNoShowShiftsDto) {
     const data = await this.shifts.detectNoShowShifts(new Date(body.from), new Date(body.to));
     return { data };
   }

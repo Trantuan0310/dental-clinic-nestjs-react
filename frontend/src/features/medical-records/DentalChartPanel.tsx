@@ -365,7 +365,7 @@ export function DentalChartPanel({
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <div className="relative min-w-0 w-full sm:max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-surface-400" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -377,7 +377,7 @@ export function DentalChartPanel({
             <span className="text-xs text-gray-500">{t('uiClinical.toothSearchHelp')}</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Filter className="h-4 w-4 text-gray-400" />
+            <Filter className="h-4 w-4 text-gray-400 dark:text-surface-400" />
             <span className="text-xs text-gray-500">{t('uiClinical.filterByStatus')}</span>
             {TOOTH_STATUSES.map((s) => {
               const enabled = enabledStatuses.has(s);
@@ -454,7 +454,7 @@ export function DentalChartPanel({
       </div>
 
       <div className="flex flex-wrap items-start gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 py-2 text-xs text-gray-600">
-        <Info className="mt-0.5 h-4 w-4 text-gray-500" />
+        <Info className="mt-0.5 h-4 w-4 text-gray-500 dark:text-surface-400" />
         <div className="flex-1 space-y-1">
           <p>
             {t('uiClinical.toothTreatmentHighlight', { count: treatmentHighlight.size })}

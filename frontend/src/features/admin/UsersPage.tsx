@@ -241,7 +241,7 @@ export default function UsersPage() {
                           onClick={() => setEditingUser(user)}
                           title={t('uiWorkforce.edit')}
                         >
-                          <MoreHorizontal className="h-4 w-4 text-gray-400" />
+                          <MoreHorizontal className="h-4 w-4 text-gray-400 dark:text-surface-400" />
                         </button>
                         {user.status === 'deactivated' ? (
                           <button

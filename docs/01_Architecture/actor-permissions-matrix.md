@@ -61,6 +61,13 @@ Trong đó:
 | Xem danh sách | ✅ | ✅ | ✅ | `patient.read` |
 | Xem chi tiết (cơ bản) | ✅ | ✅ | ✅ | `patient.read` (mô tả là `patient.read.basic`, không phải code thật) |
 | Xem lịch sử khám / số liệu tài chính | ✅ | 🔒 | 🔒 | `patient.read` (mô tả là `patient.read.medical_history`, không phải code thật) — receptionist: không xem số liệu tài chính (BR-PT-021); dentist: chỉ encounter/hóa đơn của chính mình |
+
+> **BR-PT-021 — cách che trường tài chính (kiểm chứng 2026-10):** service **bỏ hẳn** các
+> trường `totalInvoices` / `totalPaid` / `totalOutstanding` khỏi `summary` của lễ tân, chứ
+> không trả `null` như SPEC Patients §8.5 mô tả. Lễ tân nhận
+> `{totalEncounters, lastVisitAt, lastVisitBy}`; bác sĩ nhận cả trường tài chính nhưng chỉ
+> tính trên hóa đơn của ca mình khám (ví dụ đo được: cùng một bệnh nhân, admin thấy
+> 15 hóa đơn / 12.870.000 đ, bác sĩ thấy 4 hóa đơn / 1.150.000 đ).
 | Cập nhật thông tin cơ bản | ✅ | ✅ | ❌ | `patient.update` |
 | Soft-delete | ✅ | ❌ | ❌ | `patient.delete` |
 | Hard-delete | ❌ | ❌ | ❌ | (chỉ qua DB batch, không qua API) |
@@ -76,9 +83,15 @@ Trong đó:
 > - **Đánh dấu no-show**: trước đây dentist chỉ giữ alias FE `appointment.mark_no_show`, không giữ `appointment.no_show` (permission endpoint thật sự kiểm tra) — nút bấm hiện ra nhưng luôn lỗi 403. Đã cấp thêm `appointment.no_show` cho dentist và thêm kiểm tra row-level tương tự (🔒, chỉ lịch của mình).
 > - Thiếu dòng "Bắt đầu khám" (`encounter.start`, cả admin/receptionist/dentist đều có, 🔒 dentist chỉ bắt đầu được lịch của mình, receptionist không bị giới hạn vì có thể chuẩn bị hồ sơ hộ bất kỳ bác sĩ nào) — chưa bổ sung đầy đủ vào bảng, chỉ ghi chú lại ở đây.
 
+> - **Đặt lịch**: bác sĩ thực ra CÓ `appointment.create`, nhưng bị giới hạn ở tầng service
+>   (kiểm chứng 2026-10): chỉ đặt được **tái khám cho bệnh nhân mình đã khám** và **vào lịch
+>   làm việc của chính mình**. Đặt cho bác sĩ khác trả 403 "Bác sĩ chỉ đặt lịch vào lịch làm
+>   việc của chính mình"; đặt cho bệnh nhân chưa từng khám trả 403 "Bác sĩ chỉ đặt lịch tái
+>   khám cho bệnh nhân mình đã khám". Bảng cũ ghi ❌ là sai.
+
 | Action | Admin | Receptionist | Dentist | Permission code |
 | ------ | :---: | :----------: | :-----: | --------------- |
-| Đặt lịch | ✅ | ✅ | ❌ | `appointment.create` |
+| Đặt lịch | ✅ | ✅ | 🔒 (tái khám, bệnh nhân của mình, lịch của mình) | `appointment.create` |
 | Xem lịch phòng khám (toàn bộ) | ✅ | ✅ | ❌ | `appointment.read.any` |
 | Xem lịch cá nhân (dentist) | ✅ | ❌ | 🔒 | `appointment.read.own` |
 | Cập nhật lịch / Dời lịch | ✅ | ✅ | 🔒 (chỉ lịch của mình) | `appointment.update` |
@@ -96,20 +109,31 @@ Trong đó:
 
 ### 3.3 Medical Records module
 
+> **⚠ Cập nhật (2026-10, migration 027): ghi hồ sơ bệnh án là việc của bác sĩ, admin KHÔNG có.**
+> Bảng cũ ghi admin ✅ ở mọi dòng ghi — sai. `seed.ts` loại nhóm `CLINICAL_AUTHORING`
+> (`encounter.start`, `encounter.complete`, `clinical_note.write`, `clinical_note.addendum`,
+> `treatment.write`, `treatment.delete`, `prescription.write`, `dental_chart.write`) khỏi
+> `clinic_admin`. Admin **đọc** hồ sơ nhưng không ghi; chủ phòng khám có khám bệnh thì
+> được gán thêm role `dentist`.
+>
+> Tên permission thật trong code là `*.write` (một mã cho cả tạo và sửa), không phải
+> `*.create` / `*.update` như bảng cũ ghi.
+
 | Action | Admin | Receptionist | Dentist | Permission code |
 | ------ | :---: | :----------: | :-----: | --------------- |
-| Bắt đầu Encounter (từ appointment) | ✅ | ❌ | ✅ | `encounter.create` |
-| Ghi clinical note | ✅ | ❌ | 🔒 (chỉ encounter mình tạo) | `clinical_note.create` |
-| Cập nhật clinical note | ✅ | ❌ | 🔒 (chỉ của mình, trong 24h) | `clinical_note.update` |
-| Xem clinical note | ✅ | ❌ | 🔒 (của mình + liên quan) | `clinical_note.read` |
-| Tạo Treatment | ✅ | ❌ | 🔒 | `treatment.create` |
-| Cập nhật Treatment | ✅ | ❌ | 🔒 | `treatment.update` |
-| Xem Treatment | ✅ | ❌ | ✅ | `treatment.read` |
-| Tạo / sửa Prescription | ✅ | ❌ | 🔒 | `prescription.create` |
-| Xem Prescription | ✅ | ❌ | ✅ | `prescription.read` |
-| Cập nhật Dental Chart | ✅ | ❌ | 🔒 | `dental_chart.update` |
+| Bắt đầu Encounter (từ appointment) | ❌ | ❌ | 🔒 (chỉ lịch của mình) | `encounter.start` |
+| Ghi / cập nhật clinical note | ❌ | ❌ | 🔒 (chỉ encounter của mình) | `clinical_note.write` |
+| Ghi bổ sung (addendum) clinical note | ❌ | ❌ | 🔒 | `clinical_note.addendum` |
+| Xem encounter + clinical note | ✅ | ❌ | 🔒 (của mình + bệnh nhân mình đã khám) | `encounter.read.any` / `encounter.read.own` |
+| Xem encounter (bản rút gọn, không có clinical note) | ✅ | ✅ | — | `encounter.read.basic` |
+| Tạo / sửa Treatment | ❌ | ❌ | 🔒 | `treatment.write` |
+| Xóa Treatment | ❌ | ❌ | 🔒 | `treatment.delete` |
+| Ghi đơn giá khác giá đã chốt (bắt buộc nhập lý do, có audit) | ❌ | ❌ | 🔒 | `treatment.price_override` |
+| Tạo / sửa Prescription | ❌ | ❌ | 🔒 | `prescription.write` |
+| Cập nhật Dental Chart | ❌ | ❌ | 🔒 | `dental_chart.write` |
 | Xem Dental Chart | ✅ | ❌ | ✅ | `dental_chart.read` |
-| Đóng encounter | ✅ | ❌ | 🔒 | `encounter.close` |
+| Đóng encounter | ❌ | ❌ | 🔒 | `encounter.complete` |
+| Hủy encounter mở nhầm (chưa có điều trị, migration 042) | ✅ | ❌ | 🔒 | `encounter.cancel` |
 
 ### 3.4 Billing module
 
@@ -133,6 +157,7 @@ Trong đó:
 | Tạo vật tư mới | ✅ | ❌ | ❌ | `inventory.create` |
 | Cập nhật vật tư | ✅ | ❌ | ❌ | `inventory.update` |
 | Nhập kho (nhập từ nhà cung cấp) | ✅ | ✅ | ❌ | `inventory.stock_in` |
+| Xuất kho thủ công | ✅ | ✅ | ❌ | `inventory.stock_out` |
 | Điều chỉnh kiểm kê | ✅ | ❌ | ❌ | `inventory.adjust` |
 | Cấu hình ngưỡng sắp hết (`minStockLevel`) | ✅ | ❌ | ❌ | `inventory.update` (cùng permission với cập nhật item) |
 | Xem danh sách low-stock | ✅ | ✅ | ✅ | `inventory.read` (filter `lowStock=true`) |
@@ -165,6 +190,11 @@ Trong đó:
 | Đọc settings *(chưa triển khai)* | ✅ | ✅ | ✅ | `settings.read` |
 | Cập nhật settings *(chưa triển khai)* | ✅ | ❌ | ❌ | `settings.update` |
 | Quản lý Working Schedule của dentist | ✅ | ❌ | 🔒 (chỉ schedule của mình) | `schedule.write` / `schedule.read` |
+
+> Lễ tân có `schedule.read` (xem lịch làm việc để đặt hẹn) nhưng **không** `schedule.write`
+> — sửa giờ làm là việc của admin và của chính bác sĩ (kiểm chứng 2026-10: lễ tân gọi
+> `POST /appointments/schedules` trả 403). Đóng lịch cả phòng khám
+> (`/appointments/clinic-closures`) cũng chỉ admin, trái với dòng ở §3.7d bên dưới.
 
 ### 3.7b Nhân sự & hồ sơ bác sĩ (ADR-0009 giai đoạn 1)
 
@@ -209,14 +239,22 @@ Chi tiết: [`schema-per-module/schedule.md`](../04_Database/schema-per-module/s
 
 || Action | Admin | Receptionist | Dentist | Permission code |
 || ------ | :---: | :----------: | :-----: | --------------- |
+> **⚠ Cập nhật (2026-10, migration 027): lễ tân KHÔNG duyệt ca và KHÔNG xem ca của phòng khám.**
+> Ca là khái niệm thuộc bảng lương bác sĩ, nên `seed.ts` không cấp `shift.*` cho
+> `receptionist` — kiểm chứng bằng API: lễ tân gọi `/shifts/registrations` và
+> `/shifts/registrations/:id/approve` đều trả 403. Chỉ admin duyệt.
+
+|| Action | Admin | Receptionist | Dentist | Permission code |
+|| ------ | :---: | :----------: | :-----: | --------------- |
 || Đăng ký ca tự do (ShiftRegistration) | 🔒 (own) | ❌ | 🔒 (own) | `shift.register` |
-|| Xem ca đăng ký (của phòng khám) | ✅ | ✅ | ❌ | `shift.read.any` |
+|| Xem ca đăng ký (của phòng khám) | ✅ | ❌ | ❌ | `shift.read.any` |
 || Xem ca đăng ký của mình | ✅ | ❌ | ✅ | `shift.read.own` |
-|| Duyệt / từ chối ShiftRegistration | ✅ | ✅ | ❌ | `shift.approve` |
+|| Duyệt / từ chối ShiftRegistration | ✅ | ❌ | ❌ | `shift.approve` |
 || Hủy ca đã duyệt | ✅ | ❌ | 🔒 (own, ≥24h trước) | `shift.cancel` |
 
 > `schedule.update` (giờ làm cố định) tách khỏi `shift.register` (ca tự đăng ký) theo BD-0010.
-> BS tạo ShiftRegistration → Receptionist/Admin duyệt → trở thành ca có hiệu lực + tính lương.
+> BS tạo ShiftRegistration → Admin duyệt → trở thành ca có hiệu lực + tính lương.
+> (BR-APPT-027 trong SPEC Appointments còn ghi "admin/receptionist duyệt" — cần sửa theo dòng trên.)
 
 ### 3.9 Payroll Module (Phase 9 — BD-0009)
 

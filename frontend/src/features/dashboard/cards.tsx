@@ -7,16 +7,12 @@ import { useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip as ReTooltip,
   XAxis,
@@ -38,16 +34,15 @@ import {
 } from 'lucide-react';
 import { Card, CardSkeleton, EmptyState, KpiCard, Tooltip, Alert } from '@/components/ui';
 import { PermissionGuard } from '@/components/PermissionGuard';
-import { formatCurrency, formatNumber } from '@/lib/format';
+import { formatCurrency, formatNumber, vndCompact } from '@/lib/format';
+import { useChartTheme } from '@/lib/chartTheme';
 import {
   ACCENT_AMBER,
   SOURCE_COLORS,
   TEAL,
-  TEAL_DARK,
   TEAL_LIGHT,
   formatDayLabel,
   formatMonthLabel,
-  vndCompact,
   type AppointmentPoint,
   type AppointmentStats,
   type CustomerType,
@@ -148,8 +143,8 @@ export function KpiRow({kpis, range, isLoading, isError, onRetry}: KpiRowProps) 
         value={formatNumber(kpis.patients.total)}
         delta={kpis.patients.pctChange}
         icon={<Users className="h-5 w-5" />}
-        iconBgClass="bg-sky-100"
-        iconFgClass="text-sky-600"
+        iconBgClass="bg-sky-100 dark:bg-sky-400/15"
+        iconFgClass="text-sky-600 dark:text-sky-300"
         sublabel={
           kpis.patients.newCount !== undefined ? (
             <span className="flex items-center gap-2 text-[11px]">
@@ -186,8 +181,8 @@ export function KpiRow({kpis, range, isLoading, isError, onRetry}: KpiRowProps) 
         value={formatNumber(kpis.appointments.total)}
         delta={kpis.appointments.pctChange}
         icon={<Calendar className="h-5 w-5" />}
-        iconBgClass="bg-indigo-100"
-        iconFgClass="text-indigo-600"
+        iconBgClass="bg-indigo-100 dark:bg-indigo-400/15"
+        iconFgClass="text-indigo-600 dark:text-indigo-300"
         deltaLabel={comparisonLabel}
       />
       <KpiCard
@@ -195,8 +190,8 @@ export function KpiRow({kpis, range, isLoading, isError, onRetry}: KpiRowProps) 
         value={formatCurrency(kpis.treatmentRevenue.total)}
         delta={kpis.treatmentRevenue.pctChange}
         icon={<DollarSign className="h-5 w-5" />}
-        iconBgClass="bg-emerald-100"
-        iconFgClass="text-emerald-600"
+        iconBgClass="bg-emerald-100 dark:bg-emerald-400/15"
+        iconFgClass="text-emerald-600 dark:text-emerald-300"
         deltaLabel={comparisonLabel}
       />
       <KpiCard
@@ -204,8 +199,8 @@ export function KpiRow({kpis, range, isLoading, isError, onRetry}: KpiRowProps) 
         value={formatCurrency(kpis.collected.total)}
         delta={kpis.collected.pctChange}
         icon={<Wallet className="h-5 w-5" />}
-        iconBgClass="bg-teal-100"
-        iconFgClass="text-teal-600"
+        iconBgClass="bg-teal-100 dark:bg-teal-400/15"
+        iconFgClass="text-teal-600 dark:text-teal-300"
         deltaLabel={comparisonLabel}
       />
     </div>
@@ -226,6 +221,7 @@ interface CustomerTypeCardProps {
 
 export function CustomerTypeCard({rows: data, isLoading, isError, onRetry}: CustomerTypeCardProps) {
   const { t } = useTranslation();
+  const chart = useChartTheme();
   const totalRevenue = data.reduce((acc, d) => acc + d.revenue, 0);
   const labels: Record<CustomerType, string> = { NEW: t('uiEntry.dashboard.new'), RETURNING: t('uiEntry.dashboard.returning') };
   const colors: Record<CustomerType, string> = { NEW: TEAL, RETURNING: TEAL_LIGHT };
@@ -248,7 +244,7 @@ export function CustomerTypeCard({rows: data, isLoading, isError, onRetry}: Cust
 
   // Net of refunds the total can be 0 (or below) with invoices issued.
   const invoiceCount = data.reduce((acc, d) => acc + (d.count ?? 0), 0);
-  const showPie = totalRevenue > 0 && data.every((d) => d.revenue >= 0);
+  const showChart = totalRevenue > 0 && data.every((d) => d.revenue >= 0);
   if (invoiceCount === 0 && totalRevenue === 0) {
     return (
       <Card title={t('uiEntry.dashboard.customerRevenue')} description={t('uiEntry.dashboard.customerRevenueDescription')}>
@@ -275,25 +271,36 @@ export function CustomerTypeCard({rows: data, isLoading, isError, onRetry}: Cust
       description={t('uiEntry.dashboard.newCustomerDefinition')}
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
-        {showPie ? (
-        <div className="relative mx-auto h-44 w-full max-w-[200px] md:mx-0 md:w-5/12 md:max-w-none">
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie data={data} dataKey="revenue" nameKey="type" innerRadius={50} outerRadius={78} paddingAngle={2}>
-                {data.map((entry) => (
-                  <Cell key={entry.type} fill={colors[entry.type]} />
-                ))}
-              </Pie>
-              <ReTooltip
-                formatter={(value: any) => [formatCurrency(Number(value)), 'Doanh thu']}
-                labelFormatter={(_, payload: any) => labels[payload?.[0]?.payload?.type as CustomerType] ?? ''}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-surface-500">{t('uiEntry.dashboard.total')}</span>
-            <span className="text-base font-bold text-gray-900 dark:text-surface-100">{formatCurrency(totalRevenue)}</span>
+        {showChart ? (
+        <div className="mx-auto w-full md:mx-0 md:w-5/12">
+          <div className="h-44">
+            <ResponsiveContainer>
+              <BarChart data={data} margin={{ top: 8, right: 8, bottom: 5, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                <XAxis
+                  dataKey="type"
+                  tickFormatter={(type: CustomerType) => labels[type] ?? type}
+                  stroke={chart.axis}
+                  fontSize={11}
+                />
+                <YAxis tickFormatter={(v: number) => vndCompact(v)} stroke={chart.axis} fontSize={11} />
+                <ReTooltip
+                  formatter={(value: any) => [formatCurrency(Number(value)), t('uiOperations.revenue')]}
+                  labelFormatter={(type: any) => labels[type as CustomerType] ?? ''}
+                  {...chart.tooltip}
+                />
+                <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                  {data.map((entry) => (
+                    <Cell key={entry.type} fill={colors[entry.type]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
+          <p className="mt-1 text-center text-xs text-gray-500 dark:text-surface-400">
+            {t('uiEntry.dashboard.total')}:{' '}
+            <span className="font-semibold text-gray-900 dark:text-surface-100">{formatCurrency(totalRevenue)}</span>
+          </p>
         </div>
         ) : (
           <div className="text-center md:w-5/12">
@@ -419,7 +426,8 @@ interface ProcedureCardProps {
 }
 
 export function ProcedureCard({rows, isLoading, isError, onRetry}: ProcedureCardProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const chart = useChartTheme();
   if (isLoading) {
     return (
       <Card title={t('uiEntry.dashboard.procedureRevenue')} description={t('uiEntry.dashboard.top10Procedures')}>
@@ -493,11 +501,14 @@ export function ProcedureCard({rows, isLoading, isError, onRetry}: ProcedureCard
       <div className="h-52">
         <ResponsiveContainer>
           <BarChart data={rows} layout="vertical" margin={{ top: 5, right: 16, bottom: 5, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-            <XAxis type="number" tickFormatter={(value: number) => vndCompact(value, i18n.language)} stroke="#9ca3af" fontSize={11} />
-            <YAxis type="category" dataKey="procedure" width={130} stroke="#9ca3af" fontSize={11} />
-            <ReTooltip formatter={(value: any) => [formatCurrency(Number(value)), 'Doanh thu']} />
-            <Bar dataKey="revenue" radius={[0, 4, 4, 0]} fill={TEAL} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+            <XAxis type="number" tickFormatter={(value: number) => vndCompact(value)} stroke={chart.axis} fontSize={11} />
+            <YAxis type="category" dataKey="procedure" width={130} stroke={chart.axis} fontSize={11} />
+            <ReTooltip
+              formatter={(value: any) => [formatCurrency(Number(value)), t('uiOperations.revenue')]}
+              {...chart.tooltip}
+            />
+            <Bar dataKey="revenue" radius={[0, 4, 4, 0]} fill={chart.series[0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -661,10 +672,8 @@ export function DailyChartCard({rows, range, isLoading, isError, onRetry}: Daily
   // Title follows the selected range (A6-18), it used to always say 15 days.
   const title = t('uiEntry.dashboard.dailyRevenue', { range: t(`uiEntry.dashboard.range.${range}`) });
   const description = t('uiEntry.dashboard.dailyDescription');
-  const data = useMemo(
-    () => rows.map((r) => ({ ...r, label: formatDayLabel(r.date), revenueM: r.revenue / 1_000_000 })),
-    [rows],
-  );
+  const chart = useChartTheme();
+  const data = useMemo(() => rows.map((r) => ({ ...r, label: formatDayLabel(r.date) })), [rows]);
 
   if (isLoading) {
     return (
@@ -714,17 +723,18 @@ export function DailyChartCard({rows, range, isLoading, isError, onRetry}: Daily
       <div className="h-56 md:h-64">
         <ResponsiveContainer>
           <BarChart data={data} margin={{ top: 10, right: 16, bottom: 5, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} />
-            <YAxis yAxisId="left" tickFormatter={(v: number) => `${v.toFixed(1)}tr`} stroke="#9ca3af" fontSize={11} />
-            <YAxis yAxisId="right" orientation="right" stroke="#9ca3af" fontSize={11} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+            <XAxis dataKey="label" stroke={chart.axis} fontSize={11} />
+            <YAxis yAxisId="left" tickFormatter={(v: number) => vndCompact(v)} stroke={chart.axis} fontSize={11} />
+            <YAxis yAxisId="right" orientation="right" allowDecimals={false} stroke={chart.axis} fontSize={11} />
             <ReTooltip
               formatter={(value: any, name: any) => {
-                if (name === t('uiEntry.dashboard.revenueMillions')) return [`${Number(value).toFixed(1)} tr ₫`, name];
+                if (name === t('uiOperations.revenue')) return [formatCurrency(Number(value)), name];
                 return [value, t('uiEntry.dashboard.invoiceCountShort')];
               }}
+              {...chart.tooltip}
             />
-            <Bar yAxisId="left" dataKey="revenueM" name={t('uiEntry.dashboard.revenueMillions')} fill={TEAL} radius={[4, 4, 0, 0]} />
+            <Bar yAxisId="left" dataKey="revenue" name={t('uiOperations.revenue')} fill={chart.series[0]} radius={[4, 4, 0, 0]} />
             <Bar yAxisId="right" dataKey="invoiceCount" name={t('uiEntry.dashboard.invoiceCountShort')} fill={ACCENT_AMBER} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -746,10 +756,8 @@ interface MonthlyChartCardProps {
 
 export function MonthlyChartCard({rows, isLoading, isError, onRetry}: MonthlyChartCardProps) {
   const { t } = useTranslation();
-  const data = useMemo(
-    () => rows.map((r) => ({ ...r, label: formatMonthLabel(r.month), revenueM: r.revenue / 1_000_000 })),
-    [rows],
-  );
+  const chart = useChartTheme();
+  const data = useMemo(() => rows.map((r) => ({ ...r, label: formatMonthLabel(r.month) })), [rows]);
 
   if (isLoading) {
     return (
@@ -783,19 +791,23 @@ export function MonthlyChartCard({rows, isLoading, isError, onRetry}: MonthlyCha
     <Card title={t('uiEntry.dashboard.monthlyRevenue')} description={t('uiEntry.dashboard.monthlyDescription')}>
       <div className="h-52 md:h-56">
         <ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 10, right: 16, bottom: 5, left: 8 }}>
-            <defs>
-              <linearGradient id="monthlyFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={TEAL} stopOpacity={0.4} />
-                <stop offset="100%" stopColor={TEAL} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} />
-            <YAxis tickFormatter={(v: number) => `${v.toFixed(1)}tr`} stroke="#9ca3af" fontSize={11} />
-            <ReTooltip formatter={(value: any) => [`${Number(value).toFixed(1)} tr ₫`, 'Doanh thu']} />
-            <Area type="monotone" dataKey="revenueM" stroke={TEAL} fill="url(#monthlyFill)" strokeWidth={2} />
-          </AreaChart>
+          <LineChart data={data} margin={{ top: 10, right: 16, bottom: 5, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+            <XAxis dataKey="label" stroke={chart.axis} fontSize={11} />
+            <YAxis tickFormatter={(v: number) => vndCompact(v)} stroke={chart.axis} fontSize={11} />
+            <ReTooltip
+              formatter={(value: any) => [formatCurrency(Number(value)), t('uiOperations.revenue')]}
+              {...chart.tooltip}
+            />
+            <Line
+              type="monotone"
+              dataKey="revenue"
+              stroke={chart.series[0]}
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: chart.series[0] }}
+              activeDot={{ r: 5 }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </Card>
@@ -818,6 +830,7 @@ interface AppointmentsCardProps {
 
 export function AppointmentsCard({rows, range, ownOnly, isLoading, isError, onRetry}: AppointmentsCardProps) {
   const { t } = useTranslation();
+  const chart = useChartTheme();
   const data = useMemo(() => rows.map((r) => ({ ...r, label: formatDayLabel(r.date) })), [rows]);
   const title = `${t(ownOnly ? 'uiEntry.dashboard.myAppointments' : 'uiEntry.dashboard.appointmentsTitle')} — ${t(`uiEntry.dashboard.range.${range}`)}`;
   const description = t('uiEntry.dashboard.appointmentsDescription');
@@ -871,16 +884,19 @@ export function AppointmentsCard({rows, range, ownOnly, isLoading, isError, onRe
       <div className="h-48 md:h-56">
         <ResponsiveContainer>
           <LineChart data={data} margin={{ top: 10, right: 16, bottom: 5, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} />
-            <YAxis allowDecimals={false} stroke="#9ca3af" fontSize={11} />
-            <ReTooltip formatter={(value: any) => [value, t('uiEntry.dashboard.appointmentsCount')]} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+            <XAxis dataKey="label" stroke={chart.axis} fontSize={11} />
+            <YAxis allowDecimals={false} stroke={chart.axis} fontSize={11} />
+            <ReTooltip
+              formatter={(value: any) => [value, t('uiEntry.dashboard.appointmentsCount')]}
+              {...chart.tooltip}
+            />
             <Line
               type="monotone"
               dataKey="count"
-              stroke={TEAL_DARK}
+              stroke={chart.series[0]}
               strokeWidth={2.5}
-              dot={{ r: 3, fill: TEAL }}
+              dot={{ r: 3, fill: chart.series[0] }}
               activeDot={{ r: 5 }}
             />
           </LineChart>

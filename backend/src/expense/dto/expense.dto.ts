@@ -6,12 +6,13 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Length,
   Max,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ExpenseStatus } from '@prisma/client';
+import { ExpenseStatus, ExpenseType } from '@prisma/client';
 
 // Bare `@Query('status') status?: ExpenseStatus` on the controller was just
 // a TS type annotation with no runtime validation or coercion — page/pageSize
@@ -142,4 +143,25 @@ export class ReimburseExpenseDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+// The route used to take a bare inline-typed body, so it had no runtime
+// validation: an omitted name reached Postgres as NULL and came back a 500,
+// and `type` was cast to ExpenseType without checking it was one.
+export class CreateExpenseCategoryDto {
+  @ApiProperty({ description: 'Category name' })
+  @IsString()
+  @Length(1, 100)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  description?: string;
+
+  @ApiPropertyOptional({ enum: ExpenseType, default: ExpenseType.OPERATING })
+  @IsOptional()
+  @IsEnum(ExpenseType)
+  type?: ExpenseType;
 }
