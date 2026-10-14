@@ -85,7 +85,7 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await expect(row).toContainText(reference);
   await row.getByRole('button', { name: 'Xử lý' }).click();
   await page.getByRole('button', { name: 'Xác nhận lịch' }).click();
-  await expect(row).toContainText('Đã xác nhận');
+  await expect(row).toContainText('Lịch hẹn đã được xác nhận');
   // Confirming it takes it off the front desk's count.
   if (pendingBefore > 1) await expect(pendingBadge).toHaveText(String(pendingBefore - 1));
   else await expect(pendingBadge).toBeHidden();

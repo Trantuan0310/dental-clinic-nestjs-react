@@ -12,7 +12,7 @@ test('a dentist edits the self-service fields of their own profile', async ({ pa
   await page.getByRole('button', { name: /sửa hồ sơ/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Số chứng chỉ hành nghề')).toHaveCount(0);
-  await expect(dialog.getByLabel('Thời lượng khe mặc định')).toHaveCount(0);
+  await expect(dialog.getByLabel('Thời lượng mặc định')).toHaveCount(0);
   const bio = `Bác sĩ nha chu — cập nhật ${Date.now()}`;
   await dialog.getByLabel('Giới thiệu').fill(bio);
   await dialog.getByRole('button', { name: /^lưu$/i }).click();

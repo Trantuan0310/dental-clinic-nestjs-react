@@ -69,7 +69,7 @@ test('shift registration cycle: dentist registers, admin approves', async ({ bro
       dentistPage.waitForResponse(
         (r) => /\/shifts\/registrations$/.test(r.url()) && r.request().method() === 'POST',
       ),
-      registerDialog.getByRole('button', { name: /^đăng ký$/i }).click(),
+      registerDialog.getByRole('button', { name: /^đăng ký ca mới$/i }).click(),
     ]);
     expect(createResponse.ok(), `Create shift request failed: ${createResponse.status()}`).toBe(true);
     await expect(registerDialog).toBeHidden({ timeout: 10_000 });

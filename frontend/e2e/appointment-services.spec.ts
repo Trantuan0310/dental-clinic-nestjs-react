@@ -17,16 +17,17 @@ test('booking by service sets the length and records the services', async ({ pag
 
   await dialog.getByLabel('Bác sĩ').selectOption({ label: 'BS. Lê Hoàng Cường' });
   await dialog.getByLabel(/Khám tổng quát/).check();
-  await expect(dialog.getByText('Tổng 15 phút · chuẩn bị 0′ trước, dọn dẹp 5′ sau')).toBeVisible();
+  await expect(dialog.getByText('Tổng thời lượng: 15 phút')).toBeVisible();
+  await expect(dialog.getByText('Thời gian đệm trước 0 phút, sau 5 phút')).toBeVisible();
   await expect(dialog.getByLabel('Thời lượng', { exact: true })).toHaveValue('15');
 
   // A length other than the services' total asks for a reason.
   await dialog.getByLabel('Thời lượng', { exact: true }).selectOption('30');
-  await expect(dialog.getByLabel(/Lý do đổi thời lượng/)).toBeVisible();
+  await expect(dialog.getByLabel(/Lý do thay đổi thời lượng/)).toBeVisible();
   await dialog.getByLabel('Thời lượng', { exact: true }).selectOption('15');
-  await expect(dialog.getByLabel(/Lý do đổi thời lượng/)).toBeHidden();
+  await expect(dialog.getByLabel(/Lý do thay đổi thời lượng/)).toBeHidden();
 
-  const firstFree = dialog.getByText('Giờ trống phù hợp').locator('..').getByRole('button').first();
+  const firstFree = dialog.getByText(/giờ bắt đầu còn trống/).locator('..').getByRole('button').first();
   await firstFree.click();
   await dialog.getByRole('button', { name: 'Tạo lịch hẹn' }).click();
   await expect(dialog).toBeHidden();
@@ -54,13 +55,13 @@ test('a walk-in is checked in at once and can leave before the exam', async ({ p
 
   // The new visit's drawer opens: checked in, with its service.
   const drawer = page.getByRole('dialog').filter({ hasText: 'Khách vãng lai' });
-  await expect(drawer.getByLabel('Dịch vụ của lịch hẹn')).toContainText('Khám tổng quát');
-  await expect(drawer.getByLabel('Nhật ký thao tác')).toContainText('Tiếp nhận khách vãng lai');
+  await expect(drawer.getByLabel('Dịch vụ trong lịch hẹn')).toContainText('Khám tổng quát');
+  await expect(drawer.getByLabel('Nhật ký hoạt động')).toContainText('Tiếp nhận khách vãng lai');
 
   await drawer.getByRole('button', { name: 'Bệnh nhân đã về' }).click();
-  const confirm = page.getByRole('dialog', { name: 'Bệnh nhân đã về (chưa khám)' });
-  await confirm.getByRole('button', { name: 'Bệnh nhân chờ lâu, xin về' }).click();
-  await confirm.getByRole('button', { name: 'Xác nhận đã về' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Bệnh nhân đã về mà chưa khám' });
+  await confirm.getByRole('button', { name: 'Chờ quá lâu' }).click();
+  await confirm.getByRole('button', { name: 'Xác nhận bệnh nhân đã về' }).click();
   await expect(confirm).toBeHidden();
   await expect(
     page.locator('tbody tr', { hasText: patientCode }).filter({ hasText: 'BS. Phạm Thị Dung' }).first(),

@@ -113,13 +113,13 @@ volumes:
 
 Postgres chỉ chạy các file trong `/docker-entrypoint-initdb.d/` **một lần duy nhất khi
 volume được tạo lần đầu**. Nếu volume đã tồn tại từ trước khi thêm mount, cần
-`docker compose down -v postgres` (alias `pnpm db:reset`) để wipe và recreate.
+`docker compose down -v postgres` (alias `npm run db:reset`) để wipe và recreate.
 
 ### Fail-fast check ở app startup
 
 `PrismaService.onModuleInit()` chạy `SELECT uuid_generate_v7() IS NOT NULL` ngay sau
 `$connect()`. Nếu function không tồn tại (volume cũ chưa wipe, dev sửa nhầm SQL file,
-...), NestJS crash sớm với log hướng dẫn chạy `pnpm db:reset`, thay vì để Prisma trả
+...), NestJS crash sớm với log hướng dẫn chạy `npm run db:reset`, thay vì để Prisma trả
 về SQL error mơ hồ khi user thực hiện INSERT đầu tiên.
 
 Xem `backend/src/prisma/prisma.service.ts` → method `assertUuidV7Available()`.

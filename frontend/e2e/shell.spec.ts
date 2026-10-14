@@ -20,13 +20,13 @@ test.describe('Shell — post-login', () => {
     await page.waitForLoadState('networkidle');
     // Open via shortcut (Meta on macOS, Control elsewhere).
     await page.keyboard.press('Control+K');
-    const palette = page.getByRole('dialog', { name: /command palette/i });
+    const palette = page.getByRole('dialog', { name: /bảng lệnh|command palette/i });
     await expect(palette).toBeVisible();
 
     // Type a search query and press Enter. The palette only matches the
     // active locale's translated label (see CommandPalette's getHaystack),
     // and the app defaults to Vietnamese, so search the VI term.
-    await palette.getByRole('searchbox').fill('bệnh nhân');
+    await palette.getByRole('combobox').fill('bệnh nhân');
     await page.keyboard.press('Enter');
 
     // Should navigate to /patients.

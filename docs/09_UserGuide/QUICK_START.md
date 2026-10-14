@@ -7,7 +7,7 @@ Hướng dẫn nhanh để setup môi trường development và chạy dự án.
 ## Yêu cầu hệ thống
 
 - **Node.js** 20+
-- **pnpm** (recommended) hoặc npm
+- **npm** (đi kèm Node.js)
 - **Docker Desktop** (cho PostgreSQL + Redis)
 - **Git**
 
@@ -22,11 +22,11 @@ cd dental-clinic
 
 # Install backend dependencies
 cd backend
-pnpm install
+npm install
 
 # Install frontend dependencies
 cd ../frontend
-pnpm install
+npm install
 ```
 
 ---
@@ -46,16 +46,16 @@ docker-compose up -d
 sleep 10
 
 # Generate Prisma client
-pnpm exec prisma generate
+npx prisma generate
 
 # Run migrations
-pnpm exec prisma migrate deploy
+npx prisma migrate deploy
 
 # Seed data (tạo admin user)
-pnpm exec prisma db seed
+npx prisma db seed
 
 # Start dev server
-pnpm run start:dev
+npm run start:dev
 ```
 
 Backend chạy tại: `http://localhost:3000`
@@ -78,7 +78,7 @@ cp .env.example .env
 # Sửa VITE_API_BASE_URL=http://localhost:3000/api/v1
 
 # Start dev server
-pnpm run dev
+npm run dev
 ```
 
 Frontend chạy tại: `http://localhost:5173`
@@ -94,8 +94,8 @@ cd backend
 docker-compose down -v
 docker-compose up -d
 sleep 10
-pnpm exec prisma migrate deploy
-pnpm exec prisma db seed
+npx prisma migrate deploy
+npx prisma db seed
 ```
 
 ---
@@ -106,18 +106,18 @@ pnpm exec prisma db seed
 
 ```bash
 cd backend
-pnpm test           # Tất cả tests
-pnpm test --watch   # Watch mode
-pnpm test --coverage # Coverage report
+npm test           # Tất cả tests
+npm test -- --watch # Watch mode
+npm test -- --coverage # Coverage report
 ```
 
 ### Frontend
 
 ```bash
 cd frontend
-pnpm run lint       # ESLint
-pnpm exec tsc       # TypeScript check
-pnpm run build      # Production build
+npm run lint       # ESLint
+npx tsc       # TypeScript check
+npm run build      # Production build
 ```
 
 ### E2E (Playwright)
@@ -158,14 +158,14 @@ npx playwright test
 
 | Script | Mô tả |
 |--------|--------|
-| `backend:dev` | `pnpm --filter backend run start:dev` |
-| `frontend:dev` | `pnpm --filter frontend run dev` |
-| `backend:lint` | `pnpm --filter backend run lint` |
-| `frontend:lint` | `pnpm --filter frontend run lint` |
-| `backend:test` | `pnpm --filter backend run test` |
-| `frontend:test` | `pnpm --filter frontend run test` |
-| `backend:build` | `pnpm --filter backend run build` |
-| `frontend:build` | `pnpm --filter frontend run build` |
+| `backend:dev` | `npm --prefix backend run start:dev` |
+| `frontend:dev` | `npm --prefix frontend run dev` |
+| `backend:lint` | `npm --prefix backend run lint` |
+| `frontend:lint` | `npm --prefix frontend run lint` |
+| `backend:test` | `npm --prefix backend run test` |
+| `frontend:test` | `npm --prefix frontend run test:e2e` |
+| `backend:build` | `npm --prefix backend run build` |
+| `frontend:build` | `npm --prefix frontend run build` |
 
 ---
 
@@ -174,7 +174,7 @@ npx playwright test
 | Vấn đề | Giải pháp |
 |---------|-----------|
 | `ECONNREFUSED` PostgreSQL | Docker chưa chạy → `docker-compose up -d` |
-| Prisma error P3005 | Database có schema cũ → `pnpm exec prisma migrate reset` |
+| Prisma error P3005 | Database có schema cũ → `npx prisma migrate reset` |
 | Port 3000 đã dùng | Kill process: `npx kill-port 3000` |
 | `JWT_SECRET` errors | Copy lại `.env` từ `.env.example` |
 | Frontend API 401 | Kiểm tra `VITE_API_BASE_URL` đúng port 3000 |
@@ -185,7 +185,7 @@ npx playwright test
 
 ```bash
 cd backend
-pnpm exec prisma migrate dev --name describe_your_change
+npx prisma migrate dev --name describe_your_change
 ```
 
 ---

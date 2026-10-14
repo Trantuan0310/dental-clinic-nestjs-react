@@ -65,7 +65,7 @@ test.describe('A11y — keyboard & landmarks', () => {
 
   test('command palette traps focus and is dismissable with Escape', async ({ page }) => {
     await page.keyboard.press('Control+K');
-    const palette = page.getByRole('dialog', { name: /command palette/i });
+    const palette = page.getByRole('dialog', { name: /bảng lệnh|command palette/i });
     await expect(palette).toBeVisible();
 
     // Focus moves inside the dialog (the palette focuses its input on a

@@ -64,7 +64,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           'Make sure backend/02-uuid-v7.sql is mounted into the postgres ' +
           "container's /docker-entrypoint-initdb.d/ directory and that the " +
           'volume was created after the mount was added. ' +
-          'Run `pnpm db:reset` to recreate the volume and re-run init scripts.',
+          'Run `npm run db:reset` to recreate the volume and re-run init scripts.',
       );
       throw err;
     }

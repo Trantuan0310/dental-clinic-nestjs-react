@@ -64,7 +64,7 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await loginAs(receptionPage, ACCOUNTS.receptionist.email, ACCOUNTS.receptionist.password);
 
     await receptionPage.goto('/patients/new');
-    await receptionPage.getByLabel(/họ và tên/i).fill(testName);
+    await receptionPage.getByLabel(/^họ tên/i).fill(testName);
     await receptionPage.getByLabel(/ngày sinh/i).fill('1992-05-20');
     await receptionPage.getByLabel(/sđt chính/i).fill(testPhone);
     await receptionPage.getByRole('button', { name: /^lưu$/i }).click();
@@ -100,11 +100,11 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     const bookingDialog = receptionPage.getByRole('dialog');
     await expect(bookingDialog).toBeVisible();
 
-    // Use "Tra cứu nhanh" (lookup) instead of the big patient <select> — the
+    // Use "Tìm nhanh" (lookup) instead of the big patient <select> — the
     // freshly-created patient is guaranteed findable by its unique phone,
     // whereas the select's option order/pagination is not something this
     // test controls.
-    await bookingDialog.getByRole('tab', { name: /tra cứu nhanh/i }).click();
+    await bookingDialog.getByRole('tab', { name: /tìm nhanh/i }).click();
     await bookingDialog.getByLabel(/tìm bệnh nhân/i).fill(testPhone);
     await bookingDialog.getByText(testName).click();
 
@@ -214,7 +214,7 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await dentistPage.getByRole('tab', { name: /ghi chú/i }).click();
     await dentistPage.getByRole('button', { name: /thêm ghi chú/i }).click();
     const noteText = 'E2E: bệnh nhân hợp tác tốt, không biến chứng sau thủ thuật.';
-    await dentistPage.getByLabel(/nội dung/i).fill(noteText);
+    await dentistPage.getByRole('textbox', { name: 'Nội dung' }).fill(noteText);
     // Two "Thêm" buttons can exist momentarily (tab toolbar + modal) —
     // scope to the modal dialog to avoid ambiguity.
     await dentistPage.getByRole('dialog').getByRole('button', { name: /^thêm$/i }).click();

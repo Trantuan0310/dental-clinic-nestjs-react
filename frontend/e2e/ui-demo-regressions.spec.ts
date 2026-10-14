@@ -153,16 +153,16 @@ test('unsaved patient form blocks sidebar navigation and browser back', async ({
   await page.goto('/patients');
   await page.getByRole('button', { name: /^tạo bệnh nhân$/i }).first().click();
   await expect(page).toHaveURL(/\/patients\/new$/);
-  await page.getByLabel(/họ và tên/i).fill('Dữ liệu chưa lưu');
+  await page.getByLabel(/^họ tên/i).fill('Dữ liệu chưa lưu');
   // Both the route blocker and beforeunload can raise a dialog for one
   // navigation; the second dismiss must not throw "No dialog is showing".
   page.on('dialog', dialog => dialog.dismiss().catch(() => undefined));
   await page.locator('aside').getByRole('link', { name: /^dashboard$/i }).click();
   await expect(page).toHaveURL(/\/patients\/new$/);
-  await expect(page.getByLabel(/họ và tên/i)).toHaveValue('Dữ liệu chưa lưu');
+  await expect(page.getByLabel(/^họ tên/i)).toHaveValue('Dữ liệu chưa lưu');
   await page.goBack();
   await expect(page).toHaveURL(/\/patients\/new$/);
-  await expect(page.getByLabel(/họ và tên/i)).toHaveValue('Dữ liệu chưa lưu');
+  await expect(page.getByLabel(/^họ tên/i)).toHaveValue('Dữ liệu chưa lưu');
   page.removeAllListeners('dialog');
   page.once('dialog', dialog => dialog.accept().catch(() => undefined));
   await page.locator('aside').getByRole('link', { name: /^dashboard$/i }).click();

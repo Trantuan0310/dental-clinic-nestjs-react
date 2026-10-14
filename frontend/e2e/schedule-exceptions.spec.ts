@@ -19,7 +19,7 @@ test('admin closes a dentist day and removes the override', async ({ page }) => 
   await dentist.selectOption({ index: 1 });
   await dialog.getByLabel('Ngày').fill(iso);
   await dialog.getByLabel('Lý do').fill(reason);
-  await dialog.getByRole('button', { name: /^lưu$/i }).click();
+  await dialog.getByRole('button', { name: /^lưu thay đổi$/i }).click();
   await expect(dialog).toBeHidden();
 
   const row = page.locator('tbody tr', { hasText: reason });

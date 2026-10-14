@@ -45,7 +45,7 @@ test('expense approval cycle: the self-approval guard hides Duyệt for admin\'s
   // "Ngày chi" is a DatePicker with no id/name (no htmlFor wiring — see
   // DatePicker.tsx), so it isn't reachable via getByLabel; it also defaults
   // to today, so no interaction is required.
-  await dialog.getByRole('button', { name: /tạo mới/i }).click();
+  await dialog.getByRole('button', { name: /^tạo$/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });
 
   await page.waitForLoadState('networkidle');

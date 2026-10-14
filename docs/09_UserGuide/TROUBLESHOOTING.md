@@ -96,14 +96,14 @@ sleep 5
 **`P3005: Migration has not yet been applied`**
 ```bash
 cd backend
-pnpm exec prisma migrate deploy
+npx prisma migrate deploy
 ```
 
 **`P3005: The schema is not empty`**
 ```bash
 # Database đã có tables nhưng Prisma chưa track
-pnpm exec prisma migrate resolve --applied 001_init
-pnpm exec prisma db push --accept-data-loss
+npx prisma migrate resolve --applied 001_init
+npx prisma db push --accept-data-loss
 ```
 
 ---
@@ -117,14 +117,14 @@ pnpm exec prisma db push --accept-data-loss
 **`Cannot find module '@prisma/client`**
 ```bash
 cd backend
-pnpm exec prisma generate
+npx prisma generate
 ```
 
 **Tests fail với Prisma mock**
 ```bash
 cd backend
-pnpm exec prisma generate
-pnpm test -- --clearCache
+npx prisma generate
+npx jest --clearCache
 ```
 
 ---
@@ -138,7 +138,7 @@ pnpm test -- --clearCache
 **Build fail với Tailwind**
 ```bash
 cd frontend
-pnpm exec tailwindcss -i ./src/index.css -o ./dist/styles.css --watch
+npx tailwindcss -i ./src/index.css -o ./dist/styles.css --watch
 ```
 
 **Dark mode không hoạt động**
@@ -165,13 +165,13 @@ timeout: 60_000
 
 ### Backend chậm
 
-1. Kiểm tra logs: `pnpm run start:dev` (xem query chậm)
+1. Kiểm tra logs: `npm run start:dev` (xem query chậm)
 2. Check database indexes: `EXPLAIN ANALYZE` trên query chậm
 3. Enable Redis cache (nếu chưa): `REDIS_URL` trong `.env`
 
 ### Frontend chậm
 
-1. Kiểm tra bundle size: `pnpm run build` → xem chunk sizes
+1. Kiểm tra bundle size: `npm run build` → xem chunk sizes
 2. Dashboard chunk > 30kB: sử dụng `React.lazy()`
 3. Kiểm tra network tab — có query chậm > 1s?
 
@@ -207,6 +207,6 @@ cd backend
 docker-compose down -v
 docker-compose up -d
 sleep 10
-pnpm exec prisma migrate deploy
-pnpm exec prisma db seed
+npx prisma migrate deploy
+npx prisma db seed
 ```

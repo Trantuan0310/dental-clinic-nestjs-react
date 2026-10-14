@@ -46,11 +46,11 @@ test('dentist records a new allergy and books a follow-up from the encounter', a
   await expect(page).toHaveURL(/\/encounters\/[0-9a-f-]{36}$/);
 
   // Medical history: add an allergy, see it, then put the list back.
-  const card = page.getByRole('region', { name: 'Tiền sử & dị ứng' });
+  const card = page.getByRole('region', { name: 'Tiền sử và dị ứng' });
   await expect(card).toBeVisible();
   const marker = `E2E dị ứng ${Date.now().toString().slice(-6)}`;
   await card.getByRole('button', { name: 'Sửa' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Cập nhật tiền sử bệnh nhân' });
+  const dialog = page.getByRole('dialog', { name: 'Tiền sử và dị ứng' });
   const allergies = dialog.getByLabel('Dị ứng');
   const before = await allergies.inputValue();
   await allergies.fill([before, marker].filter(Boolean).join('\n'));

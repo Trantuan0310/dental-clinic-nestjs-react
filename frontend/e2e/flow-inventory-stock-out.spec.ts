@@ -74,7 +74,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     const testPhone = randomVnPhone();
 
     await receptionPage.goto('/patients/new');
-    await receptionPage.getByLabel(/họ và tên/i).fill(testName);
+    await receptionPage.getByLabel(/^họ tên/i).fill(testName);
     await receptionPage.getByLabel(/ngày sinh/i).fill('1990-03-15');
     await receptionPage.getByLabel(/sđt chính/i).fill(testPhone);
     await receptionPage.getByRole('button', { name: /^lưu$/i }).click();
@@ -97,7 +97,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     await receptionPage.waitForLoadState('networkidle');
     await receptionPage.getByRole('button', { name: /^tạo lịch hẹn$/i }).first().click();
     const dialog = receptionPage.getByRole('dialog');
-    await dialog.getByRole('tab', { name: /tra cứu nhanh/i }).click();
+    await dialog.getByRole('tab', { name: /tìm nhanh/i }).click();
     await dialog.getByLabel(/tìm bệnh nhân/i).fill(testPhone);
     await dialog.getByText(testName).click();
 
