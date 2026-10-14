@@ -29,6 +29,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = 'TRANSACTION_CONFLICT';
       message = 'Data was changed by another request. Reload and try again.';
+    } else if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === 'P2025'
+    ) {
+      // findUniqueOrThrow / update on a row that is not there. An id that
+      // does not exist is the caller's mistake, so it answers 404 rather
+      // than the 500 Prisma's own error used to produce. The Prisma message
+      // names the model, so it is logged, not returned.
+      status = HttpStatus.NOT_FOUND;
+      code = 'NOT_FOUND';
+      message = 'Không tìm thấy dữ liệu';
+      this.logger.warn(`Record not found: ${exception.message.split('\n').pop()?.trim()}`);
     } else if (badInput) {
       // Input the DTOs did not catch, rejected by the database (too long,
       // numeric overflow, NUL byte, dangling reference): a 400, not a 500.

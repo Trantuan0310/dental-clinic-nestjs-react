@@ -77,3 +77,15 @@ export class ListShiftRegistrationsQueryDto {
   @IsDateString()
   to?: string;
 }
+
+// The route used to take a bare inline-typed body, so an omitted date became
+// `new Date(undefined)` — an Invalid Date that Prisma rejected as a 500.
+export class DetectNoShowShiftsDto {
+  @ApiProperty({ example: '2026-08-01' })
+  @IsDateString()
+  from!: string;
+
+  @ApiProperty({ example: '2026-08-31' })
+  @IsDateString()
+  to!: string;
+}

@@ -27,6 +27,7 @@ import {
   RejectExpenseDto,
   ReimburseExpenseDto,
   ListExpensesQueryDto,
+  CreateExpenseCategoryDto,
 } from './dto/expense.dto';
 
 @ApiTags('Expense')
@@ -51,7 +52,7 @@ export class ExpenseController {
   @RequirePermissions('expense.create')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create expense category' })
-  async createCategory(@Body() body: { name: string; description?: string; type?: string }) {
+  async createCategory(@Body() body: CreateExpenseCategoryDto) {
     return { data: await this.expense.createCategory(body) };
   }
 

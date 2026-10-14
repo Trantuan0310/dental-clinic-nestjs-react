@@ -26,6 +26,8 @@ import {
 
 const PX_PER_MIN = HOUR_HEIGHT_PX / 60;
 const MIN_BLOCK_MIN = Math.ceil(MIN_BLOCK_PX / PX_PER_MIN);
+/** Width a single side-by-side booking needs for its time and patient name. */
+const LANE_MIN_WIDTH_PX = 112;
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
   scheduled: 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-surface-700 dark:border-surface-500 dark:text-surface-100',
@@ -66,11 +68,11 @@ interface TimeGridProps {
 
 function HourGutter({ hours, className }: { hours: number[]; className?: string }) {
   return (
-    <div className={cn('shrink-0 border-r border-gray-100', className)}>
+    <div className={cn('shrink-0 border-r border-gray-200 dark:border-surface-700', className)}>
       {hours.map((hour) => (
         <div
           key={hour}
-          className="border-b border-gray-50 pr-2 pt-0.5 text-right text-[11px] text-gray-400"
+          className="border-b border-gray-100 pr-2 pt-0.5 text-right text-[11px] text-gray-500 dark:border-surface-800 dark:text-surface-400"
           style={{ height: HOUR_HEIGHT_PX }}
         >
           {hhmm(hour)}
@@ -114,7 +116,7 @@ function DayColumn({
 
   return (
     <div
-      className={cn('relative', closed && 'bg-gray-100/80', className)}
+      className={cn('relative', closed && 'bg-gray-100/80 dark:bg-surface-800/60', className)}
       style={{ height: hours.length * HOUR_HEIGHT_PX }}
       title={closed ? t('uiScheduling.clinicClosedReason', { reason: closedReason }) : undefined}
     >
@@ -123,7 +125,7 @@ function DayColumn({
         windows?.map((w) => (
           <div
             key={`${w.startTime}-${w.endTime}`}
-            className="pointer-events-none absolute inset-x-0 bg-emerald-50/70"
+            className="pointer-events-none absolute inset-x-0 bg-emerald-50/70 dark:bg-emerald-500/10"
             style={{
               top: (hhmmToMin(w.startTime) - gridStartMin) * PX_PER_MIN,
               height: (hhmmToMin(w.endTime) - hhmmToMin(w.startTime)) * PX_PER_MIN,
@@ -140,7 +142,7 @@ function DayColumn({
             key={hour}
             type="button"
             onClick={() => onSlotClick(day, hhmm(hour))}
-            className="absolute left-0 right-0 border-b border-gray-50 px-1 text-left text-[10px] text-transparent hover:bg-brand-50/40 hover:text-brand-500"
+            className="absolute left-0 right-0 border-b border-gray-100 px-1 text-left text-[10px] text-transparent hover:bg-brand-50/40 hover:text-brand-500 dark:border-surface-800 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
             style={style}
             title={t('uiScheduling.createAppointmentDateTime', { date: format(day, 'dd/MM'), time: hhmm(hour) })}
           >
@@ -149,7 +151,7 @@ function DayColumn({
         ) : (
           <div
             key={hour}
-            className="pointer-events-none absolute left-0 right-0 border-b border-gray-50"
+            className="pointer-events-none absolute left-0 right-0 border-b border-gray-100 dark:border-surface-800"
             style={style}
           />
         );
@@ -206,7 +208,7 @@ export function DayView({
   return (
     <div>
       {closedReason !== undefined && (
-        <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+        <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-200">
           {t('uiScheduling.clinicClosedAllDay', { reason: closedReason })}
         </div>
       )}
@@ -253,14 +255,26 @@ export function WeekView({
   const today = clinicWallClock();
   const now = useNow();
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
-  const gridTemplateColumns = `56px repeat(${days.length}, minmax(96px, 1fr))`;
 
-  // min-width keeps seven columns readable on a phone; the parent scrolls sideways.
+  // A day column is split into one lane per overlapping booking, so on a week
+  // where several dentists are busy at once, a fixed-width column squeezes
+  // every block into an unreadable sliver. Size the columns off the busiest
+  // day instead and let the parent scroll sideways.
+  const maxLanes = Math.max(
+    1,
+    ...days.map((day) => {
+      const lanes = layoutLanes(appointmentsByDate[format(day, 'yyyy-MM-dd')] ?? [], MIN_BLOCK_MIN);
+      return Math.max(1, ...[...lanes.values()].map((l) => l.lanes));
+    }),
+  );
+  const dayMinWidth = Math.min(Math.max(96, maxLanes * LANE_MIN_WIDTH_PX), 420);
+  const gridTemplateColumns = `56px repeat(${days.length}, minmax(${dayMinWidth}px, 1fr))`;
+
   return (
-    <div className="min-w-[720px]">
+    <div style={{ minWidth: 56 + days.length * dayMinWidth }}>
       {/* Day headers */}
-      <div className="grid border-b border-gray-200 bg-gray-50" style={{ gridTemplateColumns }}>
-        <div className="border-r border-gray-100" />
+      <div className="grid border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800" style={{ gridTemplateColumns }}>
+        <div className="border-r border-gray-100 dark:border-surface-700" />
         {days.map((day) => {
           const isToday = isSameDay(day, today);
           const closedReason = closedDays?.[format(day, 'yyyy-MM-dd')];
@@ -268,23 +282,23 @@ export function WeekView({
             <div
               key={day.toISOString()}
               className={cn(
-                'border-r border-gray-100 px-2 py-2 text-center last:border-r-0',
-                isToday && 'bg-brand-50',
+                'border-r border-gray-100 px-2 py-2 text-center last:border-r-0 dark:border-surface-700',
+                isToday && 'bg-brand-50 dark:bg-brand-500/15',
               )}
             >
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-surface-400">
                 {format(day, 'EEE', { locale: dateLocale })}
               </p>
               <p
                 className={cn(
                   'text-base font-semibold',
-                  isToday ? 'text-brand-700' : 'text-gray-900',
+                  isToday ? 'text-brand-700 dark:text-brand-300' : 'text-gray-900 dark:text-surface-100',
                 )}
               >
                 {format(day, 'd')}
               </p>
               {closedReason !== undefined && (
-                <p className="truncate text-[10px] font-medium text-gray-500" title={closedReason}>
+                <p className="truncate text-[10px] font-medium text-gray-500 dark:text-surface-400" title={closedReason}>
                   {t('uiScheduling.clinicClosedReason', { reason: closedReason })}
                 </p>
               )}
@@ -310,8 +324,8 @@ export function WeekView({
               now={now}
               compact
               className={cn(
-                'border-r border-gray-100 last:border-r-0',
-                isSameDay(day, today) && 'bg-brand-50/30',
+                'border-r border-gray-100 last:border-r-0 dark:border-surface-700',
+                isSameDay(day, today) && 'bg-brand-50/30 dark:bg-brand-500/10',
               )}
               onSlotClick={onSlotClick}
               onAppointmentClick={onAppointmentClick}
@@ -369,7 +383,7 @@ function AppointmentBlock({
     </div>
   );
 
-  const showDetails = height >= 50;
+  const showDetails = height >= 44;
 
   // The absolutely-positioned block must be positioned relative to the day/
   // week column (the nearest `relative` ancestor up the tree), not relative

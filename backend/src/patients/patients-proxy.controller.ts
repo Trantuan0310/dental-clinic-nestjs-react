@@ -5,6 +5,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,7 +50,7 @@ export class PatientsProxyController {
   async patientEncounters(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
     const patient = await this.prisma.patient.findUnique({ where: { id } });
     if (!patient || patient.deletedAt) {
-      throw new ForbiddenException('Patient not found or deleted');
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
     }
 
     // Receptionist (encounter.read.basic) → stripped-down payload per BR-MR-022
@@ -120,7 +121,7 @@ export class PatientsProxyController {
   async patientDentalChart(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
     const patient = await this.prisma.patient.findUnique({ where: { id } });
     if (!patient || patient.deletedAt) {
-      throw new ForbiddenException('Patient not found or deleted');
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
     }
 
     const lastEncounter = await this.prisma.encounter.findFirst({
@@ -130,8 +131,10 @@ export class PatientsProxyController {
       include: { dentalChart: true },
     });
 
+    // Nothing charted yet is an empty result, not a refusal: answering 403
+    // made a patient with no snapshot look like one the caller may not see.
     if (!lastEncounter || !lastEncounter.dentalChart) {
-      throw new ForbiddenException('No dental chart snapshot yet for this patient');
+      throw new NotFoundException('Bệnh nhân chưa có sơ đồ răng');
     }
 
     // Dentist: patients they treated or are booked with (same scope as the
@@ -165,7 +168,7 @@ export class PatientsProxyController {
   async patientInvoices(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
     const patient = await this.prisma.patient.findUnique({ where: { id } });
     if (!patient || patient.deletedAt) {
-      throw new ForbiddenException('Patient not found or deleted');
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
     }
 
     // Row scope (A6-19, common/row-scope.ts): the `invoice.read` FE alias

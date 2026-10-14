@@ -48,8 +48,10 @@ export function KpiCard({
   sublabel,
   sparkline,
   icon,
-  iconBgClass = 'bg-teal-100',
-  iconFgClass = 'text-teal-600',
+  // A pale badge over a dark card glares, so each tone also carries a dark
+  // variant: a translucent fill and a lighter glyph.
+  iconBgClass = 'bg-teal-100 dark:bg-teal-400/15',
+  iconFgClass = 'text-teal-600 dark:text-teal-300',
   className,
 }: KpiCardProps) {
   const showDelta = typeof delta === 'number' && Number.isFinite(delta);

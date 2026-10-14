@@ -15,6 +15,7 @@ import {
   ApproveExpenseDto,
   RejectExpenseDto,
   ReimburseExpenseDto,
+  CreateExpenseCategoryDto,
 } from './dto/expense.dto';
 import { Prisma, ExpenseStatus } from '@prisma/client';
 
@@ -45,12 +46,12 @@ export class ExpenseService {
     });
   }
 
-  async createCategory(data: { name: string; description?: string; type?: string }) {
+  async createCategory(data: CreateExpenseCategoryDto) {
     return this.prisma.expenseCategory.create({
       data: {
         name: data.name,
         description: data.description,
-        type: (data.type as import('@prisma/client').ExpenseType) ?? 'OPERATING',
+        type: data.type ?? 'OPERATING',
       },
     });
   }

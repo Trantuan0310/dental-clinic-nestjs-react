@@ -4,7 +4,7 @@
  * Same definitions as the Dashboard (backend reports/revenue-basis.ts).
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -17,7 +17,8 @@ import {
 import { billingApi } from '@/features/billing/billingApi';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Card, Alert } from '@/components/ui';
-import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
+import { formatCurrency, formatNumber, formatPercent, vndCompact } from '@/lib/format';
+import { useChartTheme } from '@/lib/chartTheme';
 import { exportCsv } from '@/lib/csv';
 import { clinicParts, clinicToday } from '@/lib/clinicTime';
 import type { OutstandingAgingEntry, OutstandingBucket } from '@/types/billing';
@@ -34,10 +35,12 @@ import {
   Cell,
 } from 'recharts';
 
-const CHART_COLORS_LIGHT = ['#2BA3A0', '#4F46E5', '#059669', '#D97706', '#DC2626', '#7C3AED', '#0891B2'];
-const CHART_COLORS_DARK = ['#2DD4BF', '#818CF8', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#22D3EE'];
-
 type TooltipFormatter = (value: unknown, name: unknown) => [string, string];
+/**
+ * Charts plot đồng, so a money series shows its exact amount here while the
+ * axis tick shortens it. The series used to be divided down to millions and
+ * then formatted as đồng, which dropped six digits off every tooltip.
+ */
 const tooltipFormatter = ((value: unknown, name: unknown) => {
   if (typeof value === 'number') {
     return [`${formatCurrency(value)}`, String(name ?? '')];
@@ -85,17 +88,8 @@ export default function ReportsPage() {
   // Clinic calendar, not the workstation's clock.
   const [fromDate, setFromDate] = useState(() => daysBefore(clinicToday(), 30));
   const [toDate, setToDate] = useState(() => clinicToday());
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    const checkDark = () => setIsDark(document.documentElement.classList.contains('dark'));
-    checkDark();
-    const observer = new MutationObserver(checkDark);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  const colors = isDark ? CHART_COLORS_DARK : CHART_COLORS_LIGHT;
+  const chart = useChartTheme();
+  const colors = chart.series;
   // ISO 'yyyy-MM-dd' strings compare correctly lexicographically.
   const isOrderValid = fromDate <= toDate;
   // The API reads at most 366 days per report.
@@ -169,22 +163,22 @@ export default function ReportsPage() {
   // Chart data from daily revenue
   const dailyChartData = (dailyData ?? []).map(d => ({
     date: dayLabel(d.date),
-    revenue: d.revenue / 1_000_000, // Millions VND
+    revenue: d.revenue,
     count: d.invoiceCount,
   }));
 
   // Chart data from monthly revenue in report
   const monthlyChartData = (report?.byMonth ?? []).map(m => ({
     month: m.month,
-    revenue: m.total / 1_000_000,
-    collected: m.paid / 1_000_000,
+    revenue: m.total,
+    collected: m.paid,
   }));
 
   // Revenue by dentist chart data
   const dentistChartData = (report?.byDentist ?? []).map(d => ({
     name: d.dentistName.replace(/^BS\.\s*/i, ''),
-    revenue: d.revenue / 1_000_000,
-    paid: d.paid / 1_000_000,
+    revenue: d.revenue,
+    paid: d.paid,
     count: d.count,
   }));
 
@@ -199,14 +193,14 @@ export default function ReportsPage() {
   // Revenue by procedure chart data (top 10)
   const procedureChartData = (byProcedure ?? []).slice(0, 10).map(p => ({
     procedure: p.procedure,
-    revenue: p.revenue / 1_000_000,
+    revenue: p.revenue,
     count: p.count,
   }));
 
   // Revenue by source chart data
   const sourceChartData = (bySource ?? []).map(s => ({
     source: s.sourceLabel,
-    revenue: s.revenue / 1_000_000,
+    revenue: s.revenue,
     percent: s.percentage,
     count: s.count,
   }));
@@ -241,8 +235,6 @@ export default function ReportsPage() {
     ]);
   };
 
-  const gridColor = isDark ? '#374151' : '#E5E7EB';
-  const axisColor = isDark ? '#9CA3AF' : '#9CA3AF';
 
   return (
     <div className="space-y-6">
@@ -430,17 +422,18 @@ export default function ReportsPage() {
             ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke={axisColor} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke={chart.axis} />
                 <YAxis
                   tick={{ fontSize: 12 }}
-                  stroke={axisColor}
-                  tickFormatter={(value) => `${value}M`}
+                  stroke={chart.axis}
+                  tickFormatter={(value) => vndCompact(Number(value))}
                 />
-                <Tooltip formatter={tooltipFormatter} />
+                <Tooltip formatter={tooltipFormatter} {...chart.tooltip} />
                 <Line
                   type="monotone"
                   dataKey="revenue"
+                  name={t('uiOperations.revenue')}
                   stroke={colors[0]}
                   strokeWidth={2}
                   dot={{ fill: colors[0], strokeWidth: 2 }}
@@ -457,10 +450,10 @@ export default function ReportsPage() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axisColor} />
-                <YAxis tick={{ fontSize: 12 }} stroke={axisColor} tickFormatter={(v) => `${v}M`} />
-                <Tooltip formatter={tooltipFormatter} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={chart.axis} />
+                <YAxis tick={{ fontSize: 12 }} stroke={chart.axis} tickFormatter={(v) => vndCompact(Number(v))} />
+                <Tooltip formatter={tooltipFormatter} {...chart.tooltip} />
                 <Bar dataKey="revenue" fill={colors[0]} name={t('uiOperations.revenue')} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="collected" fill={colors[2]} name={t('uiOperations.collectedByPaymentDate')} radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -476,10 +469,10 @@ export default function ReportsPage() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dentistChartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}M`} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
-                <Tooltip formatter={tooltipFormatter} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis type="number" tick={{ fontSize: 12 }} stroke={chart.axis} tickFormatter={(v) => vndCompact(Number(v))} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke={chart.axis} width={80} />
+                <Tooltip formatter={tooltipFormatter} {...chart.tooltip} />
                 <Bar dataKey="revenue" fill={colors[0]} name={t('uiOperations.revenue')} radius={[0, 4, 4, 0]} />
                 <Bar dataKey="paid" fill={colors[2]} name={t('uiOperations.collected')} radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -495,10 +488,10 @@ export default function ReportsPage() {
             ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={procedureChartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}M`} />
-                <YAxis type="category" dataKey="procedure" tick={{ fontSize: 12 }} width={100} />
-                <Tooltip formatter={tooltipFormatter} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis type="number" tick={{ fontSize: 12 }} stroke={chart.axis} tickFormatter={(v) => vndCompact(Number(v))} />
+                <YAxis type="category" dataKey="procedure" tick={{ fontSize: 12 }} stroke={chart.axis} width={100} />
+                <Tooltip formatter={tooltipFormatter} {...chart.tooltip} />
                 <Bar dataKey="revenue" fill={colors[1]} name={t('uiOperations.revenue')} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -549,10 +542,10 @@ export default function ReportsPage() {
             ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sourceChartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}M`} />
-                <YAxis type="category" dataKey="source" tick={{ fontSize: 12 }} width={100} />
-                <Tooltip formatter={tooltipFormatter} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis type="number" tick={{ fontSize: 12 }} stroke={chart.axis} tickFormatter={(v) => vndCompact(Number(v))} />
+                <YAxis type="category" dataKey="source" tick={{ fontSize: 12 }} stroke={chart.axis} width={100} />
+                <Tooltip formatter={tooltipFormatter} {...chart.tooltip} />
                 <Bar dataKey="revenue" fill={colors[2]} name={t('uiOperations.revenue')} radius={[0, 4, 4, 0]}>
                   {sourceChartData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />

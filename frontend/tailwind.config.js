@@ -7,9 +7,14 @@ export default {
       colors: {
         // Legacy primary (blue) — kept for backward compatibility with existing screens.
         // New code should use `brand-*` for the GENSMILE teal palette.
+        // Tailwind's blue ramp. 300/400 were missing, so the dark-mode
+        // classes that reach for them (a lighter blue over a dark surface)
+        // emitted no CSS and silently left the light-mode colour in place.
         primary: {
           50: '#EFF6FF',
           100: '#DBEAFE',
+          300: '#93C5FD',
+          400: '#60A5FA',
           500: '#3B82F6',
           600: '#2563EB',
           700: '#1D4ED8',

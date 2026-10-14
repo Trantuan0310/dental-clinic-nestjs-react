@@ -173,15 +173,6 @@ export function resolveRange(range: TimeRange, today = clinicWallClock()): DateR
   return { from, to };
 }
 
-export function vndCompact(value: number, language = 'vi'): string {
-  if (!Number.isFinite(value)) return '—';
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}${language === 'en' ? 'B' : ' tỷ'}`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}${language === 'en' ? 'M' : ' tr'}`;
-  if (abs >= 1_000) return `${Math.round(value / 1_000)}k`;
-  return Math.round(value).toString();
-}
-
 export function formatDayLabel(s: string): string {
   const [, m, d] = s.split('-');
   return m && d ? `${d}/${m}` : s;

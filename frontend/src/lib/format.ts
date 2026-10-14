@@ -34,6 +34,22 @@ export function formatVnd(value: number | string | null | undefined, locale: For
   return new Intl.NumberFormat(INTL_LOCALES[locale]).format(Math.round(num)) + ' ₫';
 }
 
+/**
+ * Shortened đồng for a chart axis tick, where the full number does not fit.
+ * Charts plot raw đồng and label the axis with this, so the axis and the
+ * tooltip (formatVnd) describe the same number at different precision.
+ */
+export function vndCompact(value: number | string | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
+  if (value === null || value === undefined) return '—';
+  const num = typeof value === 'string' ? Number(value) : value;
+  if (!Number.isFinite(num)) return '—';
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}${locale === 'en' ? 'B' : ' tỷ'}`;
+  if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}${locale === 'en' ? 'M' : ' tr'}`;
+  if (abs >= 1_000) return `${Math.round(num / 1_000)}k`;
+  return Math.round(num).toString();
+}
+
 export function formatNumber(value: number | string | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
   if (value === null || value === undefined) return '—';
   const num = typeof value === 'string' ? Number(value) : value;

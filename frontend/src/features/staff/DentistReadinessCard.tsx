@@ -18,7 +18,7 @@ interface Item {
 const ICON: Record<Level, ReactNode> = {
   ok: <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-hidden />,
   warn: <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />,
-  info: <Info className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />,
+  info: <Info className="h-4 w-4 shrink-0 text-gray-400 dark:text-surface-400" aria-hidden />,
 };
 
 const linkClass = 'text-right text-xs text-brand-600 underline hover:no-underline';

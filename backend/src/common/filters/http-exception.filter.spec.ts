@@ -76,7 +76,9 @@ describe('HttpExceptionFilter — input errors that used to be 500s', () => {
     ],
     ['413 body too large', bodyParser(413, 'entity.too.large'), 413, 'PAYLOAD_TOO_LARGE'],
     ['400 malformed JSON', bodyParser(400, 'entity.parse.failed'), 400, 'BAD_REQUEST'],
-    ['other Prisma errors stay 500', known('P2025'), 500, 'INTERNAL_ERROR'],
+    // An id that is not there is the caller's mistake, not a server fault.
+    ['P2025 record not found', known('P2025'), 404, 'NOT_FOUND'],
+    ['other Prisma errors stay 500', known('P2016'), 500, 'INTERNAL_ERROR'],
     [
       'an unrelated "out of range" driver error stays 500',
       new Prisma.PrismaClientUnknownRequestError('index out of range', {
@@ -88,7 +90,7 @@ describe('HttpExceptionFilter — input errors that used to be 500s', () => {
   ])('%s', (_name, exception, status, code) => {
     const body = codeOf(exception);
     expect(body).toMatchObject({ status, code });
-    if (status < 500) expect(String(body.message)).toMatch(/Dữ liệu/);
+    if (status < 500) expect(String(body.message)).toMatch(/dữ liệu/i);
   });
 
   it('429 from the throttler gets a code and a Vietnamese message', () => {

@@ -175,7 +175,7 @@ export default function InvoiceListPage() {
           </div>
         ) : invoices.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Receipt className="h-10 w-10 text-gray-400" />
+            <Receipt className="h-10 w-10 text-gray-400 dark:text-surface-500" />
             <p className="mt-3 font-medium text-gray-900 dark:text-white">{t('uiOperations.noInvoices')}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {t('uiOperations.invoiceAutoCreated')}

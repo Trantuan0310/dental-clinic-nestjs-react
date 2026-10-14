@@ -14,7 +14,7 @@ export function Checkbox({ checked, onChange, label, disabled, className }: Chec
   return (
     <label
       className={cn(
-        'flex cursor-pointer select-none items-start gap-2 rounded-md p-1 text-sm hover:bg-gray-50',
+        'flex cursor-pointer select-none items-start gap-2 rounded-md p-1 text-sm hover:bg-gray-50 dark:hover:bg-surface-800',
         disabled && 'cursor-not-allowed opacity-60',
         className,
       )}
@@ -30,12 +30,14 @@ export function Checkbox({ checked, onChange, label, disabled, className }: Chec
         className={cn(
           'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
           'peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-1',
-          checked ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 bg-white text-transparent',
+          checked
+            ? 'border-primary-600 bg-primary-600 text-white'
+            : 'border-gray-300 bg-white text-transparent dark:border-surface-500 dark:bg-surface-800',
         )}
       >
         <Check className="h-3 w-3" strokeWidth={3} />
       </span>
-      {label && <span className="text-sm text-gray-700">{label}</span>}
+      {label && <span className="text-sm text-gray-700 dark:text-surface-200">{label}</span>}
     </label>
   );
 }

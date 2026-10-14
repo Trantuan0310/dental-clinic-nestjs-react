@@ -271,7 +271,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
             {mine ? t('uiScheduling.myCalendar') : t('uiScheduling.calendarView')}
           </h1>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-surface-400">
             {mine ? t('uiScheduling.myAppointmentsByPeriod') : t('uiScheduling.viewAppointmentsByPeriod')}
           </p>
         </div>
@@ -316,7 +316,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
 
       <Card noPadding>
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-3 dark:border-surface-700">
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="sm" aria-label={t('uiScheduling.previousPeriod')} onClick={() => handleDateChange('prev')}>
               <ChevronLeft className="h-4 w-4" />
@@ -369,7 +369,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
                 }
               />
             )}
-            <div className="flex rounded-lg bg-gray-100 p-1">
+            <div className="flex rounded-lg bg-gray-100 p-1 dark:bg-surface-800">
               {VIEW_MODES.map((mode) => (
                 <button
                   key={mode}
@@ -475,7 +475,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
         )}
         {Object.keys(closedDays).length > 0 && (
           <div className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-4 rounded-sm bg-gray-200" />
+            <span className="h-2.5 w-4 rounded-sm bg-gray-200 dark:bg-surface-600" />
             <span className="text-gray-700 dark:text-surface-200">{t('uiScheduling.clinicClosed')}</span>
           </div>
         )}
@@ -485,7 +485,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
           internally (title/footer/size included), so it's rendered
           directly here, not re-wrapped in another one. */}
       {showCreateModal && (
-        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">{t('uiScheduling.loading')}</div>}>
+        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.loading')}</div>}>
           <AppointmentFormModal
             open={showCreateModal}
             onClose={() => {
@@ -512,7 +512,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
 
       {/* Edit modal — opened via the detail drawer's "Sửa" action */}
       {editingAppointment && (
-        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500">{t('uiScheduling.loading')}</div>}>
+        <Suspense fallback={<div className="p-6 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.loading')}</div>}>
           <AppointmentFormModal
             open={!!editingAppointment}
             onClose={() => setEditingAppointment(null)}

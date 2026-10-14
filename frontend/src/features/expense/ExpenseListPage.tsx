@@ -363,7 +363,7 @@ export default function ExpenseListPage() {
                               className="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
                               title={t('uiOperations.edit')}
                             >
-                              <Edit className="h-4 w-4 text-gray-500" />
+                              <Edit className="h-4 w-4 text-gray-500 dark:text-surface-400" />
                             </button>
                           </PermissionGuard>
                           {expense.createdBy && expense.createdBy === currentUserId ? (

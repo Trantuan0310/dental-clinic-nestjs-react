@@ -252,6 +252,14 @@ async function ensureDentistSetup(dentistIds: string[], since: Date) {
       });
       console.log(`  + lịch làm việc T2–T7 cho bác sĩ ${dentistId}`);
     }
+    // clinic-setup.ts opens online booking for the dentists that existed
+    // when it ran, so the ones created here would otherwise stay closed and
+    // the public booking page would list no dentist and no service at all.
+    await prisma.dentistProfile.updateMany({
+      where: { userId: dentistId, acceptsOnlineBooking: false },
+      data: { acceptsOnlineBooking: true },
+    });
+
     const hasServices = await prisma.dentistService.count({
       where: { dentistId, effectiveTo: null },
     });
