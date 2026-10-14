@@ -13,11 +13,11 @@ FAQ cho người dùng và developer.
 **Giải pháp:**
 1. Kiểm tra Caps Lock đang tắt.
 2. Thử reset mật khẩu: `Quên mật khẩu` → nhập email → kiểm tra hộp thư.
-3. Liên hệ admin để reset account.
+3. Máy chủ chưa gửi được email: nhờ quản trị **Cấp mật khẩu tạm** ở trang Người dùng.
 
-**Vấn đề:** Tài khoản bị khóa (too many attempts).
+**Vấn đề:** Tài khoản bị khóa (nhập sai mật khẩu 6 lần liên tiếp).
 
-**Giải pháp:** Chờ 30 phút hoặc liên hệ admin để unlock.
+**Giải pháp:** Chờ 15 phút, hoặc nhờ quản trị **Cấp mật khẩu tạm** (thao tác này mở khóa luôn).
 
 ---
 
@@ -48,7 +48,7 @@ FAQ cho người dùng và developer.
 
 **Vấn đề:** Không thấy bác sĩ trong danh sách.
 
-**Giải pháp:** Kiểm tra `schedule.write` permission. Bác sĩ phải có lịch làm việc (working schedule) được cấu hình.
+**Giải pháp:** Tài khoản cần quyền `appointment.create`. Bác sĩ phải có đủ: hồ sơ bác sĩ đang hành nghề, dịch vụ được phân công, lịch làm việc; không đang nghỉ phép hoặc tạm đình chỉ. Xem [CLINIC_SETUP.md](../08_Deployment/CLINIC_SETUP.md).
 
 **Vấn đề:** Không thấy slot trống.
 
@@ -58,11 +58,11 @@ FAQ cho người dùng và developer.
 
 ### Lỗi thanh toán
 
-**Vấn đề:** "Invoice not editable" khi cố sửa hóa đơn.
+**Vấn đề:** "Không thể sửa hóa đơn ở trạng thái …" khi cố sửa hóa đơn.
 
-**Giải pháp:** Chỉ hóa đơn ở trạng thái `DRAFT` mới sửa được. Hóa đơn `ISSUED`/`PAID` không sửa được.
+**Giải pháp:** Chỉ hóa đơn **Nháp** mới sửa được. Hóa đơn đã phát hành hoặc đã thanh toán thì quản trị hủy rồi lập lại.
 
-**Vấn đề:** "Payment exceeds outstanding" khi ghi nhận thanh toán.
+**Vấn đề:** "Số tiền … vượt quá số còn nợ …" khi thu tiền.
 
 **Giải pháp:** Số tiền thanh toán không được lớn hơn số tiền còn nợ.
 
@@ -73,12 +73,12 @@ FAQ cho người dùng và developer.
 **Vấn đề:** Không thấy nút "Bắt đầu khám" trên lịch hẹn.
 
 **Giải pháp:**
-- Lịch hẹn phải ở trạng thái `CONFIRMED` hoặc `CHECKED_IN`.
-- User phải có permission `encounter.start`.
+- Lịch hẹn phải **đã check-in** (`CHECKED_IN`). Lịch mới "Đã xác nhận" thì nhờ lễ tân check-in trước.
+- User phải có permission `encounter.start` và là bác sĩ của lịch hẹn đó.
 
 **Vấn đề:** Không lưu được ghi chú lâm sàng.
 
-**Giải pháp:** Encounter phải đang ở trạng thái `IN_PROGRESS`. Encounter `CLOSED` không sửa được.
+**Giải pháp:** Phiên khám phải đang khám (`IN_PROGRESS`). Phiên đã hoàn tất (`COMPLETED`) chỉ thêm được addendum, trong 30 ngày sau khi đóng.
 
 ---
 
@@ -88,12 +88,13 @@ FAQ cho người dùng và developer.
 
 **`P1001: Can't reach database server`**
 ```bash
-# Docker chưa chạy
-docker-compose up -d
-sleep 5
+# Docker chưa chạy (chỉ dựng PostgreSQL)
+cd backend
+docker compose up -d postgres
 ```
+PostgreSQL trong Docker mở ở cổng **15432**: kiểm tra `DATABASE_URL` trong `backend/.env`.
 
-**`P3005: Migration has not yet been applied`**
+**Migration chưa được áp dụng** (bảng hoặc cột không tồn tại)
 ```bash
 cd backend
 npx prisma migrate deploy
@@ -102,9 +103,10 @@ npx prisma migrate deploy
 **`P3005: The schema is not empty`**
 ```bash
 # Database đã có tables nhưng Prisma chưa track
-npx prisma migrate resolve --applied 001_init
-npx prisma db push --accept-data-loss
+cd backend
+npm run db:baseline
 ```
+Không dùng `prisma db push --accept-data-loss`: lệnh này có thể xóa dữ liệu.
 
 ---
 
@@ -135,10 +137,11 @@ npx jest --clearCache
 - Kiểm tra `tsconfig.json` có `@/*` alias đúng
 - Kiểm tra path trong import
 
-**Build fail với Tailwind**
+**Build fail**
 ```bash
 cd frontend
-npx tailwindcss -i ./src/index.css -o ./dist/styles.css --watch
+npm run typecheck   # lỗi TypeScript thường là nguyên nhân
+npm run build       # đọc lỗi đầu tiên trong output
 ```
 
 **Dark mode không hoạt động**
@@ -192,7 +195,7 @@ const prisma = new PrismaClient();
   const hash = await argon2.hash('NewPassword123!');
   await prisma.user.update({
     where: { email: 'admin@clinic.local' },
-    data: { passwordHash: hash }
+    data: { passwordHash: hash, failedLoginAttempts: 0, lockedUntil: null }
   });
   console.log('Password updated');
   await prisma.\$disconnect();
@@ -200,13 +203,12 @@ const prisma = new PrismaClient();
 "
 ```
 
-### Reset toàn bộ database
+### Reset toàn bộ database (MẤT HẾT DỮ LIỆU)
 
 ```bash
 cd backend
-docker-compose down -v
-docker-compose up -d
-sleep 10
+docker compose down -v
+docker compose up -d postgres
 npx prisma migrate deploy
-npx prisma db seed
+npm run prisma:seed
 ```

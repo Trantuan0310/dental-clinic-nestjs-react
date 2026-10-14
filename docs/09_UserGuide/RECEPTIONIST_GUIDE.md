@@ -1,78 +1,76 @@
 # Hướng dẫn sử dụng cho Lễ tân (Receptionist)
 
 > **Đối tượng:** Lễ tân (`receptionist`)  
-> **Quyền hạn:** Bệnh nhân, lịch hẹn, hóa đơn, thanh toán  
-> **Ngày cập nhật:** 02/08/2026
+> **Quyền hạn:** Bệnh nhân, lịch hẹn, điều phối, yêu cầu đặt lịch online, hóa đơn, thu tiền, kho. Chi tiết: [PHAN_QUYEN.md](PHAN_QUYEN.md)  
+> **Ngày cập nhật:** 14/10/2026
 
 ---
 
-## 1. Đăng nhập & Chọn ca
+## 1. Đăng nhập
 
-1. Truy cập `http://localhost:5173` → nhập email + mật khẩu.
-2. Sau khi vào Dashboard, kiểm tra **Bệnh nhân hôm nay** + **Lịch hẹn hôm nay** ở panel.
+1. Truy cập `http://localhost:5173` (hoặc URL do IT cung cấp) → nhập email + mật khẩu.
+2. Dashboard hiện thống kê lịch khám (đến, vắng, hủy, vãng lai, online) và công nợ.
+3. Lịch trong ngày xem ở **Hôm nay** (`/today`).
 
 ---
 
 ## 2. Quản lý bệnh nhân
 
 ### Tạo bệnh nhân mới
-**Menu → Bệnh nhân → + Tạo bệnh nhân** (`/patients/new`)
+**Menu → Bệnh nhân → Tạo bệnh nhân** (`/patients/new`)
 
-Bước 1: Nhập thông tin cơ bản
-- **Họ tên** (bắt buộc).
-- **Ngày sinh** (bắt buộc, dùng date picker).
+Thông tin bắt buộc:
+- **Họ tên**.
+- **Ngày sinh**.
 - **Giới tính**: Nam / Nữ / Khác.
-- **SĐT chính** (bắt buộc, hệ thống check trùng → cảnh báo).
+- **SĐT bệnh nhân**, hoặc **SĐT người liên hệ** kèm **tên người liên hệ** khi bệnh nhân không có số riêng.
+- Bệnh nhân dưới 12 tuổi bắt buộc có tên người giám hộ.
 
-Bước 2: (tùy chọn) Điền thêm
-- Email, địa chỉ, nghề nghiệp.
-- **Dị ứng** (quan trọng — sẽ cảnh báo bác sĩ mỗi lần khám).
-- **Bệnh nền**, **thuốc đang dùng**.
-- **Người liên hệ khẩn cấp**.
+Không bắt buộc: email, địa chỉ, nghề nghiệp, ghi chú, **dị ứng**, **bệnh nền**, **thuốc đang dùng**. Dị ứng hiện thành cảnh báo cho bác sĩ mỗi lần khám.
 
-Bước 3: Nhấn **Tạo** → hệ thống sinh mã bệnh nhân tự động (BR-PT-001).
+Nhấn **Tạo**, hệ thống tự sinh mã bệnh nhân.
+
+### Cảnh báo trùng hồ sơ
+- Khi gõ SĐT (từ 3 số), form hiện các hồ sơ đã có cùng số.
+- Nếu đúng là người đó, mở hồ sơ có sẵn thay vì tạo mới.
 
 ### Tìm bệnh nhân
-- Header (top-right): **Search** → gõ tên / mã BN / SĐT → Enter.
-- Hoặc vào `/patients?q=...`.
+- Ô tìm trên header: gõ tên / mã BN / SĐT → Enter.
+- Hoặc **Ctrl+K** (⌘K trên Mac) để mở tìm kiếm nhanh.
 
-### Xem / Sửa bệnh nhân
-- Click vào tên bệnh nhân → trang chi tiết.
-- Tab **Hồ sơ**: thông tin cá nhân.
-- Tab **Lịch sử khám**: các encounter trước.
-- Tab **Hóa đơn**: danh sách invoice liên quan.
+### Xem / sửa bệnh nhân
+Bấm vào tên bệnh nhân. Trang chi tiết có các tab: **Tổng quan**, **Lịch hẹn**, **Lịch sử khám**, **Hóa đơn**.
 
-### Trùng bệnh nhân (BR-PT-007)
-- Khi tạo mới, hệ thống tự check `primaryPhone` + `fullName` + `dob`.
-- Nếu trùng → hiển thị danh sách ứng viên → chọn **Sử dụng bệnh nhân có sẵn** hoặc **Tạo mới**.
-
-### Gộp bệnh nhân (BR-PT-019)
-- **Menu → Bệnh nhân → Chọn 2 bệnh nhân → Gộp**.
-- Bệnh nhân **mục tiêu** (giữ lại) + **bệnh nhân nguồn** (xóa mềm).
-- Lịch sử khám + invoices sẽ chuyển sang mục tiêu.
+### Hồ sơ trùng
+Lễ tân **không gộp** được hồ sơ (chỉ quản trị có quyền, và hiện chưa có nút trên giao diện). Thấy hồ sơ trùng thì báo quản trị.
 
 ---
 
 ## 3. Quản lý lịch hẹn
 
 ### Đặt lịch hẹn
-**Menu → Lịch hẹn → + Tạo lịch** (`/appointments`)
+**Menu → Lịch hẹn** (`/appointments`) → tạo lịch mới.
 
-1. Chọn **Bệnh nhân** (search box).
-2. Chọn **Bác sĩ**.
-3. Chọn **Ngày** + **Giờ bắt đầu** (hệ thống check slot trống).
-4. Chọn **Thời lượng** (mặc định 30 phút).
-5. **Lý do khám** (tùy chọn).
-6. Nhấn **Tạo**.
+1. Tìm **bệnh nhân** (hoặc nhập nhanh họ tên, ngày sinh, SĐT cho khách mới).
+2. Chọn **Bác sĩ** và **dịch vụ**. Thời lượng = tổng thời lượng các dịch vụ đã chọn.
+3. Chọn **Ngày** + **Giờ bắt đầu**; hệ thống chỉ cho giờ còn trống.
+4. Chọn **Loại lịch**, **Nguồn**; ghi **Lý do khám**, **Triệu chứng** nếu có.
+5. Nhấn **Tạo**.
 
-> **Lưu ý:** Không thể đặt lịch trong quá khứ (BD-0010). Lịch hẹp trùng slot → báo lỗi (BR-APPT-014).
+> Không đặt được lịch trong quá khứ hoặc trùng giờ bác sĩ đã có lịch.
+
+### Khách vãng lai
+Khách đến quầy không hẹn trước: dùng **Khách vãng lai** để tạo lịch khám ngay.
 
 ### Check-in bệnh nhân
-- Tại Calendar page, click vào lịch hẹn → **Check-in**.
-- Hoặc trong ngày: **Menu → Bệnh nhân → Hàng chờ hôm nay** → check-in.
+- Check-in ở **Hôm nay**, **Điều phối**, hoặc bấm vào lịch hẹn trên trang Lịch hẹn → **Check-in**.
+- Check-in mở từ **15 phút trước** giờ hẹn. Sớm hơn trong cùng ngày vẫn được nhưng phải ghi lý do; bệnh nhân vẫn xếp theo giờ hẹn.
+- Đến trễ hơn 30 phút: hệ thống hỏi xác nhận trước khi check-in.
+- Không check-in được vào bác sĩ đang nghỉ hoặc ngày phòng khám nghỉ: đổi lịch sang bác sĩ khác (chọn "Phòng khám dời") rồi check-in.
 
-### Cancel / Reschedule
-- Click vào lịch → menu **⋮** → **Hủy** (nhập lý do) hoặc **Đổi lịch** (chọn slot mới).
+### Hủy / dời lịch
+- Bấm vào lịch hẹn → **Hủy lịch hẹn** (nhập lý do) hoặc **Đổi lịch** (chọn giờ mới).
+- Bệnh nhân chỉ được tự dời tối đa 3 lần.
 - Nếu **phòng khám** là bên phải hủy hoặc dời (bác sĩ vắng, đổi giờ làm, phòng khám nghỉ), tích ô **"Phòng khám hủy"** / **"Phòng khám dời"**. Khi đó:
   - lần đổi không tính vào giới hạn 3 lần đổi lịch của bệnh nhân;
   - email gửi khách (nếu hồ sơ có email) nói rõ phòng khám phải hủy/dời và xin lỗi.
@@ -84,72 +82,77 @@ Chỉ gửi khi hồ sơ bệnh nhân có email:
 - **Đặt lịch** qua điện thoại hoặc cho bệnh nhân tái khám: email xác nhận giờ, bác sĩ, dịch vụ, địa chỉ. Khách vãng lai đang ở quầy thì không gửi.
 - **Hủy / dời lịch / đổi bác sĩ**: email báo thay đổi.
 - **Nhắc lịch** trước khoảng 24 giờ (không gửi từ 21h đến 7h).
-- Lịch không gửi được email nhắc (bác sĩ nghỉ, phòng khám đóng cửa, ngoài giờ làm, gửi lỗi) hiện trong danh sách **"Lịch hẹn cần gọi khách"** để lễ tân gọi điện.
+- Lịch không gửi được email nhắc (bác sĩ nghỉ, phòng khám đóng cửa, ngoài giờ làm, gửi lỗi) hiện ở trang **Yêu cầu đặt lịch**, mục **"… lời nhắc chưa gửi được"**, để lễ tân gọi điện.
 
-### No-show
-- Bệnh nhân không đến sau 15 phút → click **Đánh dấu vắng**.
-- Hệ thống ghi nhật ký (BR-APPT-008).
+### Vắng mặt
+- Bệnh nhân trễ quá 15 phút: bấm **Đánh dấu vắng mặt** (cần lý do).
+- Không đến sau 60 phút: hệ thống tự đánh vắng.
+- Bệnh nhân quay lại: **Hoàn tác trạng thái vắng mặt** rồi check-in.
+- Đã check-in nhưng về trước khi khám: **Bệnh nhân đã về**.
 
 ---
 
-## 4. Hóa đơn & Thanh toán
+## 4. Hóa đơn và thanh toán
 
-### Tạo hóa đơn
-**Menu → Hóa đơn → + Tạo hóa đơn** (`/billing/invoices/new`)
+**Menu → Hóa đơn** (`/billing`)
 
-1. Chọn **Bệnh nhân**.
-2. Chọn **Encounter** (phiên khám) đã close.
-3. Điều chỉnh **danh sách thủ thuật** + **số lượng** + **giá**.
-4. Thêm **giảm giá** (nếu có).
-5. Nhấn **Tạo** (status: DRAFT).
+### Hóa đơn nháp
+- Hóa đơn nháp **tự tạo khi bác sĩ đóng phiên khám**, gồm các thủ thuật đã làm. Lễ tân không tạo hóa đơn từ đầu.
+- Phiên đã đóng mà chưa có hóa đơn hiện trong danh sách cảnh báo ở trang Hóa đơn: bấm để **tạo bù**.
+- Trên hóa đơn nháp, lễ tân được **Giảm giá** (theo % hoặc số tiền, có lý do) và ghi chú.
+- Sửa hoặc bỏ dòng thủ thuật: chỉ **quản trị** (bắt buộc lý do).
 
-### Xuất hóa đơn (Issue)
-- Chọn hóa đơn DRAFT → **Xuất hóa đơn** → status chuyển ISSUED.
-- Hệ thống sinh số hóa đơn + ghi audit log.
+### Phát hành
+- Mở hóa đơn nháp → **Phát hành hóa đơn**. Trạng thái chuyển **Đã phát hành**.
 
-### Thanh toán
-1. Chọn hóa đơn ISSUED → **+ Thanh toán**.
-2. Nhập **số tiền** + **phương thức** (Tiền mặt / Chuyển khoản / Thẻ / Ví điện tử).
-3. Có thể thanh toán **nhiều lần** (partial payment).
-4. Hóa đơn chuyển **PAID** khi tổng tiền thanh toán = tổng tiền hóa đơn.
+### Thu tiền
+1. Mở hóa đơn đã phát hành → **Thu tiền**.
+2. Nhập **số tiền đã nhận** và **phương thức**: Tiền mặt hoặc Chuyển khoản.
+3. Thu nhiều lần được; trạng thái là **Một phần** cho tới khi đủ thì **Đã thanh toán**.
+4. Số tiền không được lớn hơn số còn nợ.
 
-### Hủy hóa đơn (Void)
-- Chỉ hóa đơn **DRAFT** hoặc **ISSUED** chưa thanh toán mới hủy được.
-- Click **Hủy** → nhập lý do → status VOIDED.
+### Hủy hóa đơn, phiếu thu, hoàn tiền
+Lễ tân **không** làm được các việc sau; nhờ quản trị:
+- Hủy hóa đơn (chỉ hủy được khi chưa có phiếu thu còn hiệu lực).
+- Hủy phiếu thu ghi nhầm.
+- Hoàn tiền cho bệnh nhân.
+- Lập lại hóa đơn cho phiên có hóa đơn đã hủy.
 
 ### In hóa đơn
-- Click **In** → file PDF sẽ tải về (theo mẫu nhà nước quy định).
+- Bấm **In** để mở hộp in của trình duyệt (in giấy hoặc lưu PDF).
 
 ---
 
-## 5. Hàng chờ (Queue)
+## 5. Hôm nay và Điều phối
 
-**Menu → Hôm nay** (`/today`)
-
-Hiển thị:
-- Lịch hẹn hôm nay (theo giờ).
-- Bệnh nhân đang chờ (status: checked_in).
-- Bệnh nhân đang khám (status: in_progress).
-- Bệnh nhân đã xong (status: completed).
+- **Hôm nay** (`/today`): lịch hẹn trong ngày của cả phòng khám, theo giờ và trạng thái (sắp tới, đã check-in, đang khám, đã xong). Dùng mũi tên để xem ngày khác.
+- **Điều phối** (`/dispatch`): hàng chờ trước khi khám của từng bác sĩ, ca cấp cứu lên trước rồi đến giờ hẹn. Dùng để check-in, chuyển bệnh nhân sang bác sĩ khác khi bác sĩ vắng.
 
 ---
 
-## 6. Tìm kiếm nhanh
+## 6. Yêu cầu đặt lịch online
 
-- Header search box: tìm bệnh nhân.
-- **`Ctrl+K`** (Command Palette): mở tìm kiếm toàn cục.
+**Menu → Yêu cầu đặt lịch** (`/booking-requests`). Số trên menu là số yêu cầu đang chờ.
 
----
-
-## 7. Lưu ý quan trọng
-
-1. **Không xóa cứng dữ liệu** — tất cả là soft delete (BR-PT-010).
-2. **Check-in trước 15 phút** so với giờ hẹn (BR-APPT-007).
-3. **Hóa đơn sau khi ISSUED không sửa dòng** — chỉ có thể void + tạo lại.
-4. **Thanh toán không thể xóa** — chỉ **reverse** (ghi lý do).
+Với mỗi yêu cầu: xác nhận, đề xuất giờ khác, yêu cầu bổ sung, từ chối, ghi nhận khách hủy qua điện thoại, gắn vào lượt khám hôm nay khi khách đến quầy. Chi tiết và lưu ý về khớp hồ sơ: [PHAN_QUYEN.md](PHAN_QUYEN.md#yêu-cầu-đặt-lịch-online).
 
 ---
 
-## 8. Liên hệ
+## 7. Bác sĩ vắng đột xuất
 
-Khi cần hỗ trợ kỹ thuật → liên hệ admin phòng khám.
+Ở **Lịch làm việc** (`/schedule`), lễ tân ghi được bác sĩ vắng đột xuất, có hiệu lực ngay (bắt đầu trong hôm nay, kết thúc chậm nhất cuối ngày mai). Lịch hẹn bị ảnh hưởng xử lý ở tab **Lịch hẹn bị ảnh hưởng**: chuyển bác sĩ thay, dời hàng loạt, đánh dấu đã gọi báo bệnh nhân.
+
+---
+
+## 8. Lưu ý quan trọng
+
+1. **Không xóa cứng dữ liệu**: xóa bệnh nhân, hủy hóa đơn, hủy phiếu thu đều để lại dấu vết và cần quyền quản trị.
+2. **Check-in mở từ 15 phút trước** giờ hẹn.
+3. **Hóa đơn đã phát hành không sửa dòng**: quản trị hủy rồi lập lại.
+4. **Phiếu thu không xóa**: quản trị hủy phiếu thu ghi nhầm (có lý do).
+
+---
+
+## 9. Liên hệ
+
+Khi cần hỗ trợ kỹ thuật → liên hệ quản trị phòng khám.
