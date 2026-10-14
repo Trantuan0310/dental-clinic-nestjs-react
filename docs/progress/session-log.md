@@ -8,8 +8,9 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ### Đang chờ / bước tiếp theo
 
-- PR cập nhật hướng dẫn sử dụng: chờ người dùng xem và merge.
-- PR sửa 2 lỗi cấu hình lịch (mục ngay dưới) cùng `CLAUDE.md` và nhật ký này: chờ CI xanh rồi người dùng merge.
+- PR #45 (lỗi cấu hình lịch), #46 (hướng dẫn sử dụng), #47 (giờ làm từ `CLINIC_HOURS`, bác sĩ mới bật đặt lịch online): đã merge vào `main`.
+- Chờ người dùng chọn cách xử lý "Nhận bệnh nhân mới" ở đặt lịch online (đề xuất: nhận mọi yêu cầu, gắn nhãn để lễ tân quyết).
+- Chưa sửa: `backend/.env.example` cổng 5432 so với Docker 15432; `npm run db:up` dựng cả container backend.
 - Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` trên VPS (môi trường của Claude không có quyền SSH).
 
 ### Cập nhật hướng dẫn sử dụng (`docs/09_UserGuide/`)
