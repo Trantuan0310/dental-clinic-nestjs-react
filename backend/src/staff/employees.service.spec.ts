@@ -166,6 +166,9 @@ describe('EmployeesService', () => {
         employeeId: 'emp-1',
         calendarColor: '#9333EA',
         defaultSlotMinutes: 30,
+        // A new dentist shows on /booking once given services and hours.
+        acceptsOnlineBooking: true,
+        acceptsNewPatients: true,
       });
       expect(prisma.employee.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ employeeType: 'DENTIST' }) }),

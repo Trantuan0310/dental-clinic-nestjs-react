@@ -33,7 +33,7 @@ export function DentistProfileForm({
     specialties: initial?.specialties ?? [],
     calendarColor: initial?.calendarColor ?? '',
     defaultSlotMinutes: String(initial?.defaultSlotMinutes ?? 30),
-    acceptsOnlineBooking: initial?.acceptsOnlineBooking ?? false,
+    acceptsOnlineBooking: initial?.acceptsOnlineBooking ?? true,
     acceptsNewPatients: initial?.acceptsNewPatients ?? true,
     bio: initial?.bio ?? '',
   });

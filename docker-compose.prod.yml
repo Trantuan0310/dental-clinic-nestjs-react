@@ -53,6 +53,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=require
+      # Default working hours for scripts/clinic-setup-vps.sh (same values the web shows).
+      CLINIC_HOURS: ${CLINIC_HOURS:-}
+      CLINIC_SUNDAY_HOURS: ${CLINIC_SUNDAY_HOURS:-}
     restart: "no"
 
   backend:

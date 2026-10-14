@@ -6,9 +6,10 @@
  *      employee records, dentist profiles and specialties;
  *   2. the service catalogue (clinic-setup/catalog.ts), by code;
  *   3. dentist ↔ service assignments, for dentists that have none yet;
- *   4. working hours Mon–Sat 08:00–12:00 and 13:30–19:00, for dentists that
- *      have no schedule yet (RESET_SCHEDULES=1 replaces existing ones from
- *      today; past days keep their hours);
+ *   4. working hours from CLINIC_HOURS (Mon–Sat, default 08:00–12:00 and
+ *      13:30–19:00) and CLINIC_SUNDAY_HOURS (default closed), for dentists
+ *      that have no schedule yet (RESET_SCHEDULES=1 replaces existing ones
+ *      from today; past days keep their hours);
  *   5. inventory categories and items (stock 0), by name / SKU;
  *   6. expense categories, by name.
  * No patients, appointments or invoices are created. Running it again is a
@@ -26,6 +27,7 @@ import { readFileSync } from 'node:fs';
 import { backfillStaffRecords } from './staff-backfill';
 import { SERVICE_CATEGORIES, SERVICES, type Specialty } from './clinic-setup/catalog';
 import { EXPENSE_CATEGORIES, INVENTORY_CATEGORIES, INVENTORY_ITEMS } from './clinic-setup/supplies';
+import { describeOpeningHours, openingHoursFromEnv, type HourBlock } from './clinic-setup/hours';
 
 const prisma = new PrismaClient();
 
@@ -41,12 +43,6 @@ const SPECIALTIES: readonly Specialty[] = [
   'THAM_MY',
 ];
 const ROLES = ['dentist', 'receptionist', 'clinic_admin'] as const;
-// Mon–Sat (0 = Sunday), clinic wall-clock time.
-const WORK_DAYS = [1, 2, 3, 4, 5, 6];
-const SHIFTS = [
-  { start: [8, 0], end: [12, 0], shiftType: 'MORNING' as const },
-  { start: [13, 30], end: [19, 0], shiftType: 'AFTERNOON' as const },
-];
 const SLOT_MINUTES = 15;
 // Same parameters as UsersService, so these hashes verify at login.
 const ARGON2 = {
@@ -69,7 +65,7 @@ interface StaffEntry {
 }
 
 const clinicToday = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
-const pgTime = ([h, m]: number[]) => new Date(Date.UTC(1970, 0, 1, h, m));
+const pgTime = (minutes: number) => new Date(Date.UTC(1970, 0, 1, 0, minutes));
 const tempPassword = () => randomBytes(9).toString('base64url');
 
 function readRoster(): StaffEntry[] {
@@ -228,7 +224,7 @@ async function seedAssignments() {
   console.log(`✓ Phân công dịch vụ: ${dentists} bác sĩ, ${rows} dòng`);
 }
 
-async function seedSchedules() {
+async function seedSchedules(hours: HourBlock[][]) {
   const reset = process.env.RESET_SCHEDULES === '1';
   const validFrom = new Date(clinicToday());
   const yesterday = new Date(validFrom.getTime() - 24 * 3600_000);
@@ -256,8 +252,8 @@ async function seedSchedules() {
         data: { deletedAt: new Date() },
       });
       await tx.workingSchedule.createMany({
-        data: WORK_DAYS.flatMap(dayOfWeek =>
-          SHIFTS.map(s => ({
+        data: hours.flatMap((blocks, dayOfWeek) =>
+          blocks.map(s => ({
             dentistId: d.id,
             dayOfWeek,
             startTime: pgTime(s.start),
@@ -287,7 +283,7 @@ async function seedSchedules() {
     dentists++;
   }
   console.log(
-    `✓ Lịch làm việc T2–T7 08:00–12:00, 13:30–19:00: ${dentists} bác sĩ` +
+    `✓ Lịch làm việc ${describeOpeningHours(hours)}: ${dentists} bác sĩ` +
       (reset
         ? ' (lịch cũ kết thúc hôm qua, các ngày đã qua giữ nguyên)'
         : ' (bác sĩ đã có lịch được giữ nguyên)'),
@@ -372,11 +368,13 @@ async function resetPasswords(): Promise<Array<{ email: string; password: string
 
 async function main() {
   console.log('Cấu hình ban đầu phòng khám\n');
+  // Checked before anything is written: a typo in CLINIC_HOURS stops the run.
+  const hours = openingHoursFromEnv();
   const roster = readRoster();
   const created = await seedStaff(roster);
   await seedCatalog();
   await seedAssignments();
-  await seedSchedules();
+  await seedSchedules(hours);
   await seedInventory();
   await seedExpenseCategories();
 

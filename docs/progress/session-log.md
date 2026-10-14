@@ -47,7 +47,13 @@ Lỗi:
 - "Nhận đặt lịch online" mặc định tắt khi tạo bác sĩ qua giao diện.
 - "Nhận bệnh nhân mới" chỉ có tác dụng ở đặt lịch online, và áp cho cả bệnh nhân cũ.
 - Có hai "thời lượng mặc định": hồ sơ bác sĩ và từng dòng lịch làm việc.
-- Thẻ sẵn sàng đếm cả dịch vụ thuộc nhóm đã tắt.
+- ~~Thẻ sẵn sàng đếm cả dịch vụ thuộc nhóm đã tắt.~~ Kiểm lại 14/10: không xảy ra, vì không tắt được nhóm còn dịch vụ đang bật và không bật được dịch vụ trong nhóm đang tắt (`catalog.service.ts:135, 312`).
+
+Đã sửa sau đó (14/10, PR riêng):
+
+- `clinic-setup.ts` đọc giờ làm từ `CLINIC_HOURS` / `CLINIC_SUNDAY_HOURS` (`prisma/clinic-setup/hours.ts`, cùng cách đọc với frontend). Giá trị sai thì script dừng trước khi ghi. `docker-compose.prod.yml` và `docker-compose.external-db.yml` truyền hai biến này vào container `migrate`.
+- Bác sĩ tạo trên giao diện mặc định bật "Nhận đặt lịch online" (backend `employees.service.ts` và form), giống script.
+- Còn mở: "Nhận bệnh nhân mới" chặn cả bệnh nhân cũ ở đặt lịch online (cần chốt cách nhận ra khách cũ); hai "thời lượng mặc định" chỉ cần ghi rõ trong tài liệu.
 
 ### Sửa CI Playwright E2E: PR #44, đã merge vào `main`
 
