@@ -109,7 +109,7 @@ export default function PatientListPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiClinical.patients')}</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-surface-400">
             {t('uiClinical.patientManagement')}
           </p>
         </div>
@@ -173,36 +173,36 @@ export default function PatientListPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
+                  <tr className="border-b border-gray-100 bg-gray-50 dark:border-surface-700 dark:bg-surface-800">
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.patientCode')}</th>
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.fullName')}</th>
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.gender')}</th>
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.phone')}</th>
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.dateOfBirth')}</th>
                     <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiClinical.status')}</th>
-                    <th className="px-4 py-3 font-medium text-gray-600 w-12"></th>
+                    <th className="px-4 py-3 font-medium text-gray-600 w-12 dark:text-surface-300"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {patients.map((patient) => (
                     <tr
                       key={patient.id}
-                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
+                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer dark:border-surface-800 dark:hover:bg-surface-800"
                       onClick={() => navigate(`/patients/${patient.id}`)}
                     >
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-surface-400">
                         {patient.code}
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-surface-100">
                         {patient.fullName}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 dark:text-surface-300">
                         {patient.gender === 'male' ? t('uiClinical.male') : patient.gender === 'female' ? t('uiClinical.female') : t('uiClinical.other')}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 dark:text-surface-300">
                         {patient.phone ? formatPhone(patient.phone) : '-'}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-gray-600 dark:text-surface-300">
                         {patient.dateOfBirth
                           ? formatDate(patient.dateOfBirth)
                           : '-'}
@@ -211,7 +211,7 @@ export default function PatientListPage() {
                         <StatusBadge status={patient.status} />
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu trigger={<MoreHorizontal className="h-4 w-4 text-gray-400" />}>
+                        <DropdownMenu trigger={<MoreHorizontal className="h-4 w-4 text-gray-400 dark:text-surface-400" />}>
                           <DropdownMenuItem
                             variant="danger"
                             icon={<Trash2 className="h-4 w-4" />}
@@ -228,7 +228,7 @@ export default function PatientListPage() {
             </div>
 
             {hasMore && (
-              <div className="flex items-center justify-center border-t border-gray-100 px-4 py-3">
+              <div className="flex items-center justify-center border-t border-gray-100 px-4 py-3 dark:border-surface-700">
                 <Button
                   variant="outline"
                   size="sm"
@@ -251,7 +251,7 @@ export default function PatientListPage() {
         title={t('uiClinical.confirmDeletePatient')}
         size="sm"
       >
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-600 dark:text-surface-300">
           {t('uiClinical.confirmDeletePatientText')}
         </p>
         <div className="mt-4 flex justify-end gap-3">

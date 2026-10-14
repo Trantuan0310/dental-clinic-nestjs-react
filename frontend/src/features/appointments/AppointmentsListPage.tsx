@@ -391,7 +391,7 @@ export default function AppointmentsListPage() {
                 className={cn(
                   'relative -mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                   active
-                    ? 'border-primary-600 text-primary-700'
+                    ? 'border-primary-600 text-primary-700 dark:border-primary-400 dark:text-primary-300'
                     : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700',
                 )}
               >
@@ -516,7 +516,7 @@ export default function AppointmentsListPage() {
                     <td>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50 dark:text-primary-300 dark:hover:bg-primary-500/15"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDetailId(r.id);
@@ -541,7 +541,7 @@ export default function AppointmentsListPage() {
             )}
           </span>
           {isLoading && (
-            <span className="inline-flex items-center gap-1.5 text-primary-600">
+            <span className="inline-flex items-center gap-1.5 text-primary-600 dark:text-primary-300">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('uiScheduling.syncing')}
             </span>
           )}

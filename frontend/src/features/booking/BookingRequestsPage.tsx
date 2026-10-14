@@ -541,7 +541,7 @@ export default function BookingRequestsPage() {
                 setSearch("");
                 setQ("");
               }}
-              className="text-sm text-gray-500 underline"
+              className="text-sm text-gray-500 underline dark:text-surface-400"
             >
               {t('uiScheduling.clearFilters')}
             </button>
@@ -549,7 +549,7 @@ export default function BookingRequestsPage() {
         </form>
         <button
           onClick={() => query.refetch()}
-          className="rounded-md border bg-white px-3 py-2 text-sm"
+          className="rounded-md border bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
         >
           {t('uiScheduling.refresh')}
         </button>
@@ -576,7 +576,7 @@ export default function BookingRequestsPage() {
                 <tr className="border-t" key={row.id}>
                   <td className="px-4 py-3">
                     <div className="font-medium">{row.fullName}</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-surface-400">
                       {row.referenceCode} · {row.phone}
                     </div>
                   </td>
@@ -605,7 +605,7 @@ export default function BookingRequestsPage() {
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => setSelected(row)}
-                      className="rounded-md border px-3 py-1.5 text-teal-800"
+                      className="rounded-md border px-3 py-1.5 text-teal-800 dark:border-surface-600 dark:text-teal-300"
                     >
                       {t('uiScheduling.handleRequest')}
                     </button>
@@ -616,7 +616,7 @@ export default function BookingRequestsPage() {
           </table>
         )}
         {!query.isLoading && !query.isError && !query.data?.length && (
-          <p className="p-8 text-center text-sm text-gray-500">
+          <p className="p-8 text-center text-sm text-gray-500 dark:text-surface-400">
             {t('uiScheduling.noBookingRequests')}
           </p>
         )}
@@ -628,14 +628,14 @@ export default function BookingRequestsPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold">{selected.fullName}</h2>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-surface-400">
                   {selected.referenceCode} · {requestState(t, selected.status)}
                 </p>
               </div>
               <button
                 onClick={() => setSelected(null)}
                 aria-label={t('uiScheduling.close')}
-                className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100"
+                className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100 dark:text-surface-400 dark:hover:bg-surface-700"
               >
                 ✕
               </button>
@@ -724,7 +724,7 @@ export default function BookingRequestsPage() {
                 <button
                   disabled={action.isPending}
                   onClick={() => action.mutate({ path: "called" })}
-                  className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs"
+                  className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs dark:border-amber-700 dark:bg-surface-800 dark:text-surface-100"
                 >
                   {t('uiScheduling.patientCalled')}
                 </button>
@@ -763,7 +763,7 @@ export default function BookingRequestsPage() {
               </p>
             )}
             {selected.status === "EXPIRED" && (
-              <p className="mt-4 rounded bg-slate-100 p-3 text-sm text-gray-700">
+              <p className="mt-4 rounded bg-slate-100 p-3 text-sm text-gray-700 dark:bg-surface-800 dark:text-surface-200">
                 {t('uiScheduling.bookingExpiredHint')}
               </p>
             )}
@@ -774,7 +774,7 @@ export default function BookingRequestsPage() {
                   <select
                     value={patientId}
                     onChange={(e) => setPatientId(e.target.value)}
-                    className="mt-1 w-full rounded-md border bg-white px-3 py-2"
+                    className="mt-1 w-full rounded-md border bg-white px-3 py-2 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
                   >
                     <option value="">
                       {t('uiScheduling.autoMatchOrCreatePatient')}
@@ -824,7 +824,7 @@ export default function BookingRequestsPage() {
                   </div>
                 )}
                 {chosen && selected.email && (
-                  <p className="mt-2 text-xs text-gray-600">
+                  <p className="mt-2 text-xs text-gray-600 dark:text-surface-300">
                     {/* The email was typed on the public form: saved only when ticked (after checking with the patient). */}
                     {!chosen.email || chosen.email.toLowerCase() !== selected.email.toLowerCase() ? (
                       <label className="flex items-center gap-2">
@@ -843,7 +843,7 @@ export default function BookingRequestsPage() {
               </div>
             )}
             {canPropose && (
-              <div className="mt-5 rounded-lg bg-slate-50 p-4">
+              <div className="mt-5 rounded-lg bg-slate-50 p-4 dark:bg-surface-800">
                 <h3 className="font-semibold">{t('uiScheduling.alternativeTime')}</h3>
                 {dentistOptions.isSuccess && dentists.length === 0 && (
                   <p className="mt-2 rounded bg-orange-50 p-2 text-sm text-orange-900">
@@ -856,7 +856,7 @@ export default function BookingRequestsPage() {
                     <select
                       value={proposeDentist}
                       onChange={(e) => setProposeDentist(e.target.value)}
-                      className="mt-1 w-full rounded-md border bg-white px-3 py-2"
+                      className="mt-1 w-full rounded-md border bg-white px-3 py-2 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
                     >
                       <option value="">
                         {dentistOptions.isLoading ? t('uiScheduling.loading') : t('uiScheduling.chooseDentist')}
@@ -897,7 +897,7 @@ export default function BookingRequestsPage() {
                       onClick={() =>
                         action.mutate({ path: "arrived", body: { appointmentId: v.id } })
                       }
-                      className="rounded-md border border-teal-700 px-3 py-1.5 text-teal-800 disabled:opacity-50"
+                      className="rounded-md border border-teal-700 px-3 py-1.5 text-teal-800 disabled:opacity-50 dark:border-teal-500 dark:text-teal-300"
                     >
                       {t('uiScheduling.linkVisit', { time: clinicParts(v.startAt).time, name: v.patient.fullName })}
                     </button>
@@ -930,21 +930,21 @@ export default function BookingRequestsPage() {
                       ["email", t('uiScheduling.emailClearToDelete')],
                     ] as const
                   ).map(([key, label]) => (
-                    <label key={key} className="text-xs text-gray-600">
+                    <label key={key} className="text-xs text-gray-600 dark:text-surface-300">
                       {label}
                       <input
                         value={contact[key]}
                         onChange={(e) => setContact((c) => ({ ...c, [key]: e.target.value }))}
-                        className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-gray-900"
+                        className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
                       />
                     </label>
                   ))}
-                  <label className="text-xs text-gray-600 sm:col-span-2">
+                  <label className="text-xs text-gray-600 sm:col-span-2 dark:text-surface-300">
                     {t('uiScheduling.contactEditReason')}
                     <input
                       value={contact.reason}
                       onChange={(e) => setContact((c) => ({ ...c, reason: e.target.value }))}
-                      className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-gray-900"
+                      className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
                     />
                   </label>
                 </div>
@@ -1054,7 +1054,7 @@ export default function BookingRequestsPage() {
                     })
                   }
                   title={t('uiScheduling.confirmAgreedAlternativeByPhoneHint')}
-                  className="rounded-md border border-teal-700 px-4 py-2 text-sm text-teal-800 disabled:opacity-50"
+                  className="rounded-md border border-teal-700 px-4 py-2 text-sm text-teal-800 disabled:opacity-50 dark:border-teal-500 dark:text-teal-300"
                 >
                   {t('uiScheduling.confirmAlternativeTimeNow')}
                 </button>
@@ -1142,7 +1142,7 @@ export default function BookingRequestsPage() {
                   >
                     {t('uiScheduling.patientCancelledByPhone')}
                   </button>
-                  <label className="flex items-center gap-1 text-xs text-gray-600">
+                  <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-surface-300">
                     <input
                       type="checkbox"
                       checked={spam}

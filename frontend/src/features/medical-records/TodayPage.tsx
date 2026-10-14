@@ -57,16 +57,16 @@ export default function TodayPage() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      scheduled: 'border-gray-300 bg-white',
-      confirmed: 'border-blue-300 bg-blue-50',
-      checked_in: 'border-cyan-300 bg-cyan-50',
-      in_progress: 'border-amber-300 bg-amber-50',
-      completed: 'border-green-300 bg-green-50',
-      cancelled: 'border-red-300 bg-red-50 opacity-50',
-      no_show: 'border-red-300 bg-red-50 opacity-50',
-      left: 'border-orange-300 bg-orange-50 opacity-50',
+      scheduled: 'border-gray-300 bg-white dark:border-surface-600 dark:bg-surface-800',
+      confirmed: 'border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950',
+      checked_in: 'border-cyan-300 bg-cyan-50 dark:border-cyan-700 dark:bg-cyan-950',
+      in_progress: 'border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-950',
+      completed: 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950',
+      cancelled: 'border-red-300 bg-red-50 opacity-50 dark:border-red-800 dark:bg-red-950',
+      no_show: 'border-red-300 bg-red-50 opacity-50 dark:border-red-800 dark:bg-red-950',
+      left: 'border-orange-300 bg-orange-50 opacity-50 dark:border-orange-700 dark:bg-orange-950',
     };
-    return colors[status] || 'border-gray-300 bg-white';
+    return colors[status] || 'border-gray-300 bg-white dark:border-surface-600 dark:bg-surface-800';
   };
 
   return (
@@ -74,10 +74,10 @@ export default function TodayPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
             Hôm nay — {format(currentDate, 'EEEE, dd/MM/yyyy', { locale: vi })}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
             Lịch làm việc hôm nay của bạn
           </p>
         </div>
@@ -98,10 +98,10 @@ export default function TodayPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <div className="text-center">
-            <p className="text-3xl font-bold text-gray-900">
+            <p className="text-3xl font-bold text-gray-900 dark:text-surface-100">
               {isLoading || isError ? '—' : appointments.length}
             </p>
-            <p className="text-sm text-gray-500">Tổng lịch hẹn</p>
+            <p className="text-sm text-gray-500 dark:text-surface-400">Tổng lịch hẹn</p>
           </div>
         </Card>
         <Card>
@@ -109,7 +109,7 @@ export default function TodayPage() {
             <p className="text-3xl font-bold text-amber-600">
               {isLoading || isError ? '—' : checkedIn.length}
             </p>
-            <p className="text-sm text-gray-500">Chờ / đang khám</p>
+            <p className="text-sm text-gray-500 dark:text-surface-400">Chờ / đang khám</p>
           </div>
         </Card>
         <Card>
@@ -117,7 +117,7 @@ export default function TodayPage() {
             <p className="text-3xl font-bold text-green-600">
               {isLoading || isError ? '—' : completed.length}
             </p>
-            <p className="text-sm text-gray-500">Đã hoàn thành</p>
+            <p className="text-sm text-gray-500 dark:text-surface-400">Đã hoàn thành</p>
           </div>
         </Card>
       </div>
@@ -134,7 +134,7 @@ export default function TodayPage() {
             action={{ label: 'Thử lại', onClick: () => refetch() }}
           />
         ) : appointments.length === 0 ? (
-          <p className="text-center py-8 text-gray-500">Không có lịch hẹn nào hôm nay</p>
+          <p className="text-center py-8 text-gray-500 dark:text-surface-400">Không có lịch hẹn nào hôm nay</p>
         ) : (
           <div className="space-y-3">
             {[...appointments]
@@ -149,27 +149,29 @@ export default function TodayPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
                         <div className="text-center">
-                          <p className="text-lg font-bold text-gray-900">
+                          <p className="text-lg font-bold text-gray-900 dark:text-surface-100">
                             {formatTimeOnly(apt.startsAt)}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-surface-400">
                             {apt.durationMinutes} phút
                           </p>
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            {isCurrent && <span className="text-brand-600 font-medium">ĐANG KHÁM</span>}
-                            <p className="font-medium text-gray-900">{apt.patientName}</p>
+                            {isCurrent && (
+                              <span className="font-medium text-brand-600 dark:text-brand-300">ĐANG KHÁM</span>
+                            )}
+                            <p className="font-medium text-gray-900 dark:text-surface-100">{apt.patientName}</p>
                           </div>
                           {apt.patientPhone && (
-                            <p className="text-sm text-gray-500">{apt.patientPhone}</p>
+                            <p className="text-sm text-gray-500 dark:text-surface-400">{apt.patientPhone}</p>
                           )}
                           {apt.chiefComplaint && (
-                            <p className="mt-1 text-sm text-gray-600">
+                            <p className="mt-1 text-sm text-gray-600 dark:text-surface-300">
                               <span className="font-medium">Lý do:</span> {apt.chiefComplaint}
                             </p>
                           )}
-                          <p className="mt-1 text-sm text-gray-400">
+                          <p className="mt-1 text-sm text-gray-400 dark:text-surface-400">
                             Check-in: {apt.checkInAt ? formatTimeOnly(apt.checkInAt) : 'Chưa check-in'}
                           </p>
                         </div>
