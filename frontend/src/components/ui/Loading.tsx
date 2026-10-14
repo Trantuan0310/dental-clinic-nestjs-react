@@ -16,6 +16,7 @@ const SIZE_PX: Record<NonNullable<SpinnerProps['size']>, number> = {
 };
 
 export function Spinner({ size = 'md', className, label }: SpinnerProps) {
+  const { t } = useTranslation();
   return (
     <span role="status" aria-live="polite" className={cn('inline-flex', className)}>
       <Loader2
@@ -23,7 +24,7 @@ export function Spinner({ size = 'md', className, label }: SpinnerProps) {
         style={{ width: SIZE_PX[size], height: SIZE_PX[size] }}
         aria-hidden="true"
       />
-      <span className="sr-only">{label ?? 'Loading'}</span>
+      <span className="sr-only">{label ?? t('uiCommon.table.loading')}</span>
     </span>
   );
 }
@@ -37,7 +38,7 @@ export function PageLoader({ label }: { label?: string }) {
       className="flex flex-col items-center justify-center gap-3 py-16 text-gray-500"
     >
       <Spinner size="lg" />
-      <p className="text-sm">{label ?? t('common.loading')}</p>
+      <p className="text-sm">{label ?? t('uiCommon.table.loading')}</p>
     </div>
   );
 }

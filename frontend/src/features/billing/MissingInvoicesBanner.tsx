@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
@@ -15,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
  * it ("tạo bù"); a voided one opens so it can be re-made.
  */
 export function MissingInvoicesBanner() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canCreate = useAuthStore((s) => s.hasPermission('invoice.create'));
@@ -28,11 +30,11 @@ export function MissingInvoicesBanner() {
   const backfill = useMutation({
     mutationFn: (encounterId: string) => billingApi.createFromEncounter(encounterId),
     onSuccess: (res) => {
-      notify.success(res.created ? `Đã tạo hóa đơn nháp ${res.data.code}` : `Phiên khám đã có hóa đơn ${res.data.code}`);
+      notify.success(res.created ? t('uiOperations.draftInvoiceCreated', { code: res.data.code }) : t('uiOperations.encounterAlreadyHasInvoice', { code: res.data.code }));
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       navigate(`/billing/invoices/${res.data.id}`);
     },
-    onError: (err) => notify.error(getApiErrorMessage(err, 'Không tạo được hóa đơn')),
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiOperations.createInvoiceFailed'))),
   });
 
   if (!canCreate || rows.length === 0) return null;
@@ -41,10 +43,10 @@ export function MissingInvoicesBanner() {
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 font-medium">
           <AlertTriangle className="h-4 w-4" />
-          {rows.length} phiên khám đã đóng nhưng chưa có hóa đơn hợp lệ
+          {t('uiOperations.closedEncountersMissingInvoices', { count: rows.length })}
         </p>
         <button type="button" className="text-sm underline" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'Thu gọn' : 'Xem'}
+          {expanded ? t('uiOperations.collapse') : t('uiOperations.view')}
         </button>
       </div>
       {expanded && (
@@ -52,12 +54,12 @@ export function MissingInvoicesBanner() {
           {rows.map((r) => (
             <li key={r.encounterId} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
               <span>
-                {r.patientName} ({r.patientCode}) • BS {r.dentistName} • đóng {formatDateTime(r.closedAt)}
-                {r.voidedInvoice && <> • hóa đơn {r.voidedInvoice.code} đã hủy</>}
+                {r.patientName} ({r.patientCode}) • {t('uiOperations.dentistAbbrev')} {r.dentistName} • {t('uiOperations.closedAt')} {formatDateTime(r.closedAt)}
+                {r.voidedInvoice && <> • {t('uiOperations.invoiceCode')} {r.voidedInvoice.code} {t('uiOperations.voided')}</>}
               </span>
               {r.voidedInvoice ? (
                 <Button size="sm" variant="outline" onClick={() => navigate(`/billing/invoices/${r.voidedInvoice!.id}`)}>
-                  Mở hóa đơn đã hủy
+                  {t('uiOperations.openVoidedInvoice')}
                 </Button>
               ) : (
                 <Button
@@ -65,7 +67,7 @@ export function MissingInvoicesBanner() {
                   onClick={() => backfill.mutate(r.encounterId)}
                   isLoading={backfill.isPending && backfill.variables === r.encounterId}
                 >
-                  Tạo hóa đơn
+                  {t('uiOperations.createInvoice')}
                 </Button>
               )}
             </li>

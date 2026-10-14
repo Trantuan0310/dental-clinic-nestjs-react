@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Plus, MoreHorizontal, UserX, UserCheck, KeyRound, LockKeyhole } from 'lucide-react';
 import {
@@ -31,8 +32,7 @@ import { BlockingAppointmentsList } from '@/features/staff/BlockingAppointmentsL
 import { blockingAppointments, staffErrorMessage } from '@/features/staff/labels';
 import type { BlockingAppointment } from '@/features/staff/types';
 import type { AdminUser, CreateAdminUserPayload } from '@/types/admin';
-import { NAV_ROLE_HINT } from '@/lib/nav';
-import type { RoleCode } from '@/types/auth';
+import { getRoleLabel } from '@/lib/nav';
 
 /** Messages for the users API business codes (roles/email edits). */
 const USER_ERROR_MESSAGE: Record<string, string> = {
@@ -51,16 +51,10 @@ function userErrorMessage(error: unknown, fallback: string): string {
 
 type TempPasswordTarget = { user: { id: string; email: string }; emailFailed: boolean };
 
-// `user.roles` is `string[]` (custom roles beyond the 3 built-ins are
-// possible), so this falls back to the raw code for anything NAV_ROLE_HINT
-// doesn't recognize instead of assuming every value is a known RoleCode.
-function roleLabel(code: string): string {
-  return NAV_ROLE_HINT[code as RoleCode] ?? code;
-}
-
 const PAGE_SIZE = 50;
 
 export default function UsersPage() {
+  const { t, i18n } = useTranslation();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -97,14 +91,14 @@ export default function UsersPage() {
       const created = await createMutation.mutateAsync(payload);
       setShowCreateModal(false);
       if (created.inviteSent) {
-        notify.success(`Đã tạo người dùng và gửi lời mời tới ${created.email}`);
+        notify.success(t('uiWorkforce.userCreatedInvite', { email: created.email }));
       } else {
         // Never claim an invite that did not leave the server.
-        notify.warning('Đã tạo người dùng. Chưa gửi được email — dùng Cấp mật khẩu tạm.');
+        notify.warning(t('uiWorkforce.userCreatedEmailFailed'));
         setTempPassword({ user: { id: created.id, email: created.email }, emailFailed: true });
       }
     } catch (err) {
-      notify.error(userErrorMessage(err, 'Không thể tạo người dùng. Vui lòng thử lại.'));
+      notify.error(userErrorMessage(err, t('uiWorkforce.createUserError')));
     }
   };
 
@@ -115,20 +109,20 @@ export default function UsersPage() {
         id: deactivateTarget.id,
         reason: deactivateReason.trim() || undefined,
       });
-      notify.success('Đã vô hiệu hóa người dùng');
+      notify.success(t('uiWorkforce.userDeactivated'));
       setDeactivateTarget(null);
       setDeactivateReason('');
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể vô hiệu hóa người dùng. Vui lòng thử lại.'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.deactivateUserError')));
     }
   };
 
   const handleReactivate = async (user: AdminUser) => {
     try {
       await reactivateMutation.mutateAsync(user.id);
-      notify.success('Đã kích hoạt lại người dùng');
+      notify.success(t('uiWorkforce.userReactivated'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể kích hoạt lại người dùng. Vui lòng thử lại.'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.reactivateUserError')));
     }
   };
 
@@ -140,26 +134,26 @@ export default function UsersPage() {
           `Đã gửi link ${result.kind === 'setup' ? 'thiết lập tài khoản' : 'đặt lại mật khẩu'} tới ${user.email} (hiệu lực ${result.expiresInMinutes} phút)`,
         );
       } else {
-        notify.warning('Chưa gửi được email — dùng Cấp mật khẩu tạm.');
+        notify.warning(t('uiWorkforce.emailNotSent'));
         setTempPassword({ user, emailFailed: true });
       }
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không gửi được link. Vui lòng thử lại.'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.linkNotSent')));
     }
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Người dùng</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Quản lý tài khoản nhân viên phòng khám
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiWorkforce.users')}</h1>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-surface-400">
+            {t('uiWorkforce.userDescription')}
           </p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4" />
-          Tạo người dùng
+          {t('uiWorkforce.createUser')}
         </Button>
       </div>
 
@@ -168,7 +162,7 @@ export default function UsersPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <SearchInput
-                placeholder="Tìm theo tên, email..."
+                placeholder={t('uiWorkforce.searchUsers')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onClear={() => setSearch('')}
@@ -176,14 +170,14 @@ export default function UsersPage() {
             </div>
             <div className="flex gap-2">
               <select
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="all">Tất cả</option>
-                <option value="ACTIVE">Hoạt động</option>
-                <option value="PENDING_SETUP">Chờ thiết lập</option>
-                <option value="DEACTIVATED">Đã vô hiệu</option>
+                <option value="all">{t('uiWorkforce.all')}</option>
+                <option value="ACTIVE">{t('uiWorkforce.active')}</option>
+                <option value="PENDING_SETUP">{t('uiWorkforce.pendingSetup')}</option>
+                <option value="DEACTIVATED">{t('uiWorkforce.deactivated')}</option>
               </select>
             </div>
           </div>
@@ -197,20 +191,20 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 font-medium text-gray-600">Email</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Họ tên</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Vai trò</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Trạng thái</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Đăng nhập cuối</th>
+                <tr className="border-b border-gray-100 bg-gray-50 dark:border-surface-800 dark:bg-surface-800">
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.email')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.fullName')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.role')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.status')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.lastLogin')}</th>
                   <th className="px-4 py-3 font-medium text-gray-600 w-12"></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.map((user) => (
-                  <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900">{user.email}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{user.fullName}</td>
+                  <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50 dark:border-surface-800 dark:hover:bg-surface-800/60">
+                    <td className="px-4 py-3 text-gray-900 dark:text-surface-100">{user.email}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-surface-100">{user.fullName}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
                         {user.roles.map((role) => (
@@ -218,16 +212,16 @@ export default function UsersPage() {
                             key={role}
                             className="inline-flex rounded bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
                           >
-                            {roleLabel(role)}
+                            {getRoleLabel(role)}
                           </span>
                         ))}
                         {user.roles.includes('dentist') && user.hasDentistProfile === false && (
                           <Link
                             to="/staff"
                             className="inline-flex rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:underline"
-                            title="Tài khoản có vai trò Bác sĩ nhưng chưa có hồ sơ bác sĩ: chưa có màu lịch, dịch vụ, đặt lịch online. Tạo hồ sơ ở trang Nhân sự."
+                            title={t('uiWorkforce.dentistProfileMissing')}
                           >
-                            Chưa có hồ sơ bác sĩ
+                            {t('uiWorkforce.dentistProfileMissing')}
                           </Link>
                         )}
                       </div>
@@ -235,17 +229,17 @@ export default function UsersPage() {
                     <td className="px-4 py-3">
                       <StatusBadge status={user.status.toLowerCase()} />
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
+                    <td className="px-4 py-3 text-gray-500 text-xs dark:text-surface-400">
                       {user.lastLoginAt
-                        ? new Date(user.lastLoginAt).toLocaleString('vi-VN')
-                        : 'Chưa đăng nhập'}
+                        ? new Date(user.lastLoginAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US')
+                        : t('uiWorkforce.neverLoggedIn')}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button
                           className="rounded p-1 hover:bg-gray-100"
                           onClick={() => setEditingUser(user)}
-                          title="Sửa"
+                          title={t('uiWorkforce.edit')}
                         >
                           <MoreHorizontal className="h-4 w-4 text-gray-400" />
                         </button>
@@ -254,7 +248,7 @@ export default function UsersPage() {
                             className="rounded p-1 hover:bg-green-50"
                             onClick={() => handleReactivate(user)}
                             disabled={reactivateMutation.isPending && reactivateMutation.variables === user.id}
-                            title="Kích hoạt lại"
+                            title={t('uiWorkforce.reactivate')}
                           >
                             <UserCheck className="h-4 w-4 text-green-500" />
                           </button>
@@ -266,10 +260,10 @@ export default function UsersPage() {
                               disabled={sendLinkMutation.isPending && sendLinkMutation.variables === user.id}
                               title={
                                 user.status.toLowerCase() === 'pending_setup'
-                                  ? 'Gửi lại link thiết lập tài khoản'
-                                  : 'Gửi link đặt lại mật khẩu'
+                                  ? t('uiWorkforce.resendSetupLink')
+                                  : t('uiWorkforce.resetPasswordLink')
                               }
-                              aria-label={`Gửi link đặt mật khẩu cho ${user.email}`}
+                              aria-label={t('uiWorkforce.sendPasswordLink', { email: user.email })}
                             >
                               <KeyRound className="h-4 w-4 text-brand-500" />
                             </button>
@@ -277,8 +271,8 @@ export default function UsersPage() {
                               <button
                                 className="rounded p-1 hover:bg-amber-50"
                                 onClick={() => setTempPassword({ user, emailFailed: false })}
-                                title="Cấp mật khẩu tạm (không cần email)"
-                                aria-label={`Cấp mật khẩu tạm cho ${user.email}`}
+                                title={t('uiWorkforce.tempPasswordTitle')}
+                                aria-label={t('uiWorkforce.tempPasswordFor', { email: user.email })}
                               >
                                 <LockKeyhole className="h-4 w-4 text-amber-500" />
                               </button>
@@ -286,7 +280,7 @@ export default function UsersPage() {
                             <button
                               className="rounded p-1 hover:bg-red-50"
                               onClick={() => setDeactivateTarget(user)}
-                              title="Vô hiệu hóa"
+                              title={t('uiWorkforce.deactivate')}
                             >
                               <UserX className="h-4 w-4 text-red-400" />
                             </button>
@@ -303,7 +297,7 @@ export default function UsersPage() {
 
         {filteredUsers.length === 0 && !isLoading && (
           <div className="p-6 text-center text-gray-500">
-            Không tìm thấy người dùng nào
+            {t('uiWorkforce.noUsers')}
           </div>
         )}
       </Card>
@@ -335,32 +329,32 @@ export default function UsersPage() {
       <Modal
         isOpen={!!deactivateTarget}
         onClose={() => { setDeactivateTarget(null); setDeactivateReason(''); }}
-        title="Xác nhận vô hiệu hóa người dùng"
+        title={t('uiWorkforce.deactivateConfirmTitle')}
         size="sm"
       >
         <p className="text-sm text-gray-600">
-          Vô hiệu hóa <strong>{deactivateTarget?.fullName}</strong>? Tài khoản sẽ bị đăng xuất
-          khỏi mọi phiên đang hoạt động và không thể đăng nhập lại cho đến khi được kích hoạt lại.
+          {t('uiWorkforce.deactivateDescription')} <strong>{deactivateTarget?.fullName}</strong>{' '}
+          {t('uiWorkforce.deactivateDescriptionEnd')}
         </p>
         <div className="mt-3">
           <Textarea
-            label="Lý do (không bắt buộc)"
+            label={t('uiWorkforce.reasonOptionalUser')}
             value={deactivateReason}
             onChange={(e) => setDeactivateReason(e.target.value)}
-            placeholder="VD: Nghỉ việc, chuyển công tác..."
+            placeholder={t('uiWorkforce.reasonPlaceholder')}
             rows={2}
           />
         </div>
         <div className="mt-4 flex justify-end gap-3">
           <Button variant="outline" onClick={() => { setDeactivateTarget(null); setDeactivateReason(''); }}>
-            Hủy
+            {t('uiWorkforce.cancel')}
           </Button>
           <Button
             variant="danger"
             isLoading={deactivateMutation.isPending}
             onClick={handleDeactivate}
           >
-            Vô hiệu hóa
+            {t('uiWorkforce.deactivate')}
           </Button>
         </div>
       </Modal>
@@ -383,6 +377,7 @@ function CreateUserModal({
   onSubmit: (payload: CreateAdminUserPayload) => void;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [roleId, setRoleId] = useState('');
@@ -397,10 +392,10 @@ function CreateUserModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Tạo người dùng mới" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiWorkforce.createUserTitle')} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
-          label="Email"
+          label={t('uiWorkforce.email')}
           type="email"
           required
           value={email}
@@ -408,25 +403,25 @@ function CreateUserModal({
           placeholder="email@gensmile.vn"
         />
         <Input
-          label="Họ và tên"
+          label={t('uiWorkforce.fullName')}
           required
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
           placeholder="Nguyễn Văn A"
         />
         <Select
-          label="Vai trò"
+          label={t('uiWorkforce.role')}
           value={roleId}
           onChange={(e) => setRoleId(e.target.value)}
           options={roles.map((r) => ({ value: r.id, label: r.name }))}
-          placeholder="Chọn vai trò"
+          placeholder={t('uiWorkforce.selectRole')}
         />
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
           <Button variant="outline" type="button" onClick={onClose}>
-            Hủy
+            {t('uiWorkforce.cancel')}
           </Button>
           <Button type="submit" isLoading={isLoading} disabled={!email || !fullName || !roleId}>
-            Tạo
+            {t('uiWorkforce.create')}
           </Button>
         </div>
       </form>
@@ -443,6 +438,7 @@ function EditUserModal({
   onClose: () => void;
   onSendLink: () => void;
 }) {
+  const { t } = useTranslation();
   const me = useAuthStore((s) => s.user?.id);
   const { data: rolesData } = useRoles();
   const roles = rolesData?.data ?? [];
@@ -478,38 +474,38 @@ function EditUserModal({
         const roleIds = roles.filter((r) => roleCodes.includes(r.code)).map((r) => r.id);
         await updateRoles.mutateAsync({ id: user.id, roleIds });
       }
-      notify.success('Cập nhật thành công');
+      notify.success(t('uiWorkforce.updateSuccess'));
       if (emailChanged && user.status === 'pending_setup') {
-        notify.info('Email đăng nhập đã đổi: gửi lại link thiết lập tới email mới.');
+        notify.info(t('uiWorkforce.emailUpdatedNotice'));
       }
       onClose();
     } catch (err) {
       setBlocking(blockingAppointments(err));
-      notify.error(userErrorMessage(err, 'Không thể cập nhật. Vui lòng thử lại.'));
+      notify.error(userErrorMessage(err, t('uiWorkforce.updateUserError')));
     }
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Sửa người dùng" size="md">
+    <Modal isOpen onClose={onClose} title={t('uiWorkforce.editUserTitle')} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
-          label="Email đăng nhập"
+          label={t('uiWorkforce.loginEmail')}
           type="email"
           required
           maxLength={255}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          hint="Không phân biệt chữ hoa, chữ thường. Người dùng đăng nhập bằng email mới ngay sau khi lưu."
+          hint={t('uiWorkforce.emailUpdateHint')}
         />
         <Input
-          label="Họ và tên"
+          label={t('uiWorkforce.fullName')}
           required
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
-          hint="Đồng bộ sang hồ sơ nhân viên đã gắn."
+          hint={t('uiWorkforce.nameUpdateHint')}
         />
         <fieldset>
-          <legend className="mb-1 text-sm font-medium text-gray-700 dark:text-surface-200">Vai trò</legend>
+          <legend className="mb-1 text-sm font-medium text-gray-700 dark:text-surface-200">{t('uiWorkforce.role')}</legend>
           <div className="space-y-1">
             {roles.map((r) => {
               const lockSelfAdmin = isSelf && r.code === 'clinic_admin' && user.roles.includes('clinic_admin');
@@ -523,7 +519,7 @@ function EditUserModal({
                     <>
                       {r.name}
                       {lockSelfAdmin && (
-                        <span className="ml-1 text-xs text-gray-500">(không tự gỡ vai trò quản trị của mình)</span>
+                        <span className="ml-1 text-xs text-gray-500">({t('uiWorkforce.cannotRemoveOwnAdmin')})</span>
                       )}
                     </>
                   }
@@ -533,9 +529,9 @@ function EditUserModal({
           </div>
           {roleCodes.includes('dentist') && user.hasDentistProfile === false && (
             <p className="mt-1 text-xs text-amber-700">
-              Để bác sĩ có màu lịch, dịch vụ và nhận đặt lịch online, tạo hồ sơ bác sĩ ở trang{' '}
+              {t('uiWorkforce.createDentistProfileHint')}{' '}
               <Link to="/staff" className="underline">
-                Nhân sự
+                {t('uiWorkforce.employees')}
               </Link>
               .
             </p>
@@ -543,8 +539,8 @@ function EditUserModal({
           {rolesChanged && (
             <p className="mt-1 text-xs text-gray-500">
               {isSelf
-                ? 'Đổi vai trò sẽ kết thúc các phiên của bạn: bạn cần đăng nhập lại sau khi lưu.'
-                : 'Đổi vai trò sẽ đăng xuất người dùng khỏi các phiên đang mở.'}
+                ? t('uiWorkforce.roleChangeSelfNotice')
+                : t('uiWorkforce.roleChangeUserNotice')}
             </p>
           )}
         </fieldset>
@@ -556,20 +552,20 @@ function EditUserModal({
           <div>
             {user.status === 'pending_setup' && (
               <Button variant="ghost" type="button" onClick={onSendLink}>
-                Gửi lại link thiết lập
+                {t('uiWorkforce.resendSetupLink')}
               </Button>
             )}
           </div>
           <div className="flex gap-3">
             <Button variant="outline" type="button" onClick={onClose}>
-              Hủy
+              {t('uiWorkforce.cancel')}
             </Button>
             <Button
               type="submit"
               isLoading={saving}
               disabled={roleCodes.length === 0 || !fullName.trim() || !normalizedEmail}
             >
-              Lưu
+              {t('uiWorkforce.save')}
             </Button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -14,6 +15,7 @@ import { useAuthStore } from '@/stores/authStore';
 import type { StockMovementType } from '@/types/inventory';
 
 export default function InventoryItemDetailPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -68,7 +70,7 @@ export default function InventoryItemDetailPage() {
       setAdjustmentReason('');
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể điều chỉnh tồn kho'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.adjustInventoryFailed')));
     },
   });
 
@@ -83,9 +85,9 @@ export default function InventoryItemDetailPage() {
   if (!item) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500">Không tìm thấy vật tư</p>
+        <p className="text-gray-500">{t('uiOperations.itemNotFound')}</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate('/inventory')}>
-          Quay lại danh sách
+          {t('uiOperations.backToList')}
         </Button>
       </div>
     );
@@ -114,9 +116,9 @@ export default function InventoryItemDetailPage() {
   // not update, so "Kiểm kê" never appears for her rather than 403ing on
   // submit.
   const allAdjustmentTypes: { value: StockMovementType; label: string; icon: typeof Plus; permission: string }[] = [
-    { value: 'STOCK_IN', label: 'Nhập kho', icon: Plus, permission: 'inventory.stock_in' },
-    { value: 'STOCK_OUT', label: 'Xuất kho', icon: Minus, permission: 'inventory.stock_out' },
-    { value: 'ADJUSTMENT', label: 'Kiểm kê', icon: Settings, permission: 'inventory.update' },
+    { value: 'STOCK_IN', label: t('uiOperations.stockIn'), icon: Plus, permission: 'inventory.stock_in' },
+    { value: 'STOCK_OUT', label: t('uiOperations.stockOut'), icon: Minus, permission: 'inventory.stock_out' },
+    { value: 'ADJUSTMENT', label: t('uiOperations.stockAdjustment'), icon: Settings, permission: 'inventory.update' },
   ];
   const adjustmentTypes = allAdjustmentTypes.filter((t) => hasPermission(t.permission));
 
@@ -145,7 +147,7 @@ export default function InventoryItemDetailPage() {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">{item.name}</h1>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{item.name}</h1>
             <StatusBadge status={stockStatus} />
           </div>
           <p className="mt-0.5 text-sm text-gray-500 font-mono">{item.code}</p>
@@ -153,7 +155,7 @@ export default function InventoryItemDetailPage() {
         <PermissionGuard anyOf={['inventory.stock_in', 'inventory.stock_out', 'inventory.update']}>
           <Button onClick={() => setShowAdjustModal(true)}>
             <Settings className="h-4 w-4" />
-            Điều chỉnh
+            {t('uiOperations.adjust')}
           </Button>
         </PermissionGuard>
       </div>
@@ -162,35 +164,35 @@ export default function InventoryItemDetailPage() {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-3">
           {/* Item Info */}
-          <Card title="Thông tin vật tư">
+          <Card title={t('uiOperations.itemInformation')}>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <p className="text-sm text-gray-500">Loại</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.category')}</p>
                 <p className="font-medium">{item.category?.name ?? '-'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Đơn vị</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.unit')}</p>
                 <p className="font-medium">{item.unit}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Nhà cung cấp</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.supplier')}</p>
                 <p className="font-medium">{item.supplier || '-'}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Trạng thái</p>
-                <p className="font-medium">{item.status === 'ACTIVE' ? 'Hoạt động' : 'Ngừng sử dụng'}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.status')}</p>
+                <p className="font-medium">{item.status === 'ACTIVE' ? t('uiOperations.active') : t('uiOperations.inactive')}</p>
               </div>
             </div>
             {item.description && (
               <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="text-sm text-gray-500">Mô tả</p>
-                <p className="text-sm text-gray-700">{item.description}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.description')}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{item.description}</p>
               </div>
             )}
           </Card>
 
           {/* Stock Movement History */}
-          <Card title="Lịch sử xuất nhập" actions={<Link to={`/inventory/movements?itemId=${id}`} className="text-sm text-brand-600 hover:underline">Xem tất cả</Link>}>
+          <Card title={t('uiOperations.stockMovementHistory')} actions={<Link to={`/inventory/movements?itemId=${id}`} className="text-sm text-brand-600 hover:underline dark:text-brand-400">{t('uiOperations.viewAll')}</Link>}>
             {movementsList.length > 0 ? (
               <div className="space-y-2">
                 {movementsList.slice(0, 10).map((movement) => (
@@ -209,67 +211,67 @@ export default function InventoryItemDetailPage() {
                           {movement.quantity > 0 ? '+' : ''}{movement.quantity}
                         </span>
                       </div>
-                      <p className="text-gray-500">
-                        {format(new Date(movement.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })} • Còn lại: {movement.balanceAfter}
+                      <p className="text-gray-500 dark:text-gray-400">
+                        {format(new Date(movement.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })} • {t('uiOperations.remaining')}: {movement.balanceAfter}
                       </p>
                       {movement.reason && (
-                        <p className="text-xs text-gray-400">{movement.reason}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{movement.reason}</p>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Chưa có lịch sử xuất nhập</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.noStockMovements')}</p>
             )}
           </Card>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-3">
-          <Card title="Tồn kho">
+          <Card title={t('uiOperations.inventoryStock')}>
             <div className="text-center">
               <p className={`text-4xl font-bold ${
-                stockStatus === 'out_of_stock' ? 'text-red-600' : stockStatus === 'low_stock' ? 'text-amber-600' : 'text-gray-900'
+                stockStatus === 'out_of_stock' ? 'text-red-600 dark:text-red-400' : stockStatus === 'low_stock' ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'
               }`}>
                 {item.currentQuantity}
               </p>
-              <p className="text-sm text-gray-500">{item.unit}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{item.unit}</p>
             </div>
 
             <div className="mt-3 space-y-1.5">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Mức tối thiểu</span>
-                <span className={item.currentQuantity < item.minStockLevel ? 'text-amber-600 font-medium' : 'text-gray-700'}>
+                <span className="text-gray-500 dark:text-gray-400">{t('uiOperations.minimum')}</span>
+                <span className={item.currentQuantity < item.minStockLevel ? 'text-amber-600 font-medium dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'}>
                   {item.minStockLevel}
                 </span>
               </div>
               {item.maxStockLevel && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Mức tối đa</span>
-                  <span className="text-gray-700">{item.maxStockLevel}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{t('uiOperations.maximum')}</span>
+                  <span className="text-gray-700 dark:text-gray-300">{item.maxStockLevel}</span>
                 </div>
               )}
             </div>
 
             {stockStatus !== 'in_stock' && (
               <div className={`mt-3 rounded p-2.5 ${
-                stockStatus === 'out_of_stock' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                stockStatus === 'out_of_stock' ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
               }`}>
                 <p className="text-sm font-medium">
-                  {stockStatus === 'out_of_stock' ? 'Hết hàng!' : 'Sắp hết hàng'}
+                  {stockStatus === 'out_of_stock' ? t('uiOperations.outOfStock') : t('uiOperations.runningLow')}
                 </p>
                 <p className="text-xs mt-0.5">
-                  Cần nhập thêm {item.minStockLevel - item.currentQuantity} {item.unit} để đạt mức tối thiểu
+                  {t('uiOperations.restockToMinimum', { quantity: item.minStockLevel - item.currentQuantity, unit: item.unit })}
                 </p>
               </div>
             )}
           </Card>
 
-          <Card title="Giá">
+          <Card title={t('uiOperations.price')}>
             <div className="space-y-1.5">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Giá nhập</span>
+                <span className="text-gray-500 dark:text-gray-400">{t('uiOperations.purchasePrice')}</span>
                 <span className="font-medium">{formatCurrency(item.costPrice)}</span>
               </div>
             </div>
@@ -281,17 +283,17 @@ export default function InventoryItemDetailPage() {
       <Modal
         isOpen={showAdjustModal}
         onClose={() => setShowAdjustModal(false)}
-        title="Điều chỉnh tồn kho"
+        title={t('uiOperations.adjustInventory')}
         size="sm"
       >
         <div className="space-y-3">
-          <div className="rounded-lg bg-gray-50 p-2.5">
-            <p className="text-sm text-gray-600">Tồn hiện tại</p>
+          <div className="rounded-lg bg-gray-50 p-2.5 dark:bg-surface-800">
+            <p className="text-sm text-gray-600 dark:text-gray-300">{t('uiOperations.currentStock')}</p>
             <p className="text-lg font-semibold">{item.currentQuantity} {item.unit}</p>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Loại điều chỉnh</label>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">{t('uiOperations.adjustmentType')}</label>
             <div className="grid grid-cols-2 gap-2">
               {adjustmentTypes.map((type) => (
                 <button
@@ -300,7 +302,7 @@ export default function InventoryItemDetailPage() {
                   className={`rounded border p-1.5 text-sm transition-colors ${
                     adjustmentType === type.value
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-gray-200 hover:bg-gray-50'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-surface-600 dark:text-gray-200 dark:hover:bg-surface-800'
                   }`}
                 >
                   {type.label}
@@ -310,41 +312,41 @@ export default function InventoryItemDetailPage() {
           </div>
 
           <Input
-            label="Số lượng"
+            label={t('uiOperations.quantity')}
             type="number"
             min="1"
             value={adjustmentQuantity}
             onChange={(e) => setAdjustmentQuantity(e.target.value)}
-            placeholder="VD: 50"
+            placeholder={t('uiOperations.quantityExample')}
           />
 
           <Textarea
-            label="Lý do"
+            label={t('uiOperations.reason')}
             value={adjustmentReason}
             onChange={(e) => setAdjustmentReason(e.target.value)}
-            placeholder="VD: Nhập hàng từ nhà cung cấp"
+            placeholder={t('uiOperations.stockInReasonExample')}
             rows={2}
           />
 
           {adjustmentQuantity && previewQuantity !== null && (
-            <div className={`rounded-lg p-2.5 ${previewQuantity < 0 ? 'bg-red-50' : 'bg-brand-50'}`}>
-              <p className={`text-sm ${previewQuantity < 0 ? 'text-red-700' : 'text-brand-700'}`}>
-                Sau điều chỉnh:{' '}
+            <div className={`rounded-lg p-2.5 ${previewQuantity < 0 ? 'bg-red-50 dark:bg-red-950/40' : 'bg-brand-50 dark:bg-brand-950/40'}`}>
+              <p className={`text-sm ${previewQuantity < 0 ? 'text-red-700 dark:text-red-300' : 'text-brand-700 dark:text-brand-300'}`}>
+                {t('uiOperations.afterAdjustment')}{' '}
                 <span className="font-semibold">
                   {previewQuantity} {item.unit}
                 </span>
               </p>
               {previewQuantity < 0 && (
-                <p className="mt-1 text-xs text-red-600">
-                  Số lượng điều chỉnh vượt quá tồn kho hiện có ({item.currentQuantity} {item.unit}).
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  {t('uiOperations.adjustmentExceedsStock', { quantity: item.currentQuantity, unit: item.unit })}
                 </p>
               )}
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 dark:border-surface-700">
             <Button variant="outline" onClick={() => setShowAdjustModal(false)}>
-              Hủy
+              {t('uiOperations.cancel')}
             </Button>
             <Button
               onClick={() => adjustMutation.mutate()}
@@ -357,7 +359,7 @@ export default function InventoryItemDetailPage() {
                 previewQuantity < 0
               }
             >
-              Xác nhận
+              {t('uiOperations.confirm')}
             </Button>
           </div>
         </div>

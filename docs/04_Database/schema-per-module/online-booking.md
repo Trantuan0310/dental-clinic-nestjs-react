@@ -137,6 +137,59 @@ a one-time lookup code.
 - **Permissions.** `booking_request.read` and `booking_request.manage` are
   granted to `clinic_admin` and `receptionist`.
 
+## Emails to the patient
+
+Sent only to patients (or requesters) with an email. `EMAIL_MOCK=true` logs
+instead of sending; `APPOINTMENT_EMAIL_NOTICES=false` turns off the visit
+emails below (not the online-request emails).
+
+**Online request** (`BookingService`, to the address typed on the form):
+
+| When | Subject |
+|---|---|
+| Request sent | Đã nhận yêu cầu đặt lịch (no name: the form is open to anyone) |
+| Front desk proposes another time | Phòng khám đề xuất giờ khám khác (time, dentist, note; fresh link) |
+| Front desk asks for details | Phòng khám cần bổ sung thông tin (fresh link) |
+| Confirmed | Lịch hẹn đã được xác nhận (time, dentist, service, address, cancel deadline; fresh link) |
+| Declined (not as spam) | Kết quả yêu cầu đặt lịch |
+| Withdrawn by the requester online | Đã hủy yêu cầu đặt lịch theo yêu cầu của bạn |
+| Cancelled by phone | Đã hủy yêu cầu đặt lịch theo yêu cầu của bạn |
+| Confirmed visit cancelled from the link | Đã hủy lịch hẹn theo yêu cầu của bạn |
+| Expired | Yêu cầu đặt lịch đã quá hạn (not sent if the patient has another visit that day) |
+| Link resent / email corrected | Đường link quản lý yêu cầu đặt lịch |
+
+**Booked visits** (`AppointmentNoticesService`, to the patient record's email,
+however the visit was booked):
+
+| When | Subject |
+|---|---|
+| Front desk books a visit (`APPOINTMENT_CREATED_EVENT`; not a walk-in, not a visit confirmed from an online request) | Xác nhận lịch hẹn <time> |
+| Cancelled with "Phòng khám hủy" (`byClinic`) | Phòng khám phải hủy lịch hẹn của bạn (apology) |
+| Cancelled otherwise | Lịch hẹn đã bị hủy (neutral: not every staff cancel is the patient's request) |
+| Moved with "Phòng khám dời" (`byClinic`) | Phòng khám dời lịch hẹn của bạn (old and new time, apology) |
+| Moved otherwise | Lịch hẹn đã được dời (old and new time) |
+| Same time, another dentist | Lịch hẹn đổi bác sĩ |
+| Day-ahead reminder | Nhắc lịch khám <time> |
+
+The staff's cancel reason is never put in an email: it is an internal note.
+Visits booked online carry a link to their status page.
+
+**Reminders.** `BookingCron` runs `sendDueReminders` hourly. A visit is
+reminded once (claimed before sending) when it starts within the next 24
+hours and more than 30 minutes ahead, and was booked at least 2 hours before
+its start (a visit booked for this afternoon needs none). Nothing is sent
+21:00–07:00; the 07:00 run catches an early visit booked the evening before.
+A visit whose day no longer stands (closed, time-off, outside the dentist's
+hours, dentist not taking bookings) is not reminded but marked `BLOCKED`; a
+send the mail server refused is retried up to 3 runs (`FAILED`). Both are
+listed for the front desk (`GET /booking-requests/reminder-issues`) and
+emailed to `BOOKING_NOTIFY_EMAILS` as "Lịch hẹn cần gọi khách".
+
+**To the clinic** (`BOOKING_NOTIFY_EMAILS`, comma separated): every request
+event the front desk must act on (new request, details sent, proposal
+accepted or refused, withdrawn, visit cancelled from the link), with
+`[GẤP]` under 12 hours ahead, and the reminder issues above.
+
 ## Upgrading the gensmile.online VPS
 
 The VPS ran the branch `vps-local-postgres-demo-2026-09-23`. Its own migrations

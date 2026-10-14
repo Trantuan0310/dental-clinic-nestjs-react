@@ -11,14 +11,14 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useTranslation } from 'react-i18next';
 
 function rowInteractionProps<TData>(onRowClick: ((row: TData) => void) | undefined, row: TData) {
   if (!onRowClick) return {};
   return {
-    role: 'button' as const,
     tabIndex: 0,
     onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
         e.preventDefault();
         onRowClick(row);
       }
@@ -57,6 +57,7 @@ export function DataTable<TData>({
   virtual = false,
   estimatedRowHeight = 44,
 }: DataTableProps<TData>) {
+  const { t } = useTranslation();
   const [sorting, setSorting] = useState<SortingState>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +66,7 @@ export function DataTable<TData>({
     columns,
     state: { sorting },
     onSortingChange: setSorting,
+    getRowId: rowKey,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: virtual ? getCoreRowModel() : getPaginationRowModel(),
@@ -79,6 +81,8 @@ export function DataTable<TData>({
     overscan: 8,
   });
 
+  const virtualRows = virtual ? rowVirtualizer.getVirtualItems() : [];
+
   return (
     <div className={cn('overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-surface-700 dark:bg-surface-900', className)}>
       <div
@@ -86,7 +90,7 @@ export function DataTable<TData>({
         className={cn('overflow-x-auto', virtual && 'overflow-y-auto')}
         style={virtual ? { maxHeight: 480 } : undefined}
       >
-        <table className="table-base">
+        <table className="table-base" aria-busy={isLoading || undefined}>
           <thead>
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
@@ -94,12 +98,12 @@ export function DataTable<TData>({
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
                   return (
-                    <th key={header.id} className={cn('whitespace-nowrap', canSort && 'cursor-pointer select-none')}>
+                    <th key={header.id} scope="col" aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : undefined} className={cn('whitespace-nowrap', canSort && 'cursor-pointer select-none')}>
                       {canSort ? (
                         <button
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-surface-100"
+                          className="inline-flex items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 hover:text-gray-900 dark:hover:text-surface-100"
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {sorted === 'asc' ? (
@@ -120,36 +124,36 @@ export function DataTable<TData>({
             ))}
           </thead>
           {virtual ? (
-            <tbody style={{ display: 'block', height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+            <tbody>
+              {!isLoading && virtualRows.length > 0 && (
+                <tr aria-hidden="true"><td colSpan={columns.length} style={{ height: virtualRows[0].start, padding: 0, border: 0 }} /></tr>
+              )}
               {isLoading ? (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">
-                    Đang tải...
+                    {t('uiCommon.table.loading')}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="p-0">
-                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">Không có dữ liệu</div>}
+                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiCommon.table.empty')}</div>}
                   </td>
                 </tr>
               ) : (
-                rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                virtualRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
                   return (
                     <tr
                       key={rowKey ? rowKey(row.original) : row.id}
-                      onClick={() => onRowClick?.(row.original)}
-                      {...rowInteractionProps(onRowClick, row.original)}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        transform: `translateY(${virtualRow.start}px)`,
-                        display: 'table',
-                        tableLayout: 'auto',
+                      onClick={(event) => {
+                        if (!(event.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"], [role="checkbox"]')) {
+                          onRowClick?.(row.original);
+                        }
                       }}
+                      {...rowInteractionProps(onRowClick, row.original)}
+                      data-index={virtualRow.index}
+                      ref={rowVirtualizer.measureElement}
                       className={cn(
                         onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
                       )}
@@ -161,26 +165,33 @@ export function DataTable<TData>({
                   );
                 })
               )}
+              {!isLoading && virtualRows.length > 0 && (
+                <tr aria-hidden="true"><td colSpan={columns.length} style={{ height: rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end, padding: 0, border: 0 }} /></tr>
+              )}
             </tbody>
           ) : (
             <tbody>
               {isLoading ? (
                 <tr>
                   <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">
-                    Đang tải...
+                    {t('uiCommon.table.loading')}
                   </td>
                 </tr>
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="p-0">
-                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">Không có dữ liệu</div>}
+                    {emptyState ?? <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiCommon.table.empty')}</div>}
                   </td>
                 </tr>
               ) : (
                 table.getRowModel().rows.map((row) => (
                   <tr
                     key={rowKey ? rowKey(row.original) : row.id}
-                    onClick={() => onRowClick?.(row.original)}
+                    onClick={(event) => {
+                      if (!(event.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"], [role="checkbox"]')) {
+                        onRowClick?.(row.original);
+                      }
+                    }}
                     {...rowInteractionProps(onRowClick, row.original)}
                     className={cn(
                       onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500',
@@ -197,24 +208,26 @@ export function DataTable<TData>({
         </table>
       </div>
       {!virtual && table.getPageCount() > 1 && (
-        <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-surface-700 dark:text-surface-300">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-surface-700 dark:text-surface-300">
           <div>
-            Trang {table.getState().pagination.pageIndex + 1} / {table.getPageCount()} — {data.length} dòng
+            {t('uiCommon.table.page', { page: table.getState().pagination.pageIndex + 1, total: table.getPageCount(), count: data.length })}
           </div>
           <div className="flex items-center gap-1">
             <button
-              className="rounded border border-gray-200 px-2 py-1 text-xs disabled:opacity-50 dark:border-surface-700"
+              type="button"
+              className="min-h-9 rounded border border-gray-200 px-2 py-1 text-xs disabled:opacity-50 dark:border-surface-700"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
-              Trước
+              {t('uiCommon.table.previous')}
             </button>
             <button
-              className="rounded border border-gray-200 px-2 py-1 text-xs disabled:opacity-50 dark:border-surface-700"
+              type="button"
+              className="min-h-9 rounded border border-gray-200 px-2 py-1 text-xs disabled:opacity-50 dark:border-surface-700"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
-              Sau
+              {t('uiCommon.table.next')}
             </button>
           </div>
         </div>

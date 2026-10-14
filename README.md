@@ -52,7 +52,7 @@
 Ba vai trò sử dụng hệ thống: **quản trị viên phòng khám**, **lễ tân** và **bác sĩ**. Bệnh nhân không phải là tài khoản người dùng mà là dữ liệu được quản lý ([ADR 0003](docs/ADR/0003-patient-is-not-user.md)).
 
 <p align="center">
-  <img src="lu%E1%BB%93ng%20h%E1%BB%87%20th%E1%BB%91ng.png" alt="Luồng hệ thống" width="720" />
+  <img src="docs/01_Architecture/system-flow-diagram.png" alt="Luồng hệ thống" width="720" />
 </p>
 
 ---

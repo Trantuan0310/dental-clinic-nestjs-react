@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Calculator, Lock, CheckCircle, Wallet, SlidersHorizontal } from 'lucide-react';
 import { Card, Button, StatusBadge, EmptyState } from '@/components/ui';
@@ -37,38 +38,38 @@ function warningCount(w: PayrollPeriodWarnings | undefined) {
 
 /** Things to settle before locking the period (H4/H5 warnings). */
 function PeriodWarningsCard({ warnings }: { warnings: PayrollPeriodWarnings }) {
+  const { t } = useTranslation();
   return (
-    <Card title="Cần kiểm tra trước khi khóa kỳ">
+    <Card title={t('uiWorkforce.payrollWarningCardTitle')}>
       <div className="space-y-4 text-sm">
         {warnings.draftInvoices.length > 0 && (
           <section>
             <p className="font-medium text-amber-700">
-              {warnings.draftInvoices.length} hóa đơn nháp quá {warnings.draftInvoiceDays} ngày chưa phát hành
+              {t('uiWorkforce.payrollDraftInvoiceWarning', { count: warnings.draftInvoices.length, days: warnings.draftInvoiceDays })}
             </p>
-            <p className="text-gray-500">
-              Hoa hồng chỉ tính trên hóa đơn đã phát hành. Nhờ lễ tân phát hành (hoặc hủy nếu sai), rồi bấm
-              "Tính lương" lại.
+            <p className="text-gray-500 dark:text-surface-400">
+              {t('uiWorkforce.payrollDraftInvoiceInstructions')}
             </p>
-            <ul className="mt-1 list-disc pl-5 text-gray-700">
+            <ul className="mt-1 list-disc pl-5 text-gray-700 dark:text-surface-200">
               {warnings.draftInvoices.slice(0, 20).map((d) => (
                 <li key={d.invoiceId}>
-                  {d.code} — {d.patientName} — BS {d.dentistName} — {formatVnd(d.totalVnd)} ({d.ageDays} ngày)
+                  {d.code} — {d.patientName} — {d.dentistName} — {formatVnd(d.totalVnd)} ({d.ageDays} {t('uiWorkforce.days')})
                 </li>
               ))}
-              {warnings.draftInvoices.length > 20 && <li>… và {warnings.draftInvoices.length - 20} hóa đơn khác</li>}
+              {warnings.draftInvoices.length > 20 && <li>{t('uiWorkforce.payrollOtherDraftInvoices', { count: warnings.draftInvoices.length - 20 })}</li>}
             </ul>
           </section>
         )}
         {warnings.dentistsWithoutCompensation.length > 0 && (
           <section>
-            <p className="font-medium text-amber-700">Bác sĩ có phiên khám nhưng chưa có cấu hình lương</p>
-            <p className="text-gray-500">
-              Không có lương cơ bản và hoa hồng. Thêm cấu hình lương (tab "Cấu hình lương") rồi tính lại.
+            <p className="font-medium text-amber-700 dark:text-amber-300">{t('uiWorkforce.payrollDentistsMissingPay')}</p>
+            <p className="text-gray-500 dark:text-surface-400">
+              {t('uiWorkforce.payrollMissingPayDescription')}
             </p>
-            <ul className="mt-1 list-disc pl-5 text-gray-700">
+            <ul className="mt-1 list-disc pl-5 text-gray-700 dark:text-surface-200">
               {warnings.dentistsWithoutCompensation.map((d) => (
                 <li key={d.dentistId}>
-                  {d.dentistName} — {d.encounterCount} phiên khám
+                  {d.dentistName} — {t('uiWorkforce.payrollDentistEncounterCount', { count: d.encounterCount })}
                 </li>
               ))}
             </ul>
@@ -76,14 +77,14 @@ function PeriodWarningsCard({ warnings }: { warnings: PayrollPeriodWarnings }) {
         )}
         {warnings.outsideHoursEncounters.length > 0 && (
           <section>
-            <p className="font-medium text-amber-700">Phiên khám ngoài giờ làm (chưa được tính giờ)</p>
-            <p className="text-gray-500">
-              Nếu là làm thêm thật, ghi "Đổi giờ làm" hoặc ca đăng ký cho ngày đó rồi tính lại.
+            <p className="font-medium text-amber-700 dark:text-amber-300">{t('uiWorkforce.payrollOutsideHoursTitle')}</p>
+            <p className="text-gray-500 dark:text-surface-400">
+              {t('uiWorkforce.payrollOutsideHoursDescription')}
             </p>
-            <ul className="mt-1 list-disc pl-5 text-gray-700">
+            <ul className="mt-1 list-disc pl-5 text-gray-700 dark:text-surface-200">
               {warnings.outsideHoursEncounters.slice(0, 20).map((e) => (
                 <li key={e.encounterId}>
-                  {e.dentistName} — {formatDateTime(e.startedAt)} → {formatDateTime(e.closedAt)} ({e.minutes} phút ngoài giờ)
+                  {e.dentistName} — {formatDateTime(e.startedAt)} → {formatDateTime(e.closedAt)} ({t('uiWorkforce.payrollOutsideDuration', { minutes: e.minutes })})
                 </li>
               ))}
             </ul>
@@ -91,8 +92,8 @@ function PeriodWarningsCard({ warnings }: { warnings: PayrollPeriodWarnings }) {
         )}
         {warnings.terminatedDentists.length > 0 && (
           <section>
-            <p className="font-medium text-gray-700">Nghỉ việc trong kỳ (lương tính đến ngày nghỉ)</p>
-            <ul className="mt-1 list-disc pl-5 text-gray-700">
+            <p className="font-medium text-gray-700 dark:text-surface-200">{t('uiWorkforce.payrollTerminatedDuringPeriod')}</p>
+            <ul className="mt-1 list-disc pl-5 text-gray-700 dark:text-surface-200">
               {warnings.terminatedDentists.map((d) => (
                 <li key={d.dentistId ?? d.dentistName}>
                   {d.dentistName} — {d.terminationDate ? formatDate(d.terminationDate) : ''}
@@ -107,6 +108,7 @@ function PeriodWarningsCard({ warnings }: { warnings: PayrollPeriodWarnings }) {
 }
 
 export default function PeriodDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const { data: period, isLoading } = usePeriodDetail(id);
@@ -129,7 +131,7 @@ export default function PeriodDetailPage() {
   if (!period) {
     return (
       <Card>
-        <EmptyState title="Không tìm thấy kỳ lương" description="Kỳ lương này có thể đã bị xóa hoặc bạn không có quyền xem." />
+        <EmptyState title={t('uiWorkforce.payrollNotFound')} description={t('uiWorkforce.payrollNotFoundDescription')} />
       </Card>
     );
   }
@@ -150,9 +152,9 @@ export default function PeriodDetailPage() {
   const runCompute = async () => {
     try {
       await computePeriod.mutateAsync(period.id);
-      notify.success('Đã tính lương cho kỳ này');
+      notify.success(t('uiWorkforce.payrollComputedToast'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể tính lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollComputeError')));
     }
   };
 
@@ -160,9 +162,9 @@ export default function PeriodDetailPage() {
     setConfirmLock(false);
     try {
       await lockPeriod.mutateAsync(period.id);
-      notify.success('Đã khóa kỳ lương (chuyển sang REVIEWING)');
+      notify.success(t('uiWorkforce.payrollLockSuccess'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể khóa kỳ lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollLockError')));
     }
   };
 
@@ -171,7 +173,7 @@ export default function PeriodDetailPage() {
 
   const runApprove = async () => {
     if (ownLine && selfReason.trim().length < SELF_APPROVAL_REASON_MIN) {
-      notify.error(`Nhập lý do tự duyệt (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự).`);
+      notify.error(t('uiWorkforce.payrollSelfApprovalRequired', { count: SELF_APPROVAL_REASON_MIN }));
       return;
     }
     try {
@@ -180,10 +182,10 @@ export default function PeriodDetailPage() {
       );
       setConfirmSelfApprove(false);
       setSelfReason('');
-      notify.success('Đã duyệt kỳ lương');
+      notify.success(t('uiWorkforce.payrollApprovedToast'));
     } catch (err) {
       setConfirmSelfApprove(false);
-      notify.error(getApiErrorMessage(err, 'Không thể duyệt kỳ lương'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollApproveError')));
     }
   };
 
@@ -195,18 +197,18 @@ export default function PeriodDetailPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           {/* Periods list lives in the "Kỳ lương" tab of the payroll dashboard. */}
           <Link
             to="/payroll"
-            className="mb-1 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+            className="mb-1 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-surface-400 dark:hover:text-surface-200"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> Danh sách kỳ lương
+            <ArrowLeft className="h-3.5 w-3.5" /> {t('uiWorkforce.payrollBackToPeriods')}
           </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">
-              Kỳ lương {formatDate(period.periodStart)} — {formatDate(period.periodEnd)}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
+              {t('uiWorkforce.period')} {formatDate(period.periodStart)} — {formatDate(period.periodEnd)}
             </h1>
             <StatusBadge status={period.status} />
           </div>
@@ -214,7 +216,7 @@ export default function PeriodDetailPage() {
         <div className="flex flex-wrap gap-2">
           {canCompute && (
             <Button variant="outline" onClick={runCompute} isLoading={computePeriod.isPending}>
-              <Calculator className="h-4 w-4" /> Tính lương
+              <Calculator className="h-4 w-4" /> {t('uiWorkforce.payrollCalculate')}
             </Button>
           )}
           {canLock && (
@@ -223,7 +225,7 @@ export default function PeriodDetailPage() {
               onClick={() => (warningCount(warnings) > 0 ? setConfirmLock(true) : runLock())}
               isLoading={lockPeriod.isPending}
             >
-              <Lock className="h-4 w-4" /> Khóa kỳ
+              <Lock className="h-4 w-4" /> {t('uiWorkforce.payrollLock')}
             </Button>
           )}
           {canApprove && (
@@ -232,12 +234,12 @@ export default function PeriodDetailPage() {
               onClick={() => (ownLine ? setConfirmSelfApprove(true) : runApprove())}
               isLoading={approvePeriod.isPending}
             >
-              <CheckCircle className="h-4 w-4" /> Duyệt
+              <CheckCircle className="h-4 w-4" /> {t('uiWorkforce.payrollReviewApprove')}
             </Button>
           )}
           {canMarkPaid && (
             <Button onClick={() => setShowMarkPaid(true)}>
-              <Wallet className="h-4 w-4" /> Đánh dấu đã trả
+              <Wallet className="h-4 w-4" /> {t('uiWorkforce.payrollPaid')}
             </Button>
           )}
         </div>
@@ -245,59 +247,58 @@ export default function PeriodDetailPage() {
 
       {isOpenPeriod && warnings && warningCount(warnings) > 0 && <PeriodWarningsCard warnings={warnings} />}
 
-      <p className="text-xs text-gray-500">
-        Hoa hồng tính trên hóa đơn đã phát hành trong kỳ (theo ngày phát hành, sau giảm giá). Giờ làm theo lịch làm việc,
-        trừ ngày phòng khám nghỉ, ngày đóng lịch và nghỉ phép đã duyệt.
+      <p className="text-xs text-gray-500 dark:text-surface-400">
+        {t('uiWorkforce.payrollCommissionCalculationNote')}
       </p>
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <p className="text-sm text-gray-500">Tổng gross</p>
-          <p className="mt-1 text-xl font-semibold text-gray-900">{formatVnd(totals.gross)}</p>
+          <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollGrossTotal')}</p>
+          <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-surface-100">{formatVnd(totals.gross)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">Tổng net</p>
-          <p className="mt-1 text-xl font-semibold text-emerald-700">{formatVnd(totals.net)}</p>
+          <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollNetTotal')}</p>
+          <p className="mt-1 text-xl font-semibold text-emerald-700 dark:text-emerald-400">{formatVnd(totals.net)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">Tổng thuế TNCN</p>
-          <p className="mt-1 text-xl font-semibold text-gray-900">{formatVnd(totals.tax)}</p>
+          <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollTaxTotal')}</p>
+          <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-surface-100">{formatVnd(totals.tax)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-500">Tổng BHXH</p>
-          <p className="mt-1 text-xl font-semibold text-gray-900">{formatVnd(totals.bhxh)}</p>
+          <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollSocialInsuranceTotal')}</p>
+          <p className="mt-1 text-xl font-semibold text-gray-900 dark:text-surface-100">{formatVnd(totals.bhxh)}</p>
         </Card>
       </div>
 
-      <Card title={`Bác sĩ (${period.lineItems.length})`} noPadding>
+      <Card title={t('uiWorkforce.payrollDentistCount', { count: period.lineItems.length })} noPadding>
         {period.lineItems.length === 0 ? (
           <EmptyState
-            title="Chưa có dữ liệu tính lương"
-            description={canCompute ? 'Bấm "Tính lương" để tạo line item cho từng bác sĩ.' : 'Kỳ lương chưa được tính.'}
+            title={t('uiWorkforce.payrollNoLineItems')}
+            description={canCompute ? t('uiWorkforce.payrollComputeToCreateItems') : t('uiWorkforce.payrollPeriodNotCalculated')}
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
-                  <th>Bác sĩ</th>
-                  <th className="text-right">Encounters</th>
-                  <th className="text-right">Giờ làm</th>
-                  <th className="text-right">Tăng ca (giờ)</th>
-                  <th className="text-right">Gross</th>
-                  <th className="text-right">Thuế TNCN</th>
-                  <th className="text-right">BHXH</th>
-                  <th className="text-right">Net</th>
+                  <th>{t('uiWorkforce.payrollDentist')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollEncounters')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollHoursWorked')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollOvertimeHours')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollGross')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollIncomeTaxDefault')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollSocialInsurance')}</th>
+                  <th className="text-right">{t('uiWorkforce.payrollNet')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {period.lineItems.map((li) => (
                   <tr key={li.id}>
-                    <td className="font-medium text-gray-900">
+                    <td className="font-medium text-gray-900 dark:text-surface-100">
                       {li.dentistName}
                       {li.manuallyAdjusted && (
-                        <span className="ml-2 text-xs font-normal text-amber-600">(đã điều chỉnh)</span>
+                        <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">({t('uiWorkforce.payrollAdjusted')})</span>
                       )}
                     </td>
                     <td className="text-right">{li.encountersCount}</td>
@@ -311,7 +312,7 @@ export default function PeriodDetailPage() {
                     <td className="text-right font-semibold text-emerald-700">{formatVnd(li.netPayVnd)}</td>
                     <td className="whitespace-nowrap text-right">
                       <Button variant="outline" size="sm" onClick={() => setBreakdownItem(li)}>
-                        Xem chi tiết
+                        {t('uiWorkforce.payrollViewDetails')}
                       </Button>
                       {canAdjust && (
                         <Button
@@ -320,7 +321,7 @@ export default function PeriodDetailPage() {
                           className="ml-2"
                           onClick={() => setAdjustItem(li)}
                         >
-                          <SlidersHorizontal className="h-3.5 w-3.5" /> Điều chỉnh
+                          <SlidersHorizontal className="h-3.5 w-3.5" /> {t('uiWorkforce.payrollAdjust')}
                         </Button>
                       )}
                     </td>
@@ -352,25 +353,24 @@ export default function PeriodDetailPage() {
         open={confirmSelfApprove}
         onClose={() => setConfirmSelfApprove(false)}
         onConfirm={runApprove}
-        title="Bạn đang duyệt kỳ lương có phiếu của chính mình"
+        title={t('uiWorkforce.payrollSelfApproveTitle')}
         description={
           <div className="space-y-2">
             <p>
-              Kỳ này có phiếu lương của bạn ({formatVnd(ownLine?.netPayVnd ?? 0)} thực nhận). Chỉ được tự duyệt khi
-              phòng khám không có quản trị viên nào khác; thao tác được ghi nhật ký riêng (PAYROLL_SELF_APPROVED).
+              {t('uiWorkforce.payrollSelfApproveDescription', { amount: formatVnd(ownLine?.netPayVnd ?? 0) })}
             </p>
             <Textarea
-              label="Lý do tự duyệt"
-              placeholder="VD: Phòng khám chỉ có một quản trị viên"
+              label={t('uiWorkforce.payrollSelfApprovalReason')}
+              placeholder={t('uiWorkforce.payrollSelfApprovalPlaceholder')}
               rows={2}
               value={selfReason}
               onChange={(e) => setSelfReason(e.target.value)}
-              hint={`Ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự`}
+              hint={t('uiWorkforce.payrollSelfApprovalRequired', { count: SELF_APPROVAL_REASON_MIN })}
               required
             />
           </div>
         }
-        confirmLabel="Tự duyệt"
+        confirmLabel={t('uiWorkforce.payrollSelfApprove')}
         isLoading={approvePeriod.isPending}
       />
 
@@ -378,9 +378,9 @@ export default function PeriodDetailPage() {
         open={confirmLock}
         onClose={() => setConfirmLock(false)}
         onConfirm={runLock}
-        title="Khóa kỳ lương khi còn cảnh báo?"
-        description={`Còn ${warningCount(warnings)} mục cần kiểm tra (xem khung "Cần kiểm tra trước khi khóa kỳ"). Sau khi khóa vẫn có thể tính lại khi kỳ ở trạng thái REVIEWING.`}
-        confirmLabel="Vẫn khóa"
+        title={t('uiWorkforce.payrollLockWarningsTitle')}
+        description={t('uiWorkforce.payrollLockWarningsDescription', { count: warningCount(warnings) })}
+        confirmLabel={t('uiWorkforce.payrollLockAnyway')}
         isLoading={lockPeriod.isPending}
       />
 

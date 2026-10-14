@@ -133,30 +133,13 @@ export const SOURCE_COLORS: Record<string, string> = {
   RETURNING: '#10b981',
 };
 
-export const RANGE_OPTIONS: Array<{ value: TimeRange; label: string }> = [
-  { value: 'today', label: 'Hôm nay' },
-  { value: '7d', label: '7 ngày' },
-  { value: '15d', label: '15 ngày' },
-  { value: '30d', label: '30 ngày' },
-  { value: '6m', label: '6 tháng' },
+export const RANGE_OPTIONS: Array<{ value: TimeRange }> = [
+  { value: 'today' },
+  { value: '7d' },
+  { value: '15d' },
+  { value: '30d' },
+  { value: '6m' },
 ];
-
-/** Short label for card titles ("Lịch hẹn 7 ngày qua"). */
-export const RANGE_TITLES: Record<TimeRange, string> = {
-  today: 'hôm nay',
-  '7d': '7 ngày qua',
-  '15d': '15 ngày qua',
-  '30d': '30 ngày qua',
-  '6m': '6 tháng qua',
-};
-
-export const RANGE_DESCRIPTIONS: Record<TimeRange, string> = {
-  today: 'Hôm nay',
-  '7d': '7 ngày qua',
-  '15d': '15 ngày qua',
-  '30d': '30 ngày qua',
-  '6m': '6 tháng qua',
-};
 
 /** Dates on the clinic calendar, whatever the workstation's time zone (A6-18). */
 export function resolveRange(range: TimeRange, today = clinicWallClock()): DateRange {
@@ -190,11 +173,11 @@ export function resolveRange(range: TimeRange, today = clinicWallClock()): DateR
   return { from, to };
 }
 
-export function vndCompact(value: number): string {
+export function vndCompact(value: number, language = 'vi'): string {
   if (!Number.isFinite(value)) return '—';
   const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}tỷ`;
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}tr`;
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}${language === 'en' ? 'B' : ' tỷ'}`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}${language === 'en' ? 'M' : ' tr'}`;
   if (abs >= 1_000) return `${Math.round(value / 1_000)}k`;
   return Math.round(value).toString();
 }

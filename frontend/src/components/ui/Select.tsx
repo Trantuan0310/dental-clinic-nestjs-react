@@ -19,14 +19,14 @@ export interface SelectProps
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   (
-    { className, label, error, hint, options, placeholder, id, ...props },
+    { className, label, error, hint, options, placeholder, id, 'aria-describedby': ariaDescribedBy, ...props },
     ref,
   ) => {
     const autoId = useId();
-    const selectId = id ?? props.name ?? autoId;
-    const hintId = hint ? `${selectId}-hint` : undefined;
+    const selectId = id ?? autoId;
+    const hintId = hint && !error ? `${selectId}-hint` : undefined;
     const errorId = error ? `${selectId}-error` : undefined;
-    const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
+    const describedBy = [ariaDescribedBy, hintId, errorId].filter(Boolean).join(' ') || undefined;
 
     return (
       <div className="space-y-1.5">
@@ -52,7 +52,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               'dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100',
               'dark:disabled:bg-surface-900 dark:disabled:text-surface-500',
               error &&
-                'border-red-500 focus:border-red-500 focus:ring-red-500',
+                'dark:border-red-500 border-red-500 focus:border-red-500 focus:ring-red-500',
               className,
             )}
             {...props}

@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Users } from 'lucide-react';
 import { Button, Card, SearchInput, EmptyState } from '@/components/ui';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { formatDate } from '@/lib/format';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useEncounterList } from './medicalRecordsApi';
 
@@ -14,6 +14,7 @@ interface PatientRow {
 }
 
 export default function MyPatientsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const dentistId = useAuthStore((s) => s.user?.id);
@@ -54,16 +55,16 @@ export default function MyPatientsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Bệnh nhân của tôi</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiClinical.myPatients')}</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Danh sách bệnh nhân bạn đã từng khám
+          {t('uiClinical.patientsSeen')}
         </p>
       </div>
 
       <Card noPadding>
         <div className="p-4">
           <SearchInput
-            placeholder="Tìm theo tên bệnh nhân..."
+            placeholder={t('uiClinical.searchPatientName')}
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             onClear={() => handleSearch('')}
@@ -79,9 +80,9 @@ export default function MyPatientsPage() {
         ) : filteredPatients.length === 0 ? (
           <EmptyState
             icon={<Users className="h-10 w-10 text-gray-400" />}
-            title={search ? 'Không tìm thấy bệnh nhân' : 'Chưa có bệnh nhân nào'}
+            title={search ? t('uiClinical.noPatientFound') : t('uiClinical.noPatients')}
             description={
-              search ? 'Thử tìm kiếm với từ khóa khác' : 'Bệnh nhân sẽ xuất hiện sau khi bạn hoàn thành ca khám đầu tiên'
+              search ? t('uiClinical.tryAnotherSearch') : t('uiClinical.patientsAppearAfterVisit')
             }
           />
         ) : (
@@ -102,9 +103,9 @@ export default function MyPatientsPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-sm text-gray-500">Lần cuối khám</p>
-                    <p className="font-medium text-gray-900">
-                      {format(new Date(patient.lastVisit), 'dd/MM/yyyy', { locale: vi })}
+                    <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.lastVisit')}</p>
+                    <p className="font-medium text-gray-900 dark:text-surface-100">
+                      {formatDate(patient.lastVisit)}
                     </p>
                   </div>
                   <Button variant="ghost" size="sm">

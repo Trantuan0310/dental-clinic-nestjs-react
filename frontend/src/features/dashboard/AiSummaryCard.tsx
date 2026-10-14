@@ -3,6 +3,7 @@
 // Hiển thị 3 bullet ngắn: dị ứng, đang chờ, lần tới. Cache 1h.
 // =============================================================================
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CalendarClock, ChevronDown, RefreshCw, Sparkles, Stethoscope } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardSkeleton, EmptyState, Tooltip } from '@/components/ui';
@@ -26,6 +27,7 @@ const ICON_BG: Record<SummaryBullet['icon'], string> = {
 };
 
 export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps) {
+  const { t } = useTranslation();
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientId ?? patientOptions?.[0]?.id ?? null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -58,25 +60,17 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
       title={
         <span className="inline-flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-violet-500" />
-          AI tóm tắt hồ sơ
+          {t('uiEntry.dashboard.aiTitle')}
         </span>
       }
-      description={
-        <span>
-          3 điểm quan trọng trước khi khám. AI có thể sai —{' '}
-          <Tooltip label="AI chỉ hỗ trợ. Bác sĩ xác nhận lại trước khi dùng thông tin này.">
-            <span className="cursor-help underline decoration-dotted">xác nhận lại</span>
-          </Tooltip>{' '}
-          trước khi dùng.
-        </span>
-      }
+      description={t('uiEntry.dashboard.aiDescription', { confirm: t('uiEntry.dashboard.aiConfirm') })}
       actions={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {showPatientPicker && (
-            <div className="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm">
+            <div className="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 dark:border-surface-700 dark:bg-surface-800 py-1 text-xs shadow-sm">
               <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
               <select
-                aria-label="Chọn bệnh nhân"
+                aria-label={t('uiEntry.dashboard.choosePatient')}
                 value={selectedPatientId ?? ''}
                 onChange={(e) => setSelectedPatientId(e.target.value || null)}
                 className="min-w-0 max-w-[12rem] truncate bg-transparent text-xs font-medium text-gray-700 focus:outline-none sm:max-w-xs"
@@ -89,7 +83,7 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
               </select>
             </div>
           )}
-          <Tooltip label="Gọi lại AI (bỏ qua cache)">
+          <Tooltip label={t('uiEntry.dashboard.refreshAi')}>
             <button
               type="button"
               onClick={() => {
@@ -97,11 +91,11 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
                 refetch();
               }}
               disabled={!effectivePatientId || isFetching}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Làm mới"
+              className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 dark:border-surface-700 dark:bg-surface-800 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-200 dark:hover:bg-surface-700 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={t('uiEntry.dashboard.refresh')}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-              Làm mới
+              {t('uiEntry.dashboard.refresh')}
             </button>
           </Tooltip>
         </div>
@@ -110,11 +104,11 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
       {!effectivePatientId ? (
         <EmptyState
           icon={<CalendarClock className="h-10 w-10" />}
-          title="Không có cuộc hẹn hôm nay"
+          title={t('uiEntry.dashboard.noAppointmentsToday')}
           description={
             showPatientPicker
-              ? 'Chọn bệnh nhân để AI tóm tắt hồ sơ trước khi khám.'
-              : 'Không có cuộc hẹn nào hôm nay để hiển thị tóm tắt AI.'
+              ? t('uiEntry.dashboard.choosePatientDescription')
+              : t('uiEntry.dashboard.noAppointmentsDescription')
           }
         />
       ) : isLoading ? (
@@ -122,14 +116,14 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
       ) : error ? (
         <EmptyState
           icon={<AlertTriangle className="h-10 w-10" />}
-          title="Không tải được AI summary"
-          description="Thử bấm 'Làm mới' hoặc xem lại quyền 'ai.summary.read'."
+          title={t('uiEntry.dashboard.aiError')}
+          description={t('uiEntry.dashboard.aiErrorDescription')}
         />
       ) : !data || data.bullets.length === 0 ? (
         <EmptyState
           icon={<Sparkles className="h-10 w-10" />}
-          title="Chưa có dữ liệu tóm tắt"
-          description="Bệnh nhân chưa có lịch sử điều trị, không có gì để tóm tắt."
+          title={t('uiEntry.dashboard.noSummary')}
+          description={t('uiEntry.dashboard.noSummaryDescription')}
         />
       ) : (
         <div className="space-y-3">
@@ -138,15 +132,15 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
               const Icon = ICONS[b.icon] ?? Sparkles;
               const color = ICON_BG[b.icon] ?? 'bg-gray-100 text-gray-600';
               return (
-                <li key={b.id} className="flex items-start gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+                <li key={b.id} className="flex items-start gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 dark:border-surface-700 dark:bg-surface-900 py-2.5">
                   <span className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${color}`}>
                     <Icon className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{b.label}</p>
-                    <p className="mt-0.5 text-sm text-gray-800">{b.text}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-surface-400">{b.label}</p>
+                    <p className="mt-0.5 text-sm text-gray-800 dark:text-surface-200">{b.text}</p>
                     {b.basis && (
-                      <p className="mt-1 text-[11px] italic text-gray-400">{b.basis}</p>
+                      <p className="mt-1 text-[11px] italic text-gray-400 dark:text-surface-500">{b.basis}</p>
                     )}
                   </div>
                 </li>
@@ -154,17 +148,17 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
             })}
           </ul>
 
-          <p className="flex items-center justify-between text-[11px] text-gray-500">
+          <p className="flex items-center justify-between text-[11px] text-gray-500 dark:text-surface-400">
             <span>
-              Nguồn:{' '}
+              {t('uiEntry.dashboard.source')}{' '}
               {data.source === 'fallback'
-                ? 'Quy tắc có sẵn (chưa bật AI)'
-                : `${data.source === 'gemini' ? 'Gemini' : 'AI'} (${data.model ?? 'không rõ model'})`}
+                ? t('uiEntry.dashboard.rulesSource')
+                : `${data.source === 'gemini' ? 'Gemini' : 'AI'} (${data.model ?? t('uiEntry.dashboard.unknownModel')})`}
               {data.cached ? ' · cache' : ''}
             </span>
             <span>
-              Dựa trên {data.asOf.encounterCount} lần khám
-              {data.asOf.lastVisitAt ? `, gần nhất ${data.asOf.lastVisitAt}` : ''}
+              {t('uiEntry.dashboard.encounters', { count: data.asOf.encounterCount })}
+              {data.asOf.lastVisitAt ? `, ${t('uiEntry.dashboard.latest', { date: data.asOf.lastVisitAt })}` : ''}
             </span>
           </p>
         </div>

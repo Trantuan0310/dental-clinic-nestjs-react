@@ -28,7 +28,7 @@ export function Card({
       )}
     >
       {(title || description || actions) && (
-        <div className="border-b border-gray-100 px-6 py-4">
+        <div className="border-b border-gray-100 px-6 py-4 dark:border-surface-700">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div className="min-w-0">
               {title && (

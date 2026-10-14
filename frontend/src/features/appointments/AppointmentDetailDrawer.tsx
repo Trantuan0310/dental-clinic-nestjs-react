@@ -58,6 +58,7 @@ import {
 import { cn } from '@/lib/cn';
 import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useAuthStore } from '@/stores/authStore';
+import { useTranslation } from 'react-i18next';
 import type { Appointment, AppointmentStatus } from '@/types/appointment';
 import {
   isOverdueNotArrived,
@@ -84,64 +85,53 @@ type ActionKey =
   | 'undo_left'
   | 'start';
 
+type QuickReason = { value: string; key: string };
+const quickReason = (value: string, key: string): QuickReason => ({ value, key });
 const CANCEL_REASONS = [
-  'Bệnh nhân yêu cầu',
-  'Bác sĩ bận đột xuất',
-  'Trùng lịch khác',
-  'Bệnh nhân không xác nhận được',
+  quickReason('Bệnh nhân yêu cầu', 'cancelReasonPatientRequest'),
+  quickReason('Bác sĩ bận đột xuất', 'cancelReasonDentistUnavailable'),
+  quickReason('Trùng lịch khác', 'cancelReasonDuplicate'),
+  quickReason('Bệnh nhân không xác nhận được', 'cancelReasonUnableToConfirm'),
 ];
 
-const NO_SHOW_REASONS = ['Không liên lạc được', 'Bệnh nhân báo đến muộn quá giờ', 'Không rõ lý do'];
+const NO_SHOW_REASONS = [quickReason('Không liên lạc được', 'noShowReasonUnreachable'), quickReason('Bệnh nhân báo đến muộn quá giờ', 'noShowReasonTooLate'), quickReason('Không rõ lý do', 'noShowReasonUnknown')];
 
 // BR-APPT-033: checked in, then left before the exam.
 const LEFT_REASONS = [
-  'Bệnh nhân chờ lâu, xin về',
-  'Bệnh nhân có việc gấp',
-  'Bệnh nhân đổi ý, sẽ đặt lịch lại',
+  quickReason('Bệnh nhân chờ lâu, xin về', 'leftReasonLongWait'),
+  quickReason('Bệnh nhân có việc gấp', 'leftReasonUrgentMatter'),
+  quickReason('Bệnh nhân đổi ý, sẽ đặt lịch lại', 'leftReasonChangedMind'),
 ];
 
 // Labels for the audit trail (BR-APPT-034); unknown actions show their code.
-const HISTORY_LABEL: Record<string, string> = {
-  APPOINTMENT_CREATED: 'Đặt lịch',
-  APPOINTMENT_WALK_IN: 'Tiếp nhận khách vãng lai (check-in ngay)',
-  APPOINTMENT_UPDATED: 'Sửa thông tin',
-  APPOINTMENT_CONFIRMED: 'Xác nhận lịch',
-  APPOINTMENT_RESCHEDULED: 'Đổi lịch',
-  APPOINTMENT_CHECKIN_OVERRIDDEN: 'Check-in ngoài khung giờ (có lý do)',
-  APPOINTMENT_CANCELLED: 'Hủy lịch',
-  APPOINTMENT_NO_SHOW: 'Đánh vắng mặt',
-  APPOINTMENT_AUTO_NO_SHOW: 'Tự động đánh vắng mặt (quá giờ không đến)',
-  APPOINTMENT_LEFT: 'Bệnh nhân đã về (chưa khám)',
-  APPOINTMENT_LEFT_UNDONE: 'Hoàn tác "đã về", quay lại hàng chờ',
-  ENCOUNTER_CANCELLED_VIA_APPOINTMENT: 'Hủy lượt khám theo lịch hẹn',
-  APPOINTMENT_CHECKED_IN: 'Check-in',
-  QUEUE_CALLED: 'Gọi vào khám',
-  QUEUE_SKIPPED: 'Bỏ qua khi gọi',
-  QUEUE_EMERGENCY: 'Ưu tiên cấp cứu',
-  QUEUE_EMERGENCY_CLEARED: 'Gỡ ưu tiên cấp cứu',
-  QUEUE_UNCALLED: 'Hủy gọi, quay lại hàng chờ',
-  APPOINTMENT_TRANSFERRED: 'Chuyển sang bác sĩ khác',
-  APPOINTMENT_REASSIGNED: 'Thay bác sĩ (cả ngày)',
-  APPOINTMENT_CHECKIN_UNDONE: 'Hoàn tác check-in',
-  APPOINTMENT_NO_SHOW_REVERTED: 'Hoàn tác vắng mặt',
-  APPOINTMENT_EXAM_STARTED: 'Bắt đầu khám',
-  APPOINTMENT_COMPLETED: 'Hoàn tất khám',
-  APPOINTMENT_RETURNED_TO_QUEUE: 'Hủy lượt khám, quay lại hàng chờ',
+const HISTORY_TRANSLATION: Record<string, string> = {
+  APPOINTMENT_CREATED: 'appointmentBooked', APPOINTMENT_WALK_IN: 'walkInTitle', APPOINTMENT_UPDATED: 'edit',
+  APPOINTMENT_CONFIRMED: 'confirmAppointment', APPOINTMENT_RESCHEDULED: 'reschedule',
+  APPOINTMENT_CHECKIN_OVERRIDDEN: 'forcedCheckInHistory', APPOINTMENT_CANCELLED: 'cancelAppointment',
+  APPOINTMENT_NO_SHOW: 'markNoShow', APPOINTMENT_AUTO_NO_SHOW: 'automaticNoShowHistory',
+  APPOINTMENT_LEFT: 'patientLeftNotSeen', APPOINTMENT_LEFT_UNDONE: 'undoLeft',
+  ENCOUNTER_CANCELLED_VIA_APPOINTMENT: 'encounterCancelledHistory', APPOINTMENT_CHECKED_IN: 'checkIn',
+  QUEUE_CALLED: 'queueCalledHistory', QUEUE_SKIPPED: 'queueSkippedHistory', QUEUE_EMERGENCY: 'queueEmergencyHistory',
+  QUEUE_EMERGENCY_CLEARED: 'queueEmergencyClearedHistory', QUEUE_UNCALLED: 'queueUncalledHistory',
+  APPOINTMENT_TRANSFERRED: 'appointmentTransferredHistory', APPOINTMENT_REASSIGNED: 'appointmentReassignedHistory',
+  APPOINTMENT_CHECKIN_UNDONE: 'undoCheckIn', APPOINTMENT_NO_SHOW_REVERTED: 'undoNoShow',
+  APPOINTMENT_EXAM_STARTED: 'startEncounter', APPOINTMENT_COMPLETED: 'statusCompleted',
+  APPOINTMENT_RETURNED_TO_QUEUE: 'appointmentReturnedToQueueHistory',
 };
 
 const LATE_CHECK_IN_REASONS = [
-  'Bệnh nhân đến muộn, đã báo trước',
-  'Kẹt xe / thời tiết',
-  'Bác sĩ đồng ý khám bù trong ngày',
+  quickReason('Bệnh nhân đến muộn, đã báo trước', 'lateCheckInReasonNotified'),
+  quickReason('Kẹt xe / thời tiết', 'lateCheckInReasonTraffic'),
+  quickReason('Bác sĩ đồng ý khám bù trong ngày', 'lateCheckInReasonDentistAgreed'),
 ];
 
-const UNDO_CHECK_IN_REASONS = ['Check-in nhầm bệnh nhân', 'Check-in nhầm lịch hẹn'];
+const UNDO_CHECK_IN_REASONS = [quickReason('Check-in nhầm bệnh nhân', 'undoCheckInWrongPatient'), quickReason('Check-in nhầm lịch hẹn', 'undoCheckInWrongAppointment')];
 
-const UNDO_LEFT_REASONS = ['Bấm nhầm "Đã về"', 'Bệnh nhân quay lại'];
+const UNDO_LEFT_REASONS = [quickReason('Bấm nhầm "Đã về"', 'undoLeftMistake'), quickReason('Bệnh nhân quay lại', 'undoLeftReturned')];
 
-const EARLY_CHECK_IN_REASONS = ['Bác sĩ đang rảnh, khám sớm', 'Bệnh nhân đến sớm, chờ đến lượt'];
+const EARLY_CHECK_IN_REASONS = [quickReason('Bác sĩ đang rảnh, khám sớm', 'earlyCheckInReasonAvailable'), quickReason('Bệnh nhân đến sớm, chờ đến lượt', 'earlyCheckInReasonEarly')];
 
-const UNDO_NO_SHOW_REASONS = ['Đánh vắng mặt nhầm', 'Bệnh nhân gọi báo đang đến'];
+const UNDO_NO_SHOW_REASONS = [quickReason('Đánh vắng mặt nhầm', 'undoNoShowMistake'), quickReason('Bệnh nhân gọi báo đang đến', 'undoNoShowCalled')];
 
 // Backend requires ≥ 5 chars for a forced check-in (BR-APPT-007), for
 // cancelling a checked-in visit after its start (BR-APPT-025) and for undoing
@@ -172,6 +162,7 @@ const STATUS_ORDER: AppointmentStatus[] = [
 ];
 
 export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: AppointmentDetailDrawerProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { data: appointment, isLoading } = useAppointment(appointmentId ?? undefined);
   const now = useNow();
@@ -231,17 +222,17 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       value: d.id,
       label:
         d.id === chosenDentist && rescheduleDentistIncapable
-          ? `${d.fullName} (không làm được dịch vụ)`
+          ? t('uiScheduling.dentistCannotPerformService', { name: d.fullName })
           : d.fullName,
     }));
   if (chosenDentist && !rescheduleDentistOptions.some((o) => o.value === chosenDentist)) {
     const name =
       chosenDentist === appointment?.dentistId && appointment?.dentistName
         ? appointment.dentistName
-        : 'Bác sĩ hiện tại';
+        : t('uiScheduling.currentDentist');
     rescheduleDentistOptions.unshift({
       value: chosenDentist,
-      label: chosenDentistBlocked ? `${name} (không nhận lịch)` : name,
+      label: chosenDentistBlocked ? t('uiScheduling.dentistNotAcceptingBookings', { name }) : name,
       disabled: chosenDentistBlocked,
     });
   }
@@ -294,20 +285,20 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const handleCopyPhone = async () => {
     const phone = appointment?.patientPhone;
     if (!phone) {
-      notify.warning('Bệnh nhân không có số điện thoại.');
+      notify.warning(t('uiScheduling.patientPhoneMissing'));
       return;
     }
     try {
       await navigator.clipboard.writeText(phone);
-      notify.success(`Đã sao chép SĐT: ${phone}`);
+      notify.success(t('uiScheduling.phoneCopied', { phone }));
     } catch {
-      notify.error('Trình duyệt không hỗ trợ sao chép tự động.');
+      notify.error(t('uiScheduling.clipboardUnavailable'));
     }
   };
 
   const handleCall = () => {
     if (!appointment?.patientPhone) {
-      notify.warning('Bệnh nhân không có số điện thoại.');
+      notify.warning(t('uiScheduling.patientPhoneMissing'));
       return;
     }
     window.location.href = `tel:${appointment.patientPhone}`;
@@ -345,14 +336,14 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     if (!appointment) return;
     try {
       await checkIn.mutateAsync({ id: appointment.id });
-      notify.success(`Đã check-in cho ${appointment.patientName}`);
+      notify.success(t('uiScheduling.patientCheckedIn', { name: appointment.patientName }));
       onClose();
     } catch (err) {
       if (offersForcedCheckIn(err)) {
         setActionModal('force_check_in');
         return;
       }
-      notify.error(getApiErrorMessage(err, 'Không thể check-in'));
+      notify.error(getApiErrorMessage(err, t('uiScheduling.checkInError')));
     }
   };
 
@@ -360,7 +351,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     if (!appointment) return;
     const trimmed = reason.trim();
     if (trimmed.length < OVERRIDE_REASON_MIN_LENGTH) {
-      setError(`Vui lòng nhập lý do (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
+      setError(t('uiScheduling.reasonMinLengthError', { count: OVERRIDE_REASON_MIN_LENGTH }));
       return;
     }
     setError(null);
@@ -369,11 +360,11 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         id: appointment.id,
         payload: { override: true, overrideReason: trimmed },
       });
-      notify.success(`Đã check-in ${earlyCheckIn ? 'sớm' : 'muộn'} cho ${appointment.patientName}`);
+      notify.success(t(earlyCheckIn ? 'uiScheduling.earlyCheckInSuccess' : 'uiScheduling.lateCheckInSuccess', { name: appointment.patientName }));
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể check-in'));
+      setError(getApiErrorMessage(err, t('uiScheduling.checkInError')));
     }
   };
 
@@ -381,9 +372,9 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     if (!appointment) return;
     try {
       await confirm.mutateAsync(appointment.id);
-      notify.success(`${appointment.patientName} đã xác nhận lịch hẹn`);
+      notify.success(t('uiScheduling.appointmentConfirmedFor', { name: appointment.patientName }));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể xác nhận lịch hẹn'));
+      notify.error(getApiErrorMessage(err, t('uiScheduling.confirmAppointmentError')));
     }
   };
 
@@ -391,7 +382,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     if (!appointment) return;
     // The API requires ≥ 5 characters for every cancellation.
     if (reason.trim().length < OVERRIDE_REASON_MIN_LENGTH) {
-      setError(`Vui lòng nhập lý do hủy (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
+      setError(t('uiScheduling.cancelReasonMinLengthError', { count: OVERRIDE_REASON_MIN_LENGTH }));
       return;
     }
     setError(null);
@@ -407,52 +398,52 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           ...(byClinic || clinicOnlyCancel ? { byClinic: true } : {}),
         },
       });
-      notify.success('Đã hủy lịch hẹn');
+      notify.success(t('uiScheduling.appointmentCancelled'));
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể hủy lịch'));
+      setError(getApiErrorMessage(err, t('uiScheduling.cancelAppointmentError')));
     }
   };
 
   const handleNoShow = async () => {
     if (!appointment) return;
     if (!reason.trim()) {
-      setError('Vui lòng nhập lý do vắng mặt.');
+      setError(t('uiScheduling.noShowReasonRequired'));
       return;
     }
     setError(null);
     try {
       await noShow.mutateAsync({ id: appointment.id, reason });
-      notify.success('Đã đánh dấu vắng mặt');
+      notify.success(t('uiScheduling.appointmentMarkedNoShow'));
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể đánh dấu vắng mặt'));
+      setError(getApiErrorMessage(err, t('uiScheduling.markNoShowError')));
     }
   };
 
   const handleLeft = async () => {
     if (!appointment) return;
     if (reason.trim().length < 5) {
-      setError('Vui lòng nhập lý do (ít nhất 5 ký tự).');
+      setError(t('uiScheduling.reasonMinLengthError', { count: 5 }));
       return;
     }
     setError(null);
     try {
       await markLeft.mutateAsync({ id: appointment.id, reason });
-      notify.success(`${appointment.patientName} đã về, chưa khám — giờ hẹn được giải phóng`);
+      notify.success(t('uiScheduling.patientLeftSuccess', { name: appointment.patientName }));
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể ghi nhận bệnh nhân đã về'));
+      setError(getApiErrorMessage(err, t('uiScheduling.patientLeftError')));
     }
   };
 
   const handleUndo = async (what: 'check-in' | 'no-show' | 'left') => {
     if (!appointment) return;
     if (reason.trim().length < OVERRIDE_REASON_MIN_LENGTH) {
-      setError(`Vui lòng nhập lý do (ít nhất ${OVERRIDE_REASON_MIN_LENGTH} ký tự).`);
+      setError(t('uiScheduling.reasonMinLengthError', { count: OVERRIDE_REASON_MIN_LENGTH }));
       return;
     }
     setError(null);
@@ -460,26 +451,26 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       await undoStatus.mutateAsync({ id: appointment.id, what, reason });
       notify.success(
         what === 'check-in'
-          ? `Đã hoàn tác check-in cho ${appointment.patientName}`
+          ? t('uiScheduling.undoCheckInSuccess', { name: appointment.patientName })
           : what === 'left'
-            ? `${appointment.patientName} đã quay lại hàng chờ`
-            : `Đã hoàn tác vắng mặt cho ${appointment.patientName}`,
+            ? t('uiScheduling.patientReturnedToQueue', { name: appointment.patientName })
+            : t('uiScheduling.undoNoShowSuccess', { name: appointment.patientName }),
       );
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể hoàn tác'));
+      setError(getApiErrorMessage(err, t('uiScheduling.undoStatusError')));
     }
   };
 
   const handleReschedule = async () => {
     if (!appointment) return;
     if (!rescheduleDate || !rescheduleTime) {
-      setError('Vui lòng chọn ngày/giờ mới.');
+      setError(t('uiScheduling.newDateTimeRequired'));
       return;
     }
     if (chosenDentistBlocked) {
-      setError('Bác sĩ này hiện không nhận lịch — hãy chọn bác sĩ khác.');
+      setError(t('uiScheduling.rescheduleDentistUnavailable'));
       return;
     }
     setError(null);
@@ -492,18 +483,18 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           newDentistId: chosenDentist || undefined,
           newStartsAt: start.toISOString(),
           newEndsAt: end.toISOString(),
-          reason: reason || 'Đổi lịch',
+          reason: reason || t('uiScheduling.reschedule'),
           ...(byClinic ? { byClinic: true } : {}),
           // A visit moved by a colleague since this copy was loaded is a 409 (A3-12).
           rescheduleCount: appointment.rescheduleCount,
           updatedAt: appointment.updatedAt,
         },
       });
-      notify.success('Đã đổi lịch hẹn');
+      notify.success(t('uiScheduling.appointmentRescheduled'));
       closeAction();
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Không thể đổi lịch'));
+      setError(getApiErrorMessage(err, t('uiScheduling.rescheduleError')));
     }
   };
 
@@ -511,12 +502,12 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     if (!appointment) return;
     try {
       await start.mutateAsync(appointment.id);
-      notify.success(`Đã mở phiên khám cho ${appointment.patientName}`);
+      notify.success(t('uiScheduling.encounterStartedFor', { name: appointment.patientName }));
       setActionModal(null);
       onClose();
     } catch (err) {
       setActionModal(null);
-      notify.error(getApiErrorMessage(err, 'Không thể mở phiên khám'));
+      notify.error(getApiErrorMessage(err, t('uiScheduling.startEncounterError')));
     }
   };
 
@@ -539,7 +530,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           const opens = clinicParts(new Date(opensMs));
           return opens.date === clinicToday(new Date(now))
             ? opens.time
-            : `${opens.time} ngày ${opens.date.slice(8, 10)}/${opens.date.slice(5, 7)}`;
+            : t('uiScheduling.checkInOpensDate', { time: opens.time, date: `${opens.date.slice(8, 10)}/${opens.date.slice(5, 7)}` });
         })()
       : null;
   // A3-10: after the start, front desk may still cancel a visit not arrived
@@ -575,23 +566,23 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         open={!!appointmentId}
         onClose={onClose}
         width="lg"
-        title={isLoading ? 'Đang tải...' : appointment ? `Lịch hẹn #${appointment.id.slice(-6).toUpperCase()}` : 'Không tìm thấy'}
+        title={isLoading ? t('uiScheduling.loading') : appointment ? `${t('uiScheduling.appointmentDetail')} #${appointment.id.slice(-6).toUpperCase()}` : t('uiScheduling.noAppointmentFound')}
       >
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Spinner size="lg" />
           </div>
         ) : !appointment ? (
-          <p className="text-sm text-gray-500">Không tìm thấy lịch hẹn.</p>
+          <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.noAppointmentFound')}</p>
         ) : (
           <div className="space-y-5">
             {/* Header summary */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-surface-700 dark:bg-surface-800">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Bệnh nhân</p>
-                  <p className="mt-0.5 text-base font-semibold text-gray-900">{appointment.patientName}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.patient')}</p>
+              <p className="mt-0.5 text-base font-semibold text-gray-900 dark:text-surface-100">{appointment.patientName}</p>
+                  <p className="text-xs text-gray-500 dark:text-surface-400">
                     {appointment.patientCode} •{' '}
                     <span className="inline-flex items-center gap-1">
                       <Phone className="h-3 w-3" /> {formatPhone(appointment.patientPhone ?? null)}
@@ -606,12 +597,10 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"
                 >
                   <p className="font-semibold">
-                    {OVERDUE_LABEL} — trễ {minutesLate(appointment.startsAt, now)} phút
+                    {t(`uiScheduling.${OVERDUE_LABEL}`)} — {t('uiScheduling.minutesLate', { count: minutesLate(appointment.startsAt, now) })}
                   </p>
                   <p className="mt-0.5">
-                    Gọi cho bệnh nhân; nếu khách đến thì check-in muộn, nếu không đến thì đánh
-                    vắng mặt (hệ thống tự đánh vắng mặt khoảng 1 giờ sau khi hết giờ hẹn; trong
-                    ngày vẫn check-in muộn hoặc hoàn tác được).
+                    {t('uiScheduling.overdueInstructions')}
                   </p>
                 </div>
               )}
@@ -623,59 +612,59 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                     size="sm"
                     leftIcon={<Phone className="h-3.5 w-3.5" />}
                     onClick={handleCall}
-                    aria-label="Gọi điện cho bệnh nhân"
+                    aria-label={t('uiScheduling.callPatient')}
                   >
-                    Gọi điện
+                    {t('uiScheduling.call')}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     leftIcon={<Copy className="h-3.5 w-3.5" />}
                     onClick={handleCopyPhone}
-                    aria-label="Sao chép số điện thoại"
+                    aria-label={t('uiScheduling.copyPhone')}
                   >
-                    Sao chép SĐT
+                    {t('uiScheduling.copyPhone')}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     leftIcon={<ExternalLink className="h-3.5 w-3.5" />}
                     onClick={handleOpenProfile}
-                    aria-label="Mở hồ sơ bệnh nhân"
+                    aria-label={t('uiScheduling.openPatientProfile')}
                   >
-                    Xem hồ sơ
+                    {t('uiScheduling.viewPatientProfile')}
                   </Button>
                 </div>
               )}
             </div>
 
             {/* Schedule info */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <DetailRow
                 icon={<Calendar className="h-4 w-4" />}
-                label="Ngày khám"
+                label={t('uiScheduling.appointmentDate')}
                 value={`${getWeekdayLabel(appointment.startsAt)}, ${formatDate(appointment.startsAt, 'dd/MM/yyyy')}`}
               />
               <DetailRow
                 icon={<Clock className="h-4 w-4" />}
-                label="Thời gian"
-                value={`${formatTimeOnly(appointment.startsAt)} – ${formatTimeOnly(appointment.endsAt)} (${appointment.durationMinutes} phút)`}
+                label={t('uiScheduling.appointmentTime')}
+                value={`${formatTimeOnly(appointment.startsAt)} – ${formatTimeOnly(appointment.endsAt)} (${t('uiScheduling.minutesValue', { count: appointment.durationMinutes })})`}
               />
               <DetailRow
                 icon={<User className="h-4 w-4" />}
-                label="Bác sĩ"
+                label={t('uiScheduling.dentist')}
                 value={appointment.dentistName}
               />
               <DetailRow
                 icon={<Stethoscope className="h-4 w-4" />}
-                label="Loại"
+                label={t('uiScheduling.appointmentType')}
                 value={
                   appointment.appointmentType === 'consultation'
-                    ? 'Khám / Tư vấn'
+                    ? t('uiScheduling.typeConsultation')
                     : appointment.appointmentType === 'treatment'
-                      ? 'Điều trị'
+                      ? t('uiScheduling.typeTreatment')
                       : appointment.appointmentType === 'follow_up'
-                        ? 'Tái khám'
+                        ? t('uiScheduling.typeFollowUp')
                         : '—'
                 }
               />
@@ -683,39 +672,37 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
             {/* Services (ADR-0009 phase 5) */}
             {(appointment.services?.length || appointment.visitKind === 'walk_in') && (
-              <div className="rounded-md border border-gray-200 bg-white p-4">
+              <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-900">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Dịch vụ</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.service')}</p>
                   {appointment.visitKind === 'walk_in' && (
                     <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-                      Khách vãng lai
+                      {t('uiScheduling.walkIn')}
                     </span>
                   )}
                 </div>
                 {appointment.services?.length ? (
-                  <ul className="space-y-1 text-sm" aria-label="Dịch vụ của lịch hẹn">
+                  <ul className="space-y-1 text-sm" aria-label={t('uiScheduling.appointmentServices')}>
                     {appointment.services.map((sv) => (
                       <li key={sv.id} className="flex items-center justify-between gap-2">
-                        <span className="text-gray-900">{sv.serviceName}</span>
+                        <span className="text-gray-900 dark:text-surface-100">{sv.serviceName}</span>
                         <span className="text-xs text-gray-500">
-                          {sv.durationMin} phút · {formatVnd(sv.price)}
+                          {t('uiScheduling.minutesValue', { count: sv.durationMin })} · {formatVnd(sv.price)}
                         </span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-gray-500">Chưa chọn dịch vụ.</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.noServiceSelected')}</p>
                 )}
                 {(appointment.bufferBeforeMin || appointment.bufferAfterMin) ? (
                   <p className="mt-2 text-xs text-gray-500">
-                    Chuẩn bị {appointment.bufferBeforeMin ?? 0}′ trước, dọn dẹp{' '}
-                    {appointment.bufferAfterMin ?? 0}′ sau
+                    {t('uiScheduling.appointmentBuffers', { before: appointment.bufferBeforeMin ?? 0, after: appointment.bufferAfterMin ?? 0 })}
                   </p>
                 ) : null}
                 {appointment.durationOverrideReason && (
                   <p className="mt-1 text-xs text-amber-700">
-                    Thời lượng khác tổng dịch vụ ({appointment.calculatedDurationMin} phút):{' '}
-                    {appointment.durationOverrideReason}
+                    {t('uiScheduling.durationOverrideNotice', { minutes: appointment.calculatedDurationMin, reason: appointment.durationOverrideReason })}
                   </p>
                 )}
               </div>
@@ -723,23 +710,23 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
             {/* Reason / notes */}
             {(appointment.reason || appointment.chiefComplaint || appointment.notes) && (
-              <div className="space-y-2 rounded-md border border-gray-200 bg-white p-4">
+              <div className="space-y-2 rounded-md border border-gray-200 bg-white p-4 dark:border-surface-700 dark:bg-surface-900">
                 {appointment.reason && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Lý do khám</p>
-                    <p className="mt-0.5 text-sm text-gray-900">{appointment.reason}</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.reason')}</p>
+                    <p className="mt-0.5 text-sm text-gray-900 dark:text-surface-100">{appointment.reason}</p>
                   </div>
                 )}
                 {appointment.chiefComplaint && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Triệu chứng</p>
-                    <p className="mt-0.5 text-sm text-gray-900">{appointment.chiefComplaint}</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.symptoms')}</p>
+                    <p className="mt-0.5 text-sm text-gray-900 dark:text-surface-100">{appointment.chiefComplaint}</p>
                   </div>
                 )}
                 {appointment.notes && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Ghi chú nội bộ</p>
-                    <p className="mt-0.5 text-sm text-gray-700">{appointment.notes}</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.internalNote')}</p>
+                    <p className="mt-0.5 text-sm text-gray-700 dark:text-surface-200">{appointment.notes}</p>
                   </div>
                 )}
               </div>
@@ -747,10 +734,10 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
             {/* Status timeline */}
             <div>
-              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">Lịch sử trạng thái</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.appointmentHistory')}</p>
               <ul className="space-y-2 text-xs">
                 <TimelineRow
-                  label="Đặt lịch"
+                  label={t('uiScheduling.appointmentBooked')}
                   time={formatDateTime(appointment.createdAt)}
                   active
                 />
@@ -762,21 +749,21 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   />
                 )}
                 {appointment.status === 'in_progress' && (
-                  <TimelineRow label="Đang khám" time="—" active />
+                  <TimelineRow label={t('uiScheduling.statusInProgress')} time="—" active />
                 )}
                 {appointment.status === 'completed' && (
-                  <TimelineRow label="Hoàn thành" time={formatDateTime(appointment.updatedAt)} active />
+                  <TimelineRow label={t('uiScheduling.statusCompleted')} time={formatDateTime(appointment.updatedAt)} active />
                 )}
                 {appointment.status === 'cancelled' && appointment.cancelledAt && (
                   <TimelineRow
-                    label={`Hủy: ${appointment.cancellationReason ?? ''}`}
+                    label={t('uiScheduling.cancelledWithReason', { reason: appointment.cancellationReason ?? '' })}
                     time={formatDateTime(appointment.cancelledAt)}
                     danger
                   />
                 )}
                 {appointment.status === 'left' && appointment.leftAt && (
                   <TimelineRow
-                    label={`Đã về, chưa khám: ${appointment.leftReason ?? ''}`}
+                    label={t('uiScheduling.leftWithReason', { reason: appointment.leftReason ?? '' })}
                     time={formatDateTime(appointment.leftAt)}
                     danger
                   />
@@ -795,13 +782,13 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
             {history && history.events.length > 0 && (
               <div>
                 <p className="mb-2 flex items-center gap-1 text-xs uppercase tracking-wide text-gray-500">
-                  <History className="h-3.5 w-3.5" /> Nhật ký thao tác
+                  <History className="h-3.5 w-3.5" /> {t('uiScheduling.activityLog')}
                 </p>
-                <ul className="space-y-1.5 text-xs" aria-label="Nhật ký thao tác">
+                <ul className="space-y-1.5 text-xs" aria-label={t('uiScheduling.activityLog')}>
                   {history.events.map((e, i) => (
                     <li key={`${e.action}-${i}`} className="flex items-start justify-between gap-3">
                       <span className="text-gray-700">
-                        {HISTORY_LABEL[e.action] ?? e.action}
+                        {HISTORY_TRANSLATION[e.action] ? t(`uiScheduling.${HISTORY_TRANSLATION[e.action]}`) : e.action}
                         {historyDetail(e.metadata) && (
                           <span className="text-gray-500"> — {historyDetail(e.metadata)}</span>
                         )}
@@ -816,7 +803,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
             {/* Actions */}
             <div className="border-t border-gray-200 pt-4">
-              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">Thao tác</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.actions')}</p>
               <div className="flex flex-wrap gap-2">
                 {appointment.status === 'scheduled' || appointment.status === 'confirmed' ? (
                   <PermissionGuard permission="appointment.check_in">
@@ -828,7 +815,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                         leftIcon={<CheckCircle2 className="h-4 w-4" />}
                         onClick={() => setActionModal('force_check_in')}
                       >
-                        Check-in sớm (mở từ {checkInOpensAt})
+                        {t('uiScheduling.earlyCheckInOpens', { time: checkInOpensAt })}
                       </Button>
                     ) : checkInOpensAt ? (
                       // The backend refuses check-in this early; say when it opens.
@@ -838,7 +825,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                         leftIcon={<CheckCircle2 className="h-4 w-4" />}
                         disabled
                       >
-                        Mở check-in từ {checkInOpensAt}
+                        {t('uiScheduling.checkInOpensAt', { time: checkInOpensAt })}
                       </Button>
                     ) : checkInDayOver ? (
                       // An earlier clinic day: the backend refuses; book a new visit.
@@ -848,7 +835,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                         leftIcon={<CheckCircle2 className="h-4 w-4" />}
                         disabled
                       >
-                        Đã qua ngày hẹn — đặt lịch mới
+                        {t('uiScheduling.appointmentDayPassed')}
                       </Button>
                     ) : (
                       <Button
@@ -858,7 +845,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                         onClick={checkInNeedsReason ? () => setActionModal('force_check_in') : handleCheckIn}
                         isLoading={checkIn.isPending}
                       >
-                        {overdue ? 'Check-in (muộn)' : 'Check-in'}
+                        {overdue ? t('uiScheduling.lateCheckIn') : t('uiScheduling.checkIn')}
                       </Button>
                     )}
                   </PermissionGuard>
@@ -874,7 +861,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       onClick={handleConfirm}
                       isLoading={confirm.isPending}
                     >
-                      Xác nhận lịch
+                      {t('uiScheduling.confirmAppointment')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -888,7 +875,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       onClick={() => setActionModal('start')}
                       isLoading={start.isPending}
                     >
-                      Mời vào khám
+                      {t('uiScheduling.startEncounter')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -900,7 +887,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<CheckCircle2 className="h-4 w-4" />}
                       onClick={() => setActionModal('force_check_in')}
                     >
-                      Check-in muộn
+                      {t('uiScheduling.lateCheckIn')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -913,7 +900,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<Undo2 className="h-4 w-4" />}
                       onClick={() => setActionModal('undo_no_show')}
                     >
-                      Hoàn tác vắng mặt
+                      {t('uiScheduling.undoNoShow')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -926,7 +913,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<Undo2 className="h-4 w-4" />}
                       onClick={() => setActionModal('undo_left')}
                     >
-                      Hoàn tác đã về
+                      {t('uiScheduling.undoLeft')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -939,7 +926,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<Undo2 className="h-4 w-4" />}
                       onClick={() => setActionModal('undo_check_in')}
                     >
-                      Hoàn tác check-in
+                      {t('uiScheduling.undoCheckIn')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -952,7 +939,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<DoorOpen className="h-4 w-4" />}
                       onClick={() => setActionModal('left')}
                     >
-                      Bệnh nhân đã về
+                      {t('uiScheduling.patientLeft')}
                     </Button>
                   </PermissionGuard>
                 ) : null}
@@ -965,7 +952,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<Trash2 className="h-4 w-4" />}
                       onClick={() => setActionModal('no_show')}
                     >
-                      Đánh vắng mặt
+                      {t('uiScheduling.markNoShow')}
                     </Button>
                   </PermissionGuard>
                 )}
@@ -978,7 +965,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<X className="h-4 w-4" />}
                       onClick={() => setActionModal('cancel')}
                     >
-                      Hủy lịch
+                      {t('uiScheduling.cancelAppointment')}
                     </Button>
                   </PermissionGuard>
                 )}
@@ -994,7 +981,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                       leftIcon={<FileEdit className="h-4 w-4" />}
                       onClick={() => setActionModal('reschedule')}
                     >
-                      Đổi lịch
+                      {t('uiScheduling.reschedule')}
                     </Button>
                   </PermissionGuard>
                 )}
@@ -1010,7 +997,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                         onClose();
                       }}
                     >
-                      Sửa
+                      {t('uiScheduling.edit')}
                     </Button>
                   </PermissionGuard>
                 )}
@@ -1024,13 +1011,13 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       <ActionDialog
         open={actionModal === 'cancel'}
         onClose={closeAction}
-        title="Hủy lịch hẹn"
+        title={t('uiScheduling.cancelAppointment')}
         description={
           appointment?.status === 'checked_in'
             ? // Cancelling a visit the patient came to skews the arrival stats:
               // point to the action that records what really happened.
-              'Bệnh nhân đã check-in. Nếu bệnh nhân rời đi trước khi khám, hãy dùng "Bệnh nhân đã về" (thống kê là đã đến nhưng chưa khám); nếu check-in nhầm, dùng "Hoàn tác check-in". Chỉ hủy khi lượt hẹn này không còn giá trị (vd. đặt trùng). Lý do sẽ được ghi vào lịch sử.'
-            : 'Vui lòng nhập lý do hủy. Lý do sẽ được ghi vào lịch sử.'
+              t('uiScheduling.cancelCheckedInDescription')
+            : t('uiScheduling.cancelReasonDescription')
         }
         reason={reason}
         setReason={setReason}
@@ -1038,33 +1025,32 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         extra={
           rowScopedDentist ? undefined : clinicOnlyCancel ? (
             <p className="text-xs text-amber-700">
-              Đã qua giờ hẹn: chỉ hủy được với lý do "Phòng khám hủy" (bác sĩ vắng, phòng khám nghỉ) — không tính là
-              bệnh nhân vắng mặt. Nếu bệnh nhân không đến, hãy đánh vắng mặt.
+              {t('uiScheduling.clinicCancelPastDueDescription')}
             </p>
           ) : (
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" checked={byClinic} onChange={(e) => setByClinic(e.target.checked)} />
-              <span>Phòng khám hủy (bác sĩ vắng, phòng khám nghỉ) — không tính cho bệnh nhân</span>
+              <span>{t('uiScheduling.clinicCancelCheckbox')}</span>
             </label>
           )
         }
         error={error}
         onConfirm={handleCancel}
         isLoading={cancel.isPending}
-        confirmLabel="Xác nhận hủy"
+        confirmLabel={t('uiScheduling.confirmCancel')}
         confirmVariant="danger"
       />
 
       <ActionDialog
         open={actionModal === 'force_check_in'}
         onClose={closeAction}
-        title={earlyCheckIn ? 'Check-in sớm' : 'Check-in muộn'}
+        title={earlyCheckIn ? t('uiScheduling.earlyCheckIn') : t('uiScheduling.lateCheckIn')}
         description={
           earlyCheckIn
-            ? `Chưa đến giờ check-in (mở từ ${checkInOpensAt}). Vẫn check-in được trong ngày hẹn với lý do; lịch giữ nguyên giờ hẹn và bệnh nhân xếp hàng theo giờ hẹn, không chen trước người hẹn sớm hơn.`
+            ? t('uiScheduling.earlyCheckInDescription', { time: checkInOpensAt })
             : appointment?.status === 'no_show'
-            ? 'Lịch đã bị đánh vắng mặt. Vẫn check-in được trong ngày hẹn nếu khung giờ của bác sĩ còn trống; nhập lý do (được ghi vào nhật ký).'
-            : `Đã quá ${CHECK_IN_WINDOW_AFTER_MIN} phút sau giờ hẹn nên hết khung check-in thường. Vẫn check-in được trong ngày hẹn; nhập lý do (được ghi vào nhật ký).`
+            ? t('uiScheduling.checkInAfterNoShowDescription')
+            : t('uiScheduling.lateCheckInDescription', { minutes: CHECK_IN_WINDOW_AFTER_MIN })
         }
         reason={reason}
         setReason={setReason}
@@ -1072,67 +1058,67 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         error={error}
         onConfirm={handleForceCheckIn}
         isLoading={checkIn.isPending}
-        confirmLabel={earlyCheckIn ? 'Check-in sớm' : 'Vẫn check-in'}
+        confirmLabel={earlyCheckIn ? t('uiScheduling.earlyCheckIn') : t('uiScheduling.checkInAnyway')}
         confirmVariant="primary"
       />
 
       <ActionDialog
         open={actionModal === 'no_show'}
         onClose={closeAction}
-        title="Đánh vắng mặt"
-        description="Đã qua giờ hẹn mà bệnh nhân chưa đến? Lịch sẽ chuyển sang Vắng mặt và giờ hẹn được giải phóng."
+        title={t('uiScheduling.markNoShow')}
+        description={t('uiScheduling.noShowDialogDescription')}
         reason={reason}
         setReason={setReason}
         quickReasons={NO_SHOW_REASONS}
         error={error}
         onConfirm={handleNoShow}
         isLoading={noShow.isPending}
-        confirmLabel="Xác nhận vắng mặt"
+        confirmLabel={t('uiScheduling.confirmNoShow')}
         confirmVariant="danger"
       />
 
       <ActionDialog
         open={actionModal === 'undo_check_in'}
         onClose={closeAction}
-        title="Hoàn tác check-in"
-        description='Lịch quay về trạng thái trước khi check-in và bệnh nhân rời hàng chờ. Chỉ dùng khi check-in nhầm, trước khi vào khám. Bệnh nhân tạm ra ngoài: dùng "Bỏ qua" ở màn Điều phối (giữ lượt); bỏ về: dùng "Bệnh nhân đã về".'
+        title={t('uiScheduling.undoCheckIn')}
+        description={t('uiScheduling.undoCheckInDescription')}
         reason={reason}
         setReason={setReason}
         quickReasons={UNDO_CHECK_IN_REASONS}
         error={error}
         onConfirm={() => void handleUndo('check-in')}
         isLoading={undoStatus.isPending}
-        confirmLabel="Hoàn tác check-in"
+        confirmLabel={t('uiScheduling.undoCheckIn')}
         confirmVariant="primary"
       />
 
       <ActionDialog
         open={actionModal === 'undo_no_show'}
         onClose={closeAction}
-        title="Hoàn tác vắng mặt"
-        description="Lịch quay về trạng thái trước khi bị đánh vắng mặt (nếu khung giờ của bác sĩ còn trống). Hệ thống sẽ không tự đánh vắng mặt lại trước khi hết ngày."
+        title={t('uiScheduling.undoNoShow')}
+        description={t('uiScheduling.undoNoShowDescription')}
         reason={reason}
         setReason={setReason}
         quickReasons={UNDO_NO_SHOW_REASONS}
         error={error}
         onConfirm={() => void handleUndo('no-show')}
         isLoading={undoStatus.isPending}
-        confirmLabel="Hoàn tác vắng mặt"
+        confirmLabel={t('uiScheduling.undoNoShow')}
         confirmVariant="primary"
       />
 
       <ActionDialog
         open={actionModal === 'undo_left'}
         onClose={closeAction}
-        title="Hoàn tác đã về"
-        description="Bệnh nhân quay lại hàng chờ với giờ check-in và thứ tự ưu tiên ban đầu (nếu giờ hẹn chưa bị lượt khác dùng). Chỉ trong ngày hẹn."
+        title={t('uiScheduling.undoLeft')}
+        description={t('uiScheduling.undoLeftDescription')}
         reason={reason}
         setReason={setReason}
         quickReasons={UNDO_LEFT_REASONS}
         error={error}
         onConfirm={() => void handleUndo('left')}
         isLoading={undoStatus.isPending}
-        confirmLabel="Hoàn tác đã về"
+        confirmLabel={t('uiScheduling.undoLeft')}
         confirmVariant="primary"
       />
 
@@ -1142,49 +1128,48 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         onClose={closeAction}
         onConfirm={() => void handleStart()}
         isLoading={start.isPending}
-        title="Mời vào khám?"
+        title={t('uiScheduling.startEncounterConfirm')}
         description={
           appointment && (
             <>
-              Mở phiên khám cho <strong>{appointment.patientName}</strong> ({appointment.patientCode}). Kiểm tra
-              đúng người trước khi bắt đầu.
+              {t('uiScheduling.startEncounterDescription', { name: appointment.patientName, code: appointment.patientCode })}
             </>
           )
         }
-        confirmLabel="Bắt đầu khám"
+        confirmLabel={t('uiScheduling.startEncounter')}
       />
 
       <ActionDialog
         open={actionModal === 'left'}
         onClose={closeAction}
-        title="Bệnh nhân đã về (chưa khám)"
-        description="Bệnh nhân đã check-in nhưng rời phòng khám trước khi vào khám. Giờ hẹn sẽ được giải phóng; đây không phải hủy lịch hay no-show. Bấm nhầm hoặc bệnh nhân quay lại trong ngày thì dùng &quot;Hoàn tác đã về&quot;."
+        title={t('uiScheduling.patientLeftNotSeen')}
+        description={t('uiScheduling.patientLeftDescription')}
         reason={reason}
         setReason={setReason}
         quickReasons={LEFT_REASONS}
         error={error}
         onConfirm={handleLeft}
         isLoading={markLeft.isPending}
-        confirmLabel="Xác nhận đã về"
+        confirmLabel={t('uiScheduling.confirmPatientLeft')}
         confirmVariant="danger"
       />
 
       <Modal
         open={actionModal === 'reschedule'}
         onClose={closeAction}
-        title="Đổi lịch hẹn"
+        title={t('uiScheduling.rescheduleAppointment')}
         size="md"
         footer={
           <>
             <Button variant="outline" onClick={closeAction} disabled={reschedule.isPending}>
-              Hủy
+              {t('uiScheduling.cancel')}
             </Button>
             <Button
               onClick={handleReschedule}
               isLoading={reschedule.isPending}
               disabled={replans && isReplanning}
             >
-              Xác nhận đổi lịch
+              {t('uiScheduling.confirmReschedule')}
             </Button>
           </>
         }
@@ -1192,7 +1177,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         <div className="space-y-3">
           {error && <AlertInline message={error} />}
           <Select
-            label="Bác sĩ mới"
+            label={t('uiScheduling.newDentist')}
             value={chosenDentist}
             onChange={(e) => setRescheduleDentist(e.target.value)}
             options={rescheduleDentistOptions}
@@ -1200,30 +1185,29 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           />
           {chosenDentistBlocked && (
             <p className="text-xs text-amber-700">
-              Bác sĩ này hiện không nhận lịch (nghỉ, tạm ngưng hoặc bị khóa) — hãy chọn bác sĩ khác.
+              {t('uiScheduling.rescheduleDentistUnavailable')}
             </p>
           )}
           {rescheduleMinutes !== currentMinutes && (
-            <p className="text-xs text-gray-600">
-              Thời lượng tính lại theo dịch vụ của bác sĩ/ngày mới: {rescheduleMinutes} phút (trước:{' '}
-              {currentMinutes} phút).
+            <p className="text-xs text-gray-600 dark:text-surface-300">
+              {t('uiScheduling.rescheduleDurationChanged', { minutes: rescheduleMinutes, previous: currentMinutes })}
             </p>
           )}
           {rescheduleDentistIncapable && (
             <p className="text-xs text-amber-700">
-              Bác sĩ này không làm được dịch vụ của lịch hẹn vào ngày đã chọn — hãy chọn bác sĩ khác.
+              {t('uiScheduling.rescheduleServiceUnavailable')}
             </p>
           )}
           <div className="grid grid-cols-2 gap-3">
             <Input
               type="date"
-              label="Ngày mới"
+              label={t('uiScheduling.newDate')}
               value={rescheduleDate}
               onChange={(e) => setRescheduleDate(e.target.value)}
             />
             <Input
               type="time"
-              label="Giờ mới"
+              label={t('uiScheduling.newTime')}
               value={rescheduleTime}
               onChange={(e) => setRescheduleTime(e.target.value)}
             />
@@ -1231,23 +1215,23 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
           {/* Available slot suggestions */}
           <div>
-            <p className="mb-1.5 text-xs font-medium text-gray-600">
-              Khung giờ trống gợi ý
+            <p className="mb-1.5 text-xs font-medium text-gray-600 dark:text-surface-300">
+              {t('uiScheduling.suggestedAvailableSlots')}
               <span className="ml-1 font-normal text-gray-400">
-                ({rescheduleMinutes} phút)
+                ({t('uiScheduling.minutesValue', { count: rescheduleMinutes })})
               </span>
             </p>
             {!rescheduleDate ? (
               <p className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400">
-                Chọn ngày để xem gợi ý.
+                {t('uiScheduling.chooseDateForSuggestions')}
               </p>
             ) : isAvailabilityLoading ? (
               <div className="flex items-center gap-2 rounded-md border border-gray-100 px-3 py-3 text-xs text-gray-500">
-                <Spinner size="sm" /> Đang tải khung giờ trống…
+                <Spinner size="sm" /> {t('uiScheduling.loadingAvailableSlots')}
               </div>
             ) : !availability?.availableSlots?.length ? (
               <p className="rounded-md border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400">
-                Không có khung giờ trống trong ngày này.
+                {t('uiScheduling.noAvailableSlotsThisDay')}
               </p>
             ) : (
               <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-gray-100 p-2">
@@ -1277,18 +1261,17 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           </div>
 
           <Textarea
-            label="Lý do đổi lịch"
+            label={t('uiScheduling.rescheduleReason')}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="VD: BS bận đột xuất, BN yêu cầu đổi..."
+            placeholder={t('uiScheduling.rescheduleReasonExample')}
             rows={3}
           />
           {!rowScopedDentist && (
             <label className="flex items-start gap-2 text-sm">
               <input type="checkbox" checked={byClinic} onChange={(e) => setByClinic(e.target.checked)} />
               <span>
-                Phòng khám dời (bác sĩ vắng, đổi giờ làm, ngày nghỉ) — không tính vào giới hạn 3 lần đổi lịch của
-                bệnh nhân
+                {t('uiScheduling.rescheduleByClinicNote')}
               </span>
             </label>
           )}
@@ -1300,12 +1283,12 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
 
 function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-md border border-gray-200 p-3">
+    <div className="rounded-md border border-gray-200 p-3 dark:border-surface-700">
       <div className="flex items-center gap-1.5 text-xs text-gray-500">
         {icon}
         <span>{label}</span>
       </div>
-      <p className="mt-1 text-sm font-medium text-gray-900">{value}</p>
+      <p className="mt-1 text-sm font-medium text-gray-900 dark:text-surface-100">{value}</p>
     </div>
   );
 }
@@ -1349,7 +1332,7 @@ interface ActionDialogProps {
   description: string;
   reason: string;
   setReason: (v: string) => void;
-  quickReasons?: string[];
+  quickReasons?: QuickReason[];
   /** Extra controls under the reason (e.g. "Phòng khám hủy"). */
   extra?: React.ReactNode;
   error: string | null;
@@ -1374,6 +1357,7 @@ function ActionDialog({
   confirmLabel,
   confirmVariant = 'danger',
 }: ActionDialogProps) {
+  const { t } = useTranslation();
   return (
     <ConfirmDialog
       open={open}
@@ -1382,32 +1366,32 @@ function ActionDialog({
       title={title}
       description={
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">{description}</p>
+          <p className="text-sm text-gray-600 dark:text-surface-300">{description}</p>
           {error && <AlertInline message={error} />}
           {quickReasons && quickReasons.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {quickReasons.map((preset) => (
                 <button
-                  key={preset}
+                  key={preset.key}
                   type="button"
-                  onClick={() => setReason(preset)}
+                  onClick={() => setReason(t(`uiScheduling.${preset.key}`))}
                   className={cn(
                     'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-                    reason === preset
+                    reason === t(`uiScheduling.${preset.key}`)
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:bg-brand-50',
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:bg-brand-50 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-200',
                   )}
                 >
-                  {preset}
+                  {t(`uiScheduling.${preset.key}`)}
                 </button>
               ))}
             </div>
           )}
           <Textarea
-            label="Lý do *"
+            label={t('uiScheduling.reasonRequired')}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Nhập lý do..."
+            placeholder={t('uiScheduling.enterReason')}
             rows={3}
           />
           {extra}

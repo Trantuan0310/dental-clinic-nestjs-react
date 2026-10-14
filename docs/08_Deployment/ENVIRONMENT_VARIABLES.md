@@ -118,7 +118,11 @@ Với `docker-compose.prod.yml`, compose tự dựng `DATABASE_URL` nội bộ
 link trong email đặt lịch online; thiếu thì dùng `FRONTEND_URL`. Backend cũng
 nhận `CLINIC_ADDRESS` (ghi địa chỉ trong email xác nhận/nhắc lịch) và
 `BOOKING_PATIENT_CANCEL_MIN_HOURS` (mặc định 4: khách được tự hủy lịch đã xác
-nhận qua link trong email đến trước giờ hẹn bao nhiêu giờ). Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
+nhận qua link trong email đến trước giờ hẹn bao nhiêu giờ),
+`BOOKING_NOTIFY_EMAILS` (các email của phòng khám nhận báo yêu cầu đặt lịch
+và danh sách "Lịch hẹn cần gọi khách", cách nhau bằng dấu phẩy) và
+`APPOINTMENT_EMAIL_NOTICES` (đặt `false` để tắt email xác nhận/hủy/dời/nhắc
+lịch hẹn; email của yêu cầu đặt lịch online vẫn gửi). Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
 [VPS_UPGRADE.md](./VPS_UPGRADE.md).
 
 Cả hai file **không** có service Redis — `REDIS_URL` để trống trừ khi bạn tự

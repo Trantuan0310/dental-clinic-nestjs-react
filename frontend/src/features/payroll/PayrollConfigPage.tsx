@@ -1,6 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useTranslation } from 'react-i18next';
 import { Save } from 'lucide-react';
 import { Card, Button, Input, Select, Alert } from '@/components/ui';
 import { PageLoader } from '@/components/ui/Loading';
@@ -12,7 +13,7 @@ import { usePayrollConfig, useUpdatePayrollConfig } from './payrollApi';
 // 8%) but shown/edited here as whole percent numbers for admin usability.
 const schema = z.object({
   payrollCycle: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY']),
-  overtimeMultiplier: z.coerce.number().min(1, 'Tối thiểu 1.0'),
+  overtimeMultiplier: z.coerce.number().min(1, 'uiWorkforce.payrollMinMultiplierError'),
   defaultTaxTncnPctPercent: z.coerce.number().min(0).max(100),
   bhxhPctPercent: z.coerce.number().min(0).max(100),
   bhytPctPercent: z.coerce.number().min(0).max(100),
@@ -24,6 +25,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function PayrollConfigPage() {
+  const { t } = useTranslation();
   const { data: config, isLoading } = usePayrollConfig();
   const updateConfig = useUpdatePayrollConfig();
 
@@ -59,9 +61,9 @@ export default function PayrollConfigPage() {
         minGrossForBhxh: values.minGrossForBhxh,
         probationSalaryPct: values.probationSalaryPctPercent / 100,
       });
-      notify.success('Đã lưu cấu hình payroll');
+      notify.success(t('uiWorkforce.payrollConfigSaved'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể lưu cấu hình'));
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollConfigSaveError')));
     }
   });
 
@@ -70,64 +72,64 @@ export default function PayrollConfigPage() {
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Cấu hình Payroll</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiWorkforce.payrollConfigTitle')}</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Thiết lập các thông số tính lương cho phòng khám
+          {t('uiWorkforce.payrollConfigDescription')}
         </p>
       </div>
 
       {!config && (
-        <Alert variant="warning">Không tải được cấu hình hiện tại — hệ thống sẽ dùng giá trị mặc định khi lưu.</Alert>
+        <Alert variant="warning">{t('uiWorkforce.payrollConfigLoadFallback')}</Alert>
       )}
 
-      <Card title="Chu kỳ lương">
+      <Card title={t('uiWorkforce.payrollCycle')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Select
-            label="Chu kỳ"
+            label={t('uiWorkforce.payrollCycle')}
             {...register('payrollCycle')}
             error={errors.payrollCycle?.message}
             options={[
-              { value: 'MONTHLY', label: 'Hàng tháng' },
-              { value: 'BIWEEKLY', label: 'Hàng 2 tuần' },
-              { value: 'WEEKLY', label: 'Hàng tuần' },
+              { value: 'MONTHLY', label: t('uiWorkforce.monthly') },
+              { value: 'BIWEEKLY', label: t('uiWorkforce.biweekly') },
+              { value: 'WEEKLY', label: t('uiWorkforce.weekly') },
             ]}
           />
         </div>
       </Card>
 
-      <Card title="Làm thêm giờ & thử việc">
+      <Card title={t('uiWorkforce.payrollOvertimeAndProbation')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
-            label="Hệ số làm thêm"
+            label={t('uiWorkforce.payrollOvertimeMultiplier')}
             type="number"
             step="0.1"
             {...register('overtimeMultiplier')}
-            error={errors.overtimeMultiplier?.message}
-            hint="VD: 1.5 = 150% lương cơ bản"
+            error={errors.overtimeMultiplier?.message ? t(errors.overtimeMultiplier.message) : undefined}
+            hint={t('uiWorkforce.payrollOvertimeExample')}
           />
           <Input
-            label="% Lương thử việc"
+            label={t('uiWorkforce.payrollProbationPercentage')}
             type="number"
             step="0.1"
             {...register('probationSalaryPctPercent')}
             error={errors.probationSalaryPctPercent?.message}
-            hint="VD: 85 = 85% lương chính thức"
+            hint={t('uiWorkforce.payrollProbationExample')}
           />
         </div>
       </Card>
 
-      <Card title="Thuế và BHXH">
+      <Card title={t('uiWorkforce.payrollTaxAndInsurance')}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Input
-            label="Thuế TNCN mặc định"
+            label={t('uiWorkforce.payrollIncomeTaxDefault')}
             type="number"
             step="0.1"
             {...register('defaultTaxTncnPctPercent')}
             error={errors.defaultTaxTncnPctPercent?.message}
-            hint="% (VD: 10 = 10%)"
+            hint={t('uiWorkforce.payrollPercentExample')}
           />
           <Input
-            label="BHXH"
+            label={t('uiWorkforce.payrollSocialInsurance')}
             type="number"
             step="0.1"
             {...register('bhxhPctPercent')}
@@ -135,7 +137,7 @@ export default function PayrollConfigPage() {
             hint="%"
           />
           <Input
-            label="BHYT"
+            label={t('uiWorkforce.payrollHealthInsurance')}
             type="number"
             step="0.1"
             {...register('bhytPctPercent')}
@@ -143,7 +145,7 @@ export default function PayrollConfigPage() {
             hint="%"
           />
           <Input
-            label="BHTN"
+            label={t('uiWorkforce.payrollUnemploymentInsurance')}
             type="number"
             step="0.1"
             {...register('bhtnPctPercent')}
@@ -151,7 +153,7 @@ export default function PayrollConfigPage() {
             hint="%"
           />
           <Input
-            label="Lương tối thiểu đóng BHXH"
+            label={t('uiWorkforce.payrollMinimumInsuranceSalary')}
             type="number"
             {...register('minGrossForBhxh')}
             error={errors.minGrossForBhxh?.message}
@@ -163,7 +165,7 @@ export default function PayrollConfigPage() {
       <div className="flex justify-end">
         <Button type="submit" isLoading={isSubmitting || updateConfig.isPending}>
           <Save className="h-4 w-4" />
-          Lưu cấu hình
+          {t('uiWorkforce.payrollSaveConfig')}
         </Button>
       </div>
     </form>

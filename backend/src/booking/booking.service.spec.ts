@@ -347,7 +347,11 @@ describe('BookingService public request security and validation', () => {
       process.env.BOOKING_NOTIFY_EMAILS = 'desk@clinic.vn';
       try {
         prisma.bookingRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
-        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({ ...full, fullName: 'An' });
+        prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({
+          ...full,
+          fullName: 'An',
+          email: 'an@x.vn',
+        });
         await expect(
           service.withdraw('GS-1A2B3C4D5E', { token: 'right-token' }, { message: 'Bận việc' }),
         ).resolves.toEqual({ referenceCode: 'GS-1A2B3C4D5E', status: 'CANCELLED' });
@@ -369,6 +373,13 @@ describe('BookingService public request security and validation', () => {
           expect.objectContaining({
             to: 'desk@clinic.vn',
             subject: expect.stringContaining('rút'),
+          }),
+        );
+        // A receipt to the requester's own address too (when there is one).
+        expect(email.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            to: 'an@x.vn',
+            subject: 'Đã hủy yêu cầu đặt lịch theo yêu cầu của bạn',
           }),
         );
       } finally {

@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
   Receipt,
@@ -16,7 +17,7 @@ import {
 import { billingApi } from '@/features/billing/billingApi';
 import { useAuthStore } from '@/stores/authStore';
 import { Button, Card, Alert } from '@/components/ui';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 import { exportCsv } from '@/lib/csv';
 import { clinicParts, clinicToday } from '@/lib/clinicTime';
 import type { OutstandingAgingEntry, OutstandingBucket } from '@/types/billing';
@@ -44,10 +45,6 @@ const tooltipFormatter = ((value: unknown, name: unknown) => {
   return [String(value ?? ''), String(name ?? '')];
 }) as TooltipFormatter;
 
-const paymentMethodLabels: Record<string, string> = {
-  CASH: 'Tiền mặt',
-  BANK_TRANSFER: 'Chuyển khoản',
-};
 
 /** "yyyy-MM-dd" → "dd/MM" without going through the browser's time zone. */
 const dayLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -60,37 +57,31 @@ const clinicDateLabel = (value: string | null) => {
 const daysBefore = (iso: string, days: number) =>
   new Date(Date.parse(`${iso}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
 
-const AGING_COLUMNS: Array<{ bucket: OutstandingBucket; label: string; color: string }> = [
-  { bucket: 'D90_PLUS', label: 'Trên 90 ngày', color: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' },
-  { bucket: 'D61_90', label: '61–90 ngày', color: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300' },
-  { bucket: 'D31_60', label: '31–60 ngày', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
-  { bucket: 'D8_30', label: '8–30 ngày', color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' },
-  { bucket: 'D0_7', label: 'Dưới 7 ngày', color: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' },
+const AGING_COLUMNS: Array<{ bucket: OutstandingBucket; key: string; color: string }> = [
+  { bucket: 'D90_PLUS', key: 'over90Days', color: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' },
+  { bucket: 'D61_90', key: 'days61to90', color: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300' },
+  { bucket: 'D31_60', key: 'days31to60', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+  { bucket: 'D8_30', key: 'days8to30', color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' },
+  { bucket: 'D0_7', key: 'under7Days', color: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' },
 ];
 
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Nháp',
-  ISSUED: 'Đã phát hành',
-  PARTIAL: 'Một phần',
-  PAID: 'Đã thanh toán',
-  VOIDED: 'Đã hủy',
-};
-
 function ChartErrorNotice({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-      <span>Không thể tải dữ liệu.</span>
+      <span>{t('uiOperations.chartLoadFailed')}</span>
       <button
         onClick={onRetry}
         className="rounded-md border border-gray-300 px-3 py-1 font-medium hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
       >
-        Thử lại
+        {t('uiOperations.retry')}
       </button>
     </div>
   );
 }
 
 export default function ReportsPage() {
+  const { t } = useTranslation();
   // Clinic calendar, not the workstation's clock.
   const [fromDate, setFromDate] = useState(() => daysBefore(clinicToday(), 30));
   const [toDate, setToDate] = useState(() => clinicToday());
@@ -199,7 +190,7 @@ export default function ReportsPage() {
 
   // Collected by payment method (net of refunds; shares of what was collected)
   const paymentChartData = (report?.byPaymentMethod ?? []).map(m => ({
-    method: paymentMethodLabels[m.method] ?? m.method,
+    method: m.method === 'CASH' ? t('uiOperations.cash') : m.method === 'BANK_TRANSFER' ? t('uiOperations.bankTransfer') : m.method,
     amount: m.amount,
     percent: m.sharePct,
     count: m.count,
@@ -228,25 +219,25 @@ export default function ReportsPage() {
   // Shared exporter: UTF-8 BOM + formula neutralizing (A6-15).
   const handleExportRevenue = () => {
     exportCsv(`doanh-thu_${fromDate}_${toDate}`, dailyData ?? [], [
-      { header: 'Ngày phát hành', accessor: d => d.date },
-      { header: 'Doanh thu', accessor: d => d.revenue },
-      { header: 'Số hóa đơn', accessor: d => d.invoiceCount },
+      { header: t('uiOperations.issuedDate'), accessor: d => d.date },
+      { header: t('uiOperations.revenue'), accessor: d => d.revenue },
+      { header: t('uiOperations.invoiceCount'), accessor: d => d.invoiceCount },
     ]);
   };
 
   const handleExportOutstanding = () => {
     exportCsv<OutstandingAgingEntry>(`cong-no_${clinicToday()}`, sortedOutstanding, [
-      { header: 'Mã hóa đơn', accessor: i => i.code },
-      { header: 'Bệnh nhân', accessor: i => i.patient.fullName },
-      { header: 'Mã BN', accessor: i => i.patient.code },
-      { header: 'SĐT', accessor: i => i.patient.phone ?? '' },
-      { header: 'Ngày khám', accessor: i => clinicDateLabel(i.visitDate) },
-      { header: 'Bác sĩ', accessor: i => i.dentistName ?? '' },
-      { header: 'Tổng hóa đơn', accessor: i => i.total },
-      { header: 'Còn nợ', accessor: i => i.outstanding },
-      { header: 'Ngày phát hành', accessor: i => clinicDateLabel(i.issuedAt) },
-      { header: 'Số ngày nợ', accessor: i => i.daysOld },
-      { header: 'Nhóm tuổi nợ', accessor: i => i.bucketLabel },
+      { header: t('uiOperations.invoiceCode'), accessor: i => i.code },
+      { header: t('uiOperations.patient'), accessor: i => i.patient.fullName },
+      { header: t('uiOperations.patientCode'), accessor: i => i.patient.code },
+      { header: t('uiOperations.phone'), accessor: i => i.patient.phone ?? '' },
+      { header: t('uiOperations.visitDate'), accessor: i => clinicDateLabel(i.visitDate) },
+      { header: t('uiOperations.dentist'), accessor: i => i.dentistName ?? '' },
+      { header: t('uiOperations.invoiceTotal'), accessor: i => i.total },
+      { header: t('uiOperations.outstanding'), accessor: i => i.outstanding },
+      { header: t('uiOperations.issuedDate'), accessor: i => clinicDateLabel(i.issuedAt) },
+      { header: t('uiOperations.daysPastDue'), accessor: i => i.daysOld },
+      { header: t('uiOperations.agingBucket'), accessor: i => i.bucketLabel },
     ]);
   };
 
@@ -256,25 +247,24 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Báo cáo doanh thu</h1>
+      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">{t('uiOperations.billingReport')}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Doanh thu tính theo <strong>ngày phát hành hóa đơn</strong> (không gồm hóa đơn nháp, đã hủy).
-            Đã thu tính theo <strong>ngày thu</strong>, đã trừ tiền hoàn.
+            {t('uiOperations.billingReportDescription')}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0">
           {canSeeRevenue && (
             <Button variant="outline" onClick={handleExportRevenue} disabled={!dailyData?.length}>
               <Download className="h-4 w-4" />
-              Xuất doanh thu
+              {t('uiOperations.exportRevenue')}
             </Button>
           )}
           {canSeeOutstanding && (
             <Button variant="outline" onClick={handleExportOutstanding} disabled={!outstandingList.length}>
               <Download className="h-4 w-4" />
-              Xuất công nợ
+              {t('uiOperations.exportOutstanding')}
             </Button>
           )}
         </div>
@@ -284,8 +274,9 @@ export default function ReportsPage() {
       <Card noPadding className="p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Từ ngày</label>
+            <label htmlFor="report-from-date" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('uiOperations.dateFrom')}</label>
             <input
+              id="report-from-date"
               type="date"
               value={fromDate}
               max={toDate}
@@ -296,8 +287,9 @@ export default function ReportsPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Đến ngày</label>
+            <label htmlFor="report-to-date" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{t('uiOperations.dateTo')}</label>
             <input
+              id="report-to-date"
               type="date"
               value={toDate}
               min={fromDate}
@@ -311,16 +303,14 @@ export default function ReportsPage() {
         {!isDateRangeValid && (
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">
             {isOrderValid
-              ? 'Khoảng thời gian tối đa 366 ngày. Hãy chọn khoảng ngắn hơn hoặc xem từng năm.'
-              : '"Từ ngày" phải trước hoặc bằng "Đến ngày".'}
+              ? t('uiOperations.max366Days')
+              : t('uiOperations.dateFromMustBeBefore')}
           </p>
         )}
       </Card>
 
       {!canSeeRevenue && !canSeeOutstanding && (
-        <Alert type="info" title="Không có quyền xem báo cáo">
-          Tài khoản của bạn chưa được cấp quyền xem báo cáo doanh thu hoặc công nợ.
-        </Alert>
+        <Alert type="info" title={t('uiOperations.noReportPermission')}>{t('uiOperations.noReportPermissionDescription')}</Alert>
       )}
 
       {canSeeRevenue && (
@@ -330,14 +320,14 @@ export default function ReportsPage() {
           as a silent zero — indistinguishable from a genuinely empty
           period — with no way to retry. */}
       {reportError && (
-        <Alert type="danger" title="Không thể tải báo cáo doanh thu">
+        <Alert type="danger" title={t('uiOperations.revenueReportLoadFailed')}>
           <div className="flex items-center justify-between gap-4">
-            <span>Đã có lỗi khi tải dữ liệu. Vui lòng thử lại.</span>
+            <span>{t('uiOperations.reportRetryMessage')}</span>
             <button
               onClick={() => refetchReport()}
               className="shrink-0 rounded-md border border-red-300 px-3 py-1 text-sm font-medium hover:bg-red-100 dark:border-red-700 dark:hover:bg-red-900"
             >
-              Thử lại
+              {t('uiOperations.retry')}
             </button>
           </div>
         </Alert>
@@ -351,8 +341,8 @@ export default function ReportsPage() {
               <Receipt className="h-6 w-6 text-brand-600 dark:text-brand-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Doanh thu (theo ngày phát hành)</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.revenueByIssueDate')}</p>
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-gray-900 dark:text-white">
                 {reportLoading ? '—' : formatCurrency(report?.totalInvoiced ?? 0)}
               </p>
             </div>
@@ -365,12 +355,12 @@ export default function ReportsPage() {
               <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Đã thu (theo ngày thu)</p>
-              <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.collectedByPaymentDate')}</p>
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-green-600 dark:text-green-400">
                 {reportLoading ? '—' : formatCurrency(report?.totalCollected ?? 0)}
               </p>
               {!!report?.totalRefunded && (
-                <p className="text-xs text-gray-500">Đã trừ hoàn tiền {formatCurrency(report.totalRefunded)}</p>
+                <p className="text-xs text-gray-500">{t('uiOperations.refundsDeducted')} {formatCurrency(report.totalRefunded)}</p>
               )}
             </div>
           </div>
@@ -382,8 +372,8 @@ export default function ReportsPage() {
               <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Còn nợ (của hóa đơn trong kỳ)</p>
-              <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.outstandingInPeriod')}</p>
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-amber-600 dark:text-amber-400">
                 {reportLoading ? '—' : formatCurrency(report?.totalOutstanding ?? 0)}
               </p>
             </div>
@@ -396,9 +386,9 @@ export default function ReportsPage() {
               <Receipt className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Số hóa đơn đã phát hành</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {reportLoading ? '—' : (report?.invoiceCount ?? 0).toLocaleString()}
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.issuedInvoiceCount')}</p>
+              <p className="text-xl font-semibold tabular-nums sm:text-2xl text-gray-900 dark:text-white">
+                {reportLoading ? '—' : formatNumber(report?.invoiceCount ?? 0)}
               </p>
             </div>
           </div>
@@ -407,23 +397,23 @@ export default function ReportsPage() {
 
       {/* Revenue by Status */}
       {report && (report.byStatus.length > 0 || report.excluded.draft.count + report.excluded.voided.count > 0) && (
-        <Card title="Doanh thu theo trạng thái">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <Card title={t('uiOperations.reportByStatus')}>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {report.byStatus.map((s) => (
               <div key={s.status} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                <p className="text-sm text-gray-500 dark:text-gray-400">{statusLabels[s.status] ?? s.status}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t(`uiOperations.${s.status.toLowerCase()}`, { defaultValue: s.status })}</p>
                 <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatCurrency(s.total)}</p>
-                <p className="text-xs text-gray-400">{s.count} hóa đơn</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">{s.count} {t('uiOperations.invoiceCountSuffix')}</p>
               </div>
             ))}
             {/* Shown apart, never added to the totals above. */}
             <div className="rounded-lg border border-dashed border-gray-300 p-3 dark:border-gray-600">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Không tính vào doanh thu</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.excludedFromRevenue')}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Nháp: {report.excluded.draft.count} ({formatCurrency(report.excluded.draft.total)})
+                {t('uiOperations.draftPrefix')} {report.excluded.draft.count} ({formatCurrency(report.excluded.draft.total)})
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Đã hủy: {report.excluded.voided.count} ({formatCurrency(report.excluded.voided.total)})
+                {t('uiOperations.voidedPrefix')} {report.excluded.voided.count} ({formatCurrency(report.excluded.voided.total)})
               </p>
             </div>
           </div>
@@ -433,7 +423,7 @@ export default function ReportsPage() {
       {/* Charts Row 1 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Daily Revenue Chart */}
-        <Card title="Doanh thu theo ngày phát hành">
+        <Card title={t('uiOperations.revenueByIssueDay')}>
           <div className="h-64">
             {dailyError ? (
               <ChartErrorNotice onRetry={() => refetchDaily()} />
@@ -463,7 +453,7 @@ export default function ReportsPage() {
         </Card>
 
         {/* Monthly Revenue Chart */}
-        <Card title="Doanh thu theo tháng">
+        <Card title={t('uiOperations.revenueByMonth')}>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyChartData}>
@@ -471,8 +461,8 @@ export default function ReportsPage() {
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axisColor} />
                 <YAxis tick={{ fontSize: 12 }} stroke={axisColor} tickFormatter={(v) => `${v}M`} />
                 <Tooltip formatter={tooltipFormatter} />
-                <Bar dataKey="revenue" fill={colors[0]} name="Doanh thu" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="collected" fill={colors[2]} name="Đã thu (theo ngày thu)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" fill={colors[0]} name={t('uiOperations.revenue')} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="collected" fill={colors[2]} name={t('uiOperations.collectedByPaymentDate')} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -482,7 +472,7 @@ export default function ReportsPage() {
       {/* Charts Row 2 */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Revenue by Dentist */}
-        <Card title="Doanh thu theo bác sĩ">
+        <Card title={t('uiOperations.revenueByDentist')}>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dentistChartData} layout="vertical">
@@ -490,15 +480,15 @@ export default function ReportsPage() {
                 <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}M`} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
                 <Tooltip formatter={tooltipFormatter} />
-                <Bar dataKey="revenue" fill={colors[0]} name="Doanh thu" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="paid" fill={colors[2]} name="Đã thu" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="revenue" fill={colors[0]} name={t('uiOperations.revenue')} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="paid" fill={colors[2]} name={t('uiOperations.collected')} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
         {/* Revenue by Procedure */}
-        <Card title="Doanh thu theo dịch vụ (Top 10, sau giảm giá)">
+        <Card title={t('uiOperations.revenueByProcedure')}>
           <div className="h-64">
             {byProcedureError ? (
               <ChartErrorNotice onRetry={() => refetchByProcedure()} />
@@ -509,7 +499,7 @@ export default function ReportsPage() {
                 <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}M`} />
                 <YAxis type="category" dataKey="procedure" tick={{ fontSize: 12 }} width={100} />
                 <Tooltip formatter={tooltipFormatter} />
-                <Bar dataKey="revenue" fill={colors[1]} name="Doanh thu" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="revenue" fill={colors[1]} name={t('uiOperations.revenue')} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
             )}
@@ -518,7 +508,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Revenue by Payment Method */}
-      <Card title="Đã thu theo phương thức thanh toán (trừ tiền hoàn)">
+      <Card title={t('uiOperations.collectedByMethod')}>
         <div className="space-y-3">
           {paymentChartData.map((method) => (
             <div key={method.method} className="flex items-center gap-4">
@@ -537,10 +527,10 @@ export default function ReportsPage() {
                 {formatCurrency(method.amount)}
               </div>
               <div className="w-16 text-right text-sm text-gray-500 dark:text-gray-400">
-                {method.percent.toFixed(1)}%
+                {formatPercent(method.percent / 100, 1)}
               </div>
               <div className="w-16 text-right text-xs text-gray-400">
-                {method.count} lần
+                {method.count} {t('uiOperations.times')}
               </div>
             </div>
           ))}
@@ -552,7 +542,7 @@ export default function ReportsPage() {
           failed query and a genuinely-empty period both silently hid the
           whole card, with no way to tell which happened or to retry. */}
       {(sourceChartData.length > 0 || bySourceError) && (
-        <Card title="Doanh thu theo nguồn đặt lịch">
+        <Card title={t('uiOperations.revenueByBookingSource')}>
           <div className="h-64">
             {bySourceError ? (
               <ChartErrorNotice onRetry={() => refetchBySource()} />
@@ -563,7 +553,7 @@ export default function ReportsPage() {
                 <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${v}M`} />
                 <YAxis type="category" dataKey="source" tick={{ fontSize: 12 }} width={100} />
                 <Tooltip formatter={tooltipFormatter} />
-                <Bar dataKey="revenue" fill={colors[2]} name="Doanh thu" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="revenue" fill={colors[2]} name={t('uiOperations.revenue')} radius={[0, 4, 4, 0]}>
                   {sourceChartData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
                   ))}
@@ -580,16 +570,16 @@ export default function ReportsPage() {
       {/* Outstanding Aging Report */}
       {canSeeOutstanding && (
       <Card
-        title="Báo cáo công nợ theo thời gian"
-        description={`${outstandingList.length} hóa đơn còn nợ (tính đến hôm nay, mọi thời điểm phát hành)`}
+        title={t('uiOperations.outstandingAgingReport')}
+        description={t('uiOperations.outstandingAsOfToday', { count: outstandingList.length })}
       >
         {/* Aging summary */}
-        <div className="grid grid-cols-5 gap-3 mb-6">
-          {AGING_COLUMNS.map(({ bucket, label, color }) => {
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {AGING_COLUMNS.map(({ bucket, key, color }) => {
             const items = byBucket(bucket);
             return (
               <div key={bucket} className={`rounded-lg p-3 ${color}`}>
-                <p className="text-xs font-medium">{label}</p>
+                <p className="text-xs font-medium">{t(`uiOperations.${key}`)}</p>
                 <p className="text-lg font-semibold">{items.length}</p>
                 <p className="text-xs">
                   {formatCurrency(items.reduce((s, i) => s + i.outstanding, 0))}
@@ -602,16 +592,16 @@ export default function ReportsPage() {
         {/* Outstanding table */}
         {outstandingList.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Mã hóa đơn</th>
-                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Bệnh nhân</th>
-                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">SĐT</th>
-                  <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Ngày khám</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Còn nợ</th>
-                  <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Ngày phát hành</th>
-                  <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">Số ngày nợ</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.invoiceCode')}</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.patient')}</th>
+                  <th className="text-left py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.phone')}</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.visitDate')}</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.outstanding')}</th>
+                  <th className="text-center py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.issuedDate')}</th>
+                  <th className="text-right py-2 px-3 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.daysPastDue')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -642,7 +632,7 @@ export default function ReportsPage() {
                       item.daysOld > 30 ? 'text-amber-600 dark:text-amber-400' :
                       'text-gray-600 dark:text-gray-400'
                     }`}>
-                      {item.daysOld} ngày
+                      {item.daysOld} {t('uiOperations.days')}
                     </td>
                   </tr>
                 ))}
@@ -650,24 +640,24 @@ export default function ReportsPage() {
             </table>
             {outstandingList.length > 50 && (
               <p className="text-center py-2 text-sm text-gray-500">
-                Hiển thị 50/{outstandingList.length} hóa đơn
+                {t('uiOperations.show50of', { count: outstandingList.length })}
               </p>
             )}
           </div>
         ) : outstandingError ? (
           <div className="flex flex-col items-center justify-center gap-2 py-12 text-gray-400">
-            <span>Không thể tải báo cáo công nợ.</span>
+            <span>{t('uiOperations.outstandingLoadFailed')}</span>
             <button
               onClick={() => refetchOutstanding()}
               className="rounded-md border border-gray-300 px-3 py-1 text-sm font-medium hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
             >
-              Thử lại
+              {t('uiOperations.retry')}
             </button>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <DollarSign className="h-12 w-12 mb-2" />
-            <p>Không có công nợ</p>
+            <p>{t('uiOperations.noOutstanding')}</p>
           </div>
         )}
       </Card>

@@ -20,6 +20,7 @@ const ICON_FOR: Record<ThemeMode, typeof Sun> = {
 export function ThemeToggle({ variant = 'icon', className }: ThemeToggleProps) {
   const { t } = useTranslation();
   const mode = useThemeStore((s) => s.mode);
+  const resolved = useThemeStore((s) => s.resolved);
   const setMode = useThemeStore((s) => s.setMode);
   const toggle = useThemeStore((s) => s.toggle);
   const sync = useThemeStore((s) => s.sync);
@@ -75,12 +76,7 @@ export function ThemeToggle({ variant = 'icon', className }: ThemeToggleProps) {
   }
 
   const Icon = ICON_FOR[mode];
-  const label =
-    mode === 'dark'
-      ? t('theme.switchToLight')
-      : mode === 'light'
-      ? t('theme.switchToDark')
-      : t('theme.toggleLabel', { mode: t('theme.light') });
+  const label = resolved === 'dark' ? t('theme.switchToLight') : t('theme.switchToDark');
   return (
     <button
       type="button"

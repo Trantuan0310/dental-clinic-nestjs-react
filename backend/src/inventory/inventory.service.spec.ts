@@ -64,6 +64,21 @@ describe('InventoryService', () => {
     });
   });
 
+  describe('listItems', () => {
+    it('INV-01: compares stock to the minimum in the database, before the row cap', async () => {
+      const minField = { name: 'minStockLevel', modelName: 'InventoryItem' };
+      (prisma.inventoryItem as any).fields = { minStockLevel: minField };
+      (prisma.inventoryItem.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.listItems({ lowStockOnly: 'true' } as any);
+
+      const { where, take } = (prisma.inventoryItem.findMany as jest.Mock).mock.calls[0][0];
+      expect(where.quantityOnHand).toEqual({ lte: minField });
+      expect(where.minStockLevel).toEqual({ gt: 0 });
+      expect(take).toBe(200);
+    });
+  });
+
   describe('stockIn', () => {
     it('increments quantityOnHand and writes STOCK_IN movement', async () => {
       (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
@@ -89,6 +104,23 @@ describe('InventoryService', () => {
           }),
         }),
       );
+    });
+
+    it('INV-02: derives before from the locked row, not a stale first read', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      // First read saw 100, but another stock-in of 10 committed before ours:
+      // after our +20 the row holds 130, so before was 110.
+      (prisma.inventoryItem.findUnique as jest.Mock)
+        .mockResolvedValueOnce(validInventoryItem({ quantityOnHand: new Prisma.Decimal(100) }))
+        .mockResolvedValueOnce(validInventoryItem({ quantityOnHand: new Prisma.Decimal(130) }));
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await service.stockIn('item-1', { quantity: 20, reason: 'Restock' } as any, adminActor);
+
+      const { data } = (prisma.stockMovement.create as jest.Mock).mock.calls[0][0];
+      expect(Number(data.quantityBefore)).toBe(110);
+      expect(Number(data.quantityAfter)).toBe(130);
+      expect(Number(data.quantityAfter) - Number(data.quantityBefore)).toBe(data.diff);
     });
 
     it('throws when item not found', async () => {

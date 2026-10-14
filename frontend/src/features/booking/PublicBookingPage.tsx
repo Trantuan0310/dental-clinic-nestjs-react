@@ -7,6 +7,7 @@ import { saveBooking } from "./savedBookings";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
+import { useTranslation } from "react-i18next";
 
 type Dentist = {
   id: string;
@@ -83,6 +84,7 @@ const emptyReasonText = (
 };
 
 export default function PublicBookingPage() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
@@ -139,6 +141,8 @@ export default function PublicBookingPage() {
   }, [preselected]);
 
   useEffect(() => {
+    let active = true;
+    setSlotLoading(false);
     setSlots([]);
     setTime("");
     setEmptyReason(null);
@@ -153,6 +157,7 @@ export default function PublicBookingPage() {
         params: { serviceId, dentistId, date, next: 1 },
       })
       .then((r) => {
+        if (!active) return;
         const data = r.data.data;
         setSlots(data.availableSlots);
         setEmptyReason(data.emptyReason ?? null);
@@ -163,8 +168,13 @@ export default function PublicBookingPage() {
           setMinLead(data.minLeadMinutes);
       })
       // The server says what is wrong (a day too far ahead, for one).
-      .catch((e: unknown) => setSlotError(bookingErrorMessage(e, SLOT_ERROR)))
-      .finally(() => setSlotLoading(false));
+      .catch((e: unknown) => {
+        if (active) setSlotError(bookingErrorMessage(e, SLOT_ERROR));
+      })
+      .finally(() => {
+        if (active) setSlotLoading(false);
+      });
+    return () => { active = false; };
   }, [serviceId, dentistId, date]);
 
   const set = (key: keyof typeof form, value: string | boolean) =>
@@ -228,54 +238,56 @@ export default function PublicBookingPage() {
 
   if (loading)
     return (
-      <main className="mx-auto max-w-3xl p-6 text-gray-600">
+      <main role="status" className="mx-auto max-w-3xl p-6 text-gray-600 dark:text-surface-300">
         Đang tải lịch khám…
       </main>
     );
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:py-12">
+    <main className="min-h-screen bg-slate-50 dark:bg-surface-950 px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-3xl">
         <PublicTopBar>
           <Link
             to="/booking/status"
             className="text-brand-600 hover:underline"
           >
-            Tra cứu lịch hẹn
+            {t('uiScheduling.bookingLookup')}
           </Link>
         </PublicTopBar>
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            Đặt lịch khám
+        <section className="rounded-xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
+            {t('uiScheduling.publicBooking')}
           </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Gửi yêu cầu để lễ tân kiểm tra. Lịch chỉ được giữ sau khi phòng khám
-            xác nhận.
+          <p className="mt-2 text-sm text-gray-600 dark:text-surface-300">
+            {t('uiScheduling.bookingIntro')}
           </p>
+          {error && services.length === 0 && (
+            <p role="alert" className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
+          )}
           {services.length === 0 ? (
             <div className="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-              Phòng khám chưa mở dịch vụ đặt lịch trực tuyến. Vui lòng gọi trực
-              tiếp cho lễ tân.
+              {error ? "Vui lòng tải lại trang hoặc gọi trực tiếp cho lễ tân." : "Phòng khám chưa mở dịch vụ đặt lịch trực tuyến. Vui lòng gọi trực tiếp cho lễ tân."}
             </div>
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-6">
               <div>
-                <h2 className="mb-3 font-semibold text-gray-900">
-                  1. Chọn dịch vụ và giờ mong muốn
+                <h2 className="mb-3 font-semibold text-gray-900 dark:text-surface-100">
+                  1. {t('uiScheduling.bookingChooseTime')}
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    Dịch vụ
-                    <select aria-label="Dịch vụ"
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.service')}
+                    <select aria-label={t('uiScheduling.service')}
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                       value={serviceId}
                       onChange={(e) => {
                         setServiceId(e.target.value);
-                        setDentistId("");
+                        const dentists = services.find((s) => s.id === e.target.value)?.dentists;
+                        setDentistId(dentists?.length === 1 ? dentists[0].id : "");
                       }}
                       required
                     >
-                      <option value="">Chọn dịch vụ</option>
+                      <option value="">{t('uiScheduling.bookingServiceSelect')}</option>
                       {services.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
@@ -283,16 +295,16 @@ export default function PublicBookingPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Bác sĩ
-                    <select aria-label="Bác sĩ"
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.dentist')}
+                    <select aria-label={t('uiScheduling.dentist')}
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                       value={dentistId}
                       onChange={(e) => setDentistId(e.target.value)}
                       required
                       disabled={!service}
                     >
-                      <option value="">Chọn bác sĩ</option>
+                      <option value="">{t('uiScheduling.bookingDentistSelect')}</option>
                       {service?.dentists.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.fullName}
@@ -308,50 +320,54 @@ export default function PublicBookingPage() {
                     {(() => {
                       const bio = service?.dentists.find((d) => d.id === dentistId)?.bio;
                       return bio ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500">{bio}</span>
+                        <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">{bio}</span>
                       ) : null;
                     })()}
                     {/* The length depends on the dentist (their own duration first). */}
                     {(() => {
                       const minutes = service?.dentists.find((d) => d.id === dentistId)?.durationMinutes;
                       return minutes ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500">
+                        <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
                           Thời gian khám dự kiến khoảng {minutes} phút.
                         </span>
                       ) : null;
                     })()}
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Ngày
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.bookingDate')}
                     <input
                       type="date"
-                      aria-label="Ngày"
+                      aria-label={t('uiScheduling.bookingDate')}
                       min={today()}
                       max={lastDate}
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       required
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
-                    <span className="mt-1 block text-xs font-normal text-gray-500">
-                      Nhận đặt trực tuyến đến ngày {showDate(lastDate)}.
+                    <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
+                      {t('uiScheduling.onlineBookingUntil')} {showDate(lastDate)}.
                     </span>
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Giờ còn trống
-                    <select aria-label="Giờ còn trống"
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.availableTime')}
+                    <select aria-label={t('uiScheduling.availableTime')}
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                       required
                       disabled={!dentistId || slotLoading || slots.length === 0}
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                     >
                       <option value="">
-                        {slotLoading
-                          ? "Đang tải giờ…"
+                        {!dentistId
+                          ? t('uiScheduling.bookingChooseDentistFirst')
+                          : !date
+                            ? t('uiScheduling.bookingChooseDateFirst')
+                            : slotLoading
+                          ? t('uiScheduling.loading')
                           : slots.length
-                            ? "Chọn giờ"
-                            : "Không có giờ trống"}
+                            ? t('uiScheduling.bookingChooseTimeSlot')
+                            : t('uiScheduling.noAvailableTime')}
                       </option>
                       {slots.map((slot) => (
                         <option key={slot} value={slot}>
@@ -360,12 +376,11 @@ export default function PublicBookingPage() {
                       ))}
                     </select>
                     {minLead > 0 && (
-                      <span className="mt-1 block text-xs font-normal text-gray-500">
-                        Đặt trực tuyến trước ít nhất{" "}
-                        {minLead % 60 === 0
-                          ? minLead / 60 + " giờ"
-                          : minLead + " phút"}
-                        ; cần sớm hơn vui lòng gọi phòng khám
+                      <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-300">
+                        {t('uiScheduling.bookingLeadTime', { lead: i18n.language.startsWith('en')
+                          ? minLead % 60 === 0 ? `${minLead / 60} hours` : `${minLead} minutes`
+                          : minLead % 60 === 0 ? `${minLead / 60} giờ` : `${minLead} phút` })}
+                        {t('uiScheduling.bookingLeadContact')}
                         {clinic.phone ? (
                           <>
                             {" "}
@@ -400,10 +415,10 @@ export default function PublicBookingPage() {
                               onClick={() => setDate(nextDate)}
                               className="font-medium text-brand-600 underline"
                             >
-                              Ngày gần nhất còn giờ trống: {showDate(nextDate)}
+                              {t('uiScheduling.nextAvailableDate')}: {showDate(nextDate)}
                             </button>
                           ) : (
-                            "Chưa thấy giờ trống trong 2 tuần tới, vui lòng chọn bác sĩ khác hoặc gọi phòng khám."
+                            t('uiScheduling.noSlotsTwoWeeks')
                           )}
                         </span>
                       )}
@@ -412,97 +427,98 @@ export default function PublicBookingPage() {
                 </div>
               </div>
               <div>
-                <h2 className="mb-3 font-semibold text-gray-900">
-                  2. Thông tin người đến khám
+                <h2 className="mb-3 font-semibold text-gray-900 dark:text-surface-100">
+                  2. {t('uiScheduling.bookingPatientInfo')}
                 </h2>
-                <p className="-mt-2 mb-3 text-xs text-gray-500">
-                  Điền họ tên và ngày sinh của chính người sẽ khám (không phải người đặt hộ). Số
-                  điện thoại là của người khám, hoặc của người liên hệ nếu người khám không có.
+                <p className="-mt-2 mb-3 text-xs text-gray-500 dark:text-surface-400">
+                  {t('uiScheduling.bookingPatientInfoHint')}
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-                    Họ và tên người đến khám
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
+                    {t('uiScheduling.bookingFullName')}
                     <input
                       required
                       maxLength={100}
+                      autoComplete="name"
                       value={form.fullName}
                       onChange={(e) => set("fullName", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Ngày sinh
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.bookingDob')}
                     <input
                       required
                       type="date"
                       max={today()}
                       value={form.dob}
                       onChange={(e) => set("dob", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Giới tính
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.gender')}
                     <select
                       value={form.gender}
                       onChange={(e) => set("gender", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
                     >
-                      <option value="UNDISCLOSED">Không muốn nêu</option>
-                      <option value="FEMALE">Nữ</option>
-                      <option value="MALE">Nam</option>
-                      <option value="OTHER">Khác</option>
+                      <option value="UNDISCLOSED">{t('uiScheduling.genderUndisclosed')}</option>
+                      <option value="FEMALE">{t('uiScheduling.genderFemale')}</option>
+                      <option value="MALE">{t('uiScheduling.genderMale')}</option>
+                      <option value="OTHER">{t('uiScheduling.genderOther')}</option>
                     </select>
                   </label>
                   {age !== null && age < 18 && (
                     <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2">
-                      Người khám dưới 18 tuổi: vui lòng có cha mẹ hoặc người giám hộ đi cùng khi đến
-                      khám{age < 12 ? " và nhập thông tin người giám hộ bên dưới" : ""}.
+                      {t('uiScheduling.minorBookingNotice')}{age < 12 ? ` ${t('uiScheduling.minorGuardianDetails')}` : ''}
                     </p>
                   )}
-                  <label className="text-sm font-medium text-gray-700">
-                    Số điện thoại
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.phoneNumber')}
                     <input
                       required
                       type="tel"
                       maxLength={20}
+                      autoComplete="tel"
                       value={form.phone}
                       onChange={(e) => set("phone", e.target.value)}
                       placeholder="0901 234 567"
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="text-sm font-medium text-gray-700">
-                    Email (để nhận thông báo)
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.bookingEmail')}
                     <input
                       type="email"
+                      autoComplete="email"
                       value={form.email}
                       onChange={(e) => set("email", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-surface-200 sm:col-span-2">
                     <input
                       type="checkbox"
-                      checked={showContact}
+                      checked={onBehalf}
                       onChange={(e) => setOnBehalf(e.target.checked)}
                     />
-                    Tôi đặt hộ người khác (người nhà, trẻ em, người lớn tuổi)
+                    {t('uiScheduling.bookingOnBehalf')}
                   </label>
                   {showContact && (
                     <>
-                      <label className="text-sm font-medium text-gray-700">
-                        Người liên hệ / giám hộ{age !== null && age < 12 ? " (bắt buộc)" : ""}
+                      <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                        {t('uiScheduling.bookingContactPerson')}{age !== null && age < 12 ? ` (${t('uiScheduling.required')})` : ""}
                         <input
                           maxLength={100}
                           required={age !== null && age < 12}
                           value={form.contactPersonName}
                           onChange={(e) => set("contactPersonName", e.target.value)}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                         />
                       </label>
-                      <label className="text-sm font-medium text-gray-700">
-                        SĐT người liên hệ / giám hộ
+                      <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                        {t('uiScheduling.bookingContactPhone')}
                         <input
                           type="tel"
                           required={age !== null && age < 12}
@@ -510,24 +526,24 @@ export default function PublicBookingPage() {
                           onChange={(e) =>
                             set("contactPersonPhone", e.target.value)
                           }
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                         />
                       </label>
                     </>
                   )}
-                  <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-                    Lý do khám (không nhập thông tin khẩn cấp)
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
+                    {t('uiScheduling.bookingReason')}
                     <textarea
                       maxLength={1000}
                       rows={3}
                       value={form.reason}
                       onChange={(e) => set("reason", e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
                 </div>
               </div>
-              <label className="flex gap-3 rounded-lg bg-slate-50 p-3 text-sm text-gray-700">
+              <label className="flex gap-3 rounded-lg bg-slate-50 dark:bg-surface-950 p-3 text-sm text-gray-700 dark:text-surface-200">
                 <input
                   required
                   type="checkbox"
@@ -535,10 +551,7 @@ export default function PublicBookingPage() {
                   onChange={(e) => set("consent", e.target.checked)}
                   className="mt-1"
                 />
-                <span>
-                  Tôi đồng ý để phòng khám sử dụng thông tin trên nhằm xử lý yêu
-                  cầu đặt lịch và liên hệ về lịch khám.
-                </span>
+                <span>{t('uiScheduling.consent')}</span>
               </label>
               {error && (
                 <p
@@ -549,16 +562,15 @@ export default function PublicBookingPage() {
                 </p>
               )}
               <button
-                disabled={submitting}
-                className="w-full rounded-md bg-teal-700 px-4 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+                disabled={submitting || slotLoading || !time}
+                className="w-full rounded-md bg-brand-600 px-4 py-3 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? "Đang gửi…" : "Gửi yêu cầu đặt lịch"}
+                {submitting ? t('uiScheduling.sending') : t('uiScheduling.bookingSubmit')}
               </button>
             </form>
           )}
-          <p className="mt-5 text-xs text-gray-500">
-            Nếu cần hỗ trợ, hãy gọi trực tiếp phòng khám. Không gửi thông tin
-            cấp cứu qua biểu mẫu này.
+          <p className="mt-5 text-xs text-gray-500 dark:text-surface-400">
+            {t('uiScheduling.bookingHelp')}
           </p>
         </section>
       </div>

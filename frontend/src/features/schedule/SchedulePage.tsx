@@ -7,10 +7,12 @@ import { OverridesTab } from './OverridesTab';
 import { ImpactTab } from './ImpactTab';
 import { ClinicClosuresTab } from './ClinicClosuresTab';
 import { useScheduleImpact, useTimeOffs } from './scheduleApi';
+import { useTranslation } from 'react-i18next';
 
 type Tab = 'schedule' | 'time-off' | 'overrides' | 'closures' | 'impact';
 
 export default function SchedulePage() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('schedule');
   const { data: pending = [] } = useTimeOffs(undefined, 'PENDING');
   const { data: impact = [] } = useScheduleImpact();
@@ -18,18 +20,18 @@ export default function SchedulePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Lịch làm việc & Nghỉ phép"
-        description="Lịch làm việc cố định, nghỉ phép, ngoại lệ theo ngày, ngày nghỉ của phòng khám và các lịch hẹn cần điều phối lại"
+        title={t('uiScheduling.scheduleTitle')}
+        description={t('uiScheduling.scheduleDescription')}
       />
 
       <Tabs
-        aria-label="Lịch làm việc & Nghỉ phép"
+        aria-label={t('uiScheduling.scheduleTitle')}
         tabs={[
-          { id: 'schedule', label: 'Lịch làm việc cố định' },
-          { id: 'time-off', label: pending.length ? `Nghỉ phép (${pending.length} chờ duyệt)` : 'Nghỉ phép' },
-          { id: 'overrides', label: 'Ngoại lệ theo ngày' },
-          { id: 'closures', label: 'Ngày nghỉ phòng khám' },
-          { id: 'impact', label: impact.length ? `Lịch hẹn bị ảnh hưởng (${impact.length})` : 'Lịch hẹn bị ảnh hưởng' },
+          { id: 'schedule', label: t('uiScheduling.workingSchedule') },
+          { id: 'time-off', label: pending.length ? t('uiScheduling.timeOffPending', { count: pending.length }) : t('uiScheduling.timeOff') },
+          { id: 'overrides', label: t('uiScheduling.scheduleOverrides') },
+          { id: 'closures', label: t('uiScheduling.clinicClosures') },
+          { id: 'impact', label: impact.length ? t('uiScheduling.scheduleImpactCount', { count: impact.length }) : t('uiScheduling.scheduleImpact') },
         ]}
         value={tab}
         onChange={(v) => setTab(v as Tab)}

@@ -26,7 +26,7 @@ npm run dev
 - Đăng nhập: `admin@gensmile.vn` / `Admin@123`
 
 ### 3. Chuẩn bị data
-- Database đã có seed data (3 users, 3 roles, 60+ permissions, 20 patients, 50 appointments, 30 encounters, 25 invoices).
+- Database đã có dữ liệu demo: `clinic-setup.ts` rồi `seed-demo-clinic.ts` (6 tháng hoạt động: bệnh nhân, lịch hẹn, bệnh án, hóa đơn, lương). Site đã nạp bằng bản cũ thì chạy `DEMO_REPAIR=1` một lần.
 
 ---
 
@@ -179,7 +179,7 @@ npm run dev
 ## PHẦN 8: KẾT THÚC (1 phút)
 
 ### 8.1. Tóm tắt
-> "Hệ thống đã hoàn thành MVP với 10 modules, 90+ API endpoints, 60+ permission codes. Tất cả đều production-ready với 225 tests pass."
+> "Hệ thống gồm 20 module, khoảng 260 API endpoint và 124 mã quyền, đang chạy trên VPS demo, với 1.343 unit test pass và coverage 76% ở tầng nghiệp vụ."
 
 ### 8.2. Hỏi đáp
 - Mời câu hỏi từ hội đồng.

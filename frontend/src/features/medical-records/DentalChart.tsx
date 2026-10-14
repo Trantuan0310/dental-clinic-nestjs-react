@@ -111,7 +111,7 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
         data-status={status}
         data-highlighted={selected || undefined}
         className={cn(
-          'flex flex-col items-center justify-center rounded-md border transition-all',
+          'flex shrink-0 flex-col items-center justify-center rounded-md border transition-all',
           dim.cell,
           palette.bg,
           palette.text,
@@ -130,7 +130,7 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
   };
 
   const renderArch = (arch: ToothDescriptor[]) => (
-    <div className="flex w-max min-w-full justify-center gap-1.5 md:w-auto md:min-w-0">
+    <div className="flex w-max min-w-full justify-center gap-1.5">
       {arch.map((t) => renderCell(t))}
     </div>
   );
@@ -154,8 +154,8 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
         })}
       </div>
 
-      <div className="overflow-x-auto md:overflow-visible">
-        <div className="min-w-max md:min-w-0">
+      <div className="overflow-x-auto">
+        <div className="min-w-max">
           <div>
             <div className={cn('mb-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
               Hàm trên

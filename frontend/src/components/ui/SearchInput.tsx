@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn';
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Search, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export interface SearchInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   onClear?: () => void;
@@ -9,6 +10,7 @@ export interface SearchInputProps extends Omit<InputHTMLAttributes<HTMLInputElem
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
   ({ className, value, onClear, icon, placeholder, ...props }, ref) => {
+    const { t } = useTranslation();
     return (
       <div className="relative">
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -39,7 +41,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
             type="button"
             onClick={onClear}
             className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:text-surface-500 dark:hover:text-surface-200"
-            aria-label="Xóa tìm kiếm"
+            aria-label={t('uiCommon.search.clear')}
           >
             <X className="h-4 w-4" />
           </button>

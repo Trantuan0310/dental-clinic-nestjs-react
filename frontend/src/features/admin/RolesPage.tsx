@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Edit, Trash2, Lock, Users } from 'lucide-react';
 import { Button, Card, Modal, Input, Spinner } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -12,6 +13,7 @@ import {
 import type { AdminRole, CreateAdminRolePayload, UpdateAdminRolePayload } from '@/types/admin';
 
 export default function RolesPage() {
+  const { t } = useTranslation();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
 
@@ -27,44 +29,44 @@ export default function RolesPage() {
   const handleCreate = async (payload: Parameters<typeof createMutation.mutateAsync>[0]) => {
     try {
       await createMutation.mutateAsync(payload);
-      notify.success('Tạo vai trò thành công');
+      notify.success(t('uiWorkforce.rolesCreateSuccess'));
       setShowCreateModal(false);
     } catch {
-      notify.error('Không thể tạo vai trò. Vui lòng thử lại.');
+      notify.error(t('uiWorkforce.rolesCreateError'));
     }
   };
 
   const handleUpdate = async (payload: Parameters<typeof updateMutation.mutateAsync>[0]) => {
     try {
       await updateMutation.mutateAsync(payload);
-      notify.success('Cập nhật vai trò thành công');
+      notify.success(t('uiWorkforce.rolesUpdateSuccess'));
       setEditingRole(null);
     } catch {
-      notify.error('Không thể cập nhật vai trò. Vui lòng thử lại.');
+      notify.error(t('uiWorkforce.rolesUpdateError'));
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteMutation.mutateAsync(id);
-      notify.success('Đã xóa vai trò');
+      notify.success(t('uiWorkforce.rolesDeleteSuccess'));
     } catch {
-      notify.error('Không thể xóa vai trò. Vui lòng thử lại.');
+      notify.error(t('uiWorkforce.rolesDeleteError'));
     }
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Vai trò & Quyền</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Phân quyền truy cập cho nhân viên
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiWorkforce.rolesTitle')}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
+            {t('uiWorkforce.rolesDescription')}
           </p>
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4" />
-          Tạo vai trò
+          {t('uiWorkforce.rolesCreate')}
         </Button>
       </div>
 
@@ -77,23 +79,23 @@ export default function RolesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 font-medium text-gray-600">Mã</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Tên vai trò</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Mô tả</th>
-                  <th className="px-4 py-3 font-medium text-gray-600 text-center">Người dùng</th>
-                  <th className="px-4 py-3 font-medium text-gray-600 text-center">Hệ thống</th>
+                <tr className="border-b border-gray-100 bg-gray-50 dark:border-surface-800 dark:bg-surface-800">
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.rolesCode')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.rolesName')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.description')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 text-center dark:text-surface-300">{t('uiWorkforce.rolesUsers')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 text-center dark:text-surface-300">{t('uiWorkforce.rolesSystem')}</th>
                   <th className="px-4 py-3 font-medium text-gray-600 w-24"></th>
                 </tr>
               </thead>
               <tbody>
                 {roles.map((role) => (
-                  <tr key={role.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{role.code}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{role.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{role.description}</td>
+                  <tr key={role.id} className="border-b border-gray-50 hover:bg-gray-50 dark:border-surface-800 dark:hover:bg-surface-800/60">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-surface-400">{role.code}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-surface-100">{role.name}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-surface-300">{role.description}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 text-gray-600">
+                      <span className="inline-flex items-center gap-1 text-gray-600 dark:text-surface-300">
                         <Users className="h-4 w-4" />
                         {role.userCount ?? 0}
                       </span>
@@ -109,7 +111,7 @@ export default function RolesPage() {
                       {!role.isSystem && (
                         <div className="flex gap-1">
                           <button
-                            className="rounded p-1 hover:bg-gray-100"
+                            className="rounded p-1 hover:bg-gray-100 dark:hover:bg-surface-700"
                             onClick={() => setEditingRole(role)}
                           >
                             <Edit className="h-4 w-4 text-gray-400" />
@@ -169,6 +171,7 @@ function RoleModal({
   onUpdate: (payload: UpdateAdminRolePayload) => void;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   const [code, setCode] = useState(role?.code ?? '');
   const [name, setName] = useState(role?.name ?? '');
   const [description, setDescription] = useState(role?.description ?? '');
@@ -213,40 +216,40 @@ function RoleModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={role ? `Sửa vai trò: ${role.name}` : 'Tạo vai trò mới'}
+      title={role ? t('uiWorkforce.roleEditTitle', { name: role.name }) : t('uiWorkforce.roleCreateTitle')}
       size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
-            label="Mã vai trò"
-            placeholder="VD: senior_dentist"
+            label={t('uiWorkforce.rolesCode')}
+            placeholder="senior_dentist"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             disabled={!!role}
             required={!role}
           />
           <Input
-            label="Tên hiển thị"
-            placeholder="VD: Bác sĩ cao cấp"
+            label={t('uiWorkforce.rolesName')}
+            placeholder={t('uiWorkforce.roleNamePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
           />
         </div>
         <Input
-          label="Mô tả"
-          placeholder="Mô tả ngắn về vai trò này"
+          label={t('uiWorkforce.description')}
+          placeholder={t('uiWorkforce.roleDescriptionPlaceholder')}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">Quyền hạn</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-surface-200">{t('uiWorkforce.rolePermissions')}</label>
           <div className="space-y-3 max-h-64 overflow-y-auto">
             {Object.entries(groupedPermissions).map(([group, perms]) => (
-              <div key={group} className="rounded-lg border border-gray-200 p-3">
-                <h4 className="mb-1.5 font-medium text-gray-900">{group}</h4>
+              <div key={group} className="rounded-lg border border-gray-200 p-3 dark:border-surface-700">
+                <h4 className="mb-1.5 font-medium text-gray-900 dark:text-surface-100">{group}</h4>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {perms.map((perm) => (
                     <label key={perm.id} className="flex items-center gap-2">
@@ -256,7 +259,7 @@ function RoleModal({
                         checked={selectedPerms.has(perm.code)}
                         onChange={() => togglePerm(perm.code)}
                       />
-                      <span className="text-sm text-gray-700" title={perm.description ?? undefined}>
+                      <span className="text-sm text-gray-700 dark:text-surface-200" title={perm.description ?? undefined}>
                         {perm.code}
                       </span>
                     </label>
@@ -269,10 +272,10 @@ function RoleModal({
 
         <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
           <Button variant="outline" type="button" onClick={onClose}>
-            Hủy
+            {t('uiWorkforce.roleCancel')}
           </Button>
           <Button type="submit" isLoading={isLoading} disabled={!code || !name}>
-            {role ? 'Lưu thay đổi' : 'Tạo vai trò'}
+            {role ? t('uiWorkforce.roleSave') : t('uiWorkforce.rolesCreate')}
           </Button>
         </div>
       </form>

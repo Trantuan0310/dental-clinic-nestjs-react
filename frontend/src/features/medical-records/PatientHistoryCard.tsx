@@ -6,6 +6,7 @@ import { notify } from '@/components/ui/Toast';
 import { api } from '@/lib/api';
 import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/stores/authStore';
+import { useTranslation } from 'react-i18next';
 
 interface MedicalHistory {
   allergies: string[];
@@ -17,10 +18,10 @@ interface MedicalHistory {
 type HistoryKey = 'allergies' | 'chronicDiseases' | 'currentMedications';
 type Draft = Record<HistoryKey, string>;
 
-const FIELDS: Array<{ key: HistoryKey; label: string; empty: string }> = [
-  { key: 'allergies', label: 'Dị ứng', empty: 'Chưa ghi nhận' },
-  { key: 'chronicDiseases', label: 'Bệnh nền', empty: 'Không' },
-  { key: 'currentMedications', label: 'Thuốc đang dùng', empty: 'Không' },
+const FIELDS: Array<{ key: HistoryKey; labelKey: string; emptyKey: string }> = [
+  { key: 'allergies', labelKey: 'allergies', emptyKey: 'historyNoRecord' },
+  { key: 'chronicDiseases', labelKey: 'chronicConditions', emptyKey: 'none' },
+  { key: 'currentMedications', labelKey: 'currentMedications', emptyKey: 'none' },
 ];
 
 const toLines = (list: string[]) => list.join('\n');
@@ -36,6 +37,7 @@ const fromLines = (text: string) =>
  * (patient.medical_history.update, own patients) without asking front desk.
  */
 export function PatientHistoryCard({ patientId }: { patientId: string }) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const canEdit = useAuthStore(
     (s) => s.hasPermission('patient.medical_history.update') || s.hasPermission('patient.update'),
@@ -64,11 +66,11 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
       qc.setQueryData(['patients', 'medical-history', patientId], saved);
       qc.invalidateQueries({ queryKey: ['patients', 'detail', patientId] });
       qc.invalidateQueries({ queryKey: ['ai-summary', patientId] });
-      notify.success('Đã cập nhật tiền sử bệnh nhân');
+      notify.success(t('uiClinical.updateHistorySuccess'));
       setEditing(false);
     },
     onError: (e) => {
-      notify.error(getApiErrorMessage(e, 'Không lưu được tiền sử'));
+      notify.error(getApiErrorMessage(e, t('uiClinical.updateHistoryError')));
       if (getApiErrorCode(e) === 'PATIENT_VERSION_CONFLICT') {
         // Reload what was saved elsewhere; the user re-opens and re-applies.
         qc.invalidateQueries({ queryKey: ['patients', 'medical-history', patientId] });
@@ -90,7 +92,7 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
     // Never save without the version the card loaded (it guards against
     // overwriting an allergy recorded elsewhere meanwhile).
     if (!baseline.updatedAt) {
-      notify.error('Không xác định được phiên bản hồ sơ, tải lại rồi thử lại');
+      notify.error(t('uiClinical.historyVersionUnknown'));
       qc.invalidateQueries({ queryKey: ['patients', 'medical-history', patientId] });
       setEditing(false);
       return;
@@ -110,8 +112,8 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
     <Card noPadding className="p-4">
       <section aria-labelledby="patient-history-title">
       <div className="flex items-start justify-between gap-3">
-        <h2 id="patient-history-title" className="text-sm font-semibold text-gray-900">
-          Tiền sử &amp; dị ứng
+        <h2 id="patient-history-title" className="text-sm font-semibold text-gray-900 dark:text-surface-100">
+          {t('uiClinical.historyAndAllergies')}
         </h2>
         {canEdit && data && (
           <Button
@@ -128,22 +130,22 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
               setEditing(true);
             }}
           >
-            <Pencil className="h-4 w-4" /> Sửa
+            <Pencil className="h-4 w-4" /> {t('uiClinical.edit')}
           </Button>
         )}
       </div>
       {isLoading ? (
-        <p className="mt-2 text-sm text-gray-500">Đang tải…</p>
+        <p className="mt-2 text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.loading')}</p>
       ) : isError ? (
-        <p className="mt-2 text-sm text-gray-500">Không tải được tiền sử bệnh nhân.</p>
+        <p className="mt-2 text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.historyNotLoaded')}</p>
       ) : (
         <dl className="mt-3 grid gap-3 sm:grid-cols-3">
-          {FIELDS.map(({ key, label, empty }) => (
+          {FIELDS.map(({ key, labelKey, emptyKey }) => (
             <div key={key}>
-              <dt className="text-xs text-gray-500">{label}</dt>
+              <dt className="text-xs text-gray-500 dark:text-surface-400">{t(`uiClinical.${labelKey}`)}</dt>
               <dd className="mt-1 flex flex-wrap gap-1.5">
                 {history[key].length === 0 ? (
-                  <span className="text-sm text-gray-400">{empty}</span>
+                  <span className="text-sm text-gray-400 dark:text-surface-400">{t(`uiClinical.${emptyKey}`)}</span>
                 ) : (
                   history[key].map((item) => (
                     <span
@@ -151,8 +153,8 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
                       className={
                         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ' +
                         (key === 'allergies'
-                          ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
-                          : 'bg-gray-100 text-gray-700')
+                          ? 'bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-800'
+                          : 'bg-gray-100 text-gray-700 dark:bg-surface-700 dark:text-surface-200')
                       }
                     >
                       {key === 'allergies' && <AlertTriangle className="h-3 w-3" aria-hidden />}
@@ -170,24 +172,24 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
       <Modal
         open={editing}
         onClose={() => setEditing(false)}
-        title="Cập nhật tiền sử bệnh nhân"
+        title={t('uiClinical.historyModalTitle')}
         footer={
           <>
             <Button variant="outline" onClick={() => setEditing(false)}>
-              Hủy
+              {t('uiClinical.cancel')}
             </Button>
             <Button isLoading={save.isPending} onClick={submit}>
-              Lưu
+              {t('uiClinical.save')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
-          <p className="text-xs text-gray-500">Mỗi dòng một mục (hoặc ngăn cách bằng dấu phẩy).</p>
-          {FIELDS.map(({ key, label }) => (
+          <p className="text-xs text-gray-500 dark:text-surface-400">{t('uiClinical.historyLineHint')}</p>
+          {FIELDS.map(({ key, labelKey }) => (
             <Textarea
               key={key}
-              label={label}
+              label={t(`uiClinical.${labelKey}`)}
               rows={3}
               value={draft[key]}
               onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}

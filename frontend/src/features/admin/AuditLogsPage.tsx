@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import { Button, Card, SearchInput, Spinner } from '@/components/ui';
 import { AUDIT_EXPORT_MAX, fetchAllAuditLogs, useAuditLogs } from './adminApi';
@@ -8,32 +9,22 @@ import { notify } from '@/components/ui/Toast';
 
 const PAGE_SIZE = 20;
 
-const ACTION_LABELS: Record<string, string> = {
-  'invoice.issued': 'Phát hành hóa đơn',
-  'invoice.void': 'Hủy hóa đơn',
-  'payment.created': 'Tạo thanh toán',
-  'payment.reversed': 'Hoàn tiền',
-  'user.created': 'Tạo người dùng',
-  'user.updated': 'Cập nhật người dùng',
-  'user.deactivated': 'Vô hiệu hóa người dùng',
-  'user.password_reset': 'Đặt lại mật khẩu',
-  'encounter.created': 'Tạo hồ sơ khám',
-  'encounter.closed': 'Đóng hồ sơ khám',
-  'inventory.adjusted': 'Điều chỉnh tồn kho',
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  'invoice.issued': 'auditInvoiceIssued', 'invoice.void': 'auditInvoiceVoid',
+  'payment.created': 'auditPaymentCreated', 'payment.reversed': 'auditPaymentReversed',
+  'user.created': 'auditUserCreated', 'user.updated': 'auditUserUpdated',
+  'user.deactivated': 'auditUserDeactivated', 'user.password_reset': 'auditPasswordReset',
+  'encounter.created': 'auditEncounterCreated', 'encounter.closed': 'auditEncounterClosed',
+  'inventory.adjusted': 'auditInventoryAdjusted',
 };
-
-const TARGET_TYPE_LABELS: Record<string, string> = {
-  USR: 'Người dùng',
-  APT: 'Lịch hẹn',
-  PTN: 'Bệnh nhân',
-  ENC: 'Hồ sơ khám',
-  INV: 'Hóa đơn',
-  PAY: 'Thanh toán',
-  ITM: 'Vật tư',
-  ROL: 'Vai trò',
+const TARGET_TYPE_LABEL_KEYS: Record<string, string> = {
+  USR: 'auditEntityUser', APT: 'auditEntityAppointment', PTN: 'auditEntityPatient',
+  ENC: 'auditEntityEncounter', INV: 'auditEntityInvoice', PAY: 'auditEntityPayment',
+  ITM: 'auditEntityInventory', ROL: 'auditEntityRole',
 };
 
 export default function AuditLogsPage() {
+  const { t, i18n } = useTranslation();
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
@@ -96,18 +87,18 @@ export default function AuditLogsPage() {
         ...(dateTo ? { to: dateTo } : {}),
       });
       exportCsv(`nhat-ky-${new Date().toISOString().slice(0, 10)}`, rows.filter(matchesSearch), [
-        { header: 'Thời gian', accessor: (log) => new Date(log.occurredAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) },
-        { header: 'Hành động', accessor: (log) => ACTION_LABELS[log.action] ?? log.action },
-        { header: 'Người thực hiện', accessor: (log) => log.actorEmailAtTime ?? 'Hệ thống' },
-        { header: 'Đối tượng', accessor: (log) => TARGET_TYPE_LABELS[log.targetType ?? ''] ?? log.targetType ?? '' },
-        { header: 'ID đối tượng', accessor: (log) => log.targetId ?? '' },
-        { header: 'IP', accessor: (log) => log.ipAddress ?? '' },
+        { header: t('uiWorkforce.auditTime'), accessor: (log) => new Date(log.occurredAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { timeZone: 'Asia/Ho_Chi_Minh' }) },
+        { header: t('uiWorkforce.auditAction'), accessor: (log) => ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : log.action },
+        { header: t('uiWorkforce.auditActor'), accessor: (log) => log.actorEmailAtTime ?? t('uiWorkforce.auditSystem') },
+        { header: t('uiWorkforce.auditTarget'), accessor: (log) => TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : log.targetType ?? '' },
+        { header: t('uiWorkforce.auditEntityId'), accessor: (log) => log.targetId ?? '' },
+        { header: t('uiWorkforce.auditIp'), accessor: (log) => log.ipAddress ?? '' },
       ]);
       if (truncated) {
-        notify.info(`Chỉ xuất ${AUDIT_EXPORT_MAX} dòng mới nhất. Hãy thu hẹp khoảng ngày để xuất phần còn lại.`);
+        notify.info(t('uiWorkforce.auditExportLimit', { count: AUDIT_EXPORT_MAX }));
       }
     } catch {
-      notify.error('Không xuất được nhật ký. Vui lòng thử lại.');
+      notify.error(t('uiWorkforce.auditExportError'));
     } finally {
       setExporting(false);
     }
@@ -117,16 +108,16 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Nhật ký kiểm toán</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiWorkforce.auditTitle')}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Theo dõi mọi hoạt động trong hệ thống
+            {t('uiWorkforce.auditDescription')}
           </p>
         </div>
         <Button variant="outline" onClick={handleExportCsv} disabled={filteredLogs.length === 0 || exporting}>
           <Download className="h-4 w-4" />
-          {exporting ? 'Đang xuất…' : 'Xuất CSV (toàn bộ theo bộ lọc)'}
+          {exporting ? t('uiWorkforce.auditExporting') : t('uiWorkforce.auditExport')}
         </Button>
       </div>
 
@@ -135,47 +126,53 @@ export default function AuditLogsPage() {
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[200px]">
               <SearchInput
-                placeholder="Tìm kiếm..."
+                placeholder={t('uiWorkforce.auditSearch')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onClear={() => setSearch('')}
               />
             </div>
             <select
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
+              aria-label={t('uiWorkforce.auditFilterAction')}
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
             >
-              <option value="">Tất cả hành động</option>
-              <option value="invoice.issued">Phát hành hóa đơn</option>
-              <option value="payment.created">Tạo thanh toán</option>
-              <option value="user.created">Tạo người dùng</option>
-              <option value="user.deactivated">Vô hiệu hóa</option>
-              <option value="encounter.closed">Đóng hồ sơ khám</option>
+              <option value="">{t('uiWorkforce.auditAllActions')}</option>
+              <option value="invoice.issued">{t('uiWorkforce.auditInvoiceIssued')}</option>
+              <option value="payment.created">{t('uiWorkforce.auditPaymentCreated')}</option>
+              <option value="user.created">{t('uiWorkforce.auditUserCreated')}</option>
+              <option value="user.deactivated">{t('uiWorkforce.auditUserDeactivated')}</option>
+              <option value="encounter.closed">{t('uiWorkforce.auditEncounterClosed')}</option>
             </select>
             <select
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
+              aria-label={t('uiWorkforce.auditFilterTarget')}
               value={entityFilter}
               onChange={(e) => setEntityFilter(e.target.value)}
             >
-              <option value="">Tất cả đối tượng</option>
-              <option value="USR">Người dùng</option>
-              <option value="APT">Lịch hẹn</option>
-              <option value="ENC">Hồ sơ khám</option>
-              <option value="INV">Hóa đơn</option>
-              <option value="PAY">Thanh toán</option>
-              <option value="ITM">Vật tư</option>
+              <option value="">{t('uiWorkforce.auditAllTargets')}</option>
+              <option value="USR">{t('uiWorkforce.auditEntityUser')}</option>
+              <option value="APT">{t('uiWorkforce.auditEntityAppointment')}</option>
+              <option value="ENC">{t('uiWorkforce.auditEntityEncounter')}</option>
+              <option value="INV">{t('uiWorkforce.auditEntityInvoice')}</option>
+              <option value="PAY">{t('uiWorkforce.auditEntityPayment')}</option>
+              <option value="ITM">{t('uiWorkforce.auditEntityInventory')}</option>
             </select>
             <input
               type="date"
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
+              aria-label={t('uiWorkforce.auditDateFrom')}
+              max={dateTo || undefined}
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
             <span className="self-center text-gray-400">—</span>
             <input
               type="date"
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
+              aria-label={t('uiWorkforce.auditDateTo')}
+              min={dateFrom || undefined}
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
@@ -190,41 +187,41 @@ export default function AuditLogsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 font-medium text-gray-600">Thời gian</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Hành động</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Người thực hiện</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">Đối tượng</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">IP</th>
+                <tr className="border-b border-gray-100 bg-gray-50 dark:border-surface-800 dark:bg-surface-800">
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.auditTime')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.auditAction')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.auditActor')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.auditTarget')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-surface-300">{t('uiWorkforce.auditIp')}</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredLogs.map((log) => (
-                  <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-600">
-                      {new Date(log.occurredAt).toLocaleString('vi-VN')}
+                  <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50 dark:border-surface-800 dark:hover:bg-surface-800/60">
+                    <td className="px-4 py-3 text-gray-600 dark:text-surface-300">
+                      {new Date(log.occurredAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { timeZone: 'Asia/Ho_Chi_Minh' })}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-mono">
-                        {ACTION_LABELS[log.action] ?? log.action}
+                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-mono dark:bg-surface-700 dark:text-surface-200">
+                        {(ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : log.action)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <p className="font-medium text-gray-900">
-                          {log.actorEmailAtTime ?? 'Hệ thống'}
+                        <p className="font-medium text-gray-900 dark:text-surface-100">
+                          {log.actorEmailAtTime ?? t('uiWorkforce.auditSystem')}
                         </p>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-mono text-brand-700">
-                        {TARGET_TYPE_LABELS[log.targetType ?? ''] ?? log.targetType ?? '—'}
+                      <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-mono text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                        {(TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : log.targetType ?? '—')}
                       </span>
                       {log.targetId && (
-                        <span className="ml-1 text-xs text-gray-500">{log.targetId}</span>
+                        <span className="ml-1 text-xs text-gray-500 dark:text-surface-400">{log.targetId}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs dark:text-surface-400">
                       {log.ipAddress ?? '—'}
                     </td>
                   </tr>
@@ -235,13 +232,13 @@ export default function AuditLogsPage() {
         )}
 
         {filteredLogs.length === 0 && !isLoading && (
-          <div className="p-6 text-center text-gray-500">Không có nhật ký nào</div>
+          <div className="p-6 text-center text-gray-500 dark:text-surface-400">{t('uiWorkforce.auditNoLogs')}</div>
         )}
 
         {pagination?.hasMore && (
           <div className="flex justify-center border-t border-gray-100 px-4 py-3">
             <Button variant="outline" size="sm" onClick={handleLoadMore} isLoading={isFetching}>
-              Tải thêm
+              {t('uiWorkforce.auditLoadMore')}
             </Button>
           </div>
         )}

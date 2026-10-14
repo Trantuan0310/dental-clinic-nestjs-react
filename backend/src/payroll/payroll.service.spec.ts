@@ -109,6 +109,10 @@ describe('PayrollService — period lifecycle (integration)', () => {
 
     service = module.get(PayrollService);
     prisma = module.get(PrismaService);
+    // Overlap check + insert run in a transaction under an advisory lock.
+    (prisma as any).$executeRaw = jest.fn();
+    (prisma as any).$executeRawUnsafe = jest.fn();
+    (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(prisma));
     audit = module.get(AuditService);
   });
 

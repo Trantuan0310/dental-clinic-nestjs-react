@@ -14,18 +14,19 @@
 
 #### Chương 1: Giới thiệu (5 trang)
 1.1. Lý do chọn đề tài
-- Thực trạng quản lý phòng khám nha khoa tại Việt Nam (85% dùng Excel/giấy).
+- Thực trạng quản lý phòng khám nha khoa tại Việt Nam: nhiều phòng khám còn dùng Excel/giấy (cần trích nguồn khảo sát trước khi đưa vào báo cáo).
 - Nhu cầu chuyển đổi số trong y tế.
 - Xu hướng AI-first trong healthcare.
 
 1.2. Mục tiêu đề tài
 - Xây dựng hệ thống quản lý phòng khám toàn diện.
 - Tích hợp AI hỗ trợ bác sĩ.
-- Đạt chuẩn production-ready (60+ permission codes, 90+ API endpoints).
+- Đạt chuẩn triển khai thực tế: ~260 API endpoint, 124 mã quyền (RBAC), đang chạy trên VPS demo.
 
 1.3. Phạm vi đề tài
-- MVP: 1 phòng khám, 10 modules, 3 vai trò.
-- Tích hợp mở rộng: AI features, payroll, inventory.
+- 1 phòng khám, 3 vai trò nhân viên (quản trị, lễ tân, bác sĩ); bệnh nhân không có tài khoản.
+- 20 module backend: xác thực, người dùng, phân quyền, nhân sự, bệnh nhân, lịch hẹn, đặt lịch online, bệnh án, hóa đơn, kho, lương, chi phí, báo cáo, nhật ký, AI.
+- Email tự động cho bệnh nhân (xác nhận, hủy/dời, nhắc lịch) và cho phòng khám.
 
 1.4. Đối tượng & phương pháp nghiên cứu
 - Phương pháp: Agile + Specification-driven development.
@@ -78,14 +79,14 @@
 - Khảo sát 3 phòng khám tại [địa điểm].
 - Phỏng vấn 6 stakeholders (2 admin, 2 lễ tân, 2 bác sĩ).
 
-3.2. Yêu cầu chức năng (10 modules)
-- Auth, Users, Roles, Patients, Appointments, Medical Records, Billing, Inventory, Payroll, Audit.
-- 60+ permission codes (RBAC).
-- 90+ API endpoints.
+3.2. Yêu cầu chức năng (20 module)
+- Auth, Users, Roles, Staff, Patients, Appointments, Booking (đặt lịch online), Medical Records, Billing, Inventory, Payroll, Expense, Reports, Audit, AI, Catalog, Media.
+- 124 mã quyền (RBAC).
+- ~260 API endpoint.
 
 3.3. Yêu cầu phi chức năng
 - Performance: p95 < 200ms.
-- Security: bcrypt, JWT, HttpOnly, CORS, Throttler.
+- Security: argon2id (băm mật khẩu), JWT, HttpOnly cookie, CORS, Throttler.
 - Audit: mọi mutation có log.
 - UX: < 3 cú click cho happy path.
 
@@ -94,7 +95,7 @@
 - Sơ đồ luồng nghiệp vụ (BPMN).
 
 3.5. Đặc tả chi tiết
-- 10 module spec (link `docs/03_Specification/`).
+- Đặc tả theo module (link `docs/03_Specification/`, `docs/04_Database/schema-per-module/`).
 
 #### Chương 4: Thiết kế hệ thống (15 trang)
 
@@ -103,7 +104,7 @@
 - Sơ đồ module + dependencies.
 
 4.2. Thiết kế cơ sở dữ liệu
-- ERD tổng quan (30 models, 17 enums).
+- ERD tổng quan (53 bảng, 34 enum, 34 migration).
 - Schema theo module (Auth, Patient, Appointment, Encounter, Billing, Inventory, Payroll, Audit).
 - UUID v7 cho khóa chính.
 - Soft delete strategy.
@@ -112,7 +113,7 @@
 - REST conventions (`/api/v1/...`).
 - Pagination shape (`{ data, pagination }`).
 - Error response shape (`HttpExceptionFilter`).
-- 90+ endpoints documented.
+- ~260 endpoint, tài liệu Swagger.
 
 4.4. Thiết kế giao diện
 - Design system (brand palette, spacing, typography).
@@ -140,25 +141,24 @@
 - AI đóng 5 vai trò (Architect, Engineer, BA, Writer, Reviewer).
 
 5.2. Code Quality
-- Backend: 0 TS errors, 225/225 tests pass, 20 suites.
-- Frontend: 0 TS errors, 0 ESLint issues, build 10.57s.
-- 75/75 broken links fixed.
+- Backend: 0 lỗi TypeScript, 1.343 unit test pass (55 bộ test), coverage 76,3% số dòng (service + controller).
+- Frontend: 0 lỗi TypeScript, kiểm tra 6 cặp ngôn ngữ (vi/en), dark mode.
+- Rà soát nghiệp vụ theo đợt audit 14/09 (`docs/audits/2026-09-14/`).
 
 5.3. Kết quả thực nghiệm
 - Happy path: Login → Patient → Appointment → Encounter → Invoice → Payment.
-- 90+ API endpoints test qua Swagger.
-- 5 E2E test files (Playwright).
+- Luồng đặt lịch online → xác nhận → email nhắc lịch.
+- 33 file E2E (Playwright).
 
 5.4. So sánh với mục tiêu
 | Mục tiêu | Đạt được |
 |---|---|
-| 10 modules | OK |
-| 90+ endpoints | OK |
-| 60+ permissions | OK (alias added) |
-| 0 TS errors | OK |
-| 0 ESLint issues | OK |
-| 225 tests pass | OK |
-| > 75% coverage | OK |
+| 20 module | OK |
+| ~260 endpoint | OK |
+| 124 mã quyền | OK |
+| 0 lỗi TypeScript | OK |
+| 1.343 unit test pass | OK |
+| Coverage ≥ 75% (dòng, service + controller) | OK (76,3%) |
 
 #### Chương 6: Kết luận & Hướng phát triển (5 trang)
 

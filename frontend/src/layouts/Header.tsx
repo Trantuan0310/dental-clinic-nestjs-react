@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Bell, ChevronDown, Search as SearchIcon, LogOut, User as UserIcon, Building2, CalendarDays, Menu } from 'lucide-react';
@@ -13,7 +13,7 @@ import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { CommandPalette } from '@/components/ui/CommandPalette';
 import { formatDate } from '@/lib/format';
 import { clinicWallClock } from '@/lib/clinicTime';
-import { NAV_ROLE_HINT } from '@/lib/nav';
+import { getRoleLabel } from '@/lib/nav';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -26,6 +26,8 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
   const logout = useAuthStore((s) => s.clear);
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState('');
   const [now, setNow] = useState(new Date());
 
@@ -38,6 +40,25 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    function dismiss(event: PointerEvent) {
+      if (!accountRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    }
+    function escape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        accountButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [menuOpen]);
+
   if (!user) return null;
 
   const initials = user.fullName
@@ -47,7 +68,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const roleLabel = user.roles.map((role) => NAV_ROLE_HINT[role] ?? role).join(', ');
+  const roleLabel = user.roles.map((role) => getRoleLabel(role)).join(', ');
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,12 +79,13 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 flex flex-col border-b border-gray-200 bg-white dark:border-surface-700 dark:bg-surface-900">
-      <div className="flex h-16 items-center gap-4 px-4 md:px-6">
+      <div className="flex h-16 items-center gap-1 px-3 sm:gap-3 sm:px-4 md:px-6">
         <button
           type="button"
           onClick={onMenuClick}
           aria-label={t('shell.menu.open')}
           aria-expanded={mobileNavOpen}
+          aria-controls={mobileNavOpen ? "mobile-navigation" : undefined}
           className="-ml-1 rounded-md p-2 text-gray-600 hover:bg-gray-100 md:hidden dark:text-surface-300 dark:hover:bg-surface-800"
         >
           <Menu className="h-5 w-5" />
@@ -72,7 +94,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
         <Link
           to="/"
           className="flex shrink-0 items-center gap-2"
-          aria-label={`${t('shell.brand')} — Home`}
+          aria-label={`${t('shell.brand')} — ${t('uiCommon.home')}`}
         >
           <Logo variant="icon" size="sm" />
           <span className="hidden text-lg font-bold tracking-wide text-brand-700 sm:inline dark:text-brand-400">
@@ -85,7 +107,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
 
         <form
           onSubmit={handleSearchSubmit}
-          className="hidden min-w-[260px] max-w-lg flex-1 lg:block"
+          className="hidden min-w-0 max-w-lg flex-1 xl:block"
           role="search"
         >
           <div className="relative mx-auto w-full max-w-md">
@@ -95,9 +117,9 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
               // (as opposed to plain strings) rendered the literal text
               // "[object Object]" for each placeholder instead of bold text.
               label={t('shell.search.tooltip', {
-                name: 'tên',
-                code: 'mã BN',
-                phone: 'số điện thoại',
+                name: t('uiCommon.search.name'),
+                code: t('uiCommon.search.code'),
+                phone: t('uiCommon.search.phone'),
               })}
               side="bottom"
             >
@@ -118,14 +140,14 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
                 aria-label={t('shell.search.clearLabel')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-surface-500 dark:hover:bg-surface-700 dark:hover:text-surface-200"
               >
-                <span className="sr-only">Xóa</span>
+                <span className="sr-only">{t('uiCommon.action.close')}</span>
                 <span aria-hidden="true">&times;</span>
               </button>
             )}
           </div>
         </form>
 
-        <div className="ml-auto flex items-center gap-2 md:gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-2">
           <CommandPalette />
 
           <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm 2xl:flex dark:border-surface-700 dark:bg-surface-800">
@@ -133,7 +155,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
             <span className="font-medium text-gray-800 dark:text-surface-100">{t('shell.clinicName')}</span>
           </div>
 
-          <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm xl:flex dark:border-surface-700 dark:bg-surface-800">
+          <div className="hidden items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm 2xl:flex dark:border-surface-700 dark:bg-surface-800">
             <CalendarDays className="h-4 w-4 text-brand-600 dark:text-brand-400" />
             <span className="font-medium text-gray-800 dark:text-surface-100">{formatDate(clinicWallClock(now), 'dd/MM/yyyy')}</span>
           </div>
@@ -159,42 +181,45 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
             </Link>
           )}
 
-          <div className="relative">
+          <div
+            ref={accountRef}
+            className="relative"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMenuOpen(false);
+            }}
+          >
             <button
+              ref={accountButtonRef}
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
               aria-expanded={menuOpen}
-              aria-haspopup="menu"
+              aria-controls={menuOpen ? "account-menu" : undefined}
+              aria-label={user.fullName}
               className="flex items-center gap-2 rounded-md p-1 pr-2 text-sm hover:bg-gray-100 dark:hover:bg-surface-800"
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">
                 {initials || <UserIcon className="h-4 w-4" />}
               </span>
-              <div className="hidden text-left md:block">
+              <div className="hidden text-left lg:block">
                 <p className="max-w-36 truncate text-sm font-medium leading-tight text-gray-900 dark:text-surface-100">{user.fullName}</p>
                 <p className="max-w-36 truncate text-xs leading-tight text-gray-500 dark:text-surface-400">{roleLabel}</p>
               </div>
-              <ChevronDown className="h-4 w-4 text-gray-400 dark:text-surface-500" />
+              <ChevronDown className="hidden h-4 w-4 text-gray-400 sm:block dark:text-surface-500" aria-hidden="true" />
             </button>
             {menuOpen && (
               <>
                 <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setMenuOpen(false)}
-                />
-                <div
-                  role="menu"
+                  id="account-menu"
                   className={cn(
-                    'absolute right-0 z-20 mt-1 w-56 rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-surface-700 dark:bg-surface-800',
+                    'absolute right-0 z-20 mt-1 w-56 max-w-[calc(100vw-1.5rem)] rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-surface-700 dark:bg-surface-800',
                   )}
                 >
                   <div className="border-b border-gray-100 px-3 py-2 dark:border-surface-700">
-                    <p className="text-sm font-medium text-gray-900 dark:text-surface-100">{user.fullName}</p>
+                    <p className="break-words text-sm font-medium text-gray-900 dark:text-surface-100">{user.fullName}</p>
                     <p className="truncate text-xs text-gray-500 dark:text-surface-400">{user.email}</p>
                   </div>
                   <Link
                     to="/me"
-                    role="menuitem"
                     className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-surface-200 dark:hover:bg-surface-700"
                     onClick={() => setMenuOpen(false)}
                   >
@@ -202,7 +227,6 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
                   </Link>
                   <button
                     type="button"
-                    role="menuitem"
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                     onClick={async () => {
                       setMenuOpen(false);

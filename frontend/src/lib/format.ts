@@ -1,6 +1,14 @@
 import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { enUS, vi } from 'date-fns/locale';
 import { clinicWallClock } from './clinicTime';
+import { i18n } from '@/locales';
+
+export type FormatLocale = 'vi' | 'en';
+const DATE_LOCALES = { vi, en: enUS };
+const INTL_LOCALES = { vi: 'vi-VN', en: 'en-US' };
+function currentFormatLocale(): FormatLocale {
+  return i18n.resolvedLanguage?.split('-')[0] === 'en' ? 'en' : 'vi';
+}
 
 /**
  * What a value shows as, in clinic time (Asia/Ho_Chi_Minh):
@@ -19,40 +27,40 @@ function toDisplayDate(value: string | Date): Date {
   return Number.isNaN(instant.getTime()) ? instant : clinicWallClock(instant);
 }
 
-export function formatVnd(value: number | string | null | undefined): string {
+export function formatVnd(value: number | string | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
   if (value === null || value === undefined) return '—';
   const num = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(num)) return '—';
-  return new Intl.NumberFormat('vi-VN').format(Math.round(num)) + ' ₫';
+  return new Intl.NumberFormat(INTL_LOCALES[locale]).format(Math.round(num)) + ' ₫';
 }
 
-export function formatNumber(value: number | string | null | undefined): string {
+export function formatNumber(value: number | string | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
   if (value === null || value === undefined) return '—';
   const num = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(num)) return '—';
-  return new Intl.NumberFormat('vi-VN').format(num);
+  return new Intl.NumberFormat(INTL_LOCALES[locale]).format(num);
 }
 
-export function formatPct(value: number | string | null | undefined, digits = 2): string {
+export function formatPct(value: number | string | null | undefined, digits = 2, locale: FormatLocale = currentFormatLocale()): string {
   if (value === null || value === undefined) return '—';
   const num = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(num)) return '—';
-  return `${(num * 100).toFixed(digits)}%`;
+  return new Intl.NumberFormat(INTL_LOCALES[locale], { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(num * 100) + '%';
 }
 
-export function formatDate(value: string | Date | null | undefined, pattern = 'dd/MM/yyyy'): string {
+export function formatDate(value: string | Date | null | undefined, pattern = 'dd/MM/yyyy', locale: FormatLocale = currentFormatLocale()): string {
   if (!value) return '—';
   const date = toDisplayDate(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return format(date, pattern, { locale: vi });
+  return format(date, pattern, { locale: DATE_LOCALES[locale] });
 }
 
-export function formatDateTime(value: string | Date | null | undefined): string {
-  return formatDate(value, 'dd/MM/yyyy HH:mm');
+export function formatDateTime(value: string | Date | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
+  return formatDate(value, 'dd/MM/yyyy HH:mm', locale);
 }
 
-export function formatMonthYear(value: string | Date | null | undefined): string {
-  return formatDate(value, 'MM/yyyy');
+export function formatMonthYear(value: string | Date | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
+  return formatDate(value, 'MM/yyyy', locale);
 }
 
 export function diffHours(from: string | Date, to: string | Date): number {
@@ -67,19 +75,20 @@ export function diffHours(from: string | Date, to: string | Date): number {
 
 const WEEKDAY_LABELS_VI = ['CN', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7'];
 
-export function getWeekdayLabel(date: Date | string): string {
+export function getWeekdayLabel(date: Date | string, locale: FormatLocale = currentFormatLocale()): string {
+  if (locale === 'en') return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][toDisplayDate(date).getDay()] ?? '';
   return WEEKDAY_LABELS_VI[toDisplayDate(date).getDay()] ?? '';
 }
 
-export function formatTimeOnly(value: string | Date | null | undefined): string {
-  return formatDate(value, 'HH:mm');
+export function formatTimeOnly(value: string | Date | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
+  return formatDate(value, 'HH:mm', locale);
 }
 
-export function formatDateTimeShort(value: string | null | undefined): string {
+export function formatDateTimeShort(value: string | null | undefined, locale: FormatLocale = currentFormatLocale()): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('vi-VN', {
+  return d.toLocaleString(INTL_LOCALES[locale], {
     dateStyle: 'short',
     timeStyle: 'short',
     timeZone: 'Asia/Ho_Chi_Minh',

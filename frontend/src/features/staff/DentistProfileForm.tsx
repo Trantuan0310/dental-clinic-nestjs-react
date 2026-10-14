@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, DatePicker, Input, Select, Textarea } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { CALENDAR_COLORS, SPECIALTY_LABEL } from './labels';
 import type { DentistProfile, DentistProfilePayload } from './types';
 
-const SLOT_OPTIONS = [15, 20, 30, 45, 60, 90, 120].map((m) => ({ value: String(m), label: `${m} phút` }));
+const SLOT_MINUTES = [15, 20, 30, 45, 60, 90, 120];
 
 interface DentistProfileFormProps {
   initial?: Partial<DentistProfile>;
@@ -24,6 +25,8 @@ export function DentistProfileForm({
   onCancel,
   onSubmit,
 }: DentistProfileFormProps) {
+  const { t } = useTranslation();
+  const slotOptions = SLOT_MINUTES.map((minutes) => ({ value: String(minutes), label: t('uiWorkforce.minutesShort', { minutes }) }));
   const [form, setForm] = useState({
     licenseNumber: initial?.licenseNumber ?? '',
     licenseIssuedAt: initial?.licenseIssuedAt ?? '',
@@ -71,13 +74,13 @@ export function DentistProfileForm({
       {isAdmin && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
-            label="Số chứng chỉ hành nghề"
+            label={t('uiWorkforce.licenseNumber')}
             value={form.licenseNumber}
             onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })}
             maxLength={50}
           />
           <DatePicker
-            label="Ngày cấp"
+            label={t('uiWorkforce.licenseIssuedAt')}
             value={form.licenseIssuedAt}
             onChange={(value) => setForm({ ...form, licenseIssuedAt: value })}
           />
@@ -86,7 +89,7 @@ export function DentistProfileForm({
 
       <fieldset>
         <legend className="mb-2 block text-sm font-medium text-gray-700 dark:text-surface-200">
-          Chuyên môn
+          {t('uiWorkforce.specialties')}
         </legend>
         <div className="flex flex-wrap gap-2">
           {Object.entries(SPECIALTY_LABEL).map(([code, label]) => {
@@ -104,7 +107,7 @@ export function DentistProfileForm({
                     : 'border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-surface-700 dark:text-surface-300 dark:hover:bg-surface-800',
                 )}
               >
-                {label}
+                {t(`uiWorkforce.specialty_${code}`, { defaultValue: label })}
               </button>
             );
           })}
@@ -113,14 +116,14 @@ export function DentistProfileForm({
 
       <fieldset>
         <legend className="mb-2 block text-sm font-medium text-gray-700 dark:text-surface-200">
-          Màu trên lịch
+          {t('uiWorkforce.calendarColor')}
         </legend>
         <div className="flex flex-wrap items-center gap-2">
           {CALENDAR_COLORS.map((color) => (
             <button
               key={color}
               type="button"
-              aria-label={`Chọn màu ${color}`}
+              aria-label={t('uiWorkforce.chooseCalendarColor', { color })}
               aria-pressed={form.calendarColor.toUpperCase() === color}
               onClick={() => setForm({ ...form, calendarColor: color })}
               className={cn(
@@ -131,7 +134,7 @@ export function DentistProfileForm({
             />
           ))}
           {!initial?.calendarColor && !form.calendarColor && (
-            <span className="text-xs text-gray-500">Để trống: hệ thống tự chọn màu</span>
+            <span className="text-xs text-gray-500 dark:text-surface-400">{t('uiWorkforce.calendarColorAuto')}</span>
           )}
         </div>
       </fieldset>
@@ -139,19 +142,19 @@ export function DentistProfileForm({
       {isAdmin && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Select
-            label="Thời lượng khe mặc định"
+            label={t('uiWorkforce.defaultSlotDuration')}
             value={form.defaultSlotMinutes}
             onChange={(e) => setForm({ ...form, defaultSlotMinutes: e.target.value })}
-            options={SLOT_OPTIONS}
+            options={slotOptions}
           />
           <div className="space-y-2 pt-1">
             <Checkbox
-              label="Nhận bệnh nhân mới"
+            label={t('uiWorkforce.acceptsNewPatients')}
               checked={form.acceptsNewPatients}
               onChange={(checked) => setForm({ ...form, acceptsNewPatients: checked })}
             />
             <Checkbox
-              label="Nhận đặt lịch online"
+            label={t('uiWorkforce.acceptsOnlineBooking')}
               checked={form.acceptsOnlineBooking}
               onChange={(checked) => setForm({ ...form, acceptsOnlineBooking: checked })}
             />
@@ -160,7 +163,7 @@ export function DentistProfileForm({
       )}
 
       <Textarea
-        label="Giới thiệu"
+        label={t('uiWorkforce.dentistBio')}
         value={form.bio}
         onChange={(e) => setForm({ ...form, bio: e.target.value })}
         rows={3}
@@ -169,7 +172,7 @@ export function DentistProfileForm({
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Hủy
+          {t('uiWorkforce.cancel')}
         </Button>
         <Button type="submit" isLoading={submitting}>
           {submitLabel}

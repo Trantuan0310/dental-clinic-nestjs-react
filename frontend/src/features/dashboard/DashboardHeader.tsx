@@ -2,10 +2,11 @@
 // Dashboard header — range selector, Zalo toggle (placeholder), quick actions
 // =============================================================================
 import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { enUS, vi } from 'date-fns/locale';
 import { Calendar, Megaphone } from 'lucide-react';
 import { Tooltip, QuickActions } from '@/components/ui';
-import { RANGE_DESCRIPTIONS, RANGE_OPTIONS, type TimeRange } from './types';
+import { useTranslation } from 'react-i18next';
+import { RANGE_OPTIONS, type TimeRange } from './types';
 
 interface DashboardHeaderProps {
   range: TimeRange;
@@ -13,7 +14,15 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
-  const rangeDescription = RANGE_DESCRIPTIONS[range];
+  const { t, i18n } = useTranslation();
+  const rangeDescription = t(`uiEntry.dashboard.range.${range}`);
+  const rangeLabels: Record<TimeRange, string> = {
+    today: t('uiEntry.dashboard.range.today'),
+    '7d': t('uiEntry.dashboard.range.sevenDays'),
+    '15d': t('uiEntry.dashboard.range.fifteenDays'),
+    '30d': t('uiEntry.dashboard.range.thirtyDays'),
+    '6m': t('uiEntry.dashboard.range.sixMonths'),
+  };
 
   return (
     <div className="space-y-4">
@@ -21,16 +30,16 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold leading-tight text-brand-700 md:text-3xl dark:text-brand-300">
-              Dashboard
+              {t('uiEntry.dashboard.overview')}
             </h1>
             <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-              Tổng quan
+              {t('uiEntry.dashboard.overview')}
             </span>
           </div>
           <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
             <span className="font-medium text-gray-700 dark:text-surface-200">{rangeDescription}</span>
             {' · '}
-            {format(new Date(), "EEEE, dd 'tháng' MM, yyyy", { locale: vi })}
+            {format(new Date(), t('uiEntry.dashboard.dateFormat'), { locale: i18n.language === 'en' ? enUS : vi })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -42,7 +51,7 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
           <Tooltip
             label={
               <span>
-                Tích hợp Zalo OA đang được phát triển. Khi có, bạn có thể bật/tắt thông báo tổng kết hằng ngày tại đây.
+                {t('uiEntry.dashboard.zaloTooltip')}
               </span>
             }
           >
@@ -53,7 +62,7 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
               <Megaphone className="h-4 w-4" />
               <span className="font-medium">Zalo</span>
               <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Sắp ra mắt
+                {t('uiEntry.dashboard.launchingSoon')}
               </span>
               <span
                 aria-hidden
@@ -65,18 +74,18 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
             </span>
           </Tooltip>
 
-          <Tooltip label="Khoảng thời gian áp dụng cho hầu hết chỉ số trên Dashboard (riêng biểu đồ xu hướng theo tháng luôn hiển thị các tháng gần nhất, không đổi theo lựa chọn này).">
+          <Tooltip label={t('uiEntry.dashboard.rangeTooltip')}>
             <div className="inline-flex cursor-help items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-surface-700 dark:bg-surface-800">
               <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />
               <select
                 value={range}
                 onChange={(e) => setRange(e.target.value as TimeRange)}
                 className="bg-transparent text-sm font-medium text-gray-800 focus:outline-none dark:text-surface-100"
-                aria-label="Khoảng thời gian"
+                aria-label={t('uiEntry.dashboard.rangeLabel')}
               >
                 {RANGE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {rangeLabels[o.value]}
                   </option>
                 ))}
               </select>

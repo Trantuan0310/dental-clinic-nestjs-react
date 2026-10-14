@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/cn';
+import { useTranslation } from 'react-i18next';
 
 interface PermissionGuardProps {
   permission?: string;
@@ -25,17 +26,17 @@ interface PermissionGuardProps {
   showPermissionCode?: boolean;
 }
 
-const DEFAULT_DENY_MESSAGE = 'Bạn không có quyền thực hiện thao tác này';
-
 export function PermissionGuard({
   permission,
   anyOf,
   children,
   fallback = null,
   mode = 'disable',
-  denyMessage = DEFAULT_DENY_MESSAGE,
+  denyMessage,
   showPermissionCode = false,
 }: PermissionGuardProps) {
+  const { t } = useTranslation();
+  const resolvedDenyMessage = denyMessage ?? t('uiCommon.permission.denied');
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const hasAnyPermission = useAuthStore((s) => s.hasAnyPermission);
 
@@ -53,11 +54,11 @@ export function PermissionGuard({
 
   if (mode === 'lock') {
     return (
-      <Tooltip label={denyMessage}>
+        <Tooltip label={resolvedDenyMessage}>
         <span
           className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-500 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-400"
           role="img"
-          aria-label={denyMessage}
+          aria-label={resolvedDenyMessage}
         >
           <Lock className="h-3 w-3" aria-hidden="true" />
           {showPermissionCode && <span className="font-mono text-[10px]">{permission ?? anyOf?.join('|')}</span>}
@@ -68,7 +69,7 @@ export function PermissionGuard({
 
   if (mode === 'tooltip') {
     return (
-      <Tooltip label={denyMessage}>
+      <Tooltip label={resolvedDenyMessage}>
         <span className="inline-block cursor-not-allowed opacity-60">{children}</span>
       </Tooltip>
     );
@@ -86,12 +87,12 @@ export function PermissionGuard({
     const cloned = cloneElement(child, {
       disabled: true,
       'aria-disabled': true,
-      title: denyMessage,
-      'aria-label': denyMessage,
+      title: resolvedDenyMessage,
+      'aria-label': resolvedDenyMessage,
       className: cn(child.props.className, 'pointer-events-none cursor-not-allowed opacity-50'),
     });
     return (
-      <Tooltip label={denyMessage}>
+      <Tooltip label={resolvedDenyMessage}>
         <span className="inline-flex items-center gap-1.5">
           {cloned}
           <Lock className="h-3 w-3 shrink-0 text-gray-400 dark:text-surface-500" aria-hidden="true" />

@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { format } from 'date-fns';
-import { vi } from 'date-fns/locale';
 import {
   ArrowLeft,
   Edit,
@@ -33,8 +31,10 @@ import {
 import { formatPhone, formatCurrency, formatDate, formatTimeOnly } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import { useTranslation } from 'react-i18next';
 
 export default function PatientDetailPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
@@ -87,9 +87,9 @@ export default function PatientDetailPage() {
   if (!patient) {
     return (
       <div className="text-center py-10">
-        <p className="text-gray-500">Không tìm thấy bệnh nhân</p>
+        <p className="text-gray-500 dark:text-surface-400">{t('uiClinical.patientNotFound')}</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate('/patients')}>
-          Quay lại danh sách
+          {t('uiClinical.backToPatients')}
         </Button>
       </div>
     );
@@ -105,32 +105,32 @@ export default function PatientDetailPage() {
   const hasChronicDiseases = patient.chronicDiseases && patient.chronicDiseases.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/patients')}>
+      <div className="flex flex-wrap items-center gap-4">
+        <Button variant="ghost" aria-label={t('uiClinical.backToPatients')} onClick={() => navigate('/patients')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">{patient.fullName}</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="break-words text-2xl font-semibold text-gray-900 dark:text-surface-100">{patient.fullName}</h1>
             <StatusBadge status={patient.status} />
           </div>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-surface-400">
             {patient.code}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex max-w-full flex-wrap gap-2">
           <PermissionGuard permission="patient.update">
             <Button variant="outline" onClick={() => navigate(`/patients/${id}/edit`)}>
               <Edit className="h-4 w-4" />
-              Sửa
+              {t('uiClinical.edit')}
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="appointment.create">
             <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>
               <Calendar className="h-4 w-4" />
-              Đặt lịch hẹn
+              {t('uiClinical.bookAppointment')}
             </Button>
           </PermissionGuard>
         </div>
@@ -143,7 +143,7 @@ export default function PatientDetailPage() {
             <Alert type="danger">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                <span className="font-medium">Dị ứng:</span>
+                <span className="font-medium">{t('uiClinical.allergies')}:</span>
                 {patient.allergies?.join(', ')}
               </div>
             </Alert>
@@ -152,7 +152,7 @@ export default function PatientDetailPage() {
             <Alert type="warning">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                <span className="font-medium">Bệnh mãn tính:</span>
+                <span className="font-medium">{t('uiClinical.chronicConditions')}:</span>
                 {patient.chronicDiseases?.join(', ')}
               </div>
             </Alert>
@@ -160,9 +160,9 @@ export default function PatientDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         {/* Sidebar Info */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-brand-700">
@@ -171,55 +171,55 @@ export default function PatientDetailPage() {
                 </span>
               </div>
               <div>
-                <p className="text-base font-medium text-gray-900">{patient.fullName}</p>
-                <p className="text-sm text-gray-500">
-                  {age !== null ? `${age} tuổi • ` : ''}
-                  {patient.gender === 'male' ? 'Nam' : patient.gender === 'female' ? 'Nữ' : 'Khác'}
+                <p className="min-w-0 break-words text-base font-medium text-gray-900 dark:text-surface-100">{patient.fullName}</p>
+                <p className="text-sm text-gray-500 dark:text-surface-400">
+                  {age !== null ? `${t('uiClinical.patientYears', { count: age })} • ` : ''}
+                  {patient.gender === 'male' ? t('uiClinical.male') : patient.gender === 'female' ? t('uiClinical.female') : t('uiClinical.other')}
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 space-y-3 border-t border-gray-100 pt-3">
+            <div className="mt-4 space-y-3 border-t border-gray-100 pt-3 dark:border-surface-700">
               {patient.phone && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Phone className="h-4 w-4 text-gray-400" />
+                  <Phone className="h-4 w-4 text-gray-400 dark:text-surface-500" />
                   <span>{formatPhone(patient.phone)}</span>
                 </div>
               )}
               {patient.email && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Mail className="h-4 w-4 text-gray-400" />
+                  <Mail className="h-4 w-4 text-gray-400 dark:text-surface-500" />
                   <span>{patient.email}</span>
                 </div>
               )}
               {patient.address && (
                 <div className="flex items-start gap-3 text-sm">
-                  <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                  <MapPin className="h-4 w-4 shrink-0 text-gray-400 dark:text-surface-500" />
                   <span>{patient.address}</span>
                 </div>
               )}
               {patient.occupation && (
                 <div className="flex items-center gap-3 text-sm">
-                  <Briefcase className="h-4 w-4 text-gray-400" />
+                  <Briefcase className="h-4 w-4 text-gray-400 dark:text-surface-500" />
                   <span>{patient.occupation}</span>
                 </div>
               )}
             </div>
 
-            <div className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-500">
+            <div className="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-500 dark:border-surface-700 dark:text-surface-400">
               <p>
-                Ngày sinh:{' '}
+                {t('uiClinical.dateOfBirth')}:{' '}
                 {patient.dateOfBirth
-                  ? format(new Date(patient.dateOfBirth), 'dd/MM/yyyy', { locale: vi })
+                  ? formatDate(patient.dateOfBirth)
                   : '-'}
               </p>
-              <p>Ngày tạo: {format(new Date(patient.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}</p>
+              <p>{t('uiClinical.createdAtLabel')}: {formatDate(patient.createdAt, 'dd/MM/yyyy HH:mm')}</p>
             </div>
           </Card>
 
           {/* Current Medications */}
           {patient.currentMedications && patient.currentMedications.length > 0 && (
-            <Card title="Thuốc đang dùng">
+            <Card title={t('uiClinical.currentMedications')}>
               <ul className="space-y-1.5">
                 {patient.currentMedications.map((med, index) => (
                   <li key={index} className="flex items-center gap-2 text-sm">
@@ -233,59 +233,57 @@ export default function PatientDetailPage() {
         </div>
 
         {/* Main Content */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
-              <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-              <TabsTrigger value="appointments">Lịch hẹn</TabsTrigger>
-              <TabsTrigger value="encounters">Lịch sử khám</TabsTrigger>
-              <TabsTrigger value="invoices">Hóa đơn</TabsTrigger>
+              <TabsTrigger value="overview">{t('uiClinical.overview')}</TabsTrigger>
+              <TabsTrigger value="appointments">{t('uiClinical.appointments')}</TabsTrigger>
+              <TabsTrigger value="encounters">{t('uiClinical.encounterHistory')}</TabsTrigger>
+              <TabsTrigger value="invoices">{t('uiClinical.invoice')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
-              <Card title="Thống kê">
+              <Card title={t('uiClinical.statistics')}>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="rounded-lg bg-gray-50 p-3">
-                    <p className="text-xl font-semibold text-gray-900">
+                  <div className="rounded-lg bg-gray-50 p-3 dark:bg-surface-800">
+                    <p className="text-xl font-semibold text-gray-900 dark:text-surface-100">
                       {patient.summary?.totalEncounters ?? 0}
                     </p>
-                    <p className="text-sm text-gray-500">Tổng lượt khám</p>
+                    <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.totalVisits')}</p>
                   </div>
-                  <div className="rounded-lg bg-gray-50 p-3">
-                    <p className="text-xl font-semibold text-gray-900">
+                  <div className="rounded-lg bg-gray-50 p-3 dark:bg-surface-800">
+                    <p className="text-xl font-semibold text-gray-900 dark:text-surface-100">
                       {patient.summary?.lastVisitAt
-                        ? format(new Date(patient.summary.lastVisitAt), 'dd/MM/yyyy', {
-                            locale: vi,
-                          })
-                        : 'Chưa có'}
+                        ? formatDate(patient.summary.lastVisitAt)
+                        : t('uiClinical.none')}
                     </p>
-                    <p className="text-sm text-gray-500">Tái khám gần nhất</p>
+                    <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.lastFollowUp')}</p>
                   </div>
-                  <div className="rounded-lg bg-gray-50 p-3">
-                    <p className="text-xl font-semibold text-gray-900">
+                  <div className="rounded-lg bg-gray-50 p-3 dark:bg-surface-800">
+                    <p className="text-xl font-semibold text-gray-900 dark:text-surface-100">
                       {patient.allergies?.length || 0}
                     </p>
-                    <p className="text-sm text-gray-500">Dị ứng</p>
+                    <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.allergies')}</p>
                   </div>
-                  <div className="rounded-lg bg-gray-50 p-3">
-                    <p className="text-xl font-semibold text-gray-900">
+                  <div className="rounded-lg bg-gray-50 p-3 dark:bg-surface-800">
+                    <p className="text-xl font-semibold text-gray-900 dark:text-surface-100">
                       {patient.chronicDiseases?.length || 0}
                     </p>
-                    <p className="text-sm text-gray-500">Bệnh mãn tính</p>
+                    <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.chronicConditions')}</p>
                   </div>
                 </div>
               </Card>
 
               {patient.notes && (
-                <Card title="Ghi chú" className="mt-3">
-                  <p className="text-sm text-gray-600 whitespace-pre-wrap">{patient.notes}</p>
+                <Card title={t('uiClinical.patientNotes')} className="mt-3">
+                  <p className="whitespace-pre-wrap text-sm text-gray-600 dark:text-surface-300">{patient.notes}</p>
                 </Card>
               )}
             </TabsContent>
 
             <TabsContent value="appointments">
               <Card
-                title="Lịch hẹn gần đây"
+                title={t('uiClinical.recentAppointments')}
                 actions={
                   <PermissionGuard permission="appointment.create">
                     <Button
@@ -294,7 +292,7 @@ export default function PatientDetailPage() {
                       onClick={() => navigate(`/appointments?patientId=${id}`)}
                     >
                       <Plus className="h-4 w-4" />
-                      Đặt lịch hẹn
+                      {t('uiClinical.bookAppointment')}
                     </Button>
                   </PermissionGuard>
                 }
@@ -302,31 +300,31 @@ export default function PatientDetailPage() {
                 {appointmentsLoading ? (
                   <div className="space-y-2">
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-100" />
+                      <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-100 dark:bg-surface-800" />
                     ))}
                   </div>
                 ) : recentAppointments.length === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa có lịch hẹn nào</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.noAppointments')}</p>
                 ) : (
                   <div className="space-y-2">
                     {recentAppointments.map((apt) => (
                       <div
                         key={apt.id}
-                        className="flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 cursor-pointer hover:bg-gray-50"
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 p-2.5 hover:bg-gray-50 dark:border-surface-700 dark:hover:bg-surface-800"
                         onClick={() => navigate(`/appointments/list?open=${apt.id}`)}
                       >
-                        <Calendar className="h-5 w-5 text-gray-400 shrink-0" />
+                        <Calendar className="h-5 w-5 shrink-0 text-gray-400 dark:text-surface-500" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">
+                            <span className="font-medium text-gray-900 dark:text-surface-100">
                               {formatDate(apt.startsAt)} •{' '}
                               {formatTimeOnly(apt.startsAt)}
                             </span>
                             <StatusBadge status={apt.status} />
                           </div>
-                          <p className="text-sm text-gray-500">{apt.dentistName}</p>
+                          <p className="text-sm text-gray-500 dark:text-surface-400">{apt.dentistName}</p>
                           {apt.reason && (
-                            <p className="mt-0.5 text-sm text-gray-600 truncate">{apt.reason}</p>
+                            <p className="mt-0.5 truncate text-sm text-gray-600 dark:text-surface-300">{apt.reason}</p>
                           )}
                         </div>
                       </div>
@@ -338,7 +336,7 @@ export default function PatientDetailPage() {
                       to="/appointments/list"
                       className="block text-center text-sm text-brand-500 hover:underline pt-1"
                     >
-                      Xem tất cả lịch hẹn →
+                      {t('uiClinical.viewAllAppointments')}
                     </Link>
                   </div>
                 )}
@@ -347,19 +345,19 @@ export default function PatientDetailPage() {
 
             <TabsContent value="encounters">
               <Card
-                title="Lịch sử khám"
+                title={t('uiClinical.encounterHistory')}
                 actions={
                   <Button variant="outline" size="sm" onClick={() => navigate(`/medical-records/${id}`)}>
-                    Xem tất cả
+                    {t('uiClinical.viewAll')}
                   </Button>
                 }
               >
                 {!patient.summary || patient.summary.totalEncounters === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa có lịch sử khám</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.noVisitHistory')}</p>
                 ) : (
                   <div
-                    className={`flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 ${
-                      canViewEncounterDetail ? 'cursor-pointer hover:bg-gray-50' : ''
+                    className={`flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 dark:border-surface-700 ${
+                      canViewEncounterDetail ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-surface-800' : ''
                     }`}
                     onClick={
                       canViewEncounterDetail
@@ -367,20 +365,20 @@ export default function PatientDetailPage() {
                         : undefined
                     }
                   >
-                    <FileText className="h-5 w-5 text-gray-400 shrink-0" />
+                    <FileText className="h-5 w-5 shrink-0 text-gray-400 dark:text-surface-500" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">
-                          {patient.summary.totalEncounters} lượt khám
+                        <span className="font-medium text-gray-900 dark:text-surface-100">
+                          {t('uiClinical.totalEncounterCount', { count: patient.summary.totalEncounters })}
                         </span>
                       </div>
                       {patient.summary.lastVisitAt && (
-                        <p className="text-sm text-gray-500">
-                          Gần nhất: {format(new Date(patient.summary.lastVisitAt), 'dd/MM/yyyy', { locale: vi })}
+                        <p className="text-sm text-gray-500 dark:text-surface-400">
+                          {t('uiClinical.lastVisit')}: {formatDate(patient.summary.lastVisitAt)}
                           {patient.summary.lastVisitBy ? ` — ${patient.summary.lastVisitBy}` : ''}
                         </p>
                       )}
-                      <p className="mt-0.5 text-sm text-brand-500">Xem chi tiết từng lượt khám →</p>
+                      <p className="mt-0.5 text-sm text-brand-500">{t('uiClinical.viewEncounterDetails')}</p>
                     </div>
                   </div>
                 )}
@@ -389,39 +387,39 @@ export default function PatientDetailPage() {
 
             <TabsContent value="invoices">
               <Card
-                title="Hóa đơn"
+                title={t('uiClinical.invoice')}
                 actions={
                   <Button variant="outline" size="sm" onClick={() => navigate('/billing/list')}>
-                    Xem tất cả
+                    {t('uiClinical.viewAll')}
                   </Button>
                 }
               >
                 {invoicesLoading ? (
                   <div className="space-y-2">
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-100" />
+                      <div key={i} className="h-14 animate-pulse rounded-lg bg-gray-100 dark:bg-surface-800" />
                     ))}
                   </div>
                 ) : recentInvoices.length === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa có hóa đơn nào</p>
+                  <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.noInvoices')}</p>
                 ) : (
                   <div className="space-y-2">
                     {recentInvoices.map((inv) => (
                       <div
                         key={inv.id}
-                        className="flex items-start gap-3 rounded-lg border border-gray-100 p-2.5 cursor-pointer hover:bg-gray-50"
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-100 p-2.5 hover:bg-gray-50 dark:border-surface-700 dark:hover:bg-surface-800"
                         onClick={() => navigate(`/billing/invoices/${inv.id}`)}
                       >
-                        <Receipt className="h-5 w-5 text-gray-400 shrink-0" />
+                        <Receipt className="h-5 w-5 shrink-0 text-gray-400 dark:text-surface-500" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">{inv.code}</span>
+                            <span className="font-medium text-gray-900 dark:text-surface-100">{inv.code}</span>
                             <InvoiceStatusBadge status={inv.status} />
                           </div>
-                          <p className="text-sm text-gray-500">
-                            {format(new Date(inv.createdAt), 'dd/MM/yyyy', { locale: vi })} • {formatCurrency(inv.total)}
+                          <p className="text-sm text-gray-500 dark:text-surface-400">
+                            {formatDate(inv.createdAt)} • {formatCurrency(inv.total)}
                             {inv.outstandingAmount > 0 && (
-                              <span className="text-amber-600"> — còn nợ {formatCurrency(inv.outstandingAmount)}</span>
+                              <span className="text-amber-600"> — {t('uiClinical.outstandingAmount')} {formatCurrency(inv.outstandingAmount)}</span>
                             )}
                           </p>
                         </div>
@@ -431,7 +429,7 @@ export default function PatientDetailPage() {
                       to="/billing/list"
                       className="block text-center text-sm text-brand-500 hover:underline pt-1"
                     >
-                      Xem tất cả hóa đơn →
+                      {t('uiClinical.viewAllInvoices')}
                     </Link>
                   </div>
                 )}

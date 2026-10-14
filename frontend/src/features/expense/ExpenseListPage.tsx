@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -32,6 +33,7 @@ function ExpenseFormModal({
   onClose: () => void;
   onSave: (data: CreateExpensePayload) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<CreateExpensePayload>({
     amount: expense?.amount ?? 0,
     description: expense?.description ?? '',
@@ -49,7 +51,7 @@ function ExpenseFormModal({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input
-        label="Số tiền (VND)"
+        label={t('uiOperations.amount') + ' (VND)'}
         type="number"
         value={form.amount}
         onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
@@ -57,43 +59,44 @@ function ExpenseFormModal({
         min={0}
       />
       <Input
-        label="Mô tả"
+        label={t('uiOperations.description')}
         value={form.description}
         onChange={(e) => setForm({ ...form, description: e.target.value })}
         required
-        placeholder="Mô tả chi phí..."
+        placeholder={t('uiOperations.expenseDescriptionPlaceholder')}
       />
       <DatePicker
-        label="Ngày chi"
+        label={t('uiOperations.expenseDate')}
         value={form.expenseDate}
         onChange={(val: string) => setForm({ ...form, expenseDate: val })}
         required
       />
       <Select
-        label="Danh mục"
+        label={t('uiOperations.category')}
         value={form.categoryId ?? ''}
         onChange={(e) => setForm({ ...form, categoryId: e.target.value || undefined })}
         options={[
-          { value: '', label: '-- Chọn danh mục --' },
+          { value: '', label: t('uiOperations.selectCategory') },
           ...categories.map((c) => ({ value: c.id, label: c.name })),
         ]}
       />
       <Textarea
-        label="Ghi chú"
+        label={t('uiOperations.note')}
         value={form.notes ?? ''}
         onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        placeholder="Ghi chú thêm..."
+        placeholder={t('uiOperations.additionalNotes')}
         rows={3}
       />
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>Hủy</Button>
-        <Button type="submit">{expense ? 'Cập nhật' : 'Tạo mới'}</Button>
+        <Button type="button" variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
+        <Button type="submit">{expense ? t('uiOperations.update') : t('uiOperations.create')}</Button>
       </div>
     </form>
   );
 }
 
 export default function ExpenseListPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -143,9 +146,9 @@ export default function ExpenseListPage() {
     mutationFn: (payload: CreateExpensePayload) => expenseApi.create(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
-      notify.success('Tạo chi phí thành công');
+      notify.success(t('uiOperations.expenseCreated'));
     },
-    onError: () => notify.error('Không thể tạo chi phí. Vui lòng thử lại.'),
+    onError: () => notify.error(t('uiOperations.expenseCreateFailed')),
   });
 
   const updateMutation = useMutation({
@@ -153,9 +156,9 @@ export default function ExpenseListPage() {
       expenseApi.update(id, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
-      notify.success('Cập nhật chi phí thành công');
+      notify.success(t('uiOperations.expenseUpdated'));
     },
-    onError: () => notify.error('Không thể cập nhật chi phí. Vui lòng thử lại.'),
+    onError: () => notify.error(t('uiOperations.expenseUpdateFailed')),
   });
 
   const deleteMutation = useMutation({
@@ -163,11 +166,11 @@ export default function ExpenseListPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       setConfirmDelete(null);
-      notify.success('Xóa chi phí thành công');
+      notify.success(t('uiOperations.expenseDeleted'));
     },
     onError: () => {
       setConfirmDelete(null);
-      notify.error('Không thể xóa chi phí. Vui lòng thử lại.');
+      notify.error(t('uiOperations.expenseDeleteFailed'));
     },
   });
 
@@ -175,27 +178,27 @@ export default function ExpenseListPage() {
     mutationFn: (id: string) => expenseApi.approve(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
-      notify.success('Duyệt chi phí thành công');
+      notify.success(t('uiOperations.expenseApproved'));
     },
-    onError: (err) => notify.error(getApiErrorMessage(err, 'Không thể duyệt chi phí. Vui lòng thử lại.')),
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiOperations.expenseApproveFailed'))),
   });
 
   const rejectMutation = useMutation({
     mutationFn: (id: string) => expenseApi.reject(id, 'Từ chối'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
-      notify.success('Từ chối chi phí thành công');
+      notify.success(t('uiOperations.expenseRejected'));
     },
-    onError: () => notify.error('Không thể từ chối chi phí. Vui lòng thử lại.'),
+    onError: () => notify.error(t('uiOperations.expenseRejectFailed')),
   });
 
   const reimburseMutation = useMutation({
     mutationFn: (id: string) => expenseApi.markReimbursed(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
-      notify.success('Đánh dấu hoàn tiền thành công');
+      notify.success(t('uiOperations.expenseReimbursed'));
     },
-    onError: (err) => notify.error(getApiErrorMessage(err, 'Không thể đánh dấu hoàn tiền. Vui lòng thử lại.')),
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiOperations.expenseReimburseFailed'))),
   });
 
   const filteredData = (data?.data ?? []).filter((e) =>
@@ -209,17 +212,17 @@ export default function ExpenseListPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Quản lý chi phí</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">{t('uiOperations.expenseManagement')}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Theo dõi chi phí hoạt động của phòng khám
+            {t('uiOperations.expenseDescription')}
           </p>
         </div>
         <PermissionGuard permission="expense.create">
           <Button onClick={() => { setEditing(undefined); setShowForm(true); }}>
             <Plus className="h-4 w-4" />
-            Thêm chi phí
+            {t('uiOperations.addExpense')}
           </Button>
         </PermissionGuard>
       </div>
@@ -232,7 +235,7 @@ export default function ExpenseListPage() {
               <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Tổng chi phí</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.expenseTotal')}</p>
               <p className="text-xl font-semibold text-gray-900 dark:text-white">{formatCurrency(totalAmount)}</p>
             </div>
           </div>
@@ -243,7 +246,7 @@ export default function ExpenseListPage() {
               <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Đã duyệt</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.approved')}</p>
               <p className="text-xl font-semibold text-green-600 dark:text-green-400">{formatCurrency(approvedAmount)}</p>
             </div>
           </div>
@@ -254,7 +257,7 @@ export default function ExpenseListPage() {
               <Receipt className="h-6 w-6 text-gray-600 dark:text-gray-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Số khoản</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.expenseCount')}</p>
               <p className="text-xl font-semibold text-gray-900 dark:text-white">{filteredData.length}</p>
             </div>
           </div>
@@ -266,7 +269,7 @@ export default function ExpenseListPage() {
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex-1 min-w-[200px]">
             <Input
-              placeholder="Tìm kiếm mô tả, mã..."
+              placeholder={t('uiOperations.expenseSearch')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -286,11 +289,11 @@ export default function ExpenseListPage() {
                 });
               }}
               options={[
-                { value: 'all', label: 'Tất cả trạng thái' },
-                { value: 'DRAFT', label: 'Nháp' },
-                { value: 'APPROVED', label: 'Đã duyệt' },
-                { value: 'REJECTED', label: 'Từ chối' },
-                { value: 'REIMBURSED', label: 'Đã hoàn tiền' },
+                { value: 'all', label: t('uiOperations.allStatuses') },
+                { value: 'DRAFT', label: t('uiOperations.draft') },
+                { value: 'APPROVED', label: t('uiOperations.approved') },
+                { value: 'REJECTED', label: t('uiOperations.reject') },
+                { value: 'REIMBURSED', label: t('uiOperations.reimbursed') },
               ]}
               className="min-w-[160px]"
             />
@@ -304,32 +307,32 @@ export default function ExpenseListPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Mã</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Mô tả</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Danh mục</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Ngày</th>
-                <th className="text-right py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Số tiền</th>
-                <th className="text-center py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Trạng thái</th>
-                <th className="text-center py-3 px-4 font-medium text-gray-600 dark:text-gray-400">Hành động</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.code')}</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.description')}</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.category')}</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.date')}</th>
+                <th className="text-right py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.amount')}</th>
+                <th className="text-center py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.status')}</th>
+                <th className="text-center py-3 px-4 font-medium text-gray-600 dark:text-gray-400">{t('uiOperations.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-400">Đang tải...</td>
+                  <td colSpan={7} className="py-8 text-center text-gray-400">{t('uiOperations.loading')}</td>
                 </tr>
               ) : isError && filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-red-400 dark:text-red-500">
-                    Không thể tải danh sách chi phí.{' '}
+                    {t('uiOperations.loadExpensesFailed')}{' '}
                     <button type="button" onClick={() => refetch()} className="underline hover:no-underline">
-                      Thử lại
+                      {t('uiOperations.retry')}
                     </button>
                   </td>
                 </tr>
               ) : filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-400 dark:text-gray-500">Không có chi phí nào</td>
+                  <td colSpan={7} className="py-8 text-center text-gray-400 dark:text-gray-500">{t('uiOperations.noExpenses')}</td>
                 </tr>
               ) : filteredData.map((expense) => (
                 <tr key={expense.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -358,7 +361,7 @@ export default function ExpenseListPage() {
                             <button
                               onClick={() => { setEditing(expense); setShowForm(true); }}
                               className="rounded p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700"
-                              title="Sửa"
+                              title={t('uiOperations.edit')}
                             >
                               <Edit className="h-4 w-4 text-gray-500" />
                             </button>
@@ -366,9 +369,9 @@ export default function ExpenseListPage() {
                           {expense.createdBy && expense.createdBy === currentUserId ? (
                             <span
                               className="px-1.5 text-xs text-gray-400"
-                              title="Cần một người khác duyệt khoản chi do bạn tạo"
+                              title={t('uiOperations.expenseApprovalByAnother')}
                             >
-                              Chờ duyệt
+                              {t('uiOperations.pendingApproval')}
                             </span>
                           ) : (
                             <>
@@ -376,7 +379,7 @@ export default function ExpenseListPage() {
                                 <button
                                   onClick={() => approveMutation.mutate(expense.id)}
                                   className="rounded p-1.5 hover:bg-green-100 dark:hover:bg-green-900"
-                                  title="Duyệt"
+                                  title={t('uiOperations.approve')}
                                 >
                                   <Check className="h-4 w-4 text-green-600" />
                                 </button>
@@ -385,7 +388,7 @@ export default function ExpenseListPage() {
                                 <button
                                   onClick={() => rejectMutation.mutate(expense.id)}
                                   className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
-                                  title="Từ chối"
+                                  title={t('uiOperations.reject')}
                                 >
                                   <X className="h-4 w-4 text-red-600" />
                                 </button>
@@ -396,7 +399,7 @@ export default function ExpenseListPage() {
                             <button
                               onClick={() => setConfirmDelete(expense)}
                               className="rounded p-1.5 hover:bg-red-100 dark:hover:bg-red-900"
-                              title="Xóa"
+                              title={t('uiOperations.delete')}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </button>
@@ -409,7 +412,7 @@ export default function ExpenseListPage() {
                             onClick={() => reimburseMutation.mutate(expense.id)}
                             disabled={reimburseMutation.isPending}
                             className="rounded p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900 disabled:opacity-50"
-                            title="Đánh dấu hoàn tiền"
+                            title={t('uiOperations.markReimbursed')}
                           >
                             <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                           </button>
@@ -425,9 +428,9 @@ export default function ExpenseListPage() {
 
         {/* Pagination */}
         {data && data.pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 dark:border-gray-700 px-4 py-3">
             <p className="text-sm text-gray-500">
-              Trang {data.pagination.page}/{data.pagination.totalPages} — {data.pagination.total} kết quả
+              {t('uiOperations.paginationSummary', { page: data.pagination.page, totalPages: data.pagination.totalPages, total: data.pagination.total })}
             </p>
             <div className="flex gap-2">
               <Button
@@ -436,7 +439,7 @@ export default function ExpenseListPage() {
                 disabled={filters.page === 1}
                 onClick={() => setFilters({ ...filters, page: (filters.page ?? 1) - 1 })}
               >
-                Trước
+                {t('uiOperations.previous')}
               </Button>
               <Button
                 variant="outline"
@@ -444,7 +447,7 @@ export default function ExpenseListPage() {
                 disabled={filters.page === data.pagination.totalPages}
                 onClick={() => setFilters({ ...filters, page: (filters.page ?? 1) + 1 })}
               >
-                Sau
+                {t('uiOperations.next')}
               </Button>
             </div>
           </div>
@@ -455,7 +458,7 @@ export default function ExpenseListPage() {
       <Modal
         open={showForm}
         onClose={() => setShowForm(false)}
-        title={editing ? 'Sửa chi phí' : 'Thêm chi phí mới'}
+        title={editing ? t('uiOperations.expenseEditTitle') : t('uiOperations.expenseAddTitle')}
       >
         <ExpenseFormModal
           expense={editing}
@@ -475,13 +478,13 @@ export default function ExpenseListPage() {
       <Modal
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        title="Xác nhận xóa"
+            title={t('uiOperations.confirmDelete')}
       >
         <p className="text-gray-600 dark:text-gray-400">
-          Bạn có chắc muốn xóa chi phí <strong>{confirmDelete?.code}</strong> không?
+          {t('uiOperations.confirmDeleteExpense')} <strong>{confirmDelete?.code}</strong>?
         </p>
         <div className="mt-4 flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setConfirmDelete(null)}>Hủy</Button>
+          <Button variant="outline" onClick={() => setConfirmDelete(null)}>{t('uiOperations.cancel')}</Button>
           <Button
             variant="danger"
             onClick={async () => {
@@ -491,7 +494,7 @@ export default function ExpenseListPage() {
               }
             }}
           >
-            Xóa
+            {t('uiOperations.delete')}
           </Button>
         </div>
       </Modal>

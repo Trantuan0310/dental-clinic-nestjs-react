@@ -1,4 +1,6 @@
 import {
+  cloneElement,
+  isValidElement,
   forwardRef,
   type ButtonHTMLAttributes,
   type ReactNode,
@@ -24,7 +26,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASSES: Record<NonNullable<ButtonProps['variant']>, string> = {
-  primary: 'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700',
+  primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800',
   secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300 dark:bg-surface-700 dark:text-surface-100 dark:hover:bg-surface-600 dark:active:bg-surface-500',
   danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
   success: 'bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700',
@@ -74,8 +76,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     if (_asChild) {
-      // Slot needs ONE child element. Compose leftIcon + children into a fragment
-      // so Slot picks the first valid element as the wrapper (e.g. <Link>).
+      // Slot must receive the actual link, not a Fragment, so styles reach the DOM.
       return (
         <Slot
           ref={ref}
@@ -83,10 +84,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           {...ariaProps}
           {...props}
         >
-          <>
-            {leftIcon}
-            {children}
-          </>
+          {isValidElement<{ children?: ReactNode }>(children)
+            ? cloneElement(children, {}, <>{leftIcon}{children.props.children}</>)
+            : children}
         </Slot>
       );
     }

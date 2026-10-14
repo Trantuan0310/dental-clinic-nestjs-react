@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -14,16 +15,6 @@ import { MissingInvoicesBanner } from './MissingInvoicesBanner';
 // dashboard "công nợ" cards actually want to link to; there's no single
 // InvoiceStatus for "has an outstanding balance".
 type StatusFilter = InvoiceStatus | 'all' | 'unpaid';
-
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'Tất cả trạng thái' },
-  { value: 'unpaid', label: 'Chưa thanh toán (còn nợ)' },
-  { value: 'DRAFT', label: 'Bản nháp' },
-  { value: 'ISSUED', label: 'Đã phát hành' },
-  { value: 'PARTIAL', label: 'Thanh toán một phần' },
-  { value: 'PAID', label: 'Đã thanh toán' },
-  { value: 'VOIDED', label: 'Đã hủy' },
-];
 
 const VALID_STATUSES: InvoiceStatus[] = ['DRAFT', 'ISSUED', 'PARTIAL', 'PAID', 'VOIDED'];
 const PAGE_SIZE = 25;
@@ -43,6 +34,7 @@ function parseInitialStatus(searchParams: URLSearchParams): StatusFilter {
 }
 
 export default function InvoiceListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
@@ -74,13 +66,22 @@ export default function InvoiceListPage() {
   }, [data, cursor]);
 
   const summary = data?.summary;
+  const statusOptions: { value: StatusFilter; label: string }[] = [
+    { value: 'all', label: t('uiOperations.allStatuses') },
+    { value: 'unpaid', label: t('uiOperations.unpaidBalance') },
+    { value: 'DRAFT', label: t('uiOperations.draft') },
+    { value: 'ISSUED', label: t('uiOperations.issued') },
+    { value: 'PARTIAL', label: t('uiOperations.partial') },
+    { value: 'PAID', label: t('uiOperations.paid') },
+    { value: 'VOIDED', label: t('uiOperations.voided') },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Hóa đơn</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">{t('uiOperations.billingTitle')}</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Danh sách hóa đơn của phòng khám
+          {t('uiOperations.billingDescription')}
         </p>
       </div>
 
@@ -94,7 +95,7 @@ export default function InvoiceListPage() {
               <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Tổng theo bộ lọc</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.filteredTotal')}</p>
               <p className="text-xl font-semibold text-gray-900 dark:text-white">
                 {summary ? formatCurrency(summary.totalInvoiced) : '—'}
               </p>
@@ -107,7 +108,7 @@ export default function InvoiceListPage() {
               <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Đã thu</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.collected')}</p>
               <p className="text-xl font-semibold text-green-600 dark:text-green-400">
                 {summary ? formatCurrency(summary.totalCollected) : '—'}
               </p>
@@ -120,7 +121,7 @@ export default function InvoiceListPage() {
               <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Còn nợ</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.outstanding')}</p>
               <p className="text-xl font-semibold text-amber-600 dark:text-amber-400">
                 {summary ? formatCurrency(summary.totalOutstanding) : '—'}
               </p>
@@ -134,7 +135,7 @@ export default function InvoiceListPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <SearchInput
-                placeholder="Tìm theo mã hóa đơn, tên bệnh nhân..."
+                placeholder={t('uiOperations.invoiceSearch')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onClear={() => setSearch('')}
@@ -144,7 +145,7 @@ export default function InvoiceListPage() {
               className="sm:w-56"
               value={status}
               onChange={(e) => setStatus(e.target.value as StatusFilter)}
-              options={STATUS_OPTIONS}
+              options={statusOptions}
             />
           </div>
         </div>
@@ -160,24 +161,24 @@ export default function InvoiceListPage() {
         ) : isError && invoices.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />
-            <p className="mt-3 font-medium text-gray-900 dark:text-white">Không thể tải danh sách hóa đơn</p>
+            <p className="mt-3 font-medium text-gray-900 dark:text-white">{t('uiOperations.loadInvoicesFailed')}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại.
+              {t('uiOperations.loadDataFailedRetry')}
             </p>
             <button
               type="button"
               onClick={() => refetch()}
               className="mt-3 text-sm font-medium text-brand-600 underline hover:no-underline dark:text-brand-400"
             >
-              Thử lại
+              {t('uiOperations.retry')}
             </button>
           </div>
         ) : invoices.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Receipt className="h-10 w-10 text-gray-400" />
-            <p className="mt-3 font-medium text-gray-900 dark:text-white">Không có hóa đơn nào</p>
+            <p className="mt-3 font-medium text-gray-900 dark:text-white">{t('uiOperations.noInvoices')}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Hóa đơn được tạo tự động khi đóng phiên khám
+              {t('uiOperations.invoiceAutoCreated')}
             </p>
           </div>
         ) : (
@@ -186,13 +187,13 @@ export default function InvoiceListPage() {
               <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50 dark:border-surface-700 dark:bg-surface-800">
-                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">Mã</th>
-                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">Bệnh nhân</th>
-                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">Ngày tạo</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Tổng tiền</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Đã thu</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">Còn nợ</th>
-                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">Trạng thái</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.code')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.patient')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.createdDate')}</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.total')}</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.collected')}</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.outstanding')}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,7 +229,7 @@ export default function InvoiceListPage() {
                   isLoading={isFetching}
                   onClick={() => data.pagination.nextCursor && setCursor(data.pagination.nextCursor)}
                 >
-                  Tải thêm ({invoices.length}/{data.summary.invoiceCount})
+                  {t('uiOperations.loadMore', { loaded: invoices.length, total: data.summary.invoiceCount })}
                 </Button>
               </div>
             )}

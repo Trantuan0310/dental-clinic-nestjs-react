@@ -122,3 +122,20 @@ Keep these rules:
 3. **Isolate state.** New specs get the authenticated `storageState` for free (see Auth above) — only call `login()`/`logout()` directly if a test needs to exercise the auth flow itself.
 4. **Network-idle waits.** Use `waitForLoadState('networkidle')` after navigation.
 5. **No external dependencies.** No mocks — these tests assume the real backend.
+
+### UI regression checks without a backend
+
+Start `npm run dev` in `frontend`, then run:
+
+```sh
+node scripts/check-ui-polish.mjs
+node scripts/check-table-ui.mjs
+node scripts/check-booking-race.mjs
+node scripts/check-clinical-ui.mjs
+```
+
+These Chromium checks use API fixtures and do not change database records. They
+cover mobile layout, nested dialogs, keyboard navigation, virtual tables, booking
+request races, and clinical tabs. Set `PLAYWRIGHT_BASE_URL` for another Vite URL
+and `CHROMIUM_PATH` for a custom Chromium executable. Screenshots are saved in
+`frontend/artifacts/ui-polish/`. They complement the backend E2E suite above.

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Camera,
@@ -29,7 +30,6 @@ import {
 } from './medicalRecordsApi';
 import {
   TOOTH_STATUSES,
-  TOOTH_STATUS_LABEL,
   baseTeethFor,
   chartTeethFor,
   dentalChartPatientTypeForDob,
@@ -67,10 +67,8 @@ interface DentalChartPanelProps {
   onViewToothDetail?: (toothNumber: number) => void;
 }
 
-const TOOTH_OPTIONS: Array<{ value: ToothStatus; label: string }> = TOOTH_STATUSES.map((s) => ({
-  value: s,
-  label: TOOTH_STATUS_LABEL[s],
-}));
+const toothStatusTranslationKey: Record<ToothStatus, string> = { healthy: 'toothHealthy', cavity: 'toothCavity', filled: 'toothFilled', crowned: 'toothCrowned', missing: 'toothMissing', implant: 'toothImplant', extraction_needed: 'toothExtractionNeeded' };
+const toothOptions = (t: (key: string) => string) => TOOTH_STATUSES.map((status) => ({ value: status, label: t(`uiClinical.${toothStatusTranslationKey[status]}`) }));
 
 function emptyTeethFor(patientType: DentalChartPatientType): Record<string, ToothEntry> {
   return baseTeethFor(patientType).reduce<Record<string, ToothEntry>>((acc, t) => {
@@ -105,6 +103,8 @@ export function DentalChartPanel({
   patientId: _patientId,
   onViewToothDetail,
 }: DentalChartPanelProps) {
+  const { t } = useTranslation();
+  const options = toothOptions(t);
   const isMounted = useIsMounted();
   // Backend exposes the latest snapshot per-patient, not per-encounter.
   const patientId = _patientId ?? encounter.patientId;
@@ -178,7 +178,7 @@ export function DentalChartPanel({
             lastSavedHash.current = currentHash;
           },
           onError: (err) => {
-            notify.error(getApiErrorMessage(err, 'Không thể lưu sơ đồ răng'));
+            notify.error(getApiErrorMessage(err, t('uiClinical.chartSaveError')));
           },
         },
       );
@@ -240,7 +240,7 @@ export function DentalChartPanel({
       enabledStatuses,
     );
     if (targetFdis.length === 0) {
-      notify.info('Không có răng nào trong phạm vi đã chọn.');
+      notify.info(t('uiClinical.noTeethInScope'));
       return;
     }
     const next = { ...history.state };
@@ -250,7 +250,7 @@ export function DentalChartPanel({
     }
     history.push(next);
     setBulkOpen(false);
-  }, [bulkScope, bulkQuadrant, bulkStatus, history, enabledStatuses, isLocked, patientType]);
+  }, [bulkScope, bulkQuadrant, bulkStatus, history, enabledStatuses, isLocked, patientType, t]);
 
   const handleManualSave = useCallback(async () => {
     const currentHash = hashTeethMap(teeth);
@@ -258,11 +258,11 @@ export function DentalChartPanel({
     try {
       await save.mutateAsync({ payload: snapshotToWire(teeth, patientType) });
       lastSavedHash.current = currentHash;
-      notify.success('Đã lưu sơ đồ răng');
+      notify.success(t('uiClinical.chartSaveSuccess'));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể lưu sơ đồ răng'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.chartSaveError')));
     }
-  }, [save, teeth, patientType]);
+  }, [save, teeth, patientType, t]);
 
   const handleReset = useCallback(() => {
     history.push({ ...emptyTeeth });
@@ -297,19 +297,16 @@ export function DentalChartPanel({
       <Card
         title={
           <span className="flex items-center gap-2">
-            Sơ đồ răng
+            {t('uiClinical.toothChart')}
             {patientType === 'CHILD' && (
               <span className="rounded bg-sky-50 px-2 py-0.5 text-xs font-normal text-sky-700">
-                Trẻ em (răng hỗn hợp)
+                {t('uiClinical.childDentition')}
               </span>
             )}
           </span>
         }
         description={
-          <>
-            Chạm vào răng để cập nhật tình trạng. Mỗi encounter có đúng <strong>1 snapshot</strong>; thay đổi được lưu tự động sau
-            ~1.5s và có thể hoàn tác bằng nút <strong>Undo</strong>.
-          </>
+          <>{t('uiClinical.chartInstructions')}</>
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -320,35 +317,35 @@ export function DentalChartPanel({
               </span>
             )}
             <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white p-0.5">
-              <Tooltip label="Hoàn tác (Ctrl+Z)">
+              <Tooltip label={t('uiClinical.undoShortcut')}>
                 <button
                   type="button"
                   disabled={!history.canUndo || isLocked}
                   onClick={history.undo}
                   className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Undo"
+                  aria-label={t('uiClinical.undo')}
                 >
                   <Undo2 className="h-4 w-4" />
                 </button>
               </Tooltip>
-              <Tooltip label="Làm lại (Ctrl+Y)">
+              <Tooltip label={t('uiClinical.redoShortcut')}>
                 <button
                   type="button"
                   disabled={!history.canRedo || isLocked}
                   onClick={history.redo}
                   className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Redo"
+                  aria-label={t('uiClinical.redo')}
                 >
                   <Redo2 className="h-4 w-4" />
                 </button>
               </Tooltip>
             </div>
-            <Tooltip label="Đặt nhanh trạng thái cho nhiều răng">
+            <Tooltip label={t('uiClinical.bulkToothStatus')}>
               <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} disabled={isLocked} leftIcon={<Wand2 className="h-4 w-4" />}>
                 Bulk
               </Button>
             </Tooltip>
-            <Tooltip label="Reset toàn bộ răng về Bình thường">
+            <Tooltip label={t('uiClinical.resetTeeth')}>
               <Button variant="outline" size="sm" onClick={handleReset} disabled={isLocked} leftIcon={<Eraser className="h-4 w-4" />}>
                 Reset
               </Button>
@@ -360,27 +357,28 @@ export function DentalChartPanel({
               isLoading={save.isPending}
               leftIcon={<Save className="h-4 w-4" />}
             >
-              Lưu ngay
+              {t('uiClinical.saveNow')}
             </Button>
           </div>
         }
       >
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <div className="flex flex-1 items-center gap-2">
-            <div className="relative flex-1 max-w-xs">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="relative min-w-0 w-full sm:max-w-xs">
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tìm răng (VD: 16, 21)"
+                aria-label={t('uiClinical.toothFind')}
+                placeholder={t('uiClinical.toothFindExample')}
                 className="pl-8"
               />
             </div>
-            <span className="text-xs text-gray-500">Tự nhảy tới răng khi nhấn Enter</span>
+            <span className="text-xs text-gray-500">{t('uiClinical.toothSearchHelp')}</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <Filter className="h-4 w-4 text-gray-400" />
-            <span className="text-xs text-gray-500">Lọc theo trạng thái:</span>
+            <span className="text-xs text-gray-500">{t('uiClinical.filterByStatus')}</span>
             {TOOTH_STATUSES.map((s) => {
               const enabled = enabledStatuses.has(s);
               const palette = toothStatusColor(s);
@@ -403,7 +401,7 @@ export function DentalChartPanel({
                   aria-pressed={enabled}
                 >
                   <span className={cn('h-2 w-2 rounded-full', enabled ? palette.bg : 'bg-gray-300')} />
-                  {TOOTH_STATUS_LABEL[s]}
+                  {t(`uiClinical.${toothStatusTranslationKey[s]}`)}
                 </button>
               );
             })}
@@ -411,7 +409,7 @@ export function DentalChartPanel({
         </div>
 
         {isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-500">Đang tải sơ đồ răng…</p>
+          <p className="py-6 text-center text-sm text-gray-500">{t('uiClinical.chartLoading')}</p>
         ) : (
           <DentalChart
             teeth={teeth}
@@ -436,12 +434,12 @@ export function DentalChartPanel({
         )}
 
         {search && filteredFdis && filteredFdis.length === 0 && (
-          <p className="mt-2 text-xs text-amber-600">Không tìm thấy răng phù hợp với “{search}”.</p>
+          <p className="mt-2 text-xs text-amber-600">{t('uiClinical.noMatchingTooth', { query: `“${search}”` })}</p>
         )}
       </Card>
 
       <div className="grid gap-3 md:grid-cols-7">
-        {TOOTH_OPTIONS.map((opt) => (
+        {options.map((opt) => (
           <div
             key={opt.value}
             className={cn(
@@ -459,11 +457,10 @@ export function DentalChartPanel({
         <Info className="mt-0.5 h-4 w-4 text-gray-500" />
         <div className="flex-1 space-y-1">
           <p>
-            <strong>{treatmentHighlight.size}</strong> răng đã có điều trị trong encounter này — chúng được viền nổi bật.
-            Click vào sẽ mở danh sách điều trị để thêm/sửa nhanh.
+            {t('uiClinical.toothTreatmentHighlight', { count: treatmentHighlight.size })}
           </p>
           <p>
-            Auto-save: <strong>{save.isPending ? 'đang lưu…' : dirty ? 'sẽ lưu sau 1.5s' : 'đã đồng bộ'}</strong>.
+            {t('uiClinical.autoSave')}: <strong>{save.isPending ? t('uiClinical.saving') : dirty ? t('uiClinical.saveIn') : t('uiClinical.synced')}</strong>.
           </p>
         </div>
       </div>
@@ -569,6 +566,8 @@ interface ToothStatusModalProps {
 }
 
 function ToothStatusModal({ tooth, entry, onChange, onClose }: ToothStatusModalProps) {
+  const { t } = useTranslation();
+  const options = toothOptions(t);
   const [status, setStatus] = useState<ToothStatus>(entry.status);
   const [notes, setNotes] = useState<string>(entry.notes ?? '');
 
@@ -577,13 +576,11 @@ function ToothStatusModal({ tooth, entry, onChange, onClose }: ToothStatusModalP
       open
       onClose={onClose}
       size="md"
-      title={`Răng ${tooth.number} — ${tooth.arch === 'upper' ? 'Hàm trên' : 'Hàm dưới'} ${
-        tooth.side === 'right' ? 'phải' : 'trái'
-      }`}
+      title={t('uiClinical.toothPosition', { number: tooth.number, arch: t(tooth.arch === 'upper' ? 'uiClinical.upperJaw' : 'uiClinical.lowerJaw'), side: t(tooth.side === 'right' ? 'uiClinical.rightSide' : 'uiClinical.leftSide') })}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiClinical.cancel')}
           </Button>
           <Button
             onClick={() => {
@@ -591,29 +588,29 @@ function ToothStatusModal({ tooth, entry, onChange, onClose }: ToothStatusModalP
               onClose();
             }}
           >
-            Lưu
+            {t('uiClinical.save')}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
         <Select
-          label="Tình trạng"
+          label={t('uiClinical.toothStatus')}
           value={status}
           onChange={(e) => setStatus(e.target.value as ToothStatus)}
-          options={TOOTH_OPTIONS}
+          options={options}
         />
         <Input
-          label="Ghi chú"
-          placeholder="VD: Đã hàn Composite tháng 7/2026"
+          label={t('uiClinical.toothNotes')}
+          placeholder={t('uiClinical.toothNoteExample')}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          hint="Tối đa 200 ký tự (BR-MR-009)"
+          hint={t('uiClinical.toothNoteHint')}
           maxLength={200}
         />
         {status === 'missing' && (
           <p className="text-xs text-gray-500">
-            Răng <strong>đã mất</strong> không thể chọn cho điều trị mới (BR-MR-009).
+            {t('uiClinical.missingToothRule')}
           </p>
         )}
       </div>
@@ -640,9 +637,8 @@ function ToothTreatmentPopover({
   onEditStatus,
   onViewDetail,
 }: ToothTreatmentPopoverProps) {
-  const toothLabel = `Răng ${tooth.number} — ${tooth.arch === 'upper' ? 'Hàm trên' : 'Hàm dưới'} ${
-    tooth.side === 'right' ? 'phải' : 'trái'
-  }`;
+  const { t } = useTranslation();
+  const toothLabel = t('uiClinical.toothPosition', { number: tooth.number, arch: t(tooth.arch === 'upper' ? 'uiClinical.upperJaw' : 'uiClinical.lowerJaw'), side: t(tooth.side === 'right' ? 'uiClinical.rightSide' : 'uiClinical.leftSide') });
 
   return (
     <Modal
@@ -658,28 +654,28 @@ function ToothTreatmentPopover({
         <div className="flex flex-wrap justify-end gap-2">
           {onViewDetail && (
             <Button variant="outline" onClick={onViewDetail}>
-              Xem lịch sử răng
+              {t('uiClinical.viewToothHistory')}
             </Button>
           )}
           <Button variant="outline" onClick={onEditStatus}>
-            Sửa tình trạng răng
+            {t('uiClinical.editToothStatus')}
           </Button>
           <Button leftIcon={<Wand2 className="h-4 w-4" />} onClick={onAddTreatment}>
-            Thêm điều trị cho răng này
+            {t('uiClinical.addTreatmentToTooth')}
           </Button>
         </div>
       }
     >
       <div className="space-y-2">
         <p className="text-sm text-gray-600">
-          Răng này hiện có <strong>{treatments.length}</strong> dòng điều trị trong encounter này.
+          {t('uiClinical.toothTreatmentLines', { count: treatments.length })}
         </p>
         <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 bg-gray-50/60">
           {treatments.map((line) => (
             <li key={line.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-gray-900">{line.treatmentName}</p>
-                <p className="text-xs text-gray-500">Mã: {line.treatmentCode}</p>
+                <p className="text-xs text-gray-500">{t('uiClinical.code')}: {line.treatmentCode}</p>
               </div>
               <span className="font-mono text-xs text-gray-700">× {line.quantity}</span>
             </li>
@@ -719,6 +715,8 @@ function BulkActionModal({
   enabledStatuses,
   patientType,
 }: BulkActionModalProps) {
+  const { t } = useTranslation();
+  const options = toothOptions(t);
   const quadrantLabels = QUADRANT_LABEL[patientType];
   return (
     <Modal
@@ -727,63 +725,63 @@ function BulkActionModal({
       size="md"
       title={
         <span className="flex items-center gap-2">
-          <Wand2 className="h-4 w-4 text-primary-600" /> Bulk actions
+          <Wand2 className="h-4 w-4 text-primary-600" /> {t('uiClinical.bulkActions')}
         </span>
       }
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiClinical.cancel')}
           </Button>
           <Button onClick={onApply} leftIcon={<RotateCcw className="h-4 w-4" />}>
-            Áp dụng
+            {t('uiClinical.apply')}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
         <Select
-          label="Phạm vi"
+          label={t('uiClinical.toothScope')}
           value={scope}
           onChange={(e) => setScope(e.target.value as BulkScope)}
           options={[
-            { value: 'quadrant', label: 'Một quadrant (4 vùng)' },
-            { value: 'arch', label: 'Toàn hàm (trên hoặc dưới)' },
-            { value: 'remaining', label: 'Các răng chưa được lọc' },
+            { value: 'quadrant', label: t('uiClinical.oneQuadrant') },
+            { value: 'arch', label: t('uiClinical.wholeArch') },
+            { value: 'remaining', label: t('uiClinical.remainingTeeth') },
           ]}
         />
         {scope !== 'remaining' && (
           <Select
-            label={scope === 'quadrant' ? 'Quadrant' : 'Hàm'}
+            label={scope === 'quadrant' ? t('uiClinical.quadrant') : t('uiClinical.arch')}
             value={quadrant}
             onChange={(e) => setQuadrant(toothQuadrantOfFromScope(scope, e.target.value))}
             options={
               scope === 'quadrant'
                 ? (Object.keys(quadrantLabels) as ToothQuadrant[]).map((q) => ({
                     value: q,
-                    label: quadrantLabels[q],
+                    label: t(`uiClinical.${patientType === 'CHILD' ? 'child' : 'adult'}${q}`),
                   }))
                 : [
-                    { value: 'Q1', label: 'Hàm trên (Q1+Q2)' },
-                    { value: 'Q3', label: 'Hàm dưới (Q3+Q4)' },
+                    { value: 'Q1', label: t('uiClinical.upperJawShort') },
+                    { value: 'Q3', label: t('uiClinical.lowerJawShort') },
                   ]
             }
           />
         )}
         <Select
-          label="Đặt trạng thái"
+          label={t('uiClinical.setToothStatus')}
           value={status}
           onChange={(e) => setStatus(e.target.value as ToothStatus)}
-          options={TOOTH_OPTIONS}
+          options={options}
         />
         {scope === 'remaining' && (
           <p className="text-xs text-gray-500">
-            Áp dụng cho <strong>{[...enabledStatuses].length === TOOTH_STATUSES.length ? `tất cả ${baseTeethFor(patientType).length} răng` : 'các răng có trạng thái hiện đang được lọc'}</strong>.
-            Nhớ tắt các trạng thái bạn muốn giữ nguyên trước khi áp dụng.
+            {t('uiClinical.applyTo')} <strong>{[...enabledStatuses].length === TOOTH_STATUSES.length ? t('uiClinical.allTeeth', { count: baseTeethFor(patientType).length }) : t('uiClinical.filteredTeeth')}</strong>.
+            {t('uiClinical.disableStatusesToKeep')}
           </p>
         )}
         <p className="text-xs text-gray-500">
-          Bulk sẽ đẩy 1 bước vào lịch sử Undo. Sau khi áp dụng có thể nhấn <strong>Undo</strong> để khôi phục.
+          {t('uiClinical.bulkUndoInstructions')}
         </p>
       </div>
     </Modal>

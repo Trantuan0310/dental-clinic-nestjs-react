@@ -31,6 +31,7 @@ import type {
   ScheduleOverrideKind,
   TimeBlock,
 } from '@/types/schedule';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Per-day exceptions to the weekly schedule (BR-SCH-003/004): close a whole
@@ -39,6 +40,7 @@ import type {
  * (ADR-0009 D3). Clinic management only.
  */
 export function OverridesTab() {
+  const { t } = useTranslation();
   const [dentistFilter, setDentistFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const [affected, setAffected] = useState<ScheduleChangeImpact | null>(null);
@@ -56,7 +58,7 @@ export function OverridesTab() {
     const out: Array<ScheduleOverride & { times: string[] }> = [];
     const changedDay = new Map<string, ScheduleOverride & { times: string[] }>();
     for (const o of overrides) {
-      const time = o.startTime ? `${o.startTime}–${o.endTime}` : 'Cả ngày';
+      const time = o.startTime ? `${o.startTime}–${o.endTime}` : t('uiScheduling.allDay');
       const key = `${o.dentistId}|${o.date}`;
       const group = o.kind === 'CHANGED_HOURS' ? changedDay.get(key) : undefined;
       if (group) {
@@ -68,23 +70,23 @@ export function OverridesTab() {
       out.push(row);
     }
     return out;
-  }, [overrides]);
+  }, [overrides, t]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Select
-          aria-label="Lọc theo bác sĩ"
+          aria-label={t('uiScheduling.filterByDentist')}
           value={dentistFilter}
           onChange={(e) => setDentistFilter(e.target.value)}
           options={[
-            { value: '', label: 'Tất cả bác sĩ' },
+            { value: '', label: t('uiScheduling.allDentists') },
             ...dentists.map((d) => ({ value: d.id, label: d.fullName })),
           ]}
         />
         {isStaff && (
           <Button onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" /> Thêm ngoại lệ
+            <Plus className="h-4 w-4" /> {t('uiScheduling.addOverride')}
           </Button>
         )}
       </div>
@@ -94,9 +96,9 @@ export function OverridesTab() {
       ) : overrides.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<CalendarX2 className="h-10 w-10 text-gray-400" />}
-            title="Không có ngoại lệ sắp tới"
-            description="Đóng lịch một ngày (hoặc một khoảng giờ) hay đổi giờ làm của riêng một ngày."
+            icon={<CalendarX2 className="h-10 w-10 text-gray-400 dark:text-surface-500" />}
+            title={t('uiScheduling.noUpcomingOverrides')}
+            description={t('uiScheduling.noUpcomingOverridesHint')}
           />
         </Card>
       ) : (
@@ -105,11 +107,11 @@ export function OverridesTab() {
             <table className="table-base">
               <thead>
                 <tr>
-                  <th>Ngày</th>
-                  <th>Bác sĩ</th>
-                  <th>Loại</th>
-                  <th>Giờ</th>
-                  <th>Lý do</th>
+                  <th>{t('uiScheduling.date')}</th>
+                  <th>{t('uiScheduling.dentist')}</th>
+                  <th>{t('uiScheduling.type')}</th>
+                  <th>{t('uiScheduling.hours')}</th>
+                  <th>{t('uiScheduling.reason')}</th>
                   <th />
                 </tr>
               </thead>
@@ -117,20 +119,20 @@ export function OverridesTab() {
                 {rows.map((o) => (
                   <tr key={o.id}>
                     <td className="whitespace-nowrap">{formatDate(o.date)}</td>
-                    <td className="font-medium text-gray-900">{nameById.get(o.dentistId) ?? '—'}</td>
+                    <td className="font-medium text-gray-900 dark:text-surface-100">{nameById.get(o.dentistId) ?? '—'}</td>
                     <td>
                       <Badge variant={o.kind === 'CLOSED' ? 'danger' : 'info'}>
-                        {o.kind === 'CLOSED' ? 'Đóng lịch' : 'Đổi giờ làm'}
+                        {o.kind === 'CLOSED' ? t('uiScheduling.closed') : t('uiScheduling.changedHours')}
                       </Badge>
                     </td>
                     <td className="whitespace-nowrap">{o.times.join(', ')}</td>
-                    <td className="text-gray-500">{o.reason}</td>
+                    <td className="text-gray-500 dark:text-surface-400">{o.reason}</td>
                     <td className="text-right">
                       {isStaff && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          aria-label={`Xóa ngoại lệ ngày ${formatDate(o.date)}`}
+                          aria-label={t('uiScheduling.deleteOverrideOn', { date: formatDate(o.date) })}
                           onClick={() => setDeleting(o)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -148,13 +150,13 @@ export function OverridesTab() {
       <ConfirmDialog
         open={deleting !== null}
         onClose={() => setDeleting(null)}
-        title="Xóa ngoại lệ lịch làm việc"
+        title={t('uiScheduling.deleteOverrideTitle')}
         description={
           deleting
-            ? `Xóa ngoại lệ ${deleting.kind === 'CLOSED' ? 'đóng lịch' : 'đổi giờ'} ngày ${formatDate(deleting.date)} (${deleting.times.join(', ')}) của ${nameById.get(deleting.dentistId) ?? 'bác sĩ'}? Ngày này sẽ trở lại giờ làm theo lịch tuần.`
+            ? t('uiScheduling.deleteOverrideConfirm', { kind: deleting.kind === 'CLOSED' ? t('uiScheduling.closed').toLowerCase() : t('uiScheduling.changedHours').toLowerCase(), date: formatDate(deleting.date), times: deleting.times.join(', '), dentist: nameById.get(deleting.dentistId) ?? t('uiScheduling.dentist') })
             : undefined
         }
-        confirmText="Xóa"
+        confirmText={t('uiScheduling.delete')}
         variant="danger"
         isLoading={remove.isPending}
         onConfirm={() => {
@@ -162,10 +164,10 @@ export function OverridesTab() {
           remove.mutate(deleting.id, {
             onSuccess: (result) => {
               setDeleting(null);
-              notify.success('Đã xóa ngoại lệ; lịch trở lại như tuần');
+              notify.success(t('uiScheduling.overrideDeletedToast'));
               if (hasImpact(result)) setAffected(result);
             },
-            onError: (e) => notify.error(getApiErrorMessage(e, 'Không xóa được')),
+            onError: (e) => notify.error(getApiErrorMessage(e, t('uiScheduling.deleteError'))),
           });
         }}
       />
@@ -194,6 +196,7 @@ function CreateOverrideModal({
   onClose: () => void;
   onAffected: (impact: ScheduleChangeImpact) => void;
 }) {
+  const { t } = useTranslation();
   const { data: dentists = [] } = useDentistOptions();
   const create = useCreateScheduleOverride();
   // The clinic's date, whatever zone the workstation is set to (A1-14).
@@ -219,7 +222,7 @@ function CreateOverrideModal({
   const rangeError = changed ? blockError(ranges) : null;
 
   return (
-    <Modal open={open} onClose={onClose} title="Thêm ngoại lệ lịch làm việc" size="sm">
+    <Modal open={open} onClose={onClose} title={t('uiScheduling.addOverrideTitle')} size="sm">
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -235,56 +238,54 @@ function CreateOverrideModal({
             },
             {
               onSuccess: (result) => {
-                notify.success('Đã lưu ngoại lệ lịch làm việc');
+                notify.success(t('uiScheduling.overrideSavedToast'));
                 onClose();
                 if (hasImpact(result)) onAffected(result);
               },
-              onError: (err) => notify.error(getApiErrorMessage(err, 'Không lưu được ngoại lệ')),
+              onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.saveOverrideError'))),
             },
           );
         }}
       >
         <Select
-          label="Bác sĩ"
+          label={t('uiScheduling.dentist')}
           required
           value={form.dentistId}
           onChange={(e) => setForm({ ...form, dentistId: e.target.value })}
-          placeholder="-- Chọn bác sĩ --"
+          placeholder={t('uiScheduling.selectDentist')}
           options={dentists.map((d) => ({ value: d.id, label: d.fullName }))}
         />
         <DatePicker
-          label="Ngày"
+          label={t('uiScheduling.date')}
           required
           min={today}
           value={form.date}
           onChange={(value) => setForm({ ...form, date: value })}
         />
         <Select
-          label="Loại"
+          label={t('uiScheduling.type')}
           value={form.kind}
           onChange={(e) => setForm({ ...form, kind: e.target.value as ScheduleOverrideKind })}
           options={[
-            { value: 'CLOSED', label: 'Đóng lịch (không nhận hẹn)' },
-            { value: 'CHANGED_HOURS', label: 'Đổi giờ làm trong ngày' },
+            { value: 'CLOSED', label: t('uiScheduling.closeScheduleNoAppointments') },
+            { value: 'CHANGED_HOURS', label: t('uiScheduling.changeHoursForDay') },
           ]}
         />
         {form.kind === 'CLOSED' && (
           <Select
-            label="Phạm vi"
+            label={t('uiScheduling.scope')}
             value={form.wholeDay ? 'day' : 'range'}
             onChange={(e) => setForm({ ...form, wholeDay: e.target.value === 'day' })}
             options={[
-              { value: 'day', label: 'Cả ngày' },
-              { value: 'range', label: 'Một khoảng giờ' },
+              { value: 'day', label: t('uiScheduling.allDay') },
+              { value: 'range', label: t('uiScheduling.timeRange') },
             ]}
           />
         )}
         {changed && (
           <div className="space-y-2">
             <Alert variant="info">
-              Các khung dưới đây <strong>thay toàn bộ</strong> lịch tuần của ngày này. Muốn giữ nghỉ trưa, nhập hai
-              khung (VD 09:00–12:00 và 13:30–17:00). Ngày đã có khung đổi giờ thì khung mới được cộng thêm, không được
-              chồng lên khung cũ.
+              {t('uiScheduling.changedHoursHint')}
             </Alert>
             {currentWindows.length > 0 && (
               <Button
@@ -293,51 +294,51 @@ function CreateOverrideModal({
                 variant="outline"
                 onClick={() => setRanges(currentWindows.map((w) => ({ startTime: w.startTime, endTime: w.endTime })))}
               >
-                Lấy giờ làm hiện tại ({currentWindows.map((w) => `${w.startTime}–${w.endTime}`).join(', ')})
+                {t('uiScheduling.useCurrentHours', { hours: currentWindows.map((w) => `${w.startTime}–${w.endTime}`).join(', ') })}
               </Button>
             )}
-            <TimeBlocksEditor blocks={ranges} onChange={setRanges} startLabel="Làm từ" />
-            {rangeError && <p className="text-xs text-red-600">{rangeError}</p>}
+            <TimeBlocksEditor blocks={ranges} onChange={setRanges} startLabel={t('uiScheduling.workFrom')} />
+            {rangeError && <p className="text-xs text-red-600 dark:text-red-400">{rangeError}</p>}
           </div>
         )}
         {withTimes && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
-              label="Đóng từ"
+              label={t('uiScheduling.closedFrom')}
               type="time"
               required
               value={form.startTime}
               onChange={(e) => setForm({ ...form, startTime: e.target.value })}
             />
             <Input
-              label="Đến"
+              label={t('uiScheduling.to')}
               type="time"
               required
               value={form.endTime}
               onChange={(e) => setForm({ ...form, endTime: e.target.value })}
-              error={form.endTime <= form.startTime ? 'Phải sau giờ bắt đầu' : undefined}
+              error={form.endTime <= form.startTime ? t('uiScheduling.endAfterStartError') : undefined}
             />
           </div>
         )}
         <Textarea
-          label="Lý do"
+          label={t('uiScheduling.reason')}
           required
           minLength={3}
           rows={2}
           value={form.reason}
           onChange={(e) => setForm({ ...form, reason: e.target.value })}
-          placeholder="VD: Bảo trì ghế nha, họp chuyên môn"
+          placeholder={t('uiScheduling.overrideReasonExample')}
         />
-        <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-surface-700">
           <Button type="button" variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           <Button
             type="submit"
             isLoading={create.isPending}
             disabled={!form.dentistId || (withTimes && form.endTime <= form.startTime) || Boolean(rangeError)}
           >
-            Lưu
+            {t('uiScheduling.saveChanges')}
           </Button>
         </div>
       </form>

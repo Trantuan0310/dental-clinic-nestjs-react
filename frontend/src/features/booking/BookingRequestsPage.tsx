@@ -4,6 +4,8 @@ import { api } from "@/lib/api";
 import { clinicIso, clinicParts } from "@/lib/clinicTime";
 import { bookingErrorMessage } from "./errorMessage";
 import { notify } from "@/components/ui/Toast";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 type RequestRow = {
   id: string;
@@ -80,43 +82,29 @@ type PatientMatch = {
 };
 /** Patient choice value meaning "create a new record for this request". */
 const NEW_PATIENT = "__new__";
-const matchLabel = (p: PatientMatch) =>
+const matchLabel = (p: PatientMatch, t: TFunction) =>
   [
     p.code,
     p.fullName,
     String(p.dob).slice(0, 10),
     p.matchedBy?.includes("contactPersonPhone")
-      ? "khớp SĐT người giám hộ " +
+      ? t('uiScheduling.matchGuardianPhone', { phone:
         p.contactPersonPhone +
-        (p.contactPersonName ? " (" + p.contactPersonName + ")" : "")
+        (p.contactPersonName ? " (" + p.contactPersonName + ")" : "") })
       : p.matchedBy?.includes("primaryPhone")
-        ? "khớp SĐT " + (p.primaryPhone ?? "")
+        ? t('uiScheduling.matchPhone', { phone: p.primaryPhone ?? '' })
         : p.matchedBy?.includes("phoneHistory")
-          ? "SĐT cũ của hồ sơ, hiện là " + (p.primaryPhone ?? "—")
-          : "SĐT khác: " + (p.primaryPhone ?? "—"),
-    p.sameNameAndDob ? "trùng tên và ngày sinh" : "",
+          ? t('uiScheduling.matchFormerPhone', { phone: p.primaryPhone ?? '—' })
+          : t('uiScheduling.matchOtherPhone', { phone: p.primaryPhone ?? '—' }),
+    p.sameNameAndDob ? t('uiScheduling.matchSameNameDob') : '',
   ]
     .filter(Boolean)
     .join(" · ");
-const stateLabel: Record<string, string> = {
-  PENDING_REVIEW: "Chờ xử lý",
-  NEEDS_INFORMATION: "Chờ bổ sung",
-  PROPOSED: "Chờ bệnh nhân đồng ý",
-  PATIENT_ACCEPTED: "Chờ lễ tân xác nhận",
-  CONFIRMED: "Đã xác nhận",
-  DECLINED: "Từ chối",
-  CANCELLED: "Đã hủy / rút",
-  EXPIRED: "Quá hạn",
-};
-const visitLabel: Record<string, string> = {
-  SCHEDULED: "Đã đặt",
-  CONFIRMED: "Đã xác nhận",
-  CHECKED_IN: "Đã đến",
-  IN_PROGRESS: "Đang khám",
-  COMPLETED: "Đã khám xong",
-  CANCELLED: "Đã hủy",
-  NO_SHOW: "Vắng mặt",
-  LEFT: "Đã về",
+const REQUEST_STATES = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED", "CONFIRMED", "DECLINED", "CANCELLED", "EXPIRED"];
+const requestState = (t: TFunction, status: string) => t(`uiScheduling.bookingState_${status}`);
+const visitState = (t: TFunction, status: string) => {
+  const key: Record<string, string> = { SCHEDULED: 'statusScheduled', CONFIRMED: 'statusConfirmed', CHECKED_IN: 'statusCheckedIn', IN_PROGRESS: 'statusInProgress', COMPLETED: 'statusCompleted', CANCELLED: 'statusCancelled', NO_SHOW: 'statusNoShow', LEFT: 'statusLeft' };
+  return key[status] ? t(`uiScheduling.${key[status]}`) : status;
 };
 /** Age on the clinic's today from a "YYYY-MM-DD…" date of birth. */
 const ageOf = (dob: string) => {
@@ -125,10 +113,10 @@ const ageOf = (dob: string) => {
   return ty - y - (tm < m || (tm === m && td < d) ? 1 : 0);
 };
 /** The list's status: a confirmed request whose visit was cancelled says so. */
-const rowStatus = (row: RequestRow) =>
+const rowStatus = (row: RequestRow, t: TFunction) =>
   row.status === "CONFIRMED" && row.appointment && ["CANCELLED", "NO_SHOW", "LEFT"].includes(row.appointment.status)
-    ? "Đã xác nhận · lịch " + (visitLabel[row.appointment.status] ?? "").toLowerCase()
-    : (stateLabel[row.status] ?? row.status);
+    ? t("uiScheduling.bookingConfirmedWithVisitStatus", { status: t(`uiScheduling.status${row.appointment.status === 'NO_SHOW' ? 'NoShow' : row.appointment.status === 'LEFT' ? 'Left' : 'Cancelled'}`).toLowerCase() })
+    : requestState(t, row.status);
 const OPEN = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED"];
 const CONFIRMABLE = ["PENDING_REVIEW", "PATIENT_ACCEPTED"];
 const PROPOSAL = ["PROPOSED", "PATIENT_ACCEPTED"];
@@ -156,6 +144,7 @@ const urgency = (row: RequestRow, now: number) => {
 };
 /** An open request whose dentist, day or time no longer takes it. */
 function SlotIssueBadge({ issue }: { issue?: RequestRow["slotIssue"] }) {
+  const { t } = useTranslation();
   if (!issue) return null;
   return (
     <span
@@ -163,8 +152,8 @@ function SlotIssueBadge({ issue }: { issue?: RequestRow["slotIssue"] }) {
       className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800"
     >
       {issue.kind === "SLOT_CONFLICT"
-        ? "Giờ này đã có lịch khác"
-        : "Bác sĩ/khung giờ không còn nhận lịch"}
+        ? t('uiScheduling.slotConflict')
+        : t('uiScheduling.slotNoLongerAvailable')}
     </span>
   );
 }
@@ -175,30 +164,32 @@ const MAX_OPEN_PER_PHONE = 6;
  * these are handled; possibly someone else used the number to block it.
  */
 function PhoneLimitBadge({ count, phone }: { count?: number; phone: string }) {
+  const { t } = useTranslation();
   if (!count || count < MAX_OPEN_PER_PHONE) return null;
   return (
     <span
-      title={`SĐT ${phone} đang có ${count} yêu cầu mở nên không đặt thêm trực tuyến được. Nếu khách không gửi các yêu cầu này, hãy từ chối những yêu cầu lạ.`}
+      title={t('uiScheduling.phoneOpenRequestLimitTitle', { phone, count })}
       className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800"
     >
-      SĐT có {count} yêu cầu mở
+      {t('uiScheduling.phoneOpenRequestCount', { count })}
     </span>
   );
 }
 function UrgencyBadge({ kind }: { kind: "overdue" | "soon" | null }) {
+  const { t } = useTranslation();
   if (!kind) return null;
   return kind === "overdue" ? (
     <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-      Quá giờ
+      {t('uiScheduling.overdue')}
     </span>
   ) : (
     <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-      Sắp đến giờ
+      {t('uiScheduling.dueSoon')}
     </span>
   );
 }
-const format = (value: string) =>
-  new Date(value).toLocaleString("vi-VN", {
+const format = (value: string, locale = "vi-VN") =>
+  new Date(value).toLocaleString(locale, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Ho_Chi_Minh",
@@ -213,17 +204,20 @@ const fromInputDate = (value: string) =>
   clinicIso(value.slice(0, 10), value.slice(11, 16));
 /** Actions whose outcome the patient is emailed about (the server says if it went out). */
 const NOTIFIED: Record<string, string> = {
-  confirm: "Đã xác nhận lịch hẹn",
-  propose: "Đã đề xuất giờ khác",
-  decline: "Đã từ chối yêu cầu",
-  "need-information": "Đã yêu cầu bổ sung thông tin",
-  "resend-link": "Đã gửi lại đường link cho khách",
-  contact: "Đã sửa thông tin liên hệ",
+  confirm: "bookingActionConfirmed",
+  propose: "bookingActionProposed",
+  decline: "bookingActionDeclined",
+  "need-information": "bookingActionInformationRequested",
+  "resend-link": "bookingActionLinkResent",
+  contact: "bookingActionContactUpdated",
 };
 /** A patient who could not be emailed and must be called. */
 type CallNotice = { action: string; name: string; phone: string; noEmail: boolean };
 
 export default function BookingRequestsPage() {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage?.startsWith("en") ? "en-US" : "vi-VN";
+  const formatInLocale = (value: string) => format(value, locale);
   const qc = useQueryClient();
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<RequestRow | null>(null);
@@ -357,19 +351,13 @@ export default function BookingRequestsPage() {
       ),
     onSuccess: async (response, { path }) => {
       setError("");
-      const done = NOTIFIED[path];
+      const done = NOTIFIED[path] ? t(`uiScheduling.${NOTIFIED[path]}`) : undefined;
       if (response.data?.patientChangesNotApplied?.length) {
         // Booked, but this account may not change patient records.
-        notify.error(
-          "Chưa cập nhật " +
-            response.data.patientChangesNotApplied
-              .map((f) => (f === "email" ? "email" : "số điện thoại"))
-              .join(", ") +
-            " của hồ sơ: tài khoản không có quyền sửa hồ sơ bệnh nhân. Nhờ người có quyền cập nhật.",
-        );
+        notify.error(t('uiScheduling.bookingPatientUpdatePermissionError', { fields: response.data.patientChangesNotApplied.join(', ') }));
       }
       if (response.data?.alreadyConfirmed) {
-        notify.success("Yêu cầu đã được xác nhận trước đó, không tạo thêm lịch");
+        notify.success(t('uiScheduling.bookingAlreadyConfirmed'));
       } else if (done) {
         notify.success(done);
         // No email went out (none given, or sending failed): the patient
@@ -383,7 +371,7 @@ export default function BookingRequestsPage() {
           });
         }
       } else {
-        notify.success("Đã cập nhật yêu cầu");
+        notify.success(t('uiScheduling.bookingRequestUpdated'));
       }
       // A confirmed request is now a visit: calendars and dashboard change too.
       if (path === "confirm") {
@@ -398,7 +386,7 @@ export default function BookingRequestsPage() {
       setSelected(null);
     },
     onError: async (e: unknown) => {
-      const text = bookingErrorMessage(e, "Không thực hiện được thao tác.");
+      const text = bookingErrorMessage(e, t('uiScheduling.bookingActionError'));
       setError(text);
       // 409: the request changed or its time passed meanwhile. Say so and
       // reload, so the dialog shows its current state and actions.
@@ -449,12 +437,11 @@ export default function BookingRequestsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Yêu cầu đặt lịch trực tuyến
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
+          {t('uiScheduling.bookingRequestsTitle')}
         </h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Lễ tân kiểm tra thông tin, giờ trống và xác nhận trước khi tạo lịch
-          chính thức.
+        <p className="mt-1 text-sm text-gray-600 dark:text-surface-300">
+          {t('uiScheduling.bookingRequestsDescription')}
         </p>
       </div>
       {callNotice && (
@@ -464,16 +451,14 @@ export default function BookingRequestsPage() {
         >
           <p>
             <strong>{callNotice.action}</strong> —{" "}
-            {callNotice.noEmail ? "khách không có email" : "gửi email cho khách bị lỗi"}.
-            Hãy gọi {callNotice.name} theo số{" "}
+            {callNotice.noEmail ? t('uiScheduling.bookingNoEmail') : t('uiScheduling.bookingEmailFailedShort')}. {t('uiScheduling.bookingCallInstruction', { name: callNotice.name })}{" "}
             <a href={"tel:" + callNotice.phone} className="font-semibold underline">
               {callNotice.phone}
-            </a>{" "}
-            để báo kết quả.
+            </a>{" "}{t('uiScheduling.reportBookingOutcome')}
           </p>
           <button
             onClick={() => setCallNotice(null)}
-            aria-label="Đã gọi, ẩn thông báo"
+            aria-label={t('uiScheduling.dismissCallReminder')}
             className="rounded px-2 py-1 text-amber-800 hover:bg-amber-100"
           >
             ✕
@@ -486,12 +471,12 @@ export default function BookingRequestsPage() {
           className="rounded-lg border border-orange-300 bg-orange-50 p-4 text-sm text-orange-900"
         >
           <h2 className="font-semibold">
-            {reminderIssues.data.length} lịch hẹn sắp tới chưa được nhắc qua email — hãy gọi khách
+            {t('uiScheduling.reminderFailuresHeading', { count: reminderIssues.data.length })}
           </h2>
           <ul className="mt-2 space-y-1">
             {reminderIssues.data.map((r) => (
               <li key={r.appointmentId}>
-                <strong>{format(r.startAt)}</strong> · {r.patient.fullName}
+                <strong>{formatInLocale(r.startAt)}</strong> · {r.patient.fullName}
                 {r.patient.primaryPhone ? (
                   <>
                     {" "}
@@ -504,7 +489,7 @@ export default function BookingRequestsPage() {
                 {r.dentist ? " · " + r.dentist.fullName : ""}
                 {r.referenceCode ? " · " + r.referenceCode : ""} —{" "}
                 {r.reminderStatus === "BLOCKED"
-                  ? "không nhắc vì lịch không còn hợp lệ: " + (r.reminderNote ?? "") + ". Hãy dời hoặc hủy lịch và báo khách."
+                  ? t('uiScheduling.reminderBlockedReason', { reason: r.reminderNote ?? '' })
                   : r.reminderNote}
               </li>
             ))}
@@ -514,23 +499,23 @@ export default function BookingRequestsPage() {
       <div className="grid gap-3 sm:grid-cols-4">
         {["PENDING_REVIEW", "PROPOSED", "PATIENT_ACCEPTED", "CONFIRMED"].map(
           (k) => (
-            <div key={k} className="rounded-lg border bg-white p-3">
-              <div className="text-xs text-gray-500">{stateLabel[k]}</div>
+            <div key={k} className="rounded-lg border border-gray-200 bg-white p-3 dark:border-surface-700 dark:bg-surface-900">
+              <div className="text-xs text-gray-500 dark:text-surface-400">{requestState(t, k)}</div>
               <div className="mt-1 text-xl font-semibold">{counts[k] ?? 0}</div>
             </div>
           ),
         )}
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="rounded-md border bg-white px-3 py-2 text-sm"
+          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
         >
-          <option value="">Tất cả trạng thái</option>
-          {Object.keys(stateLabel).map((s) => (
+          <option value="">{t('uiScheduling.allStatuses')}</option>
+          {REQUEST_STATES.map((s) => (
             <option key={s} value={s}>
-              {stateLabel[s]}
+              {requestState(t, s)}
             </option>
           ))}
         </select>
@@ -544,11 +529,11 @@ export default function BookingRequestsPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo mã đặt lịch, SĐT hoặc tên"
-            aria-label="Tìm yêu cầu"
-            className="w-full max-w-sm rounded-md border bg-white px-3 py-2 text-sm"
+            placeholder={t('uiScheduling.searchBookingRequests')}
+            aria-label={t('uiScheduling.searchBookingRequests')}
+            className="w-full max-w-sm rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
           />
-          <button className="rounded-md border bg-white px-3 py-2 text-sm">Tìm</button>
+          <button className="rounded-md border bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100">{t('uiScheduling.searchButton')}</button>
           {q && (
             <button
               type="button"
@@ -558,7 +543,7 @@ export default function BookingRequestsPage() {
               }}
               className="text-sm text-gray-500 underline"
             >
-              Bỏ lọc
+              {t('uiScheduling.clearFilters')}
             </button>
           )}
         </form>
@@ -566,23 +551,23 @@ export default function BookingRequestsPage() {
           onClick={() => query.refetch()}
           className="rounded-md border bg-white px-3 py-2 text-sm"
         >
-          Tải lại
+          {t('uiScheduling.refresh')}
         </button>
       </div>
-      <div className="overflow-x-auto rounded-lg border bg-white">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-surface-700 dark:bg-surface-900">
         {query.isLoading ? (
-          <p className="p-6 text-gray-500">Đang tải yêu cầu…</p>
+          <p className="p-6 text-gray-500 dark:text-surface-400">{t('uiScheduling.loadingBookingRequests')}</p>
         ) : query.isError ? (
-          <p className="p-6 text-red-700">Không tải được yêu cầu.</p>
+          <p className="p-6 text-red-700 dark:text-red-300">{t('uiScheduling.bookingRequestsLoadError')}</p>
         ) : (
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-gray-600">
+            <thead className="bg-slate-50 text-gray-600 dark:bg-surface-800 dark:text-surface-300">
               <tr>
-                <th className="px-4 py-3">Mã / bệnh nhân</th>
-                <th className="px-4 py-3">Dịch vụ</th>
-                <th className="px-4 py-3">Bác sĩ</th>
-                <th className="px-4 py-3">Giờ hẹn</th>
-                <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3">{t('uiScheduling.referencePatient')}</th>
+                <th className="px-4 py-3">{t('uiScheduling.service')}</th>
+                <th className="px-4 py-3">{t('uiScheduling.dentist')}</th>
+                <th className="px-4 py-3">{t('uiScheduling.appointmentTime')}</th>
+                <th className="px-4 py-3">{t('uiScheduling.status')}</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -598,19 +583,19 @@ export default function BookingRequestsPage() {
                   <td className="px-4 py-3">{row.service.name}</td>
                   <td className="px-4 py-3">{effectiveDentist(row)}</td>
                   <td className="px-4 py-3">
-                    {format(effectiveAt(row))}
+                    {formatInLocale(effectiveAt(row))}
                     {!row.appointment && effectiveAt(row) !== row.requestedStartAt && (
-                      <div className="text-xs text-gray-500">Giờ đề xuất</div>
+                      <div className="text-xs text-gray-500 dark:text-surface-400">{t('uiScheduling.proposedTime')}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {rowStatus(row)}
+                    {rowStatus(row, t)}
                     {row.noticeFailedAt && (
                       <span
-                        title={"Chưa báo được khách: " + (row.noticeFailedSubject ?? "")}
+                        title={t('uiScheduling.noticeFailedFor', { subject: row.noticeFailedSubject ?? '' })}
                         className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
                       >
-                        Cần gọi báo khách
+                        {t('uiScheduling.callPatient')}
                       </span>
                     )}
                     <UrgencyBadge kind={urgency(row, now)} />
@@ -622,7 +607,7 @@ export default function BookingRequestsPage() {
                       onClick={() => setSelected(row)}
                       className="rounded-md border px-3 py-1.5 text-teal-800"
                     >
-                      Xử lý
+                      {t('uiScheduling.handleRequest')}
                     </button>
                   </td>
                 </tr>
@@ -632,24 +617,24 @@ export default function BookingRequestsPage() {
         )}
         {!query.isLoading && !query.isError && !query.data?.length && (
           <p className="p-8 text-center text-sm text-gray-500">
-            Chưa có yêu cầu đặt lịch.
+            {t('uiScheduling.noBookingRequests')}
           </p>
         )}
       </div>
 
       {selected && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center">
-          <section className="my-4 w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl sm:p-7">
+          <section className="my-4 w-full max-w-2xl rounded-xl bg-white p-5 text-gray-900 shadow-xl dark:bg-surface-900 dark:text-surface-100 sm:p-7">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold">{selected.fullName}</h2>
                 <p className="text-sm text-gray-500">
-                  {selected.referenceCode} · {stateLabel[selected.status]}
+                  {selected.referenceCode} · {requestState(t, selected.status)}
                 </p>
               </div>
               <button
                 onClick={() => setSelected(null)}
-                aria-label="Đóng"
+                aria-label={t('uiScheduling.close')}
                 className="rounded px-2 py-1 text-gray-500 hover:bg-gray-100"
               >
                 ✕
@@ -657,83 +642,80 @@ export default function BookingRequestsPage() {
             </div>
             <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-gray-500">Điện thoại / email</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.phoneNumber')} / {t('uiScheduling.email')}</dt>
                 <dd>
                   {selected.phone}
                   {selected.email ? " · " + selected.email : ""}
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500">Ngày sinh</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.dateOfBirth')}</dt>
                 <dd>{String(selected.dob).slice(0, 10)}</dd>
               </div>
               <div>
-                <dt className="text-gray-500">Dịch vụ</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.service')}</dt>
                 <dd>
-                  {selected.service.name} · {selected.service.durationMinutes}{" "}
-                  phút
+                  {selected.service.name} · {t('uiScheduling.minutesValue', { count: selected.service.durationMinutes })}
                 </dd>
               </div>
               <div>
-                <dt className="text-gray-500">Giờ mong muốn</dt>
-                <dd>{format(selected.requestedStartAt)}</dd>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.requestedTime')}</dt>
+                <dd>{formatInLocale(selected.requestedStartAt)}</dd>
               </div>
               {selected.proposedStartAt && (
                 <div>
-                  <dt className="text-gray-500">Giờ phòng khám đề xuất</dt>
-                  <dd>{format(selected.proposedStartAt)}</dd>
+                  <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingProposedTime')}</dt>
+                  <dd>{formatInLocale(selected.proposedStartAt)}</dd>
                 </div>
               )}
               <div>
-                <dt className="text-gray-500">Bác sĩ mong muốn</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.preferredDentist')}</dt>
                 <dd>{selected.preferredDentist.fullName}</dd>
               </div>
               {PROPOSAL.includes(selected.status) && selected.proposedStartAt && (
                 <div>
-                  <dt className="text-gray-500">Bác sĩ đề xuất</dt>
+                  <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.proposedDentist')}</dt>
                   <dd>
                     {(selected.proposedDentist ?? selected.preferredDentist).fullName}
                   </dd>
                 </div>
               )}
               <div>
-                <dt className="text-gray-500">Người giám hộ</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.guardian')}</dt>
                 <dd>
                   {selected.contactPersonName || "—"}{" "}
                   {selected.contactPersonPhone || ""}
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-gray-500">Lý do khám</dt>
+                <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.reason')}</dt>
                 <dd>{selected.reason || "—"}</dd>
               </div>
               {selected.patientMessage && (
                 <div className="sm:col-span-2">
-                  <dt className="text-gray-500">Lời nhắn của khách</dt>
+                  <dt className="text-gray-500 dark:text-surface-400">{t('uiScheduling.patientMessage')}</dt>
                   <dd className="rounded bg-sky-50 p-2 text-sky-900">{selected.patientMessage}</dd>
                 </div>
               )}
             </dl>
             {selected.appointment && (
               <p className="mt-4 rounded bg-emerald-50 p-3 text-sm text-emerald-800">
-                Lịch đã tạo: {format(selected.appointment.startAt)}
+                {t('uiScheduling.bookingAppointmentCreated')} {formatInLocale(selected.appointment.startAt)}
                 {selected.appointment.dentist
                   ? " · " + selected.appointment.dentist.fullName
                   : ""}{" "}
-                ({visitLabel[selected.appointment.status] ?? selected.appointment.status})
+                ({visitState(t, selected.appointment.status)})
               </p>
             )}
             {ageOf(selected.dob) < 18 && (
               <p className="mt-3 rounded bg-sky-50 p-2 text-xs text-sky-900">
-                Người khám {ageOf(selected.dob)} tuổi (vị thành niên): cần cha mẹ hoặc người giám hộ
-                đi cùng khi đến khám.
+                {t('uiScheduling.minorPatientReminder', { age: ageOf(selected.dob) })}
               </p>
             )}
             {selected.noticeFailedAt && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded bg-amber-50 p-3 text-sm text-amber-900">
                 <span>
-                  Chưa báo được khách “{selected.noticeFailedSubject}”
-                  {selected.email ? " (gửi email lỗi)" : " (khách không có email)"}. Hãy gọi{" "}
+                  {t('uiScheduling.noticeFailedFor', { subject: selected.noticeFailedSubject })} {selected.email ? t('uiScheduling.bookingEmailFailedShort') : t('uiScheduling.bookingNoEmail')}. {t('uiScheduling.callPatient')}{" "}
                   <a href={"tel:" + selected.phone} className="font-semibold underline">
                     {selected.phone}
                   </a>
@@ -744,27 +726,27 @@ export default function BookingRequestsPage() {
                   onClick={() => action.mutate({ path: "called" })}
                   className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs"
                 >
-                  Đã gọi báo khách
+                  {t('uiScheduling.patientCalled')}
                 </button>
               </div>
             )}
             {(!!related.data?.requests.length || !!related.data?.visits.length) && (
               <div className="mt-4 rounded bg-violet-50 p-3 text-sm text-violet-900">
                 <p className="font-medium">
-                  Cùng số điện thoại / cùng người — tránh đặt trùng hai lịch:
+                  {t('uiScheduling.relatedBookingsHeading')}
                 </p>
                 <ul className="mt-1 list-disc pl-5">
                   {related.data?.requests.map((r) => (
                     <li key={r.id}>
-                      Yêu cầu {r.referenceCode} ({r.fullName}) · {format(r.startAt)} ·{" "}
-                      {stateLabel[r.status] ?? r.status}
+                      {t('uiScheduling.bookingRequestInline', { reference: r.referenceCode, name: r.fullName, time: formatInLocale(r.startAt) })}{" "}
+                      {requestState(t, r.status)}
                     </li>
                   ))}
                   {related.data?.visits.map((v) => (
                     <li key={v.id}>
-                      Lịch hẹn {format(v.startAt)} · {v.patient.fullName} ({v.patient.code})
+                      {t('uiScheduling.bookingVisitInline', { time: formatInLocale(v.startAt), name: v.patient.fullName, code: v.patient.code })}
                       {v.dentist ? " · " + v.dentist.fullName : ""} ·{" "}
-                      {visitLabel[v.status] ?? v.status}
+                      {visitState(t, v.status)}
                     </li>
                   ))}
                 </ul>
@@ -772,59 +754,50 @@ export default function BookingRequestsPage() {
             )}
             {overdue && (
               <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
-                Giờ hẹn {format(effectiveAt(selected))} đã qua. Hãy đề xuất giờ
-                khác hoặc từ chối; nếu không, yêu cầu sẽ tự chuyển sang “Quá
-                hạn”.
+                {t('uiScheduling.bookingOverdueActionHint')}
               </p>
             )}
             {selected.slotIssue && !overdue && (
               <p className="mt-4 rounded bg-orange-50 p-3 text-sm text-orange-900">
-                Không thể xác nhận như yêu cầu hiện tại: {selected.slotIssue.message}.
-                Hãy đề xuất giờ hoặc bác sĩ khác, hoặc từ chối yêu cầu.
+                {t('uiScheduling.bookingSlotIssueHint', { reason: selected.slotIssue.message })}
               </p>
             )}
             {selected.status === "EXPIRED" && (
               <p className="mt-4 rounded bg-slate-100 p-3 text-sm text-gray-700">
-                Yêu cầu đã quá giờ mà chưa được xác nhận. Khách được hướng dẫn
-                đặt lịch mới hoặc gọi phòng khám.
+                {t('uiScheduling.bookingExpiredHint')}
               </p>
             )}
             {CONFIRMABLE.includes(selected.status) && (
               <div className="mt-5">
                 <label className="block text-sm font-medium">
-                  Hồ sơ bệnh nhân cho lịch này
+                  {t('uiScheduling.patientRecordForBooking')}
                   <select
                     value={patientId}
                     onChange={(e) => setPatientId(e.target.value)}
                     className="mt-1 w-full rounded-md border bg-white px-3 py-2"
                   >
                     <option value="">
-                      Tự ghép nếu trùng SĐT, tên và ngày sinh; không có thì tạo hồ sơ mới
+                      {t('uiScheduling.autoMatchOrCreatePatient')}
                     </option>
                     <option value={NEW_PATIENT}>
-                      Tạo hồ sơ mới cho {selected.fullName}
+                      {t('uiScheduling.createNewRecordFor', { name: selected.fullName })}
                     </option>
                     {matches.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {matchLabel(p)}
+                        {matchLabel(p, t)}
                       </option>
                     ))}
                   </select>
                 </label>
                 {matches.length > 0 && (
                   <p className="mt-1 text-xs text-amber-700">
-                    Có {matches.length} hồ sơ dùng số điện thoại của yêu cầu (kể
-                    cả SĐT người giám hộ). Nếu chọn hồ sơ sai, lịch khám sẽ gắn
-                    nhầm bệnh nhân. Hãy đối chiếu tên và ngày sinh; khám cho
-                    người khác (ví dụ con dùng số của mẹ) thì chọn “Tạo hồ sơ
-                    mới”.
+                    {t('uiScheduling.patientMatchWarning', { count: matches.length })}
                   </p>
                 )}
                 {chosen?.differentPhone && (
                   <div className="mt-2 space-y-2 rounded bg-amber-50 p-3 text-sm text-amber-900">
                     <p>
-                      Hồ sơ này dùng số điện thoại khác ({chosen.primaryPhone ?? "—"}). Chỉ chọn khi đã
-                      xác minh đúng người (khách đổi số, người nhà đặt hộ).
+                      {t('uiScheduling.differentPhoneIdentityWarning', { phone: chosen.primaryPhone ?? '—' })}
                     </p>
                     <label className="flex items-center gap-2">
                       <input
@@ -832,12 +805,12 @@ export default function BookingRequestsPage() {
                         checked={identityChecked}
                         onChange={(e) => setIdentityChecked(e.target.checked)}
                       />
-                      Đã xác minh danh tính
+                      {t('uiScheduling.identityVerified')}
                     </label>
                     <input
                       value={identityNote}
                       onChange={(e) => setIdentityNote(e.target.value)}
-                      placeholder="Cách xác minh, ví dụ: khách đọc đúng ngày sinh và SĐT cũ"
+                      placeholder={t('uiScheduling.identityVerificationExample')}
                       className="w-full rounded-md border px-3 py-1.5"
                     />
                     <label className="flex items-center gap-2">
@@ -846,7 +819,7 @@ export default function BookingRequestsPage() {
                         checked={updatePhone}
                         onChange={(e) => setUpdatePhone(e.target.checked)}
                       />
-                      Đổi SĐT hồ sơ thành {selected.phone} (giữ lịch sử số cũ)
+                      {t('uiScheduling.updatePatientPhone', { phone: selected.phone })}
                     </label>
                   </div>
                 )}
@@ -861,8 +834,8 @@ export default function BookingRequestsPage() {
                           onChange={(e) => setUpdateEmail(e.target.checked)}
                         />
                         {chosen.email
-                          ? `Thay email hồ sơ (${chosen.email}) bằng ${selected.email}`
-                          : `Lưu email ${selected.email} vào hồ sơ (để gửi nhắc lịch) — chỉ tick khi đã xác nhận với khách`}
+                          ? t('uiScheduling.replacePatientEmail', { current: chosen.email, email: selected.email })
+                          : t('uiScheduling.savePatientEmail', { email: selected.email })}
                       </label>
                     ) : null}
                   </p>
@@ -871,24 +844,22 @@ export default function BookingRequestsPage() {
             )}
             {canPropose && (
               <div className="mt-5 rounded-lg bg-slate-50 p-4">
-                <h3 className="font-semibold">Giờ thay thế</h3>
+                <h3 className="font-semibold">{t('uiScheduling.alternativeTime')}</h3>
                 {dentistOptions.isSuccess && dentists.length === 0 && (
                   <p className="mt-2 rounded bg-orange-50 p-2 text-sm text-orange-900">
-                    Không còn bác sĩ nào thực hiện dịch vụ này (bác sĩ đã nghỉ hoặc dịch vụ đã
-                    ngừng). Hãy gọi khách để đặt dịch vụ khác qua điện thoại, rồi từ chối yêu cầu này
-                    kèm lời nhắn giải thích.
+                    {t('uiScheduling.noDentistCanProvideService')}
                   </p>
                 )}
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <label className="text-sm">
-                    Bác sĩ
+                    {t('uiScheduling.dentist')}
                     <select
                       value={proposeDentist}
                       onChange={(e) => setProposeDentist(e.target.value)}
                       className="mt-1 w-full rounded-md border bg-white px-3 py-2"
                     >
                       <option value="">
-                        {dentistOptions.isLoading ? "Đang tải…" : "Chọn bác sĩ"}
+                        {dentistOptions.isLoading ? t('uiScheduling.loading') : t('uiScheduling.chooseDentist')}
                       </option>
                       {dentists.map((d) => (
                         <option key={d.id} value={d.id}>
@@ -898,7 +869,7 @@ export default function BookingRequestsPage() {
                     </select>
                   </label>
                   <label className="text-sm">
-                    Ngày và giờ
+                    {t('uiScheduling.dateAndTime')}
                     <input
                       type="datetime-local"
                       min={inputDate(new Date(now))}
@@ -913,11 +884,10 @@ export default function BookingRequestsPage() {
             {OPEN.includes(selected.status) && (
               <details className="mt-4 rounded-lg border p-3 text-sm">
                 <summary className="cursor-pointer font-medium">
-                  Khách đang ở quầy với mã đặt lịch này
+                  {t('uiScheduling.patientAtReceptionWithReference')}
                 </summary>
-                <p className="mt-2 text-gray-600">
-                  Tạo lượt khám vãng lai cho khách (Hàng chờ / Lịch hẹn) rồi gắn vào yêu cầu, hoặc chỉ
-                  đóng yêu cầu. Không gửi email cho khách.
+                <p className="mt-2 text-gray-600 dark:text-surface-300">
+                  {t('uiScheduling.linkWalkInToRequestHint')}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {todayVisits.map((v) => (
@@ -929,7 +899,7 @@ export default function BookingRequestsPage() {
                       }
                       className="rounded-md border border-teal-700 px-3 py-1.5 text-teal-800 disabled:opacity-50"
                     >
-                      Gắn lượt {clinicParts(v.startAt).time} · {v.patient.fullName}
+                      {t('uiScheduling.linkVisit', { time: clinicParts(v.startAt).time, name: v.patient.fullName })}
                     </button>
                   ))}
                   <button
@@ -937,7 +907,7 @@ export default function BookingRequestsPage() {
                     onClick={() => action.mutate({ path: "arrived", body: {} })}
                     className="rounded-md border px-3 py-1.5 disabled:opacity-50"
                   >
-                    Đóng yêu cầu (khách đã đến)
+                    {t('uiScheduling.closeRequestPatientArrived')}
                   </button>
                 </div>
               </details>
@@ -949,15 +919,15 @@ export default function BookingRequestsPage() {
                 onToggle={(e) => setEditing((e.target as HTMLDetailsElement).open)}
               >
                 <summary className="cursor-pointer font-medium">
-                  Sửa thông tin khách (gõ sai SĐT, email, tên)
+                  {t('uiScheduling.editBookingContactSummary')}
                 </summary>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {(
                     [
-                      ["fullName", "Họ và tên"],
-                      ["dob", "Ngày sinh (YYYY-MM-DD)"],
-                      ["phone", "Số điện thoại"],
-                      ["email", "Email (để trống để xóa)"],
+                      ["fullName", t('uiScheduling.fullName')],
+                      ["dob", t('uiScheduling.dateOfBirthFormat')],
+                      ["phone", t('uiScheduling.phoneNumber')],
+                      ["email", t('uiScheduling.emailClearToDelete')],
                     ] as const
                   ).map(([key, label]) => (
                     <label key={key} className="text-xs text-gray-600">
@@ -970,7 +940,7 @@ export default function BookingRequestsPage() {
                     </label>
                   ))}
                   <label className="text-xs text-gray-600 sm:col-span-2">
-                    Lý do sửa (ghi vào lịch sử)
+                    {t('uiScheduling.contactEditReason')}
                     <input
                       value={contact.reason}
                       onChange={(e) => setContact((c) => ({ ...c, reason: e.target.value }))}
@@ -1000,7 +970,7 @@ export default function BookingRequestsPage() {
                     }
                     className="rounded-md bg-slate-700 px-3 py-1.5 text-white disabled:opacity-50"
                   >
-                    Lưu thông tin
+                    {t('uiScheduling.saveInformation')}
                   </button>
                   {selected.email && (
                     <button
@@ -1008,21 +978,21 @@ export default function BookingRequestsPage() {
                       onClick={() => action.mutate({ path: "resend-link" })}
                       className="rounded-md border px-3 py-1.5 disabled:opacity-50"
                     >
-                      Gửi lại đường link cho khách
+                      {t('uiScheduling.resendBookingLink')}
                     </button>
                   )}
                 </div>
               </details>
             )}
             <label className="mt-3 block text-sm font-medium">
-              Ghi chú nội bộ (khách không thấy)
+              {t('uiScheduling.receptionistNote')}
               <div className="mt-1 flex gap-2">
                 <textarea
                   rows={1}
                   value={note}
                   maxLength={2000}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ví dụ: đã gọi 2 lần, không nghe máy"
+                  placeholder={t('uiScheduling.receptionistNoteExample')}
                   className="w-full rounded-md border px-3 py-2 text-sm font-normal"
                 />
                 <button
@@ -1031,21 +1001,21 @@ export default function BookingRequestsPage() {
                   onClick={() => action.mutate({ path: "note", method: "put", body: { note } })}
                   className="rounded-md border px-3 text-sm font-normal disabled:opacity-50"
                 >
-                  Lưu
+                  {t('uiScheduling.save')}
                 </button>
               </div>
             </label>
             {OPEN.includes(selected.status) && (
               <label className="mt-4 block text-sm font-medium">
-                Lời nhắn cho khách
+                {t('uiScheduling.messageToPatient')}
                 <textarea
                   rows={2}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder={
                     canPropose
-                      ? "Giải thích giờ thay thế, thông tin cần bổ sung hoặc lý do từ chối"
-                      : "Ghi chú (không bắt buộc khi ghi nhận trả lời qua điện thoại); bắt buộc khi từ chối"
+                      ? t('uiScheduling.patientMessageProposalPlaceholder')
+                      : t('uiScheduling.patientMessagePlaceholder')
                   }
                   className="mt-1 w-full rounded-md border px-3 py-2 text-sm font-normal"
                 />
@@ -1066,7 +1036,7 @@ export default function BookingRequestsPage() {
                   onClick={() => action.mutate({ path: "confirm", body: confirmBody() })}
                   className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
                 >
-                  Xác nhận lịch
+                  {t('uiScheduling.confirmAppointment')}
                 </button>
               )}
               {/* The patient asked for / agreed to the alternative time by phone: book it now. */}
@@ -1083,10 +1053,10 @@ export default function BookingRequestsPage() {
                       },
                     })
                   }
-                  title="Khách đã đồng ý giờ thay thế qua điện thoại: tạo lịch ngay, chỉ gửi email xác nhận"
+                  title={t('uiScheduling.confirmAgreedAlternativeByPhoneHint')}
                   className="rounded-md border border-teal-700 px-4 py-2 text-sm text-teal-800 disabled:opacity-50"
                 >
-                  Xác nhận luôn giờ thay thế
+                  {t('uiScheduling.confirmAlternativeTimeNow')}
                 </button>
               )}
               {canPropose && (
@@ -1109,7 +1079,7 @@ export default function BookingRequestsPage() {
                   }
                   className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
                 >
-                  Đề xuất giờ khác
+                  {t('uiScheduling.proposeAnotherTime')}
                 </button>
               )}
               {/* The patient answered by phone. */}
@@ -1124,7 +1094,7 @@ export default function BookingRequestsPage() {
                   }
                   className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
                 >
-                  Đã nhận đủ thông tin
+                  {t('uiScheduling.informationReceived')}
                 </button>
               )}
               {selected.status === "PROPOSED" && !overdue && (
@@ -1138,7 +1108,7 @@ export default function BookingRequestsPage() {
                   }
                   className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
                 >
-                  Khách đồng ý qua điện thoại
+                  {t('uiScheduling.patientAcceptedByPhone')}
                 </button>
               )}
               {/* Not while a proposal stands: it would drop the agreed time. */}
@@ -1153,7 +1123,7 @@ export default function BookingRequestsPage() {
                   }
                   className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
                 >
-                  Yêu cầu bổ sung
+                  {t('uiScheduling.requestMoreInformation')}
                 </button>
               )}
               {!["CONFIRMED", "DECLINED", "CANCELLED", "EXPIRED"].includes(
@@ -1170,7 +1140,7 @@ export default function BookingRequestsPage() {
                     }
                     className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
                   >
-                    Khách hủy qua điện thoại
+                    {t('uiScheduling.patientCancelledByPhone')}
                   </button>
                   <label className="flex items-center gap-1 text-xs text-gray-600">
                     <input
@@ -1178,7 +1148,7 @@ export default function BookingRequestsPage() {
                       checked={spam}
                       onChange={(e) => setSpam(e.target.checked)}
                     />
-                    Yêu cầu rác (không gửi email)
+                    {t('uiScheduling.markAsSpam')}
                   </label>
                   <button
                     disabled={action.isPending || !message.trim()}
@@ -1190,7 +1160,7 @@ export default function BookingRequestsPage() {
                     }
                     className="rounded-md border border-red-200 px-4 py-2 text-sm text-red-700 disabled:opacity-50"
                   >
-                    Từ chối
+                    {t('uiScheduling.declineRequest')}
                   </button>
                 </>
               )}
@@ -1198,7 +1168,7 @@ export default function BookingRequestsPage() {
                 onClick={() => setSelected(null)}
                 className="rounded-md border px-4 py-2 text-sm"
               >
-                Đóng
+                {t('uiScheduling.close')}
               </button>
             </div>
           </section>

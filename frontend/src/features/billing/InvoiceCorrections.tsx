@@ -2,6 +2,7 @@
 // while DRAFT, refunds, cancelling a payment entered by mistake, re-making a
 // voided invoice. Every one asks for a reason (kept in the invoice history).
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { billingApi } from '@/features/billing/billingApi';
@@ -12,20 +13,17 @@ import { getApiErrorMessage } from '@/lib/errors';
 import type { Invoice, InvoiceLineItem, Payment, PaymentMethod } from '@/types/billing';
 
 const MIN_REASON = 5;
-const METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Tiền mặt' },
-  { value: 'BANK_TRANSFER', label: 'Chuyển khoản' },
-];
 
 function ReasonField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  const { t } = useTranslation();
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-        Lý do <span className="text-red-500">*</span>
+        {t('uiOperations.reason')} <span className="text-red-500">*</span>
       </label>
       <Textarea value={value} onChange={(e) => onChange(e.target.value)} className="mt-1" rows={2} placeholder={placeholder} />
       {value.trim().length > 0 && value.trim().length < MIN_REASON && (
-        <p className="mt-1 text-xs text-red-600">Lý do cần ít nhất {MIN_REASON} ký tự</p>
+        <p className="mt-1 text-xs text-red-600">{t('uiOperations.reasonMinLength', { count: MIN_REASON })}</p>
       )}
     </div>
   );
@@ -50,6 +48,7 @@ function useInvoiceMutation<T>(invoiceId: string, fn: (v: T) => Promise<unknown>
 
 /** Discount by percent (rounded to whole đồng by the server) or amount, DRAFT only (A2-10). */
 export function DiscountModal({ invoice, isOpen, onClose }: { invoice: Invoice; isOpen: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [type, setType] = useState<'PERCENT' | 'AMOUNT'>('PERCENT');
   const [value, setValue] = useState('');
   const [reason, setReason] = useState('');
@@ -77,53 +76,53 @@ export function DiscountModal({ invoice, isOpen, onClose }: { invoice: Invoice; 
         ...(num > 0 && { reason: reason.trim() }),
         version: invoice.version,
       }),
-    num > 0 ? 'Đã áp dụng giảm giá' : 'Đã bỏ giảm giá',
+    num > 0 ? t('uiOperations.discountApplied') : t('uiOperations.discountRemoved'),
     onClose,
-    'Không áp dụng được giảm giá',
+    t('uiOperations.discountFailed'),
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Giảm giá hóa đơn" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiOperations.invoiceDiscount')} size="sm">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Select
-            label="Kiểu giảm"
+            label={t('uiOperations.discountType')}
             value={type}
             onChange={(e) => setType(e.target.value as 'PERCENT' | 'AMOUNT')}
             options={[
-              { value: 'PERCENT', label: 'Theo %' },
-              { value: 'AMOUNT', label: 'Số tiền (VND)' },
+              { value: 'PERCENT', label: t('uiOperations.byPercent') },
+              { value: 'AMOUNT', label: t('uiOperations.amountVnd') },
             ]}
           />
           <Input
-            label={type === 'PERCENT' ? 'Phần trăm' : 'Số tiền'}
+            label={type === 'PERCENT' ? t('uiOperations.percentage') : t('uiOperations.amount')}
             type="number"
             min={0}
             max={type === 'PERCENT' ? 100 : invoice.subtotal}
             step={type === 'PERCENT' ? 0.5 : 1000}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            hint="Nhập 0 để bỏ giảm giá"
+            hint={t('uiOperations.enterZeroToRemoveDiscount')}
           />
         </div>
         <div className="rounded bg-gray-50 p-3 text-sm dark:bg-surface-800">
           <div className="flex justify-between">
-            <span>Tổng cộng</span>
+            <span>{t('uiOperations.subtotal')}</span>
             <span>{formatCurrency(invoice.subtotal)}</span>
           </div>
           <div className="flex justify-between text-green-600">
-            <span>Giảm</span>
+            <span>{t('uiOperations.discount')}</span>
             <span>-{formatCurrency(Number.isFinite(preview) ? preview : 0)}</span>
           </div>
           <div className="flex justify-between font-medium">
-            <span>Phải thu</span>
+            <span>{t('uiOperations.amountDue')}</span>
             <span>{formatCurrency(invoice.subtotal - (Number.isFinite(preview) ? preview : 0))}</span>
           </div>
         </div>
-        {num > 0 && <ReasonField value={reason} onChange={setReason} placeholder="VD: Người nhà nhân viên, khuyến mãi tháng 10..." />}
+        {num > 0 && <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.discountReasonExample')} />}
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>Hủy</Button>
-          <Button onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>Lưu</Button>
+          <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
+          <Button onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>{t('uiOperations.save')}</Button>
         </div>
       </div>
     </Modal>
@@ -132,6 +131,7 @@ export function DiscountModal({ invoice, isOpen, onClose }: { invoice: Invoice; 
 
 /** Fix the price, quantity or wording of a DRAFT line, or drop it (A2-02). */
 export function ItemEditModal({ invoice, item, onClose }: { invoice: Invoice; item: InvoiceLineItem | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [unitPrice, setUnitPrice] = useState('');
@@ -164,17 +164,17 @@ export function ItemEditModal({ invoice, item, onClose }: { invoice: Invoice; it
         reason: reason.trim(),
         version: invoice.version,
       }),
-    remove ? 'Đã bỏ dòng khỏi hóa đơn' : 'Đã sửa dòng hóa đơn',
+    remove ? t('uiOperations.invoiceLineRemoved') : t('uiOperations.invoiceLineUpdated'),
     onClose,
-    'Không sửa được dòng hóa đơn',
+    t('uiOperations.invoiceLineUpdateFailed'),
   );
 
   return (
-    <Modal isOpen={!!item} onClose={onClose} title="Sửa dòng hóa đơn" size="sm">
+    <Modal isOpen={!!item} onClose={onClose} title={t('uiOperations.editInvoiceLineTitle')} size="sm">
       {item && (
         <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Chỉ sửa trên hóa đơn; bệnh án của bác sĩ giữ nguyên. Thay đổi được ghi vào lịch sử hóa đơn.
+            {t('uiOperations.editInvoiceLineNote')}
           </p>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -183,31 +183,31 @@ export function ItemEditModal({ invoice, item, onClose }: { invoice: Invoice; it
               disabled={lastLine}
               onChange={(e) => setRemove(e.target.checked)}
             />
-            Bỏ dòng này khỏi hóa đơn
-            {lastLine && <span className="text-xs text-gray-400">(hóa đơn chỉ còn một dòng)</span>}
+            {t('uiOperations.removeInvoiceLine')}
+            {lastLine && <span className="text-xs text-gray-400">{t('uiOperations.onlyInvoiceLine')}</span>}
           </label>
           {!remove && (
             <>
-              <Input label="Mô tả" value={description} onChange={(e) => setDescription(e.target.value)} />
+              <Input label={t('uiOperations.description')} value={description} onChange={(e) => setDescription(e.target.value)} />
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Số lượng" type="number" min={1} max={100} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                <Input label={t('uiOperations.quantity')} type="number" min={1} max={100} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
                 <Input
-                  label="Đơn giá (VND)"
+                  label={t('uiOperations.unitPriceVnd')}
                   type="number"
                   min={0}
                   step={1000}
                   value={unitPrice}
                   onChange={(e) => setUnitPrice(e.target.value)}
-                  hint={`Trước: ${formatCurrency(item.unitPrice)}`}
+                  hint={t('uiOperations.previousAmount', { amount: formatCurrency(item.unitPrice) })}
                 />
               </div>
             </>
           )}
-          <ReasonField value={reason} onChange={setReason} placeholder="VD: Bác sĩ gõ nhầm đơn giá 6.500.000 thay vì 650.000" />
+          <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.invoiceLineReasonExample')} />
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={onClose}>Hủy</Button>
+            <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
             <Button variant={remove ? 'danger' : 'primary'} onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>
-              {remove ? 'Bỏ dòng' : 'Lưu'}
+              {remove ? t('uiOperations.removeLine') : t('uiOperations.save')}
             </Button>
           </div>
         </div>
@@ -218,6 +218,7 @@ export function ItemEditModal({ invoice, item, onClose }: { invoice: Invoice; it
 
 /** Money handed back to the patient, dated today (A2-01). */
 export function RefundModal({ invoice, isOpen, onClose }: { invoice: Invoice; isOpen: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [reason, setReason] = useState('');
@@ -233,32 +234,31 @@ export function RefundModal({ invoice, isOpen, onClose }: { invoice: Invoice; is
   const save = useInvoiceMutation(
     invoice.id,
     () => billingApi.refund(invoice.id, { amount: num, method, reason: reason.trim(), version: invoice.version }),
-    'Đã lập phiếu hoàn tiền',
+    t('uiOperations.refundCreated'),
     onClose,
-    'Không lập được phiếu hoàn tiền',
+    t('uiOperations.refundFailed'),
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Hoàn tiền cho bệnh nhân" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiOperations.refundForPatient')} size="sm">
       <div className="space-y-4">
         <Alert type="info">
-          Phiếu hoàn tính vào hôm nay, không sửa số thu của ngày cũ. Hoàn tiền không làm bệnh nhân nợ lại. Muốn hủy cả hóa
-          đơn thì hoàn hết số đã thu rồi chọn "Hủy HĐ".
+          {t('uiOperations.refundPolicy')}
         </Alert>
         <Input
-          label={`Số tiền hoàn (tối đa ${formatCurrency(invoice.paidAmount)})`}
+          label={t('uiOperations.refundAmountMax', { amount: formatCurrency(invoice.paidAmount) })}
           type="number"
           min={1}
           max={invoice.paidAmount}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
-        <Select label="Hoàn bằng" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} options={METHODS} />
-        <ReasonField value={reason} onChange={setReason} placeholder="VD: Hủy một răng trám chưa làm" />
+        <Select label={t('uiOperations.refundMethod')} value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} options={[{ value: 'CASH', label: t('uiOperations.cash') }, { value: 'BANK_TRANSFER', label: t('uiOperations.bankTransfer') }]} />
+        <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.refundReasonExample')} />
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>Hủy</Button>
+          <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
           <Button variant="danger" onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>
-            Hoàn tiền
+            {t('uiOperations.refund')}
           </Button>
         </div>
       </div>
@@ -268,31 +268,32 @@ export function RefundModal({ invoice, isOpen, onClose }: { invoice: Invoice; is
 
 /** "Hủy phiếu thu": cancels a payment/refund entered by mistake (A2-01, A5-01). */
 export function VoidPaymentModal({ invoice, payment, onClose }: { invoice: Invoice; payment: Payment | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState('');
   useEffect(() => setReason(''), [payment]);
   const isRefund = payment?.kind === 'REFUND';
   const save = useInvoiceMutation(
     invoice.id,
     () => billingApi.voidPayment(payment!.id, reason.trim()),
-    isRefund ? 'Đã hủy phiếu hoàn' : 'Đã hủy phiếu thu',
+    isRefund ? t('uiOperations.refundVoided') : t('uiOperations.paymentVoided'),
     onClose,
-    'Không hủy được phiếu',
+    t('uiOperations.voidPaymentFailed'),
   );
   return (
-    <Modal isOpen={!!payment} onClose={onClose} title={isRefund ? 'Hủy phiếu hoàn' : 'Hủy phiếu thu'} size="sm">
+    <Modal isOpen={!!payment} onClose={onClose} title={isRefund ? t('uiOperations.voidRefund') : t('uiOperations.voidPayment')} size="sm">
       {payment && (
         <div className="space-y-4">
           <Alert type="warning">
             {isRefund
-              ? `Phiếu hoàn ${formatCurrency(payment.amount)} sẽ coi như chưa từng lập (số đã thu tăng lại).`
-              : `Phiếu thu ${formatCurrency(payment.amount)} sẽ coi như chưa từng thu: số còn nợ tăng lại. Chỉ dùng khi ghi nhầm (thu trùng, nhầm hóa đơn); tiền đã trả lại cho khách thì dùng "Hoàn tiền".`}{' '}
-            Người lập phiếu không tự hủy được phiếu của mình.
+              ? t('uiOperations.voidRefundWarning', { amount: formatCurrency(payment.amount) })
+              : t('uiOperations.voidPaymentWarning', { amount: formatCurrency(payment.amount) })}{' '}
+            {t('uiOperations.paymentCreatorCannotVoid')}
           </Alert>
-          <ReasonField value={reason} onChange={setReason} placeholder="VD: Bấm thu hai lần" />
+          <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.voidPaymentReasonExample')} />
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={onClose}>Đóng</Button>
+            <Button variant="outline" onClick={onClose}>{t('uiOperations.close')}</Button>
             <Button variant="danger" onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={reason.trim().length < MIN_REASON}>
-              Hủy phiếu
+              {t('uiOperations.voidPaymentAction')}
             </Button>
           </div>
         </div>
@@ -303,6 +304,7 @@ export function VoidPaymentModal({ invoice, payment, onClose }: { invoice: Invoi
 
 /** "Lập lại hóa đơn" for a voided invoice: a new DRAFT copied from the treatments (A2-02). */
 export function ReissueModal({ invoice, isOpen, onClose }: { invoice: Invoice; isOpen: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [reason, setReason] = useState('');
@@ -312,24 +314,24 @@ export function ReissueModal({ invoice, isOpen, onClose }: { invoice: Invoice; i
   const save = useMutation({
     mutationFn: () => billingApi.reissueInvoice(invoice.id, reason.trim()),
     onSuccess: (created) => {
-      notify.success(`Đã lập hóa đơn nháp ${created.code}. Kiểm tra, sửa dòng nếu cần rồi phát hành.`);
+      notify.success(t('uiOperations.invoiceReissuedToast', { code: created.code }));
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       onClose();
       navigate(`/billing/invoices/${created.id}`);
     },
-    onError: (err) => notify.error(getApiErrorMessage(err, 'Không lập lại được hóa đơn')),
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiOperations.reissueInvoiceFailed'))),
   });
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Lập lại hóa đơn" size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiOperations.reissueInvoice')} size="sm">
       <div className="space-y-4">
         <p className="text-sm text-gray-600 dark:text-gray-300">
-          Tạo hóa đơn nháp mới cho phiên khám này từ các thủ thuật đã ghi. Hóa đơn {invoice.code} giữ nguyên trạng thái đã hủy.
+          {t('uiOperations.reissueInvoiceDescription', { code: invoice.code })}
         </p>
-        <ReasonField value={reason} onChange={setReason} placeholder="VD: Phát hành nhầm giá, lập lại cho đúng" />
+        <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.reissueReasonExample')} />
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>Hủy</Button>
+          <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
           <Button onClick={() => save.mutate()} isLoading={save.isPending} disabled={reason.trim().length < MIN_REASON}>
-            Lập lại hóa đơn
+            {t('uiOperations.reissueInvoice')}
           </Button>
         </div>
       </div>

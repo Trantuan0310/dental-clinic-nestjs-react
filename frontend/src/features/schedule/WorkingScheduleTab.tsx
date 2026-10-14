@@ -30,22 +30,38 @@ import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { TimeBlocksEditor } from './TimeBlocksEditor';
 import { DAY_LABELS, blockError, defaultBlocks, openingBlocks, openingHoursWarnings } from './scheduleBlocks';
 import { hasImpact } from './format';
-import type { ScheduleChangeImpact, ShiftType, TimeBlock, WorkingSchedule } from '@/types/schedule';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import type { ScheduleChangeImpact, TimeBlock, WorkingSchedule } from '@/types/schedule';
 
-const SHIFT_TYPE_LABELS: Record<ShiftType, string> = {
-  MORNING: 'Buổi sáng',
-  AFTERNOON: 'Buổi chiều',
-  FULL_DAY: 'Cả ngày',
-  NIGHT: 'Buổi tối',
+const dayLabelsFor = (language: string) => {
+  const locale = language.startsWith('en') ? 'en-US' : 'vi-VN';
+  return Array.from({ length: 7 }, (_, index) => {
+    const mondayFirstDay = (index + 1) % 7;
+    return new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(new Date(2024, 0, 7 + mondayFirstDay));
+  });
 };
 
 /** Monday first, the way the clinic reads a week. */
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const dateOf = (value: string | null) => (value ? value.slice(0, 10) : null);
-const viDate = (value: string) => value.slice(0, 10).split('-').reverse().join('/');
+const formatDate = (value: string, language: string) =>
+  new Intl.DateTimeFormat(language.startsWith('en') ? 'en-US' : 'vi-VN').format(new Date(`${value.slice(0, 10)}T12:00:00`));
 const addDays = (date: string, n: number) =>
   new Date(new Date(date).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+
+function translateWarnings(items: string[], language: string, t: TFunction) {
+  if (language.startsWith('vi')) return items;
+  const weekdays = dayLabelsFor(language);
+  const dayMap = new Map(DAY_LABELS.map((day, index) => [day, index]));
+  return items.map((warning) => {
+    const closed = warning.match(/^(.+): phòng khám không mở cửa theo giờ đã cấu hình$/);
+    if (closed) return t('uiScheduling.scheduleClinicClosedWarning', { day: weekdays[((dayMap.get(closed[1]) ?? 0) + 6) % 7] });
+    const outside = warning.match(/^(.+): (.+) nằm ngoài giờ mở cửa \((.+)\)$/);
+    return outside ? t('uiScheduling.scheduleOutsideOpeningHoursWarning', { day: weekdays[((dayMap.get(outside[1]) ?? 0) + 6) % 7], blocks: outside[2], hours: outside[3] }) : warning;
+  });
+}
 
 type Phase = 'upcoming' | 'active' | 'ended';
 function phaseOf(s: WorkingSchedule, today: string): Phase {
@@ -54,13 +70,12 @@ function phaseOf(s: WorkingSchedule, today: string): Phase {
   return dateOf(s.validFrom)! > today ? 'upcoming' : 'active';
 }
 
-const PHASE_BADGE: Record<Phase, { label: string; variant: 'success' | 'info' | 'default' }> = {
-  active: { label: 'Đang áp dụng', variant: 'success' },
-  upcoming: { label: 'Chưa bắt đầu', variant: 'info' },
-  ended: { label: 'Đã kết thúc', variant: 'default' },
-};
-
 export function WorkingScheduleTab() {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? 'vi';
+  const dayLabels = useMemo(() => dayLabelsFor(language), [language]);
+  const localDate = (value: string) => formatDate(value, language);
+  const localDay = (day: number) => dayLabels[(day + 6) % 7];
   const [dentistFilter, setDentistFilter] = useState('');
   const [showEnded, setShowEnded] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -131,21 +146,21 @@ export function WorkingScheduleTab() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-full max-w-xs">
             <Select
-              aria-label="Lọc theo bác sĩ"
+              aria-label={t('uiScheduling.filterByDentist')}
               value={dentistFilter}
               onChange={(e) => setDentistFilter(e.target.value)}
               options={[
-                { value: '', label: 'Tất cả bác sĩ' },
+                { value: '', label: t('uiScheduling.allDentists') },
                 ...dentists.map((d) => ({ value: d.id, label: d.fullName })),
               ]}
             />
           </div>
-          <Checkbox checked={showEnded} onChange={setShowEnded} label="Hiện lịch đã kết thúc" />
+          <Checkbox checked={showEnded} onChange={setShowEnded} label={t('uiScheduling.showEndedSchedules')} />
         </div>
         <PermissionGuard permission="schedule.write">
           <Button onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" />
-            Thêm lịch làm việc
+            {t('uiScheduling.addWorkingSchedule')}
           </Button>
         </PermissionGuard>
       </div>
@@ -156,54 +171,54 @@ export function WorkingScheduleTab() {
         <Card>
           <EmptyState
             icon={<CalendarClock className="h-10 w-10 text-gray-400" />}
-            title="Chưa có lịch làm việc cố định"
-            description="Thêm lịch làm việc hàng tuần cho bác sĩ để hệ thống biết khi nào có thể đặt lịch hẹn."
+            title={t('uiScheduling.noRegularSchedule')}
+            description={t('uiScheduling.noRegularScheduleHint')}
           />
         </Card>
       ) : (
         <div className="space-y-3">
           {grouped.map(([dentistId, rows]) => (
             <Card key={dentistId} title={dentistNameById.get(dentistId) ?? '—'} noPadding>
-              <div className="overflow-x-auto">
+              <div className="max-w-full overflow-x-auto">
                 <table className="table-base">
                   <thead>
                     <tr>
-                      <th>Thứ</th>
-                      <th>Giờ làm</th>
-                      <th>Loại ca</th>
-                      <th>Hiệu lực từ</th>
-                      <th>Đến</th>
-                      <th className="text-center">Có lương</th>
-                      <th>Trạng thái</th>
+                      <th>{t('uiScheduling.weekday')}</th>
+                      <th>{t('uiScheduling.workingHours')}</th>
+                      <th>{t('uiScheduling.shiftType')}</th>
+                      <th>{t('uiScheduling.effectiveFrom')}</th>
+                      <th>{t('uiScheduling.to')}</th>
+                      <th className="text-center">{t('uiScheduling.paidShift')}</th>
+                      <th>{t('uiScheduling.status')}</th>
                       <th />
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((s) => {
                       const phase = phaseOf(s, today);
-                      const label = `${DAY_LABELS[s.dayOfWeek]} ${s.startTime}–${s.endTime}`;
+                      const label = `${dayLabels[(s.dayOfWeek + 6) % 7]} ${s.startTime}–${s.endTime}`;
                       return (
                         <tr key={s.id}>
-                          <td className="font-medium text-gray-900">{DAY_LABELS[s.dayOfWeek]}</td>
+                          <td className="font-medium text-gray-900 dark:text-surface-100">{dayLabels[(s.dayOfWeek + 6) % 7]}</td>
                           <td className="font-mono text-xs">{s.startTime} – {s.endTime}</td>
-                          <td>{SHIFT_TYPE_LABELS[s.shiftType]}</td>
-                          <td>{viDate(s.validFrom)}</td>
-                          <td>{s.validTo ? viDate(s.validTo) : '—'}</td>
-                          <td className="text-center">{s.isPaidShift ? 'Có' : 'Không'}</td>
+                          <td>{t(`uiScheduling.shift${s.shiftType}`)}</td>
+                          <td>{localDate(s.validFrom)}</td>
+                          <td>{s.validTo ? localDate(s.validTo) : '—'}</td>
+                          <td className="text-center">{s.isPaidShift ? t('uiScheduling.paid') : t('uiScheduling.unpaid')}</td>
                           <td>
-                            <Badge variant={PHASE_BADGE[phase].variant}>{PHASE_BADGE[phase].label}</Badge>
+                            <Badge variant={phase === 'active' ? 'success' : phase === 'upcoming' ? 'info' : 'default'}>{t(`uiScheduling.schedulePhase_${phase}`)}</Badge>
                           </td>
                           <td className="whitespace-nowrap text-right">
                             {canEdit(s) && phase !== 'ended' && (
                               <>
-                                <Button size="sm" variant="ghost" aria-label={`Sửa ${label}`} onClick={() => setEditing(s)}>
+                                <Button size="sm" variant="ghost" aria-label={t('uiScheduling.editSchedule', { schedule: label })} onClick={() => setEditing(s)}>
                                   <Pencil className="h-4 w-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" aria-label={`Kết thúc ${label}`} onClick={() => setEnding(s)}>
+                                <Button size="sm" variant="ghost" aria-label={t('uiScheduling.endSchedule', { schedule: label })} onClick={() => setEnding(s)}>
                                   <CalendarX2 className="h-4 w-4" />
                                 </Button>
                                 {deletable(s) && (
-                                  <Button size="sm" variant="ghost" aria-label={`Xóa ${label}`} onClick={() => setDeleting(s)}>
+                                  <Button size="sm" variant="ghost" aria-label={t('uiScheduling.deleteSchedule', { schedule: label })} onClick={() => setDeleting(s)}>
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 )}
@@ -228,7 +243,7 @@ export function WorkingScheduleTab() {
           onClose={() => setEditing(null)}
           onSaved={(result) => {
             setEditing(null);
-            afterChange('Đã cập nhật lịch làm việc', result);
+            afterChange(t('uiScheduling.scheduleUpdated'), result);
           }}
         />
       )}
@@ -238,20 +253,19 @@ export function WorkingScheduleTab() {
           onClose={() => setEnding(null)}
           onSaved={(result) => {
             setEnding(null);
-            afterChange('Đã kết thúc lịch làm việc', result);
+            afterChange(t('uiScheduling.scheduleEnded'), result);
           }}
         />
       )}
       <ConfirmDialog
         open={deleting !== null}
         onClose={() => setDeleting(null)}
-        title="Xóa lịch làm việc"
+        title={t('uiScheduling.deleteScheduleTitle')}
         description={
           deleting ? (
             <div className="space-y-2">
               <p>
-                Xóa lịch {DAY_LABELS[deleting.dayOfWeek]} {deleting.startTime}–{deleting.endTime} (hiệu lực từ{' '}
-                {viDate(deleting.validFrom)})?
+                {t('uiScheduling.deleteSchedulePrompt', { day: localDay(deleting.dayOfWeek), start: deleting.startTime, end: deleting.endTime, date: localDate(deleting.validFrom) })}
               </p>
               {previous && (
                 <label className="flex items-start gap-2 text-sm">
@@ -261,16 +275,14 @@ export function WorkingScheduleTab() {
                     onChange={(e) => setRestorePrevious(e.target.checked)}
                   />
                   <span>
-                    Khôi phục giờ cũ {previous.startTime}–{previous.endTime} (lịch cũ đã dừng ngày{' '}
-                    {viDate(previous.validTo!)} vì thay đổi này). Không chọn thì {DAY_LABELS[deleting.dayOfWeek]} từ{' '}
-                    {viDate(deleting.validFrom)} sẽ không còn giờ làm.
+                    {t('uiScheduling.restorePreviousSchedule', { start: previous.startTime, end: previous.endTime, date: localDate(previous.validTo!), day: localDay(deleting.dayOfWeek), from: localDate(deleting.validFrom) })}
                   </span>
                 </label>
               )}
             </div>
           ) : undefined
         }
-        confirmText="Xóa"
+        confirmText={t('uiScheduling.delete')}
         variant="danger"
         isLoading={remove.isPending}
         onConfirm={() => {
@@ -279,15 +291,15 @@ export function WorkingScheduleTab() {
             onSuccess: (result) => {
               setDeleting(null);
               setRestorePrevious(true);
-              afterChange(result.restoredSchedule ? 'Đã xóa lịch và khôi phục giờ cũ' : 'Đã xóa lịch làm việc', result);
+              afterChange(result.restoredSchedule ? t('uiScheduling.scheduleDeletedAndRestored') : t('uiScheduling.scheduleDeleted'), result);
             },
-            onError: (err) => notify.error(getApiErrorMessage(err, 'Không xóa được lịch làm việc')),
+            onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.scheduleDeleteError'))),
           });
         }}
       />
       <AffectedAppointmentsModal
         open={impact !== null}
-        title="Lịch hẹn nằm ngoài giờ làm mới"
+        title={t('uiScheduling.scheduleAffectedAppointmentsTitle')}
         appointments={impact?.affectedAppointments ?? []}
         bookingRequests={impact?.affectedBookingRequests ?? []}
         onClose={() => setImpact(null)}
@@ -297,10 +309,11 @@ export function WorkingScheduleTab() {
 }
 
 function WarningList({ warnings }: { warnings: string[] }) {
+  const { t } = useTranslation();
   if (warnings.length === 0) return null;
   return (
     <Alert variant="warning">
-      <p className="font-medium">Lưu ý (vẫn lưu được):</p>
+      <p className="font-medium">{t('uiScheduling.nonBlockingWarnings')}</p>
       <ul className="list-disc pl-5">
         {warnings.map((w) => (
           <li key={w}>{w}</li>
@@ -312,6 +325,17 @@ function WarningList({ warnings }: { warnings: string[] }) {
 
 /** Several weekdays × several blocks, saved together (all or nothing). */
 function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? 'vi';
+  const translateError = (message: string | null) => {
+    if (!message || language.startsWith('vi')) return message;
+    if (message.startsWith('Nhập đủ')) return t('uiScheduling.blockTimeRequired');
+    if (message.startsWith('Phút phải')) return t('uiScheduling.blockFiveMinuteGrid');
+    const overlap = message.match(/^Khung (\d{2}:\d{2})–(\d{2}:\d{2}) và (\d{2}:\d{2})–(\d{2}:\d{2}) chồng nhau$/);
+    if (overlap) return t('uiScheduling.blockOverlap', { firstStart: overlap[1], firstEnd: overlap[2], secondStart: overlap[3], secondEnd: overlap[4] });
+    const invalid = message.match(/^Khung (\d{2}:\d{2})–(\d{2}:\d{2}): giờ kết thúc phải sau giờ bắt đầu$/);
+    return invalid ? t('uiScheduling.blockEndAfterStart', { start: invalid[1], end: invalid[2] }) : message;
+  };
   const { dentists, defaultDentistId } = useSchedulableDentists();
   const createSchedules = useBulkCreateWorkingSchedules();
   const openDays = () => WEEK_ORDER.filter((d) => openingBlocks(d).length > 0);
@@ -349,28 +373,28 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
         validTo: validTo || undefined,
         isPaidShift,
       });
-      notify.success(`Đã thêm ${created.length} lịch làm việc`);
+      notify.success(t('uiScheduling.schedulesCreated', { count: created.length }));
       close();
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể thêm lịch làm việc'));
+      notify.error(getApiErrorMessage(err, t('uiScheduling.scheduleCreateError')));
     }
   };
 
   return (
-    <Modal open={open} onClose={close} title="Thêm lịch làm việc cố định" size="md">
+    <Modal open={open} onClose={close} title={t('uiScheduling.addWorkingSchedule')} size="md">
       <div className="space-y-4">
         <Select
-          label="Bác sĩ"
+          label={t('uiScheduling.dentist')}
           value={dentistId}
           onChange={(e) => setDentistId(e.target.value)}
-          placeholder="-- Chọn bác sĩ --"
+          placeholder={t('uiScheduling.chooseDentist')}
           options={dentists.map((d) => ({ value: d.id, label: d.fullName }))}
           required
         />
 
         <fieldset className="space-y-1">
-          <legend className="text-sm font-medium text-gray-700">
-            Thứ trong tuần <span className="text-red-500">*</span>
+          <legend className="text-sm font-medium text-gray-700 dark:text-surface-200">
+            {t('uiScheduling.weekdays')} <span className="text-red-500">*</span>
           </legend>
           <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
             {WEEK_ORDER.map((d) => (
@@ -378,26 +402,26 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
                 key={d}
                 checked={days.includes(d)}
                 onChange={(on) => setDays(on ? [...days, d] : days.filter((x) => x !== d))}
-                label={DAY_LABELS[d]}
+                label={t(`uiScheduling.weekday${d}`)}
               />
             ))}
           </div>
         </fieldset>
 
         <fieldset className="space-y-1">
-          <legend className="text-sm font-medium text-gray-700">
-            Khung giờ làm mỗi ngày đã chọn <span className="text-red-500">*</span>
+          <legend className="text-sm font-medium text-gray-700 dark:text-surface-200">
+            {t('uiScheduling.selectedDayWorkingHours')} <span className="text-red-500">*</span>
           </legend>
-          <p className="text-xs text-gray-500">
-            Mặc định theo giờ mở cửa của phòng khám; khoảng trống giữa hai khung (nghỉ trưa) không nhận lịch hẹn.
+          <p className="text-xs text-gray-500 dark:text-surface-400">
+            {t('uiScheduling.scheduleOpeningHoursHint')}
           </p>
-          <TimeBlocksEditor blocks={blocks} onChange={setBlocks} startLabel="Làm từ" />
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          <TimeBlocksEditor blocks={blocks} onChange={setBlocks} startLabel={t('uiScheduling.workFrom')} />
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{translateError(error)}</p>}
         </fieldset>
 
         <div className="grid grid-cols-2 gap-4">
           <Input
-            label="Hiệu lực từ"
+            label={t('uiScheduling.effectiveFrom')}
             type="date"
             min={clinicToday()}
             value={validFrom}
@@ -405,7 +429,7 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
             required
           />
           <Input
-            label="Hiệu lực đến (không bắt buộc)"
+            label={t('uiScheduling.effectiveToOptional')}
             type="date"
             value={validTo}
             onChange={(e) => setValidTo(e.target.value)}
@@ -413,20 +437,20 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
           />
         </div>
 
-        <Checkbox checked={isPaidShift} onChange={setIsPaidShift} label="Ca có lương" />
+        <Checkbox checked={isPaidShift} onChange={setIsPaidShift} label={t('uiScheduling.paidShift')} />
 
-        <WarningList warnings={warnings} />
+        <WarningList warnings={translateWarnings(warnings, language, t)} />
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <Button variant="outline" onClick={close}>
-            Hủy
+            <Button variant="outline" onClick={close}>
+            {t('uiScheduling.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
             isLoading={createSchedules.isPending}
             disabled={!dentistId || days.length === 0 || !validFrom || Boolean(error) || (Boolean(validTo) && validTo < validFrom)}
           >
-            Lưu {days.length * blocks.length > 1 ? `${days.length * blocks.length} lịch` : ''}
+            {days.length * blocks.length > 1 ? t('uiScheduling.saveSchedules', { count: days.length * blocks.length }) : t('uiScheduling.save')}
           </Button>
         </div>
       </div>
@@ -447,7 +471,11 @@ function EditWorkingScheduleModal({
   onClose: () => void;
   onSaved: (result: ScheduleChangeImpact) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const update = useUpdateWorkingSchedule();
+  const language = i18n.resolvedLanguage ?? 'vi';
+  const localDate = (value: string) => formatDate(value, language);
+  const dayNames = dayLabelsFor(language);
   const today = clinicToday();
   const started = dateOf(schedule.validFrom)! <= today;
   const [dayOfWeek, setDayOfWeek] = useState(String(schedule.dayOfWeek));
@@ -479,25 +507,25 @@ function EditWorkingScheduleModal({
       },
       {
         onSuccess: onSaved,
-        onError: (err) => notify.error(getApiErrorMessage(err, 'Không cập nhật được lịch làm việc')),
+        onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.scheduleUpdateError'))),
       },
     );
 
   return (
-    <Modal open onClose={onClose} title="Sửa lịch làm việc" size="sm">
+    <Modal open onClose={onClose} title={t('uiScheduling.editWorkingSchedule')} size="sm">
       <div className="space-y-4">
         <Select
-          label="Thứ trong tuần"
+          label={t('uiScheduling.weekday')}
           value={dayOfWeek}
           onChange={(e) => setDayOfWeek(e.target.value)}
-          options={WEEK_ORDER.map((d) => ({ value: String(d), label: DAY_LABELS[d] }))}
+          options={WEEK_ORDER.map((d) => ({ value: String(d), label: dayNames[(d + 6) % 7] }))}
         />
-        <TimeBlocksEditor blocks={blocks} onChange={setBlocks} startLabel="Làm từ" max={1} />
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        <TimeBlocksEditor blocks={blocks} onChange={setBlocks} startLabel={t('uiScheduling.workFrom')} max={1} />
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{t('uiScheduling.blockValidationFailed')}</p>}
         {started && hoursChanged && (
           <>
             <Input
-              label="Áp dụng giờ mới từ ngày"
+              label={t('uiScheduling.applyNewHoursFrom')}
               type="date"
               value={effectiveFrom}
               min={today}
@@ -506,39 +534,36 @@ function EditWorkingScheduleModal({
               required
             />
             <Alert variant="info">
-              Lịch đang áp dụng: các ngày trước {viDate(effectiveFrom || today)} giữ giờ cũ (dùng để tính lương);
-              từ ngày này hệ thống tạo lịch mới với giờ mới.
+              {t('uiScheduling.scheduleChangeEffectiveHint', { date: localDate(effectiveFrom || today) })}
             </Alert>
             {effectiveFrom === today && (
               <Alert variant="warning">
-                Áp dụng từ <strong>hôm nay</strong>: giờ mới có hiệu lực ngay, kể cả với các lịch hẹn hôm nay đã qua giờ
-                bắt đầu hoặc bệnh nhân đã check-in/đang khám — chúng sẽ được liệt kê nếu nằm ngoài giờ mới. Nếu không
-                gấp, hãy chọn từ ngày mai.
+                {t('uiScheduling.scheduleChangeTodayWarning')}
               </Alert>
             )}
           </>
         )}
         <Input
-          label="Hiệu lực đến (để trống = không thời hạn)"
+          label={t('uiScheduling.effectiveToNoEnd')}
           type="date"
           value={validTo}
           min={started ? addDays(today, -1) : dateOf(schedule.validFrom)!}
           onChange={(e) => setValidTo(e.target.value)}
         />
-        <WarningList warnings={warnings} />
-        <p className="text-xs text-gray-500">
-          Hệ thống không tự hủy lịch hẹn: nếu có lịch hẹn nằm ngoài giờ mới, danh sách sẽ hiện ra để lễ tân liên hệ bệnh nhân.
+        <WarningList warnings={translateWarnings(warnings, language, t)} />
+        <p className="text-xs text-gray-500 dark:text-surface-400">
+          {t('uiScheduling.scheduleChangeAppointmentsHint')}
         </p>
         <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           <Button
             onClick={submit}
             isLoading={update.isPending}
             disabled={Boolean(error) || (!hoursChanged && !validToChanged) || (started && hoursChanged && !effectiveFrom)}
           >
-            Lưu
+            {t('uiScheduling.save')}
           </Button>
         </div>
       </div>
@@ -556,7 +581,10 @@ function EndWorkingScheduleModal({
   onClose: () => void;
   onSaved: (result: ScheduleChangeImpact) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const update = useUpdateWorkingSchedule();
+  const language = i18n.resolvedLanguage ?? 'vi';
+  const dayNames = dayLabelsFor(language);
   const today = clinicToday();
   const validFrom = dateOf(schedule.validFrom)!;
   const yesterday = addDays(today, -1);
@@ -564,29 +592,28 @@ function EndWorkingScheduleModal({
   const [lastDay, setLastDay] = useState(minEnd > today ? minEnd : today);
 
   return (
-    <Modal open onClose={onClose} title="Kết thúc lịch làm việc" size="sm">
+    <Modal open onClose={onClose} title={t('uiScheduling.endWorkingSchedule')} size="sm">
       <div className="space-y-4">
-        <p className="text-sm text-gray-700">
-          {DAY_LABELS[schedule.dayOfWeek]} {schedule.startTime}–{schedule.endTime}, hiệu lực từ {viDate(schedule.validFrom)}.
+        <p className="text-sm text-gray-700 dark:text-surface-200">
+          {dayNames[(schedule.dayOfWeek + 6) % 7]} {schedule.startTime}–{schedule.endTime}, {t('uiScheduling.effectiveFrom').toLowerCase()} {formatDate(schedule.validFrom, language)}.
         </p>
         <Input
-          label="Ngày làm việc cuối cùng theo lịch này"
+          label={t('uiScheduling.lastWorkingDay')}
           type="date"
           value={lastDay}
           min={minEnd}
           onChange={(e) => setLastDay(e.target.value)}
-          hint="Chọn hôm qua để dừng ngay từ hôm nay. Các ngày đã qua được giữ nguyên để tính lương."
+          hint={t('uiScheduling.endScheduleDateHint')}
           required
         />
         {lastDay < today && (
           <Alert variant="warning">
-            Lịch dừng từ <strong>hôm nay</strong>: các lịch hẹn hôm nay theo lịch này (kể cả đã check-in/đang khám) sẽ
-            nằm ngoài giờ làm và được liệt kê để xử lý.
+            {t('uiScheduling.endScheduleTodayWarning')}
           </Alert>
         )}
         <div className="flex justify-end gap-3 border-t border-gray-100 pt-4">
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           <Button
             variant="danger"
@@ -597,12 +624,12 @@ function EndWorkingScheduleModal({
                 { id: schedule.id, validTo: lastDay, expectedUpdatedAt: schedule.updatedAt },
                 {
                   onSuccess: onSaved,
-                  onError: (err) => notify.error(getApiErrorMessage(err, 'Không kết thúc được lịch làm việc')),
+                  onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.scheduleEndError'))),
                 },
               )
             }
           >
-            Kết thúc lịch
+            {t('uiScheduling.endScheduleAction')}
           </Button>
         </div>
       </div>

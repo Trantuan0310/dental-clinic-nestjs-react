@@ -50,65 +50,16 @@ import { cn } from '@/lib/cn';
 import { clinicToday, clinicWallClock } from '@/lib/clinicTime';
 import { exportCsv, type CsvColumn } from '@/lib/csv';
 import { notify } from '@/components/ui/Toast';
+import { useTranslation } from 'react-i18next';
 
 const PAGE_SIZE = 20;
 
-const APPOINTMENT_TYPE_OPTIONS: { value: AppointmentType | 'all'; label: string }[] = [
-  { value: 'all', label: 'Tất cả loại' },
-  { value: 'consultation', label: 'Khám / Tư vấn' },
-  { value: 'treatment', label: 'Điều trị' },
-  { value: 'follow_up', label: 'Tái khám' },
-];
-
-const SOURCE_OPTIONS: { value: AppointmentSource | 'all'; label: string }[] = [
-  { value: 'all', label: 'Tất cả nguồn' },
-  { value: 'walk_in', label: 'Khách vãng lai' },
-  { value: 'phone', label: 'Qua điện thoại' },
-  { value: 'online', label: 'Trực tuyến' },
-  { value: 'returning', label: 'Khách quay lại' },
-];
-
-const SOURCE_LABEL: Record<AppointmentSource, string> = {
-  walk_in: 'Vãng lai',
-  phone: 'Điện thoại',
-  online: 'Trực tuyến',
-  returning: 'Quay lại',
+const APPOINTMENT_TYPE_KEYS: Record<AppointmentType | 'all', string> = {
+  all: 'allTypes', consultation: 'typeConsultation', treatment: 'typeTreatment', follow_up: 'typeFollowUp',
 };
-
-const TYPE_LABEL: Record<AppointmentType, string> = {
-  consultation: 'Khám / Tư vấn',
-  treatment: 'Điều trị',
-  follow_up: 'Tái khám',
+const SOURCE_KEYS: Record<AppointmentSource | 'all', string> = {
+  all: 'allSources', walk_in: 'sourceWalkIn', phone: 'sourcePhone', online: 'sourceOnline', returning: 'sourceReturning',
 };
-
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  scheduled: 'Đã đặt',
-  confirmed: 'Đã xác nhận',
-  checked_in: 'Đã check-in',
-  in_progress: 'Đang khám',
-  completed: 'Hoàn thành',
-  cancelled: 'Đã hủy',
-  no_show: 'Vắng mặt',
-  left: 'Đã về (chưa khám)',
-};
-
-const CSV_COLUMNS: CsvColumn<Appointment>[] = [
-  { header: 'Mã lịch hẹn', accessor: (r) => r.id },
-  { header: 'Ngày', accessor: (r) => formatDate(r.startsAt, 'dd/MM/yyyy') },
-  { header: 'Giờ bắt đầu', accessor: (r) => formatTimeOnly(r.startsAt) },
-  { header: 'Giờ kết thúc', accessor: (r) => formatTimeOnly(r.endsAt) },
-  { header: 'Thời lượng (phút)', accessor: (r) => r.durationMinutes },
-  { header: 'Mã BN', accessor: (r) => r.patientCode },
-  { header: 'Tên bệnh nhân', accessor: (r) => r.patientName },
-  { header: 'Số điện thoại', accessor: (r) => r.patientPhone ?? '' },
-  { header: 'Bác sĩ', accessor: (r) => r.dentistName },
-  { header: 'Loại lịch hẹn', accessor: (r) => (r.appointmentType ? TYPE_LABEL[r.appointmentType] : '') },
-  { header: 'Nguồn', accessor: (r) => (r.source ? SOURCE_LABEL[r.source] : '') },
-  { header: 'Lý do khám', accessor: (r) => r.reason ?? '' },
-  { header: 'Triệu chứng', accessor: (r) => r.chiefComplaint ?? '' },
-  { header: 'Trạng thái', accessor: (r) => STATUS_LABEL[r.status] ?? r.status },
-  { header: 'Check-in lúc', accessor: (r) => (r.checkInAt ? formatDateTime(r.checkInAt) : '') },
-];
 
 type StatusTab =
   | 'all'
@@ -117,13 +68,9 @@ type StatusTab =
   | 'completed'
   | 'cancelled';
 
-const STATUS_TABS: { id: StatusTab; label: string }[] = [
-  { id: 'all', label: 'Tất cả' },
-  { id: 'scheduled', label: 'Chưa đến' },
-  { id: 'checked_in', label: 'Đã đến' },
-  { id: 'completed', label: 'Hoàn thành' },
-  { id: 'cancelled', label: 'Hủy' },
-];
+const STATUS_TAB_KEYS: Record<StatusTab, string> = {
+  all: 'tabAll', scheduled: 'tabNotArrived', checked_in: 'tabArrived', completed: 'statusCompleted', cancelled: 'tabCancelled',
+};
 
 function isoDateOnly(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -146,13 +93,39 @@ function statusToTabBucket(status: AppointmentStatus): StatusTab {
   return 'cancelled'; // cancelled | no_show | left
 }
 
-const VIEW_OPTIONS: { id: AppointmentViewMode; label: string }[] = [
-  { id: 'day', label: 'Ngày' },
-  { id: 'week', label: 'Tuần' },
-  { id: 'month', label: 'Tháng' },
-];
-
 export default function AppointmentsListPage() {
+  const { t } = useTranslation();
+  const csvColumns: CsvColumn<Appointment>[] = [
+    { header: t('uiScheduling.appointmentId'), accessor: (r) => r.id },
+    { header: t('uiScheduling.appointmentDate'), accessor: (r) => formatDate(r.startsAt, 'dd/MM/yyyy') },
+    { header: t('uiScheduling.startTime'), accessor: (r) => formatTimeOnly(r.startsAt) },
+    { header: t('uiScheduling.endTime'), accessor: (r) => formatTimeOnly(r.endsAt) },
+    { header: t('uiScheduling.totalDuration'), accessor: (r) => r.durationMinutes },
+    { header: t('uiScheduling.patientCode'), accessor: (r) => r.patientCode },
+    { header: t('uiScheduling.patientName'), accessor: (r) => r.patientName },
+    { header: t('uiScheduling.phoneNumber'), accessor: (r) => r.patientPhone ?? '' },
+    { header: t('uiScheduling.dentist'), accessor: (r) => r.dentistName },
+    { header: t('uiScheduling.appointmentType'), accessor: (r) => r.appointmentType ? t(`uiScheduling.${APPOINTMENT_TYPE_KEYS[r.appointmentType]}`) : '' },
+    { header: t('uiScheduling.source'), accessor: (r) => r.source ? t(`uiScheduling.${SOURCE_KEYS[r.source]}`) : '' },
+    { header: t('uiScheduling.reason'), accessor: (r) => r.reason ?? '' },
+    { header: t('uiScheduling.symptoms'), accessor: (r) => r.chiefComplaint ?? '' },
+    { header: t('uiScheduling.status'), accessor: (r) => t(`uiScheduling.status${r.status.replace(/(^|_)([a-z])/g, (_, __, letter: string) => letter.toUpperCase())}`) },
+    { header: t('uiScheduling.checkInAt'), accessor: (r) => r.checkInAt ? formatDateTime(r.checkInAt) : '' },
+  ];
+  const VIEW_OPTIONS: { id: AppointmentViewMode; label: string }[] = [
+    { id: 'day', label: t('uiScheduling.day') },
+    { id: 'week', label: t('uiScheduling.week') },
+    { id: 'month', label: t('uiScheduling.month') },
+  ];
+  const statusTabs: { id: StatusTab; label: string }[] = (Object.keys(STATUS_TAB_KEYS) as StatusTab[]).map((id) => ({
+    id, label: t(`uiScheduling.${STATUS_TAB_KEYS[id]}`),
+  }));
+  const appointmentTypeOptions = (Object.keys(APPOINTMENT_TYPE_KEYS) as (AppointmentType | 'all')[]).map((value) => ({
+    value, label: t(`uiScheduling.${APPOINTMENT_TYPE_KEYS[value]}`),
+  }));
+  const sourceOptions = (Object.keys(SOURCE_KEYS) as (AppointmentSource | 'all')[]).map((value) => ({
+    value, label: t(`uiScheduling.${SOURCE_KEYS[value]}`),
+  }));
   const [view, setView] = useState<AppointmentViewMode>('day');
   // A clinic date, whatever the browser's time zone.
   const [date, setDate] = useState<Date>(() => clinicWallClock());
@@ -249,13 +222,13 @@ export default function AppointmentsListPage() {
 
   const handleExportCsv = () => {
     if (visibleRows.length === 0) {
-      notify.warning('Không có lịch hẹn nào để xuất.');
+      notify.warning(t('uiScheduling.noAppointments'));
       return;
     }
     const today = clinicToday();
-    const filename = `lich-hen_${today}_${visibleRows.length}dong`;
-    exportCsv(filename, visibleRows, CSV_COLUMNS);
-    notify.success(`Đã xuất ${visibleRows.length} lịch hẹn ra CSV.`);
+    const filename = `appointments_${today}_${visibleRows.length}_rows`;
+    exportCsv(filename, visibleRows, csvColumns);
+    notify.success(t('uiScheduling.exportedAppointments', { count: visibleRows.length }));
   };
 
   // addMonths clamps 31/01 to 28/02 (setMonth rolled it over to 03/03).
@@ -273,32 +246,32 @@ export default function AppointmentsListPage() {
 
   const renderHeaderLabel = () => {
     if (view === 'day') {
-      return `${getWeekdayLabel(date)}, Ngày ${formatDate(date, 'dd/MM/yyyy')}`;
+      return `${getWeekdayLabel(date)}, ${t('uiScheduling.day')} ${formatDate(date, 'dd/MM/yyyy')}`;
     }
     if (view === 'week') {
       const start = startOfWeek(date, { weekStartsOn: 1 });
       const end = endOfWeek(date, { weekStartsOn: 1 });
-      return `Tuần ${formatDate(start, 'dd/MM')} – ${formatDate(end, 'dd/MM/yyyy')}`;
+      return `${t('uiScheduling.week')} ${formatDate(start, 'dd/MM')} – ${formatDate(end, 'dd/MM/yyyy')}`;
     }
-    return `Tháng ${formatDate(date, 'MM/yyyy')}`;
+    return `${t('uiScheduling.month')} ${formatDate(date, 'MM/yyyy')}`;
   };
 
   return (
     <div>
       <PageHeader
-        title="Lịch hẹn — dạng bảng"
-        description="Tìm kiếm, lọc và thao tác nhanh trên danh sách lịch hẹn (check-in, đổi lịch, no-show)."
+        title={t('uiScheduling.appointmentsList')}
+        description={t('uiScheduling.appointmentsListDescription')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link to="/appointments">
-              <Button variant="outline">Xem dạng lịch</Button>
+              <Button variant="outline">{t('uiScheduling.calendarView')}</Button>
             </Link>
             <Button
               variant="outline"
               leftIcon={<Download className="h-4 w-4" />}
               onClick={handleExportCsv}
             >
-              Xuất CSV
+              {t('uiScheduling.exportCsv')}
             </Button>
             <PermissionGuard permission="appointment.check_in">
               <Button
@@ -306,12 +279,12 @@ export default function AppointmentsListPage() {
                 leftIcon={<UserRoundPlus className="h-4 w-4" />}
                 onClick={() => setWalkInOpen(true)}
               >
-                Khách vãng lai
+                {t('uiScheduling.walkIn')}
               </Button>
             </PermissionGuard>
             <PermissionGuard permission="appointment.create">
               <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
-                Tạo lịch hẹn
+                {t('uiScheduling.createAppointment')}
               </Button>
             </PermissionGuard>
           </div>
@@ -326,7 +299,7 @@ export default function AppointmentsListPage() {
               variant="outline"
               size="sm"
               onClick={() => handleShiftDate(-1)}
-              aria-label="Trước"
+              aria-label={t('uiScheduling.previous')}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -336,21 +309,21 @@ export default function AppointmentsListPage() {
               onClick={handleToday}
               disabled={isToday}
             >
-              Hôm nay
+              {t('uiScheduling.today')}
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => handleShiftDate(1)}
-              aria-label="Sau"
+              aria-label={t('uiScheduling.next')}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
             <div className="ml-3 hidden items-center gap-2 sm:flex">
-              <span className="text-sm font-medium text-gray-900">{renderHeaderLabel()}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-surface-100">{renderHeaderLabel()}</span>
               <input
                 type="date"
-                aria-label="Chọn ngày"
+                aria-label={t('uiScheduling.chooseDate')}
                 value={isoDateOnly(date)}
                 onChange={(e) => {
                   // "yyyy-MM-dd" as a local calendar date: new Date("2026-09-25")
@@ -358,13 +331,13 @@ export default function AppointmentsListPage() {
                   const [y, m, d] = e.target.value.split('-').map(Number);
                   if (y && m && d) setDate(new Date(y, m - 1, d));
                 }}
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
               />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 shadow-sm">
+            <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 shadow-sm dark:border-surface-700 dark:bg-surface-900">
               {VIEW_OPTIONS.map((v) => (
                 <button
                   key={v.id}
@@ -374,7 +347,7 @@ export default function AppointmentsListPage() {
                     'rounded-md px-3 py-1 text-xs font-medium transition-colors',
                     view === v.id
                       ? 'bg-primary-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900',
+                      : 'text-gray-600 hover:text-gray-900 dark:text-surface-300 dark:hover:text-surface-50',
                   )}
                 >
                   {v.label}
@@ -385,7 +358,7 @@ export default function AppointmentsListPage() {
               value={dentistFilter}
               onChange={(e) => setDentistFilter(e.target.value)}
               options={[
-                { value: '', label: 'Tất cả bác sĩ' },
+                { value: '', label: t('uiScheduling.allDentists') },
                 ...((dentists ?? []).map((d) => ({ value: d.id, label: d.fullName }))),
               ]}
               className="min-w-[160px]"
@@ -393,13 +366,13 @@ export default function AppointmentsListPage() {
             <Select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as AppointmentType | 'all')}
-              options={APPOINTMENT_TYPE_OPTIONS}
+              options={appointmentTypeOptions}
               className="min-w-[140px]"
             />
             <Select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value as AppointmentSource | 'all')}
-              options={SOURCE_OPTIONS}
+              options={sourceOptions}
               className="min-w-[140px]"
             />
           </div>
@@ -407,14 +380,14 @@ export default function AppointmentsListPage() {
 
         {/* Status tabs */}
         <div className="flex flex-wrap items-center gap-2 border-b border-gray-200">
-          {STATUS_TABS.map((t) => {
-            const count = counts[t.id];
-            const active = tab === t.id;
+          {statusTabs.map((statusTab) => {
+            const count = counts[statusTab.id];
+            const active = tab === statusTab.id;
             return (
               <button
-                key={t.id}
+                key={statusTab.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(statusTab.id)}
                 className={cn(
                   'relative -mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                   active
@@ -422,7 +395,7 @@ export default function AppointmentsListPage() {
                     : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700',
                 )}
               >
-                {t.label}
+                {statusTab.label}
                 <span
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-xs',
@@ -441,7 +414,7 @@ export default function AppointmentsListPage() {
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
-              placeholder="Tìm tên, mã BN, số điện thoại..."
+              placeholder={t('uiScheduling.searchAppointments')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               leftAddon={undefined}
@@ -452,7 +425,7 @@ export default function AppointmentsListPage() {
 
         {data?.pagination?.hasMore && (
           <Alert type="warning">
-            Còn lịch chưa hiển thị (chỉ tải {LIST_ALL_LIMIT} lịch đầu), hãy thu hẹp bộ lọc.
+            {t('uiScheduling.moreAppointments', { count: LIST_ALL_LIMIT })}
           </Alert>
         )}
 
@@ -462,22 +435,22 @@ export default function AppointmentsListPage() {
         ) : isError && visibleRows.length === 0 ? (
           <EmptyState
             icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
-            title="Không thể tải danh sách lịch hẹn"
-            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
-            action={{ label: 'Thử lại', onClick: () => refetch() }}
+            title={t('uiScheduling.cannotLoadAppointments')}
+            description={t('uiScheduling.loadError')}
+            action={{ label: t('uiScheduling.retry'), onClick: () => refetch() }}
           />
         ) : visibleRows.length === 0 ? (
           <EmptyState
-            title="Chưa có lịch hẹn nào"
+            title={t('uiScheduling.noAppointments')}
             description={
               tab === 'all'
-                ? 'Chưa có lịch hẹn trong khoảng thời gian này. Hãy tạo lịch hẹn mới.'
-                : 'Không có lịch hẹn nào ở trạng thái này.'
+                ? t('uiScheduling.noAppointmentsInRange')
+                : t('uiScheduling.noAppointmentsInStatus')
             }
             action={
               <PermissionGuard permission="appointment.create">
                 <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
-                  Tạo lịch hẹn
+                  {t('uiScheduling.createAppointment')}
                 </Button>
               </PermissionGuard>
             }
@@ -488,14 +461,14 @@ export default function AppointmentsListPage() {
               <thead>
                 <tr>
                   <th className="w-12">STT</th>
-                  <th className="w-28">Bắt đầu</th>
-                  <th>Bệnh nhân</th>
-                  <th className="w-32">SĐT</th>
-                  <th>Bác sĩ</th>
-                  <th>Dịch vụ</th>
-                  <th className="w-24">Thời lượng</th>
-                  <th className="w-32">Trạng thái</th>
-                  <th className="w-20">Thao tác</th>
+                  <th className="w-28">{t('uiScheduling.start')}</th>
+                  <th>{t('uiScheduling.patient')}</th>
+                  <th className="w-32">{t('uiScheduling.phone')}</th>
+                  <th>{t('uiScheduling.dentist')}</th>
+                  <th>{t('uiScheduling.service')}</th>
+                  <th className="w-24">{t('uiScheduling.duration')}</th>
+                  <th className="w-32">{t('uiScheduling.status')}</th>
+                  <th className="w-20">{t('uiScheduling.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -509,16 +482,16 @@ export default function AppointmentsListPage() {
                       {(safePage - 1) * PAGE_SIZE + idx + 1}
                     </td>
                     <td>
-                      <p className="font-medium text-gray-900">{formatTimeOnly(r.startsAt)}</p>
+                  <p className="font-medium text-gray-900 dark:text-surface-100">{formatTimeOnly(r.startsAt)}</p>
                       <p className="text-xs text-gray-500">
                         {getWeekdayLabel(r.startsAt)} • {formatDate(r.startsAt, 'dd/MM')}
                       </p>
                     </td>
                     <td>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-gray-900 dark:text-surface-100">
                         {r.patientName}
                         {r.patientDeleted && (
-                          <span className="ml-1 text-xs font-normal text-gray-500">(hồ sơ đã xóa)</span>
+                          <span className="ml-1 text-xs font-normal text-gray-500 dark:text-surface-400">{t('uiScheduling.patientDeleted')}</span>
                         )}
                       </p>
                       <p className="text-xs text-gray-500">{r.patientCode}</p>
@@ -528,12 +501,12 @@ export default function AppointmentsListPage() {
                     </td>
                     <td className="text-sm text-gray-700">{r.dentistName}</td>
                     <td>
-                      <p className="text-sm text-gray-900">{r.reason ?? '—'}</p>
+                      <p className="text-sm text-gray-900 dark:text-surface-100">{r.reason ?? '—'}</p>
                       {r.chiefComplaint && (
                         <p className="text-xs text-gray-500">{r.chiefComplaint}</p>
                       )}
                     </td>
-                    <td className="text-sm text-gray-700">{r.durationMinutes} phút</td>
+                    <td className="text-sm text-gray-700 dark:text-surface-200">{t('uiScheduling.minutesValue', { count: r.durationMinutes })}</td>
                     <td>
                       <AppointmentStatusBadge
                         status={r.status}
@@ -550,7 +523,7 @@ export default function AppointmentsListPage() {
                         }}
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        Xem
+                        {t('uiScheduling.view')}
                       </button>
                     </td>
                   </tr>
@@ -562,14 +535,14 @@ export default function AppointmentsListPage() {
 
         <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-xs text-gray-500">
           <span>
-            Hiển thị {visibleRows.length} / {rows.length} lịch hẹn
+            {t('uiScheduling.appointmentListCount', { visible: visibleRows.length, total: rows.length })}
             {(typeFilter !== 'all' || sourceFilter !== 'all' || dentistFilter) && (
-              <span className="ml-2 italic">(đang lọc)</span>
+              <span className="ml-2 italic">{t('uiScheduling.filtering')}</span>
             )}
           </span>
           {isLoading && (
             <span className="inline-flex items-center gap-1.5 text-primary-600">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang đồng bộ...
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('uiScheduling.syncing')}
             </span>
           )}
         </div>

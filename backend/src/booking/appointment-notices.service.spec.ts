@@ -23,6 +23,8 @@ describe('AppointmentNoticesService', () => {
     deletedAt: null,
     patient: { fullName: 'Nguyễn An', email: 'an@x.vn', deletedAt: null },
     dentist: { fullName: 'BS. Lê Minh' },
+    // Booked days ahead (reminders skip visits booked under 2 hours before).
+    createdAt: new Date('2026-09-25T03:00:00Z'),
     ...over,
   });
 
@@ -54,6 +56,57 @@ describe('AppointmentNoticesService', () => {
     jest.useRealTimers();
     delete process.env.EMAIL_MOCK;
     delete process.env.BOOKING_NOTIFY_EMAILS;
+  });
+
+  describe('visits the front desk books', () => {
+    it('confirms a phone booking by email, with time, dentist and services', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(
+        visit({ services: [{ serviceName: 'Cạo vôi răng' }] }),
+      );
+      await service.onCreated({ appointmentId: 'appt-1', source: 'PHONE' });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.subject).toBe('Xác nhận lịch hẹn 10:00 thứ Sáu 02/10/2026');
+      expect(sent.text).toContain('10:00 thứ Sáu 02/10/2026 với bác sĩ BS. Lê Minh (Cạo vôi răng)');
+    });
+
+    it('sends nothing for a walk-in, a patient without email, or when notices are off', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onCreated({ appointmentId: 'appt-1', source: 'WALK_IN' });
+      prisma.appointment.findUnique.mockResolvedValue(
+        visit({ patient: { fullName: 'An', email: null, deletedAt: null } }),
+      );
+      await service.onCreated({ appointmentId: 'appt-1', source: 'PHONE' });
+      process.env.APPOINTMENT_EMAIL_NOTICES = 'false';
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onCreated({ appointmentId: 'appt-1', source: 'PHONE' });
+      delete process.env.APPOINTMENT_EMAIL_NOTICES;
+      expect(email.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reminders around the quiet hours', () => {
+    it('reminds at 07:00 an 08:30 visit booked the evening before', async () => {
+      const morning = new Date('2026-10-02T00:00:00Z'); // 07:00 at the clinic
+      const early = visit({
+        startAt: new Date('2026-10-02T01:30:00Z'), // 08:30
+        createdAt: new Date('2026-10-01T15:00:00Z'), // 22:00 the evening before
+      });
+      prisma.appointment.findMany.mockResolvedValue([early]);
+      const result = await service.sendDueReminders(morning);
+      expect(result.sent).toBe(1);
+    });
+
+    it('does not remind a visit booked less than 2 hours before it starts', async () => {
+      const at = new Date('2026-10-01T05:00:00Z'); // 12:00
+      const soon = visit({
+        startAt: new Date('2026-10-01T06:30:00Z'), // 13:30
+        createdAt: new Date('2026-10-01T04:45:00Z'), // booked 11:45
+      });
+      prisma.appointment.findMany.mockResolvedValue([soon]);
+      const result = await service.sendDueReminders(at);
+      expect(result).toMatchObject({ due: 0, sent: 0 });
+      expect(email.send).not.toHaveBeenCalled();
+    });
   });
 
   describe('changes the clinic makes', () => {
@@ -109,6 +162,69 @@ describe('AppointmentNoticesService', () => {
       const sent = email.send.mock.calls[0][0];
       expect(sent.subject).toBe('Lịch hẹn đã được dời');
       expect(sent.text).toContain('từ 16:00 thứ Năm 01/10/2026 sang 10:00 thứ Sáu 02/10/2026');
+    });
+
+    it('says the clinic cancelled, with an apology, still without the staff reason', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onCancelled({
+        appointmentId: 'appt-1',
+        patientId: 'p1',
+        dentistId: 'd1',
+        cancelledAt: NOW,
+        cancelledBy: 'staff-1',
+        reason: 'BS Minh ốm, ghi chú nội bộ',
+        byClinic: true,
+      });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.subject).toBe('Phòng khám phải hủy lịch hẹn của bạn');
+      expect(sent.text).toContain('xin lỗi');
+      expect(sent.text).not.toContain('ghi chú nội bộ');
+    });
+
+    it('never claims the clinic moved a visit it did not (patient asked by phone)', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onRescheduled({
+        appointmentId: 'appt-1',
+        oldStartAt: new Date('2026-10-01T09:00:00Z'),
+        newStartAt: visitAt,
+        oldDentistId: 'd1',
+        newDentistId: 'd1',
+      });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.text).not.toContain('Phòng khám phải dời');
+      expect(sent.text).not.toContain('xin lỗi');
+    });
+
+    it('says the clinic moved the visit, with an apology, when it did', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(visit());
+      await service.onRescheduled({
+        appointmentId: 'appt-1',
+        oldStartAt: new Date('2026-10-01T09:00:00Z'),
+        newStartAt: visitAt,
+        oldDentistId: 'd1',
+        newDentistId: 'd1',
+        byClinic: true,
+      });
+      const sent = email.send.mock.calls[0][0];
+      expect(sent.subject).toBe('Phòng khám dời lịch hẹn của bạn');
+      expect(sent.text).toContain(
+        'Phòng khám phải dời lịch hẹn của bạn từ 16:00 thứ Năm 01/10/2026 sang 10:00 thứ Sáu 02/10/2026',
+      );
+      expect(sent.text).toContain('xin lỗi');
+    });
+
+    it('links an online-booked visit to its status page', async () => {
+      prisma.appointment.findUnique.mockResolvedValue(
+        visit({ bookingRequest: { referenceCode: 'GS-ABC' } }),
+      );
+      await service.onCancelled({
+        appointmentId: 'appt-1',
+        patientId: 'p1',
+        dentistId: 'd1',
+        cancelledAt: NOW,
+        cancelledBy: 'staff-1',
+      });
+      expect(email.send.mock.calls[0][0].text).toContain('/booking/status?ref=GS-ABC');
     });
 
     it('tells the patient about a new dentist at the same time', async () => {
@@ -187,7 +303,8 @@ describe('AppointmentNoticesService', () => {
         reminderSentAt: null,
         patient: { deletedAt: null, email: { not: null } },
       });
-      expect(where.startAt.gt).toEqual(new Date(NOW.getTime() + 2 * 60 * 60_000));
+      // Up to 30 minutes ahead; the 2-hour rule is on how long before the visit it was booked.
+      expect(where.startAt.gt).toEqual(new Date(NOW.getTime() + 30 * 60_000));
       expect(where.startAt.lte).toEqual(new Date(NOW.getTime() + 24 * 60 * 60_000));
       expect(prisma.$executeRaw.mock.calls[0][0].join('?')).toContain('reminder_sent_at IS NULL');
       expect(email.send).toHaveBeenCalledTimes(1);

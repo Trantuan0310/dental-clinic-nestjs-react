@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './Button';
+import { useTranslation } from 'react-i18next';
 
 export interface PaginationProps {
   currentPage: number;
@@ -19,6 +20,7 @@ export function Pagination({
   onPageChange,
   className,
 }: PaginationProps) {
+  const { t } = useTranslation();
   const getPageNumbers = () => {
     const pages: (number | '...')[] = [];
     const showEllipsisThreshold = 7;
@@ -49,12 +51,11 @@ export function Pagination({
   };
 
   return (
-    <div className={cn('flex items-center justify-between', className)}>
+    <nav aria-label={t('uiCommon.pagination.label')} className={cn('flex flex-wrap items-center justify-between gap-3', className)}>
       <div className="text-sm text-gray-500 dark:text-surface-400">
         {totalItems !== undefined && pageSize !== undefined && (
           <span>
-            Hiển thị {(currentPage - 1) * pageSize + 1} -{' '}
-            {Math.min(currentPage * pageSize, totalItems)} của {totalItems}
+            {t('uiCommon.pagination.showing', { from: totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1, to: Math.min(currentPage * pageSize, totalItems), total: totalItems })}
           </span>
         )}
       </div>
@@ -64,13 +65,13 @@ export function Pagination({
           variant="ghost"
           size="sm"
           onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          aria-label="Trang trước"
+          disabled={currentPage <= 1 || totalPages === 0}
+          aria-label={t('uiCommon.pagination.previous')}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        <div className="flex items-center gap-1">
+        <div className="hidden items-center gap-1 sm:flex">
           {getPageNumbers().map((page, index) =>
             page === '...' ? (
               <span key={`ellipsis-${index}`} className="px-2 text-gray-400">
@@ -83,7 +84,7 @@ export function Pagination({
                 size="sm"
                 onClick={() => onPageChange(page)}
                 aria-current={currentPage === page ? 'page' : undefined}
-                aria-label={`Trang ${page}${currentPage === page ? ', trang hiện tại' : ''}`}
+                aria-label={currentPage === page ? t('uiCommon.pagination.currentPage', { page }) : t('uiCommon.pagination.page', { page })}
                 className="w-9"
               >
                 {page}
@@ -92,16 +93,18 @@ export function Pagination({
           )}
         </div>
 
+        <span className="px-2 text-sm sm:hidden">{t('uiCommon.pagination.compact', { page: totalPages === 0 ? 0 : currentPage, total: totalPages })}</span>
+
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          aria-label="Trang sau"
+          disabled={currentPage >= totalPages}
+          aria-label={t('uiCommon.pagination.next')}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </nav>
   );
 }

@@ -10,6 +10,12 @@
 > - **Post-condition** — trạng thái sau khi xong
 > - **Exception** — luồng lỗi chính
 
+## Sơ đồ tổng quan
+
+![Quy trình vận hành hệ thống quản lý phòng khám nha khoa](system-flow-diagram.png)
+
+Sơ đồ theo vai trò: quản trị viên, lễ tân, bác sĩ, trợ lý AI và hệ thống. Sơ đồ chưa vẽ luồng đặt lịch online của bệnh nhân; xem [online-booking.md](../04_Database/schema-per-module/online-booking.md).
+
 ---
 
 ## 1. FLOW #1 — Bệnh nhân mới đến lần đầu (Walk-in)

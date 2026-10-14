@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Copy } from 'lucide-react';
 import { Alert, Button, Modal } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -21,6 +22,7 @@ export function TemporaryPasswordDialog({
   emailFailed?: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const canIssue = useAuthStore((s) => s.hasPermission('user.reset_password'));
   const issue = useIssueTemporaryPassword();
   const [password, setPassword] = useState<string | null>(null);
@@ -35,9 +37,9 @@ export function TemporaryPasswordDialog({
     if (!password) return;
     try {
       await navigator.clipboard.writeText(password);
-      notify.success('Đã sao chép mật khẩu tạm');
+      notify.success(t('uiWorkforce.temporaryPassword.copied'));
     } catch {
-      notify.error('Không sao chép được, hãy chép tay.');
+      notify.error(t('uiWorkforce.temporaryPassword.copyFailed'));
     }
   };
 
@@ -45,51 +47,47 @@ export function TemporaryPasswordDialog({
     <Modal
       open={!!user}
       onClose={close}
-      title={password ? 'Mật khẩu tạm' : 'Cấp mật khẩu tạm'}
+      title={password ? t('uiWorkforce.temporaryPassword.titleShown') : t('uiWorkforce.temporaryPassword.titleIssue')}
       size="md"
     >
       {user && (
         <div className="space-y-4 text-sm">
           {emailFailed && !password && (
-            <Alert type="warning" title="Chưa gửi được email">
-              Máy chủ chưa gửi được email tới {user.email} (email chưa được cấu hình hoặc gửi lỗi).
-              Dùng “Cấp mật khẩu tạm” rồi đưa mật khẩu cho người dùng trực tiếp.
+            <Alert type="warning" title={t('uiWorkforce.temporaryPassword.emailFailedTitle')}>
+              {t('uiWorkforce.temporaryPassword.emailFailedMessage', { email: user.email })}
             </Alert>
           )}
           {password ? (
             <>
               <p className="text-gray-700 dark:text-surface-200">
-                Mật khẩu tạm của <strong>{user.email}</strong>. Mật khẩu chỉ hiện <strong>một lần</strong>;
-                hãy đưa trực tiếp cho người dùng, không gửi qua kênh công khai.
+                {t('uiWorkforce.temporaryPassword.shownMessage', { email: user.email })}
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                 <code
-                  className="flex-1 select-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-base dark:border-surface-700 dark:bg-surface-800"
-                  aria-label="Mật khẩu tạm"
+                  className="min-w-0 flex-1 select-all break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-base text-gray-900 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100"
+                  aria-label={t('uiWorkforce.temporaryPassword.passwordLabel')}
                 >
                   {password}
                 </code>
-                <Button type="button" variant="outline" onClick={copy} aria-label="Sao chép mật khẩu tạm">
+                <Button type="button" variant="outline" onClick={copy} aria-label={t('uiWorkforce.temporaryPassword.copyPassword')}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-gray-500 dark:text-surface-400">
-                Người dùng đăng nhập bằng mật khẩu này rồi đổi mật khẩu ở “Tài khoản của tôi”; tài
-                khoản chuyển từ “Chờ thiết lập” sang “Hoạt động” khi đổi xong.
+                {t('uiWorkforce.temporaryPassword.nextSteps')}
               </p>
-              <div className="flex justify-end">
-                <Button onClick={close}>Đã ghi lại</Button>
+              <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+                <Button onClick={close}>{t('uiWorkforce.temporaryPassword.done')}</Button>
               </div>
             </>
           ) : canIssue ? (
             <>
               <p className="text-gray-600 dark:text-surface-300">
-                Tạo mật khẩu tạm cho <strong>{user.email}</strong>. Mật khẩu cũ (nếu có) và mọi phiên
-                đăng nhập của tài khoản này sẽ hết hiệu lực.
+                {t('uiWorkforce.temporaryPassword.issueDescription', { email: user.email })}
               </p>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
                 <Button type="button" variant="outline" onClick={close}>
-                  Để sau
+                  {t('uiWorkforce.temporaryPassword.later')}
                 </Button>
                 <Button
                   isLoading={issue.isPending}
@@ -97,24 +95,24 @@ export function TemporaryPasswordDialog({
                     issue.mutate(user.id, {
                       onSuccess: (result) => {
                         if (result.temporaryPassword) setPassword(result.temporaryPassword);
-                        else notify.error('Máy chủ không trả về mật khẩu tạm.');
+                        else notify.error(t('uiWorkforce.temporaryPassword.missingPassword'));
                       },
                       onError: (e) =>
-                        notify.error(getApiErrorMessage(e, 'Không cấp được mật khẩu tạm')),
+                        notify.error(getApiErrorMessage(e, t('uiWorkforce.temporaryPassword.issueError'))),
                     })
                   }
                 >
-                  Cấp mật khẩu tạm
+                  {t('uiWorkforce.temporaryPassword.issueAction')}
                 </Button>
               </div>
             </>
           ) : (
             <>
               <p className="text-gray-600 dark:text-surface-300">
-                Nhờ quản trị viên cấp mật khẩu tạm cho {user.email} ở trang Người dùng.
+                {t('uiWorkforce.temporaryPassword.noPermission', { email: user.email })}
               </p>
               <div className="flex justify-end">
-                <Button onClick={close}>Đóng</Button>
+                <Button onClick={close}>{t('uiWorkforce.temporaryPassword.close')}</Button>
               </div>
             </>
           )}

@@ -24,6 +24,7 @@ import {
   normalizeReference,
   saveBooking,
 } from "./savedBookings";
+import { useTranslation } from "react-i18next";
 
 type Status = {
   /** Left out of a lookup by phone alone (it would open the request). */
@@ -172,12 +173,12 @@ const TONE_STYLE: Record<Tone, { box: string; icon: typeof Clock }> = {
   wait: { box: "border-amber-200 bg-amber-50 text-amber-900", icon: Clock },
   action: { box: "border-sky-200 bg-sky-50 text-sky-900", icon: AlertCircle },
   good: { box: "border-emerald-200 bg-emerald-50 text-emerald-900", icon: CheckCircle2 },
-  bad: { box: "border-gray-200 bg-gray-50 text-gray-800", icon: XCircle },
+  bad: { box: "border-gray-200 dark:border-surface-700 bg-gray-50 text-gray-800 dark:text-surface-200", icon: XCircle },
 };
 
-const when = (value?: string | null) =>
+const when = (value?: string | null, language = "vi") =>
   value
-    ? new Date(value).toLocaleString("vi-VN", {
+    ? new Date(value).toLocaleString(language.toLowerCase().startsWith("en") ? "en-US" : "vi-VN", {
         weekday: "long",
         day: "2-digit",
         month: "2-digit",
@@ -216,9 +217,10 @@ const headers = (a: Access) => ({
 });
 
 const inputClass =
-  "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
+  "mt-1 block w-full rounded-lg border border-gray-300 dark:border-surface-600 px-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
 
-function CopyCode({ code, label = "Sao chép" }: { code: string; label?: string }) {
+function CopyCode({ code, label }: { code: string; label?: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -232,18 +234,19 @@ function CopyCode({ code, label = "Sao chép" }: { code: string; label?: string 
           () => undefined,
         );
       }}
-      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+      className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 px-2 py-1 text-xs font-medium text-gray-700 dark:text-surface-200 hover:bg-gray-50"
     >
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
-      {copied ? "Đã chép" : label}
+      {copied ? t('uiScheduling.copied') : label ?? t('uiScheduling.copy')}
     </button>
   );
 }
 
 function Progress({ step }: { step: number }) {
-  const steps = ["Đã gửi yêu cầu", "Phòng khám xem xét", "Đã xác nhận"];
+  const { t } = useTranslation();
+  const steps = [t('uiScheduling.bookingSent'), t('uiScheduling.clinicReview'), t('uiScheduling.statusConfirmed')];
   return (
-    <ol className="mt-5 grid grid-cols-3 gap-2" aria-label="Tiến trình đặt lịch">
+    <ol className="mt-5 grid grid-cols-3 gap-2" aria-label={t('uiScheduling.bookingProgress')}>
       {steps.map((label, i) => {
         const done = i + 1 < step || step === 3;
         const current = i + 1 === step && step !== 3;
@@ -258,7 +261,7 @@ function Progress({ step }: { step: number }) {
             <p
               className={
                 "mt-2 text-xs sm:text-sm " +
-                (done || current ? "font-medium text-gray-900" : "text-gray-400")
+                (done || current ? "font-medium text-gray-900 dark:text-surface-100" : "text-gray-400")
               }
               aria-current={current ? "step" : undefined}
             >
@@ -272,6 +275,7 @@ function Progress({ step }: { step: number }) {
 }
 
 function ContactButtons() {
+  const { t } = useTranslation();
   if (!clinic.phone && !clinic.zaloHref) return null;
   return (
     <div className="flex flex-wrap gap-2">
@@ -280,7 +284,7 @@ function ContactButtons() {
           href={`tel:${clinic.phoneHref}`}
           className="inline-flex items-center gap-2 rounded-full border border-brand-200 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
         >
-          <Phone className="h-4 w-4" aria-hidden /> Gọi {clinic.phone}
+          <Phone className="h-4 w-4" aria-hidden /> {t('uiScheduling.call')} {clinic.phone}
         </a>
       )}
       {clinic.zaloHref && (
@@ -290,7 +294,7 @@ function ContactButtons() {
           rel="noreferrer"
           className="inline-flex items-center gap-2 rounded-full border border-brand-200 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
         >
-          <MessageCircle className="h-4 w-4" aria-hidden /> Nhắn Zalo
+          <MessageCircle className="h-4 w-4" aria-hidden /> {t('uiScheduling.messageZalo')}
         </a>
       )}
     </div>
@@ -304,6 +308,7 @@ function DetailsForm({
   busy: boolean;
   onSubmit: (details: Record<string, string>) => void;
 }) {
+  const { t } = useTranslation();
   // The status page never shows the details sent earlier, so nothing is
   // prefilled; a field left empty keeps its old value. The phone and email
   // are changed only by calling the clinic.
@@ -328,20 +333,19 @@ function DetailsForm({
         e.preventDefault();
         onSubmit(filled);
       }}
-      className="mt-6 space-y-4 border-t border-gray-100 pt-5"
+      className="mt-6 space-y-4 border-t border-gray-100 dark:border-surface-700 pt-5"
     >
-      <h3 className="font-semibold text-gray-900">Bổ sung thông tin</h3>
-      <p className="text-sm text-gray-600">
-        Chỉ điền những thông tin phòng khám cần hoặc cần sửa. Ô để trống sẽ giữ nguyên thông tin bạn đã gửi.
-        Muốn đổi số điện thoại hoặc email, vui lòng gọi phòng khám.
+      <h3 className="font-semibold text-gray-900 dark:text-surface-100">{t('uiScheduling.supplementDetails')}</h3>
+      <p className="text-sm text-gray-600 dark:text-surface-300">
+        {t('uiScheduling.detailsFormHint')}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-          Họ và tên người khám
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
+          {t('uiScheduling.bookingFullName')}
           <input maxLength={200} value={d.fullName} onChange={set("fullName")} className={inputClass} />
         </label>
-        <label className="text-sm font-medium text-gray-700">
-          Ngày sinh
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+          {t('uiScheduling.bookingDob')}
           <input
             type="date"
             max={clinicToday()}
@@ -350,26 +354,26 @@ function DetailsForm({
             className={inputClass}
           />
         </label>
-        <label className="text-sm font-medium text-gray-700">
-          Giới tính
-          <select value={d.gender} onChange={set("gender")} className={inputClass + " bg-white"}>
-            <option value="">Giữ nguyên</option>
-            <option value="UNDISCLOSED">Không muốn nêu</option>
-            <option value="FEMALE">Nữ</option>
-            <option value="MALE">Nam</option>
-            <option value="OTHER">Khác</option>
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+          {t('uiScheduling.gender')}
+          <select value={d.gender} onChange={set("gender")} className={inputClass + " bg-white dark:bg-surface-900"}>
+            <option value="">{t('uiScheduling.keepUnchanged')}</option>
+            <option value="UNDISCLOSED">{t('uiScheduling.genderUndisclosed')}</option>
+            <option value="FEMALE">{t('uiScheduling.genderFemale')}</option>
+            <option value="MALE">{t('uiScheduling.genderMale')}</option>
+            <option value="OTHER">{t('uiScheduling.genderOther')}</option>
           </select>
         </label>
-        <label className="text-sm font-medium text-gray-700">
-          Người giám hộ (nếu khám cho trẻ)
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+          {t('uiScheduling.guardianIfChild')}
           <input value={d.contactPersonName} onChange={set("contactPersonName")} className={inputClass} />
         </label>
-        <label className="text-sm font-medium text-gray-700">
-          SĐT người giám hộ
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+          {t('uiScheduling.guardianPhone')}
           <input type="tel" inputMode="tel" value={d.contactPersonPhone} onChange={set("contactPersonPhone")} className={inputClass} />
         </label>
-        <label className="text-sm font-medium text-gray-700 sm:col-span-2">
-          Lý do khám
+        <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
+          {t('uiScheduling.bookingReason')}
           <textarea rows={3} value={d.reason} onChange={set("reason")} className={inputClass} />
         </label>
       </div>
@@ -377,13 +381,15 @@ function DetailsForm({
         disabled={busy || Object.keys(filled).length === 0}
         className="w-full rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60 sm:w-auto"
       >
-        Gửi thông tin bổ sung
+        {t('uiScheduling.submitDetails')}
       </button>
     </form>
   );
 }
 
 export default function PublicBookingStatusPage() {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language;
   const [params, setParams] = useSearchParams();
   const justBooked = params.get("new") === "1";
   // Prefill the phone this device last booked or looked up with.
@@ -542,6 +548,8 @@ export default function PublicBookingStatusPage() {
 
   const current = status ? shownStatus(status) : "";
   const { visit, state } = status ? stateOf(status) : { visit: undefined, state: undefined };
+  const displayStateKey = visit && status?.appointment ? `bookingVisitState_${status.appointment.status}` : `bookingState_${current}`;
+  const displayStateTextKey = visit && status?.appointment ? `bookingVisitStateText_${status.appointment.status}` : `bookingStateText_${current}`;
   // The visit still holds its (possibly moved) time.
   const visitStands =
     status?.status === "CONFIRMED" &&
@@ -556,17 +564,17 @@ export default function PublicBookingStatusPage() {
         : status.requestedStartAt)
     : "";
   const timeLabel = status?.appointment
-    ? "Giờ hẹn"
+    ? t('uiScheduling.bookingAppointmentTime')
     : ["PROPOSED", "PATIENT_ACCEPTED"].includes(status?.status ?? "") && status?.proposedStartAt
-      ? "Giờ phòng khám đề xuất"
-      : "Giờ bạn chọn";
+      ? t('uiScheduling.bookingProposedTime')
+      : t('uiScheduling.bookingRequestedTime');
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 sm:py-10">
+    <main className="min-h-screen bg-slate-50 dark:bg-surface-950 px-4 py-6 sm:py-10">
       <div className="mx-auto max-w-2xl">
         <PublicTopBar>
           <Link to="/booking" className="text-brand-600 hover:underline">
-            Đặt lịch mới
+            {t('uiScheduling.publicBooking')}
           </Link>
         </PublicTopBar>
 
@@ -575,17 +583,13 @@ export default function PublicBookingStatusPage() {
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
               <div>
-                <h1 className="text-lg font-semibold">Đã gửi yêu cầu đặt lịch</h1>
+                <h1 className="text-lg font-semibold">{t('uiScheduling.bookingSent')}</h1>
                 <p className="mt-1 text-sm">
-                  Mã đặt lịch của bạn là <strong className="font-mono">{status.referenceCode}</strong>.
-                  Lễ tân sẽ liên hệ để xác nhận. Để thay đổi hoặc hủy yêu cầu sau này, hãy dùng đường
-                  link trong email xác nhận (nếu bạn có nhập email) hoặc lưu đường link bên dưới; tra
-                  cứu bằng số điện thoại chỉ xem được tình trạng.
+                  {t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
                 </p>
                 {mailFailed && (
                   <p role="alert" className="mt-2 rounded-md bg-amber-100 p-2 text-sm text-amber-900">
-                    Chưa gửi được email xác nhận tới địa chỉ bạn nhập (có thể địa chỉ bị gõ sai). Hãy
-                    lưu đường link bên dưới; lễ tân sẽ gọi điện cho bạn.
+                    {t('uiScheduling.bookingEmailFailed')}
                   </p>
                 )}
                 {manageLink && (
@@ -599,11 +603,10 @@ export default function PublicBookingStatusPage() {
         )}
 
         {!status && results && results.length > 1 ? (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-            <h1 className="text-2xl font-semibold text-gray-900">Lịch hẹn của bạn</h1>
-            <p className="mt-2 text-gray-600">
-              Số <span className="font-medium text-gray-900">{phone}</span> có {results.length} yêu cầu đặt
-              lịch. Chọn một lịch để xem chi tiết.
+          <section className="rounded-2xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiScheduling.yourAppointment')}</h1>
+            <p className="mt-2 text-gray-600 dark:text-surface-300">
+              {t('uiScheduling.bookingResultsFor', { phone, count: results.length })}
             </p>
             <ul className="mt-6 space-y-3">
               {results.map((item, index) => {
@@ -618,22 +621,22 @@ export default function PublicBookingStatusPage() {
                     <button
                       type="button"
                       onClick={() => choose(item)}
-                      className="w-full rounded-xl border border-gray-200 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
+                      className="w-full rounded-xl border border-gray-200 dark:border-surface-700 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-semibold capitalize text-gray-900">{when(itemTime)}</span>
+                        <span className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(itemTime, language)}</span>
                         <span
                           className={
                             "rounded-full border px-2.5 py-0.5 text-xs font-medium " +
                             TONE_STYLE[itemState?.tone ?? "wait"].box
                           }
                         >
-                          {itemState?.title ?? item.status}
+                          {itemState ? t(`uiScheduling.bookingState_${item.status}`) : item.status}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-gray-600">
+                      <p className="mt-1 text-sm text-gray-600 dark:text-surface-300">
                         {item.patientInitials
-                          ? "Người khám: " + item.patientInitials
+                          ? t('uiScheduling.bookingPatientInitials', { initials: item.patientInitials })
                           : (item.service?.name ?? "—") +
                             (item.dentist?.fullName ? " · " + item.dentist.fullName : "")}
                       </p>
@@ -643,16 +646,16 @@ export default function PublicBookingStatusPage() {
               })}
             </ul>
             <button type="button" onClick={reset} className="mt-6 text-sm text-brand-600 hover:underline">
-              ← Tra cứu số điện thoại khác
+              ← {t('uiScheduling.lookupAnotherPhone')}
             </button>
           </section>
         ) : !status ? (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-            <h1 className="text-2xl font-semibold text-gray-900">Tra cứu lịch hẹn</h1>
-            <p className="mt-2 text-gray-600">Nhập số điện thoại bạn đã dùng khi đặt lịch.</p>
+          <section className="rounded-2xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiScheduling.bookingLookup')}</h1>
+            <p className="mt-2 text-gray-600 dark:text-surface-300">{t('uiScheduling.bookingLookupHint')}</p>
             <form onSubmit={lookup} className="mt-6 space-y-4">
-              <label className="block text-sm font-medium text-gray-700">
-                Số điện thoại
+              <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
+                {t('uiScheduling.phoneNumber')}
                 <input
                   required
                   type="tel"
@@ -673,25 +676,25 @@ export default function PublicBookingStatusPage() {
                 disabled={busy}
                 className="w-full rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
               >
-                {busy ? "Đang tra cứu…" : "Xem lịch hẹn"}
+                {busy ? t('uiScheduling.bookingLookingUp') : t('uiScheduling.viewAppointments')}
               </button>
             </form>
 
-            <div className="mt-8 border-t border-gray-100 pt-5 text-sm text-gray-600">
-              <p>Không tìm thấy lịch của bạn? Gọi hoặc nhắn lễ tân để được hỗ trợ.</p>
+            <div className="mt-8 border-t border-gray-100 dark:border-surface-700 pt-5 text-sm text-gray-600 dark:text-surface-300">
+              <p>{t('uiScheduling.noAppointmentLookup')}</p>
               <div className="mt-3">
                 <ContactButtons />
               </div>
             </div>
           </section>
         ) : (
-          <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-            {!justBooked && <h1 className="sr-only">Tình trạng lịch hẹn</h1>}
+          <section className="rounded-2xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
+            {!justBooked && <h1 className="sr-only">{t('uiScheduling.bookingStatus')}</h1>}
             {status.referenceCode && access && (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-gray-500">
-                  Mã đặt lịch{" "}
-                  <span className="font-mono text-base font-semibold text-gray-900">{status.referenceCode}</span>
+                <p className="text-sm text-gray-500 dark:text-surface-400">
+                  {t('uiScheduling.bookingReference')}{" "}
+                  <span className="font-mono text-base font-semibold text-gray-900 dark:text-surface-100">{status.referenceCode}</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <CopyCode code={status.referenceCode} />
@@ -699,9 +702,9 @@ export default function PublicBookingStatusPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => void open(status.referenceCode!, access)}
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-surface-700 px-2 py-1 text-xs font-medium text-gray-700 dark:text-surface-200 hover:bg-gray-50 disabled:opacity-60"
                   >
-                    <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} aria-hidden /> Cập nhật
+                    <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} aria-hidden /> {t('uiScheduling.refresh')}
                   </button>
                 </div>
               </div>
@@ -711,8 +714,8 @@ export default function PublicBookingStatusPage() {
               <div className="flex items-start gap-3">
                 <ToneIcon className="mt-0.5 h-6 w-6 shrink-0" aria-hidden />
                 <div>
-                  <h2 className="text-lg font-semibold">{state?.title ?? status.status}</h2>
-                  {state && <p className="mt-1 text-sm leading-relaxed">{state.text}</p>}
+                  <h2 className="text-lg font-semibold">{state ? t(`uiScheduling.${displayStateKey}`) : status.status}</h2>
+                  {state && <p className="mt-1 text-sm leading-relaxed">{t(`uiScheduling.${displayStateTextKey}`)}</p>}
                 </div>
               </div>
             </div>
@@ -728,52 +731,52 @@ export default function PublicBookingStatusPage() {
 
             {(!visit || visitStands) && state && state.step > 0 && <Progress step={state.step} />}
 
-            <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100">
+            <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100 dark:border-surface-700">
               <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                <dt className="text-sm text-gray-500">{timeLabel}</dt>
-                <dd className="font-semibold capitalize text-gray-900">{when(time)}</dd>
+                <dt className="text-sm text-gray-500 dark:text-surface-400">{timeLabel}</dt>
+                <dd className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(time, language)}</dd>
               </div>
               {status.patientInitials ? (
                 // Shown by phone alone: who it is for, masked; no service or dentist.
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                  <dt className="text-sm text-gray-500">Người khám</dt>
-                  <dd className="font-medium text-gray-900">{status.patientInitials}</dd>
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingPatient')}</dt>
+                  <dd className="font-medium text-gray-900 dark:text-surface-100">{status.patientInitials}</dd>
                 </div>
               ) : (
                 <>
                   <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                    <dt className="text-sm text-gray-500">Dịch vụ</dt>
-                    <dd className="font-medium text-gray-900">
+                    <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.service')}</dt>
+                    <dd className="font-medium text-gray-900 dark:text-surface-100">
                       {status.service?.name ?? "—"}
                       {status.service?.durationMinutes ? (
-                        <span className="font-normal text-gray-500"> · khoảng {status.service.durationMinutes} phút</span>
+                        <span className="font-normal text-gray-500 dark:text-surface-400"> · {t('uiScheduling.approximatelyMinutes', { minutes: status.service.durationMinutes })}</span>
                       ) : null}
                     </dd>
                   </div>
                   <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                    <dt className="text-sm text-gray-500">Bác sĩ</dt>
-                    <dd className="font-medium text-gray-900">{status.dentist?.fullName ?? "Phòng khám sắp xếp"}</dd>
+                    <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.dentist')}</dt>
+                    <dd className="font-medium text-gray-900 dark:text-surface-100">{status.dentist?.fullName ?? t('uiScheduling.clinicWillArrange')}</dd>
                   </div>
                 </>
               )}
               {status.status === "PROPOSED" && status.proposedStartAt && (
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                  <dt className="text-sm text-gray-500">Giờ bạn chọn ban đầu</dt>
-                  <dd className="capitalize text-gray-500 line-through">{when(status.requestedStartAt)}</dd>
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingOriginalTime')}</dt>
+                  <dd className="capitalize text-gray-500 dark:text-surface-400 line-through">{when(status.requestedStartAt, language)}</dd>
                 </div>
               )}
               {clinic.address && (
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                  <dt className="text-sm text-gray-500">Địa chỉ</dt>
-                  <dd className="text-gray-900 sm:text-right">{clinic.address}</dd>
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingAddress')}</dt>
+                  <dd className="text-gray-900 dark:text-surface-100 sm:text-right">{clinic.address}</dd>
                 </div>
               )}
             </dl>
 
             {status.responseMessage && (
-              <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Lời nhắn từ phòng khám</p>
-                <p className="mt-1 text-gray-800">{status.responseMessage}</p>
+              <div className="mt-4 rounded-xl bg-slate-50 dark:bg-surface-950 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-surface-400">{t('uiScheduling.clinicMessage')}</p>
+                <p className="mt-1 text-gray-800 dark:text-surface-200">{status.responseMessage}</p>
               </div>
             )}
 
@@ -785,8 +788,7 @@ export default function PublicBookingStatusPage() {
 
             {ACTIVE.includes(current) && !canManage && (
               <p className="mt-4 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
-                Trang này chỉ xem được tình trạng. Để thay đổi (đồng ý hoặc không đồng ý giờ mới, bổ
-                sung thông tin, hủy yêu cầu), mở đường link trong email xác nhận hoặc gọi phòng khám.
+                  {t('uiScheduling.bookingReadOnlyHint')}
               </p>
             )}
 
@@ -803,12 +805,12 @@ export default function PublicBookingStatusPage() {
                           { proposedStartAt: status.proposedStartAt ?? undefined },
                           { headers: headers(access!) },
                         ),
-                      "Không xác nhận được giờ mới.",
+                      t('uiScheduling.errorAcceptProposal'),
                     )
                   }
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
                 >
-                  <CalendarCheck className="h-5 w-5" aria-hidden /> Đồng ý giờ mới
+                  <CalendarCheck className="h-5 w-5" aria-hidden /> {t('uiScheduling.acceptNewTime')}
                 </button>
               )}
               {current === "PROPOSED" && canManage && !declining && (
@@ -816,9 +818,9 @@ export default function PublicBookingStatusPage() {
                   type="button"
                   disabled={busy}
                   onClick={() => setDeclining(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-gray-300 px-5 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-gray-300 dark:border-surface-600 px-5 py-3 font-semibold text-gray-700 dark:text-surface-200 hover:bg-gray-50 disabled:opacity-60"
                 >
-                  Không đồng ý giờ này, nhờ lễ tân chọn giờ khác
+                  {t('uiScheduling.declineNewTime')}
                 </button>
               )}
               {visitStands && (
@@ -828,7 +830,7 @@ export default function PublicBookingStatusPage() {
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600"
                 >
-                  <CalendarPlus className="h-5 w-5" aria-hidden /> Thêm vào Google Calendar
+                  <CalendarPlus className="h-5 w-5" aria-hidden /> {t('uiScheduling.addGoogleCalendar')}
                 </a>
               )}
               {["DECLINED", "CANCELLED", "EXPIRED"].includes(current) || (visit && !visitStands) ? (
@@ -836,21 +838,21 @@ export default function PublicBookingStatusPage() {
                   to="/booking"
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600"
                 >
-                  <CalendarCheck className="h-5 w-5" aria-hidden /> Đặt lịch mới
+                  <CalendarCheck className="h-5 w-5" aria-hidden /> {t('uiScheduling.publicBooking')}
                 </Link>
               ) : null}
             </div>
 
             {current === "PROPOSED" && canManage && declining && (
-              <div className="mt-4 rounded-xl border border-gray-200 bg-slate-50 p-4 text-sm">
-                <label className="block font-medium text-gray-700">
-                  Giờ nào phù hợp với bạn? (không bắt buộc)
+              <div className="mt-4 rounded-xl border border-gray-200 dark:border-surface-700 bg-slate-50 dark:bg-surface-950 p-4 text-sm">
+                <label className="block font-medium text-gray-700 dark:text-surface-200">
+                  {t('uiScheduling.bookingPreferredTimeHint')}
                   <textarea
                     rows={2}
                     maxLength={900}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="Ví dụ: tôi chỉ rảnh buổi chiều các ngày trong tuần"
+                    placeholder={t('uiScheduling.bookingPreferredTimePlaceholder')}
                     className={inputClass}
                   />
                 </label>
@@ -869,19 +871,19 @@ export default function PublicBookingStatusPage() {
                             },
                             { headers: headers(access!) },
                           ),
-                        "Không gửi được yêu cầu chọn giờ khác.",
+                        t('uiScheduling.errorDeclineProposal'),
                       )
                     }
                     className="rounded-full bg-brand-500 px-4 py-2 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
                   >
-                    Gửi cho lễ tân
+                    {t('uiScheduling.sendToReception')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeclining(false)}
-                    className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                    className="rounded-full border border-gray-300 dark:border-surface-600 bg-white dark:bg-surface-900 px-4 py-2 font-medium text-gray-700 dark:text-surface-200"
                   >
-                    Quay lại
+                    {t('uiScheduling.back')}
                   </button>
                 </div>
               </div>
@@ -893,14 +895,14 @@ export default function PublicBookingStatusPage() {
                 onSubmit={(details) =>
                   void act(
                     () => api.put<{ data: Status }>(path("/details"), details, { headers: headers(access!) }),
-                    "Không cập nhật được thông tin.",
+                    t('uiScheduling.errorUpdateDetails'),
                   )
                 }
               />
             )}
 
-            <div className="mt-8 border-t border-gray-100 pt-5">
-              <p className="text-sm text-gray-600">Cần đổi giờ hoặc có thắc mắc? Liên hệ lễ tân:</p>
+            <div className="mt-8 border-t border-gray-100 dark:border-surface-700 pt-5">
+              <p className="text-sm text-gray-600 dark:text-surface-300">{t('uiScheduling.bookingContactHint')}</p>
               <div className="mt-3">
                 <ContactButtons />
               </div>
@@ -912,16 +914,16 @@ export default function PublicBookingStatusPage() {
                   <button
                     type="button"
                     onClick={() => setConfirmCancel(true)}
-                    className="text-gray-500 underline-offset-2 hover:text-red-600 hover:underline"
+                    className="text-gray-500 dark:text-surface-400 underline-offset-2 hover:text-red-600 hover:underline"
                   >
-                    Tôi muốn hủy yêu cầu này
+                    {t('uiScheduling.withdrawRequest')}
                   </button>
                 ) : (
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <p className="font-medium text-red-800">Hủy yêu cầu đặt lịch {status.referenceCode}?</p>
-                    <p className="mt-1 text-red-700">Sau khi hủy, bạn cần đặt lịch mới nếu muốn khám.</p>
+                    <p className="font-medium text-red-800">{t('uiScheduling.confirmWithdraw', { reference: status.referenceCode })}</p>
+                    <p className="mt-1 text-red-700">{t('uiScheduling.cancelFollowup')}</p>
                     <label className="mt-3 block text-red-800">
-                      Lý do (không bắt buộc)
+                      {t('uiScheduling.optionalReason')}
                       <textarea
                         rows={2}
                         maxLength={1000}
@@ -942,19 +944,19 @@ export default function PublicBookingStatusPage() {
                                 { message: note.trim() || undefined },
                                 { headers: headers(access!) },
                               ),
-                            "Không hủy được yêu cầu.",
+                            t('uiScheduling.errorWithdraw'),
                           )
                         }
                         className="rounded-full bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
                       >
-                        Hủy yêu cầu
+                        {t('uiScheduling.withdrawRequestAction')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmCancel(false)}
-                        className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                        className="rounded-full border border-gray-300 dark:border-surface-600 bg-white dark:bg-surface-900 px-4 py-2 font-medium text-gray-700 dark:text-surface-200"
                       >
-                        Giữ lại
+                        {t('uiScheduling.keepRequest')}
                       </button>
                     </div>
                   </div>
@@ -965,27 +967,25 @@ export default function PublicBookingStatusPage() {
             {visitStands && canManage && status.cancelUntil && (
               <div className="mt-6 text-sm">
                 {new Date(status.cancelUntil).getTime() <= Date.now() ? (
-                  <p className="text-gray-600">
-                    Đã gần đến giờ hẹn nên không hủy trực tuyến được. Nếu không đến được, vui lòng gọi
-                    phòng khám.
+                  <p className="text-gray-600 dark:text-surface-300">
+                    {t('uiScheduling.cannotCancelOnline')}
                   </p>
                 ) : !cancellingVisit ? (
                   <button
                     type="button"
                     onClick={() => setCancellingVisit(true)}
-                    className="text-gray-500 underline-offset-2 hover:text-red-600 hover:underline"
+                    className="text-gray-500 dark:text-surface-400 underline-offset-2 hover:text-red-600 hover:underline"
                   >
-                    Tôi không đến được, hủy lịch hẹn này
+                    {t('uiScheduling.cancelAppointmentRequest')}
                   </button>
                 ) : (
                   <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                    <p className="font-medium text-red-800">Hủy lịch hẹn {when(time)}?</p>
+                    <p className="font-medium text-red-800">{t('uiScheduling.confirmCancelVisit', { time: when(time, language) })}</p>
                     <p className="mt-1 text-red-700">
-                      Giờ khám sẽ được nhường cho người khác. Muốn đổi sang giờ khác, hãy gọi phòng khám
-                      thay vì hủy.
+                      {t('uiScheduling.cancelVisitNotice')}
                     </p>
                     <label className="mt-3 block text-red-800">
-                      Lý do (không bắt buộc)
+                      {t('uiScheduling.optionalReason')}
                       <textarea
                         rows={2}
                         maxLength={1000}
@@ -1006,19 +1006,19 @@ export default function PublicBookingStatusPage() {
                                 { message: note.trim() || undefined },
                                 { headers: headers(access!) },
                               ),
-                            "Không hủy được lịch hẹn. Vui lòng gọi phòng khám.",
+                            t('uiScheduling.errorCancelVisit'),
                           )
                         }
                         className="rounded-full bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
                       >
-                        Hủy lịch hẹn
+                        {t('uiScheduling.cancelAppointment')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setCancellingVisit(false)}
-                        className="rounded-full border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700"
+                        className="rounded-full border border-gray-300 dark:border-surface-600 bg-white dark:bg-surface-900 px-4 py-2 font-medium text-gray-700 dark:text-surface-200"
                       >
-                        Giữ lịch
+                        {t('uiScheduling.keepAppointment')}
                       </button>
                     </div>
                   </div>
@@ -1036,18 +1036,18 @@ export default function PublicBookingStatusPage() {
                   }}
                   className="text-brand-600 hover:underline"
                 >
-                  ← Các lịch khác của số này
+                  ← {t('uiScheduling.otherBookingsForPhone')}
                 </button>
               )}
               <button type="button" onClick={reset} className="text-brand-600 hover:underline">
-                Tra cứu số điện thoại khác
+                {t('uiScheduling.lookupAnotherPhone')}
               </button>
             </div>
           </section>
         )}
 
-        <p className="mt-6 text-center text-xs text-gray-500">
-          Trang này chỉ hiển thị tình trạng đặt lịch, không hiển thị hồ sơ khám.
+        <p className="mt-6 text-center text-xs text-gray-500 dark:text-surface-400">
+          {t('uiScheduling.bookingPrivacyNote')}
         </p>
       </div>
     </main>

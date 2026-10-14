@@ -4,6 +4,7 @@
 // if the bundle grows). This file owns: state, data fetching, layout.
 // =============================================================================
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/features/dashboard/dashboardApi';
 import { useTodayAppointments } from '@/features/appointments/appointmentApi';
@@ -29,6 +30,7 @@ import {
 } from './dashboard/lazyCards';
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const [range, setRange] = useState<TimeRange>('today');
 
   const dateRange = useMemo(() => resolveRange(range), [range]);
@@ -180,7 +182,7 @@ export default function DashboardPage() {
   const aiPatientOptions = (todayAppointments?.data ?? [])
     .map((a) => ({
       id: a.patientId,
-      label: a.patientName ? `${a.patientName} (${a.startsAt ? formatTimeOnly(a.startsAt) : ''})` : 'Bệnh nhân',
+      label: a.patientName ? `${a.patientName} (${a.startsAt ? formatTimeOnly(a.startsAt) : ''})` : t('uiEntry.dashboard.patients'),
     }))
     .filter((opt) => {
       if (!opt.id || seenPatientIds.has(opt.id)) return false;

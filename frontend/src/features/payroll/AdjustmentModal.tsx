@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,11 +19,11 @@ import { SELF_APPROVAL_REASON_MIN, type PayrollLineItem, type PayrollAdjustmentT
 const schema = z
   .object({
     type: z.enum(['BONUS', 'PENALTY', 'DEDUCTION', 'MANUAL_OVERRIDE']),
-    amountVnd: z.coerce.number().int().refine((v) => v !== 0, 'Số tiền phải khác 0'),
-    reason: z.string().min(5, 'Lý do tối thiểu 5 ký tự').max(500, 'Lý do tối đa 500 ký tự'),
+    amountVnd: z.coerce.number().int().refine((v) => v !== 0, 'uiWorkforce.payrollAdjustmentAmountNonZero'),
+    reason: z.string().min(5, 'uiWorkforce.payrollReasonMinLength').max(500, 'uiWorkforce.payrollReasonMaxLength'),
   })
   .refine((v) => v.type !== 'MANUAL_OVERRIDE' || v.reason.length >= 50, {
-    message: 'MANUAL_OVERRIDE cần lý do ≥ 50 ký tự (BR-PAY-018)',
+    message: 'uiWorkforce.payrollManualOverrideReasonMinLength',
     path: ['reason'],
   });
 
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
@@ -57,9 +59,7 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
     if (!lineItem) return;
     setServerError(null);
     if (isOwnLine && selfReason.trim().length < SELF_APPROVAL_REASON_MIN) {
-      setServerError(
-        `Bạn đang điều chỉnh lương của chính mình — nhập lý do tự duyệt (ít nhất ${SELF_APPROVAL_REASON_MIN} ký tự).`,
-      );
+      setServerError(t('uiWorkforce.payrollSelfApprovalRequired', { count: SELF_APPROVAL_REASON_MIN }));
       return;
     }
     try {
@@ -70,21 +70,21 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
         reason: values.reason,
         ...(isOwnLine && { selfApprovalReason: selfReason.trim() }),
       });
-      notify.success('Đã thêm điều chỉnh');
+      notify.success(t('uiWorkforce.payrollAdjustmentCreated'));
       reset();
       setSelfReason('');
       onClose();
     } catch (err) {
-      setServerError(getApiErrorMessage(err, 'Không thể thêm điều chỉnh'));
+      setServerError(getApiErrorMessage(err, t('uiWorkforce.payrollAdjustmentCreateError')));
     }
   });
 
-  const signHelp = useMemo(() => {
-    if (type === 'BONUS') return 'Số dương: cộng vào net pay.';
-    if (type === 'PENALTY') return 'Nhập số dương — hệ thống sẽ trừ khỏi net pay.';
-    if (type === 'DEDUCTION') return 'Số dương sẽ được trừ khỏi net pay (vd: tạm ứng).';
-    return 'MANUAL_OVERRIDE — ghi đè thủ công, lý do phải ≥ 50 ký tự (BR-PAY-018).';
-  }, [type]);
+  const signHelp = t({
+    BONUS: 'uiWorkforce.payrollBonusHelp',
+    PENALTY: 'uiWorkforce.payrollPenaltyHelp',
+    DEDUCTION: 'uiWorkforce.payrollDeductionHelp',
+    MANUAL_OVERRIDE: 'uiWorkforce.payrollManualHelp',
+  }[type]);
 
   if (!lineItem) return null;
 
@@ -92,16 +92,16 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Thêm điều chỉnh"
-      description={`Bác sĩ: ${lineItem.dentistName} — Net hiện tại: ${formatVnd(lineItem.netPayVnd)}`}
+      title={t('uiWorkforce.payrollAddAdjustment')}
+      description={t('uiWorkforce.payrollAdjustmentDescription', { name: lineItem.dentistName, amount: formatVnd(lineItem.netPayVnd) })}
       size="md"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiWorkforce.payrollCancel')}
           </Button>
           <Button onClick={onSubmit} isLoading={isSubmitting || adj.isPending}>
-            Lưu điều chỉnh
+            {t('uiWorkforce.payrollSaveAdjustment')}
           </Button>
         </>
       }
@@ -109,41 +109,40 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
       <form onSubmit={onSubmit} className="space-y-3">
         {serverError && <Alert variant="error">{serverError}</Alert>}
         <Select
-          label="Loại điều chỉnh"
+          label={t('uiWorkforce.payrollAdjustmentType')}
           {...register('type')}
-          error={errors.type?.message}
+          error={errors.type?.message ? t(errors.type.message) : undefined}
           options={[
-            { value: 'BONUS', label: 'Thưởng (+)' },
-            { value: 'PENALTY', label: 'Phạt (−)' },
-            { value: 'DEDUCTION', label: 'Khấu trừ (−)' },
-            { value: 'MANUAL_OVERRIDE', label: 'Sửa tay (override)' },
+            { value: 'BONUS', label: t('uiWorkforce.payrollAdjustmentBonus') },
+            { value: 'PENALTY', label: t('uiWorkforce.payrollAdjustmentPenalty') },
+            { value: 'DEDUCTION', label: t('uiWorkforce.payrollAdjustmentDeduction') },
+            { value: 'MANUAL_OVERRIDE', label: t('uiWorkforce.payrollAdjustmentManual') },
           ]}
         />
         <Input
           type="number"
-          label="Số tiền (VND)"
+          label={t('uiWorkforce.payrollAmountVnd')}
           {...register('amountVnd', { valueAsNumber: true })}
-          error={errors.amountVnd?.message}
+          error={errors.amountVnd?.message ? t(errors.amountVnd.message) : undefined}
           hint={signHelp}
           required
         />
         <Textarea
-          label="Lý do"
-          placeholder="Mô tả lý do điều chỉnh..."
+          label={t('uiWorkforce.payrollReason')}
+          placeholder={t('uiWorkforce.payrollAdjustmentReasonPlaceholder')}
           rows={3}
           {...register('reason')}
-          error={errors.reason?.message}
+          error={errors.reason?.message ? t(errors.reason.message) : undefined}
           required
         />
         {isOwnLine && (
           <>
-            <Alert variant="warning" title="Bạn đang điều chỉnh lương của chính mình">
-              Chỉ được làm khi phòng khám không có quản trị viên nào khác. Thao tác được ghi nhật ký riêng
-              (PAYROLL_SELF_APPROVED).
+            <Alert variant="warning" title={t('uiWorkforce.payrollSelfApprovalTitle')}>
+              {t('uiWorkforce.payrollSelfApprovalDescription')}
             </Alert>
             <Textarea
-              label="Lý do tự duyệt"
-              placeholder="VD: Phòng khám chỉ có một quản trị viên"
+              label={t('uiWorkforce.payrollSelfApprovalReason')}
+              placeholder={t('uiWorkforce.payrollSelfApprovalPlaceholder')}
               rows={2}
               value={selfReason}
               onChange={(e) => setSelfReason(e.target.value)}
@@ -152,7 +151,7 @@ export function AdjustmentModal({ open, onClose, periodId, lineItem }: Props) {
           </>
         )}
         <Alert variant="warning">
-          Điều chỉnh sẽ được audit log. MANUAL_OVERRIDE sẽ được log riêng với severity=HIGH.
+          {t('uiWorkforce.payrollAdjustmentAuditNotice')}
         </Alert>
       </form>
     </Modal>

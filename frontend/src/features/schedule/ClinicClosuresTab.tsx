@@ -10,6 +10,7 @@ import { useClinicClosures, useDeleteClinicClosure, useSaveClinicClosure } from 
 import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { hasImpact } from './format';
 import type { ClinicClosure, ClinicClosureResult } from '@/types/schedule';
+import { useTranslation } from 'react-i18next';
 
 const viDate = (value: string) => value.slice(0, 10).split('-').reverse().join('/');
 
@@ -19,6 +20,7 @@ const viDate = (value: string) => value.slice(0, 10).split('-').reverse().join('
  * listed for the front desk — never cancelled automatically.
  */
 export function ClinicClosuresTab() {
+  const { t } = useTranslation();
   const { data: closures = [], isLoading } = useClinicClosures();
   const canManage = useAuthStore((s) => s.hasPermission('clinic_closure.manage'));
   const remove = useDeleteClinicClosure();
@@ -32,12 +34,12 @@ export function ClinicClosuresTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-600">
-          Trong những ngày này phòng khám đóng cửa với mọi bác sĩ; không nhận đặt lịch (kể cả đặt online).
+        <p className="text-sm text-gray-600 dark:text-surface-300">
+          {t('uiScheduling.clinicClosureIntro')}
         </p>
         {canManage && (
           <Button onClick={() => setEditing('new')}>
-            <Plus className="h-4 w-4" /> Thêm ngày nghỉ
+            <Plus className="h-4 w-4" /> {t('uiScheduling.addClinicClosure')}
           </Button>
         )}
       </div>
@@ -47,9 +49,9 @@ export function ClinicClosuresTab() {
       ) : closures.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<CalendarOff className="h-10 w-10 text-gray-400" />}
-            title="Chưa có ngày nghỉ sắp tới"
-            description="Thêm các ngày phòng khám nghỉ (Tết, lễ) để hệ thống không nhận lịch hẹn vào những ngày đó."
+            icon={<CalendarOff className="h-10 w-10 text-gray-400 dark:text-surface-500" />}
+            title={t('uiScheduling.noUpcomingClosures')}
+            description={t('uiScheduling.noUpcomingClosuresHint')}
           />
         </Card>
       ) : (
@@ -58,30 +60,30 @@ export function ClinicClosuresTab() {
             <table className="table-base">
               <thead>
                 <tr>
-                  <th>Từ ngày</th>
-                  <th>Đến ngày</th>
-                  <th>Lý do</th>
-                  <th>Người tạo</th>
+                  <th>{t('uiScheduling.startDate')}</th>
+                  <th>{t('uiScheduling.endDate')}</th>
+                  <th>{t('uiScheduling.reason')}</th>
+                  <th>{t('uiScheduling.createdBy')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {closures.map((c) => (
                   <tr key={c.id}>
-                    <td className="whitespace-nowrap font-medium text-gray-900">
+                    <td className="whitespace-nowrap font-medium text-gray-900 dark:text-surface-100">
                       {viDate(c.startDate)}
-                      {c.startTime && <span className="ml-1 text-xs text-gray-500">từ {c.startTime}</span>}
+                      {c.startTime && <span className="ml-1 text-xs text-gray-500 dark:text-surface-400">{t('uiScheduling.fromTime', { time: c.startTime })}</span>}
                     </td>
                     <td className="whitespace-nowrap">{viDate(c.endDate)}</td>
                     <td>{c.reason}</td>
-                    <td className="text-gray-500">{c.createdByName ?? '—'}</td>
+                    <td className="text-gray-500 dark:text-surface-400">{c.createdByName ?? '—'}</td>
                     <td className="whitespace-nowrap text-right">
                       {canManage && (
                         <>
-                          <Button size="sm" variant="ghost" aria-label={`Sửa ngày nghỉ ${viDate(c.startDate)}`} onClick={() => setEditing(c)}>
+                          <Button size="sm" variant="ghost" aria-label={t('uiScheduling.editClosureOn', { date: viDate(c.startDate) })} onClick={() => setEditing(c)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="ghost" aria-label={`Xóa ngày nghỉ ${viDate(c.startDate)}`} onClick={() => setDeleting(c)}>
+                          <Button size="sm" variant="ghost" aria-label={t('uiScheduling.deleteClosureOn', { date: viDate(c.startDate) })} onClick={() => setDeleting(c)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -110,15 +112,15 @@ export function ClinicClosuresTab() {
       <ConfirmDialog
         open={deleting !== null}
         onClose={() => setDeleting(null)}
-        title={begun ? 'Mở lại phòng khám từ hôm nay' : 'Xóa ngày nghỉ phòng khám'}
+        title={begun ? t('uiScheduling.reopenClinicToday') : t('uiScheduling.deleteClinicClosure')}
         description={
           deleting
             ? begun
-              ? `Đợt nghỉ ${viDate(deleting.startDate)}–${viDate(deleting.endDate)} (${deleting.reason}) đã bắt đầu: các ngày đã nghỉ được giữ làm lịch sử, phòng khám mở lại từ hôm nay.`
-              : `Mở lại lịch ${viDate(deleting.startDate)}–${viDate(deleting.endDate)} (${deleting.reason})? Các bác sĩ sẽ nhận lịch hẹn theo lịch làm việc như bình thường.`
+              ? t('uiScheduling.reopenClinicConfirm', { start: viDate(deleting.startDate), end: viDate(deleting.endDate), reason: deleting.reason })
+              : t('uiScheduling.deleteClinicClosureConfirm', { start: viDate(deleting.startDate), end: viDate(deleting.endDate), reason: deleting.reason })
             : undefined
         }
-        confirmText={begun ? 'Mở lại từ hôm nay' : 'Xóa'}
+        confirmText={begun ? t('uiScheduling.reopenFromToday') : t('uiScheduling.delete')}
         variant="danger"
         isLoading={remove.isPending}
         onConfirm={() => {
@@ -128,17 +130,17 @@ export function ClinicClosuresTab() {
               setDeleting(null);
               notify.success(
                 begun
-                  ? 'Phòng khám mở lại từ hôm nay; các ngày đã nghỉ vẫn được ghi nhận'
-                  : 'Đã xóa ngày nghỉ; lịch làm việc trở lại bình thường',
+                  ? t('uiScheduling.clinicReopenedToast')
+                  : t('uiScheduling.closureDeletedToast'),
               );
             },
-            onError: (err) => notify.error(getApiErrorMessage(err, 'Không xóa được ngày nghỉ')),
+            onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.deleteClosureError'))),
           });
         }}
       />
       <AffectedAppointmentsModal
         open={impact !== null}
-        title="Lịch hẹn rơi vào ngày nghỉ"
+        title={t('uiScheduling.appointmentsOnClosure')}
         appointments={impact?.affectedAppointments ?? []}
         bookingRequests={impact?.affectedBookingRequests ?? []}
         waitingPatients={impact?.waitingPatients ?? []}
@@ -146,9 +148,7 @@ export function ClinicClosuresTab() {
       />
       {impact && (impact.openEncounters?.length ?? 0) > 0 && (
         <Alert variant="warning" onClose={() => setImpact(null)}>
-          Còn {impact.openEncounters!.length} phiên khám chưa kết thúc (
-          {impact.openEncounters!.map((e) => `${e.patientName ?? '—'} – ${e.dentistName ?? '—'}`).join('; ')}). Nhắc
-          bác sĩ kết thúc trước khi nghỉ để lập hóa đơn kịp thời.
+          {t('uiScheduling.openEncountersWarning', { count: impact.openEncounters!.length, encounters: impact.openEncounters!.map((e) => `${e.patientName ?? '—'} – ${e.dentistName ?? '—'}`).join('; ') })}
         </Alert>
       )}
     </div>
@@ -166,6 +166,7 @@ function ClosureModal({
   onClose: () => void;
   onSaved: (result: ClinicClosureResult) => void;
 }) {
+  const { t } = useTranslation();
   const save = useSaveClinicClosure();
   // A closure already running keeps its first day.
   const started = closure !== null && closure.startDate <= today;
@@ -176,7 +177,7 @@ function ClosureModal({
   const [startTime, setStartTime] = useState(closure?.startTime ?? '');
 
   return (
-    <Modal open onClose={onClose} title={closure ? 'Sửa ngày nghỉ phòng khám' : 'Thêm ngày nghỉ phòng khám'} size="sm">
+    <Modal open onClose={onClose} title={closure ? t('uiScheduling.editClinicClosure') : t('uiScheduling.addClinicClosureTitle')} size="sm">
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -185,17 +186,17 @@ function ClosureModal({
             { id: closure?.id, startDate, endDate, reason: reason.trim(), ...(startTime ? { startTime } : {}) },
             {
               onSuccess: (result) => {
-                notify.success('Đã lưu ngày nghỉ phòng khám');
+                notify.success(t('uiScheduling.closureSavedToast'));
                 onSaved(result);
               },
-              onError: (err) => notify.error(getApiErrorMessage(err, 'Không lưu được ngày nghỉ')),
+              onError: (err) => notify.error(getApiErrorMessage(err, t('uiScheduling.saveClosureError'))),
             },
           );
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <DatePicker
-            label="Từ ngày"
+            label={t('uiScheduling.startDate')}
             required
             min={started ? undefined : today}
             disabled={started}
@@ -206,47 +207,46 @@ function ClosureModal({
             }}
           />
           <DatePicker
-            label="Đến ngày (tính cả ngày này)"
+            label={t('uiScheduling.endDateInclusive')}
             required
             min={startDate}
             value={endDate}
             onChange={(value) => setEndDate(value)}
-            error={endDate < startDate ? 'Phải từ ngày bắt đầu trở đi' : undefined}
+            error={endDate < startDate ? t('uiScheduling.endDateAfterStartError') : undefined}
           />
         </div>
         <Input
-          label="Nghỉ từ giờ (ngày đầu, để trống = cả ngày)"
+          label={t('uiScheduling.closureStartTime')}
           type="time"
           disabled={started}
           value={startTime}
           onChange={(e) => setStartTime(e.target.value)}
-          hint="VD mất điện từ 14:00: buổi sáng vẫn làm, chỉ đóng từ giờ này."
+          hint={t('uiScheduling.closureStartTimeHint')}
         />
         <Textarea
-          label="Lý do (hiển thị cho khách)"
-          hint="Bệnh nhân đặt lịch online thấy: “Phòng khám nghỉ: {lý do}”."
+          label={t('uiScheduling.reasonVisibleToPatients')}
+          hint={t('uiScheduling.closureReasonHint')}
           required
           minLength={3}
           maxLength={500}
           rows={2}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="VD: Nghỉ Tết Nguyên đán, Giỗ Tổ Hùng Vương"
+          placeholder={t('uiScheduling.closureReasonExample')}
         />
         <Alert variant="info">
-          Lịch hẹn đã có trong những ngày này không bị hủy tự động — hệ thống sẽ liệt kê để lễ tân liên hệ bệnh nhân
-          đổi lịch.
+          {t('uiScheduling.closureAppointmentsHint')}
         </Alert>
-        <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-surface-700">
           <Button type="button" variant="outline" onClick={onClose}>
-            Hủy
+            {t('uiScheduling.cancel')}
           </Button>
           <Button
             type="submit"
             isLoading={save.isPending}
             disabled={!startDate || !endDate || endDate < startDate || reason.trim().length < 3}
           >
-            Lưu
+            {t('uiScheduling.saveChanges')}
           </Button>
         </div>
       </form>

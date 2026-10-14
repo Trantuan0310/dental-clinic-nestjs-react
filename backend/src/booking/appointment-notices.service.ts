@@ -5,8 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../common/services/email.service';
 import {
   APPOINTMENT_CANCELLED_EVENT,
+  APPOINTMENT_CREATED_EVENT,
   APPOINTMENT_RESCHEDULED_EVENT,
   AppointmentCancelledEvent,
+  AppointmentCreatedEvent,
   AppointmentRescheduledEvent,
 } from '../common/events/domain-events';
 import { formatVisitTime } from './clinic-time-format';
@@ -22,9 +24,16 @@ import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 import { AvailabilityService } from '../appointments/availability.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 
-/** Reminders go out for visits starting in (now + REMINDER_MIN_AHEAD, now + REMINDER_AHEAD]. */
+/**
+ * Reminders go out for visits starting in (now + REMINDER_LAST_CALL, now +
+ * REMINDER_AHEAD], booked at least REMINDER_MIN_AHEAD before their start (a
+ * visit just booked for this afternoon needs no reminder). The morning's
+ * first run after the quiet hours still reaches an 08:00 visit booked the
+ * evening before.
+ */
 export const REMINDER_AHEAD_MS = 24 * 60 * 60_000;
 const REMINDER_MIN_AHEAD_MS = 2 * 60 * 60_000;
+const REMINDER_LAST_CALL_MS = 30 * 60_000;
 const REMINDER_BATCH = 200;
 /** A reminder the mail server refused is tried by this many runs in all (hourly). */
 export const REMINDER_MAX_ATTEMPTS = 3;
@@ -48,6 +57,7 @@ const VISIT_SELECT = {
   reminderStatus: true,
   reminderAttempts: true,
   reminderStatusFor: true,
+  createdAt: true,
   patient: { select: { fullName: true, email: true, deletedAt: true } },
   dentist: { select: { fullName: true } },
   services: { select: { serviceName: true }, orderBy: { sortOrder: 'asc' } },
@@ -93,18 +103,61 @@ export class AppointmentNoticesService {
       // A visit already under way or past (a late cancel of a checked-in
       // patient) is not news to the patient.
       if (!visit || visit.startAt.getTime() <= Date.now()) return;
+      const what =
+        'Lịch hẹn lúc ' +
+        formatVisitTime(visit.startAt) +
+        (visit.dentist?.fullName ? ' với bác sĩ ' + visit.dentist.fullName : '');
+      // Never the staff's reason: it is an internal note ("khách bom lịch").
+      // Not by the clinic does not mean the patient asked (a no-show
+      // policy), so that wording stays neutral.
       await this.send(
         visit,
-        'Lịch hẹn đã bị hủy',
-        'Lịch hẹn lúc ' +
-          formatVisitTime(visit.startAt) +
-          (visit.dentist?.fullName ? ' với bác sĩ ' + visit.dentist.fullName : '') +
-          ' đã được hủy. Nếu bạn vẫn muốn khám, vui lòng gọi phòng khám hoặc đặt lịch mới.',
+        event.byClinic ? 'Phòng khám phải hủy lịch hẹn của bạn' : 'Lịch hẹn đã bị hủy',
+        event.byClinic
+          ? what +
+              ' đã bị hủy vì phòng khám hoặc bác sĩ không thể tiếp đón vào thời gian này. ' +
+              'Phòng khám xin lỗi vì sự bất tiện. Vui lòng gọi phòng khám hoặc đặt lịch mới để được xếp giờ khác.'
+          : what +
+              ' đã được hủy. Nếu bạn vẫn muốn khám, vui lòng gọi phòng khám hoặc đặt lịch mới.',
+        this.statusLink(visit),
       );
     } catch (error) {
       this.logger.warn(
         `Could not email the cancellation of ${event.appointmentId}: ${String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Confirms a visit the front desk booked (phone, a returning patient),
+   * like the email an online booking gets. Not for a walk-in: the patient
+   * is at the desk.
+   */
+  @OnEvent(APPOINTMENT_CREATED_EVENT)
+  async onCreated(event: AppointmentCreatedEvent) {
+    if (!appointmentEmailNoticesEnabled() || event.source === 'WALK_IN') return;
+    try {
+      const visit = await this.visit(event.appointmentId);
+      if (!visit || visit.startAt.getTime() <= Date.now()) return;
+      const services = (visit.services ?? []).map(s => s.serviceName).filter(Boolean);
+      await this.send(
+        visit,
+        'Xác nhận lịch hẹn ' + formatVisitTime(visit.startAt),
+        [
+          'Phòng khám đã đặt lịch khám cho bạn lúc ' +
+            formatVisitTime(visit.startAt) +
+            (visit.dentist?.fullName ? ' với bác sĩ ' + visit.dentist.fullName : '') +
+            (services.length ? ' (' + services.join(', ') + ')' : '') +
+            '.',
+          'Vui lòng đến trước giờ hẹn khoảng 10 phút.',
+          clinicAddressLine(),
+          'Nếu cần dời hoặc hủy lịch, vui lòng gọi phòng khám.',
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+    } catch (error) {
+      this.logger.warn(`Could not email the booking of ${event.appointmentId}: ${String(error)}`);
     }
   }
 
@@ -118,8 +171,11 @@ export class AppointmentNoticesService {
       const visit = await this.visit(event.appointmentId);
       if (!visit || visit.startAt.getTime() <= Date.now()) return;
       const dentist = visit.dentist?.fullName;
+      const byClinic = event.byClinic === true;
       const message = moved
-        ? 'Phòng khám đã dời lịch hẹn của bạn từ ' +
+        ? (byClinic
+            ? 'Phòng khám phải dời lịch hẹn của bạn từ '
+            : 'Lịch hẹn của bạn đã được dời từ ') +
           formatVisitTime(event.oldStartAt) +
           ' sang ' +
           formatVisitTime(visit.startAt) +
@@ -132,8 +188,16 @@ export class AppointmentNoticesService {
           '.';
       await this.send(
         visit,
-        moved ? 'Lịch hẹn đã được dời' : 'Lịch hẹn đổi bác sĩ',
-        message + ' Nếu thời gian này không phù hợp, vui lòng gọi phòng khám.',
+        moved
+          ? byClinic
+            ? 'Phòng khám dời lịch hẹn của bạn'
+            : 'Lịch hẹn đã được dời'
+          : 'Lịch hẹn đổi bác sĩ',
+        message +
+          (byClinic
+            ? ' Phòng khám xin lỗi vì sự thay đổi này. Nếu thời gian mới không phù hợp, vui lòng gọi phòng khám.'
+            : ' Nếu thời gian này không phù hợp, vui lòng gọi phòng khám.'),
+        this.statusLink(visit),
       );
     } catch (error) {
       this.logger.warn(`Could not email the change of ${event.appointmentId}: ${String(error)}`);
@@ -165,21 +229,25 @@ export class AppointmentNoticesService {
       this.logger.warn('Visit reminders skipped: email is not configured (SMTP / EMAIL_MOCK)');
       return none;
     }
-    const due: ReminderVisit[] = await this.prisma.appointment.findMany({
-      where: {
-        status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-        deletedAt: null,
-        reminderSentAt: null,
-        startAt: {
-          gt: new Date(now.getTime() + REMINDER_MIN_AHEAD_MS),
-          lte: new Date(now.getTime() + REMINDER_AHEAD_MS),
+    const candidates: Array<ReminderVisit & { createdAt: Date }> =
+      await this.prisma.appointment.findMany({
+        where: {
+          status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+          deletedAt: null,
+          reminderSentAt: null,
+          startAt: {
+            gt: new Date(now.getTime() + REMINDER_LAST_CALL_MS),
+            lte: new Date(now.getTime() + REMINDER_AHEAD_MS),
+          },
+          patient: { deletedAt: null, email: { not: null } },
         },
-        patient: { deletedAt: null, email: { not: null } },
-      },
-      select: VISIT_SELECT,
-      orderBy: { startAt: 'asc' },
-      take: REMINDER_BATCH,
-    });
+        select: VISIT_SELECT,
+        orderBy: { startAt: 'asc' },
+        take: REMINDER_BATCH,
+      });
+    const due = candidates.filter(
+      v => v.startAt.getTime() - v.createdAt.getTime() >= REMINDER_MIN_AHEAD_MS,
+    );
     let sent = 0;
     let blocked = 0;
     let failed = 0;
@@ -210,12 +278,11 @@ export class AppointmentNoticesService {
           AND start_at < ${new Date(visit.startAt.getTime() + 1)}
           AND status IN ('SCHEDULED', 'CONFIRMED') AND deleted_at IS NULL`;
       if (!claimed) continue;
-      const ref = visit.bookingRequest?.referenceCode;
       const ok = await this.send(
         visit,
         'Nhắc lịch khám ' + formatVisitTime(visit.startAt),
         this.reminderText(visit),
-        ref ? publicAppUrl() + '/booking/status?ref=' + encodeURIComponent(ref) : undefined,
+        this.statusLink(visit),
       );
       if (ok) {
         sent++;
@@ -327,6 +394,12 @@ export class AppointmentNoticesService {
       ignoreBookings: true,
     });
     return problem?.message ?? null;
+  }
+
+  /** The online booking's status page (lookup by phone), for visits booked online. */
+  private statusLink(visit: { bookingRequest?: { referenceCode: string } | null }) {
+    const ref = visit.bookingRequest?.referenceCode;
+    return ref ? publicAppUrl() + '/booking/status?ref=' + encodeURIComponent(ref) : undefined;
   }
 
   private reminderText(visit: ReminderVisit) {

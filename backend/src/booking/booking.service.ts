@@ -996,6 +996,19 @@ export class BookingService {
       metadata: { referenceCode: row.referenceCode, ...(note ? { note } : {}) },
     });
     void this.notifyStaff(row.id, 'Khách đã rút yêu cầu đặt lịch');
+    // A receipt, as when the request is cancelled by phone: the link holder
+    // may not be the person who gets the clinic's emails.
+    if (row.email) {
+      await this.sendNotice(
+        row.email,
+        'Đã hủy yêu cầu đặt lịch theo yêu cầu của bạn',
+        row.fullName,
+        'Yêu cầu đặt lịch ' +
+          row.referenceCode +
+          ' đã được hủy theo yêu cầu của bạn. Bạn có thể đặt lịch mới bất cứ lúc nào.',
+        row.referenceCode,
+      );
+    }
     return { referenceCode: row.referenceCode, status: 'CANCELLED' };
   }
 

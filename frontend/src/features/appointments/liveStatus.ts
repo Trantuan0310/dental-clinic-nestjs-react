@@ -15,7 +15,7 @@ export const LIVE_REFRESH_MS = 60_000;
 
 /** Booked, not arrived, and this late after the start counts as overdue (matches LATE_AFTER_MIN). */
 export const OVERDUE_AFTER_MIN = 15;
-export const OVERDUE_LABEL = 'Quá giờ – chưa đến';
+export const OVERDUE_LABEL = 'overdueNotArrived';
 /** Calendar block colours for an overdue booking (replaces the status colours). */
 export const OVERDUE_BLOCK_CLASS = 'bg-rose-50 border-rose-500 text-rose-800';
 /** Dot colour for an overdue booking in compact views. */

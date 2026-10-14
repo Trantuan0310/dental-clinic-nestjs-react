@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Package, AlertTriangle, AlertCircle } from 'lucide-react';
@@ -14,6 +15,7 @@ import type { InventoryItem, InventoryFilters } from '@/types/inventory';
 const PAGE_SIZE = 20;
 
 export default function InventoryListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   // Backend POST /inventory/items requires inventory.create — receptionist
@@ -74,11 +76,11 @@ export default function InventoryListPage() {
       } as Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      notify.success('Đã thêm vật tư mới');
+      notify.success(t('uiOperations.inventoryCreated'));
       resetAddForm();
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể thêm vật tư'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.inventoryCreateFailed')));
     },
   });
 
@@ -118,24 +120,24 @@ export default function InventoryListPage() {
   };
 
   const getStockStatusColor = (status: string) => {
-    if (status === 'out_of_stock') return 'bg-red-50';
-    if (status === 'low_stock') return 'bg-amber-50';
+    if (status === 'out_of_stock') return 'bg-red-50 dark:bg-red-950/40';
+    if (status === 'low_stock') return 'bg-amber-50 dark:bg-amber-950/40';
     return '';
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Vật tư & Thuốc</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Quản lý tồn kho của phòng khám
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{t('uiOperations.inventoryTitle')}</h1>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+            {t('uiOperations.inventoryDescription')}
           </p>
         </div>
         <PermissionGuard permission="inventory.create">
           <Button onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4" />
-            Thêm vật tư
+            {t('uiOperations.addItem')}
           </Button>
         </PermissionGuard>
       </div>
@@ -145,19 +147,20 @@ export default function InventoryListPage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <SearchInput
-                placeholder="Tìm theo mã, tên..."
+                placeholder={t('uiOperations.inventorySearch')}
                 value={search}
                 onChange={(e) => handleSearch(e.target.value)}
                 onClear={() => handleSearch('')}
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <select
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                aria-label={t('uiOperations.itemType')}
+                className="min-w-0 max-w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-gray-100"
                 value={filters.categoryId || 'all'}
                 onChange={(e) => handleCategoryFilter(e.target.value)}
               >
-                <option value="all">Tất cả loại</option>
+                <option value="all">{t('uiOperations.allTypes')}</option>
                 {categories.map((c: InventoryCategoryOption) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -170,7 +173,7 @@ export default function InventoryListPage() {
                 onClick={handleLowStockFilter}
               >
                 <AlertTriangle className="h-4 w-4" />
-                Sắp hết
+                {t('uiOperations.runningLow')}
               </Button>
             </div>
           </div>
@@ -180,41 +183,41 @@ export default function InventoryListPage() {
           <div className="p-4">
             <div className="space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-12 animate-pulse rounded bg-gray-100" />
+                <div key={i} className="h-12 animate-pulse rounded bg-gray-100 dark:bg-surface-800" />
               ))}
             </div>
           </div>
         ) : isError && items.length === 0 ? (
           <EmptyState
             icon={<AlertCircle className="h-10 w-10 text-red-400 dark:text-red-500" />}
-            title="Không thể tải danh sách vật tư"
-            description="Đã có lỗi xảy ra khi tải dữ liệu. Vui lòng thử lại."
-            action={{ label: 'Thử lại', onClick: () => refetch() }}
+            title={t('uiOperations.loadInventoryFailed')}
+            description={t('uiOperations.loadDataFailedRetry')}
+            action={{ label: t('uiOperations.retry'), onClick: () => refetch() }}
           />
         ) : items.length === 0 ? (
           <EmptyState
             icon={<Package className="h-10 w-10 text-gray-400" />}
-            title="Chưa có vật tư nào"
-            description="Bắt đầu bằng việc thêm vật tư đầu tiên"
+            title={t('uiOperations.noItems')}
+            description={t('uiOperations.addFirstItem')}
             action={
               canCreateInventoryItem
-                ? { label: 'Thêm vật tư', onClick: () => setShowAddModal(true) }
+                ? { label: t('uiOperations.addItem'), onClick: () => setShowAddModal(true) }
                 : undefined
             }
           />
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="px-4 py-3 font-medium text-gray-600">Mã</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Tên</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Loại</th>
-                    <th className="px-4 py-3 font-medium text-gray-600 text-right">Tồn</th>
-                    <th className="px-4 py-3 font-medium text-gray-600 text-right">Tối thiểu</th>
-                    <th className="px-4 py-3 font-medium text-gray-600 text-right">Giá nhập</th>
-                    <th className="px-4 py-3 font-medium text-gray-600">Trạng thái</th>
+                  <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.code')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.name')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.category')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300 text-right">{t('uiOperations.stock')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300 text-right">{t('uiOperations.minimum')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300 text-right">{t('uiOperations.purchasePrice')}</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{t('uiOperations.status')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -223,25 +226,25 @@ export default function InventoryListPage() {
                     return (
                       <tr
                         key={item.id}
-                        className={`border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${getStockStatusColor(stockStatus)}`}
+                        className={`border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer ${getStockStatusColor(stockStatus)}`}
                         onClick={() => navigate(`/inventory/items/${item.id}`)}
                       >
-                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                        <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
                           {item.code}
                         </td>
-                        <td className="px-4 py-3 font-medium text-gray-900">
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
                           {item.name}
                         </td>
-                        <td className="px-4 py-3 text-gray-600">
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                           {item.category?.name ?? '—'}
                         </td>
-                        <td className={`px-4 py-3 text-right ${stockStatus === 'out_of_stock' ? 'text-red-600 font-medium' : stockStatus === 'low_stock' ? 'text-amber-600 font-medium' : 'text-gray-900'}`}>
+                        <td className={`px-4 py-3 text-right ${stockStatus === 'out_of_stock' ? 'text-red-600 dark:text-red-400 font-medium' : stockStatus === 'low_stock' ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-gray-900 dark:text-gray-100'}`}>
                           {item.currentQuantity}
                         </td>
-                        <td className="px-4 py-3 text-right text-gray-600">
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-300">
                           {item.minStockLevel}
                         </td>
-                        <td className="px-4 py-3 text-right text-gray-900">
+                        <td className="px-4 py-3 text-right text-gray-900 dark:text-gray-100">
                           {formatCurrency(item.costPrice)}
                         </td>
                         <td className="px-4 py-3">
@@ -255,7 +258,7 @@ export default function InventoryListPage() {
             </div>
 
             {totalPages > 1 && (
-              <div className="border-t border-gray-100 px-4 py-3">
+              <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3">
                 <Pagination
                   currentPage={filters.page || 1}
                   totalPages={totalPages}
@@ -269,50 +272,50 @@ export default function InventoryListPage() {
         )}
       </Card>
 
-      <Modal isOpen={showAddModal} onClose={resetAddForm} title="Thêm vật tư">
+      <Modal isOpen={showAddModal} onClose={resetAddForm} title={t('uiOperations.addItem')}>
         <div className="space-y-4">
           <Input
-            label="Mã (SKU)"
+            label={t('uiOperations.sku')}
             required
             value={newSku}
             onChange={(e) => setNewSku(e.target.value)}
-            placeholder="VD: COMP-A2"
+            placeholder={t('uiOperations.inventorySkuExample')}
           />
           <Input
-            label="Tên vật tư"
+            label={t('uiOperations.itemName')}
             required
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="VD: Composite A2 (tuýp 4g)"
+            placeholder={t('uiOperations.itemNameExample')}
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
-              label="Đơn vị"
+              label={t('uiOperations.unit')}
               required
               value={newUnit}
               onChange={(e) => setNewUnit(e.target.value)}
-              placeholder="VD: tuýp, hộp, lọ"
+              placeholder={t('uiOperations.unitExample')}
             />
             <Select
-              label="Loại"
+              label={t('uiOperations.category')}
               value={newCategoryId}
               onChange={(e) => setNewCategoryId(e.target.value)}
               options={[
-                { value: '', label: 'Không phân loại' },
+                { value: '', label: t('uiOperations.uncategorized') },
                 ...categories.map((c: InventoryCategoryOption) => ({ value: c.id, label: c.name })),
               ]}
             />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Input
-              label="Tồn kho ban đầu"
+              label={t('uiOperations.initialStock')}
               type="number"
               min="0"
               value={newQuantity}
               onChange={(e) => setNewQuantity(e.target.value)}
             />
             <Input
-              label="Mức tối thiểu"
+              label={t('uiOperations.minimum')}
               type="number"
               min="0"
               value={newMinStock}
@@ -320,7 +323,7 @@ export default function InventoryListPage() {
               placeholder="0"
             />
             <Input
-              label="Giá nhập (VND)"
+              label={t('uiOperations.purchasePriceVnd')}
               type="number"
               min="0"
               value={newCostPrice}
@@ -328,16 +331,16 @@ export default function InventoryListPage() {
               placeholder="0"
             />
           </div>
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
             <Button variant="outline" onClick={resetAddForm}>
-              Hủy
+              {t('uiOperations.cancel')}
             </Button>
             <Button
               onClick={() => createMutation.mutate()}
               isLoading={createMutation.isPending}
               disabled={!newSku.trim() || !newName.trim() || !newUnit.trim()}
             >
-              Thêm vật tư
+              {t('uiOperations.addItem')}
             </Button>
           </div>
         </div>

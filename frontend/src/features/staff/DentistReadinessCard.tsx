@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { Card } from '@/components/ui';
@@ -20,7 +21,7 @@ const ICON: Record<Level, ReactNode> = {
   info: <Info className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />,
 };
 
-const linkClass = 'whitespace-nowrap text-xs text-brand-600 underline hover:no-underline';
+const linkClass = 'text-right text-xs text-brand-600 underline hover:no-underline';
 
 /**
  * "Sẵn sàng nhận lịch": everything that decides whether this dentist shows
@@ -35,6 +36,7 @@ export function DentistReadinessCard({
   /** Opens the profile form; undefined when the viewer cannot edit it. */
   onEditProfile?: () => void;
 }) {
+  const { t } = useTranslation();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const edit = (label: string) =>
     onEditProfile ? (
@@ -54,75 +56,75 @@ export function DentistReadinessCard({
   if (r.accountStatus === 'PENDING_SETUP') {
     items.push({
       level: 'warn',
-      text: 'Tài khoản đăng nhập đang chờ thiết lập: vẫn nhận lịch, nhưng bác sĩ chưa đăng nhập được để khám.',
-      action: to('/admin/users', 'Gửi link / cấp mật khẩu tạm', 'user.read'),
+      text: t('uiWorkforce.readinessPendingAccount'),
+      action: to('/admin/users', t('uiWorkforce.sendSetupOrPasswordLink'), 'user.read'),
     });
   } else if (r.accountStatus === 'DEACTIVATED') {
     items.push({
       level: 'warn',
-      text: 'Tài khoản đăng nhập đã bị vô hiệu hóa.',
-      action: to('/admin/users', 'Trang Người dùng', 'user.read'),
+      text: t('uiWorkforce.readinessAccountDeactivated'),
+      action: to('/admin/users', t('uiWorkforce.usersPage'), 'user.read'),
     });
   } else {
-    items.push({ level: 'ok', text: 'Tài khoản đăng nhập hoạt động.' });
+    items.push({ level: 'ok', text: t('uiWorkforce.readinessAccountActive') });
   }
 
   if (r.practiceStatus !== 'ACTIVE') {
     items.push({
       level: 'warn',
-      text: 'Hành nghề đang bị tạm dừng: không nhận lịch hẹn mới (lịch làm việc vẫn sửa được).',
+      text: t('uiWorkforce.readinessPracticeSuspended'),
     });
   } else if (r.employmentStatus === 'ON_LEAVE') {
     items.push({
       level: 'warn',
-      text: 'Nhân viên đang tạm nghỉ: không nhận lịch hẹn mới.',
-      action: to('/staff', 'Trang Nhân sự', 'employee.update'),
+      text: t('uiWorkforce.readinessEmployeeOnLeave'),
+      action: to('/staff', t('uiWorkforce.staffPage'), 'employee.update'),
     });
   } else {
-    items.push({ level: 'ok', text: 'Đang nhận lịch hẹn tại quầy.' });
+    items.push({ level: 'ok', text: t('uiWorkforce.readinessAcceptingInPerson') });
   }
 
   if (!r.acceptsOnlineBooking) {
     items.push({
       level: 'warn',
-      text: 'Đặt lịch online đang tắt: bệnh nhân không chọn được bác sĩ này trên trang đặt lịch.',
-      action: edit('Bật trong hồ sơ'),
+      text: t('uiWorkforce.readinessOnlineBookingOff'),
+      action: edit(t('uiWorkforce.enableInProfile')),
     });
   } else if (!r.acceptsNewPatients) {
     items.push({
       level: 'warn',
-      text: 'Không nhận bệnh nhân mới: ẩn khỏi trang đặt lịch online.',
-      action: edit('Sửa hồ sơ'),
+      text: t('uiWorkforce.readinessNoNewPatients'),
+      action: edit(t('uiWorkforce.editProfile')),
     });
   } else if (r.activeServiceCount > 0 && r.onlineServiceCount === 0) {
     items.push({
       level: 'warn',
-      text: 'Không dịch vụ nào được phân công cho phép đặt online: không xuất hiện trên trang đặt lịch.',
-      action: to('/services', 'Trang Dịch vụ', 'service.read'),
+      text: t('uiWorkforce.readinessNoOnlineServices'),
+      action: to('/services', t('uiWorkforce.servicesPage'), 'service.read'),
     });
   } else {
-    items.push({ level: 'ok', text: 'Đặt lịch online: đang bật.' });
+    items.push({ level: 'ok', text: t('uiWorkforce.readinessOnlineBookingOn') });
   }
 
   items.push(
     r.hasCurrentSchedule
-      ? { level: 'ok', text: 'Có lịch làm việc đang hiệu lực.' }
+      ? { level: 'ok', text: t('uiWorkforce.readinessScheduleCurrent') }
       : {
           level: 'warn',
-          text: 'Chưa có lịch làm việc hiệu lực: không có giờ trống để đặt.',
-          action: to('/schedule', 'Thêm lịch làm việc', 'schedule.read'),
+          text: t('uiWorkforce.readinessNoCurrentSchedule'),
+          action: to('/schedule', t('uiWorkforce.addWorkSchedule'), 'schedule.read'),
         },
   );
 
   items.push(
     r.activeServiceCount > 0
-      ? { level: 'ok', text: `Được phân công ${r.activeServiceCount} dịch vụ.` }
+      ? { level: 'ok', text: t('uiWorkforce.readinessAssignedServices', { count: r.activeServiceCount }) }
       : {
           level: 'warn',
-          text: 'Chưa phân công dịch vụ: không xuất hiện khi đặt lịch theo dịch vụ hay đặt online.',
+          text: t('uiWorkforce.readinessNoAssignedServices'),
           action: (
             <a href="#dentist-services" className={linkClass}>
-              Phân công dịch vụ
+              {t('uiWorkforce.assignServices')}
             </a>
           ),
         },
@@ -130,13 +132,13 @@ export function DentistReadinessCard({
 
   items.push(
     r.hasPhoto
-      ? { level: 'ok', text: 'Có ảnh trên trang chủ.' }
+      ? { level: 'ok', text: t('uiWorkforce.readinessPhotoPresent') }
       : {
           level: 'info',
-          text: 'Chưa có ảnh: trang chủ hiện chữ viết tắt của tên.',
+          text: t('uiWorkforce.readinessNoPhoto'),
           action: (
             <a href="#dentist-photo" className={linkClass}>
-              Tải ảnh
+              {t('uiWorkforce.uploadPhoto')}
             </a>
           ),
         },
@@ -145,8 +147,8 @@ export function DentistReadinessCard({
   if (r.placeholderName) {
     items.push({
       level: 'warn',
-      text: 'Tên hiển thị vẫn là “Quản trị viên”: bệnh nhân và lịch hẹn sẽ thấy tên này.',
-      action: to('/staff', 'Đổi tên ở Nhân sự', 'employee.update'),
+      text: t('uiWorkforce.readinessPlaceholderName'),
+      action: to('/staff', t('uiWorkforce.changeNameOnStaffPage'), 'employee.update'),
     });
   }
 
@@ -154,14 +156,14 @@ export function DentistReadinessCard({
 
   return (
     <Card
-      title="Sẵn sàng nhận lịch"
-      description={pending === 0 ? 'Đủ điều kiện nhận lịch hẹn.' : `Còn ${pending} mục cần xử lý.`}
+      title={t('uiWorkforce.readinessTitle')}
+      description={pending === 0 ? t('uiWorkforce.readinessComplete') : t('uiWorkforce.readinessPending', { count: pending })}
     >
       <ul className="space-y-2 text-sm">
         {items.map((item) => (
           <li key={item.text} className="flex items-start gap-2">
             <span className="mt-0.5">{ICON[item.level]}</span>
-            <span className="flex-1 text-gray-700 dark:text-surface-200">{item.text}</span>
+            <span className="min-w-0 flex-1 break-words text-gray-700 dark:text-surface-200">{item.text}</span>
             {item.action}
           </li>
         ))}

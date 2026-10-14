@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useBlocker, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -12,47 +12,34 @@ import { Button, Card, Input, Textarea, Alert } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import type { CreatePatientPayload, UpdatePatientPayload, PatientLookupResult } from '@/types/patients';
+import { useTranslation } from 'react-i18next';
 
 // VN mobile numbers: 10 digits starting 0, next digit one of 3/5/7/8/9.
 const VN_PHONE_REGEX = /^0(3|5|7|8|9)[0-9]{8}$/;
-const vnPhone = z
-  .string()
-  .regex(VN_PHONE_REGEX, 'Số điện thoại không hợp lệ (VD: 0912345678)')
-  .optional()
-  .or(z.literal(''));
-
-const patientSchema = z
-  .object({
-    fullName: z.string().min(1, 'Họ tên là bắt buộc'),
-    dateOfBirth: z
-      .string()
-      .min(1, 'Ngày sinh là bắt buộc')
-      .refine(isValidDob, 'Ngày sinh không hợp lệ (phải trong quá khứ, cách đây không quá 150 năm)'),
+const makePatientSchema = (t: (key: string) => string) => {
+  const vnPhone = z.string().regex(VN_PHONE_REGEX, t('uiClinical.phoneInvalid')).optional().or(z.literal(''));
+  return z.object({
+    fullName: z.string().min(1, t('uiClinical.requiredName')),
+    dateOfBirth: z.string().min(1, t('uiClinical.dobRequired')).refine(isValidDob, t('uiClinical.dobInvalid')),
     gender: z.enum(['male', 'female', 'other']),
     phone: vnPhone,
-    email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
-    address: z.string().optional(),
-    occupation: z.string().optional(),
-    emergencyContactName: z.string().optional(),
-    emergencyContactPhone: vnPhone,
-    notes: z.string().optional(),
-    allergies: z.array(z.string()).optional(),
-    chronicDiseases: z.array(z.string()).optional(),
-    currentMedications: z.array(z.string()).optional(),
-  })
-  .superRefine((data, ctx) => {
+    email: z.string().email(t('uiClinical.emailInvalid')).optional().or(z.literal('')),
+    address: z.string().optional(), occupation: z.string().optional(), emergencyContactName: z.string().optional(),
+    emergencyContactPhone: vnPhone, notes: z.string().optional(), allergies: z.array(z.string()).optional(),
+    chronicDiseases: z.array(z.string()).optional(), currentMedications: z.array(z.string()).optional(),
+  }).superRefine((data, ctx) => {
     if (!data.phone && !data.emergencyContactPhone) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['phone'],
-        message: 'Cần ít nhất một số liên lạc',
+        message: t('uiClinical.contactRequired'),
       });
     }
     if (!data.phone && data.emergencyContactPhone && !data.emergencyContactName) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['emergencyContactName'],
-        message: 'Cần tên người liên hệ',
+        message: t('uiClinical.contactNameRequired'),
       });
     }
 
@@ -62,21 +49,24 @@ const patientSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['emergencyContactName'],
-        message: 'Bệnh nhân dưới 12 tuổi cần tên người liên hệ',
+        message: t('uiClinical.childContactNameRequired'),
       });
     }
     if (age < 12 && !data.emergencyContactPhone) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['emergencyContactPhone'],
-        message: 'Bệnh nhân dưới 12 tuổi cần SĐT người liên hệ',
+        message: t('uiClinical.childContactPhoneRequired'),
       });
     }
   });
+};
 
-type PatientFormData = z.infer<typeof patientSchema>;
+type PatientFormData = z.infer<ReturnType<typeof makePatientSchema>>;
 
 export function PatientForm() {
+  const { t } = useTranslation();
+  const patientSchema = useMemo(() => makePatientSchema(t), [t]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   // "patients/new" has no :id param, so this is undefined there — that's how
@@ -90,7 +80,7 @@ export function PatientForm() {
   const [tagsDirty, setTagsDirty] = useState(false);
   const saved = useRef(false);
 
-  const { data: patient, isLoading } = useQuery({
+  const { data: patient, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['patient', patientId],
     queryFn: () => patientsApi.get(patientId!),
     enabled: !!patientId,
@@ -103,7 +93,7 @@ export function PatientForm() {
       navigate(`/patients/${data.id}`);
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể tạo bệnh nhân'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.createPatientError')));
     },
   });
 
@@ -114,7 +104,7 @@ export function PatientForm() {
       navigate(`/patients/${data.id}`);
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể lưu thông tin bệnh nhân'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.savePatientError')));
       // Someone else saved this patient after the form loaded: reload it so
       // the next save starts from (and keeps) their changes.
       if (getApiErrorCode(err) === 'PATIENT_VERSION_CONFLICT') {
@@ -126,15 +116,22 @@ export function PatientForm() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting, isDirty },
     watch,
     reset,
+    trigger,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<PatientFormData>({
     resolver: zodResolver(patientSchema),
     defaultValues: {
       gender: 'male',
     },
   });
+
+  const invalidFieldNames = Object.keys(errors).join('|');
+  useEffect(() => {
+    const invalidFields = invalidFieldNames.split('|').filter(Boolean) as Array<keyof PatientFormData>;
+    if (invalidFields.length > 0) void trigger(invalidFields);
+  }, [invalidFieldNames, patientSchema, trigger]);
 
   useEffect(() => {
     if (patient) {
@@ -194,7 +191,7 @@ export function PatientForm() {
       // Without the loaded version the save could overwrite a newer record
       // (e.g. an allergy added meanwhile) — reload instead of skipping the check.
       if (!patient?.updatedAt) {
-        notify.error('Không xác định được phiên bản hồ sơ, tải lại rồi thử lại');
+        notify.error(t('uiClinical.versionUnknown'));
         queryClient.invalidateQueries({ queryKey: ['patient', patientId] });
         return;
       }
@@ -247,9 +244,9 @@ export function PatientForm() {
 
   useEffect(() => {
     if (blocker.state !== 'blocked') return;
-    if (window.confirm('Bạn có thay đổi chưa lưu. Vẫn rời trang?')) blocker.proceed();
+    if (window.confirm(t('uiClinical.unsavedChanges'))) blocker.proceed();
     else blocker.reset();
-  }, [blocker]);
+  }, [blocker, t]);
 
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -266,22 +263,34 @@ export function PatientForm() {
   };
 
   if (patientId && isLoading) {
-    return <div>Đang tải...</div>;
+    return <div>{t('uiClinical.loading')}</div>;
+  }
+
+  if (patientId && isError && !patient) {
+    return (
+      <Alert type="danger" title={t('uiClinical.patientRecordLoadError')}>
+        <p className="mb-3">{t('uiClinical.reloadBeforeEdit')}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => refetch()} isLoading={isFetching}>{t('uiClinical.retry')}</Button>
+          <Button variant="ghost" onClick={cancelForm}>{t('uiClinical.cancel')}</Button>
+        </div>
+      </Alert>
+    );
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={cancelForm} aria-label="Quay lại">
+        <Button variant="ghost" onClick={cancelForm} aria-label={t('uiClinical.backToPatients')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-semibold text-gray-900">
-          {patientId ? 'Sửa thông tin bệnh nhân' : 'Tạo bệnh nhân mới'}
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
+          {patientId ? t('uiClinical.editPatient') : t('uiClinical.createNewPatient')}
         </h1>
       </div>
 
       {duplicateWarning.length > 0 && (
-        <Alert type="warning" title="Phát hiện bệnh nhân trùng lặp">
+        <Alert type="warning" title={t('uiClinical.duplicatePatient')}>
           <div className="space-y-2">
             {duplicateWarning.map((p) => (
               <div
@@ -299,7 +308,7 @@ export function PatientForm() {
                   size="sm"
                   onClick={() => navigate(`/patients/${p.id}`)}
                 >
-                  Mở bệnh nhân
+                  {t('uiClinical.openPatient')}
                 </Button>
               </div>
             ))}
@@ -308,17 +317,17 @@ export function PatientForm() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <Card title="Thông tin cơ bản">
+        <Card title={t('uiClinical.basicInformation')}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
-              label="Họ và tên"
+              label={t('uiClinical.fullName')}
               required
               error={errors.fullName?.message}
               {...register('fullName')}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
               <Input
-                label="Ngày sinh"
+                label={t('uiClinical.dateOfBirth')}
                 type="date"
                 required
                 max={todayIso}
@@ -326,27 +335,27 @@ export function PatientForm() {
                 {...register('dateOfBirth')}
               />
               <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Giới tính
+                <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
+                  {t('uiClinical.gender')}
                 </label>
-                <div className="mt-1.5 flex gap-4">
+                <div className="mt-1.5 flex min-h-10 flex-wrap items-center gap-4">
                   <label className="flex items-center gap-2">
                     <input type="radio" value="male" {...register('gender')} />
-                    <span className="text-sm">Nam</span>
+                    <span className="text-sm">{t('uiClinical.male')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="radio" value="female" {...register('gender')} />
-                    <span className="text-sm">Nữ</span>
+                    <span className="text-sm">{t('uiClinical.female')}</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input type="radio" value="other" {...register('gender')} />
-                    <span className="text-sm">Khác</span>
+                    <span className="text-sm">{t('uiClinical.other')}</span>
                   </label>
                 </div>
               </div>
             </div>
             <Input
-              label="SĐT chính"
+              label={t('uiClinical.primaryPhone')}
               type="tel"
               error={errors.phone?.message}
               {...register('phone')}
@@ -356,27 +365,25 @@ export function PatientForm() {
               }}
             />
             <Input
-              label="Email"
+              label={t('uiClinical.email')}
               type="email"
               error={errors.email?.message}
               {...register('email')}
             />
-            <p className="-mt-2 text-xs text-gray-500 sm:col-span-2">
-              Cần ít nhất SĐT chính hoặc SĐT người liên hệ.
+            <p className="-mt-2 text-xs text-gray-500 dark:text-surface-400 sm:col-span-2">
+              {t('uiClinical.contactDetailsRequired')}
             </p>
+            <div className="sm:col-span-2">
+              <Input label={t('uiClinical.address')} {...register('address')} />
+            </div>
             <Input
-              label="Địa chỉ"
-              className="sm:col-span-2"
-              {...register('address')}
-            />
-            <Input
-              label="Nghề nghiệp"
+              label={t('uiClinical.occupation')}
               {...register('occupation')}
             />
           </div>
           {age !== null && (
-            <p className="mt-2 text-sm text-gray-500">
-              Tuổi: {age} tuổi
+            <p className="mt-2 text-sm text-gray-500 dark:text-surface-400">
+              {t('uiClinical.age')}: {age}
             </p>
           )}
         </Card>
@@ -384,19 +391,19 @@ export function PatientForm() {
         <Card
           title={
             age !== null && age < 12
-              ? 'Người liên hệ (bắt buộc với bệnh nhân dưới 12 tuổi)'
-              : 'Người liên hệ'
+              ? t('uiClinical.contactRequiredLabel')
+              : t('uiClinical.contactPerson')
           }
         >
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
-                label="Tên người liên hệ"
+                label={t('uiClinical.contactName')}
                 required={age !== null && age < 12}
                 error={errors.emergencyContactName?.message}
                 {...register('emergencyContactName')}
               />
               <Input
-                label="SĐT người liên hệ"
+                label={t('uiClinical.contactPhone')}
                 type="tel"
                 required={age !== null && age < 12}
                 error={errors.emergencyContactPhone?.message}
@@ -405,11 +412,11 @@ export function PatientForm() {
             </div>
         </Card>
 
-        <Card title="Thông tin y tế">
+        <Card title={t('uiClinical.medicalInformation')}>
           {/* Allergies */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">
-              Dị ứng
+            <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
+              {t('uiClinical.allergies')}
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
               {allergies.map((tag, index) => (
@@ -420,7 +427,7 @@ export function PatientForm() {
                   {tag}
                   <button
                     type="button"
-                    aria-label={`Xóa dị ứng ${tag}`}
+                    aria-label={t('uiClinical.removeAllergy', { name: tag })}
                     onClick={() => removeTag(setAllergies, index)}
                     className="text-red-400 hover:text-red-600"
                   >
@@ -429,10 +436,10 @@ export function PatientForm() {
                 </span>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
               <Input
-                label="Thêm dị ứng"
-                placeholder="VD: Penicillin"
+                label={t('uiClinical.addAllergy')}
+                placeholder={t('uiClinical.allergyExample')}
                 value={newTag.allergies}
                 onChange={(e) =>
                   setNewTag((prev) => ({ ...prev, allergies: e.target.value }))
@@ -447,7 +454,7 @@ export function PatientForm() {
               />
               <Button
                 type="button"
-                aria-label="Thêm dị ứng"
+                aria-label={t('uiClinical.addAllergy')}
                 variant="outline"
                 size="sm"
                 onClick={() => addTag(setAllergies, newTag.allergies, 'allergies')}
@@ -459,8 +466,8 @@ export function PatientForm() {
 
           {/* Chronic Diseases */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">
-              Bệnh mãn tính
+            <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
+              {t('uiClinical.chronicConditions')}
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
               {chronicDiseases.map((tag, index) => (
@@ -471,7 +478,7 @@ export function PatientForm() {
                   {tag}
                   <button
                     type="button"
-                    aria-label={`Xóa bệnh mãn tính ${tag}`}
+                    aria-label={t('uiClinical.removeCondition', { name: tag })}
                     onClick={() => removeTag(setChronicDiseases, index)}
                     className="text-amber-400 hover:text-amber-600"
                   >
@@ -480,10 +487,10 @@ export function PatientForm() {
                 </span>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
               <Input
-                label="Thêm bệnh mãn tính"
-                placeholder="VD: Tăng huyết áp"
+                label={t('uiClinical.addChronicDisease')}
+                placeholder={t('uiClinical.chronicDiseaseExample')}
                 value={newTag.chronicDiseases}
                 onChange={(e) =>
                   setNewTag((prev) => ({
@@ -501,7 +508,7 @@ export function PatientForm() {
               />
               <Button
                 type="button"
-                aria-label="Thêm bệnh mãn tính"
+                aria-label={t('uiClinical.addChronicDisease')}
                 variant="outline"
                 size="sm"
                 onClick={() =>
@@ -515,8 +522,8 @@ export function PatientForm() {
 
           {/* Current Medications */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Thuốc đang dùng
+            <label className="block text-sm font-medium text-gray-700 dark:text-surface-200">
+              {t('uiClinical.currentMedications')}
             </label>
             <div className="mt-1 flex flex-wrap gap-2">
               {currentMedications.map((tag, index) => (
@@ -527,7 +534,7 @@ export function PatientForm() {
                   {tag}
                   <button
                     type="button"
-                    aria-label={`Xóa thuốc đang dùng ${tag}`}
+                    aria-label={t('uiClinical.removeMedication', { name: tag })}
                     onClick={() => removeTag(setCurrentMedications, index)}
                     className="text-blue-400 hover:text-blue-600"
                   >
@@ -536,10 +543,10 @@ export function PatientForm() {
                 </span>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
               <Input
-                label="Thêm thuốc đang dùng"
-                placeholder="VD: Amlodipine 5mg"
+                label={t('uiClinical.addMedication')}
+                placeholder={t('uiClinical.medicationExample')}
                 value={newTag.currentMedications}
                 onChange={(e) =>
                   setNewTag((prev) => ({
@@ -561,7 +568,7 @@ export function PatientForm() {
               />
               <Button
                 type="button"
-                aria-label="Thêm thuốc đang dùng"
+                aria-label={t('uiClinical.addMedication')}
                 variant="outline"
                 size="sm"
                 onClick={() =>
@@ -578,25 +585,25 @@ export function PatientForm() {
           </div>
         </Card>
 
-        <Card title="Ghi chú">
+        <Card title={t('uiClinical.patientNotes')}>
           <Textarea
-            label="Ghi chú bệnh nhân"
-            placeholder="Ghi chú thêm về bệnh nhân..."
+            label={t('uiClinical.patientNotes')}
+            placeholder={t('uiClinical.patientNotesPlaceholder')}
             rows={3}
             {...register('notes')}
           />
         </Card>
 
-        <div className="sticky bottom-4 z-10 flex justify-end gap-3 rounded-lg border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+        <div className="sticky bottom-4 z-10 flex justify-end gap-3 rounded-lg border border-gray-200 bg-white/95 dark:bg-surface-900/95 dark:border-surface-700 p-3 shadow-lg backdrop-blur">
           <Button variant="outline" type="button" onClick={cancelForm}>
-            Hủy
+            {t('uiClinical.cancel')}
           </Button>
           <Button
             type="submit"
             isLoading={isSubmitting || createMutation.isPending || updateMutation.isPending}
           >
             <Save className="h-4 w-4" />
-            Lưu
+            {t('uiClinical.save')}
           </Button>
         </div>
       </form>

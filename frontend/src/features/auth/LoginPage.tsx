@@ -148,7 +148,7 @@ export default function LoginPage() {
           </form>
           <div className="mt-5 rounded-lg border border-brand-100 bg-brand-50 p-4 text-center text-sm text-gray-700 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-200">
             <p>{t('auth.login.patient.prompt')}</p>
-            <div className="mt-1 flex justify-center gap-4 font-medium text-brand-700 dark:text-brand-300">
+            <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-2 font-medium text-brand-700 dark:text-brand-300">
               <Link to="/booking" className="hover:underline">
                 {t('auth.login.patient.book')}
               </Link>
@@ -159,7 +159,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="mt-10 text-xs text-gray-400 dark:text-surface-500">© GENSMILE 2026 — Dental Clinic Management System</p>
+        <p className="mt-10 text-center text-xs text-gray-500 dark:text-surface-500">© GENSMILE {new Date().getFullYear()} — {t('uiEntry.account.loginFooter')}</p>
       </div>
     </div>
   );

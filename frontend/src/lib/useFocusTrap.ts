@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 /**
  * Minimal focus-trap implementation.
@@ -39,17 +39,23 @@ export interface UseFocusTrapOptions {
   autoFocus?: boolean;
 }
 
+const activeTraps: HTMLElement[] = [];
+
 export function useFocusTrap({
   active,
   containerRef,
   onEscape,
   autoFocus = true,
 }: UseFocusTrapOptions) {
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
   useEffect(() => {
     if (!active) return undefined;
     const container = containerRef.current;
     if (!container) return undefined;
 
+    activeTraps.push(container);
     const previouslyFocused = document.activeElement as HTMLElement | null;
     // Capture the live element in a const so closures don't lose type narrowing.
     const containerEl: HTMLElement = container;
@@ -75,10 +81,12 @@ export function useFocusTrap({
     }
 
     function handleKey(e: KeyboardEvent) {
+      if (activeTraps[activeTraps.length - 1] !== containerEl || e.defaultPrevented) return;
       if (e.key === 'Escape') {
-        if (onEscape) {
+        if (onEscapeRef.current) {
+          e.preventDefault();
           e.stopPropagation();
-          onEscape();
+          onEscapeRef.current();
         }
         return;
       }
@@ -106,10 +114,13 @@ export function useFocusTrap({
 
     return () => {
       document.removeEventListener('keydown', handleKey);
+      const wasTop = activeTraps[activeTraps.length - 1] === containerEl;
+      const index = activeTraps.lastIndexOf(containerEl);
+      if (index !== -1) activeTraps.splice(index, 1);
       // Restore focus to whatever was focused before we opened.
-      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+      if (wasTop && previouslyFocused?.isConnected && typeof previouslyFocused.focus === 'function') {
         previouslyFocused.focus();
       }
     };
-  }, [active, containerRef, onEscape, autoFocus]);
+  }, [active, containerRef, autoFocus]);
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
 import { Badge, Button, Card, Modal, Select, Textarea } from '@/components/ui';
@@ -13,10 +14,7 @@ import { DentistReadinessCard } from './DentistReadinessCard';
 import { DentistServicesCard } from '@/features/catalog/DentistServicesCard';
 import { DentistPhotoCard } from '@/features/media/DentistPhotoCard';
 import {
-  DAY_OF_WEEK_LABEL,
-  PRACTICE_STATUS_LABEL,
   PRACTICE_STATUS_VARIANT,
-  SPECIALTY_LABEL,
   blockingAppointments,
   staffErrorMessage,
 } from './labels';
@@ -32,6 +30,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default function DentistDetailPage() {
+  const { t } = useTranslation();
   const { userId } = useParams<{ userId: string }>();
   const { data, isLoading, isError, refetch } = useDentistOverview(userId);
   const me = useAuthStore((s) => s.user?.id);
@@ -54,13 +53,13 @@ export default function DentistDetailPage() {
   );
   const activate = useStaffMutation(() => staffApi.activateDentist(userId!));
 
-  if (isLoading) return <p className="text-sm text-gray-400">Đang tải…</p>;
+  if (isLoading) return <p className="text-sm text-gray-500 dark:text-surface-400">{t('common.loading')}</p>;
   if (isError || !data) {
     return (
       <p className="text-sm text-red-500">
-        Không tải được hồ sơ bác sĩ.{' '}
+        {t('uiWorkforce.dentistProfileLoadError')}{' '}
         <button type="button" className="underline" onClick={() => refetch()}>
-          Thử lại
+          {t('uiWorkforce.retry')}
         </button>
       </p>
     );
@@ -91,25 +90,25 @@ export default function DentistDetailPage() {
           <>
             {(canEditAll || canEditOwn) && (
               <Button variant="outline" onClick={() => setEditing(true)}>
-                <Pencil className="h-4 w-4" /> Sửa hồ sơ
+                <Pencil className="h-4 w-4" /> {t('uiWorkforce.editProfile')}
               </Button>
             )}
             {canChangeStatus &&
               (profile.practiceStatus === 'ACTIVE' ? (
                 <Button variant="danger" onClick={() => setStatusDialog(true)}>
-                  Tạm đình chỉ / ngừng
+                  {t('uiWorkforce.suspendOrStopPractice')}
                 </Button>
               ) : (
                 <Button
                   isLoading={activate.isPending}
                   onClick={() =>
                     activate.mutate(undefined, {
-                      onSuccess: () => notify.success('Bác sĩ đã hành nghề trở lại'),
-                      onError: (e) => notify.error(staffErrorMessage(e, 'Không kích hoạt được')),
+                      onSuccess: () => notify.success(t('uiWorkforce.practiceReactivated')),
+                      onError: (e) => notify.error(staffErrorMessage(e, t('uiWorkforce.practiceReactivateError'))),
                     })
                   }
                 >
-                  Cho hành nghề lại
+                  {t('uiWorkforce.reactivatePractice')}
                 </Button>
               ))}
           </>
@@ -124,29 +123,30 @@ export default function DentistDetailPage() {
               onEditProfile={canEditAll ? () => setEditing(true) : undefined}
             />
           )}
-          <Card title="Hồ sơ hành nghề">
+          <Card title={t('uiWorkforce.dentistPracticeProfile')}>
             <dl className="space-y-3">
-              <Field label="Trạng thái">
+              <Field label={t('uiWorkforce.status')}>
                 <Badge variant={PRACTICE_STATUS_VARIANT[profile.practiceStatus]}>
-                  {PRACTICE_STATUS_LABEL[profile.practiceStatus]}
+                  {t(`uiWorkforce.practiceStatus_${profile.practiceStatus}`)}
                 </Badge>
               </Field>
-              <Field label="Chứng chỉ hành nghề">
+              <Field label={t('uiWorkforce.licenseNumber')}>
                 {profile.licenseNumber ?? '—'}
-                {profile.licenseIssuedAt && ` (cấp ${formatDate(profile.licenseIssuedAt)})`}
+                {profile.licenseIssuedAt && ` (${t('uiWorkforce.issuedOn', { date: formatDate(profile.licenseIssuedAt) })})`}
               </Field>
-              <Field label="Chuyên môn">
+              <Field label={t('uiWorkforce.specialties')}>
                 {profile.specialties.length
-                  ? profile.specialties.map((s) => SPECIALTY_LABEL[s] ?? s).join(', ')
+                  ? profile.specialties.map((s) => t(`uiWorkforce.specialty_${s}`, { defaultValue: s })).join(', ')
                   : '—'}
               </Field>
-              <Field label="Khe mặc định">{profile.defaultSlotMinutes} phút</Field>
-              <Field label="Nhận bệnh nhân mới">{profile.acceptsNewPatients ? 'Có' : 'Không'}</Field>
-              <Field label="Nhận đặt lịch online">
-                {profile.acceptsOnlineBooking ? 'Có' : 'Không'}
+              <Field label={t('uiWorkforce.defaultSlotDuration')}>{t('uiWorkforce.minutesShort', { minutes: profile.defaultSlotMinutes })}</Field>
+              <Field label={t('uiWorkforce.acceptsNewPatients')}>{profile.acceptsNewPatients ? t('common.yes') : t('common.no')}
               </Field>
-              <Field label="Liên hệ">{[profile.phone, profile.email].filter(Boolean).join(' · ') || '—'}</Field>
-              {profile.bio && <Field label="Giới thiệu">{profile.bio}</Field>}
+              <Field label={t('uiWorkforce.acceptsOnlineBooking')}>
+                {profile.acceptsOnlineBooking ? t('common.yes') : t('common.no')}
+              </Field>
+              <Field label={t('uiWorkforce.contact')}>{[profile.phone, profile.email].filter(Boolean).join(' · ') || '—'}</Field>
+              {profile.bio && <Field label={t('uiWorkforce.dentistBio')}>{profile.bio}</Field>}
             </dl>
           </Card>
           <div id="dentist-photo" className="scroll-mt-20">
@@ -161,19 +161,19 @@ export default function DentistDetailPage() {
               canAssign={profile.practiceStatus === 'ACTIVE'}
             />
           </div>
-          <Card title="Lịch làm việc cố định">
+          <Card title={t('uiWorkforce.regularWorkSchedule')}>
             {schedules.length === 0 ? (
-              <p className="text-sm text-gray-500">Chưa có lịch làm việc.</p>
+              <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.noWorkSchedule')}</p>
             ) : (
               <ul className="divide-y divide-gray-100 text-sm dark:divide-surface-800">
                 {schedules.map((s) => (
                   <li key={s.id} className="flex flex-wrap justify-between gap-2 py-2">
                     <span className="font-medium">
-                      {DAY_OF_WEEK_LABEL[s.dayOfWeek]} · {s.startTime}–{s.endTime}
+                      {t(`uiWorkforce.day_${s.dayOfWeek}`)} · {s.startTime}–{s.endTime}
                     </span>
-                    <span className="text-xs text-gray-500">
-                      Từ {formatDate(s.validFrom)}
-                      {s.validTo ? ` đến ${formatDate(s.validTo)}` : ''} · khe {s.slotDurationMin}p
+                    <span className="text-xs text-gray-500 dark:text-surface-400">
+                      {t('uiWorkforce.scheduleEffectiveFrom', { date: formatDate(s.validFrom) })}
+                      {s.validTo ? ` ${t('uiWorkforce.scheduleEffectiveTo', { date: formatDate(s.validTo) })}` : ''} · {t('uiWorkforce.minutesShort', { minutes: s.slotDurationMin })}
                     </span>
                   </li>
                 ))}
@@ -181,22 +181,22 @@ export default function DentistDetailPage() {
             )}
           </Card>
 
-          <Card title="Lịch hẹn sắp tới">
+          <Card title={t('uiWorkforce.upcomingAppointments')}>
             {upcomingAppointments === null ? (
-              <p className="text-sm text-gray-500">
-                Lịch hẹn của bác sĩ khác chỉ hiện cho chính bác sĩ đó và lễ tân/quản trị.
+              <p className="text-sm text-gray-500 dark:text-surface-400">
+                {t('uiWorkforce.otherDentistAppointmentsHidden')}
               </p>
             ) : upcomingAppointments.length === 0 ? (
-              <p className="text-sm text-gray-500">Không có lịch hẹn sắp tới.</p>
+              <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.noUpcomingAppointments')}</p>
             ) : (
               <ul className="divide-y divide-gray-100 text-sm dark:divide-surface-800">
                 {upcomingAppointments.map((a) => (
                   <li key={a.id} className="flex flex-wrap justify-between gap-2 py-2">
                     <span>
                       {formatDateTime(a.startAt)} — {a.patient.fullName}{' '}
-                      <span className="text-xs text-gray-500">({a.patient.code})</span>
+                      <span className="text-xs text-gray-500 dark:text-surface-400">({a.patient.code})</span>
                     </span>
-                    <span className="text-xs uppercase text-gray-500">{a.status}</span>
+                    <span className="text-xs uppercase text-gray-500 dark:text-surface-400">{t(`uiWorkforce.appointmentStatus_${a.status}`, { defaultValue: a.status })}</span>
                   </li>
                 ))}
               </ul>
@@ -205,60 +205,59 @@ export default function DentistDetailPage() {
         </div>
       </div>
 
-      <Modal open={editing} onClose={() => setEditing(false)} title="Sửa hồ sơ bác sĩ" size="lg">
+      <Modal open={editing} onClose={() => setEditing(false)} title={t('uiWorkforce.editDentistProfile')} size="lg">
         {editing && (
           <DentistProfileForm
             initial={profile}
             mode={canEditAll ? 'admin' : 'self'}
-            submitLabel="Lưu"
+            submitLabel={t('uiWorkforce.save')}
             submitting={update.isPending}
             onCancel={() => setEditing(false)}
             onSubmit={(payload) =>
               update.mutate(payload, {
                 onSuccess: () => {
-                  notify.success('Đã cập nhật hồ sơ bác sĩ');
+                  notify.success(t('uiWorkforce.dentistProfileUpdated'));
                   setEditing(false);
                 },
-                onError: (e) => notify.error(staffErrorMessage(e, 'Không cập nhật được hồ sơ')),
+                onError: (e) => notify.error(staffErrorMessage(e, t('uiWorkforce.dentistProfileUpdateError'))),
               })
             }
           />
         )}
       </Modal>
 
-      <Modal open={statusDialog} onClose={closeStatus} title={`Ngừng nhận lịch — ${profile.fullName}`}>
+      <Modal open={statusDialog} onClose={closeStatus} title={t('uiWorkforce.stopAcceptingAppointmentsFor', { name: profile.fullName })}>
         <form
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             deactivate.mutate(undefined, {
               onSuccess: () => {
-                notify.success('Đã cập nhật trạng thái hành nghề');
+                notify.success(t('uiWorkforce.practiceStatusUpdated'));
                 closeStatus();
               },
               onError: (err) => {
                 setBlocking(blockingAppointments(err));
-                notify.error(staffErrorMessage(err, 'Không đổi được trạng thái'));
+                notify.error(staffErrorMessage(err, t('uiWorkforce.practiceStatusUpdateError')));
               },
             });
           }}
         >
           <p className="text-sm text-gray-600 dark:text-surface-300">
-            Bác sĩ sẽ không còn trong danh sách chọn khi đặt lịch. Lịch làm việc và nghỉ phép vẫn
-            quản lý được ở trang Lịch làm việc.
+            {t('uiWorkforce.stopAcceptingAppointmentsDescription')}
           </p>
           {blocking && <BlockingAppointmentsList appointments={blocking} />}
           <Select
-            label="Trạng thái mới"
+            label={t('uiWorkforce.newPracticeStatus')}
             value={newStatus}
             onChange={(e) => setNewStatus(e.target.value as 'SUSPENDED' | 'INACTIVE')}
             options={[
-              { value: 'SUSPENDED', label: PRACTICE_STATUS_LABEL.SUSPENDED },
-              { value: 'INACTIVE', label: PRACTICE_STATUS_LABEL.INACTIVE },
+              { value: 'SUSPENDED', label: t('uiWorkforce.practiceStatus_SUSPENDED') },
+              { value: 'INACTIVE', label: t('uiWorkforce.practiceStatus_INACTIVE') },
             ]}
           />
           <Textarea
-            label="Lý do"
+            label={t('uiWorkforce.reason')}
             required
             minLength={5}
             maxLength={500}
@@ -268,10 +267,10 @@ export default function DentistDetailPage() {
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={closeStatus}>
-              Hủy
+              {t('uiWorkforce.cancel')}
             </Button>
             <Button type="submit" variant="danger" isLoading={deactivate.isPending}>
-              Xác nhận
+              {t('uiWorkforce.confirm')}
             </Button>
           </div>
         </form>

@@ -1,7 +1,9 @@
-import { type ReactNode, useEffect, useRef, useId } from 'react';
+import { type ReactNode, useRef, useId } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { useFocusTrap } from '@/lib/useFocusTrap';
+import { useTranslation } from 'react-i18next';
 
 interface DrawerProps {
   open: boolean;
@@ -29,19 +31,13 @@ export function Drawer({
   width = 'lg',
   description,
 }: DrawerProps) {
+  const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
   useFocusTrap({ active: open, containerRef: panelRef, onEscape: onClose });
 
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
+  useBodyScrollLock(open);
 
   if (!open) return null;
   return (
@@ -58,21 +54,22 @@ export function Drawer({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-surface-700">
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-surface-700">
           <h2 id={titleId} className="text-base font-semibold text-gray-900 dark:text-surface-100">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng"
+            aria-label={t('uiCommon.action.close')}
             className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-surface-800 dark:hover:text-surface-200"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 scrollbar-thin">{children}</div>
-        {footer && <div className="border-t border-gray-100 bg-gray-50 px-5 py-3 dark:border-surface-700 dark:bg-surface-800">{footer}</div>}
+        {description && <div id={`${titleId}-desc`} className="px-5 pt-3 text-sm text-gray-500 dark:text-surface-400">{description}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 scrollbar-thin">{children}</div>
+        {footer && <div className="shrink-0 border-t border-gray-100 bg-gray-50 px-5 py-3 dark:border-surface-700 dark:bg-surface-800">{footer}</div>}
       </div>
     </div>
   );
