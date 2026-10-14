@@ -76,6 +76,19 @@ export default defineConfig(({ mode }) => ({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Libraries every page loads go in their own long-cached files, so a
+        // release that only changes app code doesn't re-download them.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          query: ['@tanstack/react-query', 'axios', 'zustand'],
+          i18n: ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

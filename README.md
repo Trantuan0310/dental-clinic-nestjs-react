@@ -1,221 +1,245 @@
-# Dental Clinic Management System
+<p align="center">
+  <img src="frontend/public/logo-full.png" alt="Nha khoa GENSMILE" width="260" />
+</p>
 
-> Hệ thống quản lý phòng khám nha khoa hiện đại, hướng AI-first, xây dựng theo kiến trúc Modular Monolith với chất lượng sản phẩm thực sự.
+<h1 align="center">Dental Clinic Management System</h1>
 
-[![Status](https://img.shields.io/badge/status-MVP%20Complete-brightgreen)]()
-[![License](https://img.shields.io/badge/license-TBD-lightgrey)]()
-[![Stack](https://img.shields.io/badge/stack-NestJS%20%7C%20React%20%7C%20PostgreSQL-green)]()
-[![Tests](https://img.shields.io/badge/tests-225%20passed-brightgreen)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-0%20errors-brightgreen)]()
+<p align="center">
+  Hệ thống quản lý phòng khám nha khoa: đặt lịch, hồ sơ bệnh nhân, bệnh án, hóa đơn, kho, lương và báo cáo trong một ứng dụng web.<br/>
+  Dành cho phòng khám nha khoa nhỏ và vừa tại Việt Nam, gồm quản trị viên, lễ tân và bác sĩ. Đây là đồ án tốt nghiệp (ĐATN).
+</p>
+
+<p align="center">
+  <a href="https://github.com/Trantuan0310/dental-clinic-nestjs-react/actions/workflows/ci.yml"><img src="https://github.com/Trantuan0310/dental-clinic-nestjs-react/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs" alt="NestJS 10" />
+  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React 18" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 16" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" alt="TypeScript strict" />
+</p>
 
 ---
 
-## Build Health (2026-08-03)
+## 📑 Mục lục
 
-| Target | Status |
+- [✨ Tính năng](#-tính-năng)
+- [🛠 Công nghệ](#-công-nghệ)
+- [📋 Yêu cầu](#-yêu-cầu)
+- [🚀 Cài đặt](#-cài-đặt)
+- [💡 Sử dụng](#-sử-dụng)
+- [🧪 Kiểm thử](#-kiểm-thử)
+- [☁️ Triển khai](#️-triển-khai)
+- [📂 Cấu trúc thư mục](#-cấu-trúc-thư-mục)
+- [📘 Tài liệu](#-tài-liệu)
+- [🤝 Đóng góp](#-đóng-góp)
+- [👤 Tác giả và liên hệ](#-tác-giả-và-liên-hệ)
+- [📜 Giấy phép](#-giấy-phép)
+
+---
+
+## ✨ Tính năng
+
+| Nhóm | Chức năng chính |
 | --- | --- |
-| Backend `tsc --noEmit` | ✅ 0 errors |
-| Backend `jest` | ✅ 225/225 tests pass (20 suites) |
-| Frontend `tsc --noEmit` | ✅ 0 errors |
-| Frontend `eslint` | ✅ 0 issues |
-| Frontend `vite build` | ✅ 12.37s |
-| ReportsPage data mismatch | ✅ Fixed |
-| Expense Module (BR-EXP-001) | ✅ Implemented |
-| Deployment Docs | ✅ 10 files |
-| E2E Tests | ✅ 15 files (Playwright + Supertest) |
+| **Đặt lịch** | Trang đặt lịch công khai cho bệnh nhân, duyệt yêu cầu đặt lịch, lịch hẹn, check-in, hàng chờ, điều phối bác sĩ |
+| **Bệnh nhân và bệnh án** | Hồ sơ bệnh nhân, phiên khám, sơ đồ răng, ghi chú lâm sàng, đơn thuốc, ảnh và tệp đính kèm |
+| **Thu ngân** | Hóa đơn, thanh toán nhiều lần, công nợ, hoàn tiền, danh mục dịch vụ |
+| **Nhân sự** | Lịch làm việc, đăng ký ca, nghỉ phép, bảng lương bác sĩ và nhân viên |
+| **Kho và chi phí** | Vật tư nha khoa, nhập xuất kho, cảnh báo sắp hết, quản lý chi phí có duyệt |
+| **Báo cáo** | Dashboard, doanh thu theo dịch vụ, bác sĩ, loại khách hàng |
+| **Hệ thống** | Đăng nhập JWT + refresh token, phân quyền theo vai trò, nhật ký thao tác (audit log), song ngữ Việt/Anh |
+| **AI** | Tóm tắt bệnh án và gợi ý dùng Google Gemini (tùy chọn, tắt được) |
+
+Ba vai trò sử dụng hệ thống: **quản trị viên phòng khám**, **lễ tân** và **bác sĩ**. Bệnh nhân không phải là tài khoản người dùng mà là dữ liệu được quản lý ([ADR 0003](docs/ADR/0003-patient-is-not-user.md)).
+
+<p align="center">
+  <img src="lu%E1%BB%93ng%20h%E1%BB%87%20th%E1%BB%91ng.png" alt="Luồng hệ thống" width="720" />
+</p>
 
 ---
 
-## 🎯 Tầm nhìn (Vision)
+## 🛠 Công nghệ
 
-Xem chi tiết: [`docs/00_Vision/PRODUCT_VISION.md`](docs/00_Vision/PRODUCT_VISION.md)
+| Lớp | Công nghệ |
+| --- | --- |
+| Backend | NestJS 10, TypeScript (strict), Prisma 5, Argon2, Swagger |
+| Frontend | React 18, Vite 5, Tailwind CSS 3, TanStack Query, React Hook Form + Zod, i18next |
+| Cơ sở dữ liệu | PostgreSQL 16 (Redis tùy chọn, dùng cache kết quả AI) |
+| Kiểm thử | Jest + Supertest (backend), Playwright (E2E) |
+| Hạ tầng | Docker Compose, Nginx, GitHub Actions |
 
-Tóm tắt một dòng: **Trở thành nền tảng quản lý phòng khám nha khoa AI-first đầu tiên tại Việt Nam, bắt đầu từ MVP một phòng khám duy nhất.**
+Kiến trúc là **Modular Monolith**: mỗi nghiệp vụ là một module NestJS độc lập, có thể tách thành service riêng sau này. Chi tiết xem [`ARCHITECTURE.md`](ARCHITECTURE.md) và [`TECH_STACK.md`](TECH_STACK.md).
 
 ---
 
-## 📂 Cấu trúc repository
+## 📋 Yêu cầu
+
+- **Node.js 22** trở lên (CI chạy Node 22, image Docker dùng Node 24)
+- **npm**, đi kèm Node.js. Dự án dùng `package-lock.json`.
+- **Docker** và Docker Compose, để chạy PostgreSQL
+- Hệ điều hành: Linux, macOS hoặc Windows. Windows có sẵn script khởi động một chạm, xem [`README_DEV.md`](README_DEV.md).
+
+---
+
+## 🚀 Cài đặt
+
+1. **Clone repository**
+
+   ```bash
+   git clone https://github.com/Trantuan0310/dental-clinic-nestjs-react.git
+   cd dental-clinic-nestjs-react
+   ```
+
+2. **Cấu hình và cài backend**
+
+   ```bash
+   cd backend
+   cp .env.example .env      # sửa JWT_SECRET; GEMINI_API_KEY có thể để trống
+   npm install
+   ```
+
+3. **Khởi động PostgreSQL, tạo schema và dữ liệu mẫu**
+
+   ```bash
+   npm run db:up                    # PostgreSQL 16 trong Docker
+   npx prisma migrate deploy        # áp dụng migration
+   npm run prisma:seed              # tài khoản admin + dữ liệu nền
+   npm run prisma:seed:clinical     # (tùy chọn) 3 tháng dữ liệu khám chữa bệnh mẫu
+   ```
+
+4. **Chạy backend** (http://localhost:3000)
+
+   ```bash
+   npm run start:dev
+   ```
+
+5. **Chạy frontend** ở một terminal khác (http://localhost:5173)
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+> **Windows:** chạy `check-env.bat` rồi `start-dev.bat` để thực hiện tất cả các bước trên.
+>
+> **Gặp lỗi P3005 "schema is not empty"?** Chạy `npm run db:baseline` trong `backend/`. Các lỗi khác xem [`TROUBLESHOOTING.md`](docs/09_UserGuide/TROUBLESHOOTING.md).
+
+---
+
+## 💡 Sử dụng
+
+Mở http://localhost:5173 và đăng nhập bằng tài khoản quản trị được seed:
 
 ```
-ĐATN/
-│
-├── docs/                          # 📘 Bộ tri thức sản phẩm
-│   ├── 00_Vision/                 # Tầm nhìn, phạm vi, mục tiêu
-│   ├── 01_Architecture/           # Kiến trúc tổng thể
-│   ├── 02_Glossary/               # Định nghĩa thuật ngữ nghiệp vụ
-│   ├── 03_Specification/          # Spec từng module (10 mục bắt buộc)
-│   ├── 04_Database/               # ERD, schema, migration
-│   ├── 05_API/                    # REST contract, Swagger
-│   ├── 06_UI/                    # Wireframe, flow
-│   ├── 07_Test/                  # Test plan, test case
-│   ├── 08_Deployment/            # DevOps, CI/CD
-│   ├── ADR/                       # Architecture Decision Records
-│   ├── Templates/                 # Template spec, blueprint, ADR
-│   ├── Meeting/                   # Ghi chú họp
-│   └── Research/                  # Khảo sát, POC
-│
-├── backend/                        # 🚀 NestJS API (Backend Phase 8)
-│   ├── src/
-│   │   ├── auth/                  # Authentication module
-│   │   ├── users/                 # User management module
-│   │   ├── roles/                 # Role management module
-│   │   ├── audit/                 # Audit logging module
-│   │   ├── common/                # Shared: guards, decorators, filters
-│   │   ├── prisma/                # Prisma service
-│   │   ├── app.module.ts
-│   │   └── main.ts
-│   ├── prisma/
-│   │   ├── schema.prisma           # Database schema
-│   │   └── seed.ts                 # Seed data
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── package.json
-│   └── .env.example
-│
-├── frontend/                       # React SPA (chưa implement)
-├── shared/                        # Shared types, contracts (chưa implement)
-├── scripts/                       # Tooling nội bộ
-│
-├── PROJECT_RULES.md               # 📜 Nguyên tắc vàng của dự án
-├── ROADMAP.md                     # Lộ trình theo giai đoạn
-├── TECH_STACK.md                  # Quyết định công nghệ
-├── ARCHITECTURE.md                # Tổng quan kiến trúc
-└── README.md                      # File này
+Email    : admin@clinic.local
+Mật khẩu : Admin123!     (bắt buộc đổi ở lần đăng nhập đầu)
 ```
 
----
+Sau đó vào trang **Người dùng** (`/admin/users`) để tạo tài khoản lễ tân và bác sĩ. Bộ dữ liệu `seed-clinical` có sẵn các tài khoản này.
 
-## 🧠 Triết lý cốt lõi
-
-1. **Specification là nguồn sự thật.** Code phản ánh spec, không tự sinh logic.
-2. **AI đóng vai 5 vai trò**: Solution Architect, Software Engineer, Business Analyst, Technical Writer, Code Reviewer.
-3. **AI là "Guardian of the Project"** — bảo vệ kiến trúc, coding standard, business rule.
-4. **Module độc lập, có thể tách microservice sau** (Modular Monolith).
-5. **MVP trước, scale sau.**
-
-Xem đầy đủ: [`PROJECT_RULES.md`](PROJECT_RULES.md)
-
----
-
-## Trạng thái dự án
-
-| Giai đoạn | Trạng thái |
-| --------- | ---------- |
-| Backend API (10 modules) | ✅ Hoàn thành |
-| Frontend SPA (11 features) | ✅ Hoàn thành |
-| Expense Module (BR-EXP-001) | ✅ Hoàn thành |
-| Reports & Dashboard | ✅ Hoàn thành |
-| E2E Tests | ✅ Hoàn thành |
-| Deployment Docs | ✅ Hoàn thành |
-| User Guides | ✅ Hoàn thành |
-| Thesis Documentation | ✅ Hoàn thành |
-| Production-ready | ✅ Sẵn sàng bảo vệ |
-
-Xem chi tiết: [`ROADMAP.md`](ROADMAP.md)
-
----
-
-## 🎯 Build Health (snapshot 22/07/2026)
-
-| Target | Status |
+| Địa chỉ | Nội dung |
 | --- | --- |
-| Backend `tsc --noEmit` | ✅ 0 errors |
-| Backend `jest` | ✅ 98/98 tests pass (8 suites) |
-| Frontend `tsc --noEmit` | ✅ 0 errors |
-| Frontend `eslint` | ✅ 0 issues |
-| Frontend `vite build` | ✅ 12.36s |
-| Markdown docs (75 broken links) | ✅ 75/75 đã sửa |
-| Stale log/debug files | ✅ 17/17 đã dọn |
+| http://localhost:5173 | Trang giới thiệu, đặt lịch công khai và ứng dụng quản lý |
+| http://localhost:3000/api/docs | Swagger, tài liệu REST API |
+| http://localhost:3000/health | Kiểm tra tình trạng backend |
 
-Chi tiết: [`ROADMAP.md` § Giai đoạn 10](ROADMAP.md), [`md_errors_report.md`](md_errors_report.md), [`backend_audit_report.md`](backend_audit_report.md).
+Hướng dẫn theo vai trò: [quản trị viên](docs/09_UserGuide/ADMIN_GUIDE.md), [lễ tân](docs/09_UserGuide/RECEPTIONIST_GUIDE.md), [bác sĩ](docs/09_UserGuide/DENTIST_GUIDE.md), [phân quyền](docs/09_UserGuide/PHAN_QUYEN.md).
 
 ---
 
-## 🧩 MVP Modules
-
-- **Core System:** Authentication, Authorization, Role, Permission, Clinic Settings
-- **Patient:** Hồ sơ bệnh nhân, lịch sử điều trị
-- **Appointment & Calendar:** Đặt lịch, check-in, waiting queue
-- **Medical Record:** Phiên khám, dental chart, điều trị
-- **Billing:** Hóa đơn, thanh toán, công nợ
-- **Inventory:** Vật tư nha khoa
-- **Dashboard:** Báo cáo tổng quan
-- **AI features (cơ bản):** Gợi ý lịch hẹn, nhận diện nội dung ghi chú
-
----
-
-## 🎭 Actors
-
-| Actor                 | Mô tả |
-| --------------------- | ----- |
-| **Clinic Administrator** | Quản trị viên, quản lý role, settings, báo cáo tài chính |
-| **Receptionist**         | Lễ tân, đặt lịch, check-in, thu tiền |
-| **Dentist**              | Bác sĩ, khám bệnh, ghi chú, điều trị |
-
-> **Patient không phải user hệ thống.** Patient là entity được quản lý.
-> Xem ADR: [`docs/ADR/0003-patient-is-not-user.md`](docs/ADR/0003-patient-is-not-user.md)
-
----
-
-## 🛠 Tech Stack (tổng quan)
-
-| Layer       | Công nghệ            |
-| ----------- | -------------------- |
-| Backend     | Node.js 22 + NestJS 10 + TypeScript (strict) |
-| Frontend    | React 18 + Vite + TypeScript |
-| Database    | PostgreSQL 16        |
-| ORM         | Prisma               |
-| Auth        | JWT + Refresh Token  |
-| Validation  | Zod (API), React Hook Form (UI) |
-| Testing     | Jest + Supertest (BE), Vitest + Testing Library (FE) |
-| DevOps      | Docker, GitHub Actions |
-| Docs        | Markdown + Mermaid (diagram) |
-
-Chi tiết + lý do chọn: [`TECH_STACK.md`](TECH_STACK.md), [`docs/ADR/0001-tech-stack.md`](docs/ADR/0001-tech-stack.md)
-
----
-
-## 🚀 Bắt đầu từ đâu?
-
-### Backend Development
+## 🧪 Kiểm thử
 
 ```bash
+# Backend
 cd backend
-cp .env.example .env
-npm install
+npx tsc --noEmit          # kiểm tra kiểu
+npm run lint              # ESLint
+npm test                  # unit + integration (Jest)
+npm run test:isolated     # API test trên PostgreSQL thật (cần DATABASE_URL)
 
-# --- Lần đầu setup (Docker volume mới / máy mới) ---
-# 1. Khởi động PostgreSQL container (đã có init script uuid_generate_v7)
-npm run db:up
-
-# 2. Chờ DB healthy, sau đó apply migration + seed
-#    (db:setup gộp hai bước này)
-npm run db:setup
-
-# 3. Khởi động server ở chế độ watch
-npm run start:dev
+# Frontend
+cd frontend
+npm run typecheck
+npm run lint
+npm run build
+npm run test:e2e          # Playwright, cần backend + DB đang chạy
 ```
 
-> **⚠️ Nếu DB đã có schema nhưng Prisma chưa track (lỗi P3005 "schema is not empty"):**
-> ```bash
-> npm run db:baseline
-> ```
-> Lệnh này mark migration `001_init` là đã apply và chạy seed.
+Kết quả gần nhất (14/10/2026): backend **1326/1326** test pass (55 suite); `tsc` và ESLint không có lỗi ở cả hai phía; frontend build thành công. CI trên GitHub Actions chạy migration, API test với PostgreSQL thật và E2E Playwright cho mỗi pull request vào `main`/`develop`.
 
-### Prerequisites
-- Node.js 22+
-- pnpm
-- Docker (cho PostgreSQL)
+---
+
+## ☁️ Triển khai
+
+Bản production chạy bằng `docker-compose.prod.yml`, gồm PostgreSQL, migration, backend và Nginx phục vụ frontend.
+
+```bash
+cp .env.production.example .env.production   # điền tên miền, secret, thông tin phòng khám
+docker compose --env-file .env.production -f docker-compose.prod.yml build
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml --profile bootstrap run --rm bootstrap
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d backend web
+```
+
+Các lần cập nhật sau chỉ cần `bash scripts/deploy-vps.sh`: script tự backup DB → build → migrate → restart. Nạp cấu hình ngày khai trương (dịch vụ, giá, giờ làm, tài khoản nhân viên) bằng `scripts/clinic-setup-vps.sh`.
+
+Chuyển sang VPS mới: `scripts/move-to-new-vps.sh`. Dùng database bên ngoài: `docker-compose.external-db.yml`. Hướng dẫn đầy đủ (biến môi trường, Nginx, HTTPS, backup, rollback) nằm trong [`docs/08_Deployment`](docs/08_Deployment/README.md).
+
+---
+
+## 📂 Cấu trúc thư mục
+
+```
+.
+├── backend/                 # NestJS API
+│   ├── src/                 # mỗi thư mục là một module: auth, patients, appointments,
+│   │                        # medical-records, billing, inventory, payroll, reports, ai, ...
+│   ├── prisma/              # schema, migration, script seed
+│   └── test/                # E2E + API test với PostgreSQL thật
+├── frontend/                # React SPA
+│   ├── src/features/        # màn hình theo nghiệp vụ
+│   ├── src/components/      # UI dùng chung
+│   └── e2e/                 # Playwright
+├── docs/                    # đặc tả, ADR, hướng dẫn sử dụng, triển khai
+├── scripts/                 # script cài đặt và triển khai VPS
+├── docker-compose.prod.yml  # cấu hình production
+└── *.bat, *.ps1             # script khởi động nhanh trên Windows
+```
+
+---
+
+## 📘 Tài liệu
+
+| Tài liệu | Nội dung |
+| --- | --- |
+| [`docs/INDEX.md`](docs/INDEX.md) | Bản đồ toàn bộ tài liệu |
+| [`docs/00_Vision`](docs/00_Vision/PRODUCT_VISION.md) | Tầm nhìn và phạm vi sản phẩm |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Kiến trúc tổng thể |
+| [`docs/03_Specification`](docs/03_Specification) | Đặc tả từng module |
+| [`docs/ADR`](docs/ADR) | Các quyết định kiến trúc |
+| [`PROJECT_RULES.md`](PROJECT_RULES.md) | Quy tắc code và quy trình |
+| [`ROADMAP.md`](ROADMAP.md) | Kế hoạch theo sprint |
+| [`README_DEV.md`](README_DEV.md) | Script phát triển trên Windows, dữ liệu mẫu |
+
+---
+
+## 🤝 Đóng góp
+
+1. Tạo nhánh mới từ `main`: `git checkout -b feat/ten-tinh-nang`
+2. Viết code theo [`PROJECT_RULES.md`](PROJECT_RULES.md). Mọi thay đổi nghiệp vụ phải khớp với đặc tả trong `docs/03_Specification`.
+3. Chạy các lệnh trong mục [Kiểm thử](#-kiểm-thử) và đảm bảo không có lỗi.
+4. Commit theo [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, ...) rồi mở pull request vào `main`.
+
+---
+
+## 👤 Tác giả và liên hệ
+
+- **Trần Tuấn** – [@Trantuan0310](https://github.com/Trantuan0310)
+- **GGTuanAnh** – [@GGTuanAnh](https://github.com/GGTuanAnh)
+- Báo lỗi hoặc góp ý: mở [issue](https://github.com/Trantuan0310/dental-clinic-nestjs-react/issues) trên GitHub.
 
 ---
 
 ## 📜 Giấy phép
 
-TBD.
-
----
-
-## 📞 Liên lạc
-
-Tác giả: [Tên của bạn] — Đồ án tốt nghiệp (ĐATN)
-Ngày khởi tạo: 2026
+Dự án chưa áp dụng giấy phép mã nguồn mở. Mọi quyền thuộc về tác giả (`UNLICENSED`). Nếu muốn công khai cho người khác dùng lại, có thể chọn giấy phép tại [choosealicense.com](https://choosealicense.com/).

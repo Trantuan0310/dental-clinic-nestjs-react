@@ -22,10 +22,10 @@ Các thay đổi được triển khai theo kế hoạch tối ưu 1-2 tuần (c
 
 ```bash
 # Backend (thêm helmet)
-cd backend && pnpm install
+cd backend && npm install
 
 # Frontend (thêm @tanstack/react-virtual)
-cd ../frontend && pnpm install
+cd ../frontend && npm install
 ```
 
 ### 2. Chạy migration index
@@ -49,10 +49,10 @@ concurrent tương ứng.
 
 ```bash
 # Backend
-cd backend && pnpm run start:dev
+cd backend && npm run start:dev
 
 # Frontend
-cd ../frontend && pnpm run dev
+cd ../frontend && npm run dev
 ```
 
 ## Đo baseline & sau tối ưu
@@ -83,11 +83,11 @@ endpoint                                             |    p50ms |    p95ms |    
 
 ```bash
 # Backend unit tests (32 tests pass sau khi áp Serializable)
-cd backend && pnpm exec jest --runInBand
+cd backend && npx jest --runInBand
 
 # TypeScript check cả 2 phía
-cd backend  && pnpm exec tsc --noEmit
-cd ../frontend && pnpm exec tsc --noEmit
+cd backend  && npx tsc --noEmit
+cd ../frontend && npx tsc --noEmit
 ```
 
 ## Rollback

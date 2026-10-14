@@ -148,7 +148,7 @@ frontend/
 
 | Công cụ         | Mục đích |
 | --------------- | -------- |
-| pnpm            | Package manager (nhanh, ổn định) |
+| npm             | Package manager (lockfile `package-lock.json`) |
 | Husky + lint-staged | Pre-commit lint/format |
 | Commitlint      | Conventional Commits |
 | ESLint + Prettier | Lint + format |
@@ -170,7 +170,7 @@ frontend/
 
 ## 9. Quy tắc thêm dependency mới
 
-Trước khi `pnpm add <pkg>`, hỏi:
+Trước khi `npm install <pkg>`, hỏi:
 
 1. Có thuộc MVP không? (nếu không → ghi vào "later")
 2. Có giải pháp nào dùng dep đã có không?

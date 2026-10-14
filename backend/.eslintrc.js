@@ -31,4 +31,11 @@ module.exports = {
     ],
     'no-console': 'warn',
   },
+  overrides: [
+    {
+      // Seed and setup scripts are CLI tools: printing progress is their job.
+      files: ['prisma/**/*.ts'],
+      rules: { 'no-console': 'off' },
+    },
+  ],
 };
