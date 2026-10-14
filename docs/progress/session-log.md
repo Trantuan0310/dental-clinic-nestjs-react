@@ -8,10 +8,19 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ### Đang chờ / bước tiếp theo
 
-- Hai lỗi tìm thấy khi rà luồng cấu hình phòng khám (mục bên dưới), **chưa sửa**, chờ người dùng đồng ý:
-  1. `backend/prisma/clinic-setup.ts`: `RESET_SCHEDULES=1` xoá cả lịch làm việc của ngày đã qua.
-  2. `backend/src/staff/dentists.service.ts:197`: lịch làm việc bị ẩn đúng ngày cuối hiệu lực.
+- PR sửa 2 lỗi cấu hình lịch (mục ngay dưới) cùng `CLAUDE.md` và nhật ký này: chờ CI xanh rồi người dùng merge.
 - Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` trên VPS (môi trường của Claude không có quyền SSH).
+
+### Sửa 2 lỗi cấu hình lịch làm việc
+
+1. **`clinic-setup.ts`, `RESET_SCHEDULES=1`:**
+   - Lịch đang chạy giờ kết thúc vào hôm qua; chỉ lịch chưa bắt đầu mới bị xoá. Các ngày đã qua giữ nguyên giờ làm để tính lương.
+   - Mỗi bác sĩ xử lý trong một transaction.
+   - Script in ra bác sĩ có lịch hẹn sắp tới để kiểm tra ở tab "Lịch hẹn bị ảnh hưởng".
+   - Kiểm chứng trên hai bản sao database giống nhau. Code cũ: lịch phủ thứ Hai 15/09 còn 0 dòng. Code mới: còn 1 dòng (lịch 01/04 → 13/10, lịch mới từ 14/10). Chạy reset lần hai không tạo dòng trùng.
+   - Đã cập nhật `docs/08_Deployment/CLINIC_SETUP.md` và `scripts/clinic-setup-vps.sh`.
+2. **`dentists.service.ts`:** bộ lọc lịch so `validTo` với `today` (ngày theo giờ phòng khám) thay vì `now`. Thêm test giả lập 10:00 ngày 14/10.
+3. **Kiểm tra:** backend 1344/1344 test, `tsc` và ESLint sạch.
 
 ### Rà luồng cấu hình phòng khám (bác sĩ, dịch vụ, lịch làm việc)
 

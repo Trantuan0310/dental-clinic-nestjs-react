@@ -266,5 +266,27 @@ describe('DentistsService', () => {
         category: { isActive: true },
       });
     });
+
+    it('keeps a schedule on its last day (validTo is a clinic date, not an instant)', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      // 10:00 on 14/10 at the clinic (UTC+7).
+      jest.setSystemTime(new Date('2026-10-14T03:00:00Z'));
+      try {
+        prisma.workingSchedule.findMany.mockResolvedValue([]);
+        prisma.appointment.findMany.mockResolvedValue([]);
+        prisma.dentistService.count.mockResolvedValue(0);
+
+        await service.overview('user-9');
+
+        const where = prisma.workingSchedule.findMany.mock.calls[0][0].where;
+        // A row ending 14/10 (stored as 2026-10-14T00:00Z) still counts today.
+        const lastDay = new Date('2026-10-14T00:00:00Z');
+        const ending = where.OR.find((c: { validTo?: { gte?: Date } }) => c.validTo?.gte);
+        expect(lastDay >= ending.validTo.gte).toBe(true);
+        expect(ending.validTo.gte).toEqual(lastDay);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 });

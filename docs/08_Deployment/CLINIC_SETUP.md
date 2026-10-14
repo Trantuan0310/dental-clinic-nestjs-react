@@ -13,7 +13,7 @@ Script `backend/prisma/clinic-setup.ts` nạp sẵn dữ liệu cấu hình đ�
 |---|---|
 | Dịch vụ | 10 nhóm, 55 dịch vụ: khám, X-quang, dự phòng, trám, nội nha, tiểu phẫu, phục hình, Implant, chỉnh nha, thẩm mỹ, nha khoa trẻ em. Mỗi dịch vụ có thời lượng, thời gian chuẩn bị/dọn dẹp và giá tham khảo mức trung bình thành phố lớn. Dịch vụ chuyên sâu (nội nha, Implant, chỉnh nha…) gắn với chuyên môn tương ứng. |
 | Phân công | Mỗi bác sĩ **chưa có phân công** được gán mọi dịch vụ thông thường, cộng các dịch vụ thuộc chuyên môn của mình. |
-| Lịch làm việc | Thứ Hai–Thứ Bảy, 08:00–12:00 và 13:30–19:00, khe 15 phút. Chủ nhật nghỉ. Chỉ áp cho bác sĩ **chưa có lịch**; `RESET_SCHEDULES=1` thay lịch cũ bằng lịch này. |
+| Lịch làm việc | Thứ Hai–Thứ Bảy, 08:00–12:00 và 13:30–19:00, khe 15 phút. Chủ nhật nghỉ. Chỉ áp cho bác sĩ **chưa có lịch**; `RESET_SCHEDULES=1` thay lịch cũ bằng lịch này từ hôm nay: lịch cũ kết thúc hôm qua, các ngày đã qua giữ nguyên để tính lương, và script liệt kê bác sĩ có lịch hẹn sắp tới cần xem ở tab "Lịch hẹn bị ảnh hưởng". |
 | Kho | 9 nhóm, 50 vật tư/thuốc thường dùng, có đơn vị, mức tồn tối thiểu và giá nhập tham khảo. **Tồn kho ban đầu = 0**; nhập kho lần đầu trên màn Kho. |
 | Chi phí | 18 loại: mặt bằng, điện nước, lương, BHXH, vật tư, labo, marketing, bảo trì thiết bị… |
 | Tài khoản | Theo file danh sách nhân viên (xem bên dưới). Với bác sĩ, script tạo luôn hồ sơ nhân viên, hồ sơ bác sĩ, chuyên môn, màu lịch và bật "Nhận đặt lịch online". |
