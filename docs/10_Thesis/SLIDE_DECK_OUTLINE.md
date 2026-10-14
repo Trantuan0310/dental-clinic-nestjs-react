@@ -22,7 +22,7 @@
 6. Kết luận & Hướng phát triển
 
 ## Slide 3: Lý do chọn đề tài
-- 85% phòng khám nha khoa VN dùng Excel/giấy
+- Nhiều phòng khám nha khoa còn dùng Excel/giấy (cần trích nguồn khảo sát trước khi đưa vào báo cáo)
 - Thất thoát dữ liệu, khó truy xuất
 - Xu hướng chuyển đổi số y tế
 - AI hỗ trợ bác sĩ (đặc biệt nha khoa - dental chart phức tạp)
@@ -131,10 +131,9 @@
 - **Diagram:** workflow AI + human
 
 ## Slide 23: Code Quality
-- Backend: 0 TS errors, 225/225 tests pass, 20 suites
-- Frontend: 0 TS errors, 0 ESLint issues, build 10.57s
-- 75/75 broken links fixed
-- E2E: 5 test files
+- Backend: 0 lỗi TypeScript, 1.343 unit test pass (55 bộ), coverage 76,3% dòng
+- Frontend: 0 lỗi TypeScript, song ngữ vi/en, dark mode
+- E2E: 33 file Playwright
 
 ## Slide 24: Kết quả đạt được
 | Mục tiêu | Kết quả |

@@ -8,7 +8,7 @@ Tóm tắt kỹ thuật và supplemental materials cho báo cáo ĐATN.
 
 ### A.1 Entity-Relationship Overview
 
-Hệ thống gồm **30 Prisma models** trong **7 modules**:
+Hệ thống gồm **53 bảng (Prisma model)**; bảng dưới đây liệt kê các bảng cốt lõi theo nhóm:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -136,7 +136,7 @@ Hệ thống gồm **30 Prisma models** trong **7 modules**:
 | POST | `/:id/reimburse` | `expense.approve` |
 | GET | `/categories` | `expense.read` |
 
-**Total endpoints: 90+ across all modules**
+**Tổng: khoảng 260 endpoint trên 22 controller** (đếm theo decorator `@Get/@Post/@Put/@Patch/@Delete`, 14/10/2026).
 
 ---
 
@@ -160,7 +160,7 @@ Hệ thống gồm **30 Prisma models** trong **7 modules**:
 | `payroll.read.own` | payroll | read.own | ✓ | — | ✓ |
 | `user.read` | user | read | ✓ | — | — |
 
-**Total permission codes: 60+ (includes aliases)**
+**Tổng: 124 mã quyền** (theo `prisma/seed.ts`, 14/10/2026); bảng trên là phần chính.
 
 ---
 
