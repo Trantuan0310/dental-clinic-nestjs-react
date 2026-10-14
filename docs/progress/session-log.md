@@ -8,7 +8,8 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ### Đang chờ / bước tiếp theo
 
-- PR sửa 2 lỗi cấu hình lịch (mục ngay dưới) cùng `CLAUDE.md` và nhật ký này: chờ CI xanh rồi người dùng merge.
+- PR #45 (sửa 2 lỗi cấu hình lịch, `CLAUDE.md`, nhật ký): CI xanh 10/10, đã merge vào `main` (ed3efe2).
+- Người dùng cân nhắc bật "project" của Claude Code để giữ bộ nhớ qua các phiên.
 - Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` trên VPS (môi trường của Claude không có quyền SSH).
 
 ### Sửa 2 lỗi cấu hình lịch làm việc
