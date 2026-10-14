@@ -124,7 +124,7 @@ v.v.) — schema đã seed thật sự, không phải snapshot.
 - Refresh sau khi BE đã ở `/health` = 200
 
 ### "Permission code 403 không như mong đợi"
-- Đã biết từ `backend_audit_report.md` mục #6 — ~15 permission code
+- Đã biết từ `docs/audits/legacy/backend_audit_report.md` mục #6 — ~15 permission code
   trong controller chưa có trong seed cũ
 - Script `restore-clinic-admin-permissions.ts` đã fix cho `clinic_admin`,
   nhưng role khác (receptionist/dentist) vẫn có thể thiếu
@@ -220,7 +220,7 @@ docker compose up -d
 
 1. Chạy `check-env.bat` — báo lỗi cụ thể
 2. Mở `.runtime-logs\<service>.log` liên quan
-3. Đọc `backend_audit_report.md` mục "Vấn đề CẦN xử lý trước khi FE go-live"
+3. Đọc `docs/audits/legacy/backend_audit_report.md` mục "Vấn đề CẦN xử lý trước khi FE go-live"
 
 Đã có sẵn:
 

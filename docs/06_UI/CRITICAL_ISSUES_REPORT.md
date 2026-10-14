@@ -240,4 +240,4 @@ These routes are defined in SPEC module §4 Screens tables but have NO entry in 
 - CR-15/16/17 (route param naming) → quyết định nghiêng về `:code`/`:sku` cho display routes (FE implement theo đó).
 - CR-11/13/14 (permission conflict) → không thay đổi business rule; FE handle bằng `PermissionGuard` dựa trên seed canonical list.
 
-> Xem chi tiết: [`ROADMAP.md` § Giai đoạn 10.1](../../ROADMAP.md), [`md_errors_report.md`](../../md_errors_report.md).
+> Xem chi tiết: [`ROADMAP.md` § Giai đoạn 10.1](../../ROADMAP.md), [`md_errors_report.md`](../audits/legacy/md_errors_report.md).

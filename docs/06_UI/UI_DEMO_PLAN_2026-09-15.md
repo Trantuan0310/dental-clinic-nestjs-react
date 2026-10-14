@@ -28,7 +28,7 @@ Thứ tự đề xuất: **sửa chỗ làm gián đoạn demo → làm rõ đi�
 - Hai probe có mục tiêu: tìm bệnh nhân từ header; trả lỗi 403 cho API lịch hẹn ở màn Hôm nay.
 - Các màn chi tiết có dữ liệu, biểu đồ nhiều dữ liệu, bản in, đầy đủ 3 vai trò và luồng ghi dữ liệu cần nghiệm thu tiếp khi triển khai.
 
-Báo cáo `ui_review_and_backend_alignment.md` từ tháng 7 không dùng nguyên trạng: bản hiện tại đã có mobile drawer, dark mode, command palette, focus trap cho Modal và nhiều trạng thái lỗi. Không đưa việc xây lại các chức năng này vào phạm vi.
+Báo cáo `docs/audits/legacy/ui_review_and_backend_alignment.md` từ tháng 7 không dùng nguyên trạng: bản hiện tại đã có mobile drawer, dark mode, command palette, focus trap cho Modal và nhiều trạng thái lỗi. Không đưa việc xây lại các chức năng này vào phạm vi.
 
 ## 3. Danh sách việc ưu tiên
 

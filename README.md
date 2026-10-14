@@ -127,7 +127,7 @@ Xem chi tiết: [`ROADMAP.md`](ROADMAP.md)
 | Markdown docs (75 broken links) | ✅ 75/75 đã sửa |
 | Stale log/debug files | ✅ 17/17 đã dọn |
 
-Chi tiết: [`ROADMAP.md` § Giai đoạn 10](ROADMAP.md), [`md_errors_report.md`](md_errors_report.md), [`backend_audit_report.md`](backend_audit_report.md).
+Chi tiết: [`ROADMAP.md` § Giai đoạn 10](ROADMAP.md), [`md_errors_report.md`](docs/audits/legacy/md_errors_report.md), [`backend_audit_report.md`](docs/audits/legacy/backend_audit_report.md).
 
 ---
 
