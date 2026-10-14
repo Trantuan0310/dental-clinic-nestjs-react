@@ -1,85 +1,81 @@
 # Hướng dẫn sử dụng cho Bác sĩ (Dentist)
 
 > **Đối tượng:** Bác sĩ nha khoa (`dentist`)  
-> **Quyền hạn:** Bệnh nhân được phân công, phiên khám, điều trị, dental chart  
-> **Ngày cập nhật:** 02/08/2026
+> **Quyền hạn:** Lịch hẹn và phiên khám của mình, bệnh án, điều trị, đơn thuốc, sơ đồ răng, lịch làm việc, lương của mình. Chi tiết: [PHAN_QUYEN.md](PHAN_QUYEN.md)  
+> **Ngày cập nhật:** 14/10/2026
 
 ---
 
 ## 1. Đăng nhập
 
-1. Truy cập `http://localhost:5173` → đăng nhập bằng email + mật khẩu.
-2. Sau khi vào, bạn sẽ thấy **Hàng chờ hôm nay** với các bệnh nhân được phân công.
+1. Truy cập `http://localhost:5173` (hoặc URL do IT cung cấp) → đăng nhập bằng email + mật khẩu.
+2. Bệnh nhân của bạn trong ngày nằm ở **Hàng chờ của tôi**.
+
+Menu của bác sĩ: Dashboard, Hôm nay, Hàng chờ của tôi, Lịch của tôi, Bệnh nhân của tôi, Hóa đơn, Kho vật tư, Bác sĩ, Dịch vụ, Lương của tôi, Ca của tôi, Lịch làm việc.
 
 ---
 
-## 2. Hàng chờ cá nhân (My Queue)
+## 2. Hàng chờ của tôi
 
-**Menu → Hôm nay** (`/today`) hoặc click tab **Hàng chờ của tôi**
+**Menu → Hàng chờ của tôi** (`/my-queue`)
 
-Hiển thị tất cả bệnh nhân của bạn trong ngày:
-- **Sắp tới** (scheduled, confirmed).
-- **Đang chờ** (checked_in).
-- **Đang khám** (in_progress).
-- **Đã xong** (completed).
+Hiện bệnh nhân của bạn trong ngày: sắp tới, đã check-in (đang chờ), đang khám, đã xong.
+
+**Hôm nay** (`/today`) là lịch của cả phòng khám trong ngày.
 
 ### Bắt đầu khám
-1. Click vào bệnh nhân **đang chờ**.
-2. Nhấn **Bắt đầu khám** → hệ thống tạo **Encounter** mới + chuyển status → `in_progress`.
-3. Sau khi bắt đầu, vào trang chi tiết encounter.
+1. Bệnh nhân phải **đã được lễ tân check-in**. Bác sĩ không tự check-in.
+2. Bấm **Bắt đầu khám** ở bệnh nhân đó, xác nhận đúng người.
+3. Hệ thống tạo phiên khám và mở trang phiên khám.
+
+### Hủy phiên khám tạo nhầm
+Bấm **Hủy phiên khám (mở nhầm)** khi phiên chưa có điều trị hoặc đơn thuốc. Bệnh nhân quay lại hàng chờ.
 
 ---
 
-## 3. Phiên khám (Encounter)
+## 3. Phiên khám
 
-### Trang Encounter có 4 tab:
+Ngay dưới tên bệnh nhân là thẻ **Tiền sử và dị ứng**. Bấm **Sửa** để ghi thêm dị ứng hoặc bệnh nền mới phát hiện.
 
-#### Tab 1: Tóm tắt (Summary)
-- **Lý do khám** (chief complaint).
-- **Chẩn đoán** (sơ bộ).
-- **Tiền sử bệnh** (lấy từ hồ sơ bệnh nhân).
-- **Dị ứng** (highlight đỏ nếu có).
-- **Thuốc đang dùng**.
+Trang phiên khám có 5 tab:
 
-#### Tab 2: Ghi chú lâm sàng (Clinical Notes)
-- Theo cấu trúc **SOAP**:
-  - **S**ubjective (cảm nhận chủ quan)
-  - **O**bjective (khám thực thể)
-  - **A**ssessment (đánh giá)
-  - **P**lan (kế hoạch điều trị)
-- Hoặc ghi chú tự do (raw notes).
-- Nhấn **Lưu** → cập nhật encounter.
+### Tab 1: Tổng quan
+Thông tin chính của lần khám và tiền sử bệnh nhân.
 
-#### Tab 3: Điều trị (Treatments)
-- **+ Thêm thủ thuật**:
-  - Chọn răng (tooth number).
-  - Chọn mã thủ thuật (treatment code).
-  - Số lượng.
-  - Giá (tự động lấy từ bảng giá).
-  - Mô tả.
-- **Sử dụng vật tư** (nếu có): tự động trừ tồn kho.
+### Tab 2: Ghi chú
+- **Lý do khám**, **Chẩn đoán**, **Kế hoạch điều trị**, ghi chú khác.
+- Nhấn **Lưu**.
+- Sau khi đóng phiên, ghi chú bị khóa. Muốn sửa thì **Thêm addendum** (ghi chú bổ sung), trong vòng 30 ngày sau khi đóng.
+
+### Tab 3: Điều trị
+- **Thêm điều trị**: chọn dịch vụ trong danh mục (hoặc nhập tay tên thủ thuật), số răng, số lượng.
+- **Đơn giá** lấy theo giá đã chốt khi đặt lịch hoặc giá niêm yết. Đổi giá phải ghi lý do (có ghi nhật ký).
+- **Vật tư đã dùng** (nếu có): chọn vật tư và số lượng. Kho được trừ **khi đóng phiên khám**.
 - Mỗi dòng có nút **Sửa** / **Xóa**.
 
-#### Tab 4: Đơn thuốc (Prescriptions)
-- Tạo đơn thuốc:
-  - **Bệnh nhân**.
-  - **Danh sách thuốc** (tên + liều + số lượng + cách dùng).
-  - **Ghi chú** (ví dụ: "Uống sau ăn").
-- In đơn thuốc → đưa bệnh nhân.
+### Tab 4: Đơn thuốc
+- Mỗi phiên khám có một đơn thuốc.
+- Ghi **chẩn đoán**, từng **thuốc** (tên, liều, tần suất, số ngày, số lượng, đơn vị, hướng dẫn), ngày và ghi chú tái khám.
+- Thuốc trùng với dị ứng đã ghi: hệ thống cảnh báo. Muốn vẫn kê thì phải ghi lý do.
+- Bấm **In đơn thuốc** để in.
 
-#### Tab 5: Dental Chart
-- Bảng răng 32 chiếc (hệ FDI):
-  - Click vào răng → chọn **tình trạng** (sâu, đã nhổ, đã trám, đã điều trị tủy…).
-  - Click **+ Ghi chú** cho răng.
-- Mỗi lần khám → snapshot dental chart.
+### Tab 5: Sơ đồ răng
+- Hệ FDI; bệnh nhân trẻ em dùng sơ đồ **Trẻ em (răng hỗn hợp)**.
+- Chạm vào răng để đặt tình trạng; có thao tác hàng loạt và **Hoàn tác / Làm lại**.
+- Tự lưu sau khoảng 1,5 giây. Mỗi phiên khám có một bản chụp sơ đồ.
+- Sau khi đóng phiên, sơ đồ của phiên đó không sửa được nữa.
 
-### Hoàn tất encounter
-1. Sau khi đủ thông tin → nhấn **Đóng phiên khám** (top-right).
-2. Confirm summary + chọn ngày tái khám (nếu có).
-3. Hệ thống tự động:
-   - Status encounter → `closed`.
-   - **Tạo hóa đơn nháp** (DRAFT) cho lễ tân xử lý.
-   - Ghi audit log.
+### Đặt lịch tái khám
+Nút **Đặt lịch tái khám** mở form đặt lịch với bệnh nhân điền sẵn, bác sĩ là chính bạn, loại lịch "Tái khám".
+
+### Đóng phiên khám
+1. Nhấn **Đóng Encounter**. Hệ thống cảnh báo nếu còn thiếu thông tin; có thể **Vẫn đóng phiên**.
+2. Hệ thống tự động:
+   - chuyển phiên khám và lịch hẹn sang **Hoàn tất**;
+   - khóa ghi chú;
+   - trừ kho vật tư đã ghi;
+   - **tạo hóa đơn nháp** để lễ tân xử lý (khi phiên có điều trị);
+   - ghi nhật ký.
 
 ---
 
@@ -87,90 +83,84 @@ Hiển thị tất cả bệnh nhân của bạn trong ngày:
 
 **Menu → Bệnh nhân của tôi** (`/my-patients`)
 
-Danh sách bệnh nhân đã từng khám với bạn:
-- Tên, mã BN, ngày khám gần nhất.
-- Click vào → xem chi tiết + lịch sử khám.
+Danh sách bệnh nhân bạn đã khám: tên, mã BN, lần khám gần nhất. Bấm vào để xem hồ sơ và các phiên khám.
 
-### Lịch sử khám
-- Mỗi encounter: ngày khám, chẩn đoán, điều trị.
-- Tab **Dental Chart History** → xem tiến trình điều trị từng răng qua các lần khám.
+Bạn xem được (chỉ đọc) toàn bộ bệnh án của bệnh nhân mình đã khám hoặc sắp khám, kể cả phiên của bác sĩ khác. Phạm vi chính xác: [PHAN_QUYEN.md](PHAN_QUYEN.md).
 
 ---
 
-## 5. Lịch hẹn cá nhân
+## 5. Lịch của tôi
 
-**Menu → Lịch hẹn** (`/appointments`)
+**Menu → Lịch của tôi** (`/my-appointments`)
 
-- Xem lịch theo **Ngày / Tuần / Tháng**.
-- Click vào lịch → xem chi tiết + bệnh nhân.
-- **Tạo lịch mới** cho bệnh nhân của bạn.
-- **Check-in** bệnh nhân khi đến.
-
-### Đăng ký ca làm (Shift Registration)
-**Menu → Ca làm của tôi** (`/my-shifts`)
-
-- Đăng ký ca làm thêm (ngoài giờ hành chính).
-- Admin sẽ duyệt trong vòng 24h.
-- Ca đã duyệt → tính vào bảng lương.
+- Xem lịch hẹn của bạn theo ngày, tuần, tháng.
+- Đặt lịch tái khám cho bệnh nhân mình đã khám.
+- Xác nhận, sửa lịch, **Đánh dấu vắng mặt**.
+- Dời (trong lịch của mình) và hủy chỉ khi còn ít nhất 24 giờ trước giờ hẹn. Gấp hơn thì nhờ lễ tân.
+- **Không** check-in: việc của lễ tân.
 
 ---
 
-## 6. Bảng lương cá nhân
+## 6. Lịch làm việc và ca
 
-**Menu → Bảng lương → Của tôi** (`/payroll/me`)
+### Lịch làm việc
+**Menu → Lịch làm việc** (`/schedule`)
 
-### Xem payslip
-- Chọn **kỳ lương** (tháng).
-- Hệ thống hiển thị:
-  - **Lương cứng** (theo hệ số).
-  - **Hoa hồng** (theo % doanh thu).
-  - **OT** (nếu có).
-  - **Khấu trừ** (BHXH, thuế TNCN).
-  - **Thực nhận**.
+- Sửa lịch làm việc của mình: không sửa lùi ngày, và không rút bớt giờ đang có lịch hẹn.
+- Xin nghỉ ở tab **Nghỉ phép**; quản trị duyệt.
 
-### Tải PDF
-- Click **Tải phiếu lương** → file PDF.
+### Ca của tôi
+**Menu → Ca của tôi** (`/my-shifts`)
 
----
-
-## 7. AI Summary
-
-**Dashboard → AI Tóm tắt**
-
-Panel bên phải hiển thị:
-- LLM-generated summary về bệnh nhân (triệu chứng, tiền sử, dị ứng).
-- Giúp bạn nắm nhanh trước khi khám.
-- **Lưu ý:** Luôn đọc kỹ + tự verify — AI có thể sai.
-
-### Sử dụng
-1. Chọn bệnh nhân từ dropdown.
-2. Hệ thống tự động tạo summary (cache 30 phút).
-3. Click **Refresh** nếu muốn cập nhật.
+- **Đăng ký ca mới** ngoài lịch cố định. Quản trị duyệt hoặc từ chối.
+- Có thể hủy ca đã đăng ký.
+- Ca đã duyệt được tính vào lương.
 
 ---
 
-## 8. Lưu ý quan trọng
+## 7. Lương của tôi
 
-1. **Mỗi bệnh nhân chỉ có 1 encounter OPEN** tại 1 thời điểm (BR-MR-001).
-2. **Encounter phải đóng trong 24h** sau khi bắt đầu (BR-MR-005).
-3. **Dị ứng** = cảnh báo bắt buộc — luôn check trước khi kê đơn.
-4. **Dental chart** là duy nhất theo thời gian — không thể sửa sau khi encounter closed (chỉ thêm addendum).
-5. **Tồn kho** tự động trừ khi lưu treatment — kiểm tra trước khi dùng vật tư đắt tiền.
+**Menu → Lương của tôi** (`/my-payroll`)
+
+- Xem tạm tính kỳ hiện tại, lịch sử các kỳ, và chính sách đãi ngộ của mình.
+- Mở một kỳ để xem phiếu lương: lương cơ bản, hoa hồng, làm thêm giờ, thưởng; khấu trừ (bảo hiểm, thuế TNCN, khoản khác); **thực nhận**; danh sách điều trị tính hoa hồng.
+- Phiếu lương xem trên màn hình, chưa có nút tải PDF.
 
 ---
 
-## 9. Xử lý sự cố
+## 8. AI tóm tắt hồ sơ
+
+**Dashboard → thẻ AI tóm tắt hồ sơ**
+
+1. Chọn một bệnh nhân có lịch hẹn hôm nay.
+2. Hệ thống tạo bản tóm tắt (triệu chứng, tiền sử, dị ứng) và lưu tạm 1 giờ.
+3. Bấm nút làm mới (**Gọi lại AI, bỏ qua cache**) nếu muốn tạo lại.
+
+> **Lưu ý:** Luôn tự kiểm tra lại, AI có thể sai. Khi máy chủ chưa cấu hình khóa AI, hệ thống dùng tóm tắt theo quy tắc.
+
+---
+
+## 9. Lưu ý quan trọng
+
+1. **Chỉ khám khi bệnh nhân đã check-in.**
+2. **Dị ứng** là cảnh báo bắt buộc: luôn xem trước khi kê đơn.
+3. **Ghi chú và sơ đồ răng bị khóa khi đóng phiên.** Sửa ghi chú bằng addendum trong 30 ngày.
+4. **Kho được trừ khi đóng phiên**: kiểm tra vật tư trước khi đóng.
+
+---
+
+## 10. Xử lý sự cố
 
 | Triệu chứng | Cách xử lý |
 |---|---|
-| Không thấy bệnh nhân trong queue | Kiểm tra lịch hẹn có dentistId = mình |
-| Encounter không lưu | Kiểm tra kết nối mạng + refresh |
-| Dental chart không cập nhật | Đóng tab + mở lại |
-| AI summary không hiển thị | Backend Redis có thể đang restart |
+| Không thấy bệnh nhân trong Hàng chờ của tôi | Kiểm tra lịch hẹn đúng bác sĩ là mình và bệnh nhân đã được check-in |
+| Không có nút Bắt đầu khám | Bệnh nhân chưa check-in; nhờ lễ tân |
+| Không lưu được ghi chú, sơ đồ răng | Phiên đã đóng; dùng addendum cho ghi chú |
+| Thẻ AI không hiện tóm tắt | Bấm nút làm mới; nếu vẫn lỗi, báo quản trị |
 
 ---
 
-## 10. Liên hệ
+## 11. Liên hệ
 
-- Sự cố kỹ thuật → liên hệ admin.
+- Sự cố kỹ thuật → liên hệ quản trị.
 - Thắc mắc nghiệp vụ → liên hệ quản lý phòng khám.

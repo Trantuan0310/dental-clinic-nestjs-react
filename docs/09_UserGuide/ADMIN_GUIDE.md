@@ -1,39 +1,44 @@
 # Hướng dẫn sử dụng cho Quản trị viên phòng khám (Clinic Admin)
 
 > **Đối tượng:** Quản trị viên phòng khám (`clinic_admin`)  
-> **Quyền hạn:** Toàn quyền trên hệ thống  
-> **Ngày cập nhật:** 02/08/2026
+> **Quyền hạn:** Quản lý toàn bộ phòng khám; phiên khám chỉ xem (trừ khi tài khoản có thêm vai trò Bác sĩ). Chi tiết: [PHAN_QUYEN.md](PHAN_QUYEN.md)  
+> **Ngày cập nhật:** 14/10/2026
 
 ---
 
 ## 1. Đăng nhập
 
 1. Mở trình duyệt và truy cập `http://localhost:5173` (môi trường dev) hoặc URL do IT cung cấp.
-2. Nhập email và mật khẩu đã được cấp.
+2. Nhập email và mật khẩu đã được cấp. Email không phân biệt chữ hoa, chữ thường.
 3. Nhấn **Đăng nhập**.
 
-> **Mẹo:** Tick **Ghi nhớ đăng nhập** để giữ phiên 7 ngày. Hệ thống hỗ trợ 2FA qua email (nếu được bật).
+> Tài khoản admin tạo bởi seed bắt buộc đổi mật khẩu ở lần đăng nhập đầu. Phiên đăng nhập được giữ tối đa 7 ngày.
+>
+> Nhập sai mật khẩu 6 lần liên tiếp thì tài khoản bị khóa 15 phút (xem [TROUBLESHOOTING.md](TROUBLESHOOTING.md)).
 
 ### Đăng xuất
-- Click avatar góc phải header → **Đăng xuất**.
+- Bấm menu tài khoản ở góc phải header → **Đăng xuất**.
 
 ### Quên mật khẩu
-- Tại màn hình đăng nhập, click **Quên mật khẩu** → nhập email → kiểm tra hộp thư → click link đặt lại.
+- Tại màn hình đăng nhập, bấm **Quên mật khẩu** → nhập email → mở link trong hộp thư để đặt lại.
+- Máy chủ chưa cấu hình gửi email thì nhờ một quản trị viên khác **Cấp mật khẩu tạm** (mục 3).
 
 ---
 
-## 2. Tổng quan Dashboard
+## 2. Dashboard
 
-Sau khi đăng nhập, bạn sẽ thấy Dashboard với:
+Chọn khoảng thời gian ở góc trên: **Hôm nay / 7 ngày / 15 ngày / 30 ngày / 6 tháng**.
 
-- **KPI cards** (4 ô): Tổng doanh thu, tổng bệnh nhân, lịch hẹn hôm nay, công nợ.
-- **Biểu đồ doanh thu theo ngày/tháng**.
-- **Xếp hạng bác sĩ** theo doanh thu.
-- **Top thủ thuật** mang lại doanh thu cao nhất.
-- **Tóm tắt AI**: gợi ý tổng quan từ LLM về hồ sơ bệnh nhân (panel bên phải).
+Quản trị viên thấy:
 
-### Chọn khoảng thời gian
-- Dropdown phía trên-cùng: **Hôm nay / 7 ngày / 30 ngày / Tùy chỉnh**.
+- **Hàng KPI**: doanh thu, bệnh nhân (khách mới / khách cũ), lịch hẹn (không tính lịch hủy)…
+- **Thống kê lịch khám**: đến, vắng, hủy, về sớm, vãng lai, online.
+- **AI tóm tắt hồ sơ**: chọn một bệnh nhân có lịch hôm nay để xem tóm tắt (xem [DENTIST_GUIDE.md](DENTIST_GUIDE.md#8-ai-tóm-tắt-hồ-sơ)).
+- Doanh thu theo nhóm khách, theo nguồn, theo thủ thuật, xếp hạng bác sĩ.
+- Biểu đồ doanh thu theo ngày và theo tháng, lịch hẹn theo ngày.
+- Tóm tắt tài chính và công nợ.
+
+Cách tính các số liệu: xem mục "Số liệu báo cáo" trong [PHAN_QUYEN.md](PHAN_QUYEN.md#số-liệu-báo-cáo).
 
 ---
 
@@ -43,150 +48,171 @@ Sau khi đăng nhập, bạn sẽ thấy Dashboard với:
 **Menu → Quản trị → Người dùng** (`/admin/users`)
 
 ### Thêm người dùng mới
-1. Nhấn **+ Tạo người dùng**.
-2. Điền:
-   - **Họ tên** (bắt buộc)
-   - **Email** (bắt buộc, duy nhất)
-   - **Mật khẩu tạm** (≥ 8 ký tự, có chữ hoa, thường, số, ký tự đặc biệt)
-   - **Vai trò** (1 hoặc nhiều role)
-   - **Trạng thái**: Active / Inactive
-3. Nhấn **Tạo** → hệ thống gửi email xác nhận.
+1. Nhấn **Tạo người dùng**.
+2. Điền **Email**, **Họ tên** và chọn **một Vai trò**.
+3. Nhấn **Tạo**. Tài khoản ở trạng thái **Chờ thiết lập**, hệ thống gửi link đặt mật khẩu tới email đó.
+4. Nếu báo "Chưa gửi được email", dùng **Cấp mật khẩu tạm** ở hàng người dùng đó. Mật khẩu tạm chỉ hiện một lần.
 
-### Chỉnh sửa / Reset mật khẩu / Vô hiệu hóa
-- Click biểu tượng **⋮** ở hàng người dùng → chọn thao tác.
+Người dùng đặt mật khẩu qua link (hoặc đổi mật khẩu tạm ở **Tài khoản của tôi**) thì chuyển sang **Hoạt động**.
 
-> **Lưu ý:** Không thể xóa cứng người dùng đã phát sinh dữ liệu. Chỉ có thể **Vô hiệu hóa** (BR-USR-005).
+> Muốn tạo bác sĩ: nên tạo từ **Nhân sự** (mục 9) để có cả hồ sơ nhân viên, tài khoản và hồ sơ bác sĩ.
+
+### Sửa, gửi lại link, vô hiệu hóa
+Ở mỗi hàng người dùng có các thao tác:
+- **Sửa**: đổi họ tên, email đăng nhập, vai trò. Đổi vai trò sẽ đăng xuất người đó khỏi mọi phiên (kể cả khi tự đổi của mình).
+- **Gửi lại link thiết lập** / **Gửi link đặt lại mật khẩu**.
+- **Cấp mật khẩu tạm** (không cần email). Thao tác này cũng mở khóa tài khoản đang bị khóa do nhập sai.
+- **Vô hiệu hóa** (lý do không bắt buộc) / **Kích hoạt lại**.
+
+> **Lưu ý:**
+> - Không xóa cứng người dùng, chỉ **Vô hiệu hóa**.
+> - Không tự gỡ được vai trò Quản trị của chính mình, và không gỡ được vai trò đó của quản trị viên cuối cùng.
+> - Gỡ vai trò Bác sĩ bị chặn khi bác sĩ còn lịch hẹn sắp tới hoặc phiên khám đang mở.
 
 ---
 
-## 4. Quản lý Vai trò & Phân quyền
+## 4. Vai trò và phân quyền
 
 ### Truy cập
-**Menu → Quản trị → Vai trò** (`/admin/roles`)
+**Menu → Quản trị → Vai trò & quyền** (`/admin/roles`)
 
-### Cấu trúc phân quyền
-- **Vai trò** = tập hợp **Quyền** (permission codes).
-- Ví dụ: `clinic_admin` có tất cả 60+ permission codes (xem `backend/prisma/seed.ts`).
-- `receptionist` có ~30 permission codes (xem bệnh nhân, lịch hẹn, hóa đơn).
-- `dentist` có ~25 permission codes (xem bệnh nhân được phân công, phiên khám, điều trị).
+- Ba vai trò có sẵn (Quản trị viên, Bác sĩ, Lễ tân) **không sửa được quyền** trên màn hình.
+- Muốn cấu hình khác: **Tạo vai trò** mới, tick các quyền cần cấp, rồi gán vai trò đó cho người dùng ở trang Người dùng.
+- Khi tạo vai trò, nhớ cấp quyền xem tương ứng (`*.read.any` hoặc `*.read.own`) cho mọi quyền sửa.
 
-### Thay đổi phân quyền
-1. Click vào tên vai trò.
-2. Tick/bỏ tick các permission ở table bên phải.
-3. Nhấn **Lưu**.
-
-> **Cảnh báo:** Thay đổi phân quyền có hiệu lực ngay. Người dùng đang mở trang sẽ thấy menu thay đổi sau khi refresh.
+Bảng quyền của ba vai trò có sẵn và các lưu ý khi tự tạo vai trò: [PHAN_QUYEN.md](PHAN_QUYEN.md).
 
 ---
 
-## 5. Cài đặt hệ thống
+## 5. Cài đặt
 
 ### Truy cập
 **Menu → Quản trị → Cài đặt** (`/admin/settings`)
 
-Bao gồm:
-- **Thông tin phòng khám**: tên, địa chỉ, SĐT, email, giờ làm việc.
-- **Cấu hình hóa đơn**: tiền tố mã hóa đơn, thuế VAT, điều khoản thanh toán.
-- **Cấu hình payroll**: hệ số OT, các khoản khấu trừ mặc định.
-- **Theme**: Light / Dark / System.
+Trang này **chỉ để xem**:
+- **Thông tin phòng khám**: tên, khẩu hiệu, địa chỉ, hotline, Zalo, email liên hệ, bản đồ, Facebook. Thông tin này hiện trên trang chủ, hóa đơn và đơn thuốc in ra.
+- **Giờ mở cửa hiển thị** trên trang chủ. Lịch hẹn không dựa vào giờ này mà dựa vào lịch làm việc của từng bác sĩ.
+- **Email thông báo**: chỉ gửi được khi máy chủ cấu hình SMTP.
+
+Các giá trị lấy từ biến `CLINIC_*` trong `.env.production` khi build. Muốn đổi thì sửa file đó rồi build lại ứng dụng web; xem [CLINIC_SETUP.md](../08_Deployment/CLINIC_SETUP.md).
+
+Giao diện sáng/tối đổi bằng nút trên header.
 
 ---
 
-## 6. Audit Log
+## 6. Nhật ký kiểm toán
 
 ### Truy cập
-**Menu → Quản trị → Nhật ký** (`/admin/audit-logs`)
+**Menu → Quản trị → Nhật ký kiểm toán** (`/admin/audit`)
 
-Xem tất cả thao tác:
-- Bộ lọc: actor, action, target type, khoảng thời gian.
-- Pagination cursor-based (20 logs / trang).
-- Click **Xuất CSV** để tải về.
+- Bộ lọc: người thực hiện, hành động, đối tượng, khoảng thời gian.
+- Bấm **Tải thêm** để xem trang tiếp theo.
+- Bấm **Xuất CSV** để tải về (có giới hạn số dòng mỗi lần xuất).
 
 ---
 
 ## 7. Báo cáo
 
-### Doanh thu
-**Menu → Báo cáo → Doanh thu** (`/reports`)
+### Truy cập
+**Menu → Báo cáo** (`/reports`)
 
-Biểu đồ:
-- Doanh thu theo ngày (14 ngày gần nhất).
-- Doanh thu theo tháng (12 tháng gần nhất).
-- Theo nguồn: trực tiếp / từ lịch hẹn / từ bệnh nhân cũ.
-- Theo bác sĩ.
-- Theo thủ thuật.
+1. Chọn **Từ ngày** và **Đến ngày** (tối đa 366 ngày).
+2. Trang hiển thị:
+   - Doanh thu theo trạng thái hóa đơn, kèm ô "Không tính vào doanh thu" (hóa đơn nháp, đã hủy).
+   - **Đã thu** theo phương thức (tiền mặt, chuyển khoản), đã trừ hoàn tiền.
+   - **Công nợ** theo tuổi nợ, từng hóa đơn còn nợ.
+3. Bấm **Xuất CSV** để tải doanh thu hoặc công nợ.
 
-### Công nợ
-**Menu → Báo cáo → Công nợ** (`/reports/outstanding`)
-
-Danh sách hóa đơn chưa thanh toán, phân loại theo độ tuổi nợ.
+Biểu đồ theo ngày, theo tháng, theo bác sĩ và theo thủ thuật nằm ở **Dashboard**.
 
 ---
 
-## 8. Quản lý lịch làm việc (Payroll)
+## 8. Lương
+
+### Truy cập
+**Menu → Bảng lương** (`/payroll`), gồm các tab **Kỳ lương**, **Đãi ngộ**, **Duyệt ca**.
 
 ### Cấu hình lương
-**Menu → Payroll → Cấu hình** (`/payroll/config`)
+Mở `/payroll/config`. Giá trị mặc định:
+- Hệ số làm thêm giờ: 1,5.
+- Bảo hiểm phần người lao động: BHXH 8%, BHYT 1,5%, BHTN 1%; mức lương tối thiểu đóng BHXH.
+- Thuế TNCN theo bậc; lương thử việc 85%.
+- Chu kỳ trả lương (mặc định hàng tháng).
 
-Cấu hình chung:
-- Hệ số OT (mặc định: 1.5x).
-- Hệ số ngày lễ (2x).
-- BHXH, BHYT, BHTN (mặc định: 10.5% / 1.5% / 1%).
-- Số ngày công chuẩn / tháng (mặc định: 26).
-
-### Hệ số lương bác sĩ
-**Menu → Payroll → Quản lý lương bác sĩ** (`/payroll/compensations`)
-
-- Click **+ Tạo** → chọn bác sĩ + loại hình (`monthly` / `percentage` / `hybrid`).
-- Lưu lịch sử thay đổi.
+### Đãi ngộ bác sĩ
+Tab **Đãi ngộ** (`/payroll/compensations`). Mỗi bản ghi gồm:
+- **Lương cơ bản**, **% hoa hồng** theo doanh thu, **đơn giá giờ làm thêm**;
+- **ngày hiệu lực**. Bản ghi cũ được giữ làm lịch sử.
 
 ### Kỳ lương
-**Menu → Payroll → Kỳ lương** (`/payroll/periods`)
+Tab **Kỳ lương**:
+1. **Tạo kỳ lương** (chọn ngày bắt đầu, ngày kết thúc).
+2. **Tính lương**: lấy giờ làm, doanh thu, điều chỉnh. Có thể thêm khoản điều chỉnh (thưởng, khấu trừ).
+3. **Khóa**: kỳ chuyển sang **Đang xem xét**.
+4. **Duyệt**.
+5. **Đánh dấu đã trả**. Sau 7 ngày, kỳ tự chuyển sang **Đã khóa**.
 
-Workflow:
-1. **Tạo kỳ** (ví dụ: 2026-08).
-2. **Tính toán** (compute) → snapshot giờ làm, doanh thu, điều chỉnh.
-3. **Khóa** (lock) → không thể sửa sau khi khóa.
-4. **Phê duyệt** (approve) → admin ký duyệt.
-5. **Đánh dấu đã trả** (mark paid) → chốt.
+Cần sửa kỳ đã trả hoặc đã khóa thì mở **kỳ điều chỉnh** từ kỳ đó, không sửa trực tiếp.
 
-### Đăng ký ca (Shift Registration)
-**Menu → Payroll → Duyệt ca** (`/admin/shifts/pending`)
-
-- Bác sĩ đăng ký ca làm thêm → admin duyệt/từ chối.
+### Duyệt ca
+Tab **Duyệt ca**: bác sĩ tự đăng ký ca ngoài lịch cố định, quản trị **Duyệt** hoặc **Từ chối** (có lý do).
 
 ---
 
-## 9. Quản lý tồn kho
+## 9. Nhân sự, bác sĩ, dịch vụ, lịch làm việc
+
+| Menu | Việc chính |
+|---|---|
+| **Nhân sự** (`/staff`) | Hồ sơ nhân viên; tạo tài khoản mới hoặc gắn tài khoản có sẵn; cho nghỉ việc (có thể đặt ngày trong tương lai), khôi phục |
+| **Bác sĩ** (`/dentists`) | Hồ sơ hành nghề, dịch vụ được phân công, "Nhận bệnh nhân mới", "Nhận đặt lịch online", tạm đình chỉ |
+| **Dịch vụ** (`/services`) | Nhóm dịch vụ, thời lượng, thời gian chuẩn bị/dọn dẹp, giá niêm yết, cho đặt online, hiện trên bảng giá trang chủ |
+| **Lịch làm việc** (`/schedule`) | Các tab: Lịch làm việc cố định, Nghỉ phép (duyệt), Ngoại lệ theo ngày, Ngày nghỉ phòng khám, Lịch hẹn bị ảnh hưởng |
+
+Để một bác sĩ nhận được lịch hẹn cần đủ: tài khoản vai trò Bác sĩ → hồ sơ bác sĩ → phân công dịch vụ → lịch làm việc. Xem [CLINIC_SETUP.md](../08_Deployment/CLINIC_SETUP.md).
+
+Bác sĩ vắng, phòng khám nghỉ, chuyển bác sĩ thay: xem [PHAN_QUYEN.md](PHAN_QUYEN.md#bác-sĩ-vắng-phòng-khám-nghỉ-vòng-4-migration-043).
+
+---
+
+## 10. Hóa đơn và chi phí
+
+- **Hóa đơn** (`/billing`): hóa đơn nháp tự tạo khi bác sĩ đóng phiên khám. Quản trị làm được mọi việc của lễ tân (xem [RECEPTIONIST_GUIDE.md](RECEPTIONIST_GUIDE.md#4-hóa-đơn-và-thanh-toán)), thêm: sửa/bỏ dòng hóa đơn nháp, hủy hóa đơn, hủy phiếu thu ghi nhầm, hoàn tiền, lập lại hóa đơn. Các thao tác này bắt buộc ghi lý do.
+- **Chi phí** (`/expenses`): nhập và duyệt chi phí phòng khám.
+
+---
+
+## 11. Kho vật tư
 
 ### Truy cập
 **Menu → Kho vật tư** (`/inventory`)
 
-### Nhập kho
-1. **+ Nhập kho** → chọn vật tư + số lượng + giá nhập.
-2. Hệ thống tự cập nhật `currentStock` + ghi log.
-
-### Xuất kho
-- Khi bác sĩ lưu điều trị có sử dụng vật tư, hệ thống tự xuất kho (BR-INV-003).
-
-### Điều chỉnh tồn
-- **+ Điều chỉnh** → nhập số chênh lệch + lý do → hệ thống ghi audit log.
+- **Thêm, sửa vật tư**: chỉ quản trị.
+- **Nhập kho** / **Xuất kho**: chọn vật tư, số lượng, lý do. Hệ thống cập nhật tồn và ghi lịch sử.
+- **Điều chỉnh tồn**: nhập số chênh lệch và lý do, có ghi nhật ký.
+- Vật tư bác sĩ ghi trong điều trị được **trừ kho khi đóng phiên khám**.
 
 ---
 
-## 10. Xử lý sự cố thường gặp
+## 12. Khác
+
+- **Ảnh trang chủ** (`/admin/site-media`): đổi ảnh hiển thị trên trang chủ công khai.
+- **Điều phối** (`/dispatch`) và **Yêu cầu đặt lịch** (`/booking-requests`): giống lễ tân, xem [RECEPTIONIST_GUIDE.md](RECEPTIONIST_GUIDE.md).
+- **Gộp hồ sơ bệnh nhân** trùng: chỉ quản trị có quyền, nhưng hiện **chưa có nút trên giao diện** (chỉ có API `POST /api/v1/patients/merge`).
+
+---
+
+## 13. Xử lý sự cố thường gặp
 
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| Lỗi 500 khi load dashboard | Backend chưa chạy | Verify `npm run start:dev` đang chạy ở cổng 3000 |
-| Login thất bại | Sai email/pass | Click **Quên mật khẩu** |
-| Permission denied | Role chưa được gán | Vào `/admin/users` → Role → Assign |
-| Sidebar trống | Cache trình duyệt | Ctrl+Shift+R (hard reload) |
-| Theme tối OK nhưng card sáng | Token chưa cập nhật | `/admin/settings` → chọn Dark |
+| Dashboard báo lỗi tải dữ liệu | Backend chưa chạy | Kiểm tra `npm run start:dev` đang chạy ở cổng 3000 |
+| Đăng nhập thất bại | Sai mật khẩu hoặc tài khoản bị khóa 15 phút | **Quên mật khẩu**, hoặc nhờ quản trị khác **Cấp mật khẩu tạm** |
+| Báo không có quyền (403) | Vai trò thiếu quyền | Trang Người dùng → **Sửa** → chọn vai trò phù hợp |
+| Menu thiếu mục sau khi đổi vai trò | Phiên cũ | Đăng nhập lại |
 
 ---
 
-## 11. Liên hệ hỗ trợ
+## 14. Liên hệ hỗ trợ
 
 - **Developer:** Trần Tuấn Anh (MSSV: 22010130)
 - **Email:** admin@gensmile.vn

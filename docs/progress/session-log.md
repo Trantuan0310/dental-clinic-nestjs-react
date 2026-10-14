@@ -8,8 +8,17 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ### Đang chờ / bước tiếp theo
 
+- PR cập nhật hướng dẫn sử dụng: chờ người dùng xem và merge.
 - PR sửa 2 lỗi cấu hình lịch (mục ngay dưới) cùng `CLAUDE.md` và nhật ký này: chờ CI xanh rồi người dùng merge.
 - Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` trên VPS (môi trường của Claude không có quyền SSH).
+
+### Cập nhật hướng dẫn sử dụng (`docs/09_UserGuide/`)
+
+- Đối chiếu 6 file với code. `PHAN_QUYEN.md` khớp; 5 file còn lại lệch khoảng 70 chỗ.
+- Viết lại `ADMIN_GUIDE.md`, `RECEPTIONIST_GUIDE.md`, `DENTIST_GUIDE.md` theo giao diện hiện tại; phần quyền trỏ sang `PHAN_QUYEN.md`. Sửa `QUICK_START.md`, `TROUBLESHOOTING.md`.
+- Chính: hóa đơn nháp tự tạo khi đóng phiên khám; chỉ quản trị hủy hóa đơn; gộp hồ sơ chưa có nút; bác sĩ không check-in; không có giới hạn đóng phiên 24 giờ; khóa đăng nhập 15 phút; bỏ gợi ý `prisma db push --accept-data-loss`.
+- Chưa sửa (code, cần người dùng quyết): `backend/.env.example` dùng cổng 5432 nhưng `docker-compose.yml` mở 15432; `npm run db:up` dựng cả container backend ở cổng 3000.
+- Chưa xác minh: thông tin liên hệ cuối `ADMIN_GUIDE.md`.
 
 ### Sửa 2 lỗi cấu hình lịch làm việc
 
