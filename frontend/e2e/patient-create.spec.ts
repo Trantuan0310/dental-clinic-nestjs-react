@@ -25,7 +25,7 @@ test.describe('Patient Creation', () => {
     const testName = `Test Patient ${Date.now()}`;
     const testPhone = randomVnPhone();
 
-    // Real labels are "Họ và tên (bắt buộc)" and "SĐT chính" — match
+    // Real labels are "Họ tên (bắt buộc)" and "SĐT chính" — match
     // substrings that actually appear rather than a full literal phrase.
     await page.getByLabel(/họ.*tên|fullname/i).fill(testName);
     await page.getByLabel(/ngày sinh|date of birth/i).fill('1992-05-20');

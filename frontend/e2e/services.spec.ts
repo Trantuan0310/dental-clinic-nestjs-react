@@ -20,7 +20,7 @@ test('admin manages a service and its assignment to a dentist', async ({ page })
   await dialog.getByLabel('Thời lượng').selectOption('45');
   await dialog.getByLabel('Dọn dẹp sau').selectOption('10');
   await dialog.getByLabel('Giá niêm yết (VND)').fill('350000');
-  await dialog.getByRole('button', { name: /tạo dịch vụ/i }).click();
+  await dialog.getByRole('button', { name: /thêm dịch vụ/i }).click();
   await expect(dialog).toBeHidden();
   const serviceRow = page.locator('tbody tr', { hasText: name });
   await expect(serviceRow).toContainText('45 phút');

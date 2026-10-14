@@ -89,7 +89,7 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
   const dentistTableRow = page.locator('tbody tr', { hasText: ACCOUNTS.dentist.fullName }).first();
   await expect(dentistTableRow).toBeVisible({ timeout: 10_000 });
   await dentistTableRow.getByRole('button', { name: /xem chi tiết/i }).click();
-  await page.getByRole('button', { name: /hiện computation log/i }).click();
+  await page.getByRole('button', { name: /hiện nhật ký tính toán/i }).click();
   await expect(page.locator('pre', { hasText: /totalHours/ })).toBeVisible({ timeout: 5_000 });
   await page.keyboard.press('Escape');
 

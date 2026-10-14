@@ -23,7 +23,7 @@ test('admin creates an employee, gives them an account and makes them a dentist'
   await dialog.getByRole('button', { name: /tạo nhân viên/i }).click();
   await expect(dialog).toBeHidden();
 
-  await page.getByLabel('Tìm nhân viên').fill(name);
+  await page.getByLabel('Tìm theo mã, tên, SĐT, email…').fill(name);
   await page.getByRole('button', { name: /^tìm$/i }).click();
   const row = page.locator('tbody tr', { hasText: name });
   await expect(row).toBeVisible();
@@ -42,7 +42,7 @@ test('admin creates an employee, gives them an account and makes them a dentist'
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Số chứng chỉ hành nghề').fill(`CCHN-E2E-${stamp}`);
   await dialog.getByRole('button', { name: 'Nha chu' }).click();
-  await dialog.getByRole('button', { name: 'Chọn màu #0891B2' }).click();
+  await dialog.getByRole('button', { name: 'Màu lịch: #0891B2' }).click();
   await dialog.getByRole('button', { name: /tạo hồ sơ bác sĩ/i }).click();
   await expect(dialog).toBeHidden();
 
@@ -54,7 +54,7 @@ test('admin creates an employee, gives them an account and makes them a dentist'
   await expect(page.getByText(`CCHN-E2E-${stamp}`)).toBeVisible();
 
   // ---- Suspend and reinstate (BR-STAFF-004: no bookings, so allowed) ----
-  await page.getByRole('button', { name: /tạm đình chỉ \/ ngừng/i }).click();
+  await page.getByRole('button', { name: /tạm ngưng hoặc ngừng hành nghề/i }).click();
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Lý do').fill('Nghỉ phép dài hạn');
   await dialog.getByRole('button', { name: /xác nhận/i }).click();
@@ -65,7 +65,7 @@ test('admin creates an employee, gives them an account and makes them a dentist'
 
   // ---- Terminate (BR-STAFF-005) ----
   await page.goto('/staff');
-  await page.getByLabel('Tìm nhân viên').fill(name);
+  await page.getByLabel('Tìm theo mã, tên, SĐT, email…').fill(name);
   await page.getByRole('button', { name: /^tìm$/i }).click();
   await row.getByRole('button', { name: `Cho ${name} nghỉ việc` }).click();
   dialog = page.getByRole('dialog');

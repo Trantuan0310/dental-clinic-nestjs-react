@@ -42,9 +42,9 @@ test('a front desk PC set to UTC still books clinic wall-clock time', async ({ b
     const patientName = (await pick.locator('p.font-medium').innerText()).trim();
     await pick.click();
     await dialog.getByLabel('Bác sĩ').selectOption({ label: 'BS. Trần Thị Bình' });
-    await dialog.getByLabel('Ngày *').fill(date);
+    await dialog.getByLabel('Ngày hẹn *').fill(date);
 
-    const firstFree = dialog.getByText('Giờ trống phù hợp').locator('..').getByRole('button').first();
+    const firstFree = dialog.getByText(/giờ bắt đầu còn trống/).locator('..').getByRole('button').first();
     const time = (await firstFree.innerText()).trim();
     await firstFree.click();
 
