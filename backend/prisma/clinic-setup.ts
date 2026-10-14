@@ -7,7 +7,8 @@
  *   2. the service catalogue (clinic-setup/catalog.ts), by code;
  *   3. dentist ↔ service assignments, for dentists that have none yet;
  *   4. working hours Mon–Sat 08:00–12:00 and 13:30–19:00, for dentists that
- *      have no schedule yet (RESET_SCHEDULES=1 replaces existing ones);
+ *      have no schedule yet (RESET_SCHEDULES=1 replaces existing ones from
+ *      today; past days keep their hours);
  *   5. inventory categories and items (stock 0), by name / SKU;
  *   6. expense categories, by name.
  * No patients, appointments or invoices are created. Running it again is a
@@ -230,36 +231,66 @@ async function seedAssignments() {
 async function seedSchedules() {
   const reset = process.env.RESET_SCHEDULES === '1';
   const validFrom = new Date(clinicToday());
+  const yesterday = new Date(validFrom.getTime() - 24 * 3600_000);
   let dentists = 0;
   for (const d of await activeDentists()) {
     const existing = await prisma.workingSchedule.count({
       where: { dentistId: d.id, deletedAt: null },
     });
     if (existing > 0 && !reset) continue;
-    if (existing > 0)
-      await prisma.workingSchedule.updateMany({
-        where: { dentistId: d.id, deletedAt: null },
+    await prisma.$transaction(async tx => {
+      // Past days keep their hours: payroll reads them (as the schedule
+      // screen does, A1-02). Rows still running end yesterday; only rows
+      // that have not started yet are deleted.
+      await tx.workingSchedule.updateMany({
+        where: {
+          dentistId: d.id,
+          deletedAt: null,
+          validFrom: { lt: validFrom },
+          OR: [{ validTo: null }, { validTo: { gte: validFrom } }],
+        },
+        data: { validTo: yesterday },
+      });
+      await tx.workingSchedule.updateMany({
+        where: { dentistId: d.id, deletedAt: null, validFrom: { gte: validFrom } },
         data: { deletedAt: new Date() },
       });
-    await prisma.workingSchedule.createMany({
-      data: WORK_DAYS.flatMap(dayOfWeek =>
-        SHIFTS.map(s => ({
-          dentistId: d.id,
-          dayOfWeek,
-          startTime: pgTime(s.start),
-          endTime: pgTime(s.end),
-          slotDurationMin: SLOT_MINUTES,
-          validFrom,
-          shiftType: s.shiftType,
-          isPaidShift: true,
-        })),
-      ),
+      await tx.workingSchedule.createMany({
+        data: WORK_DAYS.flatMap(dayOfWeek =>
+          SHIFTS.map(s => ({
+            dentistId: d.id,
+            dayOfWeek,
+            startTime: pgTime(s.start),
+            endTime: pgTime(s.end),
+            slotDurationMin: SLOT_MINUTES,
+            validFrom,
+            shiftType: s.shiftType,
+            isPaidShift: true,
+          })),
+        ),
+      });
     });
+    if (existing > 0) {
+      const upcoming = await prisma.appointment.count({
+        where: {
+          dentistId: d.id,
+          deletedAt: null,
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+          startAt: { gte: new Date() },
+        },
+      });
+      if (upcoming > 0)
+        console.log(
+          `  ! ${d.fullName}: ${upcoming} lịch hẹn sắp tới — kiểm tra tab "Lịch hẹn bị ảnh hưởng" ở màn Lịch`,
+        );
+    }
     dentists++;
   }
   console.log(
     `✓ Lịch làm việc T2–T7 08:00–12:00, 13:30–19:00: ${dentists} bác sĩ` +
-      (reset ? ' (đã thay lịch cũ)' : ' (bác sĩ đã có lịch được giữ nguyên)'),
+      (reset
+        ? ' (lịch cũ kết thúc hôm qua, các ngày đã qua giữ nguyên)'
+        : ' (bác sĩ đã có lịch được giữ nguyên)'),
   );
 }
 

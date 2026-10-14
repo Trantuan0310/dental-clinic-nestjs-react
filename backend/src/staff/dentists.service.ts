@@ -194,7 +194,8 @@ export class DentistsService {
         where: {
           dentistId: userId,
           deletedAt: null,
-          OR: [{ validTo: null }, { validTo: { gte: now } }],
+          // validTo is a clinic date: a row ending today still runs today.
+          OR: [{ validTo: null }, { validTo: { gte: today } }],
         },
         orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
         select: {

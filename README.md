@@ -165,7 +165,7 @@ npm run build
 npm run test:e2e          # Playwright, cần backend + DB đang chạy
 ```
 
-Kết quả gần nhất (14/10/2026): backend **1343/1343** test pass (55 suite); `tsc` và ESLint không có lỗi ở cả hai phía; frontend build thành công. CI trên GitHub Actions chạy migration, API test với PostgreSQL thật và E2E Playwright cho mỗi pull request vào `main`/`develop`.
+Kết quả gần nhất (14/10/2026): backend **1344/1344** test pass (55 suite); `tsc` và ESLint không có lỗi ở cả hai phía; frontend build thành công. CI trên GitHub Actions chạy migration, API test với PostgreSQL thật và E2E Playwright cho mỗi pull request vào `main`/`develop`.
 
 ---
 
