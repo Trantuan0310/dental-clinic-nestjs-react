@@ -165,3 +165,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `AppShell.tsx`: nội dung bị giới hạn `max-w-7xl` (1280px) và căn giữa nên màn hình ~1900px dư hai dải trống mỗi bên trong khi lịch co lại ở giữa.
 - Các trang dạng lưới (`/appointments`, `/my-appointments`, `/dispatch`, `/schedule`) nay dùng hết bề rộng; các trang khác nới giới hạn lên 1600px.
 - Kiểm tra ở cửa sổ 1900px: nội dung lịch rộng từ 248 đến 1876px (kín khung); trang Bệnh nhân 262–1862px. frontend `build`, `lint` sạch.
+
+### Lịch thu gọn để nhìn tổng quan không phải cuộn
+
+- `calendarLayout.ts`: mỗi giờ cao 64px (trước 120px), khối tối thiểu 16px (giữ tỉ lệ 4 khối 15 phút/giờ), khung giờ mặc định 08:00–18:00 (trước 07:00–19:00; vẫn tự mở rộng khi có lịch ngoài khung). Cả ngày 640px nằm vừa một màn hình.
+- Khối dưới 36px (≤ 30 phút) một dòng "giờ tên"; 45–50 phút hai dòng; từ 53 phút thêm dòng bác sĩ.
+- Chụp ở 1900×950: dạng Ngày thấy trọn 08:00–18:00 không cuộn; dạng Tuần gần trọn. frontend `build`, `lint` sạch.
