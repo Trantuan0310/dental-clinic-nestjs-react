@@ -33,7 +33,7 @@ const SIZE_MAP: Record<LogoSize, { w: number; h: number }> = {
 // Icon dimension map (square pixels)
 const ICON_SIZE_MAP: Record<LogoSize, number> = {
   xs: 16,
-  sm: 28,
+  sm: 36,
   md: 40,
   lg: 56,
   xl: 80,
@@ -44,7 +44,7 @@ function pickFile(variant: LogoVariant, _theme: LogoTheme): string {
     case 'full':
       return '/logo-full.png';
     case 'icon':
-      return '/logo-icon.svg';
+      return '/logo-icon.png';
     case 'icon-mono':
       return '/logo-icon-mono.svg';
   }

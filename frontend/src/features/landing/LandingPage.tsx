@@ -138,7 +138,7 @@ function SiteHeader() {
     <header className="sticky top-0 z-30 border-b border-gray-100 dark:border-surface-700 bg-white/90 dark:bg-surface-900/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <a href="#top" className="flex items-center gap-2" aria-label={clinic.name}>
-          <img src="/logo-icon.svg" alt="" className="h-9 w-9" />
+          <img src="/logo-icon.png" alt="" className="h-9 w-9" />
           <span className="text-lg font-bold tracking-wide text-brand-600">GENSMILE</span>
         </a>
         <nav className="hidden items-center gap-6 text-sm font-medium text-gray-700 dark:text-surface-200 md:flex" aria-label={t('uiEntry.landing.mainNav')}>
@@ -642,7 +642,7 @@ function Contact() {
           />
         ) : (
           <div className="flex min-h-[16rem] flex-col items-center justify-center rounded-2xl bg-white dark:bg-surface-900 p-8 text-center shadow-sm ring-1 ring-gray-100">
-            <img src="/logo-icon.svg" alt="" className="h-16 w-16" />
+            <img src="/logo-icon.png" alt="" className="h-16 w-16" />
             <p className="mt-4 font-semibold text-gray-900 dark:text-surface-100">{clinic.name}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
               {clinic.taglineIsDefault ? t('uiEntry.landing.defaultTagline') : clinic.tagline}

@@ -178,3 +178,11 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Chiều cao hàng theo số lịch của giờ đông nhất tuần (giờ trống chỉ 28px) nên cả tuần gọn; vẫn giữ nền giờ làm việc của bác sĩ, ngày nghỉ, tô ngày hôm nay, bấm ô trống để tạo lịch.
 - Dạng Ngày giữ kiểu khối theo thời lượng. Bỏ `layoutLanesCapped`, `OverflowChip`, `useElementWidth` (làm ở PR trước, không còn dùng); tách `appointmentTooltip` dùng chung.
 - Chụp ở 1900×950: một bác sĩ và tất cả bác sĩ đều gọn, "+N" mở hộp đúng; không cuộn ngang. frontend `build`, `lint` sạch.
+
+## Logo: thanh trên và tab trình duyệt dùng đúng logo gốc
+
+- Nguyên nhân: trang đăng nhập dùng logo gốc (`logo-full.png`, răng nét vẽ + 2 ngôi sao) còn thanh trên, trang đặt lịch, trang chủ và favicon dùng `logo-icon.svg`/`favicon.svg` là hình răng khác tự vẽ lại.
+- Cắt phần hình răng (không có chữ) từ `logo-full.png`, bỏ nền sáng thành trong suốt, xuất: `logo-icon.png` (256), `favicon-32.png`, `favicon-48.png`, và nền trắng `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png`. Script tạo nằm ngoài repo (Chromium canvas).
+- Đổi `Logo.tsx` (variant icon), `PublicTopBar`, `LandingPage` sang `/logo-icon.png`; `index.html` dùng favicon/apple-touch PNG; `manifest.webmanifest` dùng PNG 192/512. Xóa `public/logo-icon.svg`, `public/favicon.svg`. Kích thước icon cỡ `sm` 28 → 36px để nét rõ hơn.
+- Tài liệu thương hiệu trong `docs/00_Vision/branding` vẫn nhắc tên file SVG cũ (chưa cập nhật). Trình duyệt giữ favicon cũ trong cache một thời gian.
+- frontend `build`, `lint` sạch; chụp thanh trên và trang đăng nhập.
