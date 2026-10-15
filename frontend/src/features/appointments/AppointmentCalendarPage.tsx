@@ -21,6 +21,7 @@ import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { LIST_ALL_LIMIT, useDentistOptions } from './appointmentApi';
 import { Alert, Button, Card, Checkbox, EmptyState, Select, Skeleton } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import type {
@@ -115,6 +116,16 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
 
   // Dentists with bookings to show, including suspended / on-leave ones.
   const { data: dentists } = useDentistOptions('schedule');
+
+  // The week grid reads like a personal timetable only for one dentist (with
+  // everyone's bookings in the same columns they sit side by side), so moving
+  // to it from "all dentists" picks one: the signed-in dentist, else the first.
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (mode === 'week' && !mine && !selectedDentistId && dentists?.length) {
+      setSelectedDentistId(dentists.find((d) => d.id === userId)?.id ?? dentists[0].id);
+    }
+  };
 
   // Calculate date range based on view mode
   const dateRange = useMemo(() => {
@@ -335,18 +346,6 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {!mine && (
-              <Select
-                aria-label={t('uiScheduling.dentist')}
-                value={selectedDentistId}
-                onChange={(e) => setSelectedDentistId(e.target.value)}
-                options={[
-                  { value: '', label: t('uiScheduling.allDentists') },
-                  ...(dentists ?? []).map((d) => ({ value: d.id, label: d.fullName })),
-                ]}
-                className="min-w-[160px] py-1.5"
-              />
-            )}
             <Select
               aria-label={t('uiScheduling.status')}
               value={statusFilter}
@@ -375,7 +374,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
                   key={mode}
                   type="button"
                   aria-pressed={viewMode === mode}
-                  onClick={() => setViewMode(mode)}
+                  onClick={() => changeViewMode(mode)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     viewMode === mode
                     ? 'bg-white text-gray-900 shadow-sm dark:bg-surface-800 dark:text-surface-100'
@@ -388,6 +387,42 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
             </div>
           </div>
         </div>
+
+        {/* Dentist filter: one dentist shows a clean timetable, "all" shows the clinic */}
+        {!mine && dentists && dentists.length > 0 && (
+          <div
+            role="group"
+            aria-label={t('uiScheduling.dentist')}
+            className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-surface-700"
+          >
+            {[{ id: '', fullName: t('uiScheduling.allDentists'), calendarColor: null as string | null }, ...dentists].map((d) => {
+              const active = selectedDentistId === d.id;
+              return (
+                <button
+                  key={d.id || 'all'}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setSelectedDentistId(d.id)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors',
+                    active
+                      ? 'border-brand-600 bg-brand-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-200 dark:hover:bg-surface-700',
+                  )}
+                >
+                  {d.calendarColor && (
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/70"
+                      style={{ backgroundColor: d.calendarColor }}
+                      aria-hidden
+                    />
+                  )}
+                  {d.fullName}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Calendar Grid */}
         <div className="overflow-x-auto">
@@ -429,6 +464,10 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
                   closedDays={closedDays}
                   workingWindows={workingWindows}
                   onSlotClick={canCreate ? handleSlotClick : undefined}
+                  onDayClick={(d) => {
+                    setCurrentDate(d);
+                    setViewMode('day');
+                  }}
                   onAppointmentClick={handleAppointmentClick}
                 />
               )}

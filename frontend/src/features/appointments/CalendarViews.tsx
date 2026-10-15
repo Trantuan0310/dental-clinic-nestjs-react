@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { enUS } from 'date-fns/locale';
@@ -16,6 +17,7 @@ import {
   HOUR_HEIGHT_PX,
   isHourPast,
   layoutLanes,
+  layoutLanesCapped,
   MIN_BLOCK_PX,
   type LaneSlot,
 } from './calendarLayout';
@@ -26,8 +28,8 @@ import {
 
 const PX_PER_MIN = HOUR_HEIGHT_PX / 60;
 const MIN_BLOCK_MIN = Math.ceil(MIN_BLOCK_PX / PX_PER_MIN);
-/** Width a single side-by-side booking needs for its time and patient name. */
-const LANE_MIN_WIDTH_PX = 112;
+/** Narrowest a side-by-side booking may get before the rest fold into a "+N" chip. */
+const LANE_MIN_WIDTH_PX = 64;
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
   scheduled: 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-surface-700 dark:border-surface-500 dark:text-surface-100',
@@ -92,6 +94,12 @@ interface DayColumnProps
   now: number;
   compact?: boolean;
   className?: string;
+  /**
+   * Most side-by-side lanes the column may show (omit: as many as needed).
+   * Past that, extra bookings fold into a "+N" chip that calls onOverflowClick.
+   */
+  maxLanes?: number;
+  onOverflowClick?: (day: Date) => void;
 }
 
 /** One day's column: working hours, hour slots and side-by-side booking blocks. */
@@ -105,13 +113,16 @@ function DayColumn({
   now,
   compact = false,
   className,
+  maxLanes,
+  onOverflowClick,
   onSlotClick,
   onAppointmentClick,
 }: DayColumnProps) {
   const { t } = useTranslation();
   const dateKey = format(day, 'yyyy-MM-dd');
   const gridStartMin = hourStart * 60;
-  const lanes = layoutLanes(appointments, MIN_BLOCK_MIN);
+  const capped = maxLanes !== undefined ? layoutLanesCapped(appointments, MIN_BLOCK_MIN, maxLanes) : null;
+  const lanes = capped ? capped.slots : layoutLanes(appointments, MIN_BLOCK_MIN);
   const closed = closedReason !== undefined;
 
   return (
@@ -159,6 +170,8 @@ function DayColumn({
 
       {/* Appointment blocks */}
       {appointments.map((apt) => {
+        // Folded into a "+N" chip (capped columns only).
+        if (capped && !lanes.has(apt.id)) return null;
         const { start, end } = appointmentSpan(apt);
         return (
           <AppointmentBlock
@@ -173,8 +186,75 @@ function DayColumn({
           />
         );
       })}
+      {capped?.overflows.map((o) => (
+        <OverflowChip
+          key={o.ids[0]}
+          top={(o.start - gridStartMin) * PX_PER_MIN}
+          height={Math.max((o.end - o.start) * PX_PER_MIN, MIN_BLOCK_PX)}
+          count={o.ids.length}
+          lane={o.slot}
+          onClick={() => onOverflowClick?.(day)}
+        />
+      ))}
     </div>
   );
+}
+
+/** "+N" chip standing in for the bookings a crowded cluster has no lane for. */
+function OverflowChip({
+  top,
+  height,
+  count,
+  lane,
+  onClick,
+}: {
+  top: number;
+  height: number;
+  count: number;
+  lane: LaneSlot;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const hint = t('uiScheduling.dayOverflowHint', { count });
+  return (
+    <div
+      className="absolute z-10"
+      style={{
+        top: `${top}px`,
+        height: `${height}px`,
+        left: `calc(${(lane.lane / lane.lanes) * 100}% + 2px)`,
+        width: `calc(${100 / lane.lanes}% - 4px)`,
+      }}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        title={hint}
+        aria-label={hint}
+        className="flex h-full w-full items-center justify-center rounded-md border border-dashed border-gray-400 bg-white/80 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-100 dark:border-surface-500 dark:bg-surface-800/80 dark:text-surface-200 dark:hover:bg-surface-700"
+      >
+        {t('uiScheduling.dayOverflowChip', { count })}
+      </button>
+    </div>
+  );
+}
+
+/** Live width (px) of an element, kept current as the window is resized or zoomed. */
+function useElementWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, width };
 }
 
 const byStart = (a: Appointment, b: Appointment) =>
@@ -238,6 +318,8 @@ export function DayView({
 interface WeekViewProps extends TimeGridProps {
   days: Date[];
   appointmentsByDate: Record<string, Appointment[]>;
+  /** Opens one day (the "+N" chip of a crowded column). */
+  onDayClick?: (date: Date) => void;
 }
 
 export function WeekView({
@@ -248,6 +330,7 @@ export function WeekView({
   closedDays,
   workingWindows,
   onSlotClick,
+  onDayClick,
   onAppointmentClick,
 }: WeekViewProps) {
   const { t, i18n } = useTranslation();
@@ -255,23 +338,20 @@ export function WeekView({
   const today = clinicWallClock();
   const now = useNow();
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
+  const { ref: gridRef, width: gridWidth } = useElementWidth<HTMLDivElement>();
 
-  // A day column is split into one lane per overlapping booking, so on a week
-  // where several dentists are busy at once, a fixed-width column squeezes
-  // every block into an unreadable sliver. Size the columns off the busiest
-  // day instead and let the parent scroll sideways.
-  const maxLanes = Math.max(
-    1,
-    ...days.map((day) => {
-      const lanes = layoutLanes(appointmentsByDate[format(day, 'yyyy-MM-dd')] ?? [], MIN_BLOCK_MIN);
-      return Math.max(1, ...[...lanes.values()].map((l) => l.lanes));
-    }),
-  );
-  const dayMinWidth = Math.min(Math.max(96, maxLanes * LANE_MIN_WIDTH_PX), 420);
-  const gridTemplateColumns = `56px repeat(${days.length}, minmax(${dayMinWidth}px, 1fr))`;
+  // The seven day columns always share the width they are given (so a zoomed
+  // or narrow window never needs a sideways scroll); overlapping bookings
+  // split a column into lanes, whose names are cut short and shown in full in
+  // the tooltip.
+  const gridTemplateColumns = `56px repeat(${days.length}, minmax(0, 1fr))`;
+  // A lane needs ~64px for its time and the start of a name; before the first
+  // measurement (width 0) leave the column uncapped.
+  const columnWidth = (gridWidth - 56) / days.length;
+  const maxLanes = gridWidth > 0 ? Math.max(1, Math.floor(columnWidth / LANE_MIN_WIDTH_PX)) : undefined;
 
   return (
-    <div style={{ minWidth: 56 + days.length * dayMinWidth }}>
+    <div ref={gridRef}>
       {/* Day headers */}
       <div className="grid border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800" style={{ gridTemplateColumns }}>
         <div className="border-r border-gray-100 dark:border-surface-700" />
@@ -323,6 +403,8 @@ export function WeekView({
               windows={workingWindows?.[dateKey]}
               now={now}
               compact
+              maxLanes={maxLanes}
+              onOverflowClick={onDayClick}
               className={cn(
                 'border-r border-gray-100 last:border-r-0 dark:border-surface-700',
                 isSameDay(day, today) && 'bg-brand-50/30 dark:bg-brand-500/10',
@@ -442,9 +524,12 @@ function AppointmentBlock({
                 {overdue ? (
                   <AlertTriangle className="h-3 w-3 shrink-0" aria-label={t(`uiScheduling.${OVERDUE_LABEL}`)} />
                 ) : (
-                  showDetails && <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                  showDetails && !compact && <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                 )}
-                <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
+                <span className="truncate">
+                  {formatTimeOnly(appointment.startsAt)}
+                  {compact && showDetails && ` – ${formatTimeOnly(appointment.endsAt)}`}
+                </span>
               </div>
               {overdue && showOverdueLabel && !compact && (
                 <p className="truncate text-[10px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>

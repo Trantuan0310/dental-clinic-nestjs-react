@@ -97,7 +97,7 @@ export function MonthView({
   return (
     <div className="flex flex-col">
       {/* Weekday header */}
-      <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800">
+      <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800">
         {weekdayLabels.map((d) => (
           <div
             key={d}
@@ -109,7 +109,7 @@ export function MonthView({
       </div>
 
       {/* Day grid */}
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-[repeat(7,minmax(0,1fr))]">
         {gridCells.map((cell) => {
           const dateKey = format(cell.date, 'yyyy-MM-dd');
           const dayAppointments = appointmentsByDate[dateKey] ?? [];
@@ -123,7 +123,7 @@ export function MonthView({
             <div
               key={dateKey}
               className={cn(
-                'group relative min-h-[112px] border-b border-r border-gray-100 p-1.5 transition-colors last:border-r-0 dark:border-surface-700',
+                'group relative min-h-[112px] min-w-0 border-b border-r border-gray-100 p-1.5 transition-colors last:border-r-0 dark:border-surface-700',
                 !cell.inMonth && 'bg-gray-50/60 dark:bg-surface-900/60',
                 cell.inMonth && isWeekend && 'bg-gray-50/40 dark:bg-surface-800/40',
                 cell.inMonth && closedReason !== undefined && 'bg-gray-100 dark:bg-surface-800',
