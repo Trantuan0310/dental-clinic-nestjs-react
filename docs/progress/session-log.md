@@ -186,3 +186,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Đổi `Logo.tsx` (variant icon), `PublicTopBar`, `LandingPage` sang `/logo-icon.png`; `index.html` dùng favicon/apple-touch PNG; `manifest.webmanifest` dùng PNG 192/512. Xóa `public/logo-icon.svg`, `public/favicon.svg`. Kích thước icon cỡ `sm` 28 → 36px để nét rõ hơn.
 - Tài liệu thương hiệu trong `docs/00_Vision/branding` vẫn nhắc tên file SVG cũ (chưa cập nhật). Trình duyệt giữ favicon cũ trong cache một thời gian.
 - frontend `build`, `lint` sạch; chụp thanh trên và trang đăng nhập.
+
+## Bỏ công tắc Zalo (giữ chỗ) khỏi Dashboard
+
+- Gỡ công tắc "Zalo — Sắp ra mắt" ở `DashboardHeader.tsx` (chỉ là hình giữ chỗ, chưa có backend/cài đặt Zalo OA) cùng chữ `zaloTooltip`, `launchingSoon` không còn dùng (vi, en) và import `Megaphone`.
+- Không đụng nút "Nhắn Zalo" ở trang tra cứu yêu cầu đặt lịch (liên kết `CLINIC_ZALO`, chạy thật).
+- Chụp Dashboard: không còn chữ Zalo, bộ chọn khoảng thời gian giữ nguyên. frontend `build`, `lint` sạch; không có test E2E nhắc Zalo.

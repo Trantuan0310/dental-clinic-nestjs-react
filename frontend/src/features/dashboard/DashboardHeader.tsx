@@ -1,9 +1,9 @@
 // =============================================================================
-// Dashboard header — range selector, Zalo toggle (placeholder), quick actions
+// Dashboard header — range selector, quick actions
 // =============================================================================
 import { format } from 'date-fns';
 import { enUS, vi } from 'date-fns/locale';
-import { Calendar, Megaphone } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { Tooltip, QuickActions } from '@/components/ui';
 import { useTranslation } from 'react-i18next';
 import { RANGE_OPTIONS, type TimeRange } from './types';
@@ -43,37 +43,6 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/*
-            Zalo OA notification integration has no backend yet (no settings
-            API, no toggle to persist). Static disabled placeholder only —
-            no state to wire up until the BE exposes it.
-          */}
-          <Tooltip
-            label={
-              <span>
-                {t('uiEntry.dashboard.zaloTooltip')}
-              </span>
-            }
-          >
-            <span
-              aria-disabled
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-400 opacity-60 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-500"
-            >
-              <Megaphone className="h-4 w-4" />
-              <span className="font-medium">Zalo</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                {t('uiEntry.dashboard.launchingSoon')}
-              </span>
-              <span
-                aria-hidden
-                role="presentation"
-                className="relative h-5 w-9 rounded-full bg-gray-300 dark:bg-surface-700"
-              >
-                <span className="absolute top-0.5 h-4 w-4 translate-x-0.5 rounded-full bg-white shadow" />
-              </span>
-            </span>
-          </Tooltip>
-
           <Tooltip label={t('uiEntry.dashboard.rangeTooltip')}>
             <div className="inline-flex cursor-help items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-surface-700 dark:bg-surface-800">
               <Calendar className="h-4 w-4 text-teal-600 dark:text-teal-400" />

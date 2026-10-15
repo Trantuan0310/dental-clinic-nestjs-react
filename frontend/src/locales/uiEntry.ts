@@ -18,7 +18,7 @@ export const vi = {
     home: 'Về trang chủ',
   },
   dashboard: {
-    overview: 'Tổng quan', range: { today: 'Hôm nay', '7d': '7 ngày qua', '15d': '15 ngày qua', '30d': '30 ngày qua', '6m': '6 tháng qua', sevenDays: '7 ngày', fifteenDays: '15 ngày', thirtyDays: '30 ngày', sixMonths: '6 tháng' }, dateFormat: "EEEE, dd 'tháng' MM, yyyy", zaloTooltip: 'Tích hợp Zalo OA đang được phát triển. Khi có, bạn có thể bật/tắt thông báo tổng kết hằng ngày tại đây.', launchingSoon: 'Sắp ra mắt',
+    overview: 'Tổng quan', range: { today: 'Hôm nay', '7d': '7 ngày qua', '15d': '15 ngày qua', '30d': '30 ngày qua', '6m': '6 tháng qua', sevenDays: '7 ngày', fifteenDays: '15 ngày', thirtyDays: '30 ngày', sixMonths: '6 tháng' }, dateFormat: "EEEE, dd 'tháng' MM, yyyy", 
     rangeTooltip: 'Khoảng thời gian áp dụng cho hầu hết chỉ số trên Dashboard (riêng biểu đồ xu hướng theo tháng luôn hiển thị các tháng gần nhất, không đổi theo lựa chọn này).', rangeLabel: 'Khoảng thời gian',
     errorTitle: 'Không thể tải dữ liệu', errorDescription: 'Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.', retry: 'Thử lại', kpiErrorTitle: 'Không thể tải số liệu KPI',
     comparison: 'So với {{range}} cùng kỳ trước', patients: 'Bệnh nhân', firstVisit: 'Bệnh nhân lần đầu đến khám (đã check-in) trong khoảng thời gian đã chọn.',
@@ -68,7 +68,7 @@ export const en = {
     home: 'Go to home',
   },
   dashboard: {
-    overview: 'Overview', range: { today: 'Today', '7d': 'Last 7 days', '15d': 'Last 15 days', '30d': 'Last 30 days', '6m': 'Last 6 months', sevenDays: '7 days', fifteenDays: '15 days', thirtyDays: '30 days', sixMonths: '6 months' }, dateFormat: "EEEE, MMMM dd, yyyy", zaloTooltip: 'Zalo OA integration is in development. When available, daily summary notifications can be turned on or off here.', launchingSoon: 'Coming soon',
+    overview: 'Overview', range: { today: 'Today', '7d': 'Last 7 days', '15d': 'Last 15 days', '30d': 'Last 30 days', '6m': 'Last 6 months', sevenDays: '7 days', fifteenDays: '15 days', thirtyDays: '30 days', sixMonths: '6 months' }, dateFormat: "EEEE, MMMM dd, yyyy", 
     rangeTooltip: 'This time range applies to most dashboard metrics. The monthly trend chart always shows the latest months.', rangeLabel: 'Time range',
     errorTitle: 'Unable to load data', errorDescription: 'Something went wrong while loading data. Please try again.', retry: 'Retry', kpiErrorTitle: 'Unable to load KPI data',
     comparison: 'Compared with the previous {{range}} period', patients: 'Patients', firstVisit: 'Patients checking in for their first visit during the selected period.',
