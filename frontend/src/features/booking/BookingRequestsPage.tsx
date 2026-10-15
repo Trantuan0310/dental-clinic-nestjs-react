@@ -894,7 +894,7 @@ export default function BookingRequestsPage() {
             {OPEN.includes(selected.status) && (
               <details className="mt-4 rounded-lg border p-3 text-sm">
                 <summary className="cursor-pointer font-medium">
-                  {t('uiScheduling.patientAtReceptionWithReference')}
+                  {t('uiScheduling.patientAtReceptionWithReference', { reference: selected.referenceCode })}
                 </summary>
                 <p className="mt-2 text-gray-600 dark:text-surface-300">
                   {t('uiScheduling.linkWalkInToRequestHint')}

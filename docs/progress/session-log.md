@@ -129,3 +129,11 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `GET /audit` trả thêm `actorName` (họ tên, từ quan hệ `actor`); cột "Người thực hiện" hiện tên, email nhỏ bên dưới. Ô tìm kiếm tìm được theo tên. CSV ghi "Tên (email)". Sự kiện hệ thống vẫn hiện "Hệ thống".
 - 1 test mới ở `audit.controller.spec.ts` (56 test bộ audit xanh); backend `tsc`, `lint`, frontend `typecheck`, `lint` sạch.
 - Thêm vào PR #51 (cùng nhánh).
+
+## Sửa 4 lỗi giao diện phát hiện khi chụp ảnh hướng dẫn
+
+- Cửa sổ xử lý yêu cầu đặt lịch: dòng "Bệnh nhân đang ở quầy lễ tân, mã …" truyền `reference` (trước đó hiện nguyên `{{reference}}`).
+- Trang phiên khám: tiêu đề "Hồ sơ khám — {{tên bệnh nhân}}" (phiên khám không có trường mã nên trước đó chỉ hiện "Hồ sơ khám #"). Ngày giờ và bác sĩ vẫn ở dòng phụ.
+- Sơ đồ răng: nút "Bulk"/"Reset" đưa vào bản dịch ("Hàng loạt"/"Đặt lại"); sửa chữ Việt hóa còn sót trong chú thích.
+- Hóa đơn: nút hủy ẩn hẳn với người không có quyền `invoice.void` (trước đó hiện nút bị khóa).
+- frontend `typecheck`, `lint`, `build` sạch.
