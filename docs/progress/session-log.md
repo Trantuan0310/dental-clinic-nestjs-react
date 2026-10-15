@@ -151,3 +151,11 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `CalendarViews.tsx`: `WeekView` đo bề rộng bằng `ResizeObserver` (`useElementWidth`), số làn = cột rộng / 64px; chip `OverflowChip` bấm để mở dạng Ngày của ngày đó (`onDayClick`). Bỏ biểu tượng đồng hồ trong khối dạng Tuần để giờ không bị cắt.
 - Dạng Ngày giữ nguyên (không giới hạn làn). Thêm chữ `dayOverflowChip`/`dayOverflowHint` (vi, en).
 - Kiểm tra ở 900px và 1440px: không có cuộn ngang, giờ đọc được, chip "+N" hiện ở cụm đông. frontend `typecheck`, `lint`, `build` sạch.
+
+### Lịch hẹn: lọc bác sĩ bằng nút bấm, Tuần mặc định theo một bác sĩ
+
+- Ô chọn bác sĩ (dropdown) đổi thành thanh nút "Tất cả bác sĩ" + từng bác sĩ (chấm màu theo `calendarColor`), đặt phía trên lưới lịch; `aria-pressed` cho trạng thái chọn. Trang "Lịch của tôi" (`mine`) không có thanh này.
+- Chuyển sang dạng Tuần khi đang "Tất cả bác sĩ" thì tự chọn một bác sĩ (chính bác sĩ đang đăng nhập nếu có, không thì bác sĩ đầu danh sách), để các lịch của một người nằm dọc theo thời lượng như thời khóa biểu thay vì xếp cạnh nhau. Bấm "Tất cả bác sĩ" để quay lại xem cả phòng khám (cột có chip "+N").
+- Khối dạng Tuần đủ cao hiện cả giờ kết thúc ("08:30 – 09:00").
+- Lưu ý kiểm tra: `npm run typecheck` (`tsc --noEmit`) của frontend KHÔNG bắt được lỗi (tsconfig gốc dùng references); phải dùng `npm run build` (`tsc -b`) — đã dính lỗi thiếu import `cn` và khóa chữ trùng vì tin vào typecheck.
+- Không có test E2E nào dùng dạng Tuần hay ô chọn bác sĩ cũ của trang lịch.

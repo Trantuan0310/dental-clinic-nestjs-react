@@ -526,7 +526,10 @@ function AppointmentBlock({
                 ) : (
                   showDetails && !compact && <Clock className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                 )}
-                <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
+                <span className="truncate">
+                  {formatTimeOnly(appointment.startsAt)}
+                  {compact && showDetails && ` – ${formatTimeOnly(appointment.endsAt)}`}
+                </span>
               </div>
               {overdue && showOverdueLabel && !compact && (
                 <p className="truncate text-[10px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>
