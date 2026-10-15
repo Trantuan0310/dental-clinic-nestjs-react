@@ -464,10 +464,6 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
                   closedDays={closedDays}
                   workingWindows={workingWindows}
                   onSlotClick={canCreate ? handleSlotClick : undefined}
-                  onDayClick={(d) => {
-                    setCurrentDate(d);
-                    setViewMode('day');
-                  }}
                   onAppointmentClick={handleAppointmentClick}
                 />
               )}

@@ -171,3 +171,10 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `calendarLayout.ts`: mỗi giờ cao 64px (trước 120px), khối tối thiểu 16px (giữ tỉ lệ 4 khối 15 phút/giờ), khung giờ mặc định 08:00–18:00 (trước 07:00–19:00; vẫn tự mở rộng khi có lịch ngoài khung). Cả ngày 640px nằm vừa một màn hình.
 - Khối dưới 36px (≤ 30 phút) một dòng "giờ tên"; 45–50 phút hai dòng; từ 53 phút thêm dòng bác sĩ.
 - Chụp ở 1900×950: dạng Ngày thấy trọn 08:00–18:00 không cuộn; dạng Tuần gần trọn. frontend `build`, `lint` sạch.
+
+## Lịch Tuần: mỗi lịch hẹn một dòng, quá 3 thì "+N" mở danh sách
+
+- Lịch dạng Tuần bỏ kiểu khối đặt theo thời lượng xếp so le nhiều làn. Nay là lưới: mỗi giờ một hàng, mỗi ngày một cột; các lịch bắt đầu trong giờ đó liệt kê **mỗi lịch một dòng** ("giờ tên" + chấm màu bác sĩ), tối đa 3 dòng; nhiều hơn thì 2 dòng đầu + nút "+N" bấm mở hộp (Modal) liệt kê tất cả, bấm một dòng để mở chi tiết lịch hẹn.
+- Chiều cao hàng theo số lịch của giờ đông nhất tuần (giờ trống chỉ 28px) nên cả tuần gọn; vẫn giữ nền giờ làm việc của bác sĩ, ngày nghỉ, tô ngày hôm nay, bấm ô trống để tạo lịch.
+- Dạng Ngày giữ kiểu khối theo thời lượng. Bỏ `layoutLanesCapped`, `OverflowChip`, `useElementWidth` (làm ở PR trước, không còn dùng); tách `appointmentTooltip` dùng chung.
+- Chụp ở 1900×950: một bác sĩ và tất cả bác sĩ đều gọn, "+N" mở hộp đúng; không cuộn ngang. frontend `build`, `lint` sạch.
