@@ -350,13 +350,83 @@ async function repair() {
         `  ~ lịch làm việc của bác sĩ ${dentistId} có hiệu lực từ ${from.toISOString().slice(0, 10)}`,
       );
   }
+  const outside = await fixVisitsOutsideHours(upcoming);
   const fixed = await prisma.appointment.updateMany({
-    where: upcoming,
+    where: { ...upcoming, deletedAt: null },
     data: { reminderSentAt: now, reminderStatus: null, reminderNote: null },
   });
   console.log(
-    `✓ ${dentistIds.length} bác sĩ đã kiểm tra, ${fixed.count} lịch hẹn demo sắp tới không gửi nhắc`,
+    `✓ ${dentistIds.length} bác sĩ đã kiểm tra, ${fixed.count} lịch hẹn demo sắp tới không gửi nhắc; ` +
+      `lịch nằm ngoài giờ làm việc: ${outside.moved} chuyển bác sĩ, ${outside.removed} xóa`,
   );
+}
+
+/**
+ * Upcoming demo visits whose dentist does not work at that time (an older
+ * seed, or hours edited afterwards, left them there) are what makes the
+ * clinic inbox say "Bác sĩ không có lịch làm việc ngày này". Each one moves to
+ * a dentist who works then and is free; none available: it is removed (soft
+ * delete). Only weekly schedules are looked at (not one-day overrides, time
+ * off or approved shifts), and only unfinished visits of demo patients.
+ */
+async function fixVisitsOutsideHours(upcoming: Prisma.AppointmentWhereInput) {
+  const now = new Date();
+  const dentists = (
+    await prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        status: { not: 'DEACTIVATED' },
+        userRoles: { some: { role: { code: 'dentist' } } },
+      },
+      select: { id: true },
+    })
+  ).map(d => d.id);
+  const windowsOf = await windowsByDentist(dentists);
+  const fits = (dentistId: string, startAt: Date, endAt: Date) => {
+    const day = clinicDay(startAt);
+    const from = minutesOf(new Date(startAt.getTime() + 7 * 60 * 60_000));
+    const to = from + Math.round((endAt.getTime() - startAt.getTime()) / 60_000);
+    return windowsOf(dentistId, day, false).some(([a, b]) => a <= from && to <= b);
+  };
+  const visits = await prisma.appointment.findMany({
+    where: {
+      ...upcoming,
+      deletedAt: null,
+      status: { in: ['SCHEDULED', 'CONFIRMED'] },
+    },
+    select: { id: true, dentistId: true, startAt: true, endAt: true },
+    orderBy: { startAt: 'asc' },
+  });
+  let moved = 0;
+  let removed = 0;
+  for (const v of visits) {
+    if (fits(v.dentistId, v.startAt, v.endAt)) continue;
+    let target: string | null = null;
+    for (const d of dentists) {
+      if (d === v.dentistId || !fits(d, v.startAt, v.endAt)) continue;
+      const busy = await prisma.appointment.count({
+        where: {
+          dentistId: d,
+          deletedAt: null,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+          startAt: { lt: v.endAt },
+          endAt: { gt: v.startAt },
+        },
+      });
+      if (!busy) {
+        target = d;
+        break;
+      }
+    }
+    if (target) {
+      await prisma.appointment.update({ where: { id: v.id }, data: { dentistId: target } });
+      moved++;
+    } else {
+      await prisma.appointment.update({ where: { id: v.id }, data: { deletedAt: now } });
+      removed++;
+    }
+  }
+  return { moved, removed };
 }
 
 async function main() {
