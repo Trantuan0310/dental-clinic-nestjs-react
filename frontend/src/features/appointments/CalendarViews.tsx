@@ -215,7 +215,7 @@ function OverflowChip({
   onClick: () => void;
 }) {
   const { t } = useTranslation();
-  const hint = t('uiScheduling.moreAppointmentsHint', { count });
+  const hint = t('uiScheduling.dayOverflowHint', { count });
   return (
     <div
       className="absolute z-10"
@@ -236,7 +236,7 @@ function OverflowChip({
         aria-label={hint}
         className="flex h-full w-full items-center justify-center rounded-md border border-dashed border-gray-400 bg-white/80 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-100 dark:border-surface-500 dark:bg-surface-800/80 dark:text-surface-200 dark:hover:bg-surface-700"
       >
-        {t('uiScheduling.moreAppointments', { count })}
+        {t('uiScheduling.dayOverflowChip', { count })}
       </button>
     </div>
   );

@@ -149,5 +149,5 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 
 - `calendarLayout.ts`: tách `clusterLanes`, thêm `layoutLanesCapped(appointments, minMinutes, maxLanes)` — mỗi cụm lịch trùng giờ chỉ có tối đa `maxLanes` làn; các làn dư gộp thành một chip "+N" ở làn cuối.
 - `CalendarViews.tsx`: `WeekView` đo bề rộng bằng `ResizeObserver` (`useElementWidth`), số làn = cột rộng / 64px; chip `OverflowChip` bấm để mở dạng Ngày của ngày đó (`onDayClick`). Bỏ biểu tượng đồng hồ trong khối dạng Tuần để giờ không bị cắt.
-- Dạng Ngày giữ nguyên (không giới hạn làn). Thêm chữ `moreAppointments`/`moreAppointmentsHint` (vi, en).
+- Dạng Ngày giữ nguyên (không giới hạn làn). Thêm chữ `dayOverflowChip`/`dayOverflowHint` (vi, en).
 - Kiểm tra ở 900px và 1440px: không có cuộn ngang, giờ đọc được, chip "+N" hiện ở cụm đông. frontend `typecheck`, `lint`, `build` sạch.
