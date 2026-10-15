@@ -175,6 +175,7 @@ export class EmployeesService {
   async create(dto: CreateEmployeeDto, actor: JwtPayload, meta: RequestMeta) {
     this.validateContact(dto);
     const hireDate = dto.hireDate ? toDateOnly(dto.hireDate) : clinicToday();
+    this.validateHireDate(hireDate);
     this.validateDob(dto.dob, hireDate);
 
     const created = await this.prisma.$transaction(async tx => {
@@ -214,6 +215,9 @@ export class EmployeesService {
     }
     this.validateContact(dto);
     const hireDate = dto.hireDate ? toDateOnly(dto.hireDate) : current.hireDate;
+    // Only when it is being changed: an existing record whose hire date is
+    // already too far out still has to be editable, so it can be corrected.
+    if (dto.hireDate !== undefined) this.validateHireDate(hireDate);
     const dob = dto.dob === undefined ? current.dob : dto.dob ? toDateOnly(dto.dob) : null;
     this.validateDob(dob ? dob.toISOString() : null, hireDate);
     if (current.dentistProfile && dto.employeeType && dto.employeeType !== 'DENTIST') {
@@ -750,6 +754,23 @@ export class EmployeesService {
   private validateContact(dto: { phone?: string | null }) {
     if (dto.phone && !isValidVnPhone(dto.phone)) {
       throw new EmployeeValidationException('Invalid Vietnamese phone number');
+    }
+  }
+
+  /**
+   * A hire date can be today or earlier, or a start date already agreed
+   * within the year ahead. Further out is a typo (2099 for 2019), and it
+   * used to stick: terminate() refuses a termination date before the hire
+   * date, and it has no way to offer a later one, so the record could not be
+   * offboarded at all until someone worked out the hire date was the problem.
+   */
+  private validateHireDate(hireDate: Date) {
+    const limit = clinicToday();
+    limit.setUTCFullYear(limit.getUTCFullYear() + 1);
+    if (hireDate > limit) {
+      throw new EmployeeValidationException(
+        'Ngày vào làm quá xa trong tương lai (tối đa 1 năm tới) — kiểm tra lại năm',
+      );
     }
   }
 

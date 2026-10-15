@@ -7,10 +7,30 @@
 const env = import.meta.env;
 const clean = (value: string | undefined) => (value ?? '').trim();
 
-/** "08:00 – 12:00 · 13:30 – 19:00" → [{ startTime: '08:00', endTime: '12:00' }, …]. */
+/**
+ * "08:00 – 12:00 · 13:30 – 19:00" → [{ startTime: '08:00', endTime: '12:00' }, …].
+ *
+ * A pair that is not a real range (hour past 23, minute past 59, end at or
+ * before start, overlapping or out of order with the one before it) is
+ * dropped. The backend's parser — backend/prisma/clinic-setup/hours.ts —
+ * throws on those, so without the same rules here a typo in CLINIC_HOURS
+ * became opening-hours *data*: it pre-filled the working-schedule form with
+ * a block the form itself refuses to save, and measured "outside opening
+ * hours" warnings against it. This parser cannot throw (it runs while the
+ * module loads, and an exception there takes the whole app down), so it
+ * keeps the valid blocks and ignores the rest; the landing page still shows
+ * the configured text as typed, which is what tells the admin about it.
+ */
 export function parseHourBlocks(text: string): Array<{ startTime: string; endTime: string }> {
   const blocks: Array<{ startTime: string; endTime: string }> = [];
+  let previousEnd = -1;
   for (const m of text.matchAll(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/g)) {
+    const [h1, m1, h2, m2] = m.slice(1).map(Number);
+    if (h1 > 23 || h2 > 23 || m1 > 59 || m2 > 59) continue;
+    const start = h1 * 60 + m1;
+    const end = h2 * 60 + m2;
+    if (end <= start || start < previousEnd) continue;
+    previousEnd = end;
     blocks.push({ startTime: `${m[1].padStart(2, '0')}:${m[2]}`, endTime: `${m[3].padStart(2, '0')}:${m[4]}` });
   }
   return blocks;
