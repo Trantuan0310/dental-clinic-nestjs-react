@@ -792,7 +792,11 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                         {historyDetail(e.metadata) && (
                           <span className="text-gray-500"> — {historyDetail(e.metadata)}</span>
                         )}
-                        {e.actorEmail && <span className="block text-gray-400">{e.actorEmail}</span>}
+                        {(e.actorName ?? e.actorEmail) && (
+                          <span className="block text-gray-400" title={e.actorEmail ?? undefined}>
+                            {e.actorName ?? e.actorEmail}
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 text-gray-500">{formatDateTime(e.at)}</span>
                     </li>

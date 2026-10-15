@@ -4439,7 +4439,13 @@ export class AppointmentsService {
           targetId: appointmentId,
         },
         orderBy: { occurredAt: 'asc' },
-        select: { action: true, occurredAt: true, actorEmailAtTime: true, metadata: true },
+        select: {
+          action: true,
+          occurredAt: true,
+          actorEmailAtTime: true,
+          metadata: true,
+          actor: { select: { fullName: true } },
+        },
       }),
       this.prisma.appointmentRescheduleLog.findMany({
         where: { appointmentId },
@@ -4451,6 +4457,7 @@ export class AppointmentsService {
         action: e.action,
         at: e.occurredAt,
         actorEmail: e.actorEmailAtTime,
+        actorName: e.actor?.fullName ?? null,
         metadata: e.metadata,
       })),
       reschedules,
