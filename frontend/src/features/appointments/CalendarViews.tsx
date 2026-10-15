@@ -26,8 +26,6 @@ import {
 
 const PX_PER_MIN = HOUR_HEIGHT_PX / 60;
 const MIN_BLOCK_MIN = Math.ceil(MIN_BLOCK_PX / PX_PER_MIN);
-/** Width a single side-by-side booking needs for its time and patient name. */
-const LANE_MIN_WIDTH_PX = 112;
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
   scheduled: 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-surface-700 dark:border-surface-500 dark:text-surface-100',
@@ -256,22 +254,14 @@ export function WeekView({
   const now = useNow();
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
 
-  // A day column is split into one lane per overlapping booking, so on a week
-  // where several dentists are busy at once, a fixed-width column squeezes
-  // every block into an unreadable sliver. Size the columns off the busiest
-  // day instead and let the parent scroll sideways.
-  const maxLanes = Math.max(
-    1,
-    ...days.map((day) => {
-      const lanes = layoutLanes(appointmentsByDate[format(day, 'yyyy-MM-dd')] ?? [], MIN_BLOCK_MIN);
-      return Math.max(1, ...[...lanes.values()].map((l) => l.lanes));
-    }),
-  );
-  const dayMinWidth = Math.min(Math.max(96, maxLanes * LANE_MIN_WIDTH_PX), 420);
-  const gridTemplateColumns = `56px repeat(${days.length}, minmax(${dayMinWidth}px, 1fr))`;
+  // The seven day columns always share the width they are given (so a zoomed
+  // or narrow window never needs a sideways scroll); overlapping bookings
+  // split a column into lanes, whose names are cut short and shown in full in
+  // the tooltip.
+  const gridTemplateColumns = `56px repeat(${days.length}, minmax(0, 1fr))`;
 
   return (
-    <div style={{ minWidth: 56 + days.length * dayMinWidth }}>
+    <div>
       {/* Day headers */}
       <div className="grid border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800" style={{ gridTemplateColumns }}>
         <div className="border-r border-gray-100 dark:border-surface-700" />

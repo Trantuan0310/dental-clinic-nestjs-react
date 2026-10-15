@@ -137,3 +137,10 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Sơ đồ răng: nút "Bulk"/"Reset" đưa vào bản dịch ("Hàng loạt"/"Đặt lại"); sửa chữ Việt hóa còn sót trong chú thích.
 - Hóa đơn: nút hủy ẩn hẳn với người không có quyền `invoice.void` (trước đó hiện nút bị khóa).
 - frontend `typecheck`, `lint`, `build` sạch.
+
+## Lịch tuần/tháng: bỏ thanh cuộn ngang khi phóng to
+
+- Dạng Tuần: bỏ `minWidth` theo số làn; 7 cột chia đều bề rộng (`minmax(0, 1fr)`). Trước đó cột rộng tối thiểu 96–420px nên phóng to trình duyệt là phải kéo ngang. Bỏ luôn `LANE_MIN_WIDTH_PX`.
+- Dạng Tháng: lưới 7 cột `minmax(0, 1fr)` + `min-w-0` ở ô, để nội dung dài không đẩy ô rộng ra.
+- Kiểm tra ở cửa sổ 900px: không còn vùng cuộn ngang ở cả hai dạng; typecheck, lint, build sạch.
+- Đánh đổi: ngày có nhiều lịch trùng giờ (nhiều bác sĩ) bị chia thành cột mảnh, tên cắt ngắn, xem đủ bằng tooltip hoặc lọc theo bác sĩ.
