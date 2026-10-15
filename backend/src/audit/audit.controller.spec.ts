@@ -31,6 +31,17 @@ describe('AuditController', () => {
       expect(result.pagination.nextCursor).toBeNull();
     });
 
+    it("returns the actor's full name next to the email, null for system events", async () => {
+      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+        { ...validAuditLog({ id: 'l-1' }), actor: { fullName: 'Lê Thị Hạnh' } },
+        { ...validAuditLog({ id: 'l-2', actorUserId: null }), actor: null },
+      ]);
+
+      const result = await controller.list({ limit: 20 } as any);
+
+      expect(result.data.map(l => l.actorName)).toEqual(['Lê Thị Hạnh', null]);
+    });
+
     it('returns nextCursor when more pages exist', async () => {
       const logs = Array.from({ length: 21 }, (_, i) => validAuditLog({ id: `l-${i}` }));
       (prisma.auditLog.findMany as jest.Mock).mockResolvedValue(logs);

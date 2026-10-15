@@ -100,6 +100,8 @@ export interface AuditLog {
   id: string;
   actorUserId?: string | null;
   actorEmailAtTime?: string | null;
+  /** Staff member's full name; absent for system events and unknown actors. */
+  actorName?: string | null;
   action: string;
   targetType?: string | null;
   targetId?: string | null;
