@@ -9,7 +9,7 @@ export function PublicTopBar({ children }: { children?: React.ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <Link to="/" className="flex items-center gap-2" aria-label={`${clinic.name} — ${t('uiCommon.home')}`}>
-        <img src="/logo-icon.svg" alt="" className="h-8 w-8" />
+        <img src="/logo-icon.png" alt="" className="h-8 w-8" />
         <span className="text-lg font-bold tracking-wide text-brand-600">GENSMILE</span>
       </Link>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
