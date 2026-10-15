@@ -192,3 +192,10 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Gỡ công tắc "Zalo — Sắp ra mắt" ở `DashboardHeader.tsx` (chỉ là hình giữ chỗ, chưa có backend/cài đặt Zalo OA) cùng chữ `zaloTooltip`, `launchingSoon` không còn dùng (vi, en) và import `Megaphone`.
 - Không đụng nút "Nhắn Zalo" ở trang tra cứu yêu cầu đặt lịch (liên kết `CLINIC_ZALO`, chạy thật).
 - Chụp Dashboard: không còn chữ Zalo, bộ chọn khoảng thời gian giữ nguyên. frontend `build`, `lint` sạch; không có test E2E nhắc Zalo.
+
+## Dữ liệu mẫu: lịch hẹn nằm ngoài giờ làm việc của bác sĩ
+
+- Mail "Lịch hẹn cần gọi khách" báo "Bác sĩ không có lịch làm việc ngày này" (lịch 15:00 thứ Sáu 16/10 của BS Bs1). Quy tắc: lịch hẹn không nằm trong giờ làm việc của bác sĩ thì nhắc lịch bị chặn.
+- Đo trên bản demo vừa nạp mới: 0/211 lịch sắp tới nằm ngoài giờ — bộ nạp hiện tại đặt lịch đúng trong giờ từng bác sĩ. Nguyên nhân với VPS (chưa xem được dữ liệu VPS): dữ liệu nạp bởi bản cũ, hoặc giờ làm việc đã sửa sau khi nạp; lệnh `DEMO_REPAIR=1` cũ chỉ bổ sung lịch cho bác sĩ chưa có lịch nào, không xử lý bác sĩ đã có lịch riêng.
+- Bổ sung vào `DEMO_REPAIR=1` (`prisma/seed-demo-clinic.ts`, hàm `fixVisitsOutsideHours`): lịch hẹn demo sắp tới (SCHEDULED/CONFIRMED, bệnh nhân demo) nằm ngoài giờ của bác sĩ → chuyển cho bác sĩ đang làm giờ đó và rảnh; không có thì xóa mềm. Chỉ xét lịch tuần cố định (không xét ngày điều chỉnh, nghỉ phép, ca đã duyệt).
+- Thử trên bản demo: xóa lịch thứ Sáu của 1 bác sĩ → 6 lịch ngoài giờ; chạy repair → 3 chuyển, 3 xóa, còn 0 lịch ngoài giờ. Thêm `scripts/demo-repair-vps.sh` để chạy trên VPS bằng một lệnh.
