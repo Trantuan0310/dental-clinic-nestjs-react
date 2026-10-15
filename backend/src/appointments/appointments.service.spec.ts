@@ -3377,6 +3377,35 @@ describe('AppointmentsService', () => {
       expect(result.events.map(e => e.action)).toEqual(['APPOINTMENT_UPDATED']);
     });
 
+    it("gives each event the staff member's name, not just the login email", async () => {
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        dentistId: 'dentist-1',
+      });
+      (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([
+        {
+          action: 'APPOINTMENT_UPDATED',
+          occurredAt: new Date('2026-09-01T02:00:00Z'),
+          actorEmailAtTime: 'desk@clinic.com',
+          actor: { fullName: 'Lê Thị Hạnh' },
+          metadata: null,
+        },
+        {
+          action: 'APPOINTMENT_AUTO_NO_SHOW',
+          occurredAt: new Date('2026-09-01T03:00:00Z'),
+          actorEmailAtTime: null,
+          actor: null,
+          metadata: null,
+        },
+      ]);
+      (prisma.appointmentRescheduleLog.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.history('appt-1', actor);
+
+      expect(result.events.map(e => e.actorName)).toEqual(['Lê Thị Hạnh', null]);
+      expect(result.events[0].actorEmail).toBe('desk@clinic.com');
+    });
+
     it("update() now writes the lower-case 'appointment' target type", async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         id: 'appt-1',

@@ -175,6 +175,7 @@ export interface AppointmentHistory {
     action: string;
     at: string;
     actorEmail: string | null;
+    actorName?: string | null;
     metadata: Record<string, unknown> | null;
   }>;
   reschedules: Array<{

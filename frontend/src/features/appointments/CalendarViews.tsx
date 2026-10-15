@@ -383,7 +383,11 @@ function AppointmentBlock({
     </div>
   );
 
-  const showDetails = height >= 44;
+  // By height: <36px (15 min) one line "time name"; 36-55px (20-30 min) time
+  // above name; 56px+ adds the dentist; 72px+ adds the overdue label.
+  const oneLine = height < 36;
+  const showDetails = height >= 56;
+  const showOverdueLabel = height >= 72;
 
   // The absolutely-positioned block must be positioned relative to the day/
   // week column (the nearest `relative` ancestor up the tree), not relative
@@ -410,10 +414,11 @@ function AppointmentBlock({
             onClick();
           }}
           className={cn(
-            'h-full w-full overflow-hidden rounded-md border-l-4 px-2 py-1 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
+            'h-full w-full overflow-hidden rounded-md border-l-4 px-2 text-left shadow-sm transition-all hover:shadow-md hover:z-20',
             overdue ? `${OVERDUE_BLOCK_CLASS} dark:bg-rose-950 dark:border-rose-700 dark:text-rose-100` : STATUS_BG[appointment.status],
             appointment.status === 'cancelled' && 'opacity-60 line-through',
             (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
+            oneLine ? 'py-0.5' : 'py-1',
           )}
         >
           <div className="flex items-start gap-1.5">
@@ -421,6 +426,17 @@ function AppointmentBlock({
               className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', TYPE_DOT[type])}
               aria-hidden
             />
+            {oneLine ? (
+              // Very short visit (15 min = 30px): time and name share one line,
+              // since two stacked lines would clip the patient's name.
+              <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] leading-4">
+                {overdue && (
+                  <AlertTriangle className="h-3 w-3 shrink-0" aria-label={t(`uiScheduling.${OVERDUE_LABEL}`)} />
+                )}
+                <span className="shrink-0 font-semibold">{formatTimeOnly(appointment.startsAt)}</span>
+                <span className="truncate font-medium">{appointment.patientName}</span>
+              </p>
+            ) : (
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 truncate text-[11px] font-semibold">
                 {overdue ? (
@@ -430,7 +446,7 @@ function AppointmentBlock({
                 )}
                 <span className="truncate">{formatTimeOnly(appointment.startsAt)}</span>
               </div>
-              {overdue && showDetails && !compact && (
+              {overdue && showOverdueLabel && !compact && (
                 <p className="truncate text-[10px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>
               )}
               <p className={cn('truncate text-xs font-medium', compact ? 'text-[11px]' : 'text-xs')}>
@@ -449,6 +465,7 @@ function AppointmentBlock({
                 </p>
               )}
             </div>
+            )}
           </div>
         </button>
       </Tooltip>

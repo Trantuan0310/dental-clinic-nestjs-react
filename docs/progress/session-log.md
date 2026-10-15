@@ -105,3 +105,27 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Tắt dịch vụ có `/impact` (74 hẹn phía trước, 4 chỉ định đang mở) và giao diện gọi trước khi xác nhận.
 
 **Kết quả kiểm tra:** backend `tsc` sạch, `lint` sạch, 1362 test/56 bộ xanh; frontend `typecheck`, `lint`, `build` sạch.
+
+## Nhật ký hoạt động của lịch hẹn: hiện tên người thực hiện thay vì email
+
+- `GET /appointments/:id/history` trả thêm `actorName` (họ tên người thực hiện, lấy từ quan hệ `actor` của `audit_logs`); `actorEmail` giữ nguyên.
+- `AppointmentDetailDrawer` hiện tên; email chỉ hiện khi rê chuột. Sự kiện hệ thống (không có người làm) không hiện dòng nào.
+- Test mới trong `appointments.service.spec.ts`. backend `tsc`, `lint`, 188 test của bộ này xanh; frontend `typecheck`, `lint` sạch.
+- Chỗ khác còn hiện email (chưa đổi): cột "Tài khoản" ở Nhân sự, trang Người dùng, menu tài khoản.
+
+## Lịch theo ngày: khối hẹn ngắn bị cắt chữ
+
+- Khối hẹn thấp hơn 56px (≈ dưới 35 phút) xếp giờ và tên bệnh nhân **trên một dòng** thay vì hai dòng chồng nhau làm mất tên; dòng bác sĩ chỉ hiện từ 56px, dòng "Quá 15 phút chưa đến" từ 72px (biểu tượng cảnh báo vẫn có ở khối ngắn).
+- Sửa trong `CalendarViews.tsx` (`AppointmentBlock`); dùng chung cho dạng ngày và tuần. Đã chụp lại trên dữ liệu demo: không còn khối bị cắt. frontend `typecheck`, `lint` sạch.
+
+### Chỉnh lại lịch theo ngày cho vừa nhất
+
+- Tăng chiều cao mỗi giờ 96 → 120px (`HOUR_HEIGHT_PX`): 20 phút = 40px, 30 phút = 60px, 45 phút = 90px.
+- Ba mức theo chiều cao khối: dưới 36px (15 phút) một dòng "giờ tên"; 36–55px (20–29 phút) giờ trên, tên dưới; từ 56px (30 phút trở lên) thêm dòng bác sĩ; từ 72px thêm dòng "Quá 15 phút chưa đến".
+- Đã chụp lại trên dữ liệu demo: không còn khối bị cắt. frontend `typecheck`, `lint` sạch.
+
+### Nhật ký hệ thống (Quản trị → Nhật ký) hiện tên người thực hiện
+
+- `GET /audit` trả thêm `actorName` (họ tên, từ quan hệ `actor`); cột "Người thực hiện" hiện tên, email nhỏ bên dưới. Ô tìm kiếm tìm được theo tên. CSV ghi "Tên (email)". Sự kiện hệ thống vẫn hiện "Hệ thống".
+- 1 test mới ở `audit.controller.spec.ts` (56 test bộ audit xanh); backend `tsc`, `lint`, frontend `typecheck`, `lint` sạch.
+- Thêm vào PR #51 (cùng nhánh).

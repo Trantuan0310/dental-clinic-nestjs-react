@@ -74,6 +74,7 @@ export class AuditController {
       where: conditions.length > 1 ? { AND: conditions } : where,
       orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+      include: { actor: { select: { fullName: true } } },
     });
 
     const hasMore = logs.length > limit;
@@ -84,6 +85,7 @@ export class AuditController {
         id: log.id,
         actorUserId: log.actorUserId,
         actorEmailAtTime: log.actorEmailAtTime,
+        actorName: log.actor?.fullName ?? null,
         action: log.action,
         targetType: log.targetType,
         targetId: log.targetId,

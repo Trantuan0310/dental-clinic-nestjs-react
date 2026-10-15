@@ -9,6 +9,10 @@ import { notify } from '@/components/ui/Toast';
 
 const PAGE_SIZE = 20;
 
+/** "Name (email)" for exports, falling back to whichever is known. */
+const actorLabel = (log: AuditLog) =>
+  log.actorName && log.actorEmailAtTime ? `${log.actorName} (${log.actorEmailAtTime})` : (log.actorName ?? log.actorEmailAtTime);
+
 const ACTION_LABEL_KEYS: Record<string, string> = {
   'invoice.issued': 'auditInvoiceIssued', 'invoice.void': 'auditInvoiceVoid',
   'payment.created': 'auditPaymentCreated', 'payment.reversed': 'auditPaymentReversed',
@@ -68,6 +72,7 @@ export default function AuditLogsPage() {
     const q = search.toLowerCase();
     return (
       (log.actorEmailAtTime?.toLowerCase() ?? '').includes(q) ||
+      (log.actorName?.toLowerCase() ?? '').includes(q) ||
       (log.action.toLowerCase()).includes(q) ||
       (log.targetType?.toLowerCase() ?? '').includes(q) ||
       (log.targetId?.toLowerCase() ?? '').includes(q)
@@ -89,7 +94,7 @@ export default function AuditLogsPage() {
       exportCsv(`nhat-ky-${new Date().toISOString().slice(0, 10)}`, rows.filter(matchesSearch), [
         { header: t('uiWorkforce.auditTime'), accessor: (log) => new Date(log.occurredAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { timeZone: 'Asia/Ho_Chi_Minh' }) },
         { header: t('uiWorkforce.auditAction'), accessor: (log) => ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : log.action },
-        { header: t('uiWorkforce.auditActor'), accessor: (log) => log.actorEmailAtTime ?? t('uiWorkforce.auditSystem') },
+        { header: t('uiWorkforce.auditActor'), accessor: (log) => actorLabel(log) ?? t('uiWorkforce.auditSystem') },
         { header: t('uiWorkforce.auditTarget'), accessor: (log) => TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : log.targetType ?? '' },
         { header: t('uiWorkforce.auditEntityId'), accessor: (log) => log.targetId ?? '' },
         { header: t('uiWorkforce.auditIp'), accessor: (log) => log.ipAddress ?? '' },
@@ -209,8 +214,11 @@ export default function AuditLogsPage() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-gray-900 dark:text-surface-100">
-                          {log.actorEmailAtTime ?? t('uiWorkforce.auditSystem')}
+                          {log.actorName ?? log.actorEmailAtTime ?? t('uiWorkforce.auditSystem')}
                         </p>
+                        {log.actorName && log.actorEmailAtTime && (
+                          <p className="text-xs text-gray-500 dark:text-surface-400">{log.actorEmailAtTime}</p>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
