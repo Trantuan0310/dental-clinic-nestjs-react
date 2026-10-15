@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn';
 import { Header } from './Header';
@@ -7,6 +7,10 @@ import { Sidebar } from './Sidebar';
 import { SkipLink, Breadcrumb } from '@/components/ui';
 import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 import { PendingBookingWatcher } from '@/features/booking/usePendingBookingCount';
+
+// Grid-style pages (calendar, dispatch board, working schedules) use the whole
+// width of the window; everything else stops at a readable maximum.
+const FULL_WIDTH_PATHS = /^\/(appointments|my-appointments|dispatch|schedule)\/?$/;
 
 // Sidebar width tokens — keep in sync with Sidebar.tsx classes.
 export const SIDEBAR_WIDTH = 224; // px (expanded)
@@ -17,6 +21,8 @@ export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { t } = useTranslation();
   const breadcrumbs = useBreadcrumbs();
+  const { pathname } = useLocation();
+  const fullWidth = FULL_WIDTH_PATHS.test(pathname);
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   return (
@@ -54,7 +60,7 @@ export function AppShell() {
             )}
             tabIndex={-1}
           >
-            <div className="mx-auto max-w-7xl">
+            <div className={cn('mx-auto', !fullWidth && 'max-w-[1600px]')}>
               {breadcrumbs.length > 0 && (
                 <div className="mb-2">
                   <Breadcrumb items={breadcrumbs} />

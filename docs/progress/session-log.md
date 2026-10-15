@@ -159,3 +159,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Khối dạng Tuần đủ cao hiện cả giờ kết thúc ("08:30 – 09:00").
 - Lưu ý kiểm tra: `npm run typecheck` (`tsc --noEmit`) của frontend KHÔNG bắt được lỗi (tsconfig gốc dùng references); phải dùng `npm run build` (`tsc -b`) — đã dính lỗi thiếu import `cn` và khóa chữ trùng vì tin vào typecheck.
 - Không có test E2E nào dùng dạng Tuần hay ô chọn bác sĩ cũ của trang lịch.
+
+## Khung nội dung: trải kín chiều ngang ở màn hình rộng
+
+- `AppShell.tsx`: nội dung bị giới hạn `max-w-7xl` (1280px) và căn giữa nên màn hình ~1900px dư hai dải trống mỗi bên trong khi lịch co lại ở giữa.
+- Các trang dạng lưới (`/appointments`, `/my-appointments`, `/dispatch`, `/schedule`) nay dùng hết bề rộng; các trang khác nới giới hạn lên 1600px.
+- Kiểm tra ở cửa sổ 1900px: nội dung lịch rộng từ 248 đến 1876px (kín khung); trang Bệnh nhân 262–1862px. frontend `build`, `lint` sạch.
