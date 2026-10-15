@@ -11,7 +11,7 @@ export const DEFAULT_HOUR_END = 19;
  * real end, count as overlapping, and layoutLanes splits the day into
  * narrow side-by-side columns.
  */
-export const HOUR_HEIGHT_PX = 96;
+export const HOUR_HEIGHT_PX = 120;
 /** Blocks are at least this tall (px) so short visits stay clickable. */
 export const MIN_BLOCK_PX = 24;
 

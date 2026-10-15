@@ -383,7 +383,9 @@ function AppointmentBlock({
     </div>
   );
 
-  // Three lines (time, name, dentist) need ~52px; the overdue label a fourth.
+  // By height: <36px (15 min) one line "time name"; 36-55px (20-30 min) time
+  // above name; 56px+ adds the dentist; 72px+ adds the overdue label.
+  const oneLine = height < 36;
   const showDetails = height >= 56;
   const showOverdueLabel = height >= 72;
 
@@ -416,7 +418,7 @@ function AppointmentBlock({
             overdue ? `${OVERDUE_BLOCK_CLASS} dark:bg-rose-950 dark:border-rose-700 dark:text-rose-100` : STATUS_BG[appointment.status],
             appointment.status === 'cancelled' && 'opacity-60 line-through',
             (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
-            showDetails ? 'py-1' : 'py-0.5',
+            oneLine ? 'py-0.5' : 'py-1',
           )}
         >
           <div className="flex items-start gap-1.5">
@@ -424,9 +426,9 @@ function AppointmentBlock({
               className={cn('mt-1 h-1.5 w-1.5 shrink-0 rounded-full', TYPE_DOT[type])}
               aria-hidden
             />
-            {!showDetails ? (
-              // Short visit (a 20-minute block is ~32px): time and name share one
-              // line, since two stacked lines clip the patient's name.
+            {oneLine ? (
+              // Very short visit (15 min = 30px): time and name share one line,
+              // since two stacked lines would clip the patient's name.
               <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] leading-4">
                 {overdue && (
                   <AlertTriangle className="h-3 w-3 shrink-0" aria-label={t(`uiScheduling.${OVERDUE_LABEL}`)} />
