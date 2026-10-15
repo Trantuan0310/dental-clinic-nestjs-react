@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { enUS } from 'date-fns/locale';
 import { AlertTriangle, Clock } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { useDentistOptions } from './appointmentApi';
 import { isOverdueNotArrived, OVERDUE_LABEL, OVERDUE_BLOCK_CLASS, useNow } from './liveStatus';
@@ -17,7 +18,6 @@ import {
   HOUR_HEIGHT_PX,
   isHourPast,
   layoutLanes,
-  layoutLanesCapped,
   MIN_BLOCK_PX,
   type LaneSlot,
 } from './calendarLayout';
@@ -28,8 +28,6 @@ import {
 
 const PX_PER_MIN = HOUR_HEIGHT_PX / 60;
 const MIN_BLOCK_MIN = Math.ceil(MIN_BLOCK_PX / PX_PER_MIN);
-/** Narrowest a side-by-side booking may get before the rest fold into a "+N" chip. */
-const LANE_MIN_WIDTH_PX = 64;
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
   scheduled: 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-surface-700 dark:border-surface-500 dark:text-surface-100',
@@ -94,12 +92,6 @@ interface DayColumnProps
   now: number;
   compact?: boolean;
   className?: string;
-  /**
-   * Most side-by-side lanes the column may show (omit: as many as needed).
-   * Past that, extra bookings fold into a "+N" chip that calls onOverflowClick.
-   */
-  maxLanes?: number;
-  onOverflowClick?: (day: Date) => void;
 }
 
 /** One day's column: working hours, hour slots and side-by-side booking blocks. */
@@ -113,16 +105,13 @@ function DayColumn({
   now,
   compact = false,
   className,
-  maxLanes,
-  onOverflowClick,
   onSlotClick,
   onAppointmentClick,
 }: DayColumnProps) {
   const { t } = useTranslation();
   const dateKey = format(day, 'yyyy-MM-dd');
   const gridStartMin = hourStart * 60;
-  const capped = maxLanes !== undefined ? layoutLanesCapped(appointments, MIN_BLOCK_MIN, maxLanes) : null;
-  const lanes = capped ? capped.slots : layoutLanes(appointments, MIN_BLOCK_MIN);
+  const lanes = layoutLanes(appointments, MIN_BLOCK_MIN);
   const closed = closedReason !== undefined;
 
   return (
@@ -170,8 +159,6 @@ function DayColumn({
 
       {/* Appointment blocks */}
       {appointments.map((apt) => {
-        // Folded into a "+N" chip (capped columns only).
-        if (capped && !lanes.has(apt.id)) return null;
         const { start, end } = appointmentSpan(apt);
         return (
           <AppointmentBlock
@@ -186,75 +173,8 @@ function DayColumn({
           />
         );
       })}
-      {capped?.overflows.map((o) => (
-        <OverflowChip
-          key={o.ids[0]}
-          top={(o.start - gridStartMin) * PX_PER_MIN}
-          height={Math.max((o.end - o.start) * PX_PER_MIN, MIN_BLOCK_PX)}
-          count={o.ids.length}
-          lane={o.slot}
-          onClick={() => onOverflowClick?.(day)}
-        />
-      ))}
     </div>
   );
-}
-
-/** "+N" chip standing in for the bookings a crowded cluster has no lane for. */
-function OverflowChip({
-  top,
-  height,
-  count,
-  lane,
-  onClick,
-}: {
-  top: number;
-  height: number;
-  count: number;
-  lane: LaneSlot;
-  onClick: () => void;
-}) {
-  const { t } = useTranslation();
-  const hint = t('uiScheduling.dayOverflowHint', { count });
-  return (
-    <div
-      className="absolute z-10"
-      style={{
-        top: `${top}px`,
-        height: `${height}px`,
-        left: `calc(${(lane.lane / lane.lanes) * 100}% + 2px)`,
-        width: `calc(${100 / lane.lanes}% - 4px)`,
-      }}
-    >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick();
-        }}
-        title={hint}
-        aria-label={hint}
-        className="flex h-full w-full items-center justify-center rounded-md border border-dashed border-gray-400 bg-white/80 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-100 dark:border-surface-500 dark:bg-surface-800/80 dark:text-surface-200 dark:hover:bg-surface-700"
-      >
-        {t('uiScheduling.dayOverflowChip', { count })}
-      </button>
-    </div>
-  );
-}
-
-/** Live width (px) of an element, kept current as the window is resized or zoomed. */
-function useElementWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [width, setWidth] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return { ref, width };
 }
 
 const byStart = (a: Appointment, b: Appointment) =>
@@ -315,13 +235,92 @@ export function DayView({
 // Week View
 // -----------------------------------------------------------------------------
 
+/** Hover card shared by the day/week blocks and the week grid's rows. */
+function appointmentTooltip(t: TFunction, appointment: Appointment, overdue: boolean) {
+  const type = appointment.appointmentType ?? 'consultation';
+  return (
+    <div className="space-y-0.5 text-left">
+      <p className="font-semibold">{appointment.patientName}</p>
+      {overdue && <p className="text-[11px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>}
+      <p className="text-[11px] opacity-90">
+        {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} • {t('uiScheduling.minutesValue', { count: appointment.durationMinutes })}
+      </p>
+      <p className="text-[11px] opacity-90">
+        {typeLabel(t, type)} • {appointment.dentistName}
+      </p>
+      {appointment.reason && (
+        <p className="max-w-[220px] truncate text-[11px] opacity-75">{appointment.reason}</p>
+      )}
+    </div>
+  );
+}
+
+/** Height (px) of one appointment line in the week grid, and the gap between lines. */
+const WEEK_LINE_PX = 22;
+const WEEK_LINE_GAP_PX = 2;
+const WEEK_CELL_PAD_PX = 4;
+/** Lines an hour cell shows before the rest go behind a "+N" button. */
+const WEEK_MAX_LINES = 3;
+/** An hour with no booking all week stays thin. */
+const WEEK_EMPTY_ROW_PX = 28;
+
+/** One booking as a full-width line (the week grid never puts bookings side by side). */
+function WeekAppointmentRow({
+  appointment,
+  now,
+  onClick,
+}: {
+  appointment: Appointment;
+  now: number;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const type = appointment.appointmentType ?? 'consultation';
+  const overdue = isOverdueNotArrived(appointment, now);
+  const { data: dentists } = useDentistOptions();
+  const dentistColor = dentists?.find((d) => d.id === appointment.dentistId)?.calendarColor;
+  return (
+    <Tooltip label={appointmentTooltip(t, appointment, overdue)} side="right" className="block w-full">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        style={{ height: WEEK_LINE_PX }}
+        className={cn(
+          'pointer-events-auto flex w-full items-center gap-1.5 overflow-hidden rounded border-l-4 px-1.5 text-left text-[11px] leading-none shadow-sm transition-shadow hover:shadow-md',
+          overdue ? `${OVERDUE_BLOCK_CLASS} dark:bg-rose-950 dark:border-rose-700 dark:text-rose-100` : STATUS_BG[appointment.status],
+          appointment.status === 'cancelled' && 'line-through opacity-60',
+          (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
+        )}
+      >
+        {overdue ? (
+          <AlertTriangle className="h-3 w-3 shrink-0" aria-label={t(`uiScheduling.${OVERDUE_LABEL}`)} />
+        ) : (
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TYPE_DOT[type])} aria-hidden />
+        )}
+        <span className="shrink-0 font-semibold tabular-nums">{formatTimeOnly(appointment.startsAt)}</span>
+        <span className="truncate font-medium">{appointment.patientName}</span>
+        {dentistColor && (
+          <span className="ml-auto h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dentistColor }} aria-hidden />
+        )}
+      </button>
+    </Tooltip>
+  );
+}
+
 interface WeekViewProps extends TimeGridProps {
   days: Date[];
   appointmentsByDate: Record<string, Appointment[]>;
-  /** Opens one day (the "+N" chip of a crowded column). */
-  onDayClick?: (date: Date) => void;
 }
 
+/**
+ * Week grid: one row per hour, one column per day. The bookings that start in
+ * an hour are listed one per line in that day's cell (never squeezed side by
+ * side); a cell holds WEEK_MAX_LINES lines and anything beyond becomes a "+N"
+ * button that opens the full list.
+ */
 export function WeekView({
   days,
   appointmentsByDate,
@@ -330,7 +329,6 @@ export function WeekView({
   closedDays,
   workingWindows,
   onSlotClick,
-  onDayClick,
   onAppointmentClick,
 }: WeekViewProps) {
   const { t, i18n } = useTranslation();
@@ -338,20 +336,26 @@ export function WeekView({
   const today = clinicWallClock();
   const now = useNow();
   const hours = Array.from({ length: hourEnd - hourStart }, (_, i) => hourStart + i);
-  const { ref: gridRef, width: gridWidth } = useElementWidth<HTMLDivElement>();
+  const [expanded, setExpanded] = useState<{ day: Date; hour: number; items: Appointment[] } | null>(null);
 
-  // The seven day columns always share the width they are given (so a zoomed
-  // or narrow window never needs a sideways scroll); overlapping bookings
-  // split a column into lanes, whose names are cut short and shown in full in
-  // the tooltip.
+  // Seven day columns share the width they are given, so a zoomed or narrow
+  // window never needs a sideways scroll.
   const gridTemplateColumns = `56px repeat(${days.length}, minmax(0, 1fr))`;
-  // A lane needs ~64px for its time and the start of a name; before the first
-  // measurement (width 0) leave the column uncapped.
-  const columnWidth = (gridWidth - 56) / days.length;
-  const maxLanes = gridWidth > 0 ? Math.max(1, Math.floor(columnWidth / LANE_MIN_WIDTH_PX)) : undefined;
+
+  // Bookings per day and clinic hour of their start.
+  const cells: Record<string, Record<number, Appointment[]>> = {};
+  for (const day of days) {
+    const dateKey = format(day, 'yyyy-MM-dd');
+    const perHour: Record<number, Appointment[]> = {};
+    for (const apt of (appointmentsByDate[dateKey] ?? []).slice().sort(byStart)) {
+      const hour = Math.min(Math.max(Math.floor(appointmentSpan(apt).start / 60), hourStart), hourEnd - 1);
+      (perHour[hour] ??= []).push(apt);
+    }
+    cells[format(day, 'yyyy-MM-dd')] = perHour;
+  }
 
   return (
-    <div ref={gridRef}>
+    <div>
       {/* Day headers */}
       <div className="grid border-b border-gray-200 bg-gray-50 dark:border-surface-700 dark:bg-surface-800" style={{ gridTemplateColumns }}>
         <div className="border-r border-gray-100 dark:border-surface-700" />
@@ -387,34 +391,113 @@ export function WeekView({
         })}
       </div>
 
-      {/* Time grid */}
-      <div className="grid" style={{ gridTemplateColumns }}>
-        <HourGutter hours={hours} />
-        {days.map((day) => {
-          const dateKey = format(day, 'yyyy-MM-dd');
-          return (
-            <DayColumn
-              key={dateKey}
-              day={day}
-              hours={hours}
-              hourStart={hourStart}
-              appointments={(appointmentsByDate[dateKey] ?? []).slice().sort(byStart)}
-              closedReason={closedDays?.[dateKey]}
-              windows={workingWindows?.[dateKey]}
+
+      {/* Hour rows */}
+      {hours.map((hour) => {
+        const busiest = Math.max(0, ...days.map((day) => cells[format(day, 'yyyy-MM-dd')][hour]?.length ?? 0));
+        const lines = Math.min(busiest, WEEK_MAX_LINES);
+        const height =
+          lines === 0
+            ? WEEK_EMPTY_ROW_PX
+            : lines * WEEK_LINE_PX + (lines - 1) * WEEK_LINE_GAP_PX + 2 * WEEK_CELL_PAD_PX;
+        return (
+          <div
+            key={hour}
+            className="grid border-b border-gray-100 dark:border-surface-800"
+            style={{ gridTemplateColumns, height }}
+          >
+            <div className="border-r border-gray-200 pr-2 pt-1 text-right text-[11px] text-gray-500 dark:border-surface-700 dark:text-surface-400">
+              {hhmm(hour)}
+            </div>
+            {days.map((day) => {
+              const dateKey = format(day, 'yyyy-MM-dd');
+              const items = cells[dateKey][hour] ?? [];
+              const closedReason = closedDays?.[dateKey];
+              const closed = closedReason !== undefined;
+              const working = workingWindows?.[dateKey]?.some(
+                (w) => hhmmToMin(w.startTime) < (hour + 1) * 60 && hhmmToMin(w.endTime) > hour * 60,
+              );
+              const canCreate = !!onSlotClick && !closed && !isHourPast(dateKey, hour, now);
+              const overflow = items.length > WEEK_MAX_LINES;
+              const visible = overflow ? items.slice(0, WEEK_MAX_LINES - 1) : items;
+              const hint = t('uiScheduling.dayOverflowHint', { count: items.length - visible.length });
+              return (
+                <div
+                  key={dateKey}
+                  title={closed ? t('uiScheduling.clinicClosedReason', { reason: closedReason }) : undefined}
+                  className={cn(
+                    'relative min-w-0 border-r border-gray-100 last:border-r-0 dark:border-surface-700',
+                    closed && 'bg-gray-100/80 dark:bg-surface-800/60',
+                    !closed && working && 'bg-emerald-50/70 dark:bg-emerald-500/10',
+                    isSameDay(day, today) && 'ring-1 ring-inset ring-brand-200 dark:ring-brand-500/30',
+                  )}
+                >
+                  {canCreate && (
+                    <button
+                      type="button"
+                      onClick={() => onSlotClick?.(day, hhmm(hour))}
+                      className="absolute inset-0 px-1 text-left text-[10px] text-transparent hover:bg-brand-50/40 hover:text-brand-500 dark:hover:bg-brand-500/10 dark:hover:text-brand-300"
+                      title={t('uiScheduling.createAppointmentDateTime', { date: format(day, 'dd/MM'), time: hhmm(hour) })}
+                    >
+                      +
+                    </button>
+                  )}
+                  {items.length > 0 && (
+                    <div
+                      className="pointer-events-none relative flex flex-col"
+                      style={{ gap: WEEK_LINE_GAP_PX, padding: WEEK_CELL_PAD_PX }}
+                    >
+                      {visible.map((apt) => (
+                        <WeekAppointmentRow key={apt.id} appointment={apt} now={now} onClick={() => onAppointmentClick(apt)} />
+                      ))}
+                      {overflow && (
+                        <button
+                          type="button"
+                          onClick={() => setExpanded({ day, hour, items })}
+                          title={hint}
+                          aria-label={hint}
+                          style={{ height: WEEK_LINE_PX }}
+                          className="pointer-events-auto flex w-full items-center justify-center rounded border border-dashed border-gray-400 bg-white/80 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:border-surface-500 dark:bg-surface-800/80 dark:text-surface-200 dark:hover:bg-surface-700"
+                        >
+                          {t('uiScheduling.dayOverflowChip', { count: items.length - visible.length })}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      <Modal
+        open={expanded !== null}
+        onClose={() => setExpanded(null)}
+        title={
+          expanded
+            ? t('uiScheduling.dayOverflowTitle', {
+                time: hhmm(expanded.hour),
+                date: format(expanded.day, 'dd/MM/yyyy'),
+              })
+            : undefined
+        }
+        size="md"
+      >
+        <div className="space-y-1.5">
+          {expanded?.items.map((apt) => (
+            <WeekAppointmentRow
+              key={apt.id}
+              appointment={apt}
               now={now}
-              compact
-              maxLanes={maxLanes}
-              onOverflowClick={onDayClick}
-              className={cn(
-                'border-r border-gray-100 last:border-r-0 dark:border-surface-700',
-                isSameDay(day, today) && 'bg-brand-50/30 dark:bg-brand-500/10',
-              )}
-              onSlotClick={onSlotClick}
-              onAppointmentClick={onAppointmentClick}
+              onClick={() => {
+                setExpanded(null);
+                onAppointmentClick(apt);
+              }}
             />
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -449,21 +532,7 @@ function AppointmentBlock({
   // Status keeps the block colour; the dentist's profile colour marks whose it is.
   const { data: dentists } = useDentistOptions();
   const dentistColor = dentists?.find((d) => d.id === appointment.dentistId)?.calendarColor;
-  const tooltipContent = (
-    <div className="space-y-0.5 text-left">
-      <p className="font-semibold">{appointment.patientName}</p>
-      {overdue && <p className="text-[11px] font-semibold">{t(`uiScheduling.${OVERDUE_LABEL}`)}</p>}
-      <p className="text-[11px] opacity-90">
-        {formatTimeOnly(appointment.startsAt)} – {formatTimeOnly(appointment.endsAt)} • {t('uiScheduling.minutesValue', { count: appointment.durationMinutes })}
-      </p>
-      <p className="text-[11px] opacity-90">
-        {typeLabel(t, type)} • {appointment.dentistName}
-      </p>
-      {appointment.reason && (
-        <p className="max-w-[220px] truncate text-[11px] opacity-75">{appointment.reason}</p>
-      )}
-    </div>
-  );
+  const tooltipContent = appointmentTooltip(t, appointment, overdue);
 
   // By height: <36px (15 min) one line "time name"; 36-55px (20-30 min) time
   // above name; 56px+ adds the dentist; 72px+ adds the overdue label.

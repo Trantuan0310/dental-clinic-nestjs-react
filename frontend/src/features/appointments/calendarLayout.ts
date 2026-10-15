@@ -131,51 +131,6 @@ export function layoutLanes(
   return result;
 }
 
-/** Bookings folded into one "+N" chip because their cluster has too many lanes. */
-export interface LaneOverflow {
-  /** Clinic minutes (from midnight) the chip spans. */
-  start: number;
-  end: number;
-  ids: string[];
-  /** The chip sits in the last visible lane of its cluster. */
-  slot: LaneSlot;
-}
-
-/**
- * Like layoutLanes, but a cluster never gets more than `maxLanes` lanes: the
- * first `maxLanes - 1` stay as blocks and everything past them is folded into
- * a single overflow chip in the last lane. Keeps a crowded day readable in a
- * narrow column instead of slicing it into unreadable slivers.
- */
-export function layoutLanesCapped(
-  appointments: Pick<Appointment, 'id' | 'startsAt' | 'endsAt'>[],
-  minMinutes: number,
-  maxLanes: number,
-): { slots: Map<string, LaneSlot>; overflows: LaneOverflow[] } {
-  const cap = Math.max(1, Math.floor(maxLanes));
-  const slots = new Map<string, LaneSlot>();
-  const overflows: LaneOverflow[] = [];
-  for (const c of clusterLanes(appointments, minMinutes)) {
-    if (c.lanes <= cap) {
-      for (const it of c.items) slots.set(it.id, { lane: it.lane, lanes: c.lanes });
-      continue;
-    }
-    // One lane would leave only the chip, so keep at least one block visible.
-    const shown = Math.max(1, cap - 1);
-    const hidden = c.items.filter((it) => it.lane >= shown);
-    for (const it of c.items) {
-      if (it.lane < shown) slots.set(it.id, { lane: it.lane, lanes: shown + 1 });
-    }
-    overflows.push({
-      start: Math.min(...hidden.map((h) => h.start)),
-      end: Math.max(...hidden.map((h) => h.end)),
-      ids: hidden.map((h) => h.id),
-      slot: { lane: shown, lanes: shown + 1 },
-    });
-  }
-  return { slots, overflows };
-}
-
 /** True once the whole clinic hour `hour` of `date` ("yyyy-MM-dd") has passed. */
 export function isHourPast(date: string, hour: number, now: number): boolean {
   const start = new Date(clinicIso(date, `${String(hour).padStart(2, '0')}:00`)).getTime();
