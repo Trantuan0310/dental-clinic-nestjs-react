@@ -500,7 +500,7 @@ function AppointmentBlock({
             overdue ? `${OVERDUE_BLOCK_CLASS} dark:bg-rose-950 dark:border-rose-700 dark:text-rose-100` : STATUS_BG[appointment.status],
             appointment.status === 'cancelled' && 'opacity-60 line-through',
             (appointment.status === 'no_show' || appointment.status === 'left') && 'opacity-60',
-            oneLine ? 'py-0.5' : 'py-1',
+            oneLine ? 'py-0' : 'py-1',
           )}
         >
           <div className="flex items-start gap-1.5">
