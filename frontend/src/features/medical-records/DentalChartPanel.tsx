@@ -342,12 +342,12 @@ export function DentalChartPanel({
             </div>
             <Tooltip label={t('uiClinical.bulkToothStatus')}>
               <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} disabled={isLocked} leftIcon={<Wand2 className="h-4 w-4" />}>
-                Bulk
+                {t('uiClinical.bulkShort')}
               </Button>
             </Tooltip>
             <Tooltip label={t('uiClinical.resetTeeth')}>
               <Button variant="outline" size="sm" onClick={handleReset} disabled={isLocked} leftIcon={<Eraser className="h-4 w-4" />}>
-                Reset
+                {t('uiClinical.resetShort')}
               </Button>
             </Tooltip>
             <Button

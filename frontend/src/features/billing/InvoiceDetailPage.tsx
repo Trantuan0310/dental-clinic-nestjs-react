@@ -175,7 +175,7 @@ export default function InvoiceDetailPage() {
             </PermissionGuard>
           )}
           {canVoid && (
-            <PermissionGuard permission="invoice.void">
+            <PermissionGuard permission="invoice.void" mode="hide">
               <Button variant="ghost" onClick={() => setShowVoidModal(true)}>
                 <XCircle className="h-4 w-4" />
                 {t('uiOperations.voidShort')}

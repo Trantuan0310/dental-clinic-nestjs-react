@@ -178,7 +178,7 @@ export default function EncounterDetailPage() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="break-words text-2xl font-semibold text-gray-900 dark:text-surface-100">
-              {t('uiClinical.encounterRecord', { code: encounter.code })}
+              {t('uiClinical.encounterRecord', { name: encounter.patientName })}
             </h1>
             <StatusBadge status={encounter.status} />
           </div>
