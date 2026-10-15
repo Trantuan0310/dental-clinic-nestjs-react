@@ -63,17 +63,21 @@ export interface LaneSlot {
   lanes: number;
 }
 
+interface LaneCluster {
+  items: { id: string; start: number; end: number; lane: number }[];
+  lanes: number;
+}
+
 /**
- * Side-by-side lanes for bookings that overlap on screen (same hour, two
- * dentists, or a double booking): each block gets a lane, and every block
- * of an overlapping cluster shares the cluster's lane count, so blocks sit
- * next to each other instead of on top. `minMinutes` is the visual minimum
- * height, so tiny blocks that touch on screen are split too.
+ * Groups bookings that overlap on screen (same hour, two dentists, or a
+ * double booking) into clusters and gives each a lane inside its cluster.
+ * `minMinutes` is the visual minimum height, so tiny blocks that touch on
+ * screen are split too.
  */
-export function layoutLanes(
+function clusterLanes(
   appointments: Pick<Appointment, 'id' | 'startsAt' | 'endsAt'>[],
-  minMinutes = 0,
-): Map<string, LaneSlot> {
+  minMinutes: number,
+): LaneCluster[] {
   const items = appointments
     .map((a) => {
       const { start, end } = appointmentSpan(a);
@@ -81,14 +85,13 @@ export function layoutLanes(
     })
     .sort((a, b) => a.start - b.start || b.end - a.end || a.id.localeCompare(b.id));
 
-  const result = new Map<string, LaneSlot>();
-  let cluster: { id: string; lane: number }[] = [];
+  const clusters: LaneCluster[] = [];
+  let cluster: LaneCluster['items'] = [];
   let laneEnds: number[] = [];
   let clusterEnd = -1;
 
   const flush = () => {
-    const lanes = Math.max(1, laneEnds.length);
-    cluster.forEach((c) => result.set(c.id, { lane: c.lane, lanes }));
+    if (cluster.length) clusters.push({ items: cluster, lanes: Math.max(1, laneEnds.length) });
     cluster = [];
     laneEnds = [];
   };
@@ -102,11 +105,72 @@ export function layoutLanes(
     } else {
       laneEnds[lane] = item.end;
     }
-    cluster.push({ id: item.id, lane });
+    cluster.push({ ...item, lane });
     clusterEnd = cluster.length === 1 ? item.end : Math.max(clusterEnd, item.end);
   }
   flush();
+  return clusters;
+}
+
+/**
+ * Side-by-side lanes for bookings that overlap on screen: each block gets a
+ * lane, and every block of an overlapping cluster shares the cluster's lane
+ * count, so blocks sit next to each other instead of on top.
+ */
+export function layoutLanes(
+  appointments: Pick<Appointment, 'id' | 'startsAt' | 'endsAt'>[],
+  minMinutes = 0,
+): Map<string, LaneSlot> {
+  const result = new Map<string, LaneSlot>();
+  for (const c of clusterLanes(appointments, minMinutes)) {
+    for (const it of c.items) result.set(it.id, { lane: it.lane, lanes: c.lanes });
+  }
   return result;
+}
+
+/** Bookings folded into one "+N" chip because their cluster has too many lanes. */
+export interface LaneOverflow {
+  /** Clinic minutes (from midnight) the chip spans. */
+  start: number;
+  end: number;
+  ids: string[];
+  /** The chip sits in the last visible lane of its cluster. */
+  slot: LaneSlot;
+}
+
+/**
+ * Like layoutLanes, but a cluster never gets more than `maxLanes` lanes: the
+ * first `maxLanes - 1` stay as blocks and everything past them is folded into
+ * a single overflow chip in the last lane. Keeps a crowded day readable in a
+ * narrow column instead of slicing it into unreadable slivers.
+ */
+export function layoutLanesCapped(
+  appointments: Pick<Appointment, 'id' | 'startsAt' | 'endsAt'>[],
+  minMinutes: number,
+  maxLanes: number,
+): { slots: Map<string, LaneSlot>; overflows: LaneOverflow[] } {
+  const cap = Math.max(1, Math.floor(maxLanes));
+  const slots = new Map<string, LaneSlot>();
+  const overflows: LaneOverflow[] = [];
+  for (const c of clusterLanes(appointments, minMinutes)) {
+    if (c.lanes <= cap) {
+      for (const it of c.items) slots.set(it.id, { lane: it.lane, lanes: c.lanes });
+      continue;
+    }
+    // One lane would leave only the chip, so keep at least one block visible.
+    const shown = Math.max(1, cap - 1);
+    const hidden = c.items.filter((it) => it.lane >= shown);
+    for (const it of c.items) {
+      if (it.lane < shown) slots.set(it.id, { lane: it.lane, lanes: shown + 1 });
+    }
+    overflows.push({
+      start: Math.min(...hidden.map((h) => h.start)),
+      end: Math.max(...hidden.map((h) => h.end)),
+      ids: hidden.map((h) => h.id),
+      slot: { lane: shown, lanes: shown + 1 },
+    });
+  }
+  return { slots, overflows };
 }
 
 /** True once the whole clinic hour `hour` of `date` ("yyyy-MM-dd") has passed. */
