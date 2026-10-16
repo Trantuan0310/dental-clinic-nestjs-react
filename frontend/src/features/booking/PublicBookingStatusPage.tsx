@@ -585,9 +585,11 @@ export default function PublicBookingStatusPage() {
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
               <div>
-                <h1 className="text-lg font-semibold">{t('uiScheduling.bookingSent')}</h1>
+                <h1 className="text-lg font-semibold">
+                  {status.status === "CONFIRMED" ? t('uiScheduling.bookingAutoConfirmedTitle') : t('uiScheduling.bookingSent')}
+                </h1>
                 <p className="mt-1 text-sm">
-                  {t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
+                  {status.status === "CONFIRMED" ? t('uiScheduling.bookingAutoConfirmedDetails') : t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
                 </p>
                 {status.status === "PENDING_REVIEW" && (
                   <p className="mt-2 text-sm">

@@ -229,3 +229,11 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `createPublic`: khi giữ chỗ bật, khóa lịch bác sĩ trong giao dịch tạo yêu cầu rồi kiểm tra lại giữ chỗ (hai khách khác SĐT cùng gửi một lúc không còn cùng giữ được một giờ) → 409.
 - Trạng thái công khai trả `holdUntil`; trang kết quả chỉ nói "giờ được giữ" khi còn hạn giữ.
 - backend 187 test booking xanh, `tsc`/`lint` sạch; frontend `build`/`lint` sạch.
+
+## Đặt lịch online: tự xác nhận cho khách cũ khớp chắc chắn (đợt (c))
+
+- Công tắc `BOOKING_AUTO_CONFIRM` (mặc định tắt; đã thêm vào `.env.production*.example` và hai file compose, cùng `BOOKING_HOLD_MINUTES` trước đó chưa được truyền vào container). Không cần xác minh SMS theo quyết định của chủ phòng khám.
+- `createPublic`: sau khi lưu yêu cầu, nếu bật thì gọi `tryAutoConfirm` → `confirm(id, AUTO_CONFIRM_ACTOR, {}, { accessToken })`. Chỉ thành công khi `resolvePatient` tự khớp đúng một hồ sơ có sẵn (cùng ngày sinh + tên tương tự + số điện thoại; trẻ qua SĐT phụ huynh) và giờ vẫn đặt được. Chế độ `matchOnly` không bao giờ tạo hồ sơ mới; khách mới, đổi số, nghi ngờ hồ sơ trùng hay lỗi gì khác đều giữ nguyên PENDING_REVIEW cho lễ tân (ghi log).
+- Người thực hiện là actor hệ thống (`sub` rỗng, các cột `created_by/confirmed_by/actor_user_id` đều cho phép null); audit thêm `BOOKING_REQUEST_AUTO_CONFIRMED`. Link quản lý khách đang cầm không bị đổi (không xoay token), email xác nhận gửi như thường. Lễ tân vẫn được báo "Lịch hẹn đã tự động xác nhận".
+- Giao diện: trang kết quả hiện "Lịch hẹn đã được xác nhận" thay vì "Đã nhận yêu cầu" khi trạng thái là CONFIRMED.
+- Thử trên DB demo (bật công tắc): khách cũ gõ tên không dấu → CONFIRMED có lịch hẹn thật; khách mới → PENDING_REVIEW; không lỗi khóa ngoại. backend `tsc`, `lint`, 190 test booking xanh (thêm 3); frontend `build`, `lint` sạch.
