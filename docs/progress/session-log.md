@@ -237,3 +237,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Người thực hiện là actor hệ thống (`sub` rỗng, các cột `created_by/confirmed_by/actor_user_id` đều cho phép null); audit thêm `BOOKING_REQUEST_AUTO_CONFIRMED`. Link quản lý khách đang cầm không bị đổi (không xoay token), email xác nhận gửi như thường. Lễ tân vẫn được báo "Lịch hẹn đã tự động xác nhận".
 - Giao diện: trang kết quả hiện "Lịch hẹn đã được xác nhận" thay vì "Đã nhận yêu cầu" khi trạng thái là CONFIRMED.
 - Thử trên DB demo (bật công tắc): khách cũ gõ tên không dấu → CONFIRMED có lịch hẹn thật; khách mới → PENDING_REVIEW; không lỗi khóa ngoại. backend `tsc`, `lint`, 190 test booking xanh (thêm 3); frontend `build`, `lint` sạch.
+
+### Sửa theo review Codex của PR #60
+
+- `tryAutoConfirm`: nếu `confirm()` lỗi sau khi đã đặt lịch (ghi chú thông báo, audit), đọc lại trạng thái; đã CONFIRMED có lịch hẹn thì coi là thành công, không báo nhầm "chờ duyệt" và không gửi thông báo "yêu cầu mới" cho lễ tân.
+- Trang kết quả chỉ ghi "Lịch hẹn đã được xác nhận" ngay khi lần gửi đó trả `CONFIRMED` (cờ `auto=1` trong URL), không suy từ trạng thái hiện tại, để lễ tân xác nhận tay sau đó không bị nhầm là tự xác nhận.
+- `notificationSent` của lần tự xác nhận là kết quả email xác nhận (không còn bị email "đã nhận yêu cầu" che lỗi).

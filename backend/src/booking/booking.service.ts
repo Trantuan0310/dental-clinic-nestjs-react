@@ -847,7 +847,8 @@ export class BookingService {
           referenceCode: ref,
           accessToken: token,
           status: 'CONFIRMED',
-          notificationSent: confirmed.notificationSent || notificationSent,
+          // The confirmation email is the one that matters now.
+          notificationSent: row.email ? confirmed.notificationSent : false,
         };
       }
     }
@@ -2263,6 +2264,15 @@ export class BookingService {
       await this.auditAction('BOOKING_REQUEST_AUTO_CONFIRMED', id, AUTO_CONFIRM_ACTOR, {});
       return { notificationSent: !!result.notificationSent };
     } catch (error) {
+      // A failure after the visit was booked (notice bookkeeping, audit) must
+      // not read as a refusal: look at where the request actually stands.
+      const now = await this.prisma.bookingRequest
+        .findUnique({ where: { id }, select: { status: true, appointmentId: true } })
+        .catch(() => null);
+      if (now?.status === 'CONFIRMED' && now.appointmentId) {
+        this.logger.warn(`Auto-confirm of ${id} booked the visit but ended with: ${String(error)}`);
+        return { notificationSent: false };
+      }
       this.logger.log(`Auto-confirm of ${id} left to the front desk: ${String(error)}`);
       return null;
     }
