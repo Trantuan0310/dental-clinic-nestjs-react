@@ -214,3 +214,18 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Chỉ khớp qua số phụ huynh khi hồ sơ là **trẻ vị thành niên** (`isMinor`): người lớn chỉ có số liên hệ khẩn cấp vẫn để lễ tân xác nhận.
 - Cảnh báo "tạo hồ sơ mới khi đã có hồ sơ trùng" nay được chốt **cả phía máy chủ**: `confirm` với `createNewPatient` mà có hồ sơ cùng họ tên + ngày sinh thì trả 409 `PATIENT_DUPLICATE_UNCONFIRMED` trừ khi gửi `confirmDistinctPerson: true`. Giao diện chặn cả khi danh sách gợi ý chưa tải xong hoặc tải lỗi (trước đó lỗi/đang tải làm mất cảnh báo).
 - Thêm 2 test; chỉnh test cũ "tạo hồ sơ mới không tra theo số điện thoại". backend `tsc`, `lint`, 181 test booking xanh; frontend `build`, `lint` sạch.
+
+## Đặt lịch online: giữ chỗ tạm + hứa mốc phản hồi (đợt (b))
+
+- Backend (`booking.service.ts`): `heldIntervals` — giờ của yêu cầu đang chờ lễ tân (PENDING_REVIEW/NEEDS_INFORMATION, trong `BOOKING_HOLD_MINUTES`, mặc định 120, `0` = tắt) và giờ phòng khám đã đề xuất mà khách chưa trả lời/đã đồng ý được giữ, nên `publicDay` ẩn các giờ đó với khách khác (cả `createPublic` vì kiểm tra lại qua `publicDay`). Hết hạn giữ thì giờ tự mở lại. Hết giờ vì bị giữ trả `emptyReason: 'HELD'`. Lễ tân xác nhận vẫn không bị chặn bởi giữ chỗ (chỉ kiểm tra lịch hẹn thật).
+- Giao diện khách: câu giải thích `HELD`; trang kết quả sau khi gửi ghi "giờ được giữ" và "lễ tân phản hồi trong 30 phút trong giờ làm việc (giờ của phòng khám)".
+- Giao diện lễ tân: nhãn "Chờ N phút" (từ 5 phút), đỏ "Chờ quá lâu" sau 30 phút ở yêu cầu chờ duyệt.
+- backend `tsc`, `lint`, 186 test booking xanh (thêm 5 test giữ chỗ; spec mặc định tắt giữ chỗ); frontend `build` sạch.
+- Tiếp theo: (c) công tắc tự xác nhận có điều kiện (mặc định tắt).
+
+### Sửa theo review Codex của PR #59
+
+- Giữ chỗ tính theo kế hoạch khám thật (`planVisit`: thời lượng riêng của bác sĩ + đệm trước/sau) thay vì thời lượng mặc định của dịch vụ; so sánh với khoảng có đệm của giờ ứng viên.
+- `createPublic`: khi giữ chỗ bật, khóa lịch bác sĩ trong giao dịch tạo yêu cầu rồi kiểm tra lại giữ chỗ (hai khách khác SĐT cùng gửi một lúc không còn cùng giữ được một giờ) → 409.
+- Trạng thái công khai trả `holdUntil`; trang kết quả chỉ nói "giờ được giữ" khi còn hạn giữ.
+- backend 187 test booking xanh, `tsc`/`lint` sạch; frontend `build`/`lint` sạch.

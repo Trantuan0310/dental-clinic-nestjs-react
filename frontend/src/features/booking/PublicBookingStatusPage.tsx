@@ -33,6 +33,8 @@ type Status = {
   canManage?: boolean;
   status: string;
   requestedStartAt: string;
+  /** While set, the requested time is held for this request. */
+  holdUntil?: string | null;
   service?: { name: string | null; durationMinutes?: number | null };
   dentist?: { fullName: string | null };
   proposedStartAt?: string | null;
@@ -587,6 +589,14 @@ export default function PublicBookingStatusPage() {
                 <p className="mt-1 text-sm">
                   {t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
                 </p>
+                {status.status === "PENDING_REVIEW" && (
+                  <p className="mt-2 text-sm">
+                    {status.holdUntil ? `${t('uiScheduling.bookingHeldNote')} ` : ''}
+                    {t('uiScheduling.bookingResponsePromise', {
+                      hours: clinic.hours[0]?.time ?? '',
+                    })}
+                  </p>
+                )}
                 {mailFailed && (
                   <p role="alert" className="mt-2 rounded-md bg-amber-100 p-2 text-sm text-amber-900">
                     {t('uiScheduling.bookingEmailFailed')}

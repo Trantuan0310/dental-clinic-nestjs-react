@@ -18,6 +18,7 @@ type RequestRow = {
   contactPersonName?: string | null;
   contactPersonPhone?: string | null;
   requestedStartAt: string;
+  createdAt?: string;
   proposedStartAt?: string | null;
   status: string;
   reason?: string | null;
@@ -603,6 +604,19 @@ export default function BookingRequestsPage() {
                   </td>
                   <td className="px-4 py-3">
                     {rowStatus(row, t)}
+                    {row.status === 'PENDING_REVIEW' && row.createdAt && (() => {
+                      const minutes = Math.floor((Date.now() - new Date(row.createdAt).getTime()) / 60000);
+                      if (minutes < 5) return null;
+                      return (
+                        <span
+                          className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                            minutes > 30 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {minutes > 30 ? t('uiScheduling.waitingLate') : t('uiScheduling.waitingSince', { minutes })}
+                        </span>
+                      );
+                    })()}
                     {row.noticeFailedAt && (
                       <span
                         title={t('uiScheduling.noticeFailedFor', { subject: row.noticeFailedSubject ?? '' })}
