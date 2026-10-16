@@ -243,3 +243,10 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `tryAutoConfirm`: nếu `confirm()` lỗi sau khi đã đặt lịch (ghi chú thông báo, audit), đọc lại trạng thái; đã CONFIRMED có lịch hẹn thì coi là thành công, không báo nhầm "chờ duyệt" và không gửi thông báo "yêu cầu mới" cho lễ tân.
 - Trang kết quả chỉ ghi "Lịch hẹn đã được xác nhận" ngay khi lần gửi đó trả `CONFIRMED` (cờ `auto=1` trong URL), không suy từ trạng thái hiện tại, để lễ tân xác nhận tay sau đó không bị nhầm là tự xác nhận.
 - `notificationSent` của lần tự xác nhận là kết quả email xác nhận (không còn bị email "đã nhận yêu cầu" che lỗi).
+
+## Đặt lịch online: điền sẵn thông tin cho khách quay lại (phía khách)
+
+- Không tra cứu theo số điện thoại trên máy chủ (không có xác minh thì sẽ làm lộ họ tên, ngày sinh, email bệnh nhân cho bất kỳ ai gõ số). Thay vào đó, sau khi gửi yêu cầu thành công, form lưu họ tên, ngày sinh, giới tính, SĐT, email, người liên hệ vào `localStorage` của chính thiết bị (`savedProfile.ts`, khóa `gensmile.bookingProfile`; không lưu lý do khám và đồng ý), lần sau điền sẵn.
+- `PublicBookingPage.tsx`: dải thông báo "Đã điền sẵn thông tin từ lần đặt trước trên thiết bị này (tên). Đặt cho người khác?" kèm nút "Xóa và nhập lại" (xóa form và dữ liệu đã lưu); ô "Ghi nhớ thông tin trên thiết bị này (không dùng máy công cộng)" mặc định bật, bỏ chọn thì xóa dữ liệu đã lưu khi gửi.
+- Kết hợp với tự xác nhận (đợt (c)): khách quay lại điền sẵn đúng thông tin cũ sẽ khớp hồ sơ và được xác nhận ngay.
+- Thử trên trình duyệt thật (bản demo): đặt dữ liệu đã lưu → form điền sẵn và hiện dải thông báo; bấm xóa → form trống, dữ liệu đã lưu bị xóa. frontend `build`, `lint` sạch.

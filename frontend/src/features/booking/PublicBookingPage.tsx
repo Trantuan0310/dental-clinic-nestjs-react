@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
 import { saveBooking } from "./savedBookings";
+import { clearSavedProfile, loadSavedProfile, saveProfile } from "./savedProfile";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
@@ -114,16 +115,22 @@ export default function PublicBookingPage() {
   const [slotLoading, setSlotLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    fullName: "",
-    dob: "",
-    gender: "UNDISCLOSED",
-    phone: "",
-    email: "",
-    contactPersonName: "",
-    contactPersonPhone: "",
-    reason: "",
-    consent: false,
+  // Details from this device's last booking, if any (never fetched from the server).
+  const [remembered, setRemembered] = useState(() => loadSavedProfile());
+  const [remember, setRemember] = useState(true);
+  const [form, setForm] = useState(() => {
+    const saved = loadSavedProfile();
+    return {
+      fullName: saved?.fullName ?? "",
+      dob: saved?.dob ?? "",
+      gender: saved?.gender || "UNDISCLOSED",
+      phone: saved?.phone ?? "",
+      email: saved?.email ?? "",
+      contactPersonName: saved?.contactPersonName ?? "",
+      contactPersonPhone: saved?.contactPersonPhone ?? "",
+      reason: "",
+      consent: false,
+    };
   });
 
   useEffect(() => {
@@ -190,7 +197,7 @@ export default function PublicBookingPage() {
     return ty - y - (tm < m || (tm === m && td < d) ? 1 : 0);
   }, [form.dob]);
   // Booking for someone else (or a child under 12): contact person fields.
-  const [onBehalf, setOnBehalf] = useState(false);
+  const [onBehalf, setOnBehalf] = useState(() => loadSavedProfile()?.onBehalf ?? false);
   const showContact = onBehalf || (age !== null && age < 12);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,6 +229,20 @@ export default function PublicBookingPage() {
         token: result.accessToken,
         phone: form.phone.trim(),
       });
+      if (remember) {
+        saveProfile({
+          fullName: form.fullName.trim(),
+          dob: form.dob,
+          gender: form.gender,
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+          contactPersonName: showContact ? form.contactPersonName.trim() : "",
+          contactPersonPhone: showContact ? form.contactPersonPhone.trim() : "",
+          onBehalf,
+        });
+      } else {
+        clearSavedProfile();
+      }
       // An email was given but could not be sent: the status page says so.
       const mailFailed = !!form.email.trim() && result.notificationSent === false;
       navigate(
@@ -439,6 +460,32 @@ export default function PublicBookingPage() {
                 <p className="-mt-2 mb-3 text-xs text-gray-500 dark:text-surface-400">
                   {t('uiScheduling.bookingPatientInfoHint')}
                 </p>
+                {remembered && (
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-brand-50 dark:bg-surface-800 px-3 py-2 text-sm text-gray-700 dark:text-surface-200">
+                    <span>{t('uiScheduling.bookingPrefilled', { name: remembered.fullName })}</span>
+                    <button
+                      type="button"
+                      className="font-medium text-brand-700 underline underline-offset-2"
+                      onClick={() => {
+                        clearSavedProfile();
+                        setRemembered(null);
+                        setOnBehalf(false);
+                        setForm((old) => ({
+                          ...old,
+                          fullName: "",
+                          dob: "",
+                          gender: "UNDISCLOSED",
+                          phone: "",
+                          email: "",
+                          contactPersonName: "",
+                          contactPersonPhone: "",
+                        }));
+                      }}
+                    >
+                      {t('uiScheduling.bookingPrefilledClear')}
+                    </button>
+                  </div>
+                )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
                     {t('uiScheduling.bookingFullName')}
@@ -558,6 +605,15 @@ export default function PublicBookingPage() {
                   className="mt-1"
                 />
                 <span>{t('uiScheduling.consent')}</span>
+              </label>
+              <label className="flex gap-3 px-3 text-sm text-gray-600 dark:text-surface-300">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>{t('uiScheduling.bookingRemember')}</span>
               </label>
               {error && (
                 <p
