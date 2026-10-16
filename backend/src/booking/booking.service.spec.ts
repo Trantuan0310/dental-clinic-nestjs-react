@@ -1153,11 +1153,52 @@ describe('BookingService public request security and validation', () => {
         expect(appointments.create).not.toHaveBeenCalled();
       });
 
+      it("does not match an adult through an emergency contact's number", async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(
+          request({ fullName: 'Trần Văn Bình', dob: new Date('1980-05-06') }),
+        );
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'adult',
+            fullName: 'Trần Văn Bình',
+            dob: new Date('1980-05-06'),
+            primaryPhone: null,
+            contactPersonPhone: '0901234567',
+          },
+        ]);
+        await expect(service.confirm('request-1', actor)).rejects.toThrow('chọn hồ sơ phù hợp');
+        expect(appointments.create).not.toHaveBeenCalled();
+      });
+
+      it('refuses a new record beside one with the same name and date of birth, unless the front desk says it is somebody else', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'child',
+            code: 'PAT-1',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0987000111',
+          },
+        ]);
+        await expect(
+          service.confirm('request-1', actor, { createNewPatient: true }),
+        ).rejects.toThrow('đây là người khác');
+        expect(patients.create).not.toHaveBeenCalled();
+        patients.create.mockResolvedValue({ id: 'patient-new' });
+        await service.confirm('request-1', actor, {
+          createNewPatient: true,
+          confirmDistinctPerson: true,
+        });
+        expect(patients.create).toHaveBeenCalledTimes(1);
+      });
+
       it('creates a new record when the front desk asks, without matching', async () => {
         prisma.bookingRequest.findUnique.mockResolvedValue(request());
         patients.create.mockResolvedValue({ id: 'patient-new' });
         await service.confirm('request-1', actor, { createNewPatient: true });
-        expect(prisma.patient.findMany).not.toHaveBeenCalled();
+        // No lookup by phone (the only duplicate check is by name and date of birth).
+        expect(prisma.$queryRaw).not.toHaveBeenCalled();
         expect(patients.create).toHaveBeenCalledWith(
           expect.objectContaining({ fullName: 'Nguyễn Bé An', primaryPhone: '0901234567' }),
           actor,
@@ -3197,4 +3238,3 @@ describe('comparing names typed twice', () => {
     expect(similarName('Nam', 'nam')).toBe(true);
   });
 });
-

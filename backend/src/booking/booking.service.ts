@@ -2169,6 +2169,21 @@ export class BookingService {
       const synced = await this.syncPatientContact(found, row, choice, phoneMatches, actor, tx);
       return { id: found.id, created: false, identityConfirmed: !phoneMatches, ...synced };
     }
+    if (choice.createNewPatient && !choice.confirmDistinctPerson) {
+      // A new record beside one with this name and date of birth splits the
+      // person's history: the front desk says it is somebody else.
+      const same = await this.sameNameAndDobPatients(row, tx);
+      if (same.length) {
+        throw new ConflictException({
+          message:
+            'Đã có hồ sơ cùng họ tên và ngày sinh (' +
+            same.map(p => p.code + ' ' + p.fullName).join(', ') +
+            '). Tạo hồ sơ mới sẽ tách lịch sử khám của khách. Nếu chắc đây là người khác, hãy tích ' +
+            '“Tôi đã kiểm tra, đây là người khác” rồi xác nhận lại.',
+          code: 'PATIENT_DUPLICATE_UNCONFIRMED',
+        });
+      }
+    }
     if (!choice.createNewPatient) {
       const matches = await tx.patient.findMany({
         where: await this.patientsByPhone(phones, tx),
@@ -2202,7 +2217,10 @@ export class BookingService {
       const own = this.normalize(row.phone);
       if (likely) {
         const ownPhone = !!likely.primaryPhone && this.normalize(likely.primaryPhone) === own;
+        // Only a minor is matched through a guardian's number: an adult with
+        // just an emergency contact on file is for a person to confirm.
         const guardianPhone =
+          isMinor(likely.dob) &&
           !likely.primaryPhone &&
           !!likely.contactPersonPhone &&
           phones.includes(this.normalize(likely.contactPersonPhone));

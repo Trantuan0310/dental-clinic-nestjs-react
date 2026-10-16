@@ -208,3 +208,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Giao diện lễ tân (`BookingRequestsPage.tsx`): gợi ý rõ hồ sơ được chọn sẵn; khi chọn "Tạo hồ sơ mới" mà đã có hồ sơ cùng họ tên + ngày sinh thì hiện cảnh báo và phải tích "đã kiểm tra, đây là người khác" mới xác nhận được.
 - Thử trên bản demo sau khi sửa: 4/5 tình huống tự khớp (gõ có dấu cách, không dấu chữ thường, bỏ tên đệm, trẻ em qua SĐT phụ huynh), ca đổi số vẫn chặn; không sinh hồ sơ trùng. backend `tsc`, `lint`, test booking 179 xanh (thêm 8 test); frontend `build`, `lint` sạch.
 - Việc tiếp theo trong kế hoạch: (b) hứa mốc phản hồi + giữ chỗ tạm cho yêu cầu chờ duyệt; (c) công tắc tự xác nhận có điều kiện; phía khách: điền sẵn thông tin cho khách cũ (cần chọn cách xác minh).
+
+### Sửa theo review Codex của PR #58
+
+- Chỉ khớp qua số phụ huynh khi hồ sơ là **trẻ vị thành niên** (`isMinor`): người lớn chỉ có số liên hệ khẩn cấp vẫn để lễ tân xác nhận.
+- Cảnh báo "tạo hồ sơ mới khi đã có hồ sơ trùng" nay được chốt **cả phía máy chủ**: `confirm` với `createNewPatient` mà có hồ sơ cùng họ tên + ngày sinh thì trả 409 `PATIENT_DUPLICATE_UNCONFIRMED` trừ khi gửi `confirmDistinctPerson: true`. Giao diện chặn cả khi danh sách gợi ý chưa tải xong hoặc tải lỗi (trước đó lỗi/đang tải làm mất cảnh báo).
+- Thêm 2 test; chỉnh test cũ "tạo hồ sơ mới không tra theo số điện thoại". backend `tsc`, `lint`, 181 test booking xanh; frontend `build`, `lint` sạch.

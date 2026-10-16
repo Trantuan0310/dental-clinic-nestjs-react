@@ -224,6 +224,8 @@ export default function BookingRequestsPage() {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [matches, setMatches] = useState<PatientMatch[]>([]);
+  // False while the candidate records load, and for good if they fail to.
+  const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [patientId, setPatientId] = useState("");
   const [message, setMessage] = useState("");
   const [proposeAt, setProposeAt] = useState("");
@@ -296,6 +298,7 @@ export default function BookingRequestsPage() {
   }, [dentistOptions.data, proposeDentist]);
   useEffect(() => {
     setMatches([]);
+    setMatchesLoaded(false);
     setPatientId("");
     setError("");
     setMessage("");
@@ -321,6 +324,7 @@ export default function BookingRequestsPage() {
       )
       .then((r) => {
         setMatches(r.data.data);
+        setMatchesLoaded(true);
         // A single record with the same name and date of birth is the
         // likely one (a returning patient, maybe on a new phone): suggested.
         const same = r.data.data.filter((p) => p.sameNameAndDob);
@@ -414,11 +418,13 @@ export default function BookingRequestsPage() {
   const overdue = selected ? urgency(selected, now) === "overdue" : false;
   const chosen = matches.find((p) => p.id === patientId);
   const duplicates = patientId === NEW_PATIENT ? matches.filter((p) => p.sameNameAndDob) : [];
-  const newBlocked = duplicates.length > 0 && !newChecked;
+  // Needs a person's "somebody else" tick: duplicates found, or none could be looked for.
+  const newNeedsCheck = patientId === NEW_PATIENT && (duplicates.length > 0 || !matchesLoaded);
+  const newBlocked = newNeedsCheck && !newChecked;
   /** The record choice and its options, as confirm takes them. */
   const confirmBody = () =>
     patientId === NEW_PATIENT
-      ? { createNewPatient: true }
+      ? { createNewPatient: true, ...(newChecked ? { confirmDistinctPerson: true } : {}) }
       : patientId
         ? {
             patientId,
@@ -814,12 +820,14 @@ export default function BookingRequestsPage() {
                     {t('uiScheduling.matchSuggestedHint')}
                   </p>
                 )}
-                {duplicates.length > 0 && (
+                {newNeedsCheck && (
                   <div className="mt-2 space-y-2 rounded bg-red-50 p-3 text-sm text-red-800">
                     <p>
-                      {t('uiScheduling.newRecordDuplicateWarning', {
-                        names: duplicates.map((p) => p.code + ' ' + p.fullName).join(', '),
-                      })}
+                      {duplicates.length > 0
+                        ? t('uiScheduling.newRecordDuplicateWarning', {
+                            names: duplicates.map((p) => p.code + ' ' + p.fullName).join(', '),
+                          })
+                        : t('uiScheduling.newRecordUnchecked')}
                     </p>
                     <label className="flex items-center gap-2">
                       <input
