@@ -222,3 +222,10 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Giao diện lễ tân: nhãn "Chờ N phút" (từ 5 phút), đỏ "Chờ quá lâu" sau 30 phút ở yêu cầu chờ duyệt.
 - backend `tsc`, `lint`, 186 test booking xanh (thêm 5 test giữ chỗ; spec mặc định tắt giữ chỗ); frontend `build` sạch.
 - Tiếp theo: (c) công tắc tự xác nhận có điều kiện (mặc định tắt).
+
+### Sửa theo review Codex của PR #59
+
+- Giữ chỗ tính theo kế hoạch khám thật (`planVisit`: thời lượng riêng của bác sĩ + đệm trước/sau) thay vì thời lượng mặc định của dịch vụ; so sánh với khoảng có đệm của giờ ứng viên.
+- `createPublic`: khi giữ chỗ bật, khóa lịch bác sĩ trong giao dịch tạo yêu cầu rồi kiểm tra lại giữ chỗ (hai khách khác SĐT cùng gửi một lúc không còn cùng giữ được một giờ) → 409.
+- Trạng thái công khai trả `holdUntil`; trang kết quả chỉ nói "giờ được giữ" khi còn hạn giữ.
+- backend 187 test booking xanh, `tsc`/`lint` sạch; frontend `build`/`lint` sạch.

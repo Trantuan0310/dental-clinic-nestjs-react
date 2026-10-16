@@ -12,7 +12,11 @@ import { AppointmentStatus, BookingRequestStatus, Gender, Prisma } from '@prisma
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppointmentsService, VisitPlan } from '../appointments/appointments.service';
-import { LOCKING_TX_OPTIONS, lockBookingPhone } from '../appointments/domain/advisory-lock';
+import {
+  LOCKING_TX_OPTIONS,
+  lockBookingPhone,
+  lockDentistCalendar,
+} from '../appointments/domain/advisory-lock';
 import {
   AvailabilityService,
   effectiveDentistId,
@@ -562,11 +566,9 @@ export class BookingService {
     );
     // Times other people's open requests are holding while the front desk decides.
     const held = await this.heldIntervals(dentistId, date);
-    const availableSlots = afterLead.filter(time => {
-      const start = new Date(date + 'T' + time + ':00+07:00').getTime();
-      const end = start + plan.durationMin * 60_000;
-      return !held.some(h => start < h.end && h.start < end);
-    });
+    const availableSlots = afterLead.filter(
+      time => !this.hitsHold(held, new Date(date + 'T' + time + ':00+07:00').getTime(), plan),
+    );
     const clinicClosed = 'clinicClosed' in data && data.clinicClosed === true;
     // No time left because the day is (nearly) over is not "full": the last
     // moment a visit could still start in some working window.
@@ -609,15 +611,23 @@ export class BookingService {
    * after it came in), or a clinic proposal the patient has not answered, or
    * has accepted, until it is handled.
    */
+  /** Whether a visit starting at `start` (buffers included) runs into a hold. */
+  private hitsHold(held: Array<{ start: number; end: number }>, start: number, plan: VisitPlan) {
+    const from = start - plan.bufferBeforeMin * 60_000;
+    const to = start + (plan.durationMin + plan.bufferAfterMin) * 60_000;
+    return held.some(h => from < h.end && h.start < to);
+  }
+
   private async heldIntervals(
     dentistId: string,
     date: string,
+    db: Pick<PrismaService, 'bookingRequest'> = this.prisma,
   ): Promise<Array<{ start: number; end: number }>> {
     const holdMs = bookingHoldMinutes() * 60_000;
     if (holdMs <= 0) return [];
     const from = new Date(date + 'T00:00:00+07:00');
     const to = new Date(from.getTime() + 24 * 60 * 60_000);
-    const rows = await this.prisma.bookingRequest.findMany({
+    const rows = await db.bookingRequest.findMany({
       where: {
         appointmentId: null,
         status: { in: ['PENDING_REVIEW', 'NEEDS_INFORMATION', 'PROPOSED', 'PATIENT_ACCEPTED'] },
@@ -633,6 +643,7 @@ export class BookingService {
         requestedStartAt: true,
         proposedDentistId: true,
         proposedStartAt: true,
+        serviceId: true,
         service: { select: { defaultDurationMin: true } },
       },
     });
@@ -646,9 +657,15 @@ export class BookingService {
       const start = proposal && r.proposedStartAt ? r.proposedStartAt : r.requestedStartAt;
       const owner = proposal && r.proposedDentistId ? r.proposedDentistId : r.preferredDentistId;
       if (owner !== dentistId || start.getTime() <= now) continue;
+      // The occupancy the visit would really have (this dentist's length
+      // for the service, its buffers), as confirming it would book.
+      const plan = r.serviceId
+        ? await this.appointments.planVisit(dentistId, [r.serviceId], date).catch(() => null)
+        : null;
+      const length = plan?.durationMin ?? r.service?.defaultDurationMin ?? 30;
       held.push({
-        start: start.getTime(),
-        end: start.getTime() + (r.service?.defaultDurationMin ?? 30) * 60_000,
+        start: start.getTime() - (plan?.bufferBeforeMin ?? 0) * 60_000,
+        end: start.getTime() + (length + (plan?.bufferAfterMin ?? 0)) * 60_000,
       });
     }
     return held;
@@ -694,6 +711,18 @@ export class BookingService {
       // twice: submissions from one phone are serialized, so the duplicate
       // check and the insert are atomic.
       await lockBookingPhone(tx, details.phone);
+      // Two people asking for one dentist's time at once hold different phone
+      // locks: serialize on the dentist and look at the holds again, now that
+      // an earlier insert is visible.
+      if (bookingHoldMinutes() > 0) {
+        await lockDentistCalendar(tx, dto.dentistId);
+        const held = await this.heldIntervals(dto.dentistId, clinicDateOnly(startAt), tx);
+        if (this.hitsHold(held, startAt.getTime(), plan)) {
+          throw new ConflictException(
+            'Giờ này vừa được người khác giữ chỗ. Vui lòng chọn một giờ khác trong danh sách giờ còn trống.',
+          );
+        }
+      }
       // Open requests from this phone, for the duplicate check and the
       // limits. A family shares one phone: the same time for another person
       // (two children seen at once by two dentists) is not a duplicate.
@@ -2900,6 +2929,16 @@ export class BookingService {
     );
   }
 
+  private holdUntil(row: any): Date | null {
+    const holdMs = bookingHoldMinutes() * 60_000;
+    if (holdMs <= 0 || row.appointment || !(row.createdAt instanceof Date)) return null;
+    if (!['PENDING_REVIEW', 'NEEDS_INFORMATION'].includes(row.status)) return null;
+    const until = new Date(row.createdAt.getTime() + holdMs);
+    return until.getTime() > Date.now() && row.requestedStartAt?.getTime() > Date.now()
+      ? until
+      : null;
+  }
+
   private toPublic(row: any, { canManage = false } = {}) {
     const useProposed = ['PROPOSED', 'PATIENT_ACCEPTED'].includes(row.status);
     const visit = row.appointment;
@@ -2910,6 +2949,8 @@ export class BookingService {
       status: row.status,
       requestedAt: row.createdAt,
       requestedStartAt: row.requestedStartAt,
+      /** While set, the requested time is held for this request. */
+      holdUntil: this.holdUntil(row),
       service: {
         name: row.service?.name ?? null,
         durationMinutes: row.service?.defaultDurationMin ?? null,

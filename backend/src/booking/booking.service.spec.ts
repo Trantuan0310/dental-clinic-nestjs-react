@@ -921,6 +921,18 @@ describe('BookingService public request security and validation', () => {
           expect(result.emptyReason).toBe('HELD');
         });
 
+        it('holds the dentist-specific length and buffers, not the service default', async () => {
+          appointments.getAvailability.mockResolvedValue({
+            availableSlots: ['14:00', '14:30', '15:00'],
+          });
+          appointments.planVisit.mockResolvedValue({ ...plan, durationMin: 45 });
+          prisma.bookingRequest.findMany.mockResolvedValue([waiting({ serviceId: 'service-1' })]);
+          const result = await service.slots(slotQuery);
+          // 14:00–14:45 is held, so 14:30 is gone with it.
+          expect(result.availableSlots).not.toContain('14:00');
+          expect(result.availableSlots).not.toContain('14:30');
+        });
+
         it('holds nothing when BOOKING_HOLD_MINUTES is 0', async () => {
           process.env.BOOKING_HOLD_MINUTES = '0';
           prisma.bookingRequest.findMany.mockResolvedValue([waiting()]);
