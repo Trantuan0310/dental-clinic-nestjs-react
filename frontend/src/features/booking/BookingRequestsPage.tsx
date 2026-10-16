@@ -224,6 +224,8 @@ export default function BookingRequestsPage() {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [matches, setMatches] = useState<PatientMatch[]>([]);
+  // False while the candidate records load, and for good if they fail to.
+  const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [patientId, setPatientId] = useState("");
   const [message, setMessage] = useState("");
   const [proposeAt, setProposeAt] = useState("");
@@ -238,6 +240,8 @@ export default function BookingRequestsPage() {
   const [identityNote, setIdentityNote] = useState("");
   const [updatePhone, setUpdatePhone] = useState(false);
   const [updateEmail, setUpdateEmail] = useState(false);
+  // A new record while one with this name and date of birth exists: checked by a person.
+  const [newChecked, setNewChecked] = useState(false);
   const [spam, setSpam] = useState(false);
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
@@ -294,6 +298,7 @@ export default function BookingRequestsPage() {
   }, [dentistOptions.data, proposeDentist]);
   useEffect(() => {
     setMatches([]);
+    setMatchesLoaded(false);
     setPatientId("");
     setError("");
     setMessage("");
@@ -301,6 +306,7 @@ export default function BookingRequestsPage() {
     setIdentityNote("");
     setUpdatePhone(false);
     setUpdateEmail(false);
+    setNewChecked(false);
     setSpam(false);
     setEditing(false);
     setNote(selected?.receptionistNote ?? "");
@@ -318,6 +324,7 @@ export default function BookingRequestsPage() {
       )
       .then((r) => {
         setMatches(r.data.data);
+        setMatchesLoaded(true);
         // A single record with the same name and date of birth is the
         // likely one (a returning patient, maybe on a new phone): suggested.
         const same = r.data.data.filter((p) => p.sameNameAndDob);
@@ -410,10 +417,14 @@ export default function BookingRequestsPage() {
   }, [query.data]);
   const overdue = selected ? urgency(selected, now) === "overdue" : false;
   const chosen = matches.find((p) => p.id === patientId);
+  const duplicates = patientId === NEW_PATIENT ? matches.filter((p) => p.sameNameAndDob) : [];
+  // Needs a person's "somebody else" tick: duplicates found, or none could be looked for.
+  const newNeedsCheck = patientId === NEW_PATIENT && (duplicates.length > 0 || !matchesLoaded);
+  const newBlocked = newNeedsCheck && !newChecked;
   /** The record choice and its options, as confirm takes them. */
   const confirmBody = () =>
     patientId === NEW_PATIENT
-      ? { createNewPatient: true }
+      ? { createNewPatient: true, ...(newChecked ? { confirmDistinctPerson: true } : {}) }
       : patientId
         ? {
             patientId,
@@ -804,6 +815,30 @@ export default function BookingRequestsPage() {
                     {t('uiScheduling.patientMatchWarning', { count: matches.length })}
                   </p>
                 )}
+                {chosen?.sameNameAndDob && !chosen.differentPhone && (
+                  <p className="mt-1 text-xs text-teal-700 dark:text-teal-300">
+                    {t('uiScheduling.matchSuggestedHint')}
+                  </p>
+                )}
+                {newNeedsCheck && (
+                  <div className="mt-2 space-y-2 rounded bg-red-50 p-3 text-sm text-red-800">
+                    <p>
+                      {duplicates.length > 0
+                        ? t('uiScheduling.newRecordDuplicateWarning', {
+                            names: duplicates.map((p) => p.code + ' ' + p.fullName).join(', '),
+                          })
+                        : t('uiScheduling.newRecordUnchecked')}
+                    </p>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newChecked}
+                        onChange={(e) => setNewChecked(e.target.checked)}
+                      />
+                      {t('uiScheduling.newRecordDuplicateConfirm')}
+                    </label>
+                  </div>
+                )}
                 {chosen?.differentPhone && (
                   <div className="mt-2 space-y-2 rounded bg-amber-50 p-3 text-sm text-amber-900">
                     <p>
@@ -1042,7 +1077,7 @@ export default function BookingRequestsPage() {
             <div className="mt-6 flex flex-wrap justify-end gap-2 border-t pt-4">
               {CONFIRMABLE.includes(selected.status) && !overdue && (
                 <button
-                  disabled={action.isPending}
+                  disabled={action.isPending || newBlocked}
                   onClick={() => action.mutate({ path: "confirm", body: confirmBody() })}
                   className="rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
                 >
@@ -1052,7 +1087,7 @@ export default function BookingRequestsPage() {
               {/* The patient asked for / agreed to the alternative time by phone: book it now. */}
               {canPropose && (
                 <button
-                  disabled={action.isPending || !proposeAt || !proposeDentist}
+                  disabled={action.isPending || !proposeAt || !proposeDentist || newBlocked}
                   onClick={() =>
                     action.mutate({
                       path: "confirm",

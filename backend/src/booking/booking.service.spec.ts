@@ -1,7 +1,14 @@
 import { UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Gender } from '@prisma/client';
-import { BookingService, EXPIRED_MESSAGE, maskName, normalizePhone } from './booking.service';
+import {
+  BookingService,
+  EXPIRED_MESSAGE,
+  foldName,
+  maskName,
+  normalizePhone,
+  similarName,
+} from './booking.service';
 import { AvailabilityService } from '../appointments/availability.service';
 
 const plan = {
@@ -1023,7 +1030,7 @@ describe('BookingService public request security and validation', () => {
         expect(patients.create).not.toHaveBeenCalled();
       });
 
-      it('never picks a record found only through a guardian phone by itself', async () => {
+      it("does not pick a child's record when the request's phone is not on it", async () => {
         prisma.bookingRequest.findUnique.mockResolvedValue(request());
         prisma.patient.findMany.mockResolvedValue([
           // Same name and date of birth, but on file under the request's
@@ -1040,11 +1047,158 @@ describe('BookingService public request security and validation', () => {
         expect(patients.create).not.toHaveBeenCalled();
       });
 
+      it("picks a child on file only under the guardian's number when the request's phone is it", async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'child',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: null,
+            contactPersonPhone: '0901 234 567',
+          },
+        ]);
+        await service.confirm('request-1', actor);
+        expect(appointments.create.mock.calls[0][0].patientId).toBe('child');
+        expect(patients.create).not.toHaveBeenCalled();
+      });
+
+      it('picks the record when the name was typed without accents', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ fullName: 'nguyen be an' }));
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'child',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+        ]);
+        await service.confirm('request-1', actor);
+        expect(appointments.create.mock.calls[0][0].patientId).toBe('child');
+        expect(patients.create).not.toHaveBeenCalled();
+      });
+
+      it('picks the record when the middle name was left out', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ fullName: 'Ngô Nam' }));
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'adult',
+            fullName: 'Ngô Quang Nam',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+        ]);
+        await service.confirm('request-1', actor);
+        expect(appointments.create.mock.calls[0][0].patientId).toBe('adult');
+      });
+
+      it('prefers the record spelled exactly the same over a looser one', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'looser',
+            fullName: 'Nguyễn Thị Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+          {
+            id: 'exact',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+        ]);
+        await service.confirm('request-1', actor);
+        expect(appointments.create.mock.calls[0][0].patientId).toBe('exact');
+      });
+
+      it('leaves two equally alike records to the front desk', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request({ fullName: 'Nguyễn An' }));
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'one',
+            fullName: 'Nguyễn Thị An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+          {
+            id: 'two',
+            fullName: 'Nguyễn Văn An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+        ]);
+        await expect(service.confirm('request-1', actor)).rejects.toThrow('chọn hồ sơ phù hợp');
+        expect(appointments.create).not.toHaveBeenCalled();
+        expect(patients.create).not.toHaveBeenCalled();
+      });
+
+      it('does not match a different date of birth or a different given name', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'other-day',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-05'),
+            primaryPhone: '0901234567',
+          },
+          {
+            id: 'other-name',
+            fullName: 'Nguyễn Bé Anh',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0901234567',
+          },
+        ]);
+        await expect(service.confirm('request-1', actor)).rejects.toThrow('chọn hồ sơ phù hợp');
+        expect(appointments.create).not.toHaveBeenCalled();
+      });
+
+      it("does not match an adult through an emergency contact's number", async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(
+          request({ fullName: 'Trần Văn Bình', dob: new Date('1980-05-06') }),
+        );
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'adult',
+            fullName: 'Trần Văn Bình',
+            dob: new Date('1980-05-06'),
+            primaryPhone: null,
+            contactPersonPhone: '0901234567',
+          },
+        ]);
+        await expect(service.confirm('request-1', actor)).rejects.toThrow('chọn hồ sơ phù hợp');
+        expect(appointments.create).not.toHaveBeenCalled();
+      });
+
+      it('refuses a new record beside one with the same name and date of birth, unless the front desk says it is somebody else', async () => {
+        prisma.bookingRequest.findUnique.mockResolvedValue(request());
+        prisma.patient.findMany.mockResolvedValue([
+          {
+            id: 'child',
+            code: 'PAT-1',
+            fullName: 'Nguyễn Bé An',
+            dob: new Date('2020-03-04'),
+            primaryPhone: '0987000111',
+          },
+        ]);
+        await expect(
+          service.confirm('request-1', actor, { createNewPatient: true }),
+        ).rejects.toThrow('đây là người khác');
+        expect(patients.create).not.toHaveBeenCalled();
+        patients.create.mockResolvedValue({ id: 'patient-new' });
+        await service.confirm('request-1', actor, {
+          createNewPatient: true,
+          confirmDistinctPerson: true,
+        });
+        expect(patients.create).toHaveBeenCalledTimes(1);
+      });
+
       it('creates a new record when the front desk asks, without matching', async () => {
         prisma.bookingRequest.findUnique.mockResolvedValue(request());
         patients.create.mockResolvedValue({ id: 'patient-new' });
         await service.confirm('request-1', actor, { createNewPatient: true });
-        expect(prisma.patient.findMany).not.toHaveBeenCalled();
+        // No lookup by phone (the only duplicate check is by name and date of birth).
+        expect(prisma.$queryRaw).not.toHaveBeenCalled();
         expect(patients.create).toHaveBeenCalledWith(
           expect.objectContaining({ fullName: 'Nguyễn Bé An', primaryPhone: '0901234567' }),
           actor,
@@ -3062,5 +3216,25 @@ describe('BookingService public request security and validation', () => {
         expect(normalizePhone(typed)).toBe('0912345678');
       expect(maskName('Nguyễn Văn An')).toBe('N*** V** A*');
     });
+  });
+});
+
+describe('comparing names typed twice', () => {
+  it('folds accents, case, đ and spacing', () => {
+    expect(foldName('  ĐẶNG   Quang Hải ')).toBe('dang quang hai');
+  });
+
+  it('treats a name without accents or without a middle name as the same person', () => {
+    expect(similarName('Đỗ Ngọc Trang', 'do ngoc trang')).toBe(true);
+    expect(similarName('Ngô Quang Nam', 'Ngô Nam')).toBe(true);
+    expect(similarName('Nguyễn Văn Hải Đăng', 'nguyen hai dang')).toBe(true);
+  });
+
+  it('keeps different people apart', () => {
+    expect(similarName('Trần Thị Hoa', 'Trần Văn Hoa')).toBe(false); // same length, different middle
+    expect(similarName('Nguyễn Bé An', 'Nguyễn Bé Anh')).toBe(false); // given name differs
+    expect(similarName('Lê Minh', 'Phạm Minh')).toBe(false); // family name differs
+    expect(similarName('Nam', 'Ngô Nam')).toBe(false); // one word only equals itself
+    expect(similarName('Nam', 'nam')).toBe(true);
   });
 });

@@ -253,6 +253,8 @@ export class ConfirmBookingRequestDto {
   @IsOptional()
   @IsBoolean()
   createNewPatient?: boolean;
+  /** With createNewPatient: a record with this name and date of birth exists, and this is somebody else. */
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() confirmDistinctPerson?: boolean;
   /** The picked record is on another phone and the front desk checked it is this person. */
   @ApiPropertyOptional() @IsOptional() @IsBoolean() confirmIdentity?: boolean;
   /** How the identity was checked (required with confirmIdentity). */

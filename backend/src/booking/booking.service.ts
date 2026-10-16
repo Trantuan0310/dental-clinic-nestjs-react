@@ -215,6 +215,37 @@ export function normalizeName(value: string): string {
   return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi');
 }
 
+/** Lower case, no accents (đ → d), single spaces: how a name typed on a phone compares. */
+export function foldName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('vi')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The same person's name as typed twice: equal once accents and case are
+ * ignored, or one leaves out middle names ("Ngô Nam" for "Ngô Quang Nam").
+ * The family name (first word) and the given name (last) must both agree, and
+ * the shorter name's words must appear in order in the longer. A single word
+ * only ever equals itself.
+ */
+export function similarName(a: string, b: string): boolean {
+  const x = foldName(a).split(' ').filter(Boolean);
+  const y = foldName(b).split(' ').filter(Boolean);
+  if (!x.length || !y.length) return false;
+  if (x.join(' ') === y.join(' ')) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (short.length < 2) return false;
+  if (short[0] !== long[0] || short[short.length - 1] !== long[long.length - 1]) return false;
+  let next = 0;
+  for (const word of long) if (word === short[next]) next++;
+  return next === short.length;
+}
+
 /**
  * Minimum notice for an online request (BOOKING_MIN_LEAD_MIN, default 120
  * minutes), so the front desk has time to confirm it. Staff booking directly
@@ -1461,12 +1492,12 @@ export class BookingService {
       const matchedBy: Array<'primaryPhone' | 'contactPersonPhone' | 'phoneHistory'> = (
         ['primaryPhone', 'contactPersonPhone'] as const
       ).filter(field => !!p[field] && phones.includes(this.normalize(p[field]!)));
-      if (!matchedBy.length && !found.includes(p) && !this.sameNameAndDob(p, row))
+      if (!matchedBy.length && !found.includes(p) && !this.similarNameAndDob(p, row))
         matchedBy.push('phoneHistory');
       return {
         ...p,
         matchedBy,
-        sameNameAndDob: this.sameNameAndDob(p, row),
+        sameNameAndDob: this.similarNameAndDob(p, row),
         // Picking this record needs the front desk to confirm who it is.
         differentPhone: !matchedBy.some(m => m !== 'phoneHistory'),
       };
@@ -1491,7 +1522,7 @@ export class BookingService {
         contactPersonPhone: true,
       },
     });
-    return (rows ?? []).filter(p => this.sameNameAndDob(p, row));
+    return (rows ?? []).filter(p => this.similarNameAndDob(p, row));
   }
 
   /**
@@ -2138,25 +2169,65 @@ export class BookingService {
       const synced = await this.syncPatientContact(found, row, choice, phoneMatches, actor, tx);
       return { id: found.id, created: false, identityConfirmed: !phoneMatches, ...synced };
     }
+    if (choice.createNewPatient && !choice.confirmDistinctPerson) {
+      // A new record beside one with this name and date of birth splits the
+      // person's history: the front desk says it is somebody else.
+      const same = await this.sameNameAndDobPatients(row, tx);
+      if (same.length) {
+        throw new ConflictException({
+          message:
+            'Đã có hồ sơ cùng họ tên và ngày sinh (' +
+            same.map(p => p.code + ' ' + p.fullName).join(', ') +
+            '). Tạo hồ sơ mới sẽ tách lịch sử khám của khách. Nếu chắc đây là người khác, hãy tích ' +
+            '“Tôi đã kiểm tra, đây là người khác” rồi xác nhận lại.',
+          code: 'PATIENT_DUPLICATE_UNCONFIRMED',
+        });
+      }
+    }
     if (!choice.createNewPatient) {
       const matches = await tx.patient.findMany({
         where: await this.patientsByPhone(phones, tx),
-        select: { id: true, fullName: true, dob: true, primaryPhone: true, email: true },
+        select: {
+          id: true,
+          fullName: true,
+          dob: true,
+          primaryPhone: true,
+          contactPersonPhone: true,
+          email: true,
+        },
         take: 20,
       });
-      // Picked automatically only as before: the record's own phone is the
-      // request's phone, with the same name and date of birth, and no other
-      // record shares that name and date. A match through a guardian phone
-      // (typed by whoever filled in the public form) always needs a person.
-      const exact = matches.filter(p => this.sameNameAndDob(p, row));
+      // Picked automatically when one record on these phones has the
+      // request's date of birth and a name that is the same once accents,
+      // case and middle names are set aside (the record whose name is spelled
+      // exactly the same wins over a looser one), and the phone fits: its own
+      // phone is the request's, or it is a child with no phone of their own
+      // on file under the request's number (their guardian's). Anything else,
+      // including a second record this alike, needs a person to choose.
+      const alike = matches.filter(p => this.similarNameAndDob(p, row));
+      const spelledAlike = alike.filter(p => foldName(p.fullName) === foldName(row.fullName));
+      const likely =
+        spelledAlike.length > 0
+          ? spelledAlike.length === 1
+            ? spelledAlike[0]
+            : null
+          : alike.length === 1
+            ? alike[0]
+            : null;
       const own = this.normalize(row.phone);
-      if (
-        exact.length === 1 &&
-        !!exact[0].primaryPhone &&
-        this.normalize(exact[0].primaryPhone) === own
-      ) {
-        const synced = await this.syncPatientContact(exact[0], row, choice, true, actor, tx);
-        return { id: exact[0].id, created: false, ...synced };
+      if (likely) {
+        const ownPhone = !!likely.primaryPhone && this.normalize(likely.primaryPhone) === own;
+        // Only a minor is matched through a guardian's number: an adult with
+        // just an emergency contact on file is for a person to confirm.
+        const guardianPhone =
+          isMinor(likely.dob) &&
+          !likely.primaryPhone &&
+          !!likely.contactPersonPhone &&
+          phones.includes(this.normalize(likely.contactPersonPhone));
+        if (ownPhone || guardianPhone) {
+          const synced = await this.syncPatientContact(likely, row, choice, true, actor, tx);
+          return { id: likely.id, created: false, ...synced };
+        }
       }
       if (matches.length > 0) {
         throw new ConflictException(
@@ -2295,6 +2366,17 @@ export class BookingService {
               = ANY(${phones}::text[])
       LIMIT 50`;
     return { deletedAt: null, id: { in: rows.map(r => r.id) } };
+  }
+
+  /** Same date of birth and a name that is the same once accents, case and middle names are set aside. */
+  private similarNameAndDob(
+    p: { fullName: string; dob: Date },
+    row: { fullName: string; dob: Date },
+  ) {
+    return (
+      p.dob.toISOString().slice(0, 10) === row.dob.toISOString().slice(0, 10) &&
+      similarName(p.fullName, row.fullName)
+    );
   }
 
   private sameNameAndDob(p: { fullName: string; dob: Date }, row: { fullName: string; dob: Date }) {

@@ -199,3 +199,18 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Đo trên bản demo vừa nạp mới: 0/211 lịch sắp tới nằm ngoài giờ — bộ nạp hiện tại đặt lịch đúng trong giờ từng bác sĩ. Nguyên nhân với VPS (chưa xem được dữ liệu VPS): dữ liệu nạp bởi bản cũ, hoặc giờ làm việc đã sửa sau khi nạp; lệnh `DEMO_REPAIR=1` cũ chỉ bổ sung lịch cho bác sĩ chưa có lịch nào, không xử lý bác sĩ đã có lịch riêng.
 - Bổ sung vào `DEMO_REPAIR=1` (`prisma/seed-demo-clinic.ts`, hàm `fixVisitsOutsideHours`): lịch hẹn demo sắp tới (SCHEDULED/CONFIRMED, bệnh nhân demo) nằm ngoài giờ của bác sĩ → chuyển cho bác sĩ đang làm giờ đó và rảnh; không có thì xóa mềm. Chỉ xét lịch tuần cố định (không xét ngày điều chỉnh, nghỉ phép, ca đã duyệt).
 - Thử trên bản demo: xóa lịch thứ Sáu của 1 bác sĩ → 6 lịch ngoài giờ; chạy repair → 3 chuyển, 3 xóa, còn 0 lịch ngoài giờ. Thêm `scripts/demo-repair-vps.sh` để chạy trên VPS bằng một lệnh.
+
+## Đặt lịch online: tự khớp hồ sơ khách cũ (đợt (a))
+
+- Đánh giá luồng đặt lịch (xem hội thoại): khách cũ đặt online thường không tự khớp hồ sơ, lễ tân phải chọn tay, dễ tạo hồ sơ trùng. Đo trên bản demo trước khi sửa: chỉ ca gõ đúng hoàn toàn họ tên + ngày sinh + SĐT chính mới tự khớp; tên không dấu, bỏ tên đệm, trẻ em đặt bằng SĐT phụ huynh đều bị chặn.
+- `booking.service.ts`: thêm `foldName`, `similarName` (bỏ dấu/hoa thường/đ→d; một bên bỏ tên đệm vẫn cùng người nếu trùng họ và tên, từ ngắn nằm đúng thứ tự trong từ dài; một từ chỉ bằng chính nó). `resolvePatient` tự khớp khi đúng một hồ sơ cùng ngày sinh + tên tương tự (ưu tiên hồ sơ viết giống hệt), và SĐT hợp lệ: SĐT chính của hồ sơ trùng SĐT yêu cầu, HOẶC hồ sơ trẻ không có SĐT riêng mà SĐT phụ huynh trên hồ sơ là số yêu cầu. Từ hai hồ sơ giống nhau trở lên: vẫn để lễ tân chọn. Đổi số điện thoại: vẫn bắt lễ tân xác minh.
+- `patientMatches`/`sameNameAndDobPatients` dùng so sánh tương tự (danh sách gợi ý đầy đủ hơn); giới hạn số yêu cầu mở mỗi người (dòng 605) giữ so sánh chặt như cũ.
+- Giao diện lễ tân (`BookingRequestsPage.tsx`): gợi ý rõ hồ sơ được chọn sẵn; khi chọn "Tạo hồ sơ mới" mà đã có hồ sơ cùng họ tên + ngày sinh thì hiện cảnh báo và phải tích "đã kiểm tra, đây là người khác" mới xác nhận được.
+- Thử trên bản demo sau khi sửa: 4/5 tình huống tự khớp (gõ có dấu cách, không dấu chữ thường, bỏ tên đệm, trẻ em qua SĐT phụ huynh), ca đổi số vẫn chặn; không sinh hồ sơ trùng. backend `tsc`, `lint`, test booking 179 xanh (thêm 8 test); frontend `build`, `lint` sạch.
+- Việc tiếp theo trong kế hoạch: (b) hứa mốc phản hồi + giữ chỗ tạm cho yêu cầu chờ duyệt; (c) công tắc tự xác nhận có điều kiện; phía khách: điền sẵn thông tin cho khách cũ (cần chọn cách xác minh).
+
+### Sửa theo review Codex của PR #58
+
+- Chỉ khớp qua số phụ huynh khi hồ sơ là **trẻ vị thành niên** (`isMinor`): người lớn chỉ có số liên hệ khẩn cấp vẫn để lễ tân xác nhận.
+- Cảnh báo "tạo hồ sơ mới khi đã có hồ sơ trùng" nay được chốt **cả phía máy chủ**: `confirm` với `createNewPatient` mà có hồ sơ cùng họ tên + ngày sinh thì trả 409 `PATIENT_DUPLICATE_UNCONFIRMED` trừ khi gửi `confirmDistinctPerson: true`. Giao diện chặn cả khi danh sách gợi ý chưa tải xong hoặc tải lỗi (trước đó lỗi/đang tải làm mất cảnh báo).
+- Thêm 2 test; chỉnh test cũ "tạo hồ sơ mới không tra theo số điện thoại". backend `tsc`, `lint`, 181 test booking xanh; frontend `build`, `lint` sạch.
