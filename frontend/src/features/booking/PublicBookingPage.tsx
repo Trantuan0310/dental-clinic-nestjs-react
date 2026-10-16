@@ -199,6 +199,56 @@ export default function PublicBookingPage() {
   // Booking for someone else (or a child under 12): contact person fields.
   const [onBehalf, setOnBehalf] = useState(() => loadSavedProfile()?.onBehalf ?? false);
   const showContact = onBehalf || (age !== null && age < 12);
+  // A returning patient: phone + date of birth fetch the details on file.
+  type ReturningMatch = {
+    fullName: string;
+    gender: string;
+    email: string;
+    contactPersonName: string;
+    contactPersonPhone: string;
+  };
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState("");
+  const [lookupChoices, setLookupChoices] = useState<ReturningMatch[]>([]);
+  const applyReturning = (m: ReturningMatch) => {
+    setForm((old) => ({
+      ...old,
+      fullName: m.fullName,
+      gender: m.gender || old.gender,
+      email: m.email || old.email,
+      contactPersonName: m.contactPersonName,
+      contactPersonPhone: m.contactPersonPhone,
+    }));
+    setOnBehalf(!!m.contactPersonName || !!m.contactPersonPhone);
+    setLookupChoices([]);
+    setLookupMessage(t("uiScheduling.returningFound", { name: m.fullName }));
+  };
+  const lookupReturning = async () => {
+    setLookupMessage("");
+    setLookupChoices([]);
+    if (form.phone.trim().length < 9 || !form.dob) {
+      setLookupMessage(t("uiScheduling.returningNeedBoth"));
+      return;
+    }
+    setLookupBusy(true);
+    try {
+      const response = await api.post<{ data: { matches: ReturningMatch[] } }>(
+        "/public/booking/returning-patient",
+        { phone: form.phone.trim(), dob: form.dob },
+      );
+      const matches = response.data.data.matches;
+      if (matches.length === 0) setLookupMessage(t("uiScheduling.returningNone"));
+      else if (matches.length === 1) applyReturning(matches[0]);
+      else {
+        setLookupChoices(matches);
+        setLookupMessage(t("uiScheduling.returningChoose"));
+      }
+    } catch (e: unknown) {
+      setLookupMessage(bookingErrorMessage(e, t("uiScheduling.returningNone")));
+    } finally {
+      setLookupBusy(false);
+    }
+  };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -487,14 +537,16 @@ export default function PublicBookingPage() {
                   </div>
                 )}
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
-                    {t('uiScheduling.bookingFullName')}
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
+                    {t('uiScheduling.phoneNumber')}
                     <input
                       required
-                      maxLength={100}
-                      autoComplete="name"
-                      value={form.fullName}
-                      onChange={(e) => set("fullName", e.target.value)}
+                      type="tel"
+                      maxLength={20}
+                      autoComplete="tel"
+                      value={form.phone}
+                      onChange={(e) => set("phone", e.target.value)}
+                      placeholder="0901 234 567"
                       className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
@@ -506,6 +558,47 @@ export default function PublicBookingPage() {
                       max={today()}
                       value={form.dob}
                       onChange={(e) => set("dob", e.target.value)}
+                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
+                    />
+                  </label>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-gray-500 dark:text-surface-400">{t('uiScheduling.returningHint')}</p>
+                    <button
+                      type="button"
+                      onClick={lookupReturning}
+                      disabled={lookupBusy}
+                      className="mt-2 min-h-11 rounded-md border border-brand-600 px-4 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-60"
+                    >
+                      {lookupBusy ? t('uiScheduling.returningSearching') : t('uiScheduling.returningSearch')}
+                    </button>
+                    {lookupMessage && (
+                      <p role="status" className="mt-2 rounded-md bg-slate-50 dark:bg-surface-800 p-2 text-sm text-gray-700 dark:text-surface-200">
+                        {lookupMessage}
+                      </p>
+                    )}
+                    {lookupChoices.length > 1 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {lookupChoices.map((c) => (
+                          <button
+                            key={c.fullName}
+                            type="button"
+                            onClick={() => applyReturning(c)}
+                            className="min-h-11 rounded-md border border-gray-300 px-3 text-sm hover:bg-brand-50"
+                          >
+                            {c.fullName}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
+                    {t('uiScheduling.bookingFullName')}
+                    <input
+                      required
+                      maxLength={100}
+                      autoComplete="name"
+                      value={form.fullName}
+                      onChange={(e) => set("fullName", e.target.value)}
                       className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
                     />
                   </label>
@@ -527,19 +620,6 @@ export default function PublicBookingPage() {
                       {t('uiScheduling.minorBookingNotice')}{age < 12 ? ` ${t('uiScheduling.minorGuardianDetails')}` : ''}
                     </p>
                   )}
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.phoneNumber')}
-                    <input
-                      required
-                      type="tel"
-                      maxLength={20}
-                      autoComplete="tel"
-                      value={form.phone}
-                      onChange={(e) => set("phone", e.target.value)}
-                      placeholder="0901 234 567"
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                  </label>
                   <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
                     {t('uiScheduling.bookingEmail')}
                     <input
