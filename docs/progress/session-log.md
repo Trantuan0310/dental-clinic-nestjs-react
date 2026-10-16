@@ -259,3 +259,7 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Giao diện: ô số điện thoại và ngày sinh lên đầu phần thông tin bệnh nhân, nút "Tìm hồ sơ cũ"; khớp một hồ sơ thì điền họ tên, giới tính, email (và người giám hộ nếu là trẻ); khớp nhiều hồ sơ (cùng số, cùng ngày sinh) thì chọn; không khớp thì báo nhập như bình thường.
 - Kết hợp tự xác nhận: thông tin điền từ hồ sơ khớp đúng hồ sơ nên được xác nhận ngay khi `BOOKING_AUTO_CONFIRM` bật.
 - Thử trên DB demo: đúng → điền "Hoàng Đức Phúc"; sai ngày sinh → trống; dồn lần → bị giới hạn. backend `tsc`, `lint`, 195 test booking xanh (thêm 5); frontend `build`, `lint` sạch.
+
+### Sửa theo review Codex của PR #62
+
+- Lỗi bảo mật (P1): tra cứu theo số điện thoại + ngày sinh trước đây cũng khớp khi số nhập là số liên hệ khẩn cấp của một người lớn, nên người liên hệ biết ngày sinh có thể đọc họ tên, giới tính, email của người đó. Nay số phải là số riêng của bệnh nhân; số người giám hộ chỉ dùng cho trẻ vị thành niên chưa có số riêng (cùng quy tắc khớp hồ sơ khi xác nhận). Thêm test cho trường hợp người lớn; 196 test booking xanh.

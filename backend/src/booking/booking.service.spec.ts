@@ -3350,6 +3350,7 @@ describe('BookingService returning-patient lookup', () => {
     dob: new Date('1992-03-25'),
     gender: 'MALE',
     email: 'phuc@example.com',
+    primaryPhone: '0945 573 130',
     contactPersonName: 'Người thân',
     contactPersonPhone: '0911000111',
   };
@@ -3382,11 +3383,27 @@ describe('BookingService returning-patient lookup', () => {
 
   it('hands out the guardian of a child', async () => {
     prisma.patient.findMany.mockResolvedValue([
-      { ...adult, fullName: 'Bé An', dob: new Date(Date.now() - 5 * 365 * 24 * 3600_000) },
+      {
+        ...adult,
+        fullName: 'Bé An',
+        dob: new Date(Date.now() - 5 * 365 * 24 * 3600_000),
+        primaryPhone: null,
+        contactPersonPhone: '0945573130',
+      },
     ]);
     const result = await service.returningPatient({ phone: '0945573130', dob: '2021-01-01' });
     expect(result.matches[0].contactPersonName).toBe('Người thân');
-    expect(result.matches[0].contactPersonPhone).toBe('0911000111');
+    expect(result.matches[0].contactPersonPhone).toBe('0945573130');
+  });
+
+  it("does not hand an adult's details to their emergency contact", async () => {
+    // The entered number is only the adult's emergency-contact number.
+    prisma.patient.findMany.mockResolvedValue([
+      { ...adult, primaryPhone: '0987654321', contactPersonPhone: '0945573130' },
+    ]);
+    await expect(
+      service.returningPatient({ phone: '0945573130', dob: '1992-03-25' }),
+    ).resolves.toEqual({ matches: [] });
   });
 
   it('answers a wrong date the same way as an unknown phone', async () => {

@@ -973,18 +973,32 @@ export class BookingService {
         dob: true,
         gender: true,
         email: true,
+        primaryPhone: true,
         contactPersonName: true,
         contactPersonPhone: true,
       },
       orderBy: { createdAt: 'asc' },
-      take: 3,
+      take: 10,
     });
-    if (!rows.length) {
+    // The number must be the patient's own; a guardian's number counts only
+    // for a minor with no phone of their own (an adult's emergency contact
+    // must not read the adult's details).
+    const matched = rows
+      .filter(
+        p =>
+          (!!p.primaryPhone && this.normalize(p.primaryPhone) === phone) ||
+          (isMinor(p.dob) &&
+            !p.primaryPhone &&
+            !!p.contactPersonPhone &&
+            this.normalize(p.contactPersonPhone) === phone),
+      )
+      .slice(0, 3);
+    if (!matched.length) {
       this.recordLookupMiss(phone);
       return { matches: [] };
     }
     return {
-      matches: rows.map(p => ({
+      matches: matched.map(p => ({
         fullName: p.fullName,
         gender: p.gender,
         email: p.email ?? '',
