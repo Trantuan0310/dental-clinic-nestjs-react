@@ -261,6 +261,26 @@ export function bookingMinLeadMinutes(): number {
   return Number.isInteger(value) && value >= 0 ? value : DEFAULT_MIN_LEAD_MIN;
 }
 
+/**
+ * BOOKING_AUTO_CONFIRM=true: a request from a returning patient whose record
+ * is matched with certainty (resolvePatient's automatic match) and whose time
+ * is still free is confirmed at once, without waiting for the front desk.
+ * Off unless set. A new patient, a changed phone or any doubt still goes to
+ * the front desk.
+ */
+export function bookingAutoConfirm(): boolean {
+  return ['1', 'true', 'yes'].includes(
+    (process.env.BOOKING_AUTO_CONFIRM ?? '').trim().toLowerCase(),
+  );
+}
+
+/** The "person" behind an automatic confirmation: no user row, so audit shows an empty actor. */
+const AUTO_CONFIRM_ACTOR = {
+  sub: null as unknown as string,
+  email: 'auto-confirm@system',
+  permissions: ['appointment.read.any', 'appointment.create', 'booking.manage'],
+} as JwtPayload;
+
 const DEFAULT_HOLD_MINUTES = 120;
 /**
  * How long a request waiting for the front desk keeps its time off the public
@@ -818,6 +838,19 @@ export class BookingService {
         token,
       );
       await this.recordNotice(row.id, subject, notificationSent);
+    }
+    if (bookingAutoConfirm()) {
+      const confirmed = await this.tryAutoConfirm(row.id, token);
+      if (confirmed) {
+        void this.notifyStaff(row.id, 'Lịch hẹn đã tự động xác nhận');
+        return {
+          referenceCode: ref,
+          accessToken: token,
+          status: 'CONFIRMED',
+          // The confirmation email is the one that matters now.
+          notificationSent: row.email ? confirmed.notificationSent : false,
+        };
+      }
     }
     void this.notifyStaff(row.id, 'Yêu cầu đặt lịch mới');
     return { referenceCode: ref, accessToken: token, status: 'PENDING_REVIEW', notificationSent };
@@ -2065,7 +2098,13 @@ export class BookingService {
    * proposal email and second step). A request already confirmed (a second
    * click, another tab) gets the same answer again, not "time taken".
    */
-  async confirm(id: string, actor: JwtPayload, choice: ConfirmBookingRequestDto = {}) {
+  async confirm(
+    id: string,
+    actor: JwtPayload,
+    choice: ConfirmBookingRequestDto = {},
+    /** Automatic confirmation: only an existing, surely matched record; keep the patient's link. */
+    auto?: { accessToken: string },
+  ) {
     const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
     if (row.status === 'CONFIRMED' && row.appointmentId) return this.alreadyConfirmed(id);
@@ -2127,7 +2166,7 @@ export class BookingService {
         select: { appointmentId: true },
       });
       if (fresh?.appointmentId) return null;
-      const patient = await this.resolvePatient(row, choice, actor, tx);
+      const patient = await this.resolvePatient(row, choice, actor, tx, !!auto);
       // The visit length comes from the service (the dentist's own duration
       // first); create() re-checks the slot, buffers and double-booking.
       const appointment = await this.appointments.create(
@@ -2159,7 +2198,11 @@ export class BookingService {
     const dentistName = confirmed.appointment?.dentist?.fullName;
     const minHours = patientCancelMinHours();
     // A fresh link comes with the confirmation: the patient cancels from it.
-    const access = confirmed.email ? this.newAccess() : null;
+    const access = confirmed.email
+      ? auto
+        ? { token: auto.accessToken, hash: '' }
+        : this.newAccess()
+      : null;
     const subject = 'Lịch hẹn đã được xác nhận';
     const sent = confirmed.email
       ? await this.sendNotice(
@@ -2184,10 +2227,10 @@ export class BookingService {
             .join(' '),
           confirmed.referenceCode,
           access?.token,
-          true,
+          !auto,
         )
       : false;
-    await this.adoptAccess(id, access, sent);
+    if (!auto) await this.adoptAccess(id, access, sent);
     await this.recordNotice(id, subject, sent);
     await this.auditAction('BOOKING_REQUEST_CONFIRMED', id, actor, {
       appointmentId: appointment.id,
@@ -2207,6 +2250,32 @@ export class BookingService {
       // Asked for, but the caller may not change patient records.
       ...(patient.notApplied?.length ? { patientChangesNotApplied: patient.notApplied } : {}),
     };
+  }
+
+  /**
+   * Confirms a just-submitted request by itself when its patient record is
+   * matched surely and the time can still be booked. Any refusal (new
+   * patient, changed phone, doubt, a slot taken since) leaves the request
+   * waiting for the front desk, which is the normal path.
+   */
+  private async tryAutoConfirm(id: string, accessToken: string) {
+    try {
+      const result = await this.confirm(id, AUTO_CONFIRM_ACTOR, {}, { accessToken });
+      await this.auditAction('BOOKING_REQUEST_AUTO_CONFIRMED', id, AUTO_CONFIRM_ACTOR, {});
+      return { notificationSent: !!result.notificationSent };
+    } catch (error) {
+      // A failure after the visit was booked (notice bookkeeping, audit) must
+      // not read as a refusal: look at where the request actually stands.
+      const now = await this.prisma.bookingRequest
+        .findUnique({ where: { id }, select: { status: true, appointmentId: true } })
+        .catch(() => null);
+      if (now?.status === 'CONFIRMED' && now.appointmentId) {
+        this.logger.warn(`Auto-confirm of ${id} booked the visit but ended with: ${String(error)}`);
+        return { notificationSent: false };
+      }
+      this.logger.log(`Auto-confirm of ${id} left to the front desk: ${String(error)}`);
+      return null;
+    }
   }
 
   private async alreadyConfirmed(id: string) {
@@ -2230,6 +2299,7 @@ export class BookingService {
     choice: ConfirmBookingRequestDto,
     actor: JwtPayload,
     tx: Prisma.TransactionClient,
+    matchOnly = false,
   ): Promise<{
     id: string;
     created: boolean;
@@ -2348,6 +2418,8 @@ export class BookingService {
         });
       }
     }
+    // An automatic confirmation never creates a record: a person decides.
+    if (matchOnly) throw new ConflictException('Cần lễ tân chọn hoặc tạo hồ sơ bệnh nhân');
     const dto: CreatePatientDto = {
       fullName: row.fullName,
       dob: row.dob.toISOString().slice(0, 10),

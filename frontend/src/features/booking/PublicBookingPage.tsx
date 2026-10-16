@@ -30,6 +30,7 @@ type BookingResult = {
   referenceCode: string;
   accessToken: string;
   notificationSent: boolean;
+  status?: string;
 };
 
 // The clinic's date, not the browser's: a visitor abroad (or a PC set to
@@ -226,6 +227,9 @@ export default function PublicBookingPage() {
       navigate(
         "/booking/status?new=1" +
           (mailFailed ? "&mail=0" : "") +
+          // Set by this submission only: a later reload after the front desk
+          // confirms a normal request must not read as an instant confirmation.
+          (result.status === "CONFIRMED" ? "&auto=1" : "") +
           "&ref=" +
           encodeURIComponent(result.referenceCode) +
           "#token=" +

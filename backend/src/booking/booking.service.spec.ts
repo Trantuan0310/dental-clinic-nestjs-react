@@ -1084,6 +1084,54 @@ describe('BookingService public request security and validation', () => {
         expect(patients.create).not.toHaveBeenCalled();
       });
 
+      describe('automatic confirmation (BOOKING_AUTO_CONFIRM)', () => {
+        afterEach(() => delete process.env.BOOKING_AUTO_CONFIRM);
+        const child = {
+          id: 'child',
+          fullName: 'Nguyễn Bé An',
+          dob: new Date('2020-03-04'),
+          primaryPhone: '0901234567',
+        };
+
+        it("confirms a surely matched record and keeps the patient's link", async () => {
+          prisma.bookingRequest.findUnique.mockResolvedValue(request());
+          prisma.patient.findMany.mockResolvedValue([child]);
+          const result = await service.confirm('request-1', actor, {}, { accessToken: 'tok' });
+          expect(appointments.create.mock.calls[0][0].patientId).toBe('child');
+          expect(result).toHaveProperty('notificationSent');
+          // The link in the patient's hands is not rotated away.
+          expect(prisma.bookingRequest.update).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({ accessTokenHash: expect.anything() }),
+            }),
+          );
+        });
+
+        it('never creates a patient record: no match leaves it to the front desk', async () => {
+          prisma.bookingRequest.findUnique.mockResolvedValue(request());
+          prisma.patient.findMany.mockResolvedValue([]);
+          await expect(
+            service.confirm('request-1', actor, {}, { accessToken: 'tok' }),
+          ).rejects.toThrow('Cần lễ tân');
+          expect(patients.create).not.toHaveBeenCalled();
+          expect(appointments.create).not.toHaveBeenCalled();
+        });
+
+        it('is on only for an explicit true/1/yes', async () => {
+          const { bookingAutoConfirm } = await import('./booking.service');
+          for (const [value, expected] of [
+            ['true', true],
+            ['1', true],
+            ['yes', true],
+            ['false', false],
+            ['', false],
+          ] as const) {
+            process.env.BOOKING_AUTO_CONFIRM = value;
+            expect(bookingAutoConfirm()).toBe(expected);
+          }
+        });
+      });
+
       it('matches the name after NFC, whitespace and case folding', async () => {
         prisma.bookingRequest.findUnique.mockResolvedValue(request());
         prisma.patient.findMany.mockResolvedValue([

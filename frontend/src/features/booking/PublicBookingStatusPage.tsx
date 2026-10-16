@@ -394,6 +394,7 @@ export default function PublicBookingStatusPage() {
   const language = i18n.resolvedLanguage ?? i18n.language;
   const [params, setParams] = useSearchParams();
   const justBooked = params.get("new") === "1";
+  const autoConfirmed = justBooked && params.get("auto") === "1";
   // Prefill the phone this device last booked or looked up with.
   const [phone, setPhone] = useState(() => loadSavedBookings().find((b) => b.phone)?.phone ?? "");
   // Every request made with the phone just looked up (when there are several).
@@ -585,9 +586,11 @@ export default function PublicBookingStatusPage() {
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" aria-hidden />
               <div>
-                <h1 className="text-lg font-semibold">{t('uiScheduling.bookingSent')}</h1>
+                <h1 className="text-lg font-semibold">
+                  {autoConfirmed && status.status === "CONFIRMED" ? t('uiScheduling.bookingAutoConfirmedTitle') : t('uiScheduling.bookingSent')}
+                </h1>
                 <p className="mt-1 text-sm">
-                  {t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
+                  {autoConfirmed && status.status === "CONFIRMED" ? t('uiScheduling.bookingAutoConfirmedDetails') : t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
                 </p>
                 {status.status === "PENDING_REVIEW" && (
                   <p className="mt-2 text-sm">
