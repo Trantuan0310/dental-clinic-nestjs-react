@@ -78,6 +78,8 @@ const emptyReasonText = (
       );
     case "FULL":
       return "Ngày này đã kín lịch.";
+    case "HELD":
+      return "Các giờ còn lại đang được giữ cho khách khác chờ xác nhận. Vui lòng chọn ngày khác hoặc thử lại sau ít phút.";
     default:
       return "";
   }

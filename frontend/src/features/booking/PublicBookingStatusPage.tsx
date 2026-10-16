@@ -587,6 +587,14 @@ export default function PublicBookingStatusPage() {
                 <p className="mt-1 text-sm">
                   {t('uiScheduling.bookingSentDetails')} <strong className="font-mono">{status.referenceCode}</strong>.
                 </p>
+                {status.status === "PENDING_REVIEW" && (
+                  <p className="mt-2 text-sm">
+                    {t('uiScheduling.bookingHeldNote')}{' '}
+                    {t('uiScheduling.bookingResponsePromise', {
+                      hours: clinic.hours[0]?.time ?? '',
+                    })}
+                  </p>
+                )}
                 {mailFailed && (
                   <p role="alert" className="mt-2 rounded-md bg-amber-100 p-2 text-sm text-amber-900">
                     {t('uiScheduling.bookingEmailFailed')}

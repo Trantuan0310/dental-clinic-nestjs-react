@@ -257,6 +257,19 @@ export function bookingMinLeadMinutes(): number {
   return Number.isInteger(value) && value >= 0 ? value : DEFAULT_MIN_LEAD_MIN;
 }
 
+const DEFAULT_HOLD_MINUTES = 120;
+/**
+ * How long a request waiting for the front desk keeps its time off the public
+ * page (BOOKING_HOLD_MINUTES, default 120; 0 turns holding off), so two
+ * people are not offered, and do not both ask for, the same time. A time the
+ * clinic itself proposed is held until the patient answers.
+ */
+export function bookingHoldMinutes(): number {
+  const raw = process.env.BOOKING_HOLD_MINUTES?.trim();
+  const value = raw ? Number(raw) : NaN;
+  return Number.isInteger(value) && value >= 0 && value <= 24 * 60 ? value : DEFAULT_HOLD_MINUTES;
+}
+
 /**
  * How far ahead an online request may be (BOOKING_MAX_DAYS_AHEAD, default
  * 60 days after the clinic's today). Staff booking directly is not affected.
@@ -544,9 +557,16 @@ export class BookingService {
     });
     const minLeadMinutes = bookingMinLeadMinutes();
     const earliest = Date.now() + Math.max(minLeadMinutes * 60_000, 60_000);
-    const availableSlots = data.availableSlots.filter(
+    const afterLead = data.availableSlots.filter(
       time => new Date(date + 'T' + time + ':00+07:00').getTime() > earliest,
     );
+    // Times other people's open requests are holding while the front desk decides.
+    const held = await this.heldIntervals(dentistId, date);
+    const availableSlots = afterLead.filter(time => {
+      const start = new Date(date + 'T' + time + ':00+07:00').getTime();
+      const end = start + plan.durationMin * 60_000;
+      return !held.some(h => start < h.end && h.start < end);
+    });
     const clinicClosed = 'clinicClosed' in data && data.clinicClosed === true;
     // No time left because the day is (nearly) over is not "full": the last
     // moment a visit could still start in some working window.
@@ -567,11 +587,13 @@ export class BookingService {
       : clinicClosed
         ? 'CLINIC_CLOSED'
         : (data.blockedReason ??
-          (lastStart <= Date.now()
-            ? 'DAY_OVER'
-            : data.availableSlots.length || lastStart <= earliest
-              ? 'TOO_SOON'
-              : 'FULL'));
+          (afterLead.length
+            ? 'HELD'
+            : lastStart <= Date.now()
+              ? 'DAY_OVER'
+              : data.availableSlots.length || lastStart <= earliest
+                ? 'TOO_SOON'
+                : 'FULL'));
     return {
       ...data,
       closedReason: clinicClosed ? data.closedReason : undefined,
@@ -579,6 +601,57 @@ export class BookingService {
       availableSlots,
       emptyReason,
     };
+  }
+
+  /**
+   * The stretches of `date` that open requests of other people hold for this
+   * dentist: a request still waiting for the front desk (for BOOKING_HOLD_MINUTES
+   * after it came in), or a clinic proposal the patient has not answered, or
+   * has accepted, until it is handled.
+   */
+  private async heldIntervals(
+    dentistId: string,
+    date: string,
+  ): Promise<Array<{ start: number; end: number }>> {
+    const holdMs = bookingHoldMinutes() * 60_000;
+    if (holdMs <= 0) return [];
+    const from = new Date(date + 'T00:00:00+07:00');
+    const to = new Date(from.getTime() + 24 * 60 * 60_000);
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: {
+        appointmentId: null,
+        status: { in: ['PENDING_REVIEW', 'NEEDS_INFORMATION', 'PROPOSED', 'PATIENT_ACCEPTED'] },
+        OR: [
+          { preferredDentistId: dentistId, requestedStartAt: { gte: from, lt: to } },
+          { proposedDentistId: dentistId, proposedStartAt: { gte: from, lt: to } },
+        ],
+      },
+      select: {
+        status: true,
+        createdAt: true,
+        preferredDentistId: true,
+        requestedStartAt: true,
+        proposedDentistId: true,
+        proposedStartAt: true,
+        service: { select: { defaultDurationMin: true } },
+      },
+    });
+    const now = Date.now();
+    const held: Array<{ start: number; end: number }> = [];
+    for (const r of rows ?? []) {
+      if (!(r.createdAt instanceof Date) || !(r.requestedStartAt instanceof Date)) continue;
+      const proposal = r.status === 'PROPOSED' || r.status === 'PATIENT_ACCEPTED';
+      // Waiting for the front desk lapses; a proposal stands until answered.
+      if (!proposal && now - r.createdAt.getTime() > holdMs) continue;
+      const start = proposal && r.proposedStartAt ? r.proposedStartAt : r.requestedStartAt;
+      const owner = proposal && r.proposedDentistId ? r.proposedDentistId : r.preferredDentistId;
+      if (owner !== dentistId || start.getTime() <= now) continue;
+      held.push({
+        start: start.getTime(),
+        end: start.getTime() + (r.service?.defaultDurationMin ?? 30) * 60_000,
+      });
+    }
+    return held;
   }
 
   async createPublic(dto: CreatePublicBookingRequestDto) {

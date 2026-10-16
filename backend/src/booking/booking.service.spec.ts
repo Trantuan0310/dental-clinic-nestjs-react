@@ -40,6 +40,8 @@ describe('BookingService public request security and validation', () => {
   let availability: any;
 
   beforeEach(() => {
+    // Slot holds have their own tests; keep them off everywhere else.
+    process.env.BOOKING_HOLD_MINUTES = '0';
     prisma = {
       dentistService: { findFirst: jest.fn() },
       patient: {
@@ -864,6 +866,67 @@ describe('BookingService public request security and validation', () => {
           date: '2026-10-01',
         });
         expect(result.availableSlots).toEqual(['09:30', '10:00', '10:30', '14:00']);
+      });
+
+      describe('holding a slot for a request waiting on the front desk', () => {
+        const slotQuery = { serviceId: 'service-1', dentistId: 'dentist-1', date: '2026-10-01' };
+        const at1400 = new Date('2026-10-01T07:00:00Z'); // 14:00 at the clinic
+        const waiting = (over: object = {}) => ({
+          status: 'PENDING_REVIEW',
+          createdAt: new Date(),
+          preferredDentistId: 'dentist-1',
+          requestedStartAt: at1400,
+          proposedDentistId: null,
+          proposedStartAt: null,
+          service: { defaultDurationMin: 30 },
+          ...over,
+        });
+        beforeEach(() => {
+          process.env.BOOKING_HOLD_MINUTES = '120';
+        });
+
+        it('hides a slot another person is waiting on', async () => {
+          prisma.bookingRequest.findMany.mockResolvedValue([waiting()]);
+          const result = await service.slots(slotQuery);
+          expect(result.availableSlots).toEqual(['10:30']);
+        });
+
+        it('lets a request that has waited too long release its slot', async () => {
+          prisma.bookingRequest.findMany.mockResolvedValue([
+            waiting({ createdAt: new Date(Date.now() - 3 * 60 * 60_000) }),
+          ]);
+          const result = await service.slots(slotQuery);
+          expect(result.availableSlots).toEqual(['10:30', '14:00']);
+        });
+
+        it('keeps holding the time of a clinic proposal until it is answered', async () => {
+          prisma.bookingRequest.findMany.mockResolvedValue([
+            waiting({
+              status: 'PROPOSED',
+              createdAt: new Date(Date.now() - 48 * 60 * 60_000),
+              requestedStartAt: new Date('2026-10-01T03:30:00Z'),
+              proposedDentistId: 'dentist-1',
+              proposedStartAt: at1400,
+            }),
+          ]);
+          const result = await service.slots(slotQuery);
+          expect(result.availableSlots).toEqual(['10:30']);
+        });
+
+        it('says the day is held, not full, when holds took the last slots', async () => {
+          appointments.getAvailability.mockResolvedValue({ availableSlots: ['14:00'] });
+          prisma.bookingRequest.findMany.mockResolvedValue([waiting()]);
+          const result = await service.slots(slotQuery);
+          expect(result.availableSlots).toEqual([]);
+          expect(result.emptyReason).toBe('HELD');
+        });
+
+        it('holds nothing when BOOKING_HOLD_MINUTES is 0', async () => {
+          process.env.BOOKING_HOLD_MINUTES = '0';
+          prisma.bookingRequest.findMany.mockResolvedValue([waiting()]);
+          const result = await service.slots(slotQuery);
+          expect(result.availableSlots).toEqual(['10:30', '14:00']);
+        });
       });
 
       it('refuses a request inside the notice period before writing anything', async () => {
