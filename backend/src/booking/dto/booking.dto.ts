@@ -121,6 +121,17 @@ export class CreatePublicBookingRequestDto {
  * Phone and email are accepted only unchanged: they cannot be changed from
  * the public page (BookingService.updateDetails).
  */
+/** A returning patient proves who they are with the phone and date of birth on file. */
+export class ReturningPatientLookupDto {
+  @ApiProperty()
+  @Text(PHONE)
+  @NoNul(PHONE)
+  @MinLength(9, PHONE_LENGTH)
+  @MaxLength(20, PHONE_LENGTH)
+  phone!: string;
+  @ApiProperty({ example: '1990-05-01' }) @IsCalendarDate('Ngày sinh không hợp lệ') dob!: string;
+}
+
 export class UpdatePublicBookingDetailsDto {
   @ApiPropertyOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() || undefined : value))

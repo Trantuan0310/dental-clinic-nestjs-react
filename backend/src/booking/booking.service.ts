@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -280,6 +281,10 @@ const AUTO_CONFIRM_ACTOR = {
   email: 'auto-confirm@system',
   permissions: ['appointment.read.any', 'appointment.create', 'booking.manage'],
 } as JwtPayload;
+
+/** Wrong-date answers allowed per phone per hour on the returning-patient lookup. */
+const LOOKUP_MISS_LIMIT = 5;
+const LOOKUP_MISS_WINDOW_MS = 60 * 60_000;
 
 const DEFAULT_HOLD_MINUTES = 120;
 /**
@@ -943,6 +948,97 @@ export class BookingService {
       include: PUBLIC_INCLUDE,
     });
     return rows.map(row => this.toLookup(row));
+  }
+
+  /**
+   * Details to pre-fill the booking form for a returning patient, given the
+   * phone and date of birth on their record (own phone, or a guardian's for a
+   * child). Both must match, and the answer is the same for an unknown phone
+   * and a wrong date, so it cannot be used to find out who is a patient.
+   * Wrong answers are counted per phone: after a few, the phone is refused
+   * for an hour, so a date of birth cannot be guessed.
+   */
+  async returningPatient(input: { phone: string; dob: string }) {
+    const phone = this.normalize(input.phone);
+    if (phone.length > 20 || !isValidVnPhone(phone)) {
+      throw new BadRequestException('Số điện thoại không hợp lệ');
+    }
+    this.assertLookupAllowed(phone);
+    const dob = new Date(input.dob);
+    const where = await this.patientsByPhone([phone]);
+    const rows = await this.prisma.patient.findMany({
+      where: { AND: [where, { dob }] },
+      select: {
+        fullName: true,
+        dob: true,
+        gender: true,
+        email: true,
+        primaryPhone: true,
+        contactPersonName: true,
+        contactPersonPhone: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 10,
+    });
+    // The number must be the patient's own; a guardian's number counts only
+    // for a minor with no phone of their own (an adult's emergency contact
+    // must not read the adult's details).
+    const matched = rows
+      .filter(
+        p =>
+          (!!p.primaryPhone && this.normalize(p.primaryPhone) === phone) ||
+          (isMinor(p.dob) &&
+            !p.primaryPhone &&
+            !!p.contactPersonPhone &&
+            this.normalize(p.contactPersonPhone) === phone),
+      )
+      .slice(0, 3);
+    if (!matched.length) {
+      this.recordLookupMiss(phone);
+      return { matches: [] };
+    }
+    return {
+      matches: matched.map(p => ({
+        fullName: p.fullName,
+        gender: p.gender,
+        email: p.email ?? '',
+        // A child is booked under a guardian; an adult's emergency contact stays private.
+        contactPersonName: isMinor(p.dob) ? (p.contactPersonName ?? '') : '',
+        contactPersonPhone: isMinor(p.dob) ? (p.contactPersonPhone ?? '') : '',
+      })),
+    };
+  }
+
+  private readonly lookupMisses = new Map<string, { count: number; since: number }>();
+
+  private assertLookupAllowed(phone: string) {
+    const entry = this.lookupMisses.get(phone);
+    if (!entry) return;
+    if (Date.now() - entry.since > LOOKUP_MISS_WINDOW_MS) {
+      this.lookupMisses.delete(phone);
+      return;
+    }
+    if (entry.count >= LOOKUP_MISS_LIMIT) {
+      throw new HttpException(
+        'Đã thử quá nhiều lần với số điện thoại này. Vui lòng nhập thông tin trực tiếp hoặc thử lại sau 1 giờ.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private recordLookupMiss(phone: string) {
+    const now = Date.now();
+    if (this.lookupMisses.size > 5000) {
+      for (const [key, value] of this.lookupMisses) {
+        if (now - value.since > LOOKUP_MISS_WINDOW_MS) this.lookupMisses.delete(key);
+      }
+    }
+    const entry = this.lookupMisses.get(phone);
+    if (!entry || now - entry.since > LOOKUP_MISS_WINDOW_MS) {
+      this.lookupMisses.set(phone, { count: 1, since: now });
+    } else {
+      entry.count += 1;
+    }
   }
 
   async acceptProposal(

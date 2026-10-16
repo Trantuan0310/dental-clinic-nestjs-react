@@ -35,6 +35,7 @@ import {
   PublicBookingNoteDto,
   PublicSlotsQueryDto,
   ReceptionistNoteDto,
+  ReturningPatientLookupDto,
   UpdateBookingContactDto,
   UpdatePublicBookingDetailsDto,
 } from './dto/booking.dto';
@@ -65,6 +66,15 @@ export class PublicBookingController {
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreatePublicBookingRequestDto) {
     return { data: await this.booking.createPublic(dto) };
+  }
+  // A returning patient's details for pre-filling the form: phone + date of
+  // birth in the body (never the URL). The answer is the same for "no such
+  // phone" and "wrong date of birth".
+  @Post('returning-patient')
+  @Throttle({ default: { limit: 6, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  async returningPatient(@Body() dto: ReturningPatientLookupDto) {
+    return { data: await this.booking.returningPatient(dto) };
   }
   // Phone-only lookup (status only, no reference code): the phone goes in a
   // header, not the URL, so it stays out of access logs.

@@ -250,3 +250,16 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - `PublicBookingPage.tsx`: dải thông báo "Đã điền sẵn thông tin từ lần đặt trước trên thiết bị này (tên). Đặt cho người khác?" kèm nút "Xóa và nhập lại" (xóa form và dữ liệu đã lưu); ô "Ghi nhớ thông tin trên thiết bị này (không dùng máy công cộng)" mặc định bật, bỏ chọn thì xóa dữ liệu đã lưu khi gửi.
 - Kết hợp với tự xác nhận (đợt (c)): khách quay lại điền sẵn đúng thông tin cũ sẽ khớp hồ sơ và được xác nhận ngay.
 - Thử trên trình duyệt thật (bản demo): đặt dữ liệu đã lưu → form điền sẵn và hiện dải thông báo; bấm xóa → form trống, dữ liệu đã lưu bị xóa. frontend `build`, `lint` sạch.
+
+## Đặt lịch online: nhập số điện thoại + ngày sinh để điền sẵn hồ sơ cũ
+
+- Yêu cầu của chủ phòng khám: khách nhập số điện thoại trước rồi khớp thông tin cũ ngay. Không dùng SMS.
+- Backend: `POST /public/booking/returning-patient` (`ReturningPatientLookupDto`: phone + dob, trong body). Khớp hồ sơ còn dùng số đó (số riêng, hoặc số phụ huynh của trẻ) VÀ đúng ngày sinh thì trả họ tên, giới tính, email; người liên hệ chỉ trả cho trẻ vị thành niên (số liên hệ khẩn cấp của người lớn không lộ). Số lạ và sai ngày sinh trả cùng một kết quả rỗng (không dò được ai là bệnh nhân). Sai quá 5 lần/giờ cho một số điện thoại thì bị khóa (`LOOKUP_MISS_LIMIT`, trong bộ nhớ, chỉ đếm lần sai), thêm giới hạn 6 lần/phút theo địa chỉ mạng.
+- Khác với đề xuất ban đầu: không có bước trả tên che (ví dụ "N*** V** A"), vì để lộ ít thông tin hơn khi chỉ trả kết quả sau khi khớp cả số và ngày sinh.
+- Giao diện: ô số điện thoại và ngày sinh lên đầu phần thông tin bệnh nhân, nút "Tìm hồ sơ cũ"; khớp một hồ sơ thì điền họ tên, giới tính, email (và người giám hộ nếu là trẻ); khớp nhiều hồ sơ (cùng số, cùng ngày sinh) thì chọn; không khớp thì báo nhập như bình thường.
+- Kết hợp tự xác nhận: thông tin điền từ hồ sơ khớp đúng hồ sơ nên được xác nhận ngay khi `BOOKING_AUTO_CONFIRM` bật.
+- Thử trên DB demo: đúng → điền "Hoàng Đức Phúc"; sai ngày sinh → trống; dồn lần → bị giới hạn. backend `tsc`, `lint`, 195 test booking xanh (thêm 5); frontend `build`, `lint` sạch.
+
+### Sửa theo review Codex của PR #62
+
+- Lỗi bảo mật (P1): tra cứu theo số điện thoại + ngày sinh trước đây cũng khớp khi số nhập là số liên hệ khẩn cấp của một người lớn, nên người liên hệ biết ngày sinh có thể đọc họ tên, giới tính, email của người đó. Nay số phải là số riêng của bệnh nhân; số người giám hộ chỉ dùng cho trẻ vị thành niên chưa có số riêng (cùng quy tắc khớp hồ sơ khi xác nhận). Thêm test cho trường hợp người lớn; 196 test booking xanh.

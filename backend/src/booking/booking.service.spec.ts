@@ -3342,6 +3342,103 @@ describe('BookingService public request security and validation', () => {
   });
 });
 
+describe('BookingService returning-patient lookup', () => {
+  let service: BookingService;
+  let prisma: any;
+  const adult = {
+    fullName: 'Hoàng Đức Phúc',
+    dob: new Date('1992-03-25'),
+    gender: 'MALE',
+    email: 'phuc@example.com',
+    primaryPhone: '0945 573 130',
+    contactPersonName: 'Người thân',
+    contactPersonPhone: '0911000111',
+  };
+
+  beforeEach(() => {
+    prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'p1' }]),
+      patient: { findMany: jest.fn().mockResolvedValue([adult]) },
+    };
+    service = new BookingService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
+  });
+
+  it('returns the details when phone and date of birth match', async () => {
+    const result = await service.returningPatient({ phone: '0945 573 130', dob: '1992-03-25' });
+    expect(result.matches).toEqual([
+      {
+        fullName: 'Hoàng Đức Phúc',
+        gender: 'MALE',
+        email: 'phuc@example.com',
+        // An adult's emergency contact is not handed out.
+        contactPersonName: '',
+        contactPersonPhone: '',
+      },
+    ]);
+    expect(prisma.$queryRaw.mock.calls[0].slice(1)).toContainEqual(['0945573130']);
+    expect(prisma.patient.findMany.mock.calls[0][0].where.AND[1]).toEqual({
+      dob: new Date('1992-03-25'),
+    });
+  });
+
+  it('hands out the guardian of a child', async () => {
+    prisma.patient.findMany.mockResolvedValue([
+      {
+        ...adult,
+        fullName: 'Bé An',
+        dob: new Date(Date.now() - 5 * 365 * 24 * 3600_000),
+        primaryPhone: null,
+        contactPersonPhone: '0945573130',
+      },
+    ]);
+    const result = await service.returningPatient({ phone: '0945573130', dob: '2021-01-01' });
+    expect(result.matches[0].contactPersonName).toBe('Người thân');
+    expect(result.matches[0].contactPersonPhone).toBe('0945573130');
+  });
+
+  it("does not hand an adult's details to their emergency contact", async () => {
+    // The entered number is only the adult's emergency-contact number.
+    prisma.patient.findMany.mockResolvedValue([
+      { ...adult, primaryPhone: '0987654321', contactPersonPhone: '0945573130' },
+    ]);
+    await expect(
+      service.returningPatient({ phone: '0945573130', dob: '1992-03-25' }),
+    ).resolves.toEqual({ matches: [] });
+  });
+
+  it('answers a wrong date the same way as an unknown phone', async () => {
+    prisma.patient.findMany.mockResolvedValue([]);
+    await expect(
+      service.returningPatient({ phone: '0945573130', dob: '1990-01-01' }),
+    ).resolves.toEqual({ matches: [] });
+  });
+
+  it('refuses a phone after five wrong answers, and counts only misses', async () => {
+    // Hits do not count.
+    for (let i = 0; i < 8; i++) {
+      await service.returningPatient({ phone: '0945573130', dob: '1992-03-25' });
+    }
+    prisma.patient.findMany.mockResolvedValue([]);
+    for (let i = 0; i < 5; i++) {
+      await service.returningPatient({ phone: '0945573130', dob: '1990-01-0' + (i + 1) });
+    }
+    prisma.patient.findMany.mockResolvedValue([adult]);
+    await expect(
+      service.returningPatient({ phone: '0945573130', dob: '1992-03-25' }),
+    ).rejects.toThrow('quá nhiều lần');
+    // Another phone is not affected.
+    await expect(
+      service.returningPatient({ phone: '0987654321', dob: '1992-03-25' }),
+    ).resolves.toHaveProperty('matches');
+  });
+
+  it('rejects a bad phone', async () => {
+    await expect(service.returningPatient({ phone: '123', dob: '1992-03-25' })).rejects.toThrow(
+      'Số điện thoại không hợp lệ',
+    );
+  });
+});
+
 describe('comparing names typed twice', () => {
   it('folds accents, case, đ and spacing', () => {
     expect(foldName('  ĐẶNG   Quang Hải ')).toBe('dang quang hai');
