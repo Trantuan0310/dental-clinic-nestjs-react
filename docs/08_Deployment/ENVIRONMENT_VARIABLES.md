@@ -116,13 +116,22 @@ Với `docker-compose.prod.yml`, compose tự dựng `DATABASE_URL` nội bộ
 `POSTGRES_USER`, `POSTGRES_PASSWORD`; không đặt `localhost` trong URL.
 `PUBLIC_APP_URL` (= `https://${DOMAIN}`, có ở cả hai file compose) là gốc của
 link trong email đặt lịch online; thiếu thì dùng `FRONTEND_URL`. Backend cũng
-nhận `CLINIC_ADDRESS` (ghi địa chỉ trong email xác nhận/nhắc lịch) và
-`BOOKING_PATIENT_CANCEL_MIN_HOURS` (mặc định 4: khách được tự hủy lịch đã xác
-nhận qua link trong email đến trước giờ hẹn bao nhiêu giờ),
-`BOOKING_NOTIFY_EMAILS` (các email của phòng khám nhận báo yêu cầu đặt lịch
-và danh sách "Lịch hẹn cần gọi khách", cách nhau bằng dấu phẩy) và
-`APPOINTMENT_EMAIL_NOTICES` (đặt `false` để tắt email xác nhận/hủy/dời/nhắc
-lịch hẹn; email của yêu cầu đặt lịch online vẫn gửi). Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
+nhận `CLINIC_ADDRESS` (ghi địa chỉ trong email xác nhận/nhắc lịch).
+
+Đặt lịch online và email lịch hẹn (đã có sẵn giá trị mặc định trong cả hai file
+compose; chỉ đặt trong `.env.production` khi muốn đổi):
+
+| Biến | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| `BOOKING_MIN_LEAD_MIN` | `120` | Yêu cầu online phải cách giờ hẹn ít nhất bấy nhiêu phút, để lễ tân kịp xác nhận. Lễ tân đặt tại quầy không bị giới hạn. |
+| `BOOKING_MAX_DAYS_AHEAD` | `60` | Đặt online xa nhất bao nhiêu ngày tính từ hôm nay (1–730). |
+| `BOOKING_HOLD_MINUTES` | `120` | Yêu cầu đang chờ lễ tân giữ chỗ giờ đó bấy nhiêu phút, để người khác không đặt trùng (0 = không giữ, tối đa 1440). Giờ do phòng khám đề xuất được giữ đến khi khách trả lời. |
+| `BOOKING_AUTO_CONFIRM` | `false` | `true`: khách cũ khớp hồ sơ chắc chắn (cùng tên, ngày sinh, số điện thoại) và giờ còn trống thì được xác nhận ngay, không chờ lễ tân. Khách mới, số điện thoại đổi hoặc có nghi ngờ vẫn chờ lễ tân. |
+| `BOOKING_PATIENT_CANCEL_MIN_HOURS` | `4` | Khách được tự hủy lịch đã xác nhận qua link trong email đến trước giờ hẹn bao nhiêu giờ. Muộn hơn thì được đề nghị gọi điện. |
+| `BOOKING_NOTIFY_EMAILS` | trống | Các email của phòng khám (cách nhau bằng dấu phẩy) nhận báo yêu cầu đặt lịch và danh sách "Lịch hẹn cần gọi khách". |
+| `APPOINTMENT_EMAIL_NOTICES` | `true` | `false` tắt email xác nhận/hủy/dời/nhắc lịch hẹn; email của yêu cầu đặt lịch online vẫn gửi. |
+
+Xem [VPS_LOCAL_POSTGRES_DEMO.md](./VPS_LOCAL_POSTGRES_DEMO.md) và
 [VPS_UPGRADE.md](./VPS_UPGRADE.md).
 
 Cả hai file **không** có service Redis — `REDIS_URL` để trống trừ khi bạn tự
