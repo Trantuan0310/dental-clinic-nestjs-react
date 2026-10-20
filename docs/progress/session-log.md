@@ -4,6 +4,28 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 20/10/2026
+
+### Kiểm tra phiên bản mới nhất (`main` = d8c6538, PR #62)
+
+- **Từ 14/10 (ed3efe2) đến nay, `main` có thêm PR #46–#62**, sửa 91 file:
+  - hướng dẫn sử dụng;
+  - giờ làm lấy từ `CLINIC_HOURS`;
+  - "Nhận bệnh nhân mới" để lễ tân quyết;
+  - lịch tuần/tháng gọn hơn, logo gốc;
+  - đặt lịch online: tự khớp khách cũ, giữ chỗ tạm, tự xác nhận khách cũ (tắt mặc định), điền sẵn hồ sơ theo SĐT + ngày sinh.
+- **CI trên `main`:** xanh ở 8 lần chạy gần nhất, gồm d8c6538.
+- **Local:**
+  - backend: `tsc`, ESLint (0 cảnh báo), Jest **1390/1390** (56 bộ);
+  - frontend: `typecheck`, `tsc -p tsconfig.e2e.json`, ESLint, `vite build` (9,6 giây), `check-ui-locales` đều sạch.
+- **Deploy:**
+  - Không có migration mới.
+  - Biến mới `BOOKING_HOLD_MINUTES` (mặc định 120) và `BOOKING_AUTO_CONFIRM` (mặc định `false`) đã có trong `.env.production.example` và hai file docker-compose, nên deploy không cần sửa `.env.production`.
+- **Lệch nhỏ, chưa sửa:**
+  - README còn ghi 1344 test (thực tế 1390).
+  - `docs/08_Deployment/ENVIRONMENT_VARIABLES.md` chưa có hai biến `BOOKING_*`.
+  - Nhật ký chưa có mục cho PR #52–#62.
+
 ## 14/10/2026
 
 ### Đang chờ / bước tiếp theo
