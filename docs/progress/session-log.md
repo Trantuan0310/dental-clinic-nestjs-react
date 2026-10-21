@@ -8,7 +8,7 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ### Đang chờ / bước tiếp theo
 
-- PR sửa 3 chỗ lệch tài liệu (mục ngay dưới): chờ CI xanh rồi người dùng merge.
+- PR #63 (sửa 3 chỗ lệch tài liệu, mục ngay dưới): CI xanh 10/10, Codex không góp ý, đã merge vào `main` ngày 21/10 (f1e64ae).
 - Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` (không có migration mới; biến `BOOKING_*` đã có mặc định trong compose).
 
 ### Sửa 3 chỗ lệch tài liệu
