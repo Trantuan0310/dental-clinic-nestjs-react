@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Trans, useTranslation } from 'react-i18next';
 import { AlertTriangle, ListOrdered, RefreshCw, Users } from 'lucide-react';
 import { Button, Card, DatePicker, EmptyState, Modal, Select, Textarea } from '@/components/ui';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -26,6 +27,7 @@ import {
  * patient is due (BR-DSP-001).
  */
 export default function DispatchPage() {
+  const { t } = useTranslation();
   const [dentistFilter, setDentistFilter] = useState('');
   const [reassignOpen, setReassignOpen] = useState(false);
   // 'schedule': a dentist suspended or on leave still has a queue to hand over (A3-22).
@@ -55,8 +57,8 @@ export default function DispatchPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Điều phối"
-        description="Hàng đợi trước khi khám của từng bác sĩ hôm nay: gọi, bỏ qua, ưu tiên cấp cứu, chuyển bác sĩ."
+        title={t('uiCommon.breadcrumbRoutes.dispatch')}
+        description={t('uiOperations.dispatchDescription')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -64,11 +66,11 @@ export default function DispatchPage() {
               leftIcon={<RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />}
               onClick={() => void refetch()}
             >
-              Làm mới
+              {t('uiEntry.dashboard.refresh')}
             </Button>
             <PermissionGuard permission="queue.manage">
               <Button leftIcon={<Users className="h-4 w-4" />} onClick={() => setReassignOpen(true)}>
-                Thay bác sĩ cả ngày
+                {t('uiOperations.dispatchReassignDay')}
               </Button>
             </PermissionGuard>
           </div>
@@ -79,12 +81,12 @@ export default function DispatchPage() {
         <Card>
           <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-rose-700">
             <AlertTriangle className="h-4 w-4" />
-            Ca khám chưa kết thúc từ ngày trước ({unfinished.length})
+            {t('uiOperations.dispatchUnfinishedTitle', { count: unfinished.length })}
           </h2>
           <p className="mb-2 text-xs text-gray-500">
-            Bác sĩ chưa bấm kết thúc nên chưa có hóa đơn cho bệnh nhân. Hãy nhắc bác sĩ kết thúc (hoặc hủy) phiên khám.
+            {t('uiOperations.dispatchUnfinishedHint')}
           </p>
-          <ul className="space-y-1 text-sm" aria-label="Ca khám chưa kết thúc">
+          <ul className="space-y-1 text-sm" aria-label={t('uiOperations.dispatchUnfinishedList')}>
             {unfinished.map((apt) => (
               <li key={apt.id} className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1">
                 <span className="font-medium text-gray-900">{apt.patientName}</span>
@@ -98,11 +100,11 @@ export default function DispatchPage() {
       )}
 
       <Select
-        aria-label="Lọc theo bác sĩ"
+        aria-label={t('uiScheduling.filterByDentist')}
         value={dentistFilter}
         onChange={(e) => setDentistFilter(e.target.value)}
         options={[
-          { value: '', label: 'Tất cả bác sĩ' },
+          { value: '', label: t('uiScheduling.allDentists') },
           ...dentists.map((d) => ({ value: d.id, label: d.fullName })),
         ]}
       />
@@ -113,15 +115,15 @@ export default function DispatchPage() {
         <Card>
           <EmptyState
             icon={<ListOrdered className="h-10 w-10 text-gray-400" />}
-            title="Không có bệnh nhân đang chờ"
-            description="Bệnh nhân xuất hiện ở đây khi được check-in hoặc tiếp nhận vãng lai."
+            title={t('uiOperations.dispatchEmptyTitle')}
+            description={t('uiOperations.dispatchEmptyDescription')}
           />
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {groups.map(([dentistId, g]) => (
             <Card key={dentistId}>
-              <section aria-label={`Hàng đợi ${g.name}`}>
+              <section aria-label={t('uiOperations.dispatchQueueOf', { name: g.name })}>
                 <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
                   <span
                     className="h-3 w-3 rounded-full"
@@ -130,7 +132,10 @@ export default function DispatchPage() {
                   />
                   {g.name}
                   <span className="text-sm font-normal text-gray-500">
-                    · {g.entries.filter((e) => e.status === 'WAITING').length} đang chờ
+                    ·{' '}
+                    {t('uiOperations.dispatchWaitingCount', {
+                      count: g.entries.filter((e) => e.status === 'WAITING').length,
+                    })}
                   </span>
                 </h2>
                 <QueueList entries={g.entries} mode="desk" />
@@ -152,6 +157,7 @@ export default function DispatchPage() {
  * could not take (and why) — those stay with the original dentist.
  */
 function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const today = clinicToday();
   // The absent dentist may already be suspended or on leave (A3-22).
   const { data: absentOptions = [] } = useDentistOptions('schedule');
@@ -179,9 +185,9 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
         closeFromDentist: form.closeDay,
       });
       setResult(r);
-      notify.success(`Đã chuyển ${r.moved.length + (r.transferred?.length ?? 0)} lượt`);
+      notify.success(t('uiOperations.dispatchMovedCount', { count: r.moved.length + (r.transferred?.length ?? 0) }));
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thay được bác sĩ'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.dispatchReassignFailed')));
     }
   };
 
@@ -195,11 +201,12 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
       });
       setUndone(true);
       notify.success(
-        `Đã trả lại ${r.moved.length} lịch hẹn${r.reopened ? ' và mở lại lịch của bác sĩ' : ''}` +
-          (r.failed.length ? ` — ${r.failed.length} lịch không trả lại được` : ''),
+        t(r.reopened ? 'uiOperations.dispatchUndoReturnedReopened' : 'uiOperations.dispatchUndoReturned', {
+          count: r.moved.length,
+        }) + (r.failed.length ? ` — ${t('uiOperations.dispatchUndoNotReturned', { count: r.failed.length })}` : ''),
       );
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không hoàn tác được'));
+      notify.error(getApiErrorMessage(err, t('uiOperations.dispatchUndoFailed')));
     }
   };
 
@@ -208,29 +215,29 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
       open={open}
       onClose={close}
       size="md"
-      title="Thay bác sĩ cả ngày"
-      description="Chuyển các lịch hẹn chưa đến (giữ nguyên giờ, thời lượng theo bác sĩ thay) và bệnh nhân đang chờ của một bác sĩ trong ngày sang bác sĩ khác. Muốn khóa lịch của bác sĩ vắng, hãy tạo ngày nghỉ/đóng lịch riêng."
+      title={t('uiOperations.dispatchReassignDay')}
+      description={t('uiOperations.dispatchReassignDescription')}
       footer={
         result ? (
           <>
             {!undone && (
               <Button variant="outline" onClick={() => void revert()} isLoading={undo.isPending}>
-                Hoàn tác (bác sĩ đã quay lại)
+                {t('uiOperations.dispatchUndoReassign')}
               </Button>
             )}
-            <Button onClick={close}>Đóng</Button>
+            <Button onClick={close}>{t('uiCommon.action.close')}</Button>
           </>
         ) : (
           <>
             <Button variant="outline" onClick={close} disabled={reassign.isPending}>
-              Hủy
+              {t('uiCommon.dialog.cancel')}
             </Button>
             <Button
               onClick={() => void submit()}
               isLoading={reassign.isPending}
               disabled={!form.from || !form.to || form.from === form.to || form.reason.trim().length < 5}
             >
-              Chuyển lịch hẹn
+              {t('uiOperations.dispatchMoveAppointments')}
             </Button>
           </>
         )
@@ -239,68 +246,77 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
       {result ? (
         <div className="space-y-3 text-sm">
           <p>
-            Đã chuyển <strong>{result.moved.length}</strong> lịch hẹn
+            <Trans
+              i18nKey="uiOperations.dispatchResultMoved"
+              values={{ count: result.moved.length }}
+              components={{ b: <strong /> }}
+            />
             {(result.transferred?.length ?? 0) > 0 && (
               <>
-                {' '}và <strong>{result.transferred?.length}</strong> bệnh nhân đang chờ sang hàng chờ bác sĩ thay
+                {' '}
+                <Trans
+                  i18nKey="uiOperations.dispatchResultTransferred"
+                  values={{ count: result.transferred?.length ?? 0 }}
+                  components={{ b: <strong /> }}
+                />
               </>
             )}
             .
             {result.failed.length > 0 && (
               <>
                 {' '}
-                <strong>{result.failed.length}</strong> lượt không chuyển được, vẫn giữ ở bác sĩ cũ — hãy liên hệ
-                bệnh nhân hoặc chuyển từng người:
+                <Trans
+                  i18nKey="uiOperations.dispatchResultFailed"
+                  values={{ count: result.failed.length }}
+                  components={{ b: <strong /> }}
+                />
               </>
             )}
           </p>
           {result.failed.length > 0 && (
-            <ul className="space-y-1" aria-label="Lịch hẹn không chuyển được">
+            <ul className="space-y-1" aria-label={t('uiOperations.dispatchFailedList')}>
               {result.failed.map((f) => (
                 <li key={f.appointmentId} className="rounded border border-amber-200 bg-amber-50 px-2 py-1">
                   {clinicParts(f.startAt).time} · {f.patientName}
-                  {f.checkedIn && <span className="text-gray-600"> (đang chờ)</span>} —{' '}
+                  {f.checkedIn && <span className="text-gray-600"> {t('uiOperations.dispatchStillWaiting')}</span>} —{' '}
                   <span className="text-amber-800">{f.reason}</span>
                 </li>
               ))}
             </ul>
           )}
           {result.failed.length > 0 && (
-            <p className="text-gray-600">
-              Các lịch này vẫn nằm ở thẻ "Lịch hẹn bị ảnh hưởng" (Lịch làm việc) để gọi báo bệnh nhân hoặc dời sang
-              bác sĩ/ngày khác.
-            </p>
+            <p className="text-gray-600">{t('uiOperations.dispatchFailedHint')}</p>
           )}
           {result.warning && (
             <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">{result.warning}</p>
           )}
           {result.closedOverrideId && (
-            <p className="text-gray-600">Lịch của bác sĩ vắng đã được đóng cho ngày này (không nhận đặt thêm).</p>
+            <p className="text-gray-600">{t('uiOperations.dispatchDayClosed')}</p>
           )}
         </div>
       ) : (
         <div className="space-y-3">
           <Select
-            label="Bác sĩ vắng"
+            label={t('uiOperations.dispatchAbsentDentist')}
             value={form.from}
             onChange={(e) => setForm({ ...form, from: e.target.value })}
-            placeholder="Chọn bác sĩ"
+            placeholder={t('uiScheduling.chooseDentist')}
             options={absentOptions.map((d) => ({ value: d.id, label: d.fullName }))}
           />
           <Select
-            label="Bác sĩ thay"
+            label={t('uiOperations.dispatchSubstituteDentist')}
             value={form.to}
             onChange={(e) => setForm({ ...form, to: e.target.value })}
-            placeholder="Chọn bác sĩ"
+            placeholder={t('uiScheduling.chooseDentist')}
             options={dentists.filter((d) => d.id !== form.from).map((d) => ({ value: d.id, label: d.fullName }))}
           />
-          <DatePicker label="Ngày" min={today} value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
+          <DatePicker label={t('uiOperations.date')} min={today} value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
           <Textarea
-            label="Lý do (ít nhất 5 ký tự)"
+            label={t('uiOperations.dispatchReasonMin', { count: 5 })}
             rows={2}
             value={form.reason}
             onChange={(e) => setForm({ ...form, reason: e.target.value })}
-            placeholder="VD: Bác sĩ nghỉ ốm đột xuất"
+            placeholder={t('uiOperations.dispatchReasonExample')}
           />
           <label className="flex items-start gap-2 text-sm">
             <input
@@ -308,7 +324,7 @@ function ReassignDayModal({ open, onClose }: { open: boolean; onClose: () => voi
               checked={form.closeDay}
               onChange={(e) => setForm({ ...form, closeDay: e.target.checked })}
             />
-            <span>Đóng lịch của BS nghỉ (cả hôm đó; nếu là hôm nay thì từ bây giờ) để không ai đặt thêm</span>
+            <span>{t('uiOperations.dispatchCloseDay')}</span>
           </label>
         </div>
       )}

@@ -210,7 +210,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
           />
           <Button onClick={() => setShowAddModal(true)}>
             <Plus className="h-4 w-4" />
-            Thêm ghi chú
+            {t('uiClinical.noteAdd')}
           </Button>
         </div>
       )}
@@ -219,7 +219,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
         <div className="flex justify-end">
           <Button variant="outline" onClick={() => setShowAddendumModal(true)}>
             <Plus className="h-4 w-4" />
-            Thêm addendum
+            {t('uiClinical.addendumTitle')}
           </Button>
         </div>
       )}
@@ -249,14 +249,14 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
           />
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>
-              Hủy
+              {t('uiClinical.cancel')}
             </Button>
             <Button
               onClick={handleAddNote}
               isLoading={upsertMutation.isPending}
               disabled={!noteContent.trim()}
             >
-              Thêm
+              {t('uiClinical.add')}
             </Button>
           </div>
         </div>
@@ -280,14 +280,14 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
           />
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowEditModal(false)}>
-              Hủy
+              {t('uiClinical.cancel')}
             </Button>
             <Button
               onClick={handleEditNote}
               isLoading={upsertMutation.isPending}
               disabled={!noteContent.trim()}
             >
-              Lưu
+              {t('uiClinical.save')}
             </Button>
           </div>
         </div>

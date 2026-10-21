@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -43,54 +44,52 @@ const PRIORITY_VARIANT: Record<QueuePriority, 'danger' | 'success' | 'warning' |
 type DialogKind = 'skip' | 'emergency' | 'clear_emergency' | 'left' | 'undo' | 'transfer';
 type Dialog = { kind: DialogKind; entry: QueueEntry };
 
+// i18n keys, looked up at render so the dialog follows the UI language.
 const DIALOG_TEXT: Record<
   DialogKind,
   { title: string; description: string; min: number; confirm: string; placeholder: string }
 > = {
   skip: {
-    title: 'Bỏ qua bệnh nhân',
-    description: 'Bệnh nhân không có mặt khi gọi. Họ xuống cuối hàng và có thể được gọi lại.',
+    title: 'uiOperations.queueSkipTitle',
+    description: 'uiOperations.queueSkipDescription',
     min: 3,
-    confirm: 'Bỏ qua',
-    placeholder: 'VD: Gọi 2 lần không thấy',
+    confirm: 'uiOperations.queueSkip',
+    placeholder: 'uiOperations.queueSkipExample',
   },
   emergency: {
-    title: 'Ưu tiên cấp cứu',
-    description: 'Bệnh nhân được đưa lên trước tất cả người đang chờ của bác sĩ.',
+    title: 'uiOperations.queueEmergencyTitle',
+    description: 'uiOperations.queueEmergencyDescription',
     min: 5,
-    confirm: 'Đưa lên đầu',
-    placeholder: 'VD: Sưng mặt, sốt cao',
+    confirm: 'uiOperations.queueEmergencyConfirm',
+    placeholder: 'uiOperations.queueEmergencyExample',
   },
   clear_emergency: {
-    title: 'Gỡ ưu tiên cấp cứu',
-    description: 'Bệnh nhân trở lại thứ tự theo giờ hẹn/giờ đến như lúc check-in.',
+    title: 'uiOperations.queueClearEmergencyTitle',
+    description: 'uiOperations.queueClearEmergencyDescription',
     min: 5,
-    confirm: 'Gỡ cấp cứu',
-    placeholder: 'VD: Đánh dấu cấp cứu nhầm',
+    confirm: 'uiOperations.queueClearEmergency',
+    placeholder: 'uiOperations.queueClearEmergencyExample',
   },
   left: {
-    title: 'Bệnh nhân đã về (chưa khám)',
-    description:
-      'Bệnh nhân rời phòng khám trước khi được khám. Giờ hẹn được giải phóng. Nếu bấm nhầm hoặc bệnh nhân quay lại trong ngày, mở lịch hẹn và chọn "Hoàn tác đã về".',
+    title: 'uiOperations.queueLeftTitle',
+    description: 'uiOperations.queueLeftDescription',
     min: 5,
-    confirm: 'Xác nhận đã về',
-    placeholder: 'VD: Chờ lâu, xin về',
+    confirm: 'uiOperations.queueLeftConfirm',
+    placeholder: 'uiOperations.queueLeftExample',
   },
   undo: {
-    title: 'Hoàn tác check-in',
-    description:
-      'Check-in nhầm: lịch quay về trạng thái trước khi check-in và rời hàng đợi. Bệnh nhân tạm ra ngoài thì dùng "Bỏ qua" (giữ lượt, gọi lại sau); bỏ về thì dùng "Đã về".',
+    title: 'uiScheduling.undoCheckIn',
+    description: 'uiOperations.queueUndoDescription',
     min: 5,
-    confirm: 'Hoàn tác',
-    placeholder: 'VD: Check-in nhầm bệnh nhân',
+    confirm: 'uiClinical.undo',
+    placeholder: 'uiOperations.queueUndoExample',
   },
   transfer: {
-    title: 'Chuyển sang bác sĩ khác',
-    description:
-      'Bệnh nhân vào hàng chờ của bác sĩ mới, giữ thứ tự ưu tiên và giờ check-in; thời lượng theo dịch vụ của bác sĩ mới. Bác sĩ mới phải làm được các dịch vụ đã chọn và đang trong giờ làm (có thể đang bận khám).',
+    title: 'uiOperations.queueTransferTitle',
+    description: 'uiOperations.queueTransferDescription',
     min: 5,
-    confirm: 'Chuyển',
-    placeholder: 'VD: BS đang quá tải, BS khác đang trống',
+    confirm: 'uiScheduling.move',
+    placeholder: 'uiOperations.queueTransferExample',
   },
 };
 
@@ -110,6 +109,7 @@ export function QueueList({
   onStart?: (appointmentId: string) => void;
   startingId?: string | null;
 }) {
+  const { t } = useTranslation();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [reason, setReason] = useState('');
   const [targetDentist, setTargetDentist] = useState('');
@@ -155,30 +155,30 @@ export function QueueList({
     const name = entry.appointment.patient.fullName;
     const r = reason.trim();
     if (dialog.kind === 'skip') {
-      void run(() => skip.mutateAsync({ id: entry.id, reason: r }), `Đã bỏ qua ${name}`, 'Không bỏ qua được');
+      void run(() => skip.mutateAsync({ id: entry.id, reason: r }), t('uiOperations.queueSkipped', { name }), t('uiOperations.queueSkipFailed'));
     } else if (dialog.kind === 'emergency') {
       void run(
         () => emergency.mutateAsync({ id: entry.id, reason: r }),
-        `${name} được ưu tiên cấp cứu`,
-        'Không cập nhật được',
+        t('uiOperations.queueEmergencyMarked', { name }),
+        t('uiOperations.queueUpdateFailed'),
       );
     } else if (dialog.kind === 'clear_emergency') {
       void run(
         () => clearEmergency.mutateAsync({ id: entry.id, reason: r }),
-        `Đã gỡ ưu tiên cấp cứu của ${name}`,
-        'Không cập nhật được',
+        t('uiOperations.queueEmergencyCleared', { name }),
+        t('uiOperations.queueUpdateFailed'),
       );
     } else if (dialog.kind === 'left') {
       void run(
         () => markLeft.mutateAsync({ id: entry.appointmentId, reason: r }),
-        `${name} đã về, chưa khám`,
-        'Không ghi nhận được',
+        t('uiOperations.queueMarkedLeft', { name }),
+        t('uiOperations.queueMarkLeftFailed'),
       );
     } else if (dialog.kind === 'undo') {
       void run(
         () => undoCheckIn.mutateAsync({ id: entry.appointmentId, what: 'check-in', reason: r }),
-        `Đã hoàn tác check-in cho ${name}`,
-        'Không hoàn tác được',
+        t('uiOperations.queueCheckInUndone', { name }),
+        t('uiOperations.dispatchUndoFailed'),
       );
     } else {
       void run(
@@ -193,8 +193,8 @@ export function QueueList({
           if (res?.warning) notify.warning(res.warning);
           return res;
         },
-        `Đã chuyển ${name}`,
-        'Không chuyển được',
+        t('uiOperations.queueTransferred', { name }),
+        t('uiOperations.queueTransferFailed'),
       );
     }
   };
@@ -210,7 +210,7 @@ export function QueueList({
 
   return (
     <>
-      <ul className="space-y-2" aria-label="Hàng đợi">
+      <ul className="space-y-2" aria-label={t('uiOperations.queueList')}>
         {entries.map((e) => {
           const p = e.appointment.patient;
           const called = e.status === 'CALLED';
@@ -244,7 +244,7 @@ export function QueueList({
                       <Badge variant={PRIORITY_VARIANT[e.priority]}>{PRIORITY_LABEL[e.priority]}</Badge>
                       <Badge variant={called ? 'info' : 'default'}>{STATUS_LABEL[e.status]}</Badge>
                       <span className={`inline-flex items-center gap-1 ${e.waitingMinutes > 30 ? 'font-medium text-red-600' : ''}`}>
-                        <Clock className="h-3.5 w-3.5" /> chờ {e.waitingMinutes} phút
+                        <Clock className="h-3.5 w-3.5" /> {t('uiOperations.queueWaitingMinutes', { count: e.waitingMinutes })}
                       </span>
                       {e.appointment.services.length > 0 && (
                         <span>· {e.appointment.services.map((s) => s.serviceName).join(', ')}</span>
@@ -256,10 +256,12 @@ export function QueueList({
                       </p>
                     )}
                     {e.status === 'SKIPPED' && e.skipReason && (
-                      <p className="mt-1 text-xs text-gray-500">Bỏ qua: {e.skipReason}</p>
+                      <p className="mt-1 text-xs text-gray-500">{t('uiOperations.queueSkipReason', { reason: e.skipReason })}</p>
                     )}
                     {e.transferReason && (
-                      <p className="mt-1 text-xs text-gray-500">Chuyển từ bác sĩ khác: {e.transferReason}</p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {t('uiOperations.queueTransferReason', { reason: e.transferReason })}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -272,10 +274,14 @@ export function QueueList({
                         leftIcon={<BellRing className="h-3.5 w-3.5" />}
                         isLoading={call.isPending && call.variables === e.id}
                         onClick={() =>
-                          void run(() => call.mutateAsync(e.id), `Đang gọi ${p.fullName}`, 'Không gọi được')
+                          void run(
+                            () => call.mutateAsync(e.id),
+                            t('uiOperations.queueCalling', { name: p.fullName }),
+                            t('uiOperations.queueCallFailed'),
+                          )
                         }
                       >
-                        {e.status === 'SKIPPED' ? 'Gọi lại' : 'Gọi'}
+                        {e.status === 'SKIPPED' ? t('uiOperations.queueCallAgain') : t('uiScheduling.call')}
                       </Button>
                     </PermissionGuard>
                   )}
@@ -290,12 +296,12 @@ export function QueueList({
                         onClick={() =>
                           void run(
                             () => uncall.mutateAsync(e.id),
-                            `${p.fullName} trở lại hàng chờ`,
-                            'Không hủy gọi được',
+                            t('uiOperations.queueBackInLine', { name: p.fullName }),
+                            t('uiOperations.queueUncallFailed'),
                           )
                         }
                       >
-                        Hủy gọi
+                        {t('uiOperations.queueUncall')}
                       </Button>
                     </PermissionGuard>
                   )}
@@ -308,7 +314,7 @@ export function QueueList({
                         isLoading={startingId === e.appointmentId}
                         onClick={() => setConfirmStart(e)}
                       >
-                        Bắt đầu khám
+                        {t('uiOperations.queueStartExam')}
                       </Button>
                     </PermissionGuard>
                   )}
@@ -320,7 +326,7 @@ export function QueueList({
                         leftIcon={<SkipForward className="h-3.5 w-3.5" />}
                         onClick={() => open({ kind: 'skip', entry: e })}
                       >
-                        Bỏ qua
+                        {t('uiOperations.queueSkip')}
                       </Button>
                     </PermissionGuard>
                   )}
@@ -334,7 +340,7 @@ export function QueueList({
                             leftIcon={<AlertTriangle className="h-3.5 w-3.5" />}
                             onClick={() => open({ kind: 'emergency', entry: e })}
                           >
-                            Cấp cứu
+                            {t('uiOperations.queueEmergency')}
                           </Button>
                         </PermissionGuard>
                       ) : (
@@ -345,7 +351,7 @@ export function QueueList({
                             leftIcon={<ShieldOff className="h-3.5 w-3.5" />}
                             onClick={() => open({ kind: 'clear_emergency', entry: e })}
                           >
-                            Gỡ cấp cứu
+                            {t('uiOperations.queueClearEmergency')}
                           </Button>
                         </PermissionGuard>
                       )}
@@ -356,7 +362,7 @@ export function QueueList({
                           leftIcon={<ArrowRightLeft className="h-3.5 w-3.5" />}
                           onClick={() => open({ kind: 'transfer', entry: e })}
                         >
-                          Chuyển BS
+                          {t('uiOperations.queueTransferShort')}
                         </Button>
                       </PermissionGuard>
                       <PermissionGuard permission="appointment.mark_left">
@@ -366,7 +372,7 @@ export function QueueList({
                           leftIcon={<DoorOpen className="h-3.5 w-3.5" />}
                           onClick={() => open({ kind: 'left', entry: e })}
                         >
-                          Đã về
+                          {t('uiScheduling.statusLeft')}
                         </Button>
                       </PermissionGuard>
                       {/* A walk-in has no booking to go back to, nor has a transferred visit. */}
@@ -378,7 +384,7 @@ export function QueueList({
                             leftIcon={<Undo2 className="h-3.5 w-3.5" />}
                             onClick={() => open({ kind: 'undo', entry: e })}
                           >
-                            Hoàn tác check-in
+                            {t('uiScheduling.undoCheckIn')}
                           </Button>
                         </PermissionGuard>
                       )}
@@ -394,12 +400,12 @@ export function QueueList({
       <Modal
         open={dialog !== null}
         onClose={() => setDialog(null)}
-        title={text?.title ?? ''}
+        title={text ? t(text.title) : ''}
         size="sm"
         footer={
           <>
             <Button variant="outline" onClick={() => setDialog(null)} disabled={pending}>
-              Hủy
+              {t('uiCommon.dialog.cancel')}
             </Button>
             <Button
               onClick={submit}
@@ -409,7 +415,7 @@ export function QueueList({
                 (dialog?.kind === 'transfer' && (!targetDentist || (overtimeAsked !== null && !allowOvertime)))
               }
             >
-              {text?.confirm}
+              {text && t(text.confirm)}
             </Button>
           </>
         }
@@ -417,18 +423,18 @@ export function QueueList({
         {dialog && text && (
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
-              <strong>{dialog.entry.appointment.patient.fullName}</strong> — {text.description}
+              <strong>{dialog.entry.appointment.patient.fullName}</strong> — {t(text.description)}
             </p>
             {dialog.kind === 'transfer' && (
               <Select
-                label="Bác sĩ nhận"
+                label={t('uiOperations.queueReceivingDentist')}
                 value={targetDentist}
                 onChange={(ev) => {
                   setTargetDentist(ev.target.value);
                   setOvertimeAsked(null);
                   setAllowOvertime(false);
                 }}
-                placeholder="Chọn bác sĩ"
+                placeholder={t('uiScheduling.chooseDentist')}
                 options={dentists
                   .filter((d) => d.id !== dialog.entry.dentistId)
                   .map((d) => ({ value: d.id, label: d.fullName }))}
@@ -441,16 +447,16 @@ export function QueueList({
                   className="mt-1"
                   checked={allowOvertime}
                   onChange={setAllowOvertime}
-                  label="Bác sĩ đồng ý khám ngoài giờ (lý do bên dưới được ghi lại)"
+                  label={t('uiOperations.queueOvertimeConsent')}
                 />
               </div>
             )}
             <Textarea
-              label={`Lý do (ít nhất ${text.min} ký tự)`}
+              label={t('uiOperations.dispatchReasonMin', { count: text.min })}
               rows={2}
               value={reason}
               onChange={(ev) => setReason(ev.target.value)}
-              placeholder={text.placeholder}
+              placeholder={t(text.placeholder)}
             />
           </div>
         )}
@@ -464,16 +470,16 @@ export function QueueList({
           if (confirmStart) onStart?.(confirmStart.appointmentId);
           setConfirmStart(null);
         }}
-        title="Bắt đầu khám?"
+        title={t('uiOperations.queueStartExamTitle')}
         description={
           confirmStart && (
             <>
-              Mở phiên khám cho <strong>{confirmStart.appointment.patient.fullName}</strong> (
-              {confirmStart.appointment.patient.code}). Kiểm tra đúng người trước khi bắt đầu.
+              {t('uiOperations.queueStartExamFor')} <strong>{confirmStart.appointment.patient.fullName}</strong>{' '}
+              {t('uiOperations.queueStartExamCheck', { code: confirmStart.appointment.patient.code })}
             </>
           )
         }
-        confirmLabel="Bắt đầu khám"
+        confirmLabel={t('uiOperations.queueStartExam')}
       />
     </>
   );

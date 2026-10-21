@@ -77,20 +77,8 @@ function emptyTeethFor(patientType: DentalChartPatientType): Record<string, Toot
   }, {});
 }
 
-const QUADRANT_LABEL: Record<DentalChartPatientType, Record<ToothQuadrant, string>> = {
-  ADULT: {
-    Q1: 'Q1 · Hàm trên, phải (18→11)',
-    Q2: 'Q2 · Hàm trên, trái (21→28)',
-    Q3: 'Q3 · Hàm dưới, trái (38→31)',
-    Q4: 'Q4 · Hàm dưới, phải (41→48)',
-  },
-  CHILD: {
-    Q1: 'Q1 · Hàm trên, phải — răng sữa (55→51)',
-    Q2: 'Q2 · Hàm trên, trái — răng sữa (61→65)',
-    Q3: 'Q3 · Hàm dưới, trái — răng sữa (75→71)',
-    Q4: 'Q4 · Hàm dưới, phải — răng sữa (81→85)',
-  },
-};
+// Bulk-action quadrant options; labels are uiClinical.adultQ1…childQ4.
+const QUADRANTS: ToothQuadrant[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 type BulkScope = 'quadrant' | 'arch' | 'remaining';
 
@@ -717,7 +705,6 @@ function BulkActionModal({
 }: BulkActionModalProps) {
   const { t } = useTranslation();
   const options = toothOptions(t);
-  const quadrantLabels = QUADRANT_LABEL[patientType];
   return (
     <Modal
       open={open}
@@ -757,7 +744,7 @@ function BulkActionModal({
             onChange={(e) => setQuadrant(toothQuadrantOfFromScope(scope, e.target.value))}
             options={
               scope === 'quadrant'
-                ? (Object.keys(quadrantLabels) as ToothQuadrant[]).map((q) => ({
+                ? QUADRANTS.map((q) => ({
                     value: q,
                     label: t(`uiClinical.${patientType === 'CHILD' ? 'child' : 'adult'}${q}`),
                   }))

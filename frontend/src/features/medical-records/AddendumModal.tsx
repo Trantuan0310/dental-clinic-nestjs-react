@@ -1,4 +1,5 @@
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -22,14 +23,17 @@ interface AddendumFormValues {
   reason: string;
 }
 
-const SECTION_OPTIONS: Array<{ value: AddendumFormValues['targetSection']; label: string }> = [
-  { value: 'plan', label: 'Kế hoạch điều trị' },
-  { value: 'assessment', label: 'Chẩn đoán' },
-  { value: 'subjective', label: 'Lý do khám' },
-  { value: 'objective', label: 'Khám thực thể' },
-];
+const SECTION_LABEL_KEY: Record<AddendumFormValues['targetSection'], string> = {
+  plan: 'uiClinical.plan',
+  assessment: 'uiClinical.diagnosis',
+  subjective: 'uiClinical.reasonForVisit',
+  objective: 'uiClinical.physicalExam',
+};
+const SECTIONS = Object.keys(SECTION_LABEL_KEY) as AddendumFormValues['targetSection'][];
 
 export function AddendumModal({ encounter, open, onClose }: AddendumModalProps) {
+  const { t, i18n } = useTranslation();
+  const sectionOptions = SECTIONS.map((value) => ({ value, label: t(SECTION_LABEL_KEY[value]) }));
   const closedAt = encounter.closedAt ? new Date(encounter.closedAt) : null;
   const now = new Date();
   const daysRemaining = closedAt
@@ -47,15 +51,17 @@ export function AddendumModal({ encounter, open, onClose }: AddendumModalProps) 
     try {
       const idempotencyKey = `addendum_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
       await create.mutateAsync({
-        text: `${values.targetSection.toUpperCase()} (${SECTION_OPTIONS.find((o) => o.value === values.targetSection)?.label}): ${values.text}`,
+        // Stored in the medical record: the section name stays Vietnamese
+        // whatever the UI language.
+        text: `${values.targetSection.toUpperCase()} (${t(SECTION_LABEL_KEY[values.targetSection], { lng: 'vi' })}): ${values.text}`,
         reason: values.reason || undefined,
         idempotencyKey,
       });
-      notify.success('Đã thêm addendum');
+      notify.success(t('uiClinical.addendumAdded'));
       reset({ targetSection: 'plan', text: '', reason: '' });
       onClose();
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể thêm addendum'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.addendumError')));
     }
   });
 
@@ -64,42 +70,50 @@ export function AddendumModal({ encounter, open, onClose }: AddendumModalProps) 
       open={open}
       onClose={onClose}
       size="md"
-      title="Thêm addendum"
+      title={t('uiClinical.addendumTitle')}
       description={
         encounter.closedAt
-          ? `Encounter đóng lúc ${new Date(encounter.closedAt).toLocaleString('vi-VN')}. Còn ${daysRemaining} ngày để bổ sung.`
+          ? t('uiClinical.addendumWindow', {
+              closedAt: new Date(encounter.closedAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US'),
+              count: daysRemaining,
+            })
           : ''
       }
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={create.isPending}>
-            Hủy
+            {t('uiClinical.cancel')}
           </Button>
           <Button onClick={onSubmit} disabled={!allowed} isLoading={create.isPending} leftIcon={<Plus className="h-4 w-4" />}>
-            Lưu addendum
+            {t('uiClinical.addendumSave')}
           </Button>
         </>
       }
     >
       {!allowed && (
-        <Alert variant="error" title="Đã hết hạn thêm addendum">
-          Encounter đã đóng quá 30 ngày (BR-MR-019). Không thể thêm addendum mới.
+        <Alert variant="error" title={t('uiClinical.addendumExpired')}>
+          {t('uiClinical.addendumExpiredHelp')}
         </Alert>
       )}
       <form className="space-y-3" onSubmit={onSubmit}>
         <Select
-          label="Bổ sung cho"
+          label={t('uiClinical.addendumSection')}
           {...register('targetSection', { required: true })}
-          options={SECTION_OPTIONS}
+          options={sectionOptions}
         />
         <Textarea
-          label="Nội dung"
+          label={t('uiClinical.content')}
           rows={4}
           {...register('text', { required: true, minLength: 5 })}
           error={formState.errors.text?.message as string | undefined}
-          placeholder="Mô tả chi tiết thông tin bổ sung."
+          placeholder={t('uiClinical.addendumPlaceholder')}
         />
-        <Textarea label="Lý do bổ sung" rows={2} {...register('reason')} placeholder="VD: BN gọi điện thông báo triệu chứng mới." />
+        <Textarea
+          label={t('uiClinical.addendumReason')}
+          rows={2}
+          {...register('reason')}
+          placeholder={t('uiClinical.addendumReasonExample')}
+        />
       </form>
     </Modal>
   );

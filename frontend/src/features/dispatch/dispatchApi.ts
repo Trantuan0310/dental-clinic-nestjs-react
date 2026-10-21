@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
+import { translatedLabels } from '@/locales/labels';
 
 /** ADR-0009 phase 6 — the pre-exam dispatch queue. */
 
@@ -56,21 +57,21 @@ export interface ReassignDayResult {
   warning?: string;
 }
 
-export const PRIORITY_LABEL: Record<QueuePriority, string> = {
-  EMERGENCY: 'Cấp cứu',
-  ON_TIME: 'Đúng giờ',
-  LATE: 'Đến trễ',
-  WALK_IN: 'Vãng lai',
-};
+export const PRIORITY_LABEL = translatedLabels<QueuePriority>({
+  EMERGENCY: 'uiOperations.queueEmergency',
+  ON_TIME: 'uiOperations.queuePriorityOnTime',
+  LATE: 'uiOperations.queuePriorityLate',
+  WALK_IN: 'uiEntry.dashboard.walkIn',
+});
 
-export const STATUS_LABEL: Record<QueueStatus, string> = {
-  WAITING: 'Đang chờ',
-  CALLED: 'Đang gọi',
-  SKIPPED: 'Đã bỏ qua',
-  LEFT: 'Đã về',
-  DONE: 'Đã vào khám',
-  CANCELLED: 'Đã rời hàng chờ',
-};
+export const STATUS_LABEL = translatedLabels<QueueStatus>({
+  WAITING: 'uiOperations.queueStatusWaiting',
+  CALLED: 'uiOperations.queueStatusCalled',
+  SKIPPED: 'uiOperations.queueStatusSkipped',
+  LEFT: 'uiScheduling.statusLeft',
+  DONE: 'uiOperations.queueStatusDone',
+  CANCELLED: 'uiOperations.queueStatusCancelled',
+});
 
 // Under the 'appointments' prefix so every appointment mutation (check-in,
 // walk-in, start encounter, LEFT…) refreshes the queue too.
