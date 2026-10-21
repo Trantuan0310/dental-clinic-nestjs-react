@@ -124,6 +124,7 @@ export const vi = {
   dentistPhotoPick: 'Chọn ảnh bác sĩ',
   dentistPhotoChange: 'Đổi ảnh',
   brandPreviewIntro: 'Trang preview nội bộ để kiểm tra variants logo và color tokens.',
+  revenueSourceCases: '{{count}} ca',
 } as const;
 
 export const en = {
@@ -252,4 +253,5 @@ export const en = {
   dentistPhotoPick: 'Choose a dentist photo',
   dentistPhotoChange: 'Change photo',
   brandPreviewIntro: 'Internal preview page for checking logo variants and color tokens.',
+  revenueSourceCases: '{{count}} visits',
 } as const;
