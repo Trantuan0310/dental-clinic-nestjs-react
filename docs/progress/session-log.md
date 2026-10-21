@@ -382,3 +382,12 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 ### Sửa theo review Codex của PR #62
 
 - Lỗi bảo mật (P1): tra cứu theo số điện thoại + ngày sinh trước đây cũng khớp khi số nhập là số liên hệ khẩn cấp của một người lớn, nên người liên hệ biết ngày sinh có thể đọc họ tên, giới tính, email của người đó. Nay số phải là số riêng của bệnh nhân; số người giám hộ chỉ dùng cho trẻ vị thành niên chưa có số riêng (cùng quy tắc khớp hồ sơ khi xác nhận). Thêm test cho trường hợp người lớn; 196 test booking xanh.
+
+
+## 21/10/2026 — Business flow hardening: kế hoạch và checkpoint E
+
+- Nhánh `fix/business-flow-hardening`, điểm xuất phát `1d0055e`; kế hoạch chi tiết tại `docs/progress/business_flow_hardening_plan.md`. Không sửa main.
+- Đã giao năm gói A–E cho `gpt-6-sol`, một nhân viên kiểm thử môi trường/DB riêng. Model chính review và yêu cầu rework; quota 5 giờ không được cung cấp bởi công cụ, không tuyên bố có đo usage. STOP khi có tín hiệu còn <=10%.
+- Gói E: thống nhất phạm vi AI theo rowScope trước cache, loại DRAFT khỏi hóa đơn cần thanh toán, phân bổ hoàn tiền theo dịch vụ và giữ đối chiếu tổng. Model chính đọc diff và chạy lại AI+Reports: 31/31 test pass.
+- A/B/C/D đang sửa trong checkout, chưa nghiệm thu. PostgreSQL concurrency/browser/integration đang chuẩn bị; không gọi các lỗi trong lúc sửa song song là baseline trước sửa.
+- Kế tiếp: review/kiểm chứng A–D, test DB thật và UI, typecheck/lint/build/test toàn bộ; ghi báo cáo cuối trước push hoàn tất.

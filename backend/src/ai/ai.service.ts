@@ -9,6 +9,8 @@ import { AiPatientSummary, SummaryBullet, SummarySource } from './ai.types';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { CompatibleLlm, createCompatibleLlm, extractJsonObject } from './compatible-llm';
 import { dentistCanReadPatient } from '../common/dentist-patient-access';
+import { rowScope } from '../common/row-scope';
+import { InvoiceStatus } from '@prisma/client';
 import {
   ENCOUNTER_CLOSED_EVENT,
   EncounterClosedEvent,
@@ -60,14 +62,13 @@ export class AiService {
     if (!patient) throw new NotFoundException('Patient not found');
 
     // Match PatientsService's roster scope, including when a cached summary exists.
-    const wholeRoster =
-      actor.permissions.includes('patient.update') || actor.permissions.includes('patient.delete');
+    const scope = rowScope(actor, 'patient');
+    if (scope === 'none') throw new NotFoundException('Patient not found');
     // Same scope as the patient record: treated (non-cancelled encounter)
     // or booked with a live/completed appointment — a first-visit patient
     // on today's list counts; a CANCELLED/NO_SHOW booking does not.
-    const scoped = wholeRoster
-      ? null
-      : await dentistCanReadPatient(this.prisma, patientId, actor.sub);
+    const scoped =
+      scope === 'own' ? await dentistCanReadPatient(this.prisma, patientId, actor.sub) : null;
     if (scoped === false) throw new NotFoundException('Patient not found');
 
     // Diagnoses, plans and notes are clinical content (BR-MR-022): only a
@@ -159,7 +160,13 @@ export class AiService {
         : Promise.resolve([] as Awaited<ReturnType<AiService['fetchRecentEncounters']>>),
       this.prisma.encounter.count({ where: { patientId, status: 'IN_PROGRESS' } }),
       this.prisma.invoice.count({
-        where: { patientId, outstandingAmount: { gt: 0 }, voidedAt: null, deletedAt: null },
+        where: {
+          patientId,
+          status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIAL] },
+          outstandingAmount: { gt: 0 },
+          voidedAt: null,
+          deletedAt: null,
+        },
       }),
     ]);
 

@@ -62,6 +62,7 @@ describe('ReportsService', () => {
           total: D(1_000_000),
           outstandingAmount: D(0),
           issuedAt: new Date('2026-08-31T17:30:00Z'), // 1/9 00:30 clinic time
+          items: [{ description: 'Khám', lineTotal: D(1_000_000) }],
           encounter: { dentistId: 'd1', dentist: { fullName: 'BS An' } },
         },
         {
@@ -69,6 +70,10 @@ describe('ReportsService', () => {
           total: D(500_000),
           outstandingAmount: D(300_000),
           issuedAt: new Date('2026-09-10T03:00:00Z'),
+          items: [
+            { description: 'Trám', lineTotal: D(600_000) },
+            { description: 'Khác', lineTotal: D(25_000) },
+          ],
           encounter: { dentistId: 'd2', dentist: { fullName: 'BS Bình' } },
         },
       ]);
@@ -92,7 +97,11 @@ describe('ReportsService', () => {
           kind: 'REFUND',
           method: 'CASH',
           paidAt: new Date('2026-09-20T04:00:00Z'),
-          invoice: { status: 'PAID', encounter: { dentistId: 'd1' } },
+          invoice: {
+            status: 'PAID',
+            encounter: { dentistId: 'd1' },
+            items: [{ description: 'Khám', lineTotal: D(1_000_000) }],
+          },
         },
         // An invoice voided after a full refund: both receipts stay
         // COMPLETED, net to zero, and never touch revenue.
@@ -111,14 +120,6 @@ describe('ReportsService', () => {
           invoice: { status: 'VOIDED', encounter: { dentistId: 'd2' } },
         },
       ]);
-      prisma.invoiceItem.findMany.mockResolvedValue([
-        // 20 % invoice discount: 600k line counts 480k.
-        {
-          description: 'Trám',
-          lineTotal: D(600_000),
-          invoice: { subtotal: D(625_000), total: D(500_000) },
-        },
-      ]);
       prisma.invoice.aggregate
         .mockResolvedValueOnce({ _count: { _all: 2 }, _sum: { total: D(70_000) } }) // drafts
         .mockResolvedValueOnce({ _count: { _all: 1 }, _sum: { total: D(9_000_000) } }); // voided
@@ -133,11 +134,8 @@ describe('ReportsService', () => {
       expect(where.status).toEqual({ in: ['ISSUED', 'PARTIAL', 'PAID'] });
       expect(where.issuedAt.gte).toEqual(new Date('2026-09-01T00:00:00+07:00'));
       expect(where.encounter).toEqual({ dentistId: 'd1' });
-      // dentistId reaches payments, items and the excluded boxes too.
+      // dentistId reaches payments and the excluded boxes too.
       expect(prisma.payment.findMany.mock.calls[0][0].where.invoice.encounter).toEqual({
-        dentistId: 'd1',
-      });
-      expect(prisma.invoiceItem.findMany.mock.calls[0][0].where.invoice.encounter).toEqual({
         dentistId: 'd1',
       });
       expect(prisma.invoice.aggregate.mock.calls[0][0].where.encounter).toEqual({
@@ -162,10 +160,86 @@ describe('ReportsService', () => {
         revenue: 900_000,
         paid: 900_000,
       });
-      expect(r.byService).toEqual([{ service: 'Trám', total: 480_000, count: 1 }]);
+      expect(r.byService).toEqual([
+        { service: 'Khám', total: 900_000, count: 1 },
+        { service: 'Trám', total: 480_000, count: 1 },
+        { service: 'Khác', total: 20_000, count: 1 },
+      ]);
+      expect(r.byService.reduce((sum, row) => sum + row.total, 0)).toBe(r.totalInvoiced);
       const cash = r.byPaymentMethod.find(m => m.method === 'CASH')!;
       expect(cash).toMatchObject({ amount: 900_000, count: 2 });
       expect(r.byPaymentMethod.reduce((a, m) => a + m.sharePct, 0)).toBeCloseTo(100, 0);
+    });
+
+    it('attributes refunds from older invoices to this period by service and preserves rounding', async () => {
+      const olderLines = ['A', 'B', 'C'].map(description => ({ description, lineTotal: D(1) }));
+      prisma.invoice.findMany.mockResolvedValue([
+        {
+          status: 'ISSUED',
+          total: D(100),
+          outstandingAmount: D(100),
+          issuedAt: new Date('2026-10-02T00:00:00Z'),
+          items: [{ description: 'A', lineTotal: D(100) }],
+          encounter: { dentistId: 'd1', dentist: { fullName: 'BS An' } },
+        },
+      ]);
+      prisma.payment.findMany.mockResolvedValue(
+        [10, 5].map(amount => ({
+          amount: D(amount),
+          kind: 'REFUND',
+          method: 'CASH',
+          paidAt: new Date('2026-10-10T00:00:00Z'),
+          invoice: { status: 'PAID', encounter: { dentistId: 'd1' }, items: olderLines },
+        })),
+      );
+
+      const report = await service.revenueReport({ from: '2026-10-01', to: '2026-10-31' });
+
+      expect(prisma.payment.findMany.mock.calls[0][0].where.paidAt).toEqual({
+        gte: new Date('2026-10-01T00:00:00+07:00'),
+        lte: new Date('2026-10-31T23:59:59.999+07:00'),
+      });
+      expect(report.totalInvoiced).toBe(85);
+      expect(report.totalRefunded).toBe(15);
+      expect(report.byService).toEqual([
+        { service: 'A', total: 94.99, count: 1 },
+        { service: 'C', total: -4.99, count: 0 },
+        { service: 'B', total: -5, count: 0 },
+      ]);
+      expect(report.byService.reduce((sum, row) => sum + row.total, 0)).toBe(85);
+    });
+
+    it('groups repeated service names and keeps zero-value lines while excluding deleted items', async () => {
+      prisma.invoice.findMany.mockResolvedValue([
+        {
+          status: 'ISSUED',
+          total: D(5),
+          outstandingAmount: D(5),
+          issuedAt: new Date('2026-10-02T00:00:00Z'),
+          items: [
+            { description: 'A', lineTotal: D(2) },
+            { description: 'A', lineTotal: D(2) },
+            { description: 'B', lineTotal: D(1) },
+            { description: 'Zero', lineTotal: D(0) },
+          ],
+          encounter: { dentistId: 'd1', dentist: { fullName: 'BS An' } },
+        },
+      ]);
+
+      const report = await service.revenueReport({ from: '2026-10-01', to: '2026-10-31' });
+
+      expect(prisma.invoice.findMany.mock.calls[0][0].select.items.where).toEqual({
+        deletedAt: null,
+      });
+      expect(prisma.payment.findMany.mock.calls[0][0].select.invoice.select.items.where).toEqual({
+        deletedAt: null,
+      });
+      expect(report.byService).toEqual([
+        { service: 'A', total: 4, count: 2 },
+        { service: 'B', total: 1, count: 1 },
+        { service: 'Zero', total: 0, count: 1 },
+      ]);
+      expect(report.byService.reduce((sum, row) => sum + row.total, 0)).toBe(report.totalInvoiced);
     });
   });
 

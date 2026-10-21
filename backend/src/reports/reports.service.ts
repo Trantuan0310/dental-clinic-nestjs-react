@@ -67,7 +67,48 @@ interface CollectionRow {
   kind: PaymentKind;
   method: string;
   paidAt: Date;
-  invoice: { status: InvoiceStatus; encounter: { dentistId: string } | null } | null;
+  invoice: {
+    status: InvoiceStatus;
+    encounter: { dentistId: string } | null;
+    items?: Array<{ description: string; lineTotal: Prisma.Decimal }>;
+  } | null;
+}
+
+interface ServiceLine {
+  description: string;
+  lineTotal: Prisma.Decimal;
+}
+
+/** Allocate each issue/refund movement to its lines, keeping the cent remainder. */
+function allocateServiceMovement(
+  amount: number,
+  lines: ServiceLine[],
+): Array<{ service: string; amount: number }> {
+  const active = lines.filter(line => Number(line.lineTotal) >= 0);
+  if (!active.length) return [{ service: 'Khác', amount }];
+  const weight = active.reduce((sum, line) => sum + Number(line.lineTotal), 0);
+  if (weight === 0) {
+    const zeros = active.map(line => ({ service: line.description || 'Khác', amount: 0 }));
+    return amount === 0 ? zeros : [...zeros, { service: 'Khác', amount }];
+  }
+  const cents = Math.round(Math.abs(amount) * 100);
+  const sign = Math.sign(amount);
+  const shares = active.map((line, index) => {
+    const exact = (cents * Number(line.lineTotal)) / weight;
+    return {
+      index,
+      service: line.description || 'Khác',
+      cents: Math.floor(exact),
+      remainder: exact % 1,
+    };
+  });
+  let remaining = cents - shares.reduce((sum, share) => sum + share.cents, 0);
+  const priority = [...shares].sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (const share of priority) {
+    if (remaining-- <= 0) break;
+    share.cents += 1;
+  }
+  return shares.map(share => ({ service: share.service, amount: (sign * share.cents) / 100 }));
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -137,6 +178,7 @@ export class ReportsService {
     from: Date,
     to: Date,
     invoice: Prisma.InvoiceWhereInput = {},
+    withServiceLines = false,
   ): Promise<Array<CollectionRow & { signed: number; refund: boolean; lowersRevenue: boolean }>> {
     const rows: CollectionRow[] = await this.prisma.payment.findMany({
       where: collectedPaymentWhere(from, to, invoice),
@@ -145,7 +187,19 @@ export class ReportsService {
         kind: true,
         method: true,
         paidAt: true,
-        invoice: { select: { status: true, encounter: { select: { dentistId: true } } } },
+        invoice: {
+          select: {
+            status: true,
+            encounter: { select: { dentistId: true } },
+            ...(withServiceLines && {
+              items: {
+                where: { deletedAt: null },
+                orderBy: { sequence: 'asc' as const },
+                select: { description: true, lineTotal: true },
+              },
+            }),
+          },
+        },
       },
     });
     return rows.map(r => {
@@ -202,7 +256,7 @@ export class ReportsService {
     };
     const inRange = { gte: fromDate, lte: toDate };
 
-    const [invoices, items, collections, drafts, voided] = await Promise.all([
+    const [invoices, collections, drafts, voided] = await Promise.all([
       this.prisma.invoice.findMany({
         where: invoiceWhere,
         select: {
@@ -210,18 +264,15 @@ export class ReportsService {
           total: true,
           outstandingAmount: true,
           issuedAt: true,
+          items: {
+            where: { deletedAt: null },
+            orderBy: { sequence: 'asc' },
+            select: { description: true, lineTotal: true },
+          },
           encounter: { select: { dentistId: true, dentist: { select: { fullName: true } } } },
         },
       }),
-      this.prisma.invoiceItem.findMany({
-        where: { deletedAt: null, invoice: invoiceWhere },
-        select: {
-          description: true,
-          lineTotal: true,
-          invoice: { select: { subtotal: true, total: true } },
-        },
-      }),
-      this.loadCollections(fromDate, toDate, byDentistFilter),
+      this.loadCollections(fromDate, toDate, byDentistFilter, true),
       this.prisma.invoice.aggregate({
         where: {
           deletedAt: null,
@@ -319,16 +370,20 @@ export class ReportsService {
       for (const u of users) dentist(u.id, u.fullName);
     }
 
-    // Services: line totals after the invoice discount (pro rata).
+    // Services: issued totals and same-period refunds on counted invoices,
+    // both spread over the invoice lines with the same pro-rata basis.
     const serviceMap = new Map<string, { service: string; total: number; count: number }>();
-    for (const it of items) {
-      const key = it.description || 'Khác';
-      const subtotal = Number(it.invoice?.subtotal ?? 0);
-      const factor = subtotal > 0 ? Number(it.invoice?.total ?? 0) / subtotal : 1;
-      const cur = serviceMap.get(key) ?? { service: key, total: 0, count: 0 };
-      cur.total += Number(it.lineTotal ?? 0) * factor;
-      cur.count += 1;
-      serviceMap.set(key, cur);
+    const addMovement = (amount: number, lines: ServiceLine[], issued: boolean) => {
+      for (const part of allocateServiceMovement(amount, lines)) {
+        const cur = serviceMap.get(part.service) ?? { service: part.service, total: 0, count: 0 };
+        cur.total += part.amount;
+        if (issued) cur.count += 1;
+        serviceMap.set(part.service, cur);
+      }
+    };
+    for (const inv of invoices) addMovement(Number(inv.total ?? 0), inv.items, true);
+    for (const refund of revenueRefunds) {
+      addMovement(refund.signed, refund.invoice?.items ?? [], false);
     }
 
     // Payment methods: net of refunds, share of what was actually collected.
@@ -360,7 +415,7 @@ export class ReportsService {
         .map(d => ({ ...d, sharePct: pct(d.revenue, totalInvoiced) }))
         .sort((a, b) => b.revenue - a.revenue),
       byService: [...serviceMap.values()]
-        .map(s => ({ ...s, total: Math.round(s.total) }))
+        .map(s => ({ ...s, total: Math.round(s.total * 100) / 100 }))
         .sort((a, b) => b.total - a.total),
       byPaymentMethod: [...methodMap.values()]
         .map(m => ({ ...m, sharePct: pct(m.amount, totalCollected) }))

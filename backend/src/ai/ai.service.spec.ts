@@ -157,6 +157,41 @@ describe('AiService', () => {
       const openBullet = result.bullets.find(b => b.id === 'open');
       expect(openBullet?.text).toContain('1 phiên khám');
       expect(openBullet?.text).toContain('2 hóa đơn');
+      expect(prisma.invoice.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          status: { in: ['ISSUED', 'PARTIAL'] },
+          outstandingAmount: { gt: 0 },
+          voidedAt: null,
+          deletedAt: null,
+        }),
+      });
+    });
+
+    it('counts only outstanding issued or partial invoices as pending', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (prisma.encounter.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      const invoices = [
+        { status: 'DRAFT', outstandingAmount: 100 },
+        { status: 'ISSUED', outstandingAmount: 100 },
+        { status: 'PARTIAL', outstandingAmount: 50 },
+        { status: 'PAID', outstandingAmount: 0 },
+        { status: 'VOIDED', outstandingAmount: 100 },
+      ];
+      (prisma.invoice.count as jest.Mock).mockImplementation(
+        ({ where }) =>
+          invoices.filter(
+            invoice =>
+              where.status.in.includes(invoice.status) &&
+              invoice.outstandingAmount > where.outstandingAmount.gt,
+          ).length,
+      );
+
+      const result = await service.getPatientSummary('pat-1', 3, true, actor);
+
+      expect(result.bullets.find(b => b.id === 'open')?.text).toContain(
+        '2 hóa đơn chưa thanh toán',
+      );
     });
 
     it('includes "next visit" bullet from latest encounter treatment plan', async () => {
@@ -269,7 +304,7 @@ describe('AiService', () => {
     const dentist = {
       sub: 'dentist-1',
       email: 'd@example.invalid',
-      permissions: ['ai.summary.read'],
+      permissions: ['ai.summary.read', 'patient.read'],
     };
 
     it('allows a dentist with a live appointment and refuses one whose bookings were cancelled', async () => {
@@ -292,6 +327,65 @@ describe('AiService', () => {
           ]),
         }),
       });
+    });
+
+    it.each([false, true])(
+      'blocks a custom row-scoped updater before cache access (cache hit: %s)',
+      async cached => {
+        const custom = {
+          ...dentist,
+          permissions: [
+            'ai.summary.read',
+            'patient.read',
+            'patient.update',
+            'appointment.read.own',
+            'encounter.read.own',
+          ],
+        };
+        (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+        (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+        (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+        cache.getJSON.mockResolvedValue(cached ? { patientId: 'pat-1', bullets: [] } : null);
+
+        await expect(service.getPatientSummary('pat-1', 3, false, custom)).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(cache.getJSON).not.toHaveBeenCalled();
+        expect(prisma.invoice.count).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects a role with no patient read scope before checking cache', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      cache.getJSON.mockResolvedValue({ patientId: 'pat-1', bullets: [] });
+      await expect(
+        service.getPatientSummary('pat-1', 3, false, {
+          ...dentist,
+          permissions: ['ai.summary.read'],
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(cache.getJSON).not.toHaveBeenCalled();
+      expect(prisma.appointment.count).not.toHaveBeenCalled();
+    });
+
+    it('allows a scoped patient but keeps clinical data in the full cache only with own encounter read', async () => {
+      const custom = {
+        ...dentist,
+        permissions: [
+          'ai.summary.read',
+          'patient.read',
+          'appointment.read.own',
+          'encounter.read.own',
+        ],
+      };
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+      cache.getJSON.mockResolvedValue({ patientId: 'pat-1', bullets: [] });
+      await expect(service.getPatientSummary('pat-1', 3, false, custom)).resolves.toMatchObject({
+        cached: true,
+      });
+      expect(cache.getJSON).toHaveBeenCalledWith('ai:patient:pat-1:top3:full');
     });
   });
 
