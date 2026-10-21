@@ -6,6 +6,49 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ## 21/10/2026
 
+### Đang chờ / bước tiếp theo
+
+- Chờ người dùng chọn sửa các lỗi trong mục "Kiểm tra toàn bộ chức năng" bên dưới (chưa sửa gì).
+
+### Kiểm tra toàn bộ chức năng (`main` = f1e64ae)
+
+**Tự động — đều qua:**
+
+- Backend: `tsc`, ESLint (0 cảnh báo), Jest 1390/1390.
+- API trên PostgreSQL thật (`npm run test:isolated`): 107/107; migration chạy lại lần hai không lỗi; seed chạy; DB nguồn không đổi.
+- Playwright E2E trên DB mới (giống CI): **90/90**, 5,3 phút.
+
+**Quét từng màn hình:** 46 trang × 3 vai trò (admin, lễ tân, bác sĩ) × 2 ngôn ngữ, cộng 5 trang công khai. Script ở scratchpad của phiên (`smoke.cjs`, `en-leak.cjs`, không đưa vào repo).
+
+- Không có 5xx, lỗi JavaScript, khung "Đã có lỗi xảy ra", khoá dịch lộ ra (`ui*.xxx`, `{{...}}`).
+- Quyền khớp hoàn toàn: trang có quyền thì mở được, không có quyền thì vào `/403`.
+
+**Lỗi tìm thấy:**
+
+1. **Lễ tân bị 403 trên mọi trang.**
+   - `Header.tsx` luôn gọi `GET /shifts/registrations?status=PENDING` để hiện số ca chờ duyệt, nhưng số đó chỉ hiện khi có `shift.approve`.
+   - Lễ tân không có quyền đọc ca nên lần nào cũng 403 (92 lần trong lượt quét). Bác sĩ thì tải ca của mình mà không dùng.
+   - Sửa: chỉ gọi khi có `shift.approve`.
+2. **Thanh "Răng đã điều trị" ở chi tiết phiên khám hiện nút "0".**
+   - Thủ thuật không gắn răng (cạo vôi…) có `tooth_numbers` rỗng. Backend trả `toothNumber: ''`, frontend đổi thành `0`.
+   - Phiên mẫu có 4 thủ thuật như vậy → 4 nút "0", cảnh báo React trùng key, sơ đồ răng nhận `[0,0,0,0]` để tô sáng.
+   - Sửa: bỏ răng rỗng/không hợp lệ và trùng lặp.
+3. **Giao diện tiếng Anh còn sót tiếng Việt viết cứng.** Khoảng 370 dòng trong 25 file ngoài `locales/`. Đã đối chiếu thực tế các trang lộ:
+   - Điều phối (`/dispatch`), Ảnh trang chủ (`/admin/site-media`): gần như cả trang;
+   - Hôm nay (`/today`): ô số liệu, tiêu đề, ngày "Thứ Tư, 21/10/2026";
+   - Hàng đợi của tôi (`/my-queue`);
+   - chi tiết phiên khám: "Lý do khám:", "Răng đã điều trị:", chú thích sơ đồ răng, "Toàn hàm / Chung", trạng thái răng;
+   - chi tiết bác sĩ: thẻ dịch vụ thực hiện, thẻ ảnh;
+   - Kho: "Nhập kho/Xuất kho"; trang chủ: trạng thái hàng chờ.
+
+**Không phải lỗi (đã kiểm):**
+
+- Bác sĩ mở hoá đơn của bác sĩ khác → 404 (giới hạn theo bệnh nhân của mình).
+- Phiếu lương của kỳ `DRAFT` → 409 (chỉ xem sau khi duyệt).
+- Yêu cầu đặt lịch không có email → cờ "gọi khách" (đúng thiết kế).
+
+**Giới hạn:** quét chỉ mở trang, không bấm từng nút/hộp thoại; các luồng thao tác do E2E phủ.
+
 ### Kiểm tra phiên bản mới nhất (`main` = f1e64ae)
 
 - Không có commit mới sau khi merge PR #63. So với d8c6538 (đã kiểm tra đầy đủ ngày 20/10), chỉ khác 3 file tài liệu, nên không chạy lại test local.
