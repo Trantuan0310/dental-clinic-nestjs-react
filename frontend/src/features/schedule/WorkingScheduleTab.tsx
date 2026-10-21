@@ -28,10 +28,9 @@ import {
 } from './scheduleApi';
 import { AffectedAppointmentsModal } from './AffectedAppointmentsModal';
 import { TimeBlocksEditor } from './TimeBlocksEditor';
-import { DAY_LABELS, blockError, defaultBlocks, openingBlocks, openingHoursWarnings } from './scheduleBlocks';
+import { blockError, defaultBlocks, openingBlocks, openingHoursWarnings } from './scheduleBlocks';
 import { hasImpact } from './format';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 import type { ScheduleChangeImpact, TimeBlock, WorkingSchedule } from '@/types/schedule';
 
 const dayLabelsFor = (language: string) => {
@@ -50,18 +49,6 @@ const formatDate = (value: string, language: string) =>
   new Intl.DateTimeFormat(language.startsWith('en') ? 'en-US' : 'vi-VN').format(new Date(`${value.slice(0, 10)}T12:00:00`));
 const addDays = (date: string, n: number) =>
   new Date(new Date(date).getTime() + n * 86_400_000).toISOString().slice(0, 10);
-
-function translateWarnings(items: string[], language: string, t: TFunction) {
-  if (language.startsWith('vi')) return items;
-  const weekdays = dayLabelsFor(language);
-  const dayMap = new Map(DAY_LABELS.map((day, index) => [day, index]));
-  return items.map((warning) => {
-    const closed = warning.match(/^(.+): phòng khám không mở cửa theo giờ đã cấu hình$/);
-    if (closed) return t('uiScheduling.scheduleClinicClosedWarning', { day: weekdays[((dayMap.get(closed[1]) ?? 0) + 6) % 7] });
-    const outside = warning.match(/^(.+): (.+) nằm ngoài giờ mở cửa \((.+)\)$/);
-    return outside ? t('uiScheduling.scheduleOutsideOpeningHoursWarning', { day: weekdays[((dayMap.get(outside[1]) ?? 0) + 6) % 7], blocks: outside[2], hours: outside[3] }) : warning;
-  });
-}
 
 type Phase = 'upcoming' | 'active' | 'ended';
 function phaseOf(s: WorkingSchedule, today: string): Phase {
@@ -325,17 +312,7 @@ function WarningList({ warnings }: { warnings: string[] }) {
 
 /** Several weekdays × several blocks, saved together (all or nothing). */
 function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { t, i18n } = useTranslation();
-  const language = i18n.resolvedLanguage ?? 'vi';
-  const translateError = (message: string | null) => {
-    if (!message || language.startsWith('vi')) return message;
-    if (message.startsWith('Nhập đủ')) return t('uiScheduling.blockTimeRequired');
-    if (message.startsWith('Phút phải')) return t('uiScheduling.blockFiveMinuteGrid');
-    const overlap = message.match(/^Khung (\d{2}:\d{2})–(\d{2}:\d{2}) và (\d{2}:\d{2})–(\d{2}:\d{2}) chồng nhau$/);
-    if (overlap) return t('uiScheduling.blockOverlap', { firstStart: overlap[1], firstEnd: overlap[2], secondStart: overlap[3], secondEnd: overlap[4] });
-    const invalid = message.match(/^Khung (\d{2}:\d{2})–(\d{2}:\d{2}): giờ kết thúc phải sau giờ bắt đầu$/);
-    return invalid ? t('uiScheduling.blockEndAfterStart', { start: invalid[1], end: invalid[2] }) : message;
-  };
+  const { t } = useTranslation();
   const { dentists, defaultDentistId } = useSchedulableDentists();
   const createSchedules = useBulkCreateWorkingSchedules();
   const openDays = () => WEEK_ORDER.filter((d) => openingBlocks(d).length > 0);
@@ -416,7 +393,7 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
             {t('uiScheduling.scheduleOpeningHoursHint')}
           </p>
           <TimeBlocksEditor blocks={blocks} onChange={setBlocks} startLabel={t('uiScheduling.workFrom')} />
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{translateError(error)}</p>}
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
         </fieldset>
 
         <div className="grid grid-cols-2 gap-4">
@@ -439,7 +416,7 @@ function CreateWorkingScheduleModal({ open, onClose }: { open: boolean; onClose:
 
         <Checkbox checked={isPaidShift} onChange={setIsPaidShift} label={t('uiScheduling.paidShift')} />
 
-        <WarningList warnings={translateWarnings(warnings, language, t)} />
+        <WarningList warnings={warnings} />
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={close}>
@@ -521,7 +498,7 @@ function EditWorkingScheduleModal({
           options={WEEK_ORDER.map((d) => ({ value: String(d), label: dayNames[(d + 6) % 7] }))}
         />
         <TimeBlocksEditor blocks={blocks} onChange={setBlocks} startLabel={t('uiScheduling.workFrom')} max={1} />
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{t('uiScheduling.blockValidationFailed')}</p>}
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
         {started && hoursChanged && (
           <>
             <Input
@@ -550,7 +527,7 @@ function EditWorkingScheduleModal({
           min={started ? addDays(today, -1) : dateOf(schedule.validFrom)!}
           onChange={(e) => setValidTo(e.target.value)}
         />
-        <WarningList warnings={translateWarnings(warnings, language, t)} />
+        <WarningList warnings={warnings} />
         <p className="text-xs text-gray-500 dark:text-surface-400">
           {t('uiScheduling.scheduleChangeAppointmentsHint')}
         </p>

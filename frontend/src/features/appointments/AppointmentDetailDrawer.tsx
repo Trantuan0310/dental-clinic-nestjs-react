@@ -85,22 +85,24 @@ type ActionKey =
   | 'undo_left'
   | 'start';
 
+// A preset reason: `value` is what is saved on the appointment (kept in
+// Vietnamese whatever the UI language); `key` is the i18n label shown.
 type QuickReason = { value: string; key: string };
 const quickReason = (value: string, key: string): QuickReason => ({ value, key });
 const CANCEL_REASONS = [
-  quickReason('Bệnh nhân yêu cầu', 'cancelReasonPatientRequest'),
-  quickReason('Bác sĩ bận đột xuất', 'cancelReasonDentistUnavailable'),
-  quickReason('Trùng lịch khác', 'cancelReasonDuplicate'),
-  quickReason('Bệnh nhân không xác nhận được', 'cancelReasonUnableToConfirm'),
+  quickReason('Bệnh nhân yêu cầu', 'uiScheduling.quickCancelPatientRequest'),
+  quickReason('Bác sĩ bận đột xuất', 'uiScheduling.quickCancelDentistBusy'),
+  quickReason('Trùng lịch khác', 'uiScheduling.quickCancelConflict'),
+  quickReason('Bệnh nhân không xác nhận được', 'uiScheduling.quickCancelUnconfirmed'),
 ];
 
-const NO_SHOW_REASONS = [quickReason('Không liên lạc được', 'noShowReasonUnreachable'), quickReason('Bệnh nhân báo đến muộn quá giờ', 'noShowReasonTooLate'), quickReason('Không rõ lý do', 'noShowReasonUnknown')];
+const NO_SHOW_REASONS = [quickReason('Không liên lạc được', 'uiScheduling.noShowReasonUnreachable'), quickReason('Bệnh nhân báo đến muộn quá giờ', 'uiScheduling.quickNoShowTooLate'), quickReason('Không rõ lý do', 'uiScheduling.noShowReasonUnknown')];
 
 // BR-APPT-033: checked in, then left before the exam.
 const LEFT_REASONS = [
-  quickReason('Bệnh nhân chờ lâu, xin về', 'leftReasonLongWait'),
-  quickReason('Bệnh nhân có việc gấp', 'leftReasonUrgentMatter'),
-  quickReason('Bệnh nhân đổi ý, sẽ đặt lịch lại', 'leftReasonChangedMind'),
+  quickReason('Bệnh nhân chờ lâu, xin về', 'uiScheduling.quickLeftLongWait'),
+  quickReason('Bệnh nhân có việc gấp', 'uiScheduling.quickLeftUrgent'),
+  quickReason('Bệnh nhân đổi ý, sẽ đặt lịch lại', 'uiScheduling.quickLeftRebook'),
 ];
 
 // Labels for the audit trail (BR-APPT-034); unknown actions show their code.
@@ -120,18 +122,18 @@ const HISTORY_TRANSLATION: Record<string, string> = {
 };
 
 const LATE_CHECK_IN_REASONS = [
-  quickReason('Bệnh nhân đến muộn, đã báo trước', 'lateCheckInReasonNotified'),
-  quickReason('Kẹt xe / thời tiết', 'lateCheckInReasonTraffic'),
-  quickReason('Bác sĩ đồng ý khám bù trong ngày', 'lateCheckInReasonDentistAgreed'),
+  quickReason('Bệnh nhân đến muộn, đã báo trước', 'uiScheduling.quickLateNotified'),
+  quickReason('Kẹt xe / thời tiết', 'uiScheduling.quickLateTraffic'),
+  quickReason('Bác sĩ đồng ý khám bù trong ngày', 'uiScheduling.quickLateDentistAgreed'),
 ];
 
-const UNDO_CHECK_IN_REASONS = [quickReason('Check-in nhầm bệnh nhân', 'undoCheckInWrongPatient'), quickReason('Check-in nhầm lịch hẹn', 'undoCheckInWrongAppointment')];
+const UNDO_CHECK_IN_REASONS = [quickReason('Check-in nhầm bệnh nhân', 'uiScheduling.undoCheckInWrongPatient'), quickReason('Check-in nhầm lịch hẹn', 'uiScheduling.undoCheckInWrongAppointment')];
 
-const UNDO_LEFT_REASONS = [quickReason('Bấm nhầm "Đã về"', 'undoLeftMistake'), quickReason('Bệnh nhân quay lại', 'undoLeftReturned')];
+const UNDO_LEFT_REASONS = [quickReason('Bấm nhầm "Đã về"', 'uiScheduling.quickUndoLeftMistake'), quickReason('Bệnh nhân quay lại', 'uiScheduling.quickUndoLeftReturned')];
 
-const EARLY_CHECK_IN_REASONS = [quickReason('Bác sĩ đang rảnh, khám sớm', 'earlyCheckInReasonAvailable'), quickReason('Bệnh nhân đến sớm, chờ đến lượt', 'earlyCheckInReasonEarly')];
+const EARLY_CHECK_IN_REASONS = [quickReason('Bác sĩ đang rảnh, khám sớm', 'uiScheduling.quickEarlyDentistFree'), quickReason('Bệnh nhân đến sớm, chờ đến lượt', 'uiScheduling.quickEarlyPatientEarly')];
 
-const UNDO_NO_SHOW_REASONS = [quickReason('Đánh vắng mặt nhầm', 'undoNoShowMistake'), quickReason('Bệnh nhân gọi báo đang đến', 'undoNoShowCalled')];
+const UNDO_NO_SHOW_REASONS = [quickReason('Đánh vắng mặt nhầm', 'uiScheduling.quickUndoNoShowMistake'), quickReason('Bệnh nhân gọi báo đang đến', 'uiScheduling.quickUndoNoShowCalled')];
 
 // Backend requires ≥ 5 chars for a forced check-in (BR-APPT-007), for
 // cancelling a checked-in visit after its start (BR-APPT-025) and for undoing
@@ -1378,15 +1380,15 @@ function ActionDialog({
                 <button
                   key={preset.key}
                   type="button"
-                  onClick={() => setReason(t(`uiScheduling.${preset.key}`))}
+                  onClick={() => setReason(preset.value)}
                   className={cn(
                     'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-                    reason === t(`uiScheduling.${preset.key}`)
+                    reason === preset.value
                       ? 'border-brand-500 bg-brand-50 text-brand-700'
                       : 'border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:bg-brand-50 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-200',
                   )}
                 >
-                  {t(`uiScheduling.${preset.key}`)}
+                  {t(preset.key)}
                 </button>
               ))}
             </div>

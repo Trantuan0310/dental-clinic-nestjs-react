@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { notify } from '@/components/ui/Toast';
@@ -34,6 +35,7 @@ export function usePendingBookingCount(): number | undefined {
  * title so it is visible from other browser tabs.
  */
 export function PendingBookingWatcher() {
+  const { t } = useTranslation();
   const loaded = usePendingBookingCount();
   const count = loaded ?? 0;
   const previous = useRef<number | null>(null);
@@ -43,12 +45,12 @@ export function PendingBookingWatcher() {
     if (previous.current !== null && count > previous.current) {
       notify.info(
         count - previous.current === 1
-          ? 'Có yêu cầu đặt lịch online mới cần xử lý'
-          : `Có ${count - previous.current} yêu cầu đặt lịch online mới cần xử lý`,
+          ? t('uiScheduling.bookingNewRequestOne')
+          : t('uiScheduling.bookingNewRequestMany', { count: count - previous.current }),
       );
     }
     previous.current = count;
-  }, [loaded, count]);
+  }, [loaded, count, t]);
 
   useEffect(() => {
     const strip = () => document.title.replace(/^\(\d+\)\s+/, '');

@@ -8,6 +8,7 @@ import { clearSavedProfile, loadSavedProfile, saveProfile } from "./savedProfile
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
+import { i18n } from "@/locales";
 import { useTranslation } from "react-i18next";
 
 type Dentist = {
@@ -37,7 +38,6 @@ type BookingResult = {
 // The clinic's date, not the browser's: a visitor abroad (or a PC set to
 // another zone) must not be offered yesterday or refused today.
 const today = () => clinicToday();
-const SLOT_ERROR = "Không tải được giờ trống. Chọn ngày khác hoặc liên hệ lễ tân.";
 /** "YYYY-MM-DD" `days` after `date`. */
 const addDays = (date: string, days: number) => {
   const d = new Date(date + "T00:00:00Z");
@@ -55,6 +55,11 @@ type SlotsResponse = {
   nextAvailableDate?: string | null;
   lastDate?: string;
 };
+/** The minimum notice (e.g. 2 hours, 90 minutes) in the UI language. */
+const leadText = (minLead: number) =>
+  minLead % 60 === 0
+    ? i18n.t("uiScheduling.bookingLeadHours", { count: minLead / 60 })
+    : i18n.t("uiScheduling.minutesValue", { count: minLead });
 /** Why the chosen day has no time left, in the patient's words. */
 const emptyReasonText = (
   reason: string | null | undefined,
@@ -63,32 +68,28 @@ const emptyReasonText = (
 ) => {
   switch (reason) {
     case "CLINIC_CLOSED":
-      return (closedReason || "Phòng khám nghỉ ngày này") + ".";
+      return (closedReason || i18n.t("uiScheduling.clinicClosedDay")) + ".";
     case "CLOSED":
-      return "Bác sĩ không nhận lịch ngày này (phòng khám đóng lịch).";
+      return i18n.t("uiScheduling.dentistClosed");
     case "NO_SCHEDULE":
-      return "Bác sĩ không làm việc ngày này.";
+      return i18n.t("uiScheduling.dentistNoSchedule");
     case "TIME_OFF":
-      return "Bác sĩ nghỉ ngày này.";
+      return i18n.t("uiScheduling.dentistTimeOff");
     case "DAY_OVER":
-      return "Đã hết giờ làm việc trong ngày này.";
+      return i18n.t("uiScheduling.dayEnded");
     case "TOO_SOON":
-      return (
-        "Các giờ còn lại trong ngày quá gần: cần đặt trước ít nhất " +
-        (minLead % 60 === 0 ? minLead / 60 + " giờ" : minLead + " phút") +
-        "."
-      );
+      return i18n.t("uiScheduling.bookingTooSoon", { lead: leadText(minLead) });
     case "FULL":
-      return "Ngày này đã kín lịch.";
+      return i18n.t("uiScheduling.dayFull");
     case "HELD":
-      return "Các giờ còn lại đang được giữ cho khách khác chờ xác nhận. Vui lòng chọn ngày khác hoặc thử lại sau ít phút.";
+      return i18n.t("uiScheduling.bookingDayHeld");
     default:
       return "";
   }
 };
 
 export default function PublicBookingPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
@@ -145,7 +146,7 @@ export default function PublicBookingPage() {
         }
       })
       .catch(() =>
-        setError("Không tải được danh sách dịch vụ. Vui lòng thử lại sau."),
+        setError(i18n.t("uiScheduling.bookingServicesError")),
       )
       .finally(() => setLoading(false));
   }, [preselected]);
@@ -179,7 +180,7 @@ export default function PublicBookingPage() {
       })
       // The server says what is wrong (a day too far ahead, for one).
       .catch((e: unknown) => {
-        if (active) setSlotError(bookingErrorMessage(e, SLOT_ERROR));
+        if (active) setSlotError(bookingErrorMessage(e, i18n.t("uiScheduling.slotsLoadError")));
       })
       .finally(() => {
         if (active) setSlotLoading(false);
@@ -253,7 +254,7 @@ export default function PublicBookingPage() {
     e.preventDefault();
     setError("");
     if (!serviceId || !dentistId || !date || !time) {
-      setError("Vui lòng chọn dịch vụ, bác sĩ, ngày và giờ.");
+      setError(t("uiScheduling.bookingMissingSelection"));
       return;
     }
     setSubmitting(true);
@@ -307,7 +308,7 @@ export default function PublicBookingPage() {
           encodeURIComponent(result.accessToken),
       );
     } catch (e: unknown) {
-      setError(bookingErrorMessage(e, "Chưa gửi được yêu cầu. Khung giờ có thể vừa được người khác chọn."));
+      setError(bookingErrorMessage(e, t("uiScheduling.bookingSubmitFailed")));
     } finally {
       setSubmitting(false);
     }
@@ -316,7 +317,7 @@ export default function PublicBookingPage() {
   if (loading)
     return (
       <main role="status" className="mx-auto max-w-3xl p-6 text-gray-600 dark:text-surface-300">
-        Đang tải lịch khám…
+        {t("uiScheduling.bookingPageLoading")}
       </main>
     );
 
@@ -343,7 +344,7 @@ export default function PublicBookingPage() {
           )}
           {services.length === 0 ? (
             <div className="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-              {error ? "Vui lòng tải lại trang hoặc gọi trực tiếp cho lễ tân." : "Phòng khám chưa mở dịch vụ đặt lịch trực tuyến. Vui lòng gọi trực tiếp cho lễ tân."}
+              {error ? t("uiScheduling.bookingReloadOrCall") : t("uiScheduling.bookingOnlineClosed")}
             </div>
           ) : (
             <form onSubmit={submit} className="mt-6 space-y-6">
@@ -405,7 +406,7 @@ export default function PublicBookingPage() {
                       const minutes = service?.dentists.find((d) => d.id === dentistId)?.durationMinutes;
                       return minutes ? (
                         <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
-                          Thời gian khám dự kiến khoảng {minutes} phút.
+                          {t("uiScheduling.bookingEstimatedDuration", { minutes })}
                         </span>
                       ) : null;
                     })()}
@@ -454,9 +455,7 @@ export default function PublicBookingPage() {
                     </select>
                     {minLead > 0 && (
                       <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-300">
-                        {t('uiScheduling.bookingLeadTime', { lead: i18n.language.startsWith('en')
-                          ? minLead % 60 === 0 ? `${minLead / 60} hours` : `${minLead} minutes`
-                          : minLead % 60 === 0 ? `${minLead / 60} giờ` : `${minLead} phút` })}
+                        {t('uiScheduling.bookingLeadTime', { lead: leadText(minLead) })}
                         {t('uiScheduling.bookingLeadContact')}
                         {clinic.phone ? (
                           <>
