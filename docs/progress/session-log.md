@@ -25,7 +25,9 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 - Quét lại 281 lượt mở trang: không 5xx, lỗi JS, khóa thô; request 403 tới `/shifts/registrations` từ 92 → 0. 4xx còn lại là giới hạn phạm vi (bác sĩ mở bệnh nhân/hoá đơn không thuộc mình, admin không có phiếu lương).
 - Chữ tiếng Việt lộ ở giao diện tiếng Anh: 75 → 21 mẫu; 21 mẫu còn lại đều là dữ liệu (tên dịch vụ, người, vai trò, đơn thuốc, chẩn đoán, tiêu đề email) hoặc câu tóm tắt AI do backend viết.
 
-**Bước tiếp theo:** chờ CI của PR; nếu muốn tiếng Anh cho thẻ tóm tắt AI thì backend (`ai.service.ts`) phải trả mã + tham số thay vì câu tiếng Việt.
+**PR #64:** CI xanh 10/10 (gồm Playwright E2E); Codex có 1 nhận xét (select nhân sự giữ nhãn ngôn ngữ cũ) — không tái hiện được vì mọi chỗ dùng đều dịch lại nhãn lúc render, đã trả lời và đóng. Đã merge vào `main` (1d0055e) theo yêu cầu.
+
+**Bước tiếp theo:** nếu muốn tiếng Anh cho thẻ tóm tắt AI thì backend (`ai.service.ts`) phải trả mã + tham số thay vì câu tiếng Việt.
 
 **Ghi chú môi trường:** container khởi động lại thì PostgreSQL mất cấu hình `trust`; đã đặt mật khẩu `postgres` cho user `postgres` (chỉ DB thử local) và dùng trong `DATABASE_URL` của E2E.
 
