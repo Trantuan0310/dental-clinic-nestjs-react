@@ -33,9 +33,10 @@ function walk(dir){return readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isD
 for(const file of walk('src').filter(p=>/\.(ts|tsx)$/.test(p)&&!p.includes('/locales/'))) {
  const source=ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,file.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
  function visit(node) {
-  if(ts.isCallExpression(node)&&node.arguments[0]&&ts.isStringLiteral(node.arguments[0])) {
-   const key=node.arguments[0].text;
-   if(/^ui(Common|Clinical|Entry|Operations|Scheduling|Workforce)\./.test(key)) {
+  // Any string literal that is a whole key: t('ui…') calls and translatedLabels() maps alike.
+  if(ts.isStringLiteral(node)||ts.isNoSubstitutionTemplateLiteral(node)) {
+   const key=node.text;
+   if(/^ui(Common|Clinical|Entry|Operations|Scheduling|Workforce)\.[A-Za-z0-9_.]+$/.test(key)) {
     const [module,...parts]=key.split('.');
     for(const locale of ['vi','en'])if(parts.reduce((o,p)=>o?.[p],resources[module][locale])===undefined)issues.push(`${file}: missing ${locale} ${key}`);
     checked++;
