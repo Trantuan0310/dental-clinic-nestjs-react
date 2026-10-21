@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Camera, Trash2, UserRound } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { notify } from "@/components/ui/Toast";
@@ -17,6 +18,7 @@ export function DentistPhotoCard({
   dentistId: string;
   canEdit: boolean;
 }) {
+  const { t } = useTranslation();
   const { data } = useSiteMedia();
   const { uploadDentistPhoto, remove } = useMediaMutations();
   const input = useRef<HTMLInputElement>(null);
@@ -28,20 +30,20 @@ export function DentistPhotoCard({
     uploadDentistPhoto.mutate(
       { dentistId, file },
       {
-        onSuccess: () => notify.success("Đã cập nhật ảnh bác sĩ"),
+        onSuccess: () => notify.success(t("uiEntry.dentistPhotoUpdated")),
         onError: (e) =>
-          notify.error(mediaErrorMessage(e, "Không tải được ảnh")),
+          notify.error(mediaErrorMessage(e, t("uiEntry.mediaUploadError"))),
       },
     );
   };
 
   return (
-    <Card title="Ảnh trên trang chủ">
+    <Card title={t("uiEntry.dentistPhotoTitle")}>
       <div className="flex items-center gap-4">
         {photoId ? (
           <img
             src={mediaUrl(photoId)}
-            alt="Ảnh bác sĩ"
+            alt={t("uiEntry.dentistPhotoAlt")}
             className="h-24 w-24 rounded-full object-cover ring-2 ring-brand-100"
           />
         ) : (
@@ -51,8 +53,7 @@ export function DentistPhotoCard({
         )}
         <div className="space-y-2">
           <p className="text-xs text-gray-500 dark:text-surface-400">
-            Ảnh chân dung, nền sáng, mặt ở giữa. Hiện ở mục “Đội ngũ bác sĩ”
-            trên trang chủ.
+            {t("uiEntry.dentistPhotoHint")}
           </p>
           {canEdit && (
             <div className="flex flex-wrap gap-2">
@@ -61,7 +62,7 @@ export function DentistPhotoCard({
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className="hidden"
-                aria-label="Chọn ảnh bác sĩ"
+                aria-label={t("uiEntry.dentistPhotoPick")}
                 onChange={(e) => {
                   pick(e.target.files?.[0]);
                   e.target.value = "";
@@ -75,7 +76,9 @@ export function DentistPhotoCard({
                 onClick={() => input.current?.click()}
               >
                 <Camera className="h-4 w-4" />{" "}
-                {photoId ? "Đổi ảnh" : "Tải ảnh lên"}
+                {photoId
+                  ? t("uiEntry.dentistPhotoChange")
+                  : t("uiWorkforce.uploadPhoto")}
               </Button>
               {photoId && (
                 <Button
@@ -84,15 +87,15 @@ export function DentistPhotoCard({
                   disabled={busy}
                   onClick={() =>
                     remove.mutate(photoId, {
-                      onSuccess: () => notify.success("Đã xóa ảnh"),
+                      onSuccess: () => notify.success(t("uiEntry.mediaDeleted")),
                       onError: (e) =>
                         notify.error(
-                          mediaErrorMessage(e, "Không xóa được ảnh"),
+                          mediaErrorMessage(e, t("uiEntry.mediaDeleteError")),
                         ),
                     })
                   }
                 >
-                  <Trash2 className="h-4 w-4" /> Xóa ảnh
+                  <Trash2 className="h-4 w-4" /> {t("uiEntry.mediaDeletePhoto")}
                 </Button>
               )}
             </div>

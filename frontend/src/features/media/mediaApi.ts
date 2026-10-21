@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
+import { i18n } from "@/locales";
 
 /** Photos the landing page shows (GET /public/media/site). */
 export interface SiteMedia {
@@ -41,14 +42,14 @@ export async function prepareImage(
   try {
     bitmap = await createImageBitmap(file);
   } catch {
-    throw new Error("Không đọc được ảnh này. Hãy chọn ảnh JPG hoặc PNG.");
+    throw new Error(i18n.t("uiEntry.mediaReadError"));
   }
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Trình duyệt không hỗ trợ xử lý ảnh.");
+  if (!ctx) throw new Error(i18n.t("uiEntry.mediaCanvasUnsupported"));
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
@@ -56,7 +57,7 @@ export async function prepareImage(
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, "image/jpeg", 0.85),
   );
-  if (!blob) throw new Error("Không nén được ảnh.");
+  if (!blob) throw new Error(i18n.t("uiEntry.mediaCompressError"));
   return blob;
 }
 

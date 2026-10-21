@@ -2,6 +2,7 @@ import type { AxiosError } from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/lib/api';
 import { getApiErrorMessage } from '@/lib/errors';
+import { translatedLabels } from '@/locales/labels';
 import type {
   CatalogService,
   DentistServiceAssignment,
@@ -134,12 +135,12 @@ export function useCatalogMutation<TVars, TResult>(mutationFn: (vars: TVars) => 
 
 // CATALOG_VALIDATION and ASSIGNMENT_NOT_ALLOWED carry a specific Vietnamese
 // message from the backend, shown as is.
-const CODE_MESSAGE: Record<string, string> = {
-  CATALOG_CODE_TAKEN: 'Mã này đã được dùng.',
-  CATALOG_NOT_FOUND: 'Không tìm thấy dữ liệu.',
-  SPECIALTY_REQUIRED: 'Bác sĩ chưa có chuyên môn mà dịch vụ này yêu cầu.',
-  ASSIGNMENT_OVERLAP: 'Bác sĩ đã được phân công dịch vụ này trong khoảng thời gian trùng.',
-};
+const CODE_MESSAGE = translatedLabels<string>({
+  CATALOG_CODE_TAKEN: 'uiEntry.catalogErrCodeTaken',
+  CATALOG_NOT_FOUND: 'uiEntry.catalogErrNotFound',
+  SPECIALTY_REQUIRED: 'uiEntry.catalogErrSpecialtyRequired',
+  ASSIGNMENT_OVERLAP: 'uiEntry.catalogErrAssignmentOverlap',
+});
 
 export function catalogErrorMessage(error: unknown, fallback: string): string {
   const code = (error as AxiosError<{ code?: string }>)?.response?.data?.code;
