@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { clinic } from '@/config/clinic';
 
 /**
@@ -6,7 +7,10 @@ import { clinic } from '@/config/clinic';
  * page (CLINIC_* in .env.production). Empty values are left out.
  */
 export function ClinicPrintHeading() {
-  const contact = [clinic.address, clinic.phone && `ĐT: ${clinic.phone}`].filter(Boolean).join(' · ');
+  const { t } = useTranslation();
+  const contact = [clinic.address, clinic.phone && t('uiWorkforce.printPhone', { phone: clinic.phone })]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <>
       <p className="text-lg font-bold uppercase">{clinic.name}</p>

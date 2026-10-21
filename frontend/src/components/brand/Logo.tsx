@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn';
 
 export type LogoVariant = 'full' | 'icon' | 'icon-mono';
@@ -68,6 +69,7 @@ export function Logo({
   width,
   style,
 }: LogoProps) {
+  const { t } = useTranslation();
   const isIcon = variant !== 'full';
   const dims = isIcon
     ? { w: ICON_SIZE_MAP[size], h: ICON_SIZE_MAP[size] }
@@ -78,7 +80,7 @@ export function Logo({
 
   const ariaProps = decorative
     ? { 'aria-hidden': true as const }
-    : { role: 'img' as const, 'aria-label': 'GENSMILE — Nha khoa thẩm mỹ' };
+    : { role: 'img' as const, 'aria-label': t('uiWorkforce.brandLogoAlt') };
 
   // Inline mono SVG (color follows `currentColor` from CSS)
   if (inline && variant === 'icon-mono') {
@@ -111,7 +113,7 @@ export function Logo({
   return (
     <img
       src={pickFile(variant, theme)}
-      alt={decorative ? '' : 'GENSMILE — Nha khoa thẩm mỹ'}
+      alt={decorative ? '' : t('uiWorkforce.brandLogoAlt')}
       width={finalWidth}
       height={Math.round(finalHeight)}
       loading="lazy"

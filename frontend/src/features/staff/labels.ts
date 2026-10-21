@@ -1,6 +1,8 @@
 import type { AxiosError } from 'axios';
 import type { BadgeProps } from '@/components/ui';
 import { getApiErrorMessage } from '@/lib/errors';
+import { i18n } from '@/locales';
+import { translatedLabels } from '@/locales/labels';
 import type {
   BlockingAppointment,
   EmployeeType,
@@ -9,19 +11,19 @@ import type {
   PracticeStatus,
 } from './types';
 
-export const EMPLOYEE_TYPE_LABEL: Record<EmployeeType, string> = {
-  DENTIST: 'Bác sĩ',
-  ASSISTANT: 'Phụ tá',
-  RECEPTIONIST: 'Lễ tân',
-  MANAGER: 'Quản lý',
-  OTHER: 'Khác',
-};
+export const EMPLOYEE_TYPE_LABEL = translatedLabels<EmployeeType>({
+  DENTIST: 'uiWorkforce.employeeType_DENTIST',
+  ASSISTANT: 'uiWorkforce.employeeType_ASSISTANT',
+  RECEPTIONIST: 'uiWorkforce.employeeType_RECEPTIONIST',
+  MANAGER: 'uiWorkforce.employeeType_MANAGER',
+  OTHER: 'uiWorkforce.employeeType_OTHER',
+});
 
-export const EMPLOYMENT_STATUS_LABEL: Record<EmploymentStatus, string> = {
-  ACTIVE: 'Đang làm',
-  ON_LEAVE: 'Tạm nghỉ',
-  TERMINATED: 'Đã nghỉ việc',
-};
+export const EMPLOYMENT_STATUS_LABEL = translatedLabels<EmploymentStatus>({
+  ACTIVE: 'uiWorkforce.employment_ACTIVE',
+  ON_LEAVE: 'uiWorkforce.employment_ON_LEAVE',
+  TERMINATED: 'uiWorkforce.employment_TERMINATED',
+});
 
 export const EMPLOYMENT_STATUS_VARIANT: Record<EmploymentStatus, BadgeProps['variant']> = {
   ACTIVE: 'success',
@@ -29,11 +31,11 @@ export const EMPLOYMENT_STATUS_VARIANT: Record<EmploymentStatus, BadgeProps['var
   TERMINATED: 'default',
 };
 
-export const PRACTICE_STATUS_LABEL: Record<PracticeStatus, string> = {
-  ACTIVE: 'Đang hành nghề',
-  SUSPENDED: 'Tạm đình chỉ',
-  INACTIVE: 'Ngừng hành nghề',
-};
+export const PRACTICE_STATUS_LABEL = translatedLabels<PracticeStatus>({
+  ACTIVE: 'uiWorkforce.practiceLabel_ACTIVE',
+  SUSPENDED: 'uiWorkforce.practiceLabel_SUSPENDED',
+  INACTIVE: 'uiWorkforce.practiceLabel_INACTIVE',
+});
 
 export const PRACTICE_STATUS_VARIANT: Record<PracticeStatus, BadgeProps['variant']> = {
   ACTIVE: 'success',
@@ -41,25 +43,25 @@ export const PRACTICE_STATUS_VARIANT: Record<PracticeStatus, BadgeProps['variant
   INACTIVE: 'default',
 };
 
-export const GENDER_LABEL: Record<Gender, string> = {
-  MALE: 'Nam',
-  FEMALE: 'Nữ',
-  OTHER: 'Khác',
-  UNDISCLOSED: 'Không tiết lộ',
-};
+export const GENDER_LABEL = translatedLabels<Gender>({
+  MALE: 'uiWorkforce.gender_MALE',
+  FEMALE: 'uiWorkforce.gender_FEMALE',
+  OTHER: 'uiWorkforce.gender_OTHER',
+  UNDISCLOSED: 'uiWorkforce.gender_UNDISCLOSED',
+});
 
 /** Same fixed codes as the backend DTO (DENTIST_SPECIALTIES). */
-export const SPECIALTY_LABEL: Record<string, string> = {
-  TONG_QUAT: 'Nha khoa tổng quát',
-  NHA_CHU: 'Nha chu',
-  NOI_NHA: 'Nội nha',
-  CHINH_NHA: 'Chỉnh nha',
-  NHO_RANG: 'Nhổ răng / tiểu phẫu',
-  PHUC_HINH: 'Phục hình',
-  IMPLANT: 'Implant',
-  NHA_TRE_EM: 'Nha khoa trẻ em',
-  THAM_MY: 'Thẩm mỹ',
-};
+export const SPECIALTY_LABEL: Record<string, string> = translatedLabels({
+  TONG_QUAT: 'uiWorkforce.specialty_TONG_QUAT',
+  NHA_CHU: 'uiWorkforce.specialty_NHA_CHU',
+  NOI_NHA: 'uiWorkforce.specialty_NOI_NHA',
+  CHINH_NHA: 'uiWorkforce.specialty_CHINH_NHA',
+  NHO_RANG: 'uiWorkforce.specialty_NHO_RANG',
+  PHUC_HINH: 'uiWorkforce.specialty_PHUC_HINH',
+  IMPLANT: 'uiWorkforce.specialty_IMPLANT',
+  NHA_TRE_EM: 'uiWorkforce.specialty_NHA_TRE_EM',
+  THAM_MY: 'uiWorkforce.specialty_THAM_MY',
+});
 
 export const CALENDAR_COLORS = [
   '#2563EB',
@@ -72,7 +74,24 @@ export const CALENDAR_COLORS = [
   '#65A30D',
 ];
 
-export const DAY_OF_WEEK_LABEL = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const WEEKDAY_SHORT_KEYS = [
+  'uiWorkforce.weekdayShort_0',
+  'uiWorkforce.weekdayShort_1',
+  'uiWorkforce.weekdayShort_2',
+  'uiWorkforce.weekdayShort_3',
+  'uiWorkforce.weekdayShort_4',
+  'uiWorkforce.weekdayShort_5',
+  'uiWorkforce.weekdayShort_6',
+];
+
+/**
+ * Short weekday names, Sunday first (index = `Date#getDay()`). Each element is
+ * looked up when read, so indexing and `.map()` follow the UI language.
+ */
+export const DAY_OF_WEEK_LABEL: readonly string[] = WEEKDAY_SHORT_KEYS.reduce<string[]>((labels, key, index) => {
+  Object.defineProperty(labels, index, { enumerable: true, get: () => i18n.t(key) });
+  return labels;
+}, []);
 
 interface StaffErrorBody {
   code?: string;
@@ -80,20 +99,18 @@ interface StaffErrorBody {
   details?: { appointments?: BlockingAppointment[] };
 }
 
-const CODE_MESSAGE: Record<string, string> = {
-  EMPLOYEE_NOT_FOUND: 'Không tìm thấy nhân viên.',
-  DENTIST_PROFILE_NOT_FOUND: 'Không tìm thấy hồ sơ bác sĩ.',
-  DENTIST_PROFILE_NOT_ALLOWED:
-    'Chỉ nhân viên đang làm việc và đã có tài khoản mới được tạo hồ sơ bác sĩ.',
-  STAFF_LINK_CONFLICT: 'Tài khoản hoặc hồ sơ này đã được gắn với nhân viên khác.',
-  LICENSE_NUMBER_TAKEN: 'Số chứng chỉ hành nghề đã được dùng cho bác sĩ khác.',
-  DENTIST_HAS_FUTURE_APPOINTMENTS:
-    'Bác sĩ còn lịch hẹn sắp tới hoặc đang khám. Hãy chuyển, hủy hoặc hoàn tất các lịch này trước.',
-  CANNOT_REMOVE_LAST_ADMIN: 'Không thể cho nghỉ quản trị viên cuối cùng của phòng khám.',
-  EMAIL_ALREADY_EXISTS: 'Email đăng nhập đã được dùng cho tài khoản khác.',
-};
+const CODE_MESSAGE: Record<string, string> = translatedLabels({
+  EMPLOYEE_NOT_FOUND: 'uiWorkforce.staffErrorEmployeeNotFound',
+  DENTIST_PROFILE_NOT_FOUND: 'uiWorkforce.staffErrorDentistProfileNotFound',
+  DENTIST_PROFILE_NOT_ALLOWED: 'uiWorkforce.staffErrorDentistProfileNotAllowed',
+  STAFF_LINK_CONFLICT: 'uiWorkforce.staffErrorLinkConflict',
+  LICENSE_NUMBER_TAKEN: 'uiWorkforce.staffErrorLicenseTaken',
+  DENTIST_HAS_FUTURE_APPOINTMENTS: 'uiWorkforce.staffErrorDentistHasAppointments',
+  CANNOT_REMOVE_LAST_ADMIN: 'uiWorkforce.staffErrorLastAdmin',
+  EMAIL_ALREADY_EXISTS: 'uiWorkforce.staffErrorEmailTaken',
+});
 
-/** Vietnamese message for a staff API error, keyed by its business code. */
+/** Localized message for a staff API error, keyed by its business code. */
 export function staffErrorMessage(error: unknown, fallback: string): string {
   const body = (error as AxiosError<StaffErrorBody>)?.response?.data;
   if (body?.code && CODE_MESSAGE[body.code]) return CODE_MESSAGE[body.code];

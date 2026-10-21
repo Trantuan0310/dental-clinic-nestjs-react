@@ -1,4 +1,5 @@
 import { i18n } from '@/locales';
+import { translatedLabels } from '@/locales/labels';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
@@ -204,15 +205,15 @@ export function buildNavGroups(roles: RoleCode[]): NavGroupDef[] {
   return groups;
 }
 
-export const NAV_ROLE_HINT: Record<RoleCode, string> = {
-  clinic_admin: 'Quản trị viên',
-  receptionist: 'Lễ tân',
-  dentist: 'Bác sĩ',
-};
+export const NAV_ROLE_HINT = translatedLabels<RoleCode>({
+  clinic_admin: 'uiCommon.roles.clinic_admin',
+  receptionist: 'uiCommon.roles.receptionist',
+  dentist: 'uiCommon.roles.dentist',
+});
 
 export const DEFAULT_ROLES: RoleCode[] = ALL_STAFF;
 
 /** Translate display labels without changing permission/role codes. */
 export function getRoleLabel(code: string): string {
-  return i18n.t(`uiCommon.roles.${code}`, { defaultValue: NAV_ROLE_HINT[code as RoleCode] ?? code });
+  return i18n.t(`uiCommon.roles.${code}`, { defaultValue: code });
 }
