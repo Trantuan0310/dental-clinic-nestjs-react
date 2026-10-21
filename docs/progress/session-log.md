@@ -6,11 +6,28 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ## 21/10/2026
 
-### Đang làm: sửa 3 lỗi của lượt kiểm tra, rồi mở PR vào `main`
+### Sửa 3 lỗi của lượt kiểm tra (nhánh `claude/admiring-keller-933rkp`, PR vào `main`)
 
-- Xong (chưa push): lỗi 1 (`Header.tsx` chỉ tải ca chờ duyệt khi có `shift.approve`; `useShiftRegistrations` nhận `enabled`), lỗi 2 (`EncounterDetailPage.tsx` bỏ răng rỗng/0/trùng).
-- Lỗi 3 đang làm theo từng file: đã chuyển `EncounterDetailPage`, `TodayPage`, `MyQueuePage` sang khoá dịch (`uiClinical`, thêm 23 khoá). Còn: Điều phối, Ảnh trang chủ, thẻ bác sĩ, kho, sơ đồ răng và các tab phiên khám, trang đặt lịch, người dùng, lịch làm việc, chi phí.
-- Sau đó: typecheck/lint/build, `check-ui-locales`, E2E đầy đủ, quét lại (không còn 403 cho lễ tân), mở PR.
+**Đã làm:**
+
+1. Lễ tân hết 403: `Header.tsx` chỉ tải ca chờ duyệt khi có `shift.approve` (`useShiftRegistrations` nhận `enabled`).
+2. Thanh "Răng đã điều trị" bỏ răng rỗng/0/trùng (`EncounterDetailPage.tsx`).
+3. Giao diện tiếng Anh: chuyển chữ cứng sang khóa dịch ở 44 file (Điều phối, Hôm nay, Hàng đợi, phiên khám và các tab, sơ đồ răng, dịch vụ, ảnh trang chủ, kho, người dùng, nhân sự, đặt lịch công khai, lịch làm việc).
+   - Thêm `translatedLabels()` (`frontend/src/locales/labels.ts`) cho bảng mã → nhãn; `check-ui-locales.mjs` kiểm cả khóa trong các bảng này.
+   - Giữ nguyên chữ tiếng Việt (trừ tên thứ trong cảnh báo lịch làm việc: "Thứ hai"). Dữ liệu lưu vào hồ sơ không đổi.
+   - Sửa thêm: `{{unit}` trong cảnh báo kho, "N ca" ở biểu đồ nguồn doanh thu; xóa 25 khóa `uiScheduling` không dùng; test `tests/clinical-data.test.mjs` stub import locale.
+   - Drawer lịch hẹn: giữ nhãn lý do nhanh như cũ (E2E bấm "Chờ quá lâu").
+
+**Kết quả:**
+
+- frontend `typecheck`, `typecheck:e2e`, `lint`, `build`, `check-ui-locales` qua.
+- E2E trên DB mới: **90/90** (5,3 phút).
+- Quét lại 281 lượt mở trang: không 5xx, lỗi JS, khóa thô; request 403 tới `/shifts/registrations` từ 92 → 0. 4xx còn lại là giới hạn phạm vi (bác sĩ mở bệnh nhân/hoá đơn không thuộc mình, admin không có phiếu lương).
+- Chữ tiếng Việt lộ ở giao diện tiếng Anh: 75 → 21 mẫu; 21 mẫu còn lại đều là dữ liệu (tên dịch vụ, người, vai trò, đơn thuốc, chẩn đoán, tiêu đề email) hoặc câu tóm tắt AI do backend viết.
+
+**Bước tiếp theo:** chờ CI của PR; nếu muốn tiếng Anh cho thẻ tóm tắt AI thì backend (`ai.service.ts`) phải trả mã + tham số thay vì câu tiếng Việt.
+
+**Ghi chú môi trường:** container khởi động lại thì PostgreSQL mất cấu hình `trust`; đã đặt mật khẩu `postgres` cho user `postgres` (chỉ DB thử local) và dùng trong `DATABASE_URL` của E2E.
 
 ### Kiểm tra toàn bộ chức năng (`main` = f1e64ae)
 
