@@ -4,6 +4,13 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 21/10/2026
+
+### Kiểm tra phiên bản mới nhất (`main` = f1e64ae)
+
+- Không có commit mới sau khi merge PR #63. So với d8c6538 (đã kiểm tra đầy đủ ngày 20/10), chỉ khác 3 file tài liệu, nên không chạy lại test local.
+- CI của f1e64ae trên `main` đang chạy lúc kiểm tra. Cùng nội dung này đã xanh 10/10 trên PR #63.
+
 ## 20/10/2026
 
 ### Đang chờ / bước tiếp theo
