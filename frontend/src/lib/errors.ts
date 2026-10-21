@@ -1,4 +1,5 @@
 import type { AxiosError } from 'axios';
+import { i18n } from '@/locales';
 
 export interface ApiErrorBody {
   statusCode: number;
@@ -13,7 +14,7 @@ export interface ApiErrorBody {
   instance?: string;
 }
 
-export function getApiErrorMessage(error: unknown, fallback = 'Có lỗi xảy ra'): string {
+export function getApiErrorMessage(error: unknown, fallback = i18n.t('uiWorkforce.genericError')): string {
   const axiosError = error as AxiosError<ApiErrorBody>;
   const data = axiosError?.response?.data;
   if (!data) return axiosError?.message ?? fallback;

@@ -393,7 +393,7 @@ export function SourceCard({rows, isLoading, isError, onRetry}: SourceCardProps)
                 <span className="font-semibold text-gray-900 dark:text-surface-100">
                   {formatCurrency(row.revenue)}{' '}
                   <span className="text-xs font-normal text-gray-500 dark:text-surface-400">
-                    ({row.percentage.toFixed(1)}% · {row.count} ca)
+                    ({row.percentage.toFixed(1)}% · {t('uiEntry.revenueSourceCases', { count: row.count })})
                   </span>
                 </span>
               </div>

@@ -20,6 +20,14 @@ const ICONS: Record<SummaryBullet['icon'], typeof AlertTriangle> = {
   stethoscope: Stethoscope,
 };
 
+// The backend sends Vietnamese labels; show each bullet's label in the UI
+// language by its id (unknown ids keep the label the backend sent).
+const BULLET_LABEL_KEY: Record<SummaryBullet['id'], string> = {
+  allergy: 'uiClinical.allergies',
+  open: 'uiOperations.aiSummaryPending',
+  next: 'uiOperations.aiSummaryNext',
+};
+
 const ICON_BG: Record<SummaryBullet['icon'], string> = {
   alert: 'bg-rose-100 text-rose-600',
   clock: 'bg-amber-100 text-amber-600',
@@ -87,7 +95,7 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
             <button
               type="button"
               onClick={() => {
-                setRefreshTick((t) => t + 1);
+                setRefreshTick((tick) => tick + 1);
                 refetch();
               }}
               disabled={!effectivePatientId || isFetching}
@@ -137,7 +145,9 @@ export function AiSummaryCard({ patientId, patientOptions }: AiSummaryCardProps)
                     <Icon className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-surface-400">{b.label}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-surface-400">
+                      {BULLET_LABEL_KEY[b.id] ? t(BULLET_LABEL_KEY[b.id]) : b.label}
+                    </p>
                     <p className="mt-0.5 text-sm text-gray-800 dark:text-surface-200">{b.text}</p>
                     {b.basis && (
                       <p className="mt-1 text-[11px] italic text-gray-400 dark:text-surface-500">{b.basis}</p>

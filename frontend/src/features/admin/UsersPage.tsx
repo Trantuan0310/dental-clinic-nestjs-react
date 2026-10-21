@@ -33,16 +33,15 @@ import { blockingAppointments, staffErrorMessage } from '@/features/staff/labels
 import type { BlockingAppointment } from '@/features/staff/types';
 import type { AdminUser, CreateAdminUserPayload } from '@/types/admin';
 import { getRoleLabel } from '@/lib/nav';
+import { translatedLabels } from '@/locales/labels';
 
 /** Messages for the users API business codes (roles/email edits). */
-const USER_ERROR_MESSAGE: Record<string, string> = {
-  CANNOT_REMOVE_LAST_ADMIN: 'Không thể gỡ vai trò Quản trị của quản trị viên cuối cùng.',
-  EMAIL_ALREADY_EXISTS: 'Email đăng nhập đã được dùng cho tài khoản khác.',
-  DENTIST_HAS_FUTURE_APPOINTMENTS:
-    'Bác sĩ còn lịch hẹn sắp tới. Chuyển hoặc hủy các lịch này trước khi gỡ vai trò Bác sĩ.',
-  DENTIST_HAS_OPEN_ENCOUNTERS:
-    'Bác sĩ còn phiên khám đang mở. Đóng các phiên khám trước khi gỡ vai trò Bác sĩ.',
-};
+const USER_ERROR_MESSAGE: Record<string, string> = translatedLabels({
+  CANNOT_REMOVE_LAST_ADMIN: 'uiWorkforce.userErrorLastAdmin',
+  EMAIL_ALREADY_EXISTS: 'uiWorkforce.staffErrorEmailTaken',
+  DENTIST_HAS_FUTURE_APPOINTMENTS: 'uiWorkforce.userErrorDentistHasAppointments',
+  DENTIST_HAS_OPEN_ENCOUNTERS: 'uiWorkforce.userErrorDentistHasOpenEncounters',
+});
 
 function userErrorMessage(error: unknown, fallback: string): string {
   const code = getApiErrorCode(error);
@@ -131,7 +130,10 @@ export default function UsersPage() {
       const result = await sendLinkMutation.mutateAsync(user.id);
       if (result.sent) {
         notify.success(
-          `Đã gửi link ${result.kind === 'setup' ? 'thiết lập tài khoản' : 'đặt lại mật khẩu'} tới ${user.email} (hiệu lực ${result.expiresInMinutes} phút)`,
+          t(result.kind === 'setup' ? 'uiWorkforce.usersSetupLinkSent' : 'uiWorkforce.usersResetLinkSent', {
+            email: user.email,
+            minutes: result.expiresInMinutes,
+          }),
         );
       } else {
         notify.warning(t('uiWorkforce.emailNotSent'));
@@ -407,7 +409,7 @@ function CreateUserModal({
           required
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
-          placeholder="Nguyễn Văn A"
+          placeholder={t('uiScheduling.patientNameExample')}
         />
         <Select
           label={t('uiWorkforce.role')}

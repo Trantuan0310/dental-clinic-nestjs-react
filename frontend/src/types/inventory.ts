@@ -3,6 +3,8 @@
 // Source: backend API + docs/04_Database/schema-per-module/inventory.md
 // =============================================================================
 
+import { translatedLabels } from '@/locales/labels';
+
 export type InventoryCategory = 'medication' | 'material' | 'instrument' | 'implant' | 'other';
 
 // `MovementType` from Prisma enum (`backend/prisma/schema.prisma`):
@@ -22,19 +24,19 @@ export type StockMovementType =
   | 'RETURNED'
   | 'DAMAGED';
 
-/** Vietnamese display label for a stock-movement type. */
-export const STOCK_MOVEMENT_TYPE_LABEL: Record<StockMovementType, string> = {
-  STOCK_IN: 'Nhập kho',
-  STOCK_OUT: 'Xuất kho',
-  ADJUSTMENT: 'Kiểm kê',
-  ENCOUNTER_REF: 'Sử dụng trong điều trị',
-  WRITE_OFF: 'Xuất hủy',
-  TRANSFER: 'Chuyển kho',
-  EXPIRED: 'Hết hạn',
-  INITIAL: 'Tồn ban đầu',
-  RETURNED: 'Khách trả',
-  DAMAGED: 'Hư hỏng',
-};
+/** Display label for a stock-movement type, in the current UI language. */
+export const STOCK_MOVEMENT_TYPE_LABEL = translatedLabels<StockMovementType>({
+  STOCK_IN: 'uiOperations.stockIn',
+  STOCK_OUT: 'uiOperations.stockOut',
+  ADJUSTMENT: 'uiOperations.stockAdjustment',
+  ENCOUNTER_REF: 'uiOperations.stockMovementEncounter',
+  WRITE_OFF: 'uiOperations.stockMovementWriteOff',
+  TRANSFER: 'uiOperations.stockMovementTransfer',
+  EXPIRED: 'uiOperations.stockMovementExpired',
+  INITIAL: 'uiOperations.stockMovementInitial',
+  RETURNED: 'uiOperations.stockMovementReturned',
+  DAMAGED: 'uiOperations.stockMovementDamaged',
+});
 
 export function stockMovementLabel(type: string): string {
   return STOCK_MOVEMENT_TYPE_LABEL[type as StockMovementType] ?? type;

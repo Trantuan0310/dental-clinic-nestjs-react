@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format, parseISO } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { enUS, vi } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Play, ArrowRight, AlertCircle } from 'lucide-react';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { useStartEncounter } from '@/features/appointments/appointmentApi';
@@ -20,6 +21,8 @@ import { useNavigate } from 'react-router-dom';
 import { formatTimeOnly } from '@/lib/format';
 
 export default function TodayPage() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'vi' ? vi : enUS;
   const navigate = useNavigate();
   // null = follow the clinic's today, so a page left open overnight moves
   // to the new day; the arrows pick a fixed date.
@@ -47,7 +50,7 @@ export default function TodayPage() {
       const updated = await startEncounter.mutateAsync(appointmentId);
       navigate(`/encounters/${updated.encounterId}`);
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể bắt đầu khám'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.startEncounterError')));
     }
   };
 
@@ -75,20 +78,20 @@ export default function TodayPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
-            Hôm nay — {format(currentDate, 'EEEE, dd/MM/yyyy', { locale: vi })}
+            {t('uiClinical.todayTitle', { date: format(currentDate, 'EEEE, dd/MM/yyyy', { locale: dateLocale }) })}
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
-            Lịch làm việc hôm nay của bạn
+            {t('uiClinical.todaySubtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" aria-label="Ngày trước" onClick={() => goToDay(-1)}>
+          <Button variant="ghost" size="sm" aria-label={t('uiClinical.previousDay')} onClick={() => goToDay(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={() => setPickedDay(null)}>
-            Hôm nay
+            {t('uiScheduling.today')}
           </Button>
-          <Button variant="ghost" size="sm" aria-label="Ngày sau" onClick={() => goToDay(1)}>
+          <Button variant="ghost" size="sm" aria-label={t('uiClinical.nextDay')} onClick={() => goToDay(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -101,7 +104,7 @@ export default function TodayPage() {
             <p className="text-3xl font-bold text-gray-900 dark:text-surface-100">
               {isLoading || isError ? '—' : appointments.length}
             </p>
-            <p className="text-sm text-gray-500 dark:text-surface-400">Tổng lịch hẹn</p>
+            <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.todayTotal')}</p>
           </div>
         </Card>
         <Card>
@@ -109,7 +112,7 @@ export default function TodayPage() {
             <p className="text-3xl font-bold text-amber-600">
               {isLoading || isError ? '—' : checkedIn.length}
             </p>
-            <p className="text-sm text-gray-500 dark:text-surface-400">Chờ / đang khám</p>
+            <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.todayWaitingOrInProgress')}</p>
           </div>
         </Card>
         <Card>
@@ -117,24 +120,24 @@ export default function TodayPage() {
             <p className="text-3xl font-bold text-green-600">
               {isLoading || isError ? '—' : completed.length}
             </p>
-            <p className="text-sm text-gray-500 dark:text-surface-400">Đã hoàn thành</p>
+            <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.todayCompleted')}</p>
           </div>
         </Card>
       </div>
 
       {/* Appointments List */}
-      <Card title="Lịch hẹn hôm nay">
+      <Card title={t('uiClinical.todayAppointments')}>
         {isLoading ? (
           <FormSkeleton rows={4} columns={3} />
         ) : isError ? (
           <EmptyState
             icon={<AlertCircle className="h-10 w-10 text-red-400" />}
-            title="Không thể tải lịch hẹn"
-            description="Vui lòng kiểm tra quyền truy cập hoặc kết nối rồi thử lại."
-            action={{ label: 'Thử lại', onClick: () => refetch() }}
+            title={t('uiScheduling.cannotLoadAppointments')}
+            description={t('uiClinical.loadErrorCheckAccess')}
+            action={{ label: t('uiClinical.retry'), onClick: () => refetch() }}
           />
         ) : appointments.length === 0 ? (
-          <p className="text-center py-8 text-gray-500 dark:text-surface-400">Không có lịch hẹn nào hôm nay</p>
+          <p className="text-center py-8 text-gray-500 dark:text-surface-400">{t('uiClinical.todayNoAppointments')}</p>
         ) : (
           <div className="space-y-3">
             {[...appointments]
@@ -153,13 +156,13 @@ export default function TodayPage() {
                             {formatTimeOnly(apt.startsAt)}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-surface-400">
-                            {apt.durationMinutes} phút
+                            {t('uiScheduling.minutesValue', { count: apt.durationMinutes })}
                           </p>
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
                             {isCurrent && (
-                              <span className="font-medium text-brand-600 dark:text-brand-300">ĐANG KHÁM</span>
+                              <span className="font-medium text-brand-600 dark:text-brand-300">{t('uiClinical.inProgressCaps')}</span>
                             )}
                             <p className="font-medium text-gray-900 dark:text-surface-100">{apt.patientName}</p>
                           </div>
@@ -168,11 +171,11 @@ export default function TodayPage() {
                           )}
                           {apt.chiefComplaint && (
                             <p className="mt-1 text-sm text-gray-600 dark:text-surface-300">
-                              <span className="font-medium">Lý do:</span> {apt.chiefComplaint}
+                              <span className="font-medium">{t('uiScheduling.reason')}:</span> {apt.chiefComplaint}
                             </p>
                           )}
                           <p className="mt-1 text-sm text-gray-400 dark:text-surface-400">
-                            Check-in: {apt.checkInAt ? formatTimeOnly(apt.checkInAt) : 'Chưa check-in'}
+                            Check-in: {apt.checkInAt ? formatTimeOnly(apt.checkInAt) : t('uiClinical.notCheckedIn')}
                           </p>
                         </div>
                       </div>
@@ -192,7 +195,7 @@ export default function TodayPage() {
                               isLoading={startEncounter.isPending && startEncounter.variables === apt.id}
                             >
                               <Play className="h-4 w-4" />
-                              Bắt đầu khám
+                              {t('uiClinical.startExam')}
                             </Button>
                           </PermissionGuard>
                         )}
@@ -201,7 +204,7 @@ export default function TodayPage() {
                             size="sm"
                             onClick={() => navigate(`/encounters/${apt.encounterId}`)}
                           >
-                            Tiếp tục khám
+                            {t('uiClinical.continueExam')}
                             <ArrowRight className="h-4 w-4" />
                           </Button>
                         )}
@@ -211,7 +214,7 @@ export default function TodayPage() {
                             size="sm"
                             onClick={() => navigate(`/encounters/${apt.encounterId}`)}
                           >
-                            Xem chi tiết
+                            {t('uiEntry.dashboard.viewDetails')}
                           </Button>
                         )}
                       </div>
@@ -230,16 +233,16 @@ export default function TodayPage() {
           if (confirmStart) void handleStart(confirmStart.id);
           setConfirmStart(null);
         }}
-        title="Bắt đầu khám?"
+        title={t('uiClinical.startExamConfirmTitle')}
         description={
           confirmStart && (
             <>
-              Mở phiên khám cho <strong>{confirmStart.name}</strong> ({confirmStart.code}). Kiểm tra đúng người
-              trước khi bắt đầu.
+              {t('uiClinical.startExamConfirmFor')} <strong>{confirmStart.name}</strong>{' '}
+              {t('uiClinical.startExamConfirmCheck', { code: confirmStart.code })}
             </>
           )
         }
-        confirmLabel="Bắt đầu khám"
+        confirmLabel={t('uiClinical.startExam')}
       />
     </div>
   );

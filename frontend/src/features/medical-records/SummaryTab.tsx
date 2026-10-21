@@ -26,7 +26,7 @@ export function SummaryTab({ encounter, onClose, isClosing }: SummaryTabProps) {
   const chiefComplaint = notes.find((n) => n.type === 'chief_complaint');
   const diagnosis = notes.find((n) => n.type === 'diagnosis');
 
-  const totalTreatmentCost = treatments.reduce((sum, t) => sum + (t.total ?? 0), 0);
+  const totalTreatmentCost = treatments.reduce((sum, line) => sum + (line.total ?? 0), 0);
 
   const allChecked = checkboxes.checked && checkboxes.explained && checkboxes.prescription;
 
@@ -114,7 +114,7 @@ export function SummaryTab({ encounter, onClose, isClosing }: SummaryTabProps) {
             className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
           />
           <span className="text-sm text-gray-700">
-            {t('uiClinical.patient')} đã được giải thích về tình trạng và kế hoạch điều trị
+            {t('uiClinical.patientExplained')}
           </span>
         </label>
         <label className="flex items-start gap-3">
@@ -125,7 +125,7 @@ export function SummaryTab({ encounter, onClose, isClosing }: SummaryTabProps) {
             className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
           />
           <span className="text-sm text-gray-700">
-            {t('uiClinical.prescriptions')} đã được in/giao cho bệnh nhân
+            {t('uiClinical.prescriptionDelivered')}
           </span>
         </label>
       </div>

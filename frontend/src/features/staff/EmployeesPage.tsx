@@ -534,7 +534,7 @@ export default function EmployeesPage() {
               {isLoading ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-gray-400">
-                    Đang tải…
+                    {t('uiCommon.table.loading')}
                   </td>
                 </tr>
               ) : isError ? (

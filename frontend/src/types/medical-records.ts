@@ -3,6 +3,9 @@
 // Source: backend API + docs/03_Specification/MedicalRecords/SPEC.md
 // =============================================================================
 
+import { i18n } from '@/locales';
+import { translatedLabels } from '@/locales/labels';
+
 export type EncounterStatus = 'in_progress' | 'completed' | 'cancelled';
 export type NoteType = 'chief_complaint' | 'diagnosis' | 'treatment_plan' | 'progress_note' | 'other';
 export type ToothSurface =
@@ -272,15 +275,15 @@ export interface DentalChartPutPayload {
   teeth: Record<string, ToothEntry>;
 }
 
-export const TOOTH_STATUS_LABEL: Record<ToothStatus, string> = {
-  healthy: 'Bình thường',
-  cavity: 'Sâu răng',
-  filled: 'Đã hàn',
-  crowned: 'Bọc mão',
-  missing: 'Đã nhổ',
-  implant: 'Implant',
-  extraction_needed: 'Cần nhổ',
-};
+export const TOOTH_STATUS_LABEL = translatedLabels<ToothStatus>({
+  healthy: 'uiClinical.toothHealthy',
+  cavity: 'uiClinical.toothCavity',
+  filled: 'uiClinical.toothFilled',
+  crowned: 'uiClinical.toothCrowned',
+  missing: 'uiClinical.toothMissing',
+  implant: 'uiClinical.toothImplant',
+  extraction_needed: 'uiClinical.toothExtractionNeeded',
+});
 
 export const TOOTH_STATUS_SEMANTIC: Record<ToothStatus, 'healthy' | 'attention' | 'severe'> = {
   healthy: 'healthy',
@@ -328,23 +331,33 @@ function makeTooth(
   arch: ToothArch,
   side: ToothSide,
   quadrant: ToothQuadrant,
-  name: string,
+  nameKey: string,
 ): ToothDescriptor {
-  return { number, fdi: String(number), name, arch, side, quadrant };
+  return {
+    number,
+    fdi: String(number),
+    // Looked up when read, so the name follows the current UI language.
+    get name() {
+      return i18n.t(nameKey, { number });
+    },
+    arch,
+    side,
+    quadrant,
+  };
 }
 
 export const ADULT_TEETH: ToothDescriptor[] = [
-  ...UPPER_RIGHT.map((n) => makeTooth(n, 'upper', 'right', 'Q1', `Răng ${n}`)),
-  ...UPPER_LEFT.map((n) => makeTooth(n, 'upper', 'left', 'Q2', `Răng ${n}`)),
-  ...LOWER_LEFT.map((n) => makeTooth(n, 'lower', 'left', 'Q3', `Răng ${n}`)),
-  ...LOWER_RIGHT.map((n) => makeTooth(n, 'lower', 'right', 'Q4', `Răng ${n}`)),
+  ...UPPER_RIGHT.map((n) => makeTooth(n, 'upper', 'right', 'Q1', 'uiClinical.toothName')),
+  ...UPPER_LEFT.map((n) => makeTooth(n, 'upper', 'left', 'Q2', 'uiClinical.toothName')),
+  ...LOWER_LEFT.map((n) => makeTooth(n, 'lower', 'left', 'Q3', 'uiClinical.toothName')),
+  ...LOWER_RIGHT.map((n) => makeTooth(n, 'lower', 'right', 'Q4', 'uiClinical.toothName')),
 ];
 
 export const PRIMARY_TEETH: ToothDescriptor[] = [
-  ...PRIMARY_UPPER_RIGHT.map((n) => makeTooth(n, 'upper', 'right', 'Q1', `Răng sữa ${n}`)),
-  ...PRIMARY_UPPER_LEFT.map((n) => makeTooth(n, 'upper', 'left', 'Q2', `Răng sữa ${n}`)),
-  ...PRIMARY_LOWER_LEFT.map((n) => makeTooth(n, 'lower', 'left', 'Q3', `Răng sữa ${n}`)),
-  ...PRIMARY_LOWER_RIGHT.map((n) => makeTooth(n, 'lower', 'right', 'Q4', `Răng sữa ${n}`)),
+  ...PRIMARY_UPPER_RIGHT.map((n) => makeTooth(n, 'upper', 'right', 'Q1', 'uiClinical.primaryToothName')),
+  ...PRIMARY_UPPER_LEFT.map((n) => makeTooth(n, 'upper', 'left', 'Q2', 'uiClinical.primaryToothName')),
+  ...PRIMARY_LOWER_LEFT.map((n) => makeTooth(n, 'lower', 'left', 'Q3', 'uiClinical.primaryToothName')),
+  ...PRIMARY_LOWER_RIGHT.map((n) => makeTooth(n, 'lower', 'right', 'Q4', 'uiClinical.primaryToothName')),
 ];
 
 export type DentalChartPatientType = 'ADULT' | 'CHILD';

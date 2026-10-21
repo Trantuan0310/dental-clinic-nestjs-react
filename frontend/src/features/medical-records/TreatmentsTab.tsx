@@ -123,7 +123,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       resetForm();
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể thêm dịch vụ'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.serviceAddError')));
     },
   });
 
@@ -135,7 +135,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       setEditingTreatment(null);
     },
     onError: (err) => {
-      notify.error(getApiErrorMessage(err, 'Không thể cập nhật dịch vụ'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.serviceUpdateError')));
     },
   });
 
@@ -147,7 +147,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     },
     onError: (err) => {
       setConfirmDelete(null);
-      notify.error(getApiErrorMessage(err, 'Không thể xoá dịch vụ'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.serviceDeleteError')));
     },
   });
 
@@ -182,7 +182,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const handleSubmit = () => {
     // Mirrors the backend DTO: permanent 11–48 or primary 51–85 (FDI).
     if (toothNumber.trim() !== '' && !isValidFdiToothNumber(Number(toothNumber.trim()))) {
-      notify.error('Số răng không hợp lệ (FDI: 11–48 răng vĩnh viễn, 51–85 răng sữa).');
+      notify.error(t('uiClinical.invalidToothNumber'));
       return;
     }
     if (editingTreatment) {
@@ -216,7 +216,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   };
 
   const treatments = encounter.treatments || [];
-  const totalTreatment = treatments.reduce((sum, t) => sum + (t.total ?? 0), 0);
+  const totalTreatment = treatments.reduce((sum, line) => sum + (line.total ?? 0), 0);
   const canWrite = useAuthStore((s) => s.hasPermission('treatment.write'));
   const ownScope = useIsOwnEncounterScope(encounter);
   const isEditable = encounter.status === 'in_progress' && canWrite && ownScope;
@@ -236,14 +236,14 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         Object.entries(treatmentsByTooth).map(([tooth, toothTreatments]) => (
           <div key={tooth} className="rounded-lg border border-gray-200 p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h4 className="font-medium text-gray-900">{tooth ? `Răng ${tooth}` : 'Toàn hàm / Chung'}</h4>
+              <h4 className="font-medium text-gray-900">{tooth ? t('uiClinical.toothName', { number: tooth }) : t('uiClinical.treatmentWholeMouth')}</h4>
               {onViewToothDetail && tooth && (
                 <button
                   type="button"
                   onClick={() => onViewToothDetail(Number(tooth))}
                   className="text-xs text-primary-700 hover:underline"
                 >
-                  Xem lịch sử răng →
+                  {t('uiClinical.viewToothHistory')} →
                 </button>
               )}
             </div>
@@ -261,8 +261,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                     </p>
                     {treatment.listPrice != null && treatment.listPrice !== treatment.unitPrice && (
                       <p className="text-xs text-amber-700">
-                        Giá đã chốt {formatCurrency(treatment.listPrice)}
-                        {treatment.priceReason ? ` • Lý do: ${treatment.priceReason}` : ''}
+                        {t('uiClinical.lockedPriceHint', { price: formatCurrency(treatment.listPrice) })}
+                        {treatment.priceReason ? ` • ${t('uiClinical.treatmentPriceReason', { reason: treatment.priceReason })}` : ''}
                       </p>
                     )}
                     {treatment.notes && (
@@ -336,7 +336,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                 const snapshot = sv && bookedVisit?.services?.find((b) => b.serviceId === sv.serviceId);
                 setPriceNote(
                   sv && snapshot && snapshot.price !== sv.price
-                    ? `Giá lúc đặt lịch hẹn ${formatCurrency(snapshot.price)}; giá hiện hành ${formatCurrency(sv.price)}.`
+                    ? t('uiClinical.priceAtBooking', { booked: formatCurrency(snapshot.price), current: formatCurrency(sv.price) })
                     : '',
                 );
                 if (sv) {
@@ -349,7 +349,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                 { value: '', label: t('uiClinical.manualEntry') },
                 ...pickable.map((sv) => ({
                   value: sv.serviceId,
-                  label: `${sv.name} (${sv.code})${sv.offCatalog ? ' — theo lịch hẹn, đã ngừng/không còn phân công' : ''}`,
+                  label: `${sv.name} (${sv.code})${sv.offCatalog ? ` — ${t('uiClinical.serviceOffCatalog')}` : ''}`,
                 })),
               ]}
             />
@@ -375,8 +375,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
               step={1000}
               hint={
                 priceLocked
-                  ? `Theo giá đã chốt ${formatCurrency(listPrice!)}`
-                  : priceNote || (listPrice !== null ? `Giá đã chốt ${formatCurrency(listPrice)}` : undefined)
+                  ? t('uiClinical.priceLockedHint', { price: formatCurrency(listPrice!) })
+                  : priceNote || (listPrice !== null ? t('uiClinical.lockedPriceHint', { price: formatCurrency(listPrice) }) : undefined)
               }
               disabled={priceLocked}
               value={unitPrice}
@@ -417,7 +417,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                     placeholder={t('uiClinical.selectSupply')}
                     options={inventoryItems.map((item) => ({
                       value: item.id,
-                      label: `${item.name} (còn ${item.quantityOnHand} ${item.unit})`,
+                      label: t('uiClinical.supplyOption', { name: item.name, quantity: item.quantityOnHand, unit: item.unit }),
                       disabled: item.quantityOnHand <= 0,
                     }))}
                   />
@@ -468,7 +468,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={resetForm}>
-              Hủy
+              {t('uiClinical.cancel')}
             </Button>
             <Button
               onClick={handleSubmit}

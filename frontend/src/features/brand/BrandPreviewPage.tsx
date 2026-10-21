@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Logo } from '@/components/brand';
 
 /**
@@ -7,6 +8,7 @@ import { Logo } from '@/components/brand';
  * Ưu tiên: chỉ dành cho designer / dev review. KHÔNG ship ngoài dev mode.
  */
 export default function BrandPreviewPage() {
+  const { t } = useTranslation();
   const variants = ['full', 'icon', 'icon-mono'] as const;
   const sizes = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
 
@@ -14,9 +16,7 @@ export default function BrandPreviewPage() {
     <div className="mx-auto max-w-5xl space-y-12 p-8">
       <header>
         <h1 className="text-3xl font-bold text-brand-700">GENSMILE — Brand Preview</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Trang preview nội bộ để kiểm tra variants logo và color tokens.
-        </p>
+        <p className="mt-2 text-sm text-gray-600">{t('uiEntry.brandPreviewIntro')}</p>
       </header>
 
       <section>

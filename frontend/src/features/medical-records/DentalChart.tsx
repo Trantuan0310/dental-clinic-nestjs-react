@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn';
 import {
   ADULT_TEETH,
@@ -58,17 +59,18 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
   },
   ref,
 ) {
-  const upper = useMemo(() => ADULT_TEETH.filter((t) => t.arch === 'upper'), []);
-  const lower = useMemo(() => ADULT_TEETH.filter((t) => t.arch === 'lower'), []);
+  const { t } = useTranslation();
+  const upper = useMemo(() => ADULT_TEETH.filter((tooth) => tooth.arch === 'upper'), []);
+  const lower = useMemo(() => ADULT_TEETH.filter((tooth) => tooth.arch === 'lower'), []);
   const isChild = patientType === 'CHILD';
   // Mixed dentition lasts past the CHILD band (~13 y): an ADULT chart still
   // shows the primary teeth already recorded, so they are not lost.
   const primaryUpper = useMemo(
-    () => PRIMARY_TEETH.filter((t) => t.arch === 'upper' && (isChild || !!teeth[String(t.number)])),
+    () => PRIMARY_TEETH.filter((tooth) => tooth.arch === 'upper' && (isChild || !!teeth[String(tooth.number)])),
     [isChild, teeth],
   );
   const primaryLower = useMemo(
-    () => PRIMARY_TEETH.filter((t) => t.arch === 'lower' && (isChild || !!teeth[String(t.number)])),
+    () => PRIMARY_TEETH.filter((tooth) => tooth.arch === 'lower' && (isChild || !!teeth[String(tooth.number)])),
     [isChild, teeth],
   );
   const showPrimaryUpper = primaryUpper.length > 0;
@@ -92,21 +94,21 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
     registerToothRef?.(fdi, el);
   };
 
-  const renderCell = (t: ToothDescriptor) => {
-    const entry = teeth[String(t.number)];
+  const renderCell = (tooth: ToothDescriptor) => {
+    const entry = teeth[String(tooth.number)];
     const status: ToothStatus = entry?.status ?? 'healthy';
     const palette = toothStatusColor(status);
-    const selected = highlightSet.has(t.number);
-    const fdi = String(t.number);
+    const selected = highlightSet.has(tooth.number);
+    const fdi = String(tooth.number);
     const isFilteredOut = filterEnabled && !filterEnabled.has(status);
     const isDimmed = (dimFdis && !dimFdis.has(fdi)) || isFilteredOut;
     return (
       <button
         ref={handleRef(fdi)}
         type="button"
-        key={t.number}
+        key={tooth.number}
         disabled={readOnly || !onToothClick}
-        onClick={() => onToothClick?.(t)}
+        onClick={() => onToothClick?.(tooth)}
         data-fdi={fdi}
         data-status={status}
         data-highlighted={selected || undefined}
@@ -121,17 +123,17 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
           !readOnly && onToothClick && 'cursor-pointer hover:scale-105 hover:shadow',
           readOnly && 'cursor-default',
         )}
-        title={`${t.name} — ${TOOTH_STATUS_LABEL[status]}${entry?.notes ? ` (${entry.notes})` : ''}`}
-        aria-label={`${t.name}, ${TOOTH_STATUS_LABEL[status]}`}
+        title={`${tooth.name} — ${TOOTH_STATUS_LABEL[status]}${entry?.notes ? ` (${entry.notes})` : ''}`}
+        aria-label={`${tooth.name}, ${TOOTH_STATUS_LABEL[status]}`}
       >
-        <span className="font-mono font-semibold leading-none">{t.fdi}</span>
+        <span className="font-mono font-semibold leading-none">{tooth.fdi}</span>
       </button>
     );
   };
 
   const renderArch = (arch: ToothDescriptor[]) => (
     <div className="flex w-max min-w-full justify-center gap-1.5">
-      {arch.map((t) => renderCell(t))}
+      {arch.map((tooth) => renderCell(tooth))}
     </div>
   );
 
@@ -142,7 +144,7 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
-        <span className="font-semibold text-gray-700">Chú thích:</span>
+        <span className="font-semibold text-gray-700">{t('uiClinical.chartLegend')}</span>
         {TOOTH_STATUSES.map((s) => {
           const palette = toothStatusColor(s);
           return (
@@ -158,11 +160,11 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
         <div className="min-w-max">
           <div>
             <div className={cn('mb-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
-              Hàm trên
+              {t('uiClinical.upperJaw')}
             </div>
-            {showPrimaryUpper && renderSubLabel('Răng vĩnh viễn')}
+            {showPrimaryUpper && renderSubLabel(t('uiClinical.permanentTeeth'))}
             {renderArch(upper)}
-            {showPrimaryUpper && renderSubLabel('Răng sữa')}
+            {showPrimaryUpper && renderSubLabel(t('uiClinical.primaryTeeth'))}
             {showPrimaryUpper && renderArch(primaryUpper)}
           </div>
 
@@ -170,11 +172,11 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
 
           <div>
             {showPrimaryLower && renderArch(primaryLower)}
-            {showPrimaryLower && renderSubLabel('Răng sữa')}
+            {showPrimaryLower && renderSubLabel(t('uiClinical.primaryTeeth'))}
             {renderArch(lower)}
-            {showPrimaryLower && renderSubLabel('Răng vĩnh viễn')}
+            {showPrimaryLower && renderSubLabel(t('uiClinical.permanentTeeth'))}
             <div className={cn('mt-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
-              Hàm dưới
+              {t('uiClinical.lowerJaw')}
             </div>
           </div>
         </div>
@@ -182,9 +184,9 @@ export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(funct
 
       {!readOnly && (
         <p className="mt-1 text-center text-[11px] text-gray-400">
-          Chạm vào răng để cập nhật tình trạng • {TOOTH_STATUSES.length} trạng thái
+          {t('uiClinical.toothTapInstructions', { count: TOOTH_STATUSES.length })}
         </p>
       )}
     </div>
   );
-});
+});

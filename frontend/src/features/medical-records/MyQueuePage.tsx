@@ -10,6 +10,7 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { QueueList } from '@/features/dispatch/QueueList';
 import { useQueue } from '@/features/dispatch/dispatchApi';
+import { useTranslation } from 'react-i18next';
 
 /**
  * The dentist's queue (ADR-0009 phase 6): patients waiting in dispatch
@@ -18,6 +19,7 @@ import { useQueue } from '@/features/dispatch/dispatchApi';
  * already running are listed below to resume.
  */
 export default function MyQueuePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const startEncounter = useStartEncounter();
   const today = clinicToday();
@@ -45,7 +47,7 @@ export default function MyQueuePage() {
       const updated = await startEncounter.mutateAsync(appointmentId);
       navigate(`/encounters/${updated.encounterId}`);
     } catch (err) {
-      notify.error(getApiErrorMessage(err, 'Không thể bắt đầu khám'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.startEncounterError')));
     }
   };
 
@@ -53,14 +55,14 @@ export default function MyQueuePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Hàng đợi của tôi</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('uiClinical.myQueue')}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Thứ tự: cấp cứu trước, rồi theo giờ hẹn — đến trễ xếp sau 15 phút, vãng lai chờ tối đa khoảng 45 phút
+            {t('uiClinical.queuePriority')}
           </p>
         </div>
         <Button variant="outline" onClick={() => void refetch()} isLoading={isFetching}>
           <RefreshCw className="h-4 w-4" />
-          Làm mới
+          {t('uiEntry.dashboard.refresh')}
         </Button>
       </div>
 
@@ -68,10 +70,10 @@ export default function MyQueuePage() {
         <Card>
           <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-rose-700">
             <AlertTriangle className="h-4 w-4" />
-            Ca khám chưa kết thúc từ ngày trước
+            {t('uiClinical.unfinishedEncounters')}
           </h2>
           <p className="mb-2 text-xs text-gray-500">
-            Hãy mở lại để hoàn tất hoặc hủy lượt khám — hệ thống không tự đóng bệnh án.
+            {t('uiClinical.unfinishedEncountersHelp')}
           </p>
           <ul className="space-y-2">
             {unfinished.map((apt) => (
@@ -84,7 +86,7 @@ export default function MyQueuePage() {
                 </span>
                 <Button size="sm" variant="outline" onClick={() => navigate(`/encounters/${apt.encounterId}`)}>
                   <Stethoscope className="h-4 w-4" />
-                  Mở ca khám
+                  {t('uiClinical.openEncounter')}
                 </Button>
               </li>
             ))}
@@ -94,14 +96,14 @@ export default function MyQueuePage() {
 
       {inProgress.length > 0 && (
         <Card>
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Đang khám</h2>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">{t('uiCommon.status.in_progress')}</h2>
           <ul className="space-y-2">
             {inProgress.map((apt) => (
               <li key={apt.id} className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 p-3">
                 <span className="font-medium text-gray-900">{apt.patientName}</span>
                 <Button size="sm" onClick={() => navigate(`/encounters/${apt.encounterId}`)}>
                   <Stethoscope className="h-4 w-4" />
-                  Tiếp tục khám
+                  {t('uiClinical.continueExam')}
                 </Button>
               </li>
             ))}
@@ -114,15 +116,15 @@ export default function MyQueuePage() {
           <FormSkeleton rows={3} />
         ) : isError ? (
           <EmptyState
-            title="Không thể tải hàng đợi"
-            description="Vui lòng kiểm tra kết nối hoặc quyền truy cập rồi thử lại."
-            action={{ label: 'Thử lại', onClick: () => void refetch() }}
+            title={t('uiClinical.queueLoadError')}
+            description={t('uiClinical.loadErrorCheckAccess')}
+            action={{ label: t('uiClinical.retry'), onClick: () => void refetch() }}
           />
         ) : queue.length === 0 ? (
           <EmptyState
             icon={<div className="text-4xl">📋</div>}
-            title="Không có bệnh nhân nào đang chờ"
-            description="Hàng đợi trống. Các bệnh nhân đã check-in sẽ xuất hiện ở đây."
+            title={t('uiClinical.noWaitingPatients')}
+            description={t('uiClinical.queueEmpty')}
           />
         ) : (
           <QueueList
@@ -135,7 +137,7 @@ export default function MyQueuePage() {
       </Card>
 
       {queue.length > 0 && (
-        <p className="text-center text-sm text-gray-500">Hàng đợi tự động làm mới mỗi 20 giây</p>
+        <p className="text-center text-sm text-gray-500">{t('uiClinical.queueRefresh')}</p>
       )}
     </div>
   );

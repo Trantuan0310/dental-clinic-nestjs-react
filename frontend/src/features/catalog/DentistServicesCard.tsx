@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import { Badge, Button, Card, DatePicker, Input, Modal, Select } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -34,6 +35,7 @@ export function DentistServicesCard({
   /** The dentist's practice is ACTIVE (assignments need it). */
   canAssign: boolean;
 }) {
+  const { t } = useTranslation();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const mayManage = hasPermission('dentist.assign_service');
   const { data: rows = [], isLoading } = useDentistServices(dentistId);
@@ -88,7 +90,7 @@ export function DentistServicesCard({
   const earliestStart = (serviceId: string) =>
     rows.some((r) => r.service.id === serviceId && r.effectiveTo === today) ? tomorrow : today;
   const assignMin = form.serviceId ? earliestStart(form.serviceId) : today;
-  const FREE_PRICE_WARNING = 'Dịch vụ này đánh dấu miễn phí; giá riêng > 0 sẽ hiện trên bảng giá trang chủ';
+  const FREE_PRICE_WARNING = t('uiEntry.dentistSvcFreePriceWarning');
   const assignFree = services.find((s) => s.id === form.serviceId)?.isFree ?? false;
 
   const openAssign = () => {
@@ -98,19 +100,19 @@ export function DentistServicesCard({
 
   return (
     <Card
-      title="Dịch vụ thực hiện"
+      title={t('uiEntry.dentistSvcTitle')}
       actions={
         mayManage && canAssign ? (
           <Button size="sm" onClick={openAssign}>
-            <Plus className="h-4 w-4" /> Phân công
+            <Plus className="h-4 w-4" /> {t('uiEntry.dentistSvcAssign')}
           </Button>
         ) : undefined
       }
     >
       {isLoading ? (
-        <p className="text-sm text-gray-400">Đang tải…</p>
+        <p className="text-sm text-gray-400">{t('uiCommon.table.loading')}</p>
       ) : active.length === 0 ? (
-        <p className="text-sm text-gray-500">Chưa được phân công dịch vụ nào.</p>
+        <p className="text-sm text-gray-500">{t('uiEntry.dentistSvcNone')}</p>
       ) : (
         <ul className="divide-y divide-gray-100 text-sm dark:divide-surface-800">
           {active.map((r) => (
@@ -121,21 +123,22 @@ export function DentistServicesCard({
                   <span className="text-xs font-normal text-gray-500">· {r.service.categoryName}</span>
                 </p>
                 <p className="text-xs text-gray-500">
-                  {r.effectiveDurationMin} phút{r.durationMin !== null && ' (riêng)'} ·{' '}
+                  {t('uiScheduling.minutesValue', { count: r.effectiveDurationMin })}
+                  {r.durationMin !== null && ` ${t('uiEntry.dentistSvcCustom')}`} ·{' '}
                   {formatCurrency(r.effectivePrice)}
-                  {r.price !== null && ' (riêng)'}
-                  {r.service.isFree && r.effectivePrice > 0 && ' (dịch vụ đánh dấu miễn phí!)'} · từ{' '}
-                  {formatDate(r.effectiveFrom)}
-                  {r.effectiveTo && ` đến ${formatDate(r.effectiveTo)}`}
+                  {r.price !== null && ` ${t('uiEntry.dentistSvcCustom')}`}
+                  {r.service.isFree && r.effectivePrice > 0 && ` ${t('uiEntry.dentistSvcMarkedFree')}`} ·{' '}
+                  {t('uiEntry.dentistSvcFrom', { date: formatDate(r.effectiveFrom) })}
+                  {r.effectiveTo && ` ${t('uiEntry.dentistSvcUntil', { date: formatDate(r.effectiveTo) })}`}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {!r.current && <Badge variant="info">Sắp áp dụng</Badge>}
+                {!r.current && <Badge variant="info">{t('uiScheduling.schedulePhase_upcoming')}</Badge>}
                 {mayManage && r.service.isActive && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label={`Đổi giá/thời lượng ${r.service.name}`}
+                    aria-label={t('uiEntry.dentistSvcChangeTermsNamed', { name: r.service.name })}
                     onClick={() =>
                       setChanging({
                         row: r,
@@ -145,17 +148,17 @@ export function DentistServicesCard({
                       })
                     }
                   >
-                    Đổi giá/thời lượng
+                    {t('uiEntry.dentistSvcChangeTerms')}
                   </Button>
                 )}
                 {mayManage && !r.effectiveTo && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label={`Ngừng phân công ${r.service.name}`}
+                    aria-label={t('uiEntry.dentistSvcEndNamed', { name: r.service.name })}
                     onClick={() => setEnding({ row: r, effectiveTo: later(today, r.effectiveFrom) })}
                   >
-                    Ngừng
+                    {t('uiWorkforce.discontinue')}
                   </Button>
                 )}
               </div>
@@ -170,14 +173,14 @@ export function DentistServicesCard({
             className="text-xs text-gray-500 underline"
             onClick={() => setShowHistory((v) => !v)}
           >
-            {showHistory ? 'Ẩn' : 'Xem'} lịch sử ({past.length})
+            {t(showHistory ? 'uiEntry.dentistSvcHideHistory' : 'uiEntry.dentistSvcShowHistory', { count: past.length })}
           </button>
           {showHistory && (
             <ul className="mt-2 space-y-1 text-xs text-gray-500">
               {past.map((r) => (
                 <li key={r.id}>
                   {r.service.name}: {formatDate(r.effectiveFrom)} – {formatDate(r.effectiveTo)} ·{' '}
-                  {r.effectiveDurationMin} phút · {formatCurrency(r.effectivePrice)}
+                  {t('uiScheduling.minutesValue', { count: r.effectiveDurationMin })} · {formatCurrency(r.effectivePrice)}
                 </li>
               ))}
             </ul>
@@ -185,23 +188,23 @@ export function DentistServicesCard({
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Phân công dịch vụ">
+      <Modal open={open} onClose={() => setOpen(false)} title={t('uiWorkforce.assignServices')}>
         <form
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             assign.mutate(undefined, {
               onSuccess: () => {
-                notify.success('Đã phân công dịch vụ');
+                notify.success(t('uiEntry.dentistSvcAssigned'));
                 setOpen(false);
                 setForm({ serviceId: '', effectiveFrom: today, durationMin: '', price: '' });
               },
-              onError: (err) => notify.error(catalogErrorMessage(err, 'Không phân công được')),
+              onError: (err) => notify.error(catalogErrorMessage(err, t('uiEntry.dentistSvcAssignError'))),
             });
           }}
         >
           <Select
-            label="Dịch vụ"
+            label={t('uiScheduling.service')}
             required
             value={form.serviceId}
             onChange={(e) =>
@@ -211,48 +214,48 @@ export function DentistServicesCard({
                 effectiveFrom: later(form.effectiveFrom, earliestStart(e.target.value)),
               })
             }
-            placeholder="-- Chọn dịch vụ --"
+            placeholder={t('uiEntry.dentistSvcSelectPlaceholder')}
             options={selectable.map((s) => ({
               value: s.id,
-              label: `${s.name} (${s.defaultDurationMin} phút · ${formatCurrency(s.basePrice)})`,
+              label: `${s.name} (${t('uiScheduling.minutesValue', { count: s.defaultDurationMin })} · ${formatCurrency(s.basePrice)})`,
             }))}
           />
           <DatePicker
-            label="Áp dụng từ"
+            label={t('uiEntry.dentistSvcEffectiveFrom')}
             required
             min={assignMin}
-            hint={assignMin === tomorrow ? 'Phân công cũ kết thúc hôm nay, nên phân công lại từ ngày mai' : undefined}
+            hint={assignMin === tomorrow ? t('uiEntry.dentistSvcRestartTomorrow') : undefined}
             value={form.effectiveFrom}
             onChange={(value) => setForm({ ...form, effectiveFrom: value })}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
-              label="Thời lượng riêng (phút)"
+              label={t('uiEntry.dentistSvcCustomDuration')}
               type="number"
               min={5}
               max={480}
               step={5}
-              hint="Để trống: theo dịch vụ"
+              hint={t('uiEntry.dentistSvcDurationHint')}
               value={form.durationMin}
               onChange={(e) => setForm({ ...form, durationMin: e.target.value })}
             />
             <Input
-              label="Giá riêng (VND)"
+              label={t('uiEntry.dentistSvcCustomPrice')}
               type="number"
               min={0}
               max={999_999_999_999_999}
               step={1000}
-              hint={assignFree && Number(form.price) > 0 ? FREE_PRICE_WARNING : 'Để trống: giá niêm yết'}
+              hint={assignFree && Number(form.price) > 0 ? FREE_PRICE_WARNING : t('uiEntry.dentistSvcPriceHint')}
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Hủy
+              {t('uiCommon.dialog.cancel')}
             </Button>
             <Button type="submit" isLoading={assign.isPending}>
-              Phân công
+              {t('uiEntry.dentistSvcAssign')}
             </Button>
           </div>
         </form>
@@ -261,7 +264,7 @@ export function DentistServicesCard({
       <Modal
         open={!!changing}
         onClose={() => setChanging(null)}
-        title={changing ? `Đổi giá/thời lượng: ${changing.row.service.name}` : ''}
+        title={changing ? t('uiEntry.dentistSvcChangeTermsTitle', { name: changing.row.service.name }) : ''}
       >
         {changing && (
           <form
@@ -277,26 +280,20 @@ export function DentistServicesCard({
                 },
                 {
                   onSuccess: (res) => {
-                    notify.success(`Đã đổi, áp dụng từ ${formatDate(changing.effectiveFrom)}`);
+                    notify.success(t('uiEntry.dentistSvcChanged', { date: formatDate(changing.effectiveFrom) }));
                     // Booked visits froze their price and length at booking.
                     if (res.affectedAppointments > 0)
-                      notify.warning(
-                        `${res.affectedAppointments} lịch hẹn đã đặt từ ngày này vẫn giữ giá và thời lượng lúc đặt ` +
-                          '(hệ thống không đổi dịch vụ hay giá của lịch đã đặt). Muốn áp mức mới cho một lịch thì hủy và đặt lại lịch đó.',
-                      );
+                      notify.warning(t('uiEntry.dentistSvcChangedBooked', { count: res.affectedAppointments }));
                     setChanging(null);
                   },
-                  onError: (err) => notify.error(catalogErrorMessage(err, 'Không đổi được')),
+                  onError: (err) => notify.error(catalogErrorMessage(err, t('uiEntry.dentistSvcChangeError'))),
                 },
               );
             }}
           >
-            <p className="text-sm text-gray-600 dark:text-surface-300">
-              Lịch hẹn đã đặt giữ giá lúc đặt. Phân công hiện tại kết thúc ngày trước ngày áp dụng và một phân công
-              mới bắt đầu từ ngày áp dụng.
-            </p>
+            <p className="text-sm text-gray-600 dark:text-surface-300">{t('uiEntry.dentistSvcChangeNote')}</p>
             <DatePicker
-              label="Áp dụng từ"
+              label={t('uiEntry.dentistSvcEffectiveFrom')}
               required
               min={later(today, changing.row.effectiveFrom)}
               max={changing.row.effectiveTo ?? undefined}
@@ -305,17 +302,17 @@ export function DentistServicesCard({
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
-                label="Thời lượng riêng (phút)"
+                label={t('uiEntry.dentistSvcCustomDuration')}
                 type="number"
                 min={5}
                 max={480}
                 step={5}
-                hint="Để trống: theo dịch vụ"
+                hint={t('uiEntry.dentistSvcDurationHint')}
                 value={changing.durationMin}
                 onChange={(e) => setChanging({ ...changing, durationMin: e.target.value })}
               />
               <Input
-                label="Giá riêng (VND)"
+                label={t('uiEntry.dentistSvcCustomPrice')}
                 type="number"
                 min={0}
                 max={999_999_999_999_999}
@@ -323,7 +320,7 @@ export function DentistServicesCard({
                 hint={
                   changing.row.service.isFree && Number(changing.price) > 0
                     ? FREE_PRICE_WARNING
-                    : 'Để trống: giá niêm yết'
+                    : t('uiEntry.dentistSvcPriceHint')
                 }
                 value={changing.price}
                 onChange={(e) => setChanging({ ...changing, price: e.target.value })}
@@ -331,10 +328,10 @@ export function DentistServicesCard({
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setChanging(null)}>
-                Hủy
+                {t('uiCommon.dialog.cancel')}
               </Button>
               <Button type="submit" isLoading={change.isPending}>
-                Lưu thay đổi
+                {t('uiScheduling.saveChanges')}
               </Button>
             </div>
           </form>
@@ -344,7 +341,7 @@ export function DentistServicesCard({
       <Modal
         open={!!ending}
         onClose={() => setEnding(null)}
-        title={ending ? `Ngừng phân công: ${ending.row.service.name}` : ''}
+        title={ending ? t('uiEntry.dentistSvcEndTitle', { name: ending.row.service.name }) : ''}
       >
         {ending && (
           <form
@@ -357,13 +354,11 @@ export function DentistServicesCard({
                   onSuccess: (res) => {
                     notify.success(
                       res.removed
-                        ? 'Đã hủy phân công chưa bắt đầu'
-                        : `Phân công kết thúc ngày ${formatDate(ending.effectiveTo)}`,
+                        ? t('uiEntry.dentistSvcRemoved')
+                        : t('uiEntry.dentistSvcEndsOn', { date: formatDate(ending.effectiveTo) }),
                     );
                     if (res.affectedAppointments > 0)
-                      notify.warning(
-                        `Còn ${res.affectedAppointments} lịch hẹn đã đặt với dịch vụ này; lễ tân cần dời lịch, đổi bác sĩ hoặc báo khách.`,
-                      );
+                      notify.warning(t('uiEntry.dentistSvcEndedBooked', { count: res.affectedAppointments }));
                     setEnding(null);
                   },
                   onError: (err) => {
@@ -374,7 +369,7 @@ export function DentistServicesCard({
                         return;
                       }
                     }
-                    notify.error(catalogErrorMessage(err, 'Không ngừng được phân công'));
+                    notify.error(catalogErrorMessage(err, t('uiEntry.dentistSvcEndError')));
                   },
                 },
               );
@@ -382,14 +377,14 @@ export function DentistServicesCard({
           >
             {ending.row.effectiveFrom > today ? (
               <p className="text-sm text-gray-600 dark:text-surface-300">
-                Phân công này chưa bắt đầu (từ {formatDate(ending.row.effectiveFrom)}) nên sẽ bị hủy.
+                {t('uiEntry.dentistSvcNotStarted', { date: formatDate(ending.row.effectiveFrom) })}
               </p>
             ) : (
               <DatePicker
-                label="Ngày cuối thực hiện"
+                label={t('uiEntry.dentistSvcLastDay')}
                 required
                 min={today}
-                hint="Để đổi giá hoặc thời lượng, dùng “Đổi giá/thời lượng” thay vì ngừng rồi phân công lại"
+                hint={t('uiEntry.dentistSvcLastDayHint')}
                 value={ending.effectiveTo}
                 onChange={(value) => setEnding({ ...ending, effectiveTo: value, booked: undefined })}
               />
@@ -397,7 +392,7 @@ export function DentistServicesCard({
             {ending.booked && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                 <p className="font-medium">
-                  Còn {ending.booked.count} lịch hẹn đã đặt với dịch vụ này sau ngày kết thúc:
+                  {t('uiEntry.dentistSvcBookedAfterEnd', { count: ending.booked.count })}
                 </p>
                 <ul className="mt-1 list-disc pl-5">
                   {ending.booked.appointments.map((a) => (
@@ -406,20 +401,22 @@ export function DentistServicesCard({
                     </li>
                   ))}
                   {ending.booked.count > ending.booked.appointments.length && (
-                    <li>… và {ending.booked.count - ending.booked.appointments.length} lịch khác</li>
+                    <li>
+                      {t('uiEntry.dentistSvcMoreBooked', {
+                        count: ending.booked.count - ending.booked.appointments.length,
+                      })}
+                    </li>
                   )}
                 </ul>
-                <p className="mt-1">
-                  Nên dời lịch hoặc đổi bác sĩ cho các lịch này trước. Nếu vẫn ngừng, lễ tân cần xử lý từng lịch.
-                </p>
+                <p className="mt-1">{t('uiEntry.dentistSvcBookedAdvice')}</p>
               </div>
             )}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setEnding(null)}>
-                Hủy
+                {t('uiCommon.dialog.cancel')}
               </Button>
               <Button type="submit" variant="danger" isLoading={end.isPending}>
-                {ending.booked ? 'Vẫn ngừng phân công' : 'Ngừng phân công'}
+                {ending.booked ? t('uiEntry.dentistSvcEndAnyway') : t('uiEntry.dentistSvcEnd')}
               </Button>
             </div>
           </form>

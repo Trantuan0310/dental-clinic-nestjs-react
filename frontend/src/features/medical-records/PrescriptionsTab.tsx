@@ -54,7 +54,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
         setAllergyConflicts(details?.conflicts ?? []);
         return;
       }
-      notify.error(getApiErrorMessage(err, 'Không thể lưu đơn thuốc'));
+      notify.error(getApiErrorMessage(err, t('uiClinical.prescriptionSaveError')));
     },
   });
 
@@ -150,21 +150,21 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
               <ClinicPrintHeading />
               <p className="text-sm">{t('uiClinical.prescriptionTitle')}</p>
               <p className="mt-2 text-left text-sm">
-                Bệnh nhân: <strong>{encounter.patientName}</strong> ({encounter.patientCode})
+                {t('uiClinical.patient')}: <strong>{encounter.patientName}</strong> ({encounter.patientCode})
               </p>
             </div>
             <div className="flex items-start justify-between">
               <div>
                 {prescription.diagnosis && (
-                  <p className="font-medium text-gray-900">Chẩn đoán: {prescription.diagnosis}</p>
+                  <p className="font-medium text-gray-900">{t('uiClinical.diagnosis')}: {prescription.diagnosis}</p>
                 )}
-                <p className="text-sm text-gray-500">Kê bởi: {prescription.prescribedByUserName}</p>
+                <p className="text-sm text-gray-500">{t('uiClinical.prescribedBy', { name: prescription.prescribedByUserName })}</p>
               </div>
               <div className="no-print flex items-center gap-1">
                 {isEditable && (
                   <Button variant="outline" size="sm" onClick={() => openEdit(prescription)}>
                     <Pencil className="h-4 w-4" />
-                    Sửa đơn
+                    {t('uiClinical.prescriptionEditShort')}
                   </Button>
                 )}
                 <button
@@ -196,10 +196,10 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                       <td className="py-2">{item.dosage}</td>
                       <td className="py-2">{item.frequency}</td>
                       <td className="py-2">
-                        {item.quantity ? `${item.quantity} ${item.unit || 'viên'}` : '-'}
+                        {item.quantity ? `${item.quantity} ${item.unit || t('uiClinical.dosageUnit')}` : '-'}
                       </td>
                       <td className="py-2">
-                        {item.durationDays ? `${item.durationDays} ngày` : '-'}
+                        {item.durationDays ? t('uiClinical.prescriptionDays', { count: item.durationDays }) : '-'}
                       </td>
                     </tr>
                   ))}
@@ -228,7 +228,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
       {isEditable && prescriptions.length === 0 && (
         <Button onClick={() => setShowAddModal(true)}>
           <Plus className="h-4 w-4" />
-          Tạo đơn thuốc
+          {t('uiClinical.prescriptionCreate')}
         </Button>
       )}
 
@@ -244,12 +244,12 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             label={t('uiClinical.diagnosisLabel')}
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
-            placeholder="VD: Viêm quanh răng"
+            placeholder={t('uiClinical.diagnosisExample')}
           />
 
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700">
-              Thuốc
+              {t('uiClinical.medication')}
             </label>
             {items.map((item, index) => (
               <div key={index} className="mb-3 rounded border border-gray-200 p-3">
@@ -259,21 +259,21 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                     value={item.drugName}
                     maxLength={255}
                     onChange={(e) => updateItem(index, 'drugName', e.target.value)}
-                    placeholder="VD: Amoxicillin 500mg"
+                    placeholder={t('uiClinical.drugNameExample')}
                   />
                   <Input
                     label={t('uiClinical.dose')}
                     value={item.dosage}
                     maxLength={100}
                     onChange={(e) => updateItem(index, 'dosage', e.target.value)}
-                    placeholder="VD: 500mg"
+                    placeholder={t('uiClinical.doseExample')}
                   />
                   <Input
                     label={t('uiClinical.frequency')}
                     value={item.frequency}
                     maxLength={100}
                     onChange={(e) => updateItem(index, 'frequency', e.target.value)}
-                    placeholder="VD: 3 lần/ngày"
+                    placeholder={t('uiClinical.frequencyExample')}
                   />
                   <div className="grid grid-cols-3 gap-2">
                     <Input
@@ -292,7 +292,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                       value={item.unit || ''}
                       maxLength={50}
                       onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                      placeholder="viên"
+                      placeholder={t('uiClinical.dosageUnit')}
                     />
                     <Input
                       label={t('uiClinical.days')}
@@ -311,14 +311,14 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
                     onClick={() => removeItem(index)}
                     className="text-sm text-red-600 hover:text-red-700"
                   >
-                    Xóa
+                    {t('uiClinical.delete')}
                   </button>
                 </div>
               </div>
             ))}
             <Button variant="outline" size="sm" onClick={addItem}>
               <Plus className="h-4 w-4" />
-              Thêm thuốc
+              {t('uiClinical.addDrug')}
             </Button>
           </div>
 
@@ -326,7 +326,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             label={t('uiClinical.instructions')}
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
-            placeholder="VD: Uống sau ăn..."
+            placeholder={t('uiClinical.instructionsExample')}
             rows={2}
           />
 
@@ -334,12 +334,12 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             label={t('uiClinical.followUpNote')}
             value={followUpNote}
             onChange={(e) => setFollowUpNote(e.target.value)}
-            placeholder="VD: Sau 1 tuần nếu không giảm"
+            placeholder={t('uiClinical.followUpExample')}
           />
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={resetForm}>
-              Hủy
+              {t('uiClinical.cancel')}
             </Button>
             <Button
               onClick={() => handleSubmit()}
@@ -370,7 +370,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {(allergyConflicts ?? []).map((c, i) => (
                 <li key={`${c.lineIndex}-${c.allergy}-${i}`}>
-                  <strong>{c.drugName}</strong> — dị ứng: <strong>{c.allergy}</strong>
+                  <strong>{c.drugName}</strong> — {t('uiClinical.allergyLabel')} <strong>{c.allergy}</strong>
                   {c.drugClass ? ` (${c.drugClass})` : ''}
                 </li>
               ))}
@@ -380,7 +380,7 @@ export function PrescriptionsTab({ encounter }: PrescriptionsTabProps) {
             label={t('uiClinical.keepPrescriptionReasonLabel')}
             value={overrideReason}
             onChange={(e) => setOverrideReason(e.target.value)}
-            placeholder="VD: Đã test da âm tính, bệnh nhân đồng ý và được theo dõi"
+            placeholder={t('uiClinical.overrideReasonExample')}
             rows={3}
             hint={t('uiClinical.minAuditHint', { count: MIN_OVERRIDE_REASON })}
           />

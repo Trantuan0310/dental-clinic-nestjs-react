@@ -1,7 +1,19 @@
 import { clinic } from '@/config/clinic';
+import { i18n } from '@/locales';
 import type { TimeBlock } from '@/types/schedule';
 
-export const DAY_LABELS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+const WEEKDAY_KEYS = [
+  'uiScheduling.weekday0',
+  'uiScheduling.weekday1',
+  'uiScheduling.weekday2',
+  'uiScheduling.weekday3',
+  'uiScheduling.weekday4',
+  'uiScheduling.weekday5',
+  'uiScheduling.weekday6',
+];
+
+/** Weekday name in the UI language (0 = Sunday), read when called. */
+export const dayLabel = (dayOfWeek: number) => i18n.t(WEEKDAY_KEYS[dayOfWeek]);
 
 const toMinutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 
@@ -21,15 +33,22 @@ export function blockError(blocks: TimeBlock[]): string | null {
   const sorted = [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime));
   for (const [i, b] of sorted.entries()) {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b.startTime) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(b.endTime)) {
-      return 'Nhập đủ giờ bắt đầu và kết thúc (HH:mm)';
+      return i18n.t('uiScheduling.scheduleBlockTimeIncomplete');
     }
     if ((toMinutes(b.startTime) % 5 !== 0) || (toMinutes(b.endTime) % 5 !== 0 && b.endTime !== '23:59')) {
-      return 'Phút phải là bội số của 5 (VD 08:05, 13:30)';
+      return i18n.t('uiScheduling.scheduleBlockMinuteStep');
     }
-    if (b.endTime <= b.startTime) return `Khung ${b.startTime}–${b.endTime}: giờ kết thúc phải sau giờ bắt đầu`;
+    if (b.endTime <= b.startTime) {
+      return i18n.t('uiScheduling.scheduleBlockEndBeforeStart', { start: b.startTime, end: b.endTime });
+    }
     const prev = sorted[i - 1];
     if (prev && b.startTime < prev.endTime) {
-      return `Khung ${prev.startTime}–${prev.endTime} và ${b.startTime}–${b.endTime} chồng nhau`;
+      return i18n.t('uiScheduling.scheduleBlocksOverlap', {
+        firstStart: prev.startTime,
+        firstEnd: prev.endTime,
+        secondStart: b.startTime,
+        secondEnd: b.endTime,
+      });
     }
   }
   return null;
@@ -44,7 +63,7 @@ export function openingHoursWarnings(days: number[], blocks: TimeBlock[]): strin
   for (const day of [...days].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))) {
     const open = openingBlocks(day);
     if (open.length === 0) {
-      warnings.push(`${DAY_LABELS[day]}: phòng khám không mở cửa theo giờ đã cấu hình`);
+      warnings.push(i18n.t('uiScheduling.scheduleDayClinicClosed', { day: dayLabel(day) }));
       continue;
     }
     const outside = blocks.filter(
@@ -52,9 +71,11 @@ export function openingHoursWarnings(days: number[], blocks: TimeBlock[]): strin
     );
     if (outside.length) {
       warnings.push(
-        `${DAY_LABELS[day]}: ${outside.map((b) => `${b.startTime}–${b.endTime}`).join(', ')} nằm ngoài giờ mở cửa (${open
-          .map((o) => `${o.startTime}–${o.endTime}`)
-          .join(', ')})`,
+        i18n.t('uiScheduling.scheduleDayOutsideHours', {
+          day: dayLabel(day),
+          blocks: outside.map((b) => `${b.startTime}–${b.endTime}`).join(', '),
+          hours: open.map((o) => `${o.startTime}–${o.endTime}`).join(', '),
+        }),
       );
     }
   }

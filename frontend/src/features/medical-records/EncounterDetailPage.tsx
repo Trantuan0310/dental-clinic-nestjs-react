@@ -25,10 +25,11 @@ import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/authStore';
 import { useIsOwnEncounterScope } from './encounterUtils';
 import { useTranslation } from 'react-i18next';
+import { i18n } from '@/locales';
 
 /** Close failures (thiếu kho, thiếu giá…) carry a Vietnamese server message. */
 function notifyCloseError(err: unknown) {
-  notify.error(getApiErrorMessage(err, 'Không thể đóng phiên khám'));
+  notify.error(getApiErrorMessage(err, i18n.t('uiClinical.encounterCloseError')));
 }
 
 // Tabs are heavy (rich-text editor, dental chart canvas, etc.) — only the
@@ -60,12 +61,17 @@ const SummaryTab = lazy(() =>
 
 const MIN_OVERRIDE_REASON = 10;
 
-const TabFallback = (
-  <div className="flex items-center justify-center py-8 text-sm text-gray-500 dark:text-surface-400">
-    <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-    <span className="ml-2">Đang tải…</span>
-  </div>
-);
+function TabLoading() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center py-8 text-sm text-gray-500 dark:text-surface-400">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+      <span className="ml-2">{t('uiClinical.encounterLoad')}</span>
+    </div>
+  );
+}
+
+const TabFallback = <TabLoading />;
 
 export default function EncounterDetailPage() {
   const { t } = useTranslation();
@@ -122,9 +128,9 @@ export default function EncounterDetailPage() {
       setCancelReason('');
       queryClient.invalidateQueries({ queryKey: ['encounter', id] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      notify.success('Đã hủy phiên khám — bệnh nhân quay lại hàng chờ (nếu trong ngày)');
+      notify.success(t('uiClinical.encounterCancelled'));
     },
-    onError: (err) => notify.error(getApiErrorMessage(err, 'Không hủy được phiên khám')),
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiClinical.encounterCancelError'))),
   });
   const dismissCloseConflicts = () => {
     setCloseConflicts(null);
@@ -152,7 +158,7 @@ export default function EncounterDetailPage() {
       <div className="text-center py-10">
         <p className="text-gray-500 dark:text-surface-400">{t('uiClinical.encounterNotFound')}</p>
         <Button variant="outline" className="mt-3" onClick={() => navigate(-1)}>
-          Quay lại
+          {t('common.back')}
         </Button>
       </div>
     );
@@ -164,9 +170,14 @@ export default function EncounterDetailPage() {
     (Date.now() - new Date(encounter.startedAt).getTime()) / 60000,
   );
 
-  const treatmentToothNumbers = (encounter.treatments ?? []).map((t) =>
-    typeof t.toothNumber === 'number' ? t.toothNumber : Number(t.toothNumber),
-  );
+  // A treatment without a tooth (scaling, a check-up) comes back as '' — not tooth 0.
+  const treatmentToothNumbers = [
+    ...new Set(
+      (encounter.treatments ?? [])
+        .map((tr) => Number(tr.toothNumber))
+        .filter((n) => Number.isInteger(n) && n > 0),
+    ),
+  ];
 
   return (
     <div className="space-y-4">
@@ -224,7 +235,7 @@ export default function EncounterDetailPage() {
         footer={
           <>
             <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelMutation.isPending}>
-              Không hủy
+              {t('uiClinical.doNotCancel')}
             </Button>
             <Button
               variant="danger"
@@ -232,32 +243,25 @@ export default function EncounterDetailPage() {
               disabled={cancelReason.trim().length < 10}
               onClick={() => cancelMutation.mutate(cancelReason.trim())}
             >
-              Hủy phiên khám
+              {t('uiClinical.cancelEncounter')}
             </Button>
           </>
         }
       >
         <div className="space-y-3 text-sm text-gray-600 dark:text-surface-300">
-          <p>
-            Dùng khi bắt đầu khám nhầm bệnh nhân hoặc nhầm lượt. Bệnh nhân quay lại hàng chờ (lịch trong ngày); sau
-            đó có thể hoàn tác check-in nếu check-in nhầm. Bác sĩ chỉ tự hủy được khi phiên chưa có điều trị hay đơn
-            thuốc — nếu đã có, xóa phần nhập nhầm trước hoặc nhờ quản trị viên.
-          </p>
+          <p>{t('uiClinical.cancelEncounterHelp')}</p>
           <Textarea
-            label="Lý do (ít nhất 10 ký tự)"
+            label={t('uiClinical.encounterCancelReasonLabel')}
             rows={2}
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}
-            placeholder="VD: Bắt đầu khám nhầm bệnh nhân"
+            placeholder={t('uiClinical.cancelEncounterExample')}
           />
         </div>
       </Modal>
 
       {encounter.status === 'in_progress' && encounter.reopenedFromCancel && (
-        <Alert type="warning">
-          Phiên khám này được mở lại sau khi hủy — kiểm tra và xóa điều trị/đơn thuốc không còn
-          đúng trước khi đóng phiên.
-        </Alert>
+        <Alert type="warning">{t('uiClinical.reopenedEncounterWarning')}</Alert>
       )}
 
       {/* Patient Info */}
@@ -276,7 +280,7 @@ export default function EncounterDetailPage() {
           </div>
           {encounter.chiefComplaint && (
             <div className="min-w-0 break-words text-sm text-gray-600 dark:text-surface-300">
-              <span className="font-medium">Lý do khám:</span> {encounter.chiefComplaint}
+              <span className="font-medium">{t('uiClinical.reasonForVisit')}:</span> {encounter.chiefComplaint}
             </div>
           )}
         </div>
@@ -389,7 +393,7 @@ export default function EncounterDetailPage() {
       {treatmentToothNumbers.length > 0 && activeTab !== 'chart' && (
         <Card noPadding className="p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-gray-700 dark:text-surface-200">Răng đã điều trị:</span>
+            <span className="font-medium text-gray-700 dark:text-surface-200">{t('uiClinical.treatedTeeth')}</span>
             {treatmentToothNumbers.map((n) => (
               <button
                 key={n}
@@ -403,7 +407,7 @@ export default function EncounterDetailPage() {
                 {n}
               </button>
             ))}
-            <span className="text-xs text-gray-400">Click để nhảy nhanh tới sơ đồ răng.</span>
+            <span className="text-xs text-gray-400">{t('uiClinical.encounterJumpHint')}</span>
           </div>
         </Card>
       )}

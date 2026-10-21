@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
+import { i18n } from '@/locales';
 import type {
   ClinicalNote,
   ClinicalNoteAddendum,
@@ -211,7 +212,7 @@ export function useAddTreatment(encounterId: string) {
       if (ctx?.previous) {
         qc.setQueryData(mrKeys.detail(encounterId), ctx.previous);
       }
-      notify.error(getApiErrorMessage(err, 'Không thể thêm điều trị'));
+      notify.error(getApiErrorMessage(err, i18n.t('uiClinical.treatmentAddError')));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: mrKeys.detail(encounterId) });
@@ -251,7 +252,7 @@ export function useUpdateTreatment(encounterId: string) {
       if (ctx?.previous) {
         qc.setQueryData(mrKeys.detail(encounterId), ctx.previous);
       }
-      notify.error(getApiErrorMessage(err, 'Không thể cập nhật điều trị'));
+      notify.error(getApiErrorMessage(err, i18n.t('uiClinical.treatmentUpdateError')));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: mrKeys.detail(encounterId) });
@@ -280,7 +281,7 @@ export function useDeleteTreatment(encounterId: string) {
       if (ctx?.previous) {
         qc.setQueryData(mrKeys.detail(encounterId), ctx.previous);
       }
-      notify.error(getApiErrorMessage(err, 'Không thể xóa điều trị'));
+      notify.error(getApiErrorMessage(err, i18n.t('uiClinical.treatmentDeleteError')));
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: mrKeys.detail(encounterId) });

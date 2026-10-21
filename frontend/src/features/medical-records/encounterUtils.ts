@@ -1,5 +1,6 @@
 import { TOOTH_STATUS_LABEL, type Encounter } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
+import { i18n } from '@/locales';
 
 export type CloseBlocker = string;
 
@@ -15,11 +16,13 @@ export function validateClose(enc: Encounter): CloseBlocker[] {
   );
   const hasTreatment = (enc.treatments?.length ?? 0) > 0;
   if (!hasNote && !hasTreatment) {
-    blockers.push('Encounter phải có ít nhất ghi chú lâm sàng HOẶC điều trị (BR-MR-022).');
+    blockers.push(i18n.t('uiClinical.closeBlockerNoContent'));
   }
-  for (const t of enc.treatments ?? []) {
-    if (!t.priceCents || t.priceCents <= 0) {
-      blockers.push(`Điều trị "${t.treatmentName}" (răng ${t.toothNumber}) chưa có giá (BR-MR-025).`);
+  for (const line of enc.treatments ?? []) {
+    if (!line.priceCents || line.priceCents <= 0) {
+      blockers.push(
+        i18n.t('uiClinical.closeBlockerNoPrice', { name: line.treatmentName, tooth: line.toothNumber }),
+      );
     }
   }
   return blockers;

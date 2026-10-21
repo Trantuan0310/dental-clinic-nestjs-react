@@ -27,11 +27,8 @@ import {
 } from './catalogApi';
 import type { CatalogService, ServiceCategory, ServiceImpact, ServicePayload } from './types';
 
-const DURATION_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 45, 60, 75, 90, 120, 150, 180, 240].map((m) => ({
-  value: String(m),
-  label: `${m} phút`,
-}));
-const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30, 45, 60].map((m) => ({ value: String(m), label: `${m} phút` }));
+const DURATION_MINUTES = [5, 10, 15, 20, 25, 30, 40, 45, 60, 75, 90, 120, 150, 180, 240];
+const BUFFER_MINUTES = [0, 5, 10, 15, 20, 30, 45, 60];
 
 function ServiceForm({
   service,
@@ -47,6 +44,10 @@ function ServiceForm({
   onSubmit: (payload: ServicePayload) => void;
 }) {
   const { t } = useTranslation();
+  const minuteOptions = (values: number[]) =>
+    values.map((m) => ({ value: String(m), label: t('uiScheduling.minutesValue', { count: m }) }));
+  const durationOptions = minuteOptions(DURATION_MINUTES);
+  const bufferOptions = minuteOptions(BUFFER_MINUTES);
   const [form, setForm] = useState({
     code: service?.code ?? '',
     categoryId: service?.category.id ?? categories.find((c) => c.isActive)?.id ?? '',
@@ -90,7 +91,7 @@ function ServiceForm({
           required
           disabled={!!service}
           pattern="[A-Za-z0-9][A-Za-z0-9_\-]{1,29}"
-          hint={service ? 'Không đổi được mã' : 'VD: CAO_VOI (chữ, số, _ hoặc -)'}
+          hint={service ? t('uiEntry.catalogCodeLocked') : t('uiEntry.catalogCodeHint', { example: 'CAO_VOI' })}
           value={form.code}
           onChange={(e) => setForm({ ...form, code: e.target.value })}
         />
@@ -117,19 +118,19 @@ function ServiceForm({
           label={t('uiWorkforce.duration')}
           value={form.defaultDurationMin}
           onChange={(e) => setForm({ ...form, defaultDurationMin: e.target.value })}
-          options={DURATION_OPTIONS}
+          options={durationOptions}
         />
         <Select
           label={t('uiWorkforce.preparationTime')}
           value={form.bufferBeforeMin}
           onChange={(e) => setForm({ ...form, bufferBeforeMin: e.target.value })}
-          options={BUFFER_OPTIONS}
+          options={bufferOptions}
         />
         <Select
           label={t('uiWorkforce.cleanupTime')}
           value={form.bufferAfterMin}
           onChange={(e) => setForm({ ...form, bufferAfterMin: e.target.value })}
-          options={BUFFER_OPTIONS}
+          options={bufferOptions}
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -144,7 +145,7 @@ function ServiceForm({
             disabled={form.isFree}
             hint={
               !form.isFree && form.basePrice !== '' && Number(form.basePrice) === 0
-                ? 'Giá 0 hiện "Liên hệ" trên trang chủ; chọn "Dịch vụ miễn phí" nếu miễn phí thật'
+                ? t('uiEntry.catalogZeroPriceHint')
                 : undefined
             }
             value={form.isFree ? '0' : form.basePrice}
@@ -226,7 +227,7 @@ function CategoryForm({
         required
         disabled={!!category}
         pattern="[A-Za-z0-9][A-Za-z0-9_\-]{1,29}"
-        hint={category ? 'Không đổi được mã' : 'VD: DIEU_TRI (chữ, số, _ hoặc -)'}
+        hint={category ? t('uiEntry.catalogCodeLocked') : t('uiEntry.catalogCodeHint', { example: 'DIEU_TRI' })}
         value={code}
         onChange={(e) => setCode(e.target.value)}
       />
@@ -236,7 +237,7 @@ function CategoryForm({
         type="number"
         min={0}
         max={999}
-        hint="Số nhỏ hiện trước (trên trang này và bảng giá trang chủ)"
+        hint={t('uiEntry.catalogSortHint')}
         value={sortOrder}
         onChange={(e) => setSortOrder(e.target.value)}
       />
@@ -352,7 +353,7 @@ export default function ServicesPage() {
       />
 
       {isLoading ? (
-        <p className="text-sm text-gray-400">Đang tải…</p>
+        <p className="text-sm text-gray-400">{t('uiCommon.table.loading')}</p>
       ) : isError ? (
         <p className="text-sm text-red-500">
           {t('uiWorkforce.servicesLoadError')}{' '}
@@ -381,7 +382,7 @@ export default function ServicesPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label={`Sửa nhóm ${category.name}`}
+                    aria-label={t('uiWorkforce.editGroupNamed', { name: category.name })}
                     onClick={() => setCategoryForm(category)}
                   >
                     <Pencil className="h-4 w-4" />
@@ -450,10 +451,10 @@ export default function ServicesPage() {
                           {s.description && <p className="text-xs text-gray-500">{s.description}</p>}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          {s.defaultDurationMin} phút
+                          {t('uiScheduling.minutesValue', { count: s.defaultDurationMin })}
                           {(s.bufferBeforeMin > 0 || s.bufferAfterMin > 0) && (
                             <span className="block text-xs text-gray-500">
-                              +{s.bufferBeforeMin}/{s.bufferAfterMin} phút chuẩn bị/dọn
+                              {t('uiEntry.catalogBuffers', { before: s.bufferBeforeMin, after: s.bufferAfterMin })}
                             </span>
                           )}
                         </td>

@@ -16,6 +16,7 @@ import {
 import { api } from "@/lib/api";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
+import { i18n } from "@/locales";
 import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
 import {
@@ -58,53 +59,56 @@ type Status = {
 type Access = { token?: string; phone?: string };
 type Tone = "wait" | "action" | "good" | "bad";
 
-/** What the patient sees for each state: a headline and what happens next. */
+/**
+ * What the patient sees for each state: a headline and what happens next
+ * (i18n keys, translated when shown).
+ */
 const STATE: Record<string, { title: string; text: string; tone: Tone; step: number }> = {
   PENDING_REVIEW: {
-    title: "Đang chờ lễ tân xem xét",
-    text: "Phòng khám đã nhận yêu cầu của bạn. Lễ tân sẽ gọi hoặc nhắn tin để xác nhận trong giờ làm việc. Bạn chưa cần làm gì thêm.",
+    title: "uiScheduling.bookingState_PENDING_REVIEW",
+    text: "uiScheduling.bookingStateText_PENDING_REVIEW",
     tone: "wait",
     step: 2,
   },
   NEEDS_INFORMATION: {
-    title: "Cần bổ sung thông tin",
-    text: "Phòng khám cần thêm thông tin để giữ lịch. Đọc lời nhắn bên dưới rồi điền lại biểu mẫu.",
+    title: "uiScheduling.bookingState_NEEDS_INFORMATION",
+    text: "uiScheduling.bookingStateText_NEEDS_INFORMATION",
     tone: "action",
     step: 2,
   },
   PROPOSED: {
-    title: "Phòng khám đề xuất giờ khác",
-    text: "Giờ bạn chọn không còn phù hợp. Bấm “Đồng ý giờ mới” để giữ giờ phòng khám đề xuất, hoặc “Không đồng ý giờ này” để lễ tân chọn giờ khác.",
+    title: "uiScheduling.bookingState_PROPOSED",
+    text: "uiScheduling.bookingProposedStateText",
     tone: "action",
     step: 2,
   },
   PATIENT_ACCEPTED: {
-    title: "Bạn đã đồng ý giờ mới",
-    text: "Lễ tân sẽ xác nhận lần cuối và báo lại cho bạn.",
+    title: "uiScheduling.bookingState_PATIENT_ACCEPTED",
+    text: "uiScheduling.bookingStateText_PATIENT_ACCEPTED",
     tone: "wait",
     step: 2,
   },
   CONFIRMED: {
-    title: "Lịch hẹn đã được xác nhận",
-    text: "Vui lòng đến trước giờ hẹn khoảng 10 phút, mang theo giấy tờ tùy thân và phim X-quang hoặc đơn thuốc cũ nếu có.",
+    title: "uiScheduling.bookingState_CONFIRMED",
+    text: "uiScheduling.bookingStateText_CONFIRMED",
     tone: "good",
     step: 3,
   },
   DECLINED: {
-    title: "Phòng khám chưa thể tiếp nhận yêu cầu",
-    text: "Rất tiếc, lịch này chưa thể sắp xếp. Bạn có thể chọn giờ khác hoặc gọi lễ tân để được hỗ trợ.",
+    title: "uiScheduling.bookingState_DECLINED",
+    text: "uiScheduling.bookingStateText_DECLINED",
     tone: "bad",
     step: 0,
   },
   CANCELLED: {
-    title: "Yêu cầu đã được hủy",
-    text: "Yêu cầu này không còn hiệu lực. Bạn có thể đặt lịch mới bất cứ lúc nào.",
+    title: "uiScheduling.bookingState_CANCELLED",
+    text: "uiScheduling.bookingStateText_CANCELLED",
     tone: "bad",
     step: 0,
   },
   EXPIRED: {
-    title: "Yêu cầu đã quá hạn",
-    text: "Đã qua giờ hẹn mà phòng khám chưa kịp xác nhận yêu cầu này, nên lịch không được giữ. Vui lòng đặt lịch mới hoặc gọi lễ tân để được sắp xếp.",
+    title: "uiScheduling.bookingState_EXPIRED",
+    text: "uiScheduling.bookingStateText_EXPIRED",
     tone: "bad",
     step: 0,
   },
@@ -112,39 +116,39 @@ const STATE: Record<string, { title: string; text: string; tone: Tone; step: num
 /** A confirmed request whose visit was later changed at the clinic. */
 const VISIT_STATE: Record<string, { title: string; text: string; tone: Tone }> = {
   CANCELLED: {
-    title: "Lịch hẹn đã bị hủy",
-    text: "Lịch hẹn này đã được hủy. Gọi lễ tân nếu bạn cần đặt lại.",
+    title: "uiScheduling.bookingVisitState_CANCELLED",
+    text: "uiScheduling.bookingVisitStateText_CANCELLED",
     tone: "bad",
   },
   NO_SHOW: {
-    title: "Lịch hẹn đã qua",
-    text: "Phòng khám ghi nhận bạn chưa đến khám theo lịch này. Bạn có thể đặt lịch mới.",
+    title: "uiScheduling.bookingVisitState_NO_SHOW",
+    text: "uiScheduling.bookingVisitStateText_NO_SHOW",
     tone: "bad",
   },
   CHECKED_IN: {
-    title: "Bạn đang ở phòng khám",
-    text: "Phòng khám đã ghi nhận bạn đến. Vui lòng chờ đến lượt khám.",
+    title: "uiScheduling.bookingVisitState_AT_CLINIC",
+    text: "uiScheduling.bookingVisitStateText_CHECKED_IN",
     tone: "good",
   },
   IN_PROGRESS: {
-    title: "Bạn đang ở phòng khám",
-    text: "Bạn đang được khám theo lịch hẹn này.",
+    title: "uiScheduling.bookingVisitState_AT_CLINIC",
+    text: "uiScheduling.bookingVisitStateText_IN_PROGRESS",
     tone: "good",
   },
   LEFT: {
-    title: "Bạn đã rời phòng khám",
-    text: "Phòng khám ghi nhận bạn đã về trước khi được khám theo lịch này. Gọi lễ tân hoặc đặt lịch mới nếu bạn vẫn cần khám.",
+    title: "uiScheduling.bookingVisitState_LEFT",
+    text: "uiScheduling.bookingVisitStateText_LEFT",
     tone: "bad",
   },
   COMPLETED: {
-    title: "Đã khám xong",
-    text: "Cảm ơn bạn đã tin tưởng phòng khám. Hẹn gặp lại bạn ở lần tái khám.",
+    title: "uiScheduling.bookingVisitState_COMPLETED",
+    text: "uiScheduling.bookingVisitStateText_COMPLETED",
     tone: "good",
   },
 };
 const RESCHEDULED = {
-  title: "Lịch hẹn đã được dời",
-  text: "Phòng khám đã đổi giờ hẹn của bạn. Giờ mới ở bên dưới; gọi lễ tân nếu giờ này không phù hợp.",
+  title: "uiScheduling.bookingVisitState_RESCHEDULED",
+  text: "uiScheduling.bookingVisitStateText_RESCHEDULED",
   tone: "good" as Tone,
 };
 /** Visit states in which the booked time no longer stands. */
@@ -199,11 +203,14 @@ const googleCalendarUrl = (status: Status) => {
   const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const params = new URLSearchParams({
     action: "TEMPLATE",
-    text: `${status.service?.name ?? "Lịch khám"} — ${clinic.name}`,
+    text: `${status.service?.name ?? i18n.t("uiScheduling.bookingCalendarTitleFallback")} — ${clinic.name}`,
     dates: `${stamp(start)}/${stamp(end)}`,
     details: status.referenceCode
-      ? `Mã đặt lịch ${status.referenceCode}. Tra cứu: ${window.location.origin}/booking/status?ref=${status.referenceCode}`
-      : `Tra cứu: ${window.location.origin}/booking/status`,
+      ? i18n.t("uiScheduling.bookingCalendarDetailsWithRef", {
+          reference: status.referenceCode,
+          url: `${window.location.origin}/booking/status?ref=${status.referenceCode}`,
+        })
+      : i18n.t("uiScheduling.bookingCalendarDetails", { url: `${window.location.origin}/booking/status` }),
   });
   if (clinic.address) params.set("location", clinic.address);
   return "https://calendar.google.com/calendar/render?" + params.toString();
@@ -437,12 +444,12 @@ export default function PublicBookingStatusPage() {
         return open(ref, { phone: a.phone }, quiet);
       }
       if (!quiet || rotated(e))
-        setError(bookingErrorMessage(e, "Mã đặt lịch hoặc số điện thoại không đúng."));
+        setError(bookingErrorMessage(e, t("uiScheduling.bookingLookupWrongCode")));
       return false;
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [t]);
 
   // Open straight away when this device (or the email link) already knows how.
   // The token comes in the URL fragment (never sent to the server) and is
@@ -486,16 +493,14 @@ export default function PublicBookingStatusPage() {
       });
       const list = response.data.data;
       if (list.length === 0) {
-        setError(
-          "Chưa có lịch đặt nào với số điện thoại này trong 6 tháng gần đây. Kiểm tra lại số, hoặc gọi lễ tân để được hỗ trợ.",
-        );
+        setError(t("uiScheduling.bookingLookupNoneByPhone"));
         return;
       }
       setResults(list);
       // One request: show it directly.
       if (list.length === 1) choose(list[0]);
     } catch (e: unknown) {
-      setError(bookingErrorMessage(e, "Không tra cứu được. Vui lòng kiểm tra số điện thoại và thử lại."));
+      setError(bookingErrorMessage(e, t("uiScheduling.bookingLookupFailed")));
     } finally {
       setBusy(false);
     }
@@ -551,8 +556,6 @@ export default function PublicBookingStatusPage() {
 
   const current = status ? shownStatus(status) : "";
   const { visit, state } = status ? stateOf(status) : { visit: undefined, state: undefined };
-  const displayStateKey = visit && status?.appointment ? `bookingVisitState_${status.appointment.status}` : `bookingState_${current}`;
-  const displayStateTextKey = visit && status?.appointment ? `bookingVisitStateText_${status.appointment.status}` : `bookingStateText_${current}`;
   // The visit still holds its (possibly moved) time.
   const visitStands =
     status?.status === "CONFIRMED" &&
@@ -607,7 +610,7 @@ export default function PublicBookingStatusPage() {
                 )}
                 {manageLink && (
                   <div className="mt-2">
-                    <CopyCode code={manageLink} label="Sao chép đường link quản lý" />
+                    <CopyCode code={manageLink} label={t("uiScheduling.bookingCopyManageLink")} />
                   </div>
                 )}
               </div>
@@ -644,7 +647,7 @@ export default function PublicBookingStatusPage() {
                             TONE_STYLE[itemState?.tone ?? "wait"].box
                           }
                         >
-                          {itemState ? t(`uiScheduling.bookingState_${item.status}`) : item.status}
+                          {itemState ? t(itemState.title) : item.status}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-gray-600 dark:text-surface-300">
@@ -727,8 +730,8 @@ export default function PublicBookingStatusPage() {
               <div className="flex items-start gap-3">
                 <ToneIcon className="mt-0.5 h-6 w-6 shrink-0" aria-hidden />
                 <div>
-                  <h2 className="text-lg font-semibold">{state ? t(`uiScheduling.${displayStateKey}`) : status.status}</h2>
-                  {state && <p className="mt-1 text-sm leading-relaxed">{t(`uiScheduling.${displayStateTextKey}`)}</p>}
+                  <h2 className="text-lg font-semibold">{state ? t(state.title) : status.status}</h2>
+                  {state && <p className="mt-1 text-sm leading-relaxed">{t(state.text)}</p>}
                 </div>
               </div>
             </div>

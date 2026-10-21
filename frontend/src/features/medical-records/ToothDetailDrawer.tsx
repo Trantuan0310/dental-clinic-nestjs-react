@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Calendar, ClipboardList, FileText, History, Pill, Stethoscope, TrendingUp, X } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -25,10 +26,10 @@ interface ToothDetailDrawerProps {
   onJumpToEncounter?: (encounterId: string) => void;
 }
 
-const SEMANTIC_LABEL: Record<'healthy' | 'attention' | 'severe', string> = {
-  healthy: 'Bình thường',
-  attention: 'Cần theo dõi',
-  severe: 'Nghiêm trọng',
+const SEMANTIC_LABEL_KEY: Record<'healthy' | 'attention' | 'severe', string> = {
+  healthy: 'uiClinical.toothNormal',
+  attention: 'uiClinical.toothSemanticAttention',
+  severe: 'uiClinical.toothSemanticSevere',
 };
 
 const SEMANTIC_BADGE: Record<'healthy' | 'attention' | 'severe', 'success' | 'warning' | 'danger'> = {
@@ -46,6 +47,7 @@ export function ToothDetailDrawer({
   onAddTreatment,
   onJumpToEncounter,
 }: ToothDetailDrawerProps) {
+  const { t } = useTranslation();
   const history = useToothHistory({
     patientId,
     fdi: fdi ?? 0,
@@ -67,14 +69,14 @@ export function ToothDetailDrawer({
       title={
         <span className="flex items-center gap-2">
           <Stethoscope className="h-4 w-4 text-primary-600" />
-          {fdi ? `Răng số ${fdi} — Hồ sơ điều trị` : 'Chi tiết răng'}
+          {fdi ? t('uiClinical.toothDrawerTitle', { number: fdi }) : t('uiClinical.toothDetailTitle')}
         </span>
       }
       footer={
         onAddTreatment && fdi && history.history.currentStatus !== 'missing' ? (
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose}>
-              Đóng
+              {t('uiCommon.action.close')}
             </Button>
             <Button
               onClick={() => {
@@ -82,20 +84,20 @@ export function ToothDetailDrawer({
                 onClose();
               }}
             >
-              Thêm điều trị cho răng này
+              {t('uiClinical.addTreatmentToTooth')}
             </Button>
           </div>
         ) : (
           <div className="flex justify-end">
             <Button variant="outline" onClick={onClose}>
-              Đóng
+              {t('uiCommon.action.close')}
             </Button>
           </div>
         )
       }
     >
       {!fdi ? (
-        <p className="text-sm text-gray-500">Chọn một răng để xem chi tiết.</p>
+        <p className="text-sm text-gray-500">{t('uiClinical.toothChoose')}</p>
       ) : loading ? (
         <DrawerSkeleton />
       ) : (
@@ -126,13 +128,14 @@ function ToothDetailContent({
   currentEncounterId,
   onJumpToEncounter,
 }: ToothDetailContentProps) {
+  const { t } = useTranslation();
   const palette = history.currentStatus ? toothStatusColor(history.currentStatus) : null;
   const semantic = history.currentStatus ? TOOTH_STATUS_SEMANTIC[history.currentStatus] : 'healthy';
   const treatmentsByEncounter = new Map<string, typeof history.treatments>();
-  for (const t of history.treatments) {
-    const arr = treatmentsByEncounter.get(t.encounterId) ?? [];
-    arr.push(t);
-    treatmentsByEncounter.set(t.encounterId, arr);
+  for (const line of history.treatments) {
+    const arr = treatmentsByEncounter.get(line.encounterId) ?? [];
+    arr.push(line);
+    treatmentsByEncounter.set(line.encounterId, arr);
   }
 
   return (
@@ -146,37 +149,37 @@ function ToothDetailContent({
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-gray-500">Trạng thái hiện tại</p>
+            <p className="text-xs uppercase tracking-wider text-gray-500">{t('uiClinical.toothCurrentStatus')}</p>
             <h3 className="mt-1 flex items-center gap-2 text-xl font-semibold">
-              {history.currentStatus ? TOOTH_STATUS_LABEL[history.currentStatus] : 'Chưa có dữ liệu'}
+              {history.currentStatus ? TOOTH_STATUS_LABEL[history.currentStatus] : t('uiClinical.noData')}
             </h3>
             {history.currentNotes && (
               <p className="mt-1 text-sm text-gray-600">{history.currentNotes}</p>
             )}
           </div>
           <div className="flex flex-col items-end gap-1">
-            <Badge variant={SEMANTIC_BADGE[semantic]}>{SEMANTIC_LABEL[semantic]}</Badge>
+            <Badge variant={SEMANTIC_BADGE[semantic]}>{t(SEMANTIC_LABEL_KEY[semantic])}</Badge>
             {history.lastVisitAt && (
               <span className="text-xs text-gray-500">
                 <Calendar className="mr-1 inline h-3.5 w-3.5" />
-                Khám gần nhất: {formatDateTime(history.lastVisitAt)}
+                {t('uiClinical.toothLastVisit', { date: formatDateTime(history.lastVisitAt) })}
               </span>
             )}
           </div>
         </div>
         <dl className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
-          <Stat label="Số lần điều trị" value={history.treatments.length.toString()} />
-          <Stat label="Encounter có điều trị" value={history.totalEncountersWithTreatments.toString()} />
-          <Stat label="Số lần thay đổi status" value={history.timeline.length.toString()} />
+          <Stat label={t('uiClinical.treatmentCount')} value={history.treatments.length.toString()} />
+          <Stat label={t('uiClinical.encounterTreatmentCount')} value={history.totalEncountersWithTreatments.toString()} />
+          <Stat label={t('uiClinical.statusChangeCount')} value={history.timeline.length.toString()} />
         </dl>
       </section>
 
       {/* Tabs */}
       <nav className="flex gap-1 border-b border-gray-200">
         {[
-          { id: 'overview', label: 'Tổng quan', icon: ClipboardList },
-          { id: 'history', label: 'Lịch sử điều trị', icon: History },
-          { id: 'plan', label: 'Kế hoạch tiếp theo', icon: TrendingUp },
+          { id: 'overview', label: t('uiClinical.overview'), icon: ClipboardList },
+          { id: 'history', label: t('uiClinical.toothTabHistory'), icon: History },
+          { id: 'plan', label: t('uiClinical.toothTabPlan'), icon: TrendingUp },
         ].map(({ id, label, icon: Icon }) => {
           const active = activeTab === id;
           return (
@@ -224,14 +227,15 @@ interface SubProps {
 }
 
 function OverviewTab({ history, treatmentsByEncounter, currentEncounterId, onJumpToEncounter }: SubProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <section>
         <h4 className="mb-2 text-sm font-semibold text-gray-700">
-          <History className="mr-1 inline h-4 w-4" /> Thay đổi trạng thái răng
+          <History className="mr-1 inline h-4 w-4" /> {t('uiClinical.toothStatusChanges')}
         </h4>
         {history.timeline.length === 0 ? (
-          <p className="text-sm text-gray-500">Chưa ghi nhận thay đổi trạng thái nào cho răng này.</p>
+          <p className="text-sm text-gray-500">{t('uiClinical.noStatusChanges')}</p>
         ) : (
           <ol className="relative space-y-3 border-l border-gray-200 pl-4">
             {history.timeline.map((entry, idx) => {
@@ -258,7 +262,7 @@ function OverviewTab({ history, treatmentsByEncounter, currentEncounterId, onJum
                         onClick={() => onJumpToEncounter?.(entry.encounterId)}
                         className="mt-1 text-xs text-primary-700 hover:underline"
                       >
-                        Xem encounter {entry.encounterCode}
+                        {t('uiClinical.toothViewEncounter', { code: entry.encounterCode })}
                       </button>
                     )}
                   </div>
@@ -271,17 +275,17 @@ function OverviewTab({ history, treatmentsByEncounter, currentEncounterId, onJum
 
       <section>
         <h4 className="mb-2 text-sm font-semibold text-gray-700">
-          <Stethoscope className="mr-1 inline h-4 w-4" /> Đã điều trị gì ({history.treatments.length} dòng)
+          <Stethoscope className="mr-1 inline h-4 w-4" /> {t('uiClinical.toothTreatmentsDone', { count: history.treatments.length })}
         </h4>
         {history.treatments.length === 0 ? (
-          <p className="text-sm text-gray-500">Răng này chưa được điều trị trong các encounter đã ghi nhận.</p>
+          <p className="text-sm text-gray-500">{t('uiClinical.noRecordedTreatment')}</p>
         ) : (
           <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 bg-white">
             {Array.from(treatmentsByEncounter.entries()).map(([encounterId, lines]) => (
               <li key={encounterId} className="p-3">
                 <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
                   <span className="font-mono">
-                    {lines[0]?.encounterCode ?? encounterId.slice(0, 8)} • {lines[0]?.dentistName ?? 'BS'}
+                    {lines[0]?.encounterCode ?? encounterId.slice(0, 8)} • {lines[0]?.dentistName ?? t('uiOperations.dentistAbbrev')}
                   </span>
                   {currentEncounterId !== encounterId && (
                     <button
@@ -289,7 +293,7 @@ function OverviewTab({ history, treatmentsByEncounter, currentEncounterId, onJum
                       onClick={() => onJumpToEncounter?.(encounterId)}
                       className="text-primary-700 hover:underline"
                     >
-                      Mở encounter
+                      {t('uiClinical.toothOpenEncounter')}
                     </button>
                   )}
                 </div>
@@ -317,8 +321,9 @@ function OverviewTab({ history, treatmentsByEncounter, currentEncounterId, onJum
 }
 
 function HistoryTab({ history, treatmentsByEncounter, onJumpToEncounter }: SubProps) {
+  const { t } = useTranslation();
   if (history.treatments.length === 0) {
-    return <p className="text-sm text-gray-500">Răng này chưa có lịch sử điều trị.</p>;
+    return <p className="text-sm text-gray-500">{t('uiClinical.noToothTreatmentHistory')}</p>;
   }
   return (
     <ol className="relative space-y-4 border-l border-gray-200 pl-5">
@@ -331,10 +336,10 @@ function HistoryTab({ history, treatmentsByEncounter, onJumpToEncounter }: SubPr
               <div className="mb-2 flex items-center justify-between text-xs text-gray-500">
                 <span>
                   <Calendar className="mr-1 inline h-3.5 w-3.5" />
-                  {last?.closedAt ? formatDateTime(last.closedAt) : 'Đang điều trị'}
+                  {last?.closedAt ? formatDateTime(last.closedAt) : t('uiClinical.toothInTreatment')}
                 </span>
                 <span className="font-mono">
-                  {last?.encounterCode ?? encounterId.slice(0, 8)} • {last?.dentistName ?? 'BS'}
+                  {last?.encounterCode ?? encounterId.slice(0, 8)} • {last?.dentistName ?? t('uiOperations.dentistAbbrev')}
                 </span>
               </div>
               <ul className="space-y-2">
@@ -362,7 +367,7 @@ function HistoryTab({ history, treatmentsByEncounter, onJumpToEncounter }: SubPr
                   onClick={() => onJumpToEncounter?.(encounterId)}
                   className="text-xs text-primary-700 hover:underline"
                 >
-                  Mở encounter gốc →
+                  {t('uiClinical.toothOpenSourceEncounter')} →
                 </button>
               </div>
             </div>
@@ -374,45 +379,46 @@ function HistoryTab({ history, treatmentsByEncounter, onJumpToEncounter }: SubPr
 }
 
 function PlanTab({ history }: { history: ToothHistoryData }) {
+  const { t } = useTranslation();
   const plan = history.upcomingPlan;
   if (!plan) {
     return (
       <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
         <TrendingUp className="mr-1 inline h-4 w-4" />
-        Chưa có kế hoạch tiếp theo nào được ghi nhận cho răng này.
+        {t('uiClinical.toothNoPlan')}
       </div>
     );
   }
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
-        <p className="text-xs uppercase tracking-wider text-amber-700">Encounter đang điều trị</p>
+        <p className="text-xs uppercase tracking-wider text-amber-700">{t('uiClinical.currentEncounterTreatment')}</p>
         <h4 className="mt-1 text-base font-semibold text-amber-900">
-          {plan.encounterCode ?? plan.encounterId.slice(0, 8)} • {plan.dentistName ?? 'BS'}
+          {plan.encounterCode ?? plan.encounterId.slice(0, 8)} • {plan.dentistName ?? t('uiOperations.dentistAbbrev')}
         </h4>
-        <p className="text-xs text-amber-700">Bắt đầu: {formatDateTime(plan.startedAt)}</p>
+        <p className="text-xs text-amber-700">{t('uiClinical.toothPlanStarted', { date: formatDateTime(plan.startedAt) })}</p>
       </div>
 
       {plan.chiefComplaint && (
-        <Block icon={<FileText className="h-4 w-4" />} title="Lý do khám / triệu chứng">
+        <Block icon={<FileText className="h-4 w-4" />} title={t('uiClinical.symptomTitle')}>
           <p className="whitespace-pre-wrap text-sm text-gray-700">{plan.chiefComplaint}</p>
         </Block>
       )}
 
       {plan.diagnosis && (
-        <Block icon={<Pill className="h-4 w-4" />} title="Chẩn đoán">
+        <Block icon={<Pill className="h-4 w-4" />} title={t('uiClinical.diagnosis')}>
           <p className="whitespace-pre-wrap text-sm text-gray-700">{plan.diagnosis}</p>
         </Block>
       )}
 
       {plan.treatmentPlan ? (
-        <Block icon={<ClipboardList className="h-4 w-4" />} title="Kế hoạch điều trị (từ clinical note)">
+        <Block icon={<ClipboardList className="h-4 w-4" />} title={t('uiClinical.treatmentPlanFromNote')}>
           <p className="whitespace-pre-wrap text-sm text-gray-700">{plan.treatmentPlan}</p>
         </Block>
       ) : (
-        <Block icon={<ClipboardList className="h-4 w-4" />} title="Kế hoạch điều trị">
+        <Block icon={<ClipboardList className="h-4 w-4" />} title={t('uiClinical.treatmentPlan')}>
           <p className="text-sm text-gray-500">
-            Chưa có plan trong clinical note. BS có thể bổ sung trong tab Ghi chú của encounter.
+            {t('uiClinical.toothNoPlanInNote')}
           </p>
         </Block>
       )}
