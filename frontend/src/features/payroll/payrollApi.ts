@@ -454,8 +454,12 @@ function mapShiftRegistration(
   return { ...raw, dentistName: raw.dentist?.fullName ?? raw.dentistName ?? '—' };
 }
 
-export function useShiftRegistrations(filters?: { dentistId?: string; status?: string; from?: string; to?: string }) {
+export function useShiftRegistrations(
+  filters?: { dentistId?: string; status?: string; from?: string; to?: string },
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled,
     queryKey: shiftKeys.list(filters),
     queryFn: () =>
       get<ShiftRegistration[]>('/shifts/registrations', {

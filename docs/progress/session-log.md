@@ -6,9 +6,11 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ## 21/10/2026
 
-### Đang chờ / bước tiếp theo
+### Đang làm: sửa 3 lỗi của lượt kiểm tra, rồi mở PR vào `main`
 
-- Chờ người dùng chọn sửa các lỗi trong mục "Kiểm tra toàn bộ chức năng" bên dưới (chưa sửa gì).
+- Xong (chưa push): lỗi 1 (`Header.tsx` chỉ tải ca chờ duyệt khi có `shift.approve`; `useShiftRegistrations` nhận `enabled`), lỗi 2 (`EncounterDetailPage.tsx` bỏ răng rỗng/0/trùng).
+- Lỗi 3 đang làm theo từng file: đã chuyển `EncounterDetailPage`, `TodayPage`, `MyQueuePage` sang khoá dịch (`uiClinical`, thêm 23 khoá). Còn: Điều phối, Ảnh trang chủ, thẻ bác sĩ, kho, sơ đồ răng và các tab phiên khám, trang đặt lịch, người dùng, lịch làm việc, chi phí.
+- Sau đó: typecheck/lint/build, `check-ui-locales`, E2E đầy đủ, quét lại (không còn 403 cho lễ tân), mở PR.
 
 ### Kiểm tra toàn bộ chức năng (`main` = f1e64ae)
 

@@ -31,9 +31,10 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
   const [search, setSearch] = useState('');
   const [now, setNow] = useState(new Date());
 
-  const { data: pendingShifts } = useShiftRegistrations({ status: 'PENDING' });
+  const canApprove = !!user?.permissions.includes('shift.approve');
+  // Only approvers see the badge; others (front desk) may not list shifts at all.
+  const { data: pendingShifts } = useShiftRegistrations({ status: 'PENDING' }, { enabled: canApprove });
   const pendingCount = pendingShifts?.length ?? 0;
-  const canApprove = user?.permissions.includes('shift.approve');
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
