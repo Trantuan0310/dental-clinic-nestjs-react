@@ -4,6 +4,56 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 20/10/2026
+
+### Đang chờ / bước tiếp theo
+
+- PR sửa 3 chỗ lệch tài liệu (mục ngay dưới): chờ CI xanh rồi người dùng merge.
+- Deploy lên VPS: người dùng tự chạy `bash scripts/deploy-vps.sh` (không có migration mới; biến `BOOKING_*` đã có mặc định trong compose).
+
+### Sửa 3 chỗ lệch tài liệu
+
+- README: kết quả test 1390/1390 (56 bộ), ngày 20/10.
+- `docs/08_Deployment/ENVIRONMENT_VARIABLES.md`: chuyển các biến đặt lịch online và email sang bảng. Thêm 4 biến chưa có: `BOOKING_MIN_LEAD_MIN`, `BOOKING_MAX_DAYS_AHEAD`, `BOOKING_HOLD_MINUTES`, `BOOKING_AUTO_CONFIRM`. Mặc định và giới hạn đối chiếu với `booking.service.ts`; cả 7 biến có trong hai file compose.
+- Nhật ký: bổ sung PR #49 và #52–#62 (mục bên dưới).
+
+### PR đã merge 15–16/10 nhưng chưa có trong nhật ký (ghi bổ sung từ lịch sử git)
+
+- **#49** (15/10): báo cáo hiện đủ số tiền, biểu đồ cột/xu hướng; sửa nốt chế độ tối ở Hôm nay, bệnh nhân, lịch hẹn, đặt lịch.
+- **#52** (15/10): sửa 4 lỗi giao diện khi chụp ảnh hướng dẫn: mã yêu cầu hiện `{{reference}}`, tiêu đề phiên khám, nút sơ đồ răng tiếng Anh, nút hủy hóa đơn bị khóa.
+- **#53–#55** (15/10), lịch hẹn:
+  - lọc bác sĩ bằng nút bấm; dạng Tuần mặc định theo một bác sĩ; hiện giờ kết thúc;
+  - lịch tuần/tháng vừa bề rộng, không cuộn ngang;
+  - thu gọn còn 64px/giờ, khung 08–18;
+  - lịch tuần mỗi lịch hẹn một dòng, quá 3 dòng gộp "+N" mở danh sách.
+- **#56** (15/10): thanh trên, trang chủ, favicon dùng logo gốc; bỏ công tắc "Zalo giữ chỗ" chưa có chức năng.
+- **#57** (15/10): `DEMO_REPAIR` chuyển hoặc xóa lịch demo nằm ngoài giờ làm của bác sĩ; thêm script chạy trên VPS.
+- **#58** (16/10): đặt lịch online tự khớp hồ sơ khách cũ (tên gõ không dấu, thiếu tên đệm, trẻ em qua SĐT phụ huynh, chỉ với trẻ vị thành niên); chặn tạo hồ sơ trùng cả ở máy chủ.
+- **#59** (16/10): yêu cầu chờ duyệt giữ chỗ tạm (`BOOKING_HOLD_MINUTES`), hứa mốc phản hồi, lễ tân thấy thời gian chờ.
+- **#60** (16/10): tự xác nhận khách cũ khớp chắc chắn (`BOOKING_AUTO_CONFIRM`, tắt mặc định).
+- **#61** (16/10): form đặt lịch điền sẵn từ lần đặt trước trên cùng thiết bị (chỉ lưu ở máy khách).
+- **#62** (16/10): nhập SĐT + ngày sinh để điền sẵn hồ sơ cũ; người liên hệ khẩn cấp của người lớn không đọc được thông tin người đó.
+
+### Kiểm tra phiên bản mới nhất (`main` = d8c6538, PR #62)
+
+- **Từ 14/10 (ed3efe2) đến nay, `main` có thêm PR #46–#62**, sửa 91 file:
+  - hướng dẫn sử dụng;
+  - giờ làm lấy từ `CLINIC_HOURS`;
+  - "Nhận bệnh nhân mới" để lễ tân quyết;
+  - lịch tuần/tháng gọn hơn, logo gốc;
+  - đặt lịch online: tự khớp khách cũ, giữ chỗ tạm, tự xác nhận khách cũ (tắt mặc định), điền sẵn hồ sơ theo SĐT + ngày sinh.
+- **CI trên `main`:** xanh ở 8 lần chạy gần nhất, gồm d8c6538.
+- **Local:**
+  - backend: `tsc`, ESLint (0 cảnh báo), Jest **1390/1390** (56 bộ);
+  - frontend: `typecheck`, `tsc -p tsconfig.e2e.json`, ESLint, `vite build` (9,6 giây), `check-ui-locales` đều sạch.
+- **Deploy:**
+  - Không có migration mới.
+  - Biến mới `BOOKING_HOLD_MINUTES` (mặc định 120) và `BOOKING_AUTO_CONFIRM` (mặc định `false`) đã có trong `.env.production.example` và hai file docker-compose, nên deploy không cần sửa `.env.production`.
+- **Lệch nhỏ** (đã sửa, mục "Sửa 3 chỗ lệch tài liệu"):
+  - README còn ghi 1344 test (thực tế 1390).
+  - `docs/08_Deployment/ENVIRONMENT_VARIABLES.md` thiếu biến `BOOKING_*`.
+  - Nhật ký chưa có mục cho PR #52–#62.
+
 ## 14/10/2026
 
 ### Đang chờ / bước tiếp theo
