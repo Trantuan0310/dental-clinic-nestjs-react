@@ -6,11 +6,11 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ## 21/10/2026
 
-### Đang làm: rà soát nghiệp vụ các luồng
+### Rà soát nghiệp vụ các luồng (đã dừng)
 
 - Yêu cầu: tìm chỗ chưa hợp lý, chỗ cần chỉnh trong các luồng nghiệp vụ (chỉ rà soát, chưa sửa code).
 - Chia 5 mảng, rà song song: (1) lịch hẹn và luồng trong ngày (check-in, hàng chờ, điều phối); (2) đặt lịch online và hồ sơ bệnh nhân; (3) phiên khám → hoá đơn → thanh toán → kho; (4) nhân sự, lịch làm, danh mục dịch vụ, lương, chi phí; (5) phân quyền, báo cáo, trang chủ và tóm tắt AI.
-- Kết quả sẽ ghi vào `docs/audits/2026-10-21/BUSINESS_FLOW_REVIEW.md`.
+- Đã dừng theo yêu cầu người dùng trước khi có kết quả (đợt đầu bị hết hạn mức giữa chừng). Chưa có báo cáo, chưa sửa code. Muốn làm lại: chạy lần lượt từng mảng để tiết kiệm hạn mức.
 
 ### Sửa 3 lỗi của lượt kiểm tra (nhánh `claude/admiring-keller-933rkp`, PR vào `main`)
 
