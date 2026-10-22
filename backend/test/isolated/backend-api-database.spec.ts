@@ -329,7 +329,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
   });
   it('adds a treatment and persists its decimal price', async () => {
     await api('post', `/medical-records/encounters/${encounterId}/treatments`, 'dentist')
-      .send({ procedure: 'Dental filling', toothNumbers: [16], unitPrice: 350000 })
+      .send({ procedure: 'Dental filling', toothNumbers: [16], unitPrice: 350000, priceReason: 'Ngoài danh mục' })
       .expect(201);
     const t = await db.treatment.findFirstOrThrow({ where: { encounterId } });
     expect(Number(t.unitPrice)).toBe(350000);
@@ -510,7 +510,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
   it('rejects competing payments without double collecting or a server error', async () => {
     const id = await fixtureEncounter();
     await api('post', `/medical-records/encounters/${id}/treatments`, 'dentist')
-      .send({ procedure: 'Concurrent payment fixture', unitPrice: 100000 })
+      .send({ procedure: 'Concurrent payment fixture', unitPrice: 100000, priceReason: 'Ngoài danh mục' })
       .expect(201);
     await api('post', `/medical-records/encounters/${id}/close`, 'dentist').send({}).expect(200);
     const invoice = await invoiceFor(id);
@@ -555,6 +555,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
     await api('post', `/medical-records/encounters/${id}/treatments`, 'dentist')
       .send({
         procedure: 'Stock rollback treatment',
+        priceReason: 'Ngoài danh mục',
         unitPrice: 100000,
         inventoryUsages: [
           { inventoryItemId: first.id, quantity: 2, unit: 'piece' },
@@ -874,7 +875,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
       .send({ diagnosis: 'Blocked change' })
       .expect(409);
     await api('post', `/medical-records/encounters/${id}/treatments`, 'dentist')
-      .send({ procedure: 'Blocked treatment', unitPrice: 1000 })
+      .send({ procedure: 'Blocked treatment', unitPrice: 1000, priceReason: 'Ngoài danh mục' })
       .expect(409);
   });
   it('cancelling an encounter started by mistake returns the appointment to CHECKED_IN and allows a restart', async () => {
