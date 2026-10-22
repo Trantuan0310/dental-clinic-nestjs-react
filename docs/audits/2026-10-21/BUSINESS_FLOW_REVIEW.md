@@ -4,6 +4,30 @@ Chỉ rà soát, chưa sửa code. Mỗi mảng do một lượt đọc code ri�
 
 Mức: **Cao** (sai tiền/dữ liệu/quyền, chặn việc hằng ngày) · **Trung bình** · **Thấp** (bất tiện, hiếm).
 
+## Tóm tắt
+
+32 phát hiện: **9 Cao**, 9 Trung bình, 14 Thấp.
+
+### Nên sửa trước (sai tiền, sai số liệu, không có đường xử lý)
+
+| # | Vấn đề | Mục | Cần chủ phòng khám quyết? |
+| --- | --- | --- | --- |
+| 1 | Lễ tân giảm giá tới 100% không dấu vết | 5.1 | Ngưỡng giảm giá |
+| 2 | "Tổng chi" bỏ sót khoản chi đã hoàn tiền | 4.1 | Không |
+| 3 | Duyệt kỳ lương sớm làm mất hoa hồng | 4.2 | Có cho trả lương sớm không |
+| 4 | Không đổi được tỷ lệ hoa hồng/lương giữa chừng | 4.3 | Không |
+| 5 | Hoá đơn đã phát hành không điều chỉnh/xoá nợ được | 3.2 | Chọn cách (a) hoặc (b) |
+| 6 | Phiên khám đã đóng không mở lại được | 3.1 | Có làm "mở lại" không |
+| 7 | Hồ sơ trùng không gộp được trước buổi khám | 2.1 | Nới quy tắc gộp |
+
+### Cần chủ phòng khám chọn hướng
+
+- Hủy lịch sau check-in (1.1); chặn hay cảnh báo check-in trùng (1.2); thiếu tồn kho có cho đóng phiên (3.4); lương bác sĩ trong "Thu – Chi" (4.4); tự xác nhận khi khách đặt nhiều lần (2.3); tra cứu bằng SĐT có trả giờ hẹn (2.7); hủy hoá đơn có sửa doanh thu tháng cũ (5.3).
+
+### Sửa nhỏ, không cần quyết định
+
+- 1.3, 1.4, 1.5, 1.6 (sửa đặc tả), 2.4, 2.5, 2.6, 3.3, 3.5, 3.6, 4.5, 4.6, 5.2, 5.4, 5.5, 5.6, 5.7; và mục 2.2 (giữ chỗ theo giờ mở cửa).
+
 ## 1. Lịch hẹn và luồng trong ngày
 
 1. **[Trung bình] "Hủy lịch" vẫn mở cho bệnh nhân đã check-in, song song với "Đã về"** — trái ADR-0009 D2 (LEFT thay cho hủy CHECKED_IN).
@@ -67,3 +91,19 @@ Chưa xác nhận / ngoài phạm vi đặc tả: giao diện có báo rõ lỗi
 Chưa xác nhận: kỳ điều chỉnh chép nguyên `netPayVnd` của kỳ gốc (`payroll.service.ts:2010-2035`) — có thể trả hai lần nếu đánh dấu đã trả theo tổng; `softDeleteCompensation` lấy "hôm nay" theo UTC.
 
 Đã kiểm, thấy hợp lý: hoa hồng tính trên dòng hoá đơn sau giảm giá/hoàn tiền, tỷ lệ theo ngày khám, truy thu khi hoá đơn bị hủy, lập lại hoá đơn không trả hai lần; bác sĩ nghỉ việc bị chặn khi còn lịch; đổi giá dịch vụ không ảnh hưởng lịch đã đặt; không tự duyệt khoản chi của mình.
+
+## 5. Phân quyền, báo cáo, trang chủ, tóm tắt AI
+
+1. **[Cao] Lễ tân giảm giá tới 100% một mình, không để lại dấu vết cho chủ phòng khám** — `PUT invoices/:id/discount` chỉ đòi `invoice.update` (`backend/src/billing/billing.controller.ts:81-82`), lễ tân có quyền này; `updateDiscount` chỉ chặn 0–100% (`billing.service.ts:1118-1141`) và không ghi nhật ký hệ thống (các thao tác tiền khác đều ghi). Báo cáo không có dòng tổng giảm giá. Trái BR-BILL-025 (giảm >50% chỉ admin, phải audit rõ).
+   - Tình huống: khách trả tiền mặt, lễ tân giảm 100%, phát hành hoá đơn 0đ và giữ tiền.
+   - Đề xuất: ngưỡng giảm giá lớn cần quyền riêng chỉ admin có; ghi `INVOICE_DISCOUNT_UPDATED` vào nhật ký; thêm "Tổng giảm giá" theo người giảm vào báo cáo. **Ngưỡng do chủ phòng khám chọn.**
+2. **[Trung bình] Vai trò tự tạo không có menu** — `frontend/src/lib/nav.ts:54-61` chọn nhóm menu theo mã vai trò (`dentist|receptionist|clinic_admin`), không theo quyền (trái ADR-0004); vai trò hệ thống lại không sửa được quyền. Vai trò "Lễ tân ca tối" tự tạo không thấy Lịch hẹn, Bệnh nhân, Điều phối. Đề xuất: lọc từng mục chỉ theo `permission`.
+3. **[Trung bình] Hủy hoá đơn làm đổi doanh thu của tháng đã chốt** — doanh thu lọc theo trạng thái hiện tại (`backend/src/reports/revenue-basis.ts:16-31`): hoá đơn tháng 9 bị hủy ngày 5/10 làm doanh thu tháng 9 giảm theo, lệch với lúc chốt và lúc tính hoa hồng. Đề xuất: ghi bút toán âm vào ngày hủy, giống cách xử lý hoàn tiền.
+4. **[Thấp] Hai bảng "theo dịch vụ" ra số khác nhau** — `revenueReport.byService` không trừ hoàn tiền (`reports.service.ts:322-332`), bảng trên trang chủ có trừ (`:780-805`).
+5. **[Thấp] Trang Thanh toán: "Tổng theo bộ lọc" cộng cả hoá đơn nháp và đã hủy, lọc theo ngày tạo** (`billing.service.ts:424-433, 480-500`) → khác số báo cáo.
+6. **[Thấp] Tóm tắt AI đếm hoá đơn nháp là "chưa thanh toán" và giữ cache cũ 1 giờ sau khi khách trả** (`backend/src/ai/ai.service.ts:161-163, 19, 139-146`) → lễ tân có thể đòi tiền lần nữa. Đề xuất: chỉ đếm ISSUED/PARTIAL; xoá cache khi có thanh toán/hoàn/hủy.
+7. **[Thấp] Quyền menu và API lệch nhau ở Vai trò, Nhật ký** (`role.read`/`audit.read` ở frontend, `role.upsert`/`system.audit.read` ở API → vào được menu nhưng 403); nhật ký đổi vai trò/quyền không lưu danh sách cũ.
+
+Chưa xác nhận: hoá đơn từ phiên khám không có lịch hẹn bị bỏ khỏi doanh thu theo nguồn (inner join); đặt lại mật khẩu cho tài khoản đã khoá; chi tiết hoá đơn trả lịch sử thay đổi cho người không có `invoice.audit.read`.
+
+Đã kiểm, thấy hợp lý: quyền nạp lại mỗi request, chặn xoá admin cuối cùng, lễ tân không hoàn tiền/hủy phiếu/hủy hoá đơn, không tự hủy phiếu mình thu, bác sĩ chỉ xem hoá đơn của mình và không xem doanh thu, giá ngoài bảng giá cần quyền và lý do, tóm tắt AI không lộ chẩn đoán cho lễ tân, các bảng doanh thu chính dùng chung một định nghĩa.

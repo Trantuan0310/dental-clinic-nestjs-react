@@ -6,14 +6,13 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ## 21/10/2026
 
-### Đang làm: rà soát nghiệp vụ các luồng (lần lượt từng mảng)
+### Rà soát nghiệp vụ các luồng (xong)
 
-- Làm lại theo yêu cầu, mỗi lúc một mảng để tiết kiệm hạn mức. Kết quả ghi dần vào `docs/audits/2026-10-21/BUSINESS_FLOW_REVIEW.md`.
-- Xong mảng 1 (lịch hẹn, luồng trong ngày): 6 phát hiện (1 Trung bình, 5 Thấp), phát hiện chính đã kiểm lại trong code.
-- Xong mảng 2 (đặt lịch online, bệnh nhân): 7 phát hiện (1 Cao, 2 Trung bình, 4 Thấp).
-- Xong mảng 3 (phiên khám → hoá đơn → kho): 6 phát hiện (2 Cao, 2 Trung bình, 2 Thấp).
-- Xong mảng 4 (nhân sự, lương, chi phí): 6 phát hiện (3 Cao, 1 Trung bình, 2 Thấp).
-- Còn: (5) phân quyền, báo cáo, AI.
+- Làm lần lượt 5 mảng; báo cáo: `docs/audits/2026-10-21/BUSINESS_FLOW_REVIEW.md`. Chỉ rà soát, chưa sửa code.
+- 32 phát hiện: 9 Cao, 9 Trung bình, 14 Thấp. Phát hiện mức Cao đã kiểm lại trực tiếp trong code.
+- Nên sửa trước: giảm giá 100% không dấu vết (5.1), "Tổng chi" bỏ sót khoản đã hoàn (4.1), duyệt lương sớm mất hoa hồng (4.2), không đổi được tỷ lệ hoa hồng giữa chừng (4.3), hoá đơn đã phát hành không điều chỉnh được (3.2), không mở lại phiên khám đã đóng (3.1), hồ sơ trùng không gộp được (2.1).
+
+**Bước tiếp theo:** chờ chủ phòng khám chọn hướng cho các mục cần quyết định (danh sách ở đầu báo cáo); các mục không cần quyết định có thể sửa ngay theo thứ tự ưu tiên.
 
 ### Sửa 3 lỗi của lượt kiểm tra (nhánh `claude/admiring-keller-933rkp`, PR vào `main`)
 
