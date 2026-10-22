@@ -6,7 +6,7 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ## 22/10/2026
 
-### Đang làm: sửa toàn bộ 32 điểm của báo cáo rà soát nghiệp vụ
+### Sửa toàn bộ 32 điểm của báo cáo rà soát nghiệp vụ (xong)
 
 Người dùng: "sửa hết". Với các điểm cần chủ phòng khám quyết, chọn phương án an toàn nhất (đổi được nếu chủ phòng khám muốn khác):
 
@@ -22,6 +22,9 @@ Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo;
 - Xong đợt B (4.2, 4.3, 4.5, 4.6, kỳ điều chỉnh trả 2 lần, ngày UTC): backend 1404 test xanh; bỏ route trùng `/appointments/shift-registrations`; E2E `flow-payroll-period-cycle` đổi sang kỳ đã kết thúc. Quyền `shift_registration.*` giờ không dùng.
 - Xong đợt C (3.1–3.6): backend 1417 test xanh; migration 050 (bảng `invoice_adjustments`, quyền `encounter.reopen`, `invoice.adjust`, chỉ admin). Điều chỉnh giảm không sửa `total` mà ghi dòng có ngày, để không sửa tháng đã chốt. E2E `flow-inventory-stock-out`, `flow-patient-to-payment` thêm ô lý do giá.
 - Xong đợt D (1.1–1.6): backend 1417 test xanh; check-in có cờ `ignoreOpenVisit` khi xác nhận.
+- Xong đợt E+F (2.1–2.7, 5.2, 5.7): nút gộp hồ sơ cho admin, giờ mở cửa dùng chung `src/common/clinic-hours.ts` (chưa xét ngày nghỉ của phòng khám), menu theo quyền.
+- Kiểm tra cuối: backend 1432 test, lint, tsc xanh; frontend lint/build xanh; E2E trên DB mới (có migration 049, 050) **90/90**.
+- Còn để ý: lễ tân sửa dị ứng (BR-PT-015 có vẻ cũ, chưa đổi); quyền `shift_registration.*` không còn dùng; deploy cần chạy migration 049, 050.
  (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
 
 ## 21/10/2026
