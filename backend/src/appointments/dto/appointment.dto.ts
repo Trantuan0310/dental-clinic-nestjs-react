@@ -235,6 +235,13 @@ export class CheckInAppointmentDto {
   @IsOptional()
   @IsString()
   overrideReason?: string;
+
+  @ApiPropertyOptional({
+    description: 'The patient already has another open visit today and this one is checked in too',
+  })
+  @IsOptional()
+  @IsBoolean()
+  ignoreOpenVisit?: boolean;
 }
 
 export class RescheduleAppointmentDto {

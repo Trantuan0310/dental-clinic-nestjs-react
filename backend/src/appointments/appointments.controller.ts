@@ -425,7 +425,13 @@ export class AppointmentsController {
     @User() actor: JwtPayload,
   ) {
     return {
-      data: await this.appointments.checkIn(id, dto.override ?? false, dto.overrideReason, actor),
+      data: await this.appointments.checkIn(
+        id,
+        dto.override ?? false,
+        dto.overrideReason,
+        actor,
+        dto.ignoreOpenVisit ?? false,
+      ),
     };
   }
 

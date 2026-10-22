@@ -487,6 +487,7 @@ export class AppointmentsService {
     override: boolean,
     overrideReason: string | undefined,
     actor: JwtPayload,
+    ignoreOpenVisit = false,
   ) {
     const appt = await this.requireAppointment(appointmentId);
     // Row-level, as confirm/markNoShow: a dentist acts on their own calendar only.
@@ -570,6 +571,30 @@ export class AppointmentsService {
     // inventory stock writes and shift-registration approve/reject/cancel.
     const updated = await this.prisma.$transaction(async tx => {
       if (fromNoShow) await this.assertSlotStillFree(tx, appt, actor);
+      // As walk-in: one open visit per patient in the clinic. Two bookings the
+      // same day (two dentists) need the desk to confirm the second one.
+      if (!ignoreOpenVisit) {
+        await this.lockPatient(tx, appt.patientId);
+        const dayStart = startOfClinicDay(clinicDateOnly(new Date(now)));
+        const open = await tx.appointment.findFirst({
+          where: {
+            patientId: appt.patientId,
+            id: { not: appointmentId },
+            status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+            startAt: { gte: dayStart, lt: new Date(dayStart.getTime() + DAY_MS) },
+            deletedAt: null,
+          },
+          include: { dentist: { select: { fullName: true } } },
+        });
+        if (open) {
+          throw new BusinessRuleException(
+            `Bệnh nhân đang ${STATUS_LABEL[open.status]} (lượt ${this.toClinicTimeString(open.startAt)} với BS ${open.dentist?.fullName ?? ''}). Nếu bệnh nhân đến cho cả lịch này, chọn "Vẫn check-in".`,
+            HttpStatus.CONFLICT,
+            { appointmentId: open.id },
+            'PATIENT_ALREADY_IN_CLINIC',
+          );
+        }
+      }
       const checkInResult = await this.slotSafe(() =>
         tx.appointment.updateMany({
           where: this.unchangedSince(appt),
@@ -607,8 +632,11 @@ export class AppointmentsService {
             ...(fromNoShow
               ? { fromStatus: AppointmentStatus.NO_SHOW, noShowReason: appt.cancelledReason }
               : {}),
+            ...(ignoreOpenVisit ? { ignoredOpenVisit: true } : {}),
           }
-        : undefined,
+        : ignoreOpenVisit
+          ? { ignoredOpenVisit: true }
+          : undefined,
     });
 
     return updated;
@@ -828,10 +856,16 @@ export class AppointmentsService {
         'Không thể hủy lịch khi bệnh nhân đang khám — hãy kết thúc hoặc hủy lượt khám trước',
       );
     }
+    if (appt.status === AppointmentStatus.CHECKED_IN) {
+      // ADR-0009 D2 / BR-APPT-025: the patient is here; one who leaves before
+      // being seen is "Đã về" (markLeft, undoable), never a cancellation.
+      throw new InvalidAppointmentStateException(
+        'Bệnh nhân đã check-in — không hủy lịch được; nếu bệnh nhân rời đi, hãy ghi nhận "Đã về"',
+      );
+    }
 
     // BR-APPT-009 / 010 — authorization windows
     const now = Date.now();
-    let lateCheckedInCancel = false;
     const byClinic = dto.byClinic === true;
     if (byClinic && this.isRowScopedDentist(actor)) {
       throw new ForbiddenException('Chỉ lễ tân/quản trị ghi nhận "Phòng khám hủy"');
@@ -853,12 +887,9 @@ export class AppointmentsService {
         );
       }
     } else if (now >= appt.startAt.getTime()) {
-      // BR-APPT-025: a CHECKED_IN patient who leaves before being seen can't
-      // be marked no-show (they did arrive), so cancel is the only way out —
-      // without this the appointment stayed CHECKED_IN in the queue forever.
       // A visit the clinic could not honour (absent dentist, closed day) is
-      // cancelled "by the clinic" after its start too, never a no-show.
-      if (appt.status !== AppointmentStatus.CHECKED_IN && !byClinic) {
+      // cancelled "by the clinic" after its start, never a no-show.
+      if (!byClinic) {
         // BR-APPT-010
         throw new InvalidAppointmentStateException(
           'Đã qua giờ hẹn nên không thể hủy — nếu bệnh nhân không đến, hãy đánh vắng mặt; nếu do phòng khám (bác sĩ vắng, đóng cửa), chọn "Phòng khám hủy"',
@@ -866,10 +897,9 @@ export class AppointmentsService {
       }
       if ((dto.reason?.trim().length ?? 0) < LATE_CANCEL_REASON_MIN_LENGTH) {
         throw new InvalidAppointmentStateException(
-          `Hủy lịch đã check-in sau giờ hẹn cần lý do (ít nhất ${LATE_CANCEL_REASON_MIN_LENGTH} ký tự)`,
+          `Hủy lịch sau giờ hẹn cần lý do (ít nhất ${LATE_CANCEL_REASON_MIN_LENGTH} ký tự)`,
         );
       }
-      lateCheckedInCancel = true;
     }
 
     const updated = await this.prisma.$transaction(async tx => {
@@ -915,7 +945,6 @@ export class AppointmentsService {
       targetId: appointmentId,
       metadata: {
         reason: dto.reason,
-        ...(lateCheckedInCancel ? { lateCheckedInCancel: true } : {}),
         ...(byClinic ? { byClinic: true } : {}),
       },
     });
@@ -1710,7 +1739,7 @@ export class AppointmentsService {
         // frontend navigates from an in-progress/completed appointment to
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
-        encounter: { select: { id: true } },
+        encounter: { select: { id: true, status: true } },
         services: { orderBy: { sortOrder: 'asc' } },
       },
     });
@@ -1877,7 +1906,7 @@ export class AppointmentsService {
         // frontend navigates from an in-progress/completed appointment to
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
-        encounter: { select: { id: true } },
+        encounter: { select: { id: true, status: true } },
       },
     });
     const hasMore = items.length > pageSize;
@@ -1912,7 +1941,7 @@ export class AppointmentsService {
         // frontend navigates from an in-progress/completed appointment to
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
-        encounter: { select: { id: true } },
+        encounter: { select: { id: true, status: true } },
       },
     });
     return { data: items };
@@ -3960,7 +3989,8 @@ export class AppointmentsService {
         where: {
           patientId: dto.patientId,
           status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-          startAt: { gte: dayStart },
+          // Today only: a follow-up weeks away is not why the patient is here.
+          startAt: { gte: dayStart, lt: dayEnd },
           deletedAt: null,
         },
         orderBy: { startAt: 'asc' },
@@ -3969,10 +3999,7 @@ export class AppointmentsService {
       });
       if (upcoming?.length) {
         const first = upcoming[0];
-        const when =
-          first.startAt < dayEnd
-            ? `${this.toClinicTimeString(first.startAt)} hôm nay`
-            : `${this.toClinicTimeString(first.startAt)} ngày ${this.viDate(new Date(clinicDateOnly(first.startAt)))}`;
+        const when = `${this.toClinicTimeString(first.startAt)} hôm nay`;
         throw new BusinessRuleException(
           `Bệnh nhân đã có lịch hẹn ${when} với BS ${first.dentist?.fullName ?? ''}. Nếu bệnh nhân đến cho lịch đó, hãy mở lịch hẹn để check-in (hoặc đổi lịch về hôm nay); nếu là lượt khám khác, chọn "Vẫn tiếp nhận vãng lai".`,
           HttpStatus.CONFLICT,

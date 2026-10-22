@@ -154,7 +154,7 @@ export type PrismaAppointmentRow = {
     deletedAt?: Date | string | null;
   } | null;
   dentist?: { id: string; fullName?: string } | null;
-  encounter?: { id: string } | null;
+  encounter?: { id: string; status?: string } | null;
 };
 
 const toIso = (v: Date | string | null | undefined): string | null => {
@@ -201,6 +201,7 @@ export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
     noShowAt: toIso(raw.noShowAt),
     rescheduleCount: raw.rescheduleCount ?? 0,
     encounterId: raw.encounter?.id ?? raw.encounterId ?? null,
+    encounterCancelled: raw.encounter?.status === 'CANCELLED',
     visitKind: raw.visitKind === 'WALK_IN' ? 'walk_in' : 'booked',
     bufferBeforeMin: raw.bufferBeforeMin ?? 0,
     bufferAfterMin: raw.bufferAfterMin ?? 0,
@@ -720,6 +721,7 @@ export function useCheckInAppointment() {
         {
           override: body.override ?? false,
           overrideReason: body.overrideReason ?? undefined,
+          ignoreOpenVisit: body.ignoreOpenVisit || undefined,
         },
       );
       return transformAppointment(row);

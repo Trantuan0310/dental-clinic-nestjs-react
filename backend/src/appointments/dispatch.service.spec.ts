@@ -90,6 +90,10 @@ describe('DispatchService.reassignDay', () => {
       }),
     });
     expect(res.closedOverrideId).toBe('ov-1');
+    // Closed before the visits are looked up and moved: none booked meanwhile is missed.
+    expect(prisma.scheduleOverride.create.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.appointment.findMany.mock.invocationCallOrder[0],
+    );
     expect(prisma.appointmentRescheduleLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ byClinic: true }),
     });
