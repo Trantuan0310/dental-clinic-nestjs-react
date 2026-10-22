@@ -8,12 +8,10 @@ import { AvailabilityService } from './availability.service';
 import { AppointmentsCron } from './appointments.cron';
 import { DispatchController } from './dispatch.controller';
 import { DispatchService } from './dispatch.service';
-import { PayrollModule } from '../payroll/payroll.module';
 
 @Module({
-  // PayrollModule: the legacy /appointments/shift-registrations/:id/cancel
-  // route delegates to ShiftRegistrationService.cancel (single implementation).
-  imports: [ScheduleModule.forRoot(), PrismaModule, AuditModule, PayrollModule],
+  // Shift registrations live in PayrollModule only (/shifts/registrations).
+  imports: [ScheduleModule.forRoot(), PrismaModule, AuditModule],
   controllers: [AppointmentsController, DispatchController],
   providers: [AppointmentsService, AvailabilityService, DispatchService, AppointmentsCron],
   exports: [AppointmentsService, AvailabilityService],

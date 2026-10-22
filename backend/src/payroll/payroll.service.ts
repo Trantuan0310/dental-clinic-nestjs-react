@@ -303,10 +303,32 @@ export class PayrollService {
     this.assertCompensationRange(effectiveFrom, effectiveTo);
     // BR-PAY-022: no two terms of one dentist overlap. There is no database
     // constraint for it, so the check and the insert run under one lock.
-    const created = await this.prisma.$transaction(async tx => {
+    const { created, endedPrevious } = await this.prisma.$transaction(async tx => {
       await lockPayroll(tx, dto.dentistId);
+      // 4.3: a new term ends the dentist's open-ended one the day before
+      // (a raise from the 1st ends the old rate on the last day of the
+      // month), so changing pay never rewrites days already worked.
+      const open = await tx.dentistCompensation.findFirst({
+        where: {
+          dentistId: dto.dentistId,
+          deletedAt: null,
+          effectiveTo: null,
+          effectiveFrom: { lt: effectiveFrom },
+        },
+        orderBy: { effectiveFrom: 'desc' },
+      });
+      let ended: { id: string; effectiveFrom: Date; effectiveTo: Date | null } | null = null;
+      if (open) {
+        const dayBefore = new Date(effectiveFrom);
+        dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+        ended = await tx.dentistCompensation.update({
+          where: { id: open.id },
+          data: { effectiveTo: dayBefore },
+          select: { id: true, effectiveFrom: true, effectiveTo: true },
+        });
+      }
       await this.assertNoCompensationOverlap(tx, dto.dentistId, effectiveFrom, effectiveTo);
-      return tx.dentistCompensation.create({
+      const row = await tx.dentistCompensation.create({
         data: {
           dentistId: dto.dentistId,
           effectiveFrom,
@@ -319,6 +341,7 @@ export class PayrollService {
           approvedAt: new Date(),
         },
       });
+      return { created: row, endedPrevious: ended };
     }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
@@ -330,6 +353,7 @@ export class PayrollService {
         dentistId: created.dentistId,
         baseSalaryVnd: created.baseSalaryVnd,
         commissionPct: created.commissionPct,
+        ...(endedPrevious && { endedPrevious }),
       },
     });
     if (selfReason) {
@@ -342,16 +366,34 @@ export class PayrollService {
       );
     }
 
-    return created;
+    return { ...created, endedPrevious };
   }
 
   async updateCompensation(id: string, dto: UpdateCompensationDto, actorUserId: string) {
     const current = await this.prisma.dentistCompensation.findUnique({
       where: { id },
-      select: { dentistId: true, effectiveFrom: true, deletedAt: true },
+      select: {
+        dentistId: true,
+        effectiveFrom: true,
+        deletedAt: true,
+        baseSalaryVnd: true,
+        commissionPct: true,
+        overtimeHourlyVnd: true,
+      },
     });
     if (!current || current.deletedAt)
       throw new PayrollNotFoundException('DentistCompensation', id);
+    // 4.3: a new rate on a term already in force would be paid back to its
+    // first day (closed periods excepted). Pay changes take a new term.
+    const moneyChanged = (['baseSalaryVnd', 'commissionPct', 'overtimeHourlyVnd'] as const).some(
+      k => dto[k] !== undefined && Number(dto[k]) !== Number(current[k]),
+    );
+    if (moneyChanged && dateKey(current.effectiveFrom) < clinicDateOnly()) {
+      throw new PayrollStateException(
+        'Chế độ lương này đã áp dụng cho những ngày đã qua nên không sửa lương/hoa hồng tại chỗ được. ' +
+          'Hãy thêm chế độ mới có hiệu lực từ ngày thay đổi; chế độ cũ tự kết thúc vào ngày hôm trước.',
+      );
+    }
     const selfReason =
       current.dentistId === actorUserId
         ? await this.assertSelfAction(
@@ -414,21 +456,52 @@ export class PayrollService {
     return updated;
   }
 
+  /**
+   * "Stop" a term (4.3): it ends today, the clinic's date (00:00–07:00 VN is
+   * already the next day in UTC terms). The row stays, so the days it paid
+   * keep their pay on a recompute; deleting it zeroed them. A term not yet
+   * in force paid nothing and is removed.
+   */
   async softDeleteCompensation(id: string, actorUserId: string) {
-    // Sets effectiveTo to today (BR-PAY compensation end-of-life)
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const current = await this.prisma.dentistCompensation.findUnique({
+      where: { id },
+      select: { effectiveFrom: true, effectiveTo: true, deletedAt: true },
+    });
+    if (!current || current.deletedAt)
+      throw new PayrollNotFoundException('DentistCompensation', id);
+    const today = clinicDateOnly();
+
+    if (dateKey(current.effectiveFrom) > today) {
+      const removed = await this.prisma.dentistCompensation.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      await this.audit.log({
+        actorUserId,
+        action: 'COMPENSATION_DELETED',
+        targetType: 'DENTIST_COMPENSATION',
+        targetId: id,
+        metadata: { reason: 'not yet in force' },
+      });
+      return removed;
+    }
+    if (current.effectiveTo && dateKey(current.effectiveTo) <= today) {
+      throw new PayrollStateException(
+        `Chế độ lương này đã kết thúc ngày ${dateKey(current.effectiveTo).split('-').reverse().join('/')}.`,
+      );
+    }
 
     const updated = await this.prisma.dentistCompensation.update({
       where: { id },
-      data: { effectiveTo: today, deletedAt: new Date() },
+      data: { effectiveTo: new Date(today) },
     });
 
     await this.audit.log({
       actorUserId,
-      action: 'COMPENSATION_DELETED',
+      action: 'COMPENSATION_ENDED',
       targetType: 'DENTIST_COMPENSATION',
       targetId: id,
+      metadata: { effectiveTo: today },
     });
 
     return updated;
@@ -604,8 +677,8 @@ export class PayrollService {
         `Cannot compute period in status ${period.status}. Only DRAFT or REVIEWING allowed.`,
       );
     }
-    // An adjustment period copies a paid period's lines; recomputing it would
-    // pay the whole period a second time.
+    // An adjustment period holds only differences to a paid period;
+    // recomputing it would pay the whole period a second time.
     if (period.openedFromPeriodId) {
       throw new PayrollStateException(
         'Kỳ điều chỉnh không tính lại tự động — hãy thêm thưởng/phạt cho từng bác sĩ.',
@@ -853,8 +926,36 @@ export class PayrollService {
           select: { dentistId: true },
         }),
       ]);
+    // 4.6: commission paid in a closed period on an invoice voided or
+    // refunded since is clawed back here even when the dentist has nothing
+    // else in this period (left the clinic, no pay terms any more).
+    const changedInvoices =
+      (await tx.invoice.findMany({
+        where: {
+          OR: [
+            {
+              status: InvoiceStatus.VOIDED,
+              OR: [{ voidedAt: null }, { voidedAt: { lt: range.toExclusive } }],
+            },
+            { refundedAmount: { gt: 0 } },
+          ],
+        },
+        select: { id: true },
+      })) ?? [];
+    const clawbacks = changedInvoices.length
+      ? ((await tx.payrollEncounterDetail.findMany({
+          where: {
+            payrollPeriodId: { not: periodId },
+            invoiceId: { in: changedInvoices.map(i => i.id) },
+            invoiceItemId: { not: null },
+            period: { status: { in: CLOSED_PERIOD_STATUSES } },
+          },
+          select: { lineItem: { select: { dentistId: true } } },
+        })) ?? [])
+      : [];
     return [
       ...new Set([
+        ...clawbacks.map(r => r.lineItem.dentistId),
         ...comps.map(r => r.dentistId),
         ...invoices.map(r => r.encounter?.dentistId).filter((x): x is string => !!x),
         ...encounters.map(r => r.dentistId),
@@ -1701,31 +1802,63 @@ export class PayrollService {
         });
         const { bonusVnd, penaltyVnd } = sumAdjustments(allAdjustments);
 
-        const grossPayVnd =
-          Number(lineItem.baseSalaryVnd) +
-          Number(lineItem.commissionVnd) +
-          Number(lineItem.overtimePayVnd) +
-          bonusVnd -
-          penaltyVnd;
+        // An adjustment period holds differences only: its gross is the
+        // adjustments, taxed as the original payslip plus them, minus what
+        // the original already withheld (its own config snapshot).
+        const original = period.openedFromPeriodId
+          ? await tx.payrollLineItem.findFirst({
+              where: { payrollPeriodId: period.openedFromPeriodId, dentistId: lineItem.dentistId },
+              select: { grossPayVnd: true, taxTncnVnd: true, bhxhVnd: true },
+            })
+          : null;
+        const grossPayVnd = period.openedFromPeriodId
+          ? bonusVnd - penaltyVnd
+          : Number(lineItem.baseSalaryVnd) +
+            Number(lineItem.commissionVnd) +
+            Number(lineItem.overtimePayVnd) +
+            bonusVnd -
+            penaltyVnd;
 
-        const config = await this.getPeriodConfigSnapshot(lineItem.payrollPeriodId);
+        const config = await this.getPeriodConfigSnapshot(
+          period.openedFromPeriodId ?? lineItem.payrollPeriodId,
+        );
         const taxConfig =
           (config.taxBrackets as unknown as TaxBracketsConfig) ?? DEFAULT_TAX_BRACKETS;
-        const taxResult = computeProgressiveTax(Math.max(grossPayVnd, 0), taxConfig);
         // Critical #8: Decimal-precision-safe math for BHXH rate.
         const bhxhCap = config.minGrossForBhxh.mul(20);
-        const bhxhBase = grossPayVnd < bhxhCap.toNumber() ? grossPayVnd : bhxhCap.toNumber();
         const bhxhRate = config.bhxhPct.add(config.bhytPct).add(config.bhtnPct);
-        const bhxhVnd = Math.round(bhxhBase * bhxhRate.toNumber());
-        const netPayVnd = grossPayVnd - taxResult.totalTaxVnd - bhxhVnd;
+        const deductions = (gross: number) => {
+          const bhxhBase = gross < bhxhCap.toNumber() ? gross : bhxhCap.toNumber();
+          return {
+            tax: computeProgressiveTax(Math.max(gross, 0), taxConfig).totalTaxVnd,
+            bhxh: Math.round(bhxhBase * bhxhRate.toNumber()),
+          };
+        };
+        let taxTncnVnd: number;
+        let bhxhVnd: number;
+        if (period.openedFromPeriodId) {
+          const originalGross = Number(original?.grossPayVnd ?? 0);
+          const after = deductions(originalGross + grossPayVnd);
+          taxTncnVnd = after.tax - Number(original?.taxTncnVnd ?? 0);
+          bhxhVnd = after.bhxh - Number(original?.bhxhVnd ?? 0);
+        } else {
+          ({ tax: taxTncnVnd, bhxh: bhxhVnd } = deductions(grossPayVnd));
+        }
+        const netPayVnd = grossPayVnd - taxTncnVnd - bhxhVnd;
 
         await tx.payrollLineItem.update({
           where: { id: dto.lineItemId },
           data: {
+            // Lines copied whole before the fix above become differences too.
+            ...(period.openedFromPeriodId && {
+              baseSalaryVnd: 0,
+              commissionVnd: 0,
+              overtimePayVnd: 0,
+            }),
             bonusVnd,
             penaltyVnd,
             grossPayVnd,
-            taxTncnVnd: taxResult.totalTaxVnd,
+            taxTncnVnd,
             bhxhVnd,
             netPayVnd,
             manuallyAdjusted: true,
@@ -1769,10 +1902,27 @@ export class PayrollService {
   // State transitions
   // ============================================================================
 
+  /**
+   * 4.2: a period is closed only after its last clinic day. Locked or
+   * approved earlier, invoices issued on the remaining days landed in no
+   * period (the listener only writes to open ones) and their commission was
+   * never paid.
+   */
+  private assertPeriodEnded(period: { periodEnd: Date }, what: string) {
+    const lastDay = dateKey(period.periodEnd);
+    if (clinicDateOnly() <= lastDay) {
+      throw new PayrollStateException(
+        `Kỳ lương chưa kết thúc (đến hết ngày ${lastDay.split('-').reverse().join('/')}): ` +
+          `chỉ ${what} được từ ngày hôm sau, để hóa đơn và ca làm của những ngày cuối kỳ được tính.`,
+      );
+    }
+  }
+
   async lockPeriod(periodId: string, actorUserId: string) {
     const period = await this.prisma.payrollPeriod.findUnique({ where: { id: periodId } });
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.REVIEWING);
+    this.assertPeriodEnded(period, 'khóa kỳ');
 
     // Guarded write: only succeed if status is still what we just read.
     // Payroll transitions are money, and several admins can hold the
@@ -1814,6 +1964,12 @@ export class PayrollService {
     const period = await this.prisma.payrollPeriod.findUnique({ where: { id: periodId } });
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     assertTransition(period.status, PayrollPeriodStatus.APPROVED);
+    this.assertPeriodEnded(period, 'duyệt kỳ');
+    // 4.2: approve today's numbers. Time-off, shifts, schedules and pay terms
+    // changed since the last compute have no listener; recomputing here
+    // picks them up (adjustments are kept). An adjustment period is never
+    // recomputed (it holds differences only).
+    if (!period.openedFromPeriodId) await this.computePeriod(periodId, actorUserId);
 
     // The period holds the approver's own payslip (owner who also practises).
     const ownLine = await this.prisma.payrollLineItem.findFirst({
@@ -2009,7 +2165,10 @@ export class PayrollService {
           },
         });
 
-        // Copy original line items as starting point for adjustment
+        // One line per dentist of the original, holding only the DIFFERENCE
+        // to pay or recover: every amount starts at 0 and the adjustments
+        // added here make it up. A copy of the original's pay was paid (and
+        // counted in reports) a second time when this period was marked paid.
         const originals = await tx.payrollLineItem.findMany({
           where: { payrollPeriodId: originalPeriodId },
         });
@@ -2019,21 +2178,30 @@ export class PayrollService {
             data: {
               payrollPeriodId: created.id,
               dentistId: orig.dentistId,
-              encountersCount: orig.encountersCount,
-              totalRevenueVnd: orig.totalRevenueVnd,
-              workedShifts: orig.workedShifts,
-              totalHours: orig.totalHours,
-              overtimeHours: orig.overtimeHours,
-              baseSalaryVnd: orig.baseSalaryVnd,
-              commissionVnd: orig.commissionVnd,
-              overtimePayVnd: orig.overtimePayVnd,
-              bonusVnd: orig.bonusVnd,
-              penaltyVnd: orig.penaltyVnd,
-              grossPayVnd: orig.grossPayVnd,
-              taxTncnVnd: orig.taxTncnVnd,
-              bhxhVnd: orig.bhxhVnd,
-              netPayVnd: orig.netPayVnd,
-              computationLog: orig.computationLog as unknown as Prisma.InputJsonValue,
+              encountersCount: 0,
+              totalRevenueVnd: 0,
+              workedShifts: 0,
+              totalHours: 0,
+              overtimeHours: 0,
+              baseSalaryVnd: 0,
+              commissionVnd: 0,
+              overtimePayVnd: 0,
+              bonusVnd: 0,
+              penaltyVnd: 0,
+              grossPayVnd: 0,
+              taxTncnVnd: 0,
+              bhxhVnd: 0,
+              netPayVnd: 0,
+              computationLog: {
+                adjustmentFor: {
+                  periodId: originalPeriodId,
+                  lineItemId: orig.id,
+                  grossPayVnd: Number(orig.grossPayVnd),
+                  taxTncnVnd: Number(orig.taxTncnVnd),
+                  bhxhVnd: Number(orig.bhxhVnd),
+                  netPayVnd: Number(orig.netPayVnd),
+                },
+              },
               manuallyAdjusted: true,
               adjustmentNote: `Adjustment for original period ${originalPeriodId}`,
               computedAt: new Date(),

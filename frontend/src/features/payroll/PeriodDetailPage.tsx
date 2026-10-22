@@ -8,6 +8,8 @@ import { PageLoader } from '@/components/ui/Loading';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatVnd, formatDate, formatDateTime, formatNumber } from '@/lib/format';
+import { clinicToday } from '@/lib/clinicTime';
+import { Alert } from '@/components/ui/Alert';
 import { useAuthStore } from '@/stores/authStore';
 import {
   usePeriodDetail,
@@ -193,6 +195,10 @@ export default function PeriodDetailPage() {
   const canAdjust = hasPermission('payroll.period.adjust') && (period.status === 'DRAFT' || period.status === 'REVIEWING');
   const canLock = hasPermission('payroll.period.lock') && period.status === 'DRAFT';
   const canApprove = hasPermission('payroll.period.approve') && period.status === 'REVIEWING';
+  // Lock/approve open the day after the period's last clinic day (the
+  // server refuses earlier: invoices issued on the last days would be lost).
+  const periodEnded = clinicToday() > period.periodEnd.slice(0, 10);
+  const notEndedHint = t('uiWorkforce.payrollPeriodNotEnded', { date: formatDate(period.periodEnd.slice(0, 10)) });
   const canMarkPaid = hasPermission('payroll.period.mark_paid') && period.status === 'APPROVED';
 
   return (
@@ -224,6 +230,8 @@ export default function PeriodDetailPage() {
               variant="outline"
               onClick={() => (warningCount(warnings) > 0 ? setConfirmLock(true) : runLock())}
               isLoading={lockPeriod.isPending}
+              disabled={!periodEnded}
+              title={periodEnded ? undefined : notEndedHint}
             >
               <Lock className="h-4 w-4" /> {t('uiWorkforce.payrollLock')}
             </Button>
@@ -233,6 +241,8 @@ export default function PeriodDetailPage() {
               variant="outline"
               onClick={() => (ownLine ? setConfirmSelfApprove(true) : runApprove())}
               isLoading={approvePeriod.isPending}
+              disabled={!periodEnded}
+              title={periodEnded ? t('uiWorkforce.payrollApproveRecomputes') : notEndedHint}
             >
               <CheckCircle className="h-4 w-4" /> {t('uiWorkforce.payrollReviewApprove')}
             </Button>
@@ -244,6 +254,10 @@ export default function PeriodDetailPage() {
           )}
         </div>
       </div>
+
+      {(canLock || canApprove) && !periodEnded && <Alert variant="info">{notEndedHint}</Alert>}
+
+      {period.openedFromPeriodId && <Alert variant="warning">{t('uiWorkforce.payrollAdjustmentPeriodNote')}</Alert>}
 
       {isOpenPeriod && warnings && warningCount(warnings) > 0 && <PeriodWarningsCard warnings={warnings} />}
 

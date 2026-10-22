@@ -7,9 +7,8 @@ import { ACCOUNTS } from './flow-helpers';
  *
  * Date range: backend/prisma/seed-clinical.ts pre-seeds fixed historical
  * periods for May (PAID), Jun (PAID), Jul (APPROVED) and Aug 1–16 (DRAFT) —
- * see the `periods` array there. September is untouched, so a
- * month-to-date period this month can't collide with
- * PeriodOverlapException regardless of which day this suite runs on.
+ * see the `periods` array there. Later months are untouched, so a
+ * month-to-yesterday period can't collide with PeriodOverlapException.
  *
  * This session's payroll.service.ts change (commit 71dcec4, "tie overtime
  * pay to approved duty schedule, not encounter duration") made totalHours
@@ -21,9 +20,16 @@ import { ACCOUNTS } from './flow-helpers';
 test('payroll period cycle: create, compute, lock, approve', async ({ page }) => {
   test.setTimeout(60_000);
 
-  const now = new Date();
-  const periodStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-  const periodEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // A period can only be locked/approved once its last day is over (the
+  // server refuses earlier), so it ends yesterday: from the 1st of
+  // yesterday's month, or the week before when that is too short.
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const end = new Date();
+  end.setDate(end.getDate() - 1);
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() >= 7 ? 1 : end.getDate() - 6);
+  const periodStart = ymd(start);
+  const periodEnd = ymd(end);
 
   await page.goto('/payroll');
   await page.waitForLoadState('networkidle');

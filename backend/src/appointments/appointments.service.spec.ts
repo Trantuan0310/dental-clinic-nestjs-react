@@ -572,62 +572,6 @@ describe('AppointmentsService', () => {
     });
   });
 
-  describe('legacy /appointments/shift-registrations approve/reject', () => {
-    const pending = {
-      id: 'shift-1',
-      dentistId: 'dentist-1',
-      date: new Date('2099-01-06'),
-      startTime: '18:00',
-      endTime: '21:00',
-      status: 'PENDING',
-    };
-
-    it('refuses to approve a shift of a past clinic day', async () => {
-      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue({
-        ...pending,
-        date: new Date('2020-01-01'),
-      });
-
-      await expect(service.approveShiftRegistration('shift-1', undefined, actor)).rejects.toThrow(
-        /ngày đã qua/,
-      );
-      expect(prisma.shiftRegistration.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('approves only a row still PENDING and surfaces a concurrent decision', async () => {
-      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue(pending);
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
-        status: 'ACTIVE',
-        userRoles: [{ role: { code: 'dentist' } }],
-      });
-      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-
-      await expect(service.approveShiftRegistration('shift-1', undefined, actor)).rejects.toThrow(
-        /vừa được thay đổi/,
-      );
-      expect(prisma.shiftRegistration.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'shift-1', status: 'PENDING' } }),
-      );
-      expect(audit.log).not.toHaveBeenCalled();
-    });
-
-    it('rejects with the same guarded write', async () => {
-      (prisma.shiftRegistration.findUnique as jest.Mock).mockResolvedValue(pending);
-      (prisma.shiftRegistration.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (prisma.shiftRegistration.findUniqueOrThrow as jest.Mock).mockResolvedValue({
-        ...pending,
-        status: 'REJECTED',
-      });
-
-      const result = await service.rejectShiftRegistration('shift-1', 'Không đủ nhân sự', actor);
-
-      expect(result.status).toBe('REJECTED');
-      expect(prisma.shiftRegistration.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'shift-1', status: 'PENDING' } }),
-      );
-    });
-  });
-
   describe('dentist profiles (BR-STAFF-006)', () => {
     const base = {
       id: 'dentist-1',

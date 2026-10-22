@@ -75,6 +75,8 @@ export interface PayrollPeriod {
   approvedAt: string | null;
   paidAt: string | null;
   paymentReference: string | null;
+  /** Set on an adjustment period: its amounts are differences to that period. */
+  openedFromPeriodId?: string | null;
 }
 
 export interface PayrollAdjustment {

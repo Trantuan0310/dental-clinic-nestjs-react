@@ -229,21 +229,67 @@ describe('ShiftRegistrationService', () => {
       expect(result.status).toBe(ShiftRegistrationStatus.PENDING);
     });
 
-    it('throws when already has APPROVED shift on same date', async () => {
-      (prisma.workingSchedule.findFirst as jest.Mock).mockResolvedValue(null);
+    it('throws when it overlaps an APPROVED shift on the same date', async () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.shiftRegistration.findFirst as jest.Mock).mockResolvedValue({
-        ...mockShiftPending,
-        status: ShiftRegistrationStatus.APPROVED,
-      });
+      // mockShiftPending runs 18:00-21:00
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([
+        { ...mockShiftPending, status: ShiftRegistrationStatus.APPROVED },
+      ]);
 
       await expect(
         service.create(
-          { date: FUTURE_DATE, startTime: '08:00', endTime: '12:00' },
+          { date: FUTURE_DATE, startTime: '20:00', endTime: '22:00' },
           'dentist-1',
           false,
         ),
-      ).rejects.toThrow(ShiftConflictException);
+      ).rejects.toThrow(/Trùng ca đã duyệt 18:00-21:00/);
+      expect(prisma.shiftRegistration.create).not.toHaveBeenCalled();
+    });
+
+    it('allows a second shift the same day when it does not overlap (4.5)', async () => {
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([
+        { ...mockShiftPending, status: ShiftRegistrationStatus.APPROVED },
+      ]);
+      (prisma.shiftRegistration.create as jest.Mock).mockResolvedValue({
+        ...mockShiftPending,
+        id: 'shift-2',
+        startTime: '08:00',
+        endTime: '12:00',
+      });
+
+      const result = await service.create(
+        { date: FUTURE_DATE, startTime: '08:00', endTime: '12:00' },
+        'dentist-1',
+        false,
+      );
+
+      expect(result.id).toBe('shift-2');
+      // Same day, live statuses only, read under the dentist's calendar lock.
+      const calls = (prisma.shiftRegistration.findMany as jest.Mock).mock.calls;
+      expect(calls[calls.length - 1][0].where).toEqual({
+        dentistId: 'dentist-1',
+        date: new Date(FUTURE_DATE),
+        status: { in: [ShiftRegistrationStatus.APPROVED, ShiftRegistrationStatus.PENDING] },
+        deletedAt: null,
+      });
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect((prisma as any).$executeRawUnsafe.mock.calls[0][0]).toMatch(/pg_advisory_xact_lock/);
+    });
+
+    it('a dentist naming a colleague still registers only their own shift', async () => {
+      (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.shiftRegistration.create as jest.Mock).mockResolvedValue(mockShiftPending);
+
+      await service.create(
+        { dentistId: 'other-dentist', date: FUTURE_DATE, startTime: '18:00', endTime: '21:00' },
+        'dentist-1',
+        false,
+      );
+
+      expect(prisma.shiftRegistration.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ dentistId: 'dentist-1', createdByUserId: 'dentist-1' }),
+      });
     });
   });
 

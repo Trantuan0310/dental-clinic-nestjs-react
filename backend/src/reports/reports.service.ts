@@ -957,9 +957,8 @@ export class ReportsService {
 
   /**
    * Net pay of payroll periods marked paid in [from, to], by the payment
-   * date (PAID, or LOCKED after being paid). Adjustment periods are left
-   * out: they start as a copy of the original's payslips, so summing them
-   * would count the original pay twice.
+   * date (PAID, or LOCKED after being paid). An adjustment period holds
+   * only the difference to its original, so it adds just that.
    */
   private async payrollPaidTotal(from: Date, to: Date): Promise<number> {
     const agg = await this.prisma.payrollLineItem.aggregate({
@@ -968,7 +967,6 @@ export class ReportsService {
         period: {
           status: { in: [PayrollPeriodStatus.PAID, PayrollPeriodStatus.LOCKED] },
           paidAt: { gte: from, lte: to },
-          openedFromPeriodId: null,
         },
       },
     });

@@ -782,48 +782,6 @@ export class ScheduleImpactQueryDto {
   to?: string;
 }
 
-export class CreateShiftRegistrationDto {
-  @ApiProperty()
-  @IsUUID()
-  dentistId!: string;
-
-  @ApiProperty()
-  @IsCalendarDate()
-  date!: string;
-
-  @ApiProperty({ example: '08:00' })
-  @IsClinicTime()
-  startTime!: string;
-
-  @ApiProperty({ example: '17:00' })
-  @IsClinicTime()
-  endTime!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  maxEncounters?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  notes?: string;
-}
-
-export class ApproveShiftRegistrationDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  reason?: string;
-}
-
-export class RejectShiftRegistrationDto {
-  @ApiProperty()
-  @IsString()
-  reason!: string;
-}
-
 export class ClinicClosureDto {
   @ApiProperty({ description: 'First closed clinic date YYYY-MM-DD' })
   @IsCalendarDate()

@@ -155,14 +155,18 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
   // M#4: Check PENDING shifts too
   // ============================================================================
 
-  describe('M#4 — block creation when PENDING shift exists', () => {
-    it('rejects when BS already has PENDING shift for that date', async () => {
+  describe('M#4 — block creation overlapping a PENDING shift', () => {
+    const pending = {
+      id: 'pending-1',
+      status: ShiftRegistrationStatus.PENDING,
+      date: new Date(FUTURE_DATE),
+      startTime: '09:00',
+      endTime: '11:00',
+    };
+
+    it('rejects when BS already has an overlapping PENDING shift for that date', async () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.shiftRegistration.findFirst as jest.Mock).mockResolvedValue({
-        id: 'pending-1',
-        status: ShiftRegistrationStatus.PENDING,
-        date: new Date(FUTURE_DATE),
-      });
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([pending]);
 
       await expect(
         service.create(
@@ -173,12 +177,9 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
       ).rejects.toThrow(ShiftConflictException);
     });
 
-    it('mentions PENDING (not APPROVED) in error when conflict is PENDING', async () => {
+    it('says the clash is a shift waiting for approval when it is PENDING', async () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.shiftRegistration.findFirst as jest.Mock).mockResolvedValue({
-        id: 'pending-1',
-        status: ShiftRegistrationStatus.PENDING,
-      });
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([pending]);
 
       try {
         await service.create(
@@ -188,14 +189,14 @@ describe('ShiftRegistrationService — Major fix coverage (M#4, M#5, M#8, M#9)',
         );
         fail('Should have thrown');
       } catch (err: any) {
-        expect(err.message).toContain('PENDING');
+        expect(err.message).toContain('đang chờ duyệt');
       }
     });
 
     it('allows creation when only REJECTED shifts exist (terminal)', async () => {
       (prisma.workingSchedule.findMany as jest.Mock).mockResolvedValue([]);
-      // findFirst returns null because filter excludes REJECTED
-      (prisma.shiftRegistration.findFirst as jest.Mock).mockResolvedValue(null);
+      // findMany returns nothing because the filter excludes REJECTED
+      (prisma.shiftRegistration.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.shiftRegistration.create as jest.Mock).mockResolvedValue({ id: 'new-shift' });
 
       const result = await service.create(

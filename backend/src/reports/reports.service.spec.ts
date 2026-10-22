@@ -438,14 +438,13 @@ describe('ReportsService', () => {
       },
     );
     // By payment date; a PAID period stays paid once auto-locked; an
-    // adjustment period (a copy of the original payslips) is not summed.
+    // adjustment period holds only differences, so it is summed too.
     expect(prisma.payrollLineItem.aggregate.mock.calls[0][0].where.period).toEqual({
       status: { in: ['PAID', 'LOCKED'] },
       paidAt: {
         gte: new Date('2026-10-01T00:00:00+07:00'),
         lte: new Date('2026-10-01T23:59:59.999+07:00'),
       },
-      openedFromPeriodId: null,
     });
   });
 

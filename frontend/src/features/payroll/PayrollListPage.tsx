@@ -8,6 +8,8 @@ import { Plus, Calculator, Calendar, CheckCircle, Wallet, AlertCircle } from 'lu
 import { Button, Card, StatusBadge, EmptyState, Modal, Input, Select } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
+import { clinicToday } from '@/lib/clinicTime';
+import { formatDate } from '@/lib/format';
 import {
   usePeriods,
   useCreatePeriod,
@@ -15,6 +17,9 @@ import {
   useApprovePeriod,
 } from './payrollApi';
 import { MarkPaidModal } from './MarkPaidModal';
+
+/** Lock/approve open the day after the period's last clinic day. */
+const hasEnded = (periodEnd: string) => clinicToday() > periodEnd.slice(0, 10);
 
 export function PayrollListPage() {
   const { t, i18n } = useTranslation();
@@ -164,7 +169,12 @@ export function PayrollListPage() {
                             size="sm"
                             onClick={() => handleApprove(period.id)}
                             isLoading={approvePeriod.isPending && approvePeriod.variables === period.id}
-                            title={t('uiWorkforce.approve')}
+                            disabled={!hasEnded(period.periodEnd)}
+                            title={
+                              hasEnded(period.periodEnd)
+                                ? t('uiWorkforce.approve')
+                                : t('uiWorkforce.payrollPeriodNotEnded', { date: formatDate(period.periodEnd.slice(0, 10)) })
+                            }
                           >
                             <CheckCircle className="h-4 w-4" />
                           </Button>
