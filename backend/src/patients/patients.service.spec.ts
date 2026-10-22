@@ -790,6 +790,31 @@ describe('PatientsService', () => {
         data: expect.objectContaining({ patientId: 'p2', newPhone: '0901111111' }),
       });
     });
+
+    it('merge keeps the source email on a target that has none, never overwrites one', async () => {
+      const same = { fullName: 'A', dob: new Date('1990-01-15') };
+      const run = async (targetEmail: string | null) => {
+        (prisma.patient.update as jest.Mock).mockClear();
+        (prisma.patient.findUnique as jest.Mock)
+          .mockResolvedValueOnce(validPatient({ ...same, id: 'p1', email: 'old@example.com' }))
+          .mockResolvedValueOnce(validPatient({ ...same, id: 'p2', email: targetEmail }));
+        for (const m of [
+          prisma.appointment,
+          prisma.encounter,
+          prisma.invoice,
+          prisma.bookingRequest,
+          prisma.patientPhoneHistory,
+        ]) {
+          (m.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+        }
+        (prisma.patientIdentifier.findMany as jest.Mock).mockResolvedValue([]);
+        await service.merge({ sourcePatientId: 'p1', targetPatientId: 'p2' } as any, actor);
+        return (prisma.patient.update as jest.Mock).mock.calls.find(c => c[0].where.id === 'p2')[0]
+          .data;
+      };
+      expect((await run(null)).email).toBe('old@example.com');
+      expect((await run('new@example.com')).email).toBeUndefined();
+    });
   });
 
   describe('updateMedicalHistory', () => {

@@ -422,3 +422,12 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - **Duyệt kỳ lương tính lại số liệu (đợt B):** `approvePeriod` tính lại kỳ trước khi duyệt, nên số được duyệt có thể khác số người duyệt vừa xem. Nay so thực nhận từng bác sĩ trước/sau khi tính lại; nếu có ai đổi (hoặc phiếu lương thêm/mất) thì giữ số mới, KHÔNG duyệt, trả 409 nêu tên và số cũ → mới, ghi nhật ký `PERIOD_APPROVE_RECOMPUTED`; duyệt lần nữa sẽ qua nếu không còn gì đổi. Giao diện (`useApprovePeriod`) tải lại số liệu kỳ cả khi bị từ chối (`onSettled`), nếu không bấm duyệt lần hai sẽ duyệt số người duyệt chưa từng thấy.
 - **Tổng giảm giá trong báo cáo doanh thu (đợt A):** cộng cả giảm giá của hóa đơn đã hủy; nay bỏ hóa đơn VOIDED (test mới: 225.000 → 125.000).
 - backend `tsc`, `lint`, 204 test payroll + reports xanh; frontend `build`, `lint` sạch. Chưa chạy E2E đầy đủ ở máy này (CI chạy).
+
+## 22/10 — Phần 1 của kế hoạch (`plan-2026-10-22.md`): rà đợt E–F và giao diện A–D
+
+- 1.1 Gộp hồ sơ: chuyển đủ mọi bảng tham chiếu bệnh nhân (lịch hẹn, phiên khám, hóa đơn, yêu cầu đặt lịch, lịch sử SĐT, giấy tờ; đối chiếu toàn bộ schema); khóa hai hồ sơ theo thứ tự, Serializable; quyền `patient.merge` cả API và giao diện. **Sửa:** email của hồ sơ nguồn bị bỏ cả khi hồ sơ đích không có email → nay giữ sang (như SĐT), không ghi đè email đã có; nhật ký gộp ghi đúng email giữ/bỏ. +1 test.
+- 1.2 Giờ mở cửa dùng chung: máy chủ đọc cùng `CLINIC_HOURS`/`CLINIC_SUNDAY_HOURS` với giao diện (đã truyền vào container). Chưa tính ngày phòng khám nghỉ → việc 2.3.
+- 1.3 Đặt lịch đợt E: tự xác nhận bỏ qua người có yêu cầu/lịch khác, tra cứu chỉ SĐT không trả giờ — đúng.
+- 1.4 Menu theo quyền: Playwright đăng nhập admin (20 mục), lễ tân (12), bác sĩ (12) trên DB demo, mở từng mục: không 403/5xx/lỗi JS.
+- 1.5 Giao diện A–D trên demo: điều chỉnh giảm hóa đơn qua giao diện (còn nợ 3,5tr → 3tr, hiện dòng điều chỉnh có ngày/lý do/người); mở lại phiên khám qua giao diện (về "đang khám", hóa đơn nháp bị hủy); giảm giá: lễ tân 40% được, 60% bị chặn 403 `DISCOUNT_LARGE_FORBIDDEN`, admin 60% được, đều ghi `INVOICE_DISCOUNT_UPDATED`.
+- 1.6 Migration 049, 050 trên DB demo có dữ liệu (1.721 hóa đơn): chạy sạch, số liệu hóa đơn không đổi, 3 quyền mới chỉ gán `clinic_admin`. (DB demo cục bộ: đặt lại mật khẩu admin về mặc định để kiểm; sao lưu `guidedemo_bak`.)
