@@ -64,6 +64,8 @@ export const COMMISSION_INVOICE_STATUSES: InvoiceStatus[] = [
   InvoiceStatus.PAID,
 ];
 
+const vnd = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)}đ`;
+
 /** Periods whose numbers are final; a void after this is clawed back. */
 const CLOSED_PERIOD_STATUSES: PayrollPeriodStatus[] = [
   PayrollPeriodStatus.APPROVED,
@@ -1977,6 +1979,37 @@ export class PayrollService {
     return updated;
   }
 
+  /** Net pay of each payslip in a period, by dentist (for spotting a recompute that moved pay). */
+  private async netPayByDentist(periodId: string): Promise<Map<string, number>> {
+    const rows =
+      (await this.prisma.payrollLineItem.findMany({
+        where: { payrollPeriodId: periodId },
+        select: { dentistId: true, netPayVnd: true },
+      })) ?? [];
+    return new Map(rows.map(r => [r.dentistId, Number(r.netPayVnd)]));
+  }
+
+  /** Whose net pay in the period differs from `before` now (a payslip added or dropped counts). */
+  private async payChanges(periodId: string, before: Map<string, number>) {
+    const after = await this.netPayByDentist(periodId);
+    const ids = [...new Set([...before.keys(), ...after.keys()])].filter(
+      id => (before.get(id) ?? 0) !== (after.get(id) ?? 0),
+    );
+    if (!ids.length) return [];
+    const users =
+      (await this.prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, fullName: true },
+      })) ?? [];
+    const name = new Map(users.map(u => [u.id, u.fullName]));
+    return ids.map(id => ({
+      dentistId: id,
+      dentistName: name.get(id) ?? null,
+      fromVnd: before.get(id) ?? 0,
+      toVnd: after.get(id) ?? 0,
+    }));
+  }
+
   async approvePeriod(periodId: string, actorUserId: string, selfApprovalReason?: string) {
     const period = await this.prisma.payrollPeriod.findUnique({ where: { id: periodId } });
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
@@ -1986,7 +2019,32 @@ export class PayrollService {
     // changed since the last compute have no listener; recomputing here
     // picks them up (adjustments are kept). An adjustment period is never
     // recomputed (it holds differences only).
-    if (!period.openedFromPeriodId) await this.computePeriod(periodId, actorUserId);
+    // The approver signs off what they saw: if recomputing moves anybody's pay,
+    // the new numbers are kept but nothing is approved, and the change is
+    // reported so it can be looked at and approved again.
+    if (!period.openedFromPeriodId) {
+      const before = await this.netPayByDentist(periodId);
+      await this.computePeriod(periodId, actorUserId);
+      const changes = await this.payChanges(periodId, before);
+      if (changes.length) {
+        await this.audit.log({
+          actorUserId,
+          action: 'PERIOD_APPROVE_RECOMPUTED',
+          targetType: 'PAYROLL_PERIOD',
+          targetId: periodId,
+          metadata: { changes },
+        });
+        throw new PayrollStateException(
+          'Số liệu kỳ lương vừa thay đổi khi tính lại trước khi duyệt (nghỉ phép, ca làm, hóa đơn hoặc chế độ lương đổi sau lần tính trước): ' +
+            changes
+              .slice(0, 5)
+              .map(c => `${c.dentistName ?? c.dentistId}: ${vnd(c.fromVnd)} → ${vnd(c.toVnd)}`)
+              .join('; ') +
+            (changes.length > 5 ? `; … và ${changes.length - 5} người khác` : '') +
+            '. Hãy xem lại bảng lương rồi duyệt lần nữa.',
+        );
+      }
+    }
 
     // The period holds the approver's own payslip (owner who also practises).
     const ownLine = await this.prisma.payrollLineItem.findFirst({

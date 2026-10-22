@@ -272,8 +272,13 @@ export function useApprovePeriod() {
         selfApprovalReason ? { selfApprovalReason } : undefined,
       );
     },
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: payrollKeys.period(data.id) });
+    // Also after a refusal: approving recomputes first, and when that moved
+    // anybody's pay the server keeps the new numbers without approving. The
+    // screen must show them before the next attempt, or the second click
+    // would approve figures the approver never saw.
+    onSettled: (_data, _error, vars) => {
+      const id = typeof vars === 'string' ? vars : vars.id;
+      qc.invalidateQueries({ queryKey: payrollKeys.period(id) });
       qc.invalidateQueries({ queryKey: ['payroll', 'periods'] });
     },
   });

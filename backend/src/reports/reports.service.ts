@@ -319,10 +319,10 @@ export class ReportsService {
     const totalCollected = collections.reduce((acc, p) => acc + p.signed, 0);
     const totalRefunded = collections.filter(p => p.refund).reduce((a, p) => a - p.signed, 0);
     // BR-BILL-025: discounts given on the invoices issued in the range.
-    const totalDiscount = invoices.reduce(
-      (acc, i) => acc + Number(i.subtotal ?? 0) - Number(i.total ?? 0),
-      0,
-    );
+    // A voided invoice gave nothing away: its revenue is taken back whole.
+    const totalDiscount = invoices
+      .filter(i => i.status !== InvoiceStatus.VOIDED)
+      .reduce((acc, i) => acc + Number(i.subtotal ?? 0) - Number(i.total ?? 0), 0);
 
     // Status split of the invoices still counted (a voided one is in totalVoided).
     const statusMap = new Map<string, { count: number; total: number; outstanding: number }>();

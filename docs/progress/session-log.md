@@ -415,3 +415,10 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 ### Sửa theo review Codex của PR #62
 
 - Lỗi bảo mật (P1): tra cứu theo số điện thoại + ngày sinh trước đây cũng khớp khi số nhập là số liên hệ khẩn cấp của một người lớn, nên người liên hệ biết ngày sinh có thể đọc họ tên, giới tính, email của người đó. Nay số phải là số riêng của bệnh nhân; số người giám hộ chỉ dùng cho trẻ vị thành niên chưa có số riêng (cùng quy tắc khớp hồ sơ khi xác nhận). Thêm test cho trường hợp người lớn; 196 test booking xanh.
+
+## Rà soát đợt A–D của báo cáo nghiệp vụ 21–22/10 và hai chỗ đã sửa
+
+- Rà bằng cách đọc mã và chạy lại toàn bộ test backend (57 bộ, 1432 test xanh, khớp ghi chú của phiên kia). Không thấy lỗi sai tiền hay lộ dữ liệu. Hai điểm cần sửa:
+- **Duyệt kỳ lương tính lại số liệu (đợt B):** `approvePeriod` tính lại kỳ trước khi duyệt, nên số được duyệt có thể khác số người duyệt vừa xem. Nay so thực nhận từng bác sĩ trước/sau khi tính lại; nếu có ai đổi (hoặc phiếu lương thêm/mất) thì giữ số mới, KHÔNG duyệt, trả 409 nêu tên và số cũ → mới, ghi nhật ký `PERIOD_APPROVE_RECOMPUTED`; duyệt lần nữa sẽ qua nếu không còn gì đổi. Giao diện (`useApprovePeriod`) tải lại số liệu kỳ cả khi bị từ chối (`onSettled`), nếu không bấm duyệt lần hai sẽ duyệt số người duyệt chưa từng thấy.
+- **Tổng giảm giá trong báo cáo doanh thu (đợt A):** cộng cả giảm giá của hóa đơn đã hủy; nay bỏ hóa đơn VOIDED (test mới: 225.000 → 125.000).
+- backend `tsc`, `lint`, 204 test payroll + reports xanh; frontend `build`, `lint` sạch. Chưa chạy E2E đầy đủ ở máy này (CI chạy).

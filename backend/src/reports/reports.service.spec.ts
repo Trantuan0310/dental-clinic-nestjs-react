@@ -105,7 +105,8 @@ describe('ReportsService', () => {
           // Issued, refunded in full, then voided — all in the range.
           {
             status: 'VOIDED',
-            subtotal: D(300_000),
+            // A discount on an invoice that was then voided is not given away.
+            subtotal: D(400_000),
             total: D(300_000),
             outstandingAmount: D(0),
             issuedAt: issuedC,
