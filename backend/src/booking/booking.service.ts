@@ -43,7 +43,7 @@ import {
 } from '../patients/domain/patient-rules';
 export { foldName, similarName };
 import { AuditService } from '../audit/audit.service';
-import { nextClinicOpening } from '../common/clinic-hours';
+import { ClosedInterval, closureIntervals, nextClinicOpening } from '../common/clinic-hours';
 import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
 import { EmailService } from '../common/services/email.service';
 import {
@@ -258,6 +258,9 @@ const AUTO_CONFIRM_ACTOR = {
 /** Wrong-date answers allowed per phone per hour on the returning-patient lookup. */
 const LOOKUP_MISS_LIMIT = 5;
 const LOOKUP_MISS_WINDOW_MS = 60 * 60_000;
+
+/** The reply time promised on the public booking page (frontend locales say 30 minutes). */
+export const BOOKING_RESPONSE_MINUTES = 30;
 
 const DEFAULT_HOLD_MINUTES = 120;
 /**
@@ -550,6 +553,7 @@ export class BookingService {
    * (DAY_OVER: today's working hours are over).
    */
   private async publicDay(dentistId: string, date: string, plan: VisitPlan) {
+    await this.loadClosures();
     const data = await this.appointments.getAvailability({
       dentistId,
       date,
@@ -616,7 +620,7 @@ export class BookingService {
    * from now, or from the clinic's next opening when it is closed now.
    */
   private earliestOnlineStart(minLeadMinutes: number): number {
-    const from = nextClinicOpening(new Date()).getTime();
+    const from = nextClinicOpening(new Date(), undefined, this.closures.list).getTime();
     return Math.max(from + minLeadMinutes * 60_000, Date.now() + 60_000);
   }
 
@@ -626,7 +630,33 @@ export class BookingService {
    * while the clinic was closed.
    */
   private holdEndsAt(createdAt: Date, holdMs: number): number {
-    return nextClinicOpening(createdAt).getTime() + holdMs;
+    return nextClinicOpening(createdAt, undefined, this.closures.list).getTime() + holdMs;
+  }
+
+  /**
+   * Clinic closures around now (a week back, three weeks ahead), for the
+   * opening-hours checks above, which are synchronous. Re-read at most once a
+   * minute; the async entry points await this first. A failed read keeps the
+   * last list (none at first): the plain opening hours still apply.
+   */
+  private closures: { list: ClosedInterval[]; at: number } = { list: [], at: 0 };
+  private async loadClosures(): Promise<void> {
+    if (Date.now() - this.closures.at < 60_000) return;
+    try {
+      const today = clinicDateOnly();
+      const rows =
+        (await this.prisma.clinicClosure.findMany({
+          where: {
+            deletedAt: null,
+            endDate: { gte: new Date(addClinicDays(today, -7)) },
+            startDate: { lte: new Date(addClinicDays(today, 21)) },
+          },
+          select: { startDate: true, endDate: true, startTime: true },
+        })) ?? [];
+      this.closures = { list: closureIntervals(rows), at: Date.now() };
+    } catch (error) {
+      this.logger.warn(`Could not read clinic closures: ${String(error)}`);
+    }
   }
 
   /** Whether a visit starting at `start` (buffers included) runs into a hold. */
@@ -690,6 +720,7 @@ export class BookingService {
   }
 
   async createPublic(dto: CreatePublicBookingRequestDto) {
+    await this.loadClosures();
     const details = this.validateDetails(dto);
     const startAt = new Date(dto.startAt);
     if (!Number.isFinite(startAt.getTime()) || startAt.getTime() <= Date.now() + 60_000) {
@@ -859,6 +890,7 @@ export class BookingService {
    * allows changes (`canManage`); reference + phone only shows it.
    */
   async publicStatus(reference: string, access: PublicAccess) {
+    await this.loadClosures();
     const row = await this.verify(reference, access);
     return this.withIssue(row, { canManage: this.hasToken(access) });
   }
@@ -1589,6 +1621,46 @@ export class BookingService {
    * front desk confirms or changes at the same moment is left alone, and a
    * second run finds nothing to do. Requesters with an email are told.
    */
+  /**
+   * The public page promises a reply within BOOKING_RESPONSE_MINUTES of
+   * opening hours. A request still waiting for the front desk past that gets
+   * one reminder email to the staff list (the same as for a new request).
+   * Claimed with a guarded write first, so two runs never both send it.
+   */
+  async remindSlowRequests(now = new Date()) {
+    await this.loadClosures();
+    const rows =
+      (await this.prisma.bookingRequest.findMany({
+        where: {
+          status: 'PENDING_REVIEW',
+          appointmentId: null,
+          staffRemindedAt: null,
+          createdAt: { gte: new Date(now.getTime() - 3 * 24 * 60 * 60_000) },
+        },
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+      })) ?? [];
+    let reminded = 0;
+    for (const row of rows) {
+      const deadline =
+        nextClinicOpening(row.createdAt, undefined, this.closures.list).getTime() +
+        BOOKING_RESPONSE_MINUTES * 60_000;
+      if (now.getTime() < deadline) continue;
+      const { count } = await this.prisma.bookingRequest.updateMany({
+        where: { id: row.id, staffRemindedAt: null, status: 'PENDING_REVIEW' },
+        data: { staffRemindedAt: now },
+      });
+      if (!count) continue;
+      await this.notifyStaff(
+        row.id,
+        `Yêu cầu đặt lịch đã chờ quá ${BOOKING_RESPONSE_MINUTES} phút`,
+      );
+      reminded++;
+    }
+    return { reminded };
+  }
+
   async expireOverdue(now = new Date()) {
     const where: Prisma.BookingRequestWhereInput = {
       appointmentId: null,

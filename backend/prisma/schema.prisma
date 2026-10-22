@@ -1719,6 +1719,8 @@ model BookingRequest {
   accessRotatedAt     DateTime?            @map("access_rotated_at") @db.Timestamptz()
   /// Migration 044: the last patient email failed; the front desk must call.
   noticeFailedAt      DateTime?            @map("notice_failed_at") @db.Timestamptz()
+  /// Migration 052: the one "still waiting" reminder to the front desk went out.
+  staffRemindedAt     DateTime?            @map("staff_reminded_at") @db.Timestamptz()
   noticeFailedSubject String?              @map("notice_failed_subject") @db.VarChar(200)
   /// Migration 044: why it was closed (BookingCloseReason in booking.service.ts);
   /// partial index booking_requests_close_reason_idx is managed by the migration.

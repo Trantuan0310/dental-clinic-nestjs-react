@@ -46,9 +46,14 @@ import {
   isValidIdentifierValue,
   isValidVnPhone,
   foldName,
+  medicalListChanges,
   mergeStringLists,
   readJsonStringArray,
 } from './domain/patient-rules';
+
+/** `{ medicalChanges }` for the audit metadata, or nothing when no list changed. */
+const medicalAudit = (changes: ReturnType<typeof medicalListChanges>) =>
+  Object.keys(changes).length ? { medicalChanges: changes } : {};
 
 /**
  * Matches the millisecond a client echoed back: timestamptz keeps
@@ -348,6 +353,7 @@ export class PatientsService {
       metadata: {
         fields: Object.keys(dto).filter(k => k !== 'expectedUpdatedAt'),
         phoneChanged,
+        ...medicalAudit(medicalListChanges(current, dto)),
       },
     });
     this.emitClinicalDataChanged(id);
@@ -554,7 +560,7 @@ export class PatientsService {
   async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, allergies: true, chronicDiseases: true, currentMedications: true },
     });
     if (!current) throw new PatientNotFoundException(id);
     if (this.isRowScopedDentist(actor)) {
@@ -610,7 +616,10 @@ export class PatientsService {
       actorEmail: actor.email,
       targetType: 'patient',
       targetId: id,
-      metadata: { fields: Object.keys(data) },
+      metadata: {
+        fields: Object.keys(data),
+        ...medicalAudit(medicalListChanges(current, data)),
+      },
     });
     this.emitClinicalDataChanged(id);
     return {

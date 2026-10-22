@@ -90,25 +90,67 @@ export function clinicOpeningHours(env: NodeJS.ProcessEnv = process.env): HourBl
 
 const DAY_MS = 24 * 60 * 60_000;
 
+/** A stretch the whole clinic is closed, as instants (ms since epoch, UTC). */
+export interface ClosedInterval {
+  start: number;
+  end: number;
+}
+
+/**
+ * Clinic closures (clinic_closures rows: whole days, the first one possibly
+ * from `startTime`) as instants: closed from the start day (at `startTime`,
+ * else midnight, clinic time) up to the end of the end day.
+ */
+export function closureIntervals(
+  rows: Array<{ startDate: Date; endDate: Date; startTime?: Date | null }>,
+): ClosedInterval[] {
+  return rows.map(r => {
+    const firstMidnight = r.startDate.getTime() - CLINIC_UTC_OFFSET_MS;
+    const fromMinutes = r.startTime
+      ? r.startTime.getUTCHours() * 60 + r.startTime.getUTCMinutes()
+      : 0;
+    return {
+      start: firstMidnight + fromMinutes * 60_000,
+      end: r.endDate.getTime() - CLINIC_UTC_OFFSET_MS + DAY_MS,
+    };
+  });
+}
+
 /**
  * `at` itself while the clinic is open, otherwise the start of its next
  * opening block (looking two weeks ahead): when the front desk can first act
- * on something that came in at `at`. Clinic closures are not considered.
+ * on something that came in at `at`. Time inside a clinic closure (Tết, a
+ * holiday) is not open.
  */
 export function nextClinicOpening(
   at: Date,
   byDay: HourBlock[][] | null = clinicOpeningHours(),
+  closed: ClosedInterval[] = [],
 ): Date {
   if (!byDay) return at;
   const local = at.getTime() + CLINIC_UTC_OFFSET_MS;
   const firstDay = Math.floor(local / DAY_MS) * DAY_MS;
+  // Closures in clinic-local ms, like the blocks below.
+  const shut = closed.map(c => ({
+    start: c.start + CLINIC_UTC_OFFSET_MS,
+    end: c.end + CLINIC_UTC_OFFSET_MS,
+  }));
   for (let d = 0; d <= 14; d++) {
     const day = firstDay + d * DAY_MS;
     for (const b of byDay[new Date(day).getUTCDay()] ?? []) {
-      const start = day + b.start * 60_000;
-      if (local < day + b.end * 60_000) {
-        return new Date(Math.max(start, local) - CLINIC_UTC_OFFSET_MS);
+      const blockEnd = day + b.end * 60_000;
+      let from = Math.max(day + b.start * 60_000, local);
+      // Step past every closure that covers the candidate instant.
+      for (let moved = true; moved && from < blockEnd;) {
+        moved = false;
+        for (const c of shut) {
+          if (c.start <= from && from < c.end) {
+            from = c.end;
+            moved = true;
+          }
+        }
       }
+      if (from < blockEnd) return new Date(from - CLINIC_UTC_OFFSET_MS);
     }
   }
   return at;

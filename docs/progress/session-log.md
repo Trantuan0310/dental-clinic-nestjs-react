@@ -431,3 +431,13 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - 1.4 Menu theo quyền: Playwright đăng nhập admin (20 mục), lễ tân (12), bác sĩ (12) trên DB demo, mở từng mục: không 403/5xx/lỗi JS.
 - 1.5 Giao diện A–D trên demo: điều chỉnh giảm hóa đơn qua giao diện (còn nợ 3,5tr → 3tr, hiện dòng điều chỉnh có ngày/lý do/người); mở lại phiên khám qua giao diện (về "đang khám", hóa đơn nháp bị hủy); giảm giá: lễ tân 40% được, 60% bị chặn 403 `DISCOUNT_LARGE_FORBIDDEN`, admin 60% được, đều ghi `INVOICE_DISCOUNT_UPDATED`.
 - 1.6 Migration 049, 050 trên DB demo có dữ liệu (1.721 hóa đơn): chạy sạch, số liệu hóa đơn không đổi, 3 quyền mới chỉ gán `clinic_admin`. (DB demo cục bộ: đặt lại mật khẩu admin về mặc định để kiểm; sao lưu `guidedemo_bak`.)
+
+## 22/10 — Phần 2 của kế hoạch: dọn việc tồn đọng
+
+- 2.1 Dị ứng / BR-PT-015: đặc tả cũ ghi lễ tân không thấy medical history, nhưng thực tế lễ tân ghi dị ứng khi tiếp nhận — giữ cách làm này (thông tin an toàn cần có trước khi khám), sửa đặc tả. Thêm nhật ký: mọi lần sửa dị ứng / bệnh nền / thuốc đang dùng (lễ tân qua `PATCH /patients/:id`, bác sĩ qua `/medical-history`) ghi `medicalChanges` = mục thêm/bớt từng danh sách (`medicalListChanges` trong `patient-rules.ts`), để truy được ai xoá một dị ứng. +2 test.
+- 2.2 Gỡ quyền `shift_registration.read/write/approve` (không route nào dùng): migration 051 xoá quyền và gán vai trò; `seed.ts` không tạo nữa.
+- 2.3 Giờ mở cửa tính ngày phòng khám nghỉ: `nextClinicOpening(at, hours, closed)` bỏ qua khoảng nghỉ (`closureIntervals` từ `clinic_closures`, ngày đầu có thể từ `startTime`). Đặt lịch đọc ngày nghỉ (bộ đệm 60 giây) trước khi tính báo trước và giữ chỗ. +3 test.
+- 2.4 Ticket PAY-006/007/012 đã xong từ trước, PAY-011 không còn áp dụng (trang đã thay) → chuyển `docs/Tickets/done/`, cập nhật `INDEX.md`.
+- 2.5 Nhắc lễ tân khi yêu cầu chờ quá 30 phút (đúng lời hứa trên trang khách, `BOOKING_RESPONSE_MINUTES`): cron 5 phút, tính từ giờ mở cửa kế tiếp (có ngày nghỉ), gửi một lần qua email danh sách nhận báo của lễ tân; migration 052 thêm `booking_requests.staff_reminded_at`, chiếm quyền gửi bằng ghi có điều kiện. +3 test.
+- 2.6 Nhật ký hiển thị "Hệ thống" khi không có người thực hiện — đã có sẵn, không sửa.
+- backend `tsc`, lint sạch, toàn bộ 1444 test xanh; migration 051, 052 chạy sạch trên DB demo.

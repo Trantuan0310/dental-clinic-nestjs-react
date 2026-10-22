@@ -7,6 +7,8 @@ import { bookingEmailConfigProblems } from './clinic-contact';
 /**
  * Every 5 minutes: close online booking requests whose time passed before
  * the front desk confirmed them (EXPIRED), so they stop waiting in the inbox.
+ * Every 5 minutes: one reminder to the front desk for a request waiting past
+ * the promised reply time.
  * Every hour: email the day-ahead visit reminders.
  * ScheduleModule.forRoot() is registered by AppointmentsModule.
  */
@@ -36,6 +38,19 @@ export class BookingCron implements OnModuleInit {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`expireOverdueRequests failed: ${msg}`);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async remindSlowRequests() {
+    try {
+      const result = await this.booking.remindSlowRequests();
+      if (result.reminded > 0) {
+        this.logger.log(`Reminded the front desk of ${result.reminded} waiting booking requests`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`remindSlowRequests failed: ${msg}`);
     }
   }
 

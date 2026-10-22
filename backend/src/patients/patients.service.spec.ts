@@ -195,6 +195,38 @@ describe('PatientsService', () => {
       );
     });
 
+    it('logs which allergies were added and removed, so a removal is traceable', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({ allergies: ['Penicillin', 'Latex'] }),
+      );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.patient.update as jest.Mock).mockResolvedValue(validPatient());
+
+      await service.update('p1', { allergies: ['latex', 'Aspirin'] } as any, actor);
+
+      const entry = (audit.log as jest.Mock).mock.calls.find(
+        c => c[0].action === 'PATIENT_UPDATED',
+      )[0];
+      expect(entry.metadata.medicalChanges).toEqual({
+        allergies: { added: ['Aspirin'], removed: ['Penicillin'] },
+      });
+    });
+
+    it('adds no medical changes to the log when the lists stay the same', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
+        validPatient({ allergies: ['Penicillin'] }),
+      );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.patient.update as jest.Mock).mockResolvedValue(validPatient());
+
+      await service.update('p1', { allergies: ['Penicillin'], address: 'Hà Nội' } as any, actor);
+
+      const entry = (audit.log as jest.Mock).mock.calls.find(
+        c => c[0].action === 'PATIENT_UPDATED',
+      )[0];
+      expect(entry.metadata.medicalChanges).toBeUndefined();
+    });
+
     it('writes phone history when primaryPhone changes (BR-PT-009)', async () => {
       (prisma.patient.findUnique as jest.Mock).mockResolvedValue(
         validPatient({ primaryPhone: '0901111111' }),

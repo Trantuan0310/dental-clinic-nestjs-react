@@ -4,7 +4,7 @@
 🟡 P2 — UX enhancement
 
 ## Status
-Open
+Done (đóng 22/10/2026)
 
 ## Owner
 Backend
@@ -147,3 +147,10 @@ Tạo mới (nếu chưa có) `docs/05_API/error-codes.md` chứa bảng:
 - `docs/03_Specification/UI/SPEC.md` (§13 — Error handling & UX messages)
 - `docs/05_API/error-codes.md`
 - RFC 7807 — Problem Details for HTTP APIs
+
+
+---
+
+## Đóng 22/10/2026
+
+Đã có: mọi exception của Payroll/Shift có `code` riêng (`PAYROLL_STATE_INVALID`, `PERIOD_OVERLAP`, `SHIFT_CONFLICT`, ...) trong `payroll/domain/exceptions.ts`.

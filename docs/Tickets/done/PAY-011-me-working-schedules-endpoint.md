@@ -4,7 +4,7 @@
 🟡 P2 — UX enhancement
 
 ## Status
-Open
+Done (đóng 22/10/2026)
 
 ## Owner
 Backend
@@ -99,3 +99,10 @@ WorkingSchedule[]   // schema đã có trong Prisma, có thể tận dụng DTO 
 
 - `docs/03_Specification/UI/SPEC.md` (§7 — Register Shift page)
 - `docs/03_Specification/Appointments/SPEC.md` (WorkingSchedule domain)
+
+
+---
+
+## Đóng 22/10/2026
+
+Không còn áp dụng: `RegisterShiftPage` đã được thay bằng `MyShiftsPage` + `RegisterShiftModal`; bác sĩ xem lịch cố định ở menu "Lịch làm việc" (`/schedule`).
