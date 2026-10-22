@@ -35,3 +35,20 @@ Mức: **Cao** (sai tiền/dữ liệu/quyền, chặn việc hằng ngày) · *
 Chưa xác nhận: `PATCH /patients/:id` có thể sửa hồ sơ đã lưu trữ/gộp; lễ tân sửa được dị ứng (lệch BR-PT-015).
 
 Đã kiểm, thấy hợp lý: chống gửi trùng, hai lễ tân cùng xác nhận, khách đổi SĐT, trẻ em do phụ huynh đặt, đồng ý/từ chối giờ đề xuất, khách tự hủy, gộp hồ sơ chuyển đủ các bảng, xoá mềm có chặn, danh sách "cần gọi".
+
+## 3. Phiên khám → hoá đơn → thanh toán → kho
+
+1. **[Cao] Phiên khám đã đóng không mở lại được**, dù đặc tả có BR-MR-024 và `POST /encounters/:id/reopen` (`docs/03_Specification/MedicalRecords/SPEC.md:418,663-670`), và đặc tả Billing dặn "admin reopen" khi đổi thủ thuật. Controller không có route reopen; `reopenCancelledEncounter` chỉ mở lại phiên đã **hủy**; mọi thao tác sửa đòi IN_PROGRESS (`backend/src/medical-records/medical-records.service.ts:196-198`); hoá đơn chỉ sửa/bỏ dòng có sẵn, không thêm được (`backend/src/billing/billing.service.ts:1191-1312`). Còn mở từ báo cáo 14/09.
+   - Bác sĩ bấm "Kết thúc" mà quên ghi một thủ thuật → không thêm được vào bệnh án, hoá đơn, kho. Đóng nhầm cả phiên → kho đã trừ, hủy hoá đơn không hoàn kho.
+   - Đề xuất: reopen cho admin (bắt lý do, audit `REOPENED`), chỉ khi hoá đơn còn DRAFT hoặc đã hủy; khi mở lại thì hủy hoá đơn nháp và nhập lại kho các dòng STOCK_OUT của phiên. Nếu không làm reopen thì phải sửa đặc tả Billing. **Cần chủ phòng khám quyết.**
+2. **[Cao] Hoá đơn đã phát hành không điều chỉnh được mà giữ đúng số đã thu** — giảm giá/sửa dòng chỉ khi DRAFT (`billing.service.ts:1122-1128, 1205-1210`); hủy hoá đơn đòi số đã thu = 0 (`:1390-1410`), nên phải "hủy phiếu thu ghi nhầm" (dù đã thu thật) hoặc "hoàn tiền" (dù không trả thật). Không có chuyển phiếu thu sang hoá đơn lập lại, không có xoá nợ.
+   - Ví dụ: implant 30 triệu, khách đã trả 10 triệu, phát hiện tính sai giá hoặc khách ngưng điều trị → sổ quỹ sai, hoặc 20 triệu treo mãi trong công nợ.
+   - Đề xuất (**chủ phòng khám chọn**): (a) "điều chỉnh giảm/xoá nợ" cho hoá đơn ISSUED/PARTIAL, quyền riêng, bắt lý do; hoặc (b) khi lập lại hoá đơn thì chuyển phiếu thu của hoá đơn cũ sang.
+3. **[Trung bình] "Lập lại hoá đơn" làm mất chỉnh sửa và giảm giá đã duyệt** — `reissue` dựng lại từ thủ thuật gốc (`billing.service.ts:316-320, 233-249`), không chép giảm giá (`:177-197`). Khách có thể bị tính dư. Đề xuất: lập lại từ các dòng còn hiệu lực của hoá đơn cũ + chép giảm giá, tối thiểu cảnh báo.
+4. **[Trung bình, quyết định cần xem lại] Thiếu tồn kho trên sổ thì không đóng được phiên khám** → không có hoá đơn, bệnh nhân đứng chờ ở quầy (`medical-records.service.ts:593-646`, đúng ADR-0008/BR-INV-005). Không sửa được vật tư của thủ thuật đã ghi. Đề xuất (**chủ phòng khám chọn**): cho tồn âm kèm cảnh báo/nhật ký, hoặc trừ kho tách riêng để đối soát; tối thiểu cho sửa vật tư khi phiên còn mở.
+5. **[Thấp] Vẫn chọn được vật tư ngừng dùng (DISCONTINUED)** — `createTreatment` chỉ lọc `deletedAt` (`medical-records.service.ts:1138-1152`), trái BR-INV-014.
+6. **[Thấp] Thủ thuật nhập tay không có giá niêm yết và không cần lý do giá** (`medical-records.service.ts:1116-1134`). Đề xuất: bắt nhập lý do.
+
+Chưa xác nhận / ngoài phạm vi đặc tả: giao diện có báo rõ lỗi thiếu tồn kho khi đóng phiên không; chưa có quản lý lô và hạn dùng; chưa có kế hoạch điều trị nhiều buổi (lấy tuỷ, implant) — buổi sau chọn lại dịch vụ thì tính lại đủ giá.
+
+Đã kiểm, thấy hợp lý: hủy rồi mở lại phiên đã hủy, không tạo trùng hoá đơn, thu nhiều lần (chống bấm lặp, không thu quá nợ), hủy phiếu thu và hoàn tiền có kiểm soát, đổi giá danh mục không ảnh hưởng hoá đơn cũ, phiên không có thủ thuật không tạo hoá đơn 0đ.
