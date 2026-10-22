@@ -6,9 +6,12 @@ import { createPrismaMock, PrismaMockShape } from '../../test/helpers/prisma-moc
 import {
   REVENUE_INVOICE_STATUSES,
   REVENUE_INVOICE_WHERE,
+  countsAsRevenue,
   revenueInvoiceSql,
   revenueInvoiceWhere,
+  revenueRowsSql,
   signedPaymentAmount,
+  voidReversalAmount,
 } from './revenue-basis';
 
 const D = (n: number) => new Prisma.Decimal(n);
@@ -16,8 +19,17 @@ const admin = { sub: 'admin-1', email: 'a@x', permissions: ['appointment.read.an
 const dentist = { sub: 'dentist-1', email: 'd@x', permissions: ['appointment.read.own'] };
 
 describe('revenue basis (H7)', () => {
-  it('counts only issued invoices by issue date — never DRAFT or VOIDED', () => {
+  it('counts issued invoices by issue date — never DRAFT, nor VOIDED unless issued first', () => {
     expect(REVENUE_INVOICE_STATUSES).toEqual(['ISSUED', 'PARTIAL', 'PAID']);
+    expect(REVENUE_INVOICE_WHERE.OR).toEqual([
+      { status: { in: ['ISSUED', 'PARTIAL', 'PAID'] } },
+      { status: 'VOIDED', voidedAt: { not: null } },
+    ]);
+    const at = new Date('2026-09-10T03:00:00Z');
+    expect(countsAsRevenue({ status: 'PAID', issuedAt: at, voidedAt: null })).toBe(true);
+    expect(countsAsRevenue({ status: 'VOIDED', issuedAt: at, voidedAt: at })).toBe(true);
+    expect(countsAsRevenue({ status: 'VOIDED', issuedAt: null, voidedAt: at })).toBe(false);
+    expect(countsAsRevenue({ status: 'DRAFT', issuedAt: null, voidedAt: null })).toBe(false);
     const from = new Date('2026-09-01T00:00:00+07:00');
     const to = new Date('2026-09-30T23:59:59.999+07:00');
     expect(revenueInvoiceWhere(from, to)).toEqual({
@@ -28,6 +40,18 @@ describe('revenue basis (H7)', () => {
     expect(sql.sql).toContain('i."issued_at" >=');
     expect(sql.values).toEqual(['ISSUED', 'PARTIAL', 'PAID', from, to]);
     expect(() => revenueInvoiceSql('i; DROP', from, to)).toThrow();
+  });
+
+  it('takes a void back on the void date: total less the refunds already counted (5.3)', () => {
+    expect(voidReversalAmount({ total: D(500), refundedAmount: D(200) })).toBe(-300);
+    expect(voidReversalAmount({ total: D(500), refundedAmount: D(0) })).toBe(-500);
+    const from = new Date('2026-10-01T00:00:00+07:00');
+    const to = new Date('2026-10-31T23:59:59.999+07:00');
+    const sql = revenueRowsSql(from, to).sql;
+    expect(sql).toContain('-(i."total" - i."refunded_amount")');
+    expect(sql).toContain('i."voided_at" >=');
+    // A refund on an invoice voided later still lowers its own month.
+    expect(sql).toContain(`i."status"::text = 'VOIDED' AND i."voided_at" IS NOT NULL`);
   });
 
   it('signs refunds negative (H6 payments.kind = REFUND)', () => {
@@ -56,69 +80,105 @@ describe('ReportsService', () => {
 
   describe('revenueReport', () => {
     it('sums issued invoices, nets refunds by payment date and fills every section', async () => {
-      prisma.invoice.findMany.mockResolvedValue([
-        {
-          status: 'PAID',
-          total: D(1_000_000),
-          outstandingAmount: D(0),
-          issuedAt: new Date('2026-08-31T17:30:00Z'), // 1/9 00:30 clinic time
-          encounter: { dentistId: 'd1', dentist: { fullName: 'BS An' } },
-        },
-        {
-          status: 'PARTIAL',
-          total: D(500_000),
-          outstandingAmount: D(300_000),
-          issuedAt: new Date('2026-09-10T03:00:00Z'),
-          encounter: { dentistId: 'd2', dentist: { fullName: 'BS Bình' } },
-        },
-      ]);
+      const issuedC = new Date('2026-09-04T03:00:00Z');
+      const voidedC = new Date('2026-09-07T03:00:00Z');
+      prisma.invoice.findMany
+        .mockResolvedValueOnce([
+          {
+            status: 'PAID',
+            subtotal: D(1_000_000),
+            total: D(1_000_000),
+            outstandingAmount: D(0),
+            issuedAt: new Date('2026-08-31T17:30:00Z'), // 1/9 00:30 clinic time
+            encounter: { dentistId: 'd1', dentist: { fullName: 'BS An' } },
+          },
+          {
+            status: 'PARTIAL',
+            subtotal: D(625_000),
+            total: D(500_000),
+            outstandingAmount: D(300_000),
+            issuedAt: new Date('2026-09-10T03:00:00Z'),
+            encounter: { dentistId: 'd2', dentist: { fullName: 'BS Bình' } },
+          },
+          // Issued, refunded in full, then voided — all in the range.
+          {
+            status: 'VOIDED',
+            subtotal: D(300_000),
+            total: D(300_000),
+            outstandingAmount: D(0),
+            issuedAt: issuedC,
+            encounter: { dentistId: 'd2', dentist: { fullName: 'BS Bình' } },
+          },
+        ])
+        // Voided in the range: C (nothing left to take back) and an August
+        // invoice taken back on 15/9, never in August.
+        .mockResolvedValueOnce([
+          {
+            total: D(300_000),
+            refundedAmount: D(300_000),
+            voidedAt: voidedC,
+            encounter: { dentistId: 'd2', dentist: { fullName: 'BS Bình' } },
+          },
+          {
+            total: D(250_000),
+            refundedAmount: D(0),
+            voidedAt: new Date('2026-09-15T03:00:00Z'),
+            encounter: { dentistId: 'd1', dentist: { fullName: 'BS An' } },
+          },
+        ]);
+      const counted = { issuedAt: new Date('2026-09-01T00:00:00Z'), voidedAt: null };
       prisma.payment.findMany.mockResolvedValue([
         {
           amount: D(1_000_000),
           kind: 'PAYMENT',
           method: 'CASH',
           paidAt: new Date('2026-09-01T02:00:00Z'),
-          invoice: { status: 'PAID', encounter: { dentistId: 'd1' } },
+          invoice: { status: 'PAID', ...counted, encounter: { dentistId: 'd1' } },
         },
         {
           amount: D(200_000),
           kind: 'PAYMENT',
           method: 'BANK_TRANSFER',
           paidAt: new Date('2026-09-10T04:00:00Z'),
-          invoice: { status: 'PARTIAL', encounter: { dentistId: 'd2' } },
+          invoice: { status: 'PARTIAL', ...counted, encounter: { dentistId: 'd2' } },
         },
         {
           amount: D(100_000),
           kind: 'REFUND',
           method: 'CASH',
           paidAt: new Date('2026-09-20T04:00:00Z'),
-          invoice: { status: 'PAID', encounter: { dentistId: 'd1' } },
+          invoice: { status: 'PAID', ...counted, encounter: { dentistId: 'd1' } },
         },
-        // An invoice voided after a full refund: both receipts stay
-        // COMPLETED, net to zero, and never touch revenue.
+        // C voided after a full refund: both receipts stay COMPLETED and net
+        // to zero; the refund lowers revenue on its date, the void takes
+        // back what is left (0).
         {
           amount: D(300_000),
           kind: 'PAYMENT',
           method: 'CASH',
           paidAt: new Date('2026-09-05T04:00:00Z'),
-          invoice: { status: 'VOIDED', encounter: { dentistId: 'd2' } },
+          invoice: {
+            status: 'VOIDED',
+            issuedAt: issuedC,
+            voidedAt: voidedC,
+            encounter: { dentistId: 'd2' },
+          },
         },
         {
           amount: D(300_000),
           kind: 'REFUND',
           method: 'CASH',
           paidAt: new Date('2026-09-06T04:00:00Z'),
-          invoice: { status: 'VOIDED', encounter: { dentistId: 'd2' } },
+          invoice: {
+            status: 'VOIDED',
+            issuedAt: issuedC,
+            voidedAt: voidedC,
+            encounter: { dentistId: 'd2' },
+          },
         },
       ]);
-      prisma.invoiceItem.findMany.mockResolvedValue([
-        // 20 % invoice discount: 600k line counts 480k.
-        {
-          description: 'Trám',
-          lineTotal: D(600_000),
-          invoice: { subtotal: D(625_000), total: D(500_000) },
-        },
-      ]);
+      // Same movements as the Dashboard's revenueByProcedure (5.4).
+      prisma.$queryRaw.mockResolvedValue([{ service: 'Trám', total: 480_000.4, count: BigInt(1) }]);
       prisma.invoice.aggregate
         .mockResolvedValueOnce({ _count: { _all: 2 }, _sum: { total: D(70_000) } }) // drafts
         .mockResolvedValueOnce({ _count: { _all: 1 }, _sum: { total: D(9_000_000) } }); // voided
@@ -130,38 +190,54 @@ describe('ReportsService', () => {
       });
 
       const where = prisma.invoice.findMany.mock.calls[0][0].where;
-      expect(where.status).toEqual({ in: ['ISSUED', 'PARTIAL', 'PAID'] });
+      expect(where.OR).toEqual(REVENUE_INVOICE_WHERE.OR);
       expect(where.issuedAt.gte).toEqual(new Date('2026-09-01T00:00:00+07:00'));
       expect(where.encounter).toEqual({ dentistId: 'd1' });
-      // dentistId reaches payments, items and the excluded boxes too.
+      const voidWhere = prisma.invoice.findMany.mock.calls[1][0].where;
+      expect(voidWhere).toMatchObject({
+        status: 'VOIDED',
+        issuedAt: { not: null },
+        voidedAt: { gte: new Date('2026-09-01T00:00:00+07:00') },
+        encounter: { dentistId: 'd1' },
+      });
+      // dentistId reaches payments, services and the excluded boxes too.
       expect(prisma.payment.findMany.mock.calls[0][0].where.invoice.encounter).toEqual({
         dentistId: 'd1',
       });
-      expect(prisma.invoiceItem.findMany.mock.calls[0][0].where.invoice.encounter).toEqual({
-        dentistId: 'd1',
-      });
+      const sqlArgs = prisma.$queryRaw.mock.calls[0].slice(1);
+      const values = sqlArgs.flatMap((v: { values?: unknown[] }) => v?.values ?? []);
+      expect(values).toContain('d1');
       expect(prisma.invoice.aggregate.mock.calls[0][0].where.encounter).toEqual({
         dentistId: 'd1',
       });
+      // "Excluded" voided = never counted: voided as a draft, or no void date.
+      expect(prisma.invoice.aggregate.mock.calls[1][0].where.OR).toEqual([
+        { issuedAt: null, createdAt: expect.any(Object) },
+        { voidedAt: null, issuedAt: expect.any(Object) },
+      ]);
 
-      // Issued 1.5M − 100k refunded in the range (commission basis).
-      expect(r.totalInvoiced).toBe(1_400_000);
+      // Issued 1.8M − 400k refunded − 250k voided in the range.
+      expect(r.totalInvoiced).toBe(1_150_000);
+      expect(r.totalVoided).toBe(250_000);
+      expect(r.totalDiscount).toBe(125_000);
       expect(r.totalCollected).toBe(1_100_000);
       expect(r.totalRefunded).toBe(400_000);
       expect(r.totalOutstanding).toBe(300_000);
+      expect(r.invoiceCount).toBe(3);
+      expect(r.byStatus.map(b => b.status)).toEqual(['PAID', 'PARTIAL']);
       expect(r.excluded).toEqual({
         draft: { count: 2, total: 70_000 },
         voided: { count: 1, total: 9_000_000 },
       });
       expect(r.byMonth).toEqual([
-        { month: '2026-09', total: 1_400_000, paid: 1_100_000, count: 2 },
+        { month: '2026-09', total: 1_150_000, paid: 1_100_000, count: 3 },
       ]);
-      expect(r.byDentist[0]).toMatchObject({
-        dentistId: 'd1',
+      expect(r.byDentist.find(d => d.dentistId === 'd1')).toMatchObject({
         dentistName: 'BS An',
-        revenue: 900_000,
+        revenue: 650_000,
         paid: 900_000,
       });
+      expect(r.byDentist.find(d => d.dentistId === 'd2')).toMatchObject({ revenue: 500_000 });
       expect(r.byService).toEqual([{ service: 'Trám', total: 480_000, count: 1 }]);
       const cash = r.byPaymentMethod.find(m => m.method === 'CASH')!;
       expect(cash).toMatchObject({ amount: 900_000, count: 2 });
@@ -347,17 +423,48 @@ describe('ReportsService', () => {
     });
   });
 
-  it('financeSummary nets refunds out of income', async () => {
+  it('financeSummary nets refunds out of income and adds payroll paid to spending (4.4)', async () => {
     prisma.payment.findMany.mockResolvedValue([
       { amount: D(300), kind: 'PAYMENT', method: 'CASH', paidAt: new Date(), invoice: null },
       { amount: D(100), kind: 'REFUND', method: 'CASH', paidAt: new Date(), invoice: null },
     ]);
     expense.aggregateApproved.mockResolvedValue(50);
+    prisma.payrollLineItem.aggregate.mockResolvedValue({ _sum: { netPayVnd: D(40) } });
     await expect(service.financeSummary({ from: '2026-10-01', to: '2026-10-01' })).resolves.toEqual(
       {
         totalIncome: 200,
-        totalExpense: 50,
+        totalExpense: 90,
+        payrollPaid: 40,
       },
     );
+    // By payment date; a PAID period stays paid once auto-locked; an
+    // adjustment period (a copy of the original payslips) is not summed.
+    expect(prisma.payrollLineItem.aggregate.mock.calls[0][0].where.period).toEqual({
+      status: { in: ['PAID', 'LOCKED'] },
+      paidAt: {
+        gte: new Date('2026-10-01T00:00:00+07:00'),
+        lte: new Date('2026-10-01T23:59:59.999+07:00'),
+      },
+      openedFromPeriodId: null,
+    });
+  });
+
+  it('dashboard revenue takes a void back on its own date (5.3)', async () => {
+    prisma.appointment.findMany.mockResolvedValue([]);
+    prisma.invoice.aggregate.mockImplementation(async ({ where }: any) =>
+      where.voidedAt
+        ? { _sum: { total: D(300), refundedAmount: D(100) } }
+        : { _sum: { total: D(1000) } },
+    );
+    prisma.payment.aggregate.mockResolvedValue({ _sum: { amount: D(100) } });
+
+    const k = await service.dashboardKpis({ from: '2026-10-01', to: '2026-10-01' });
+
+    // 1000 issued − 100 refunded − (300 − 100) voided.
+    expect(k.treatmentRevenue.total).toBe(700);
+    const voidWhere = prisma.invoice.aggregate.mock.calls
+      .map((c: any[]) => c[0].where)
+      .find((w: any) => w.voidedAt);
+    expect(voidWhere).toMatchObject({ status: 'VOIDED', issuedAt: { not: null } });
   });
 });

@@ -320,11 +320,12 @@ export class ExpenseService {
   // Aggregation for financeSummary (wired from billing.service.ts)
   // ==========================================================================
 
+  /** Approved expenses, REIMBURSED included (the step after APPROVED: still spent). */
   async aggregateApproved(fromDate: Date, toDate: Date) {
     const agg = await this.prisma.expense.aggregate({
       _sum: { amount: true },
       where: {
-        status: ExpenseStatus.APPROVED,
+        status: { in: [ExpenseStatus.APPROVED, ExpenseStatus.REIMBURSED] },
         expenseDate: { gte: fromDate, lte: toDate },
         deletedAt: null,
       },

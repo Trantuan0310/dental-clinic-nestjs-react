@@ -99,6 +99,7 @@ export default function InvoiceListPage() {
               <p className="text-xl font-semibold text-gray-900 dark:text-white">
                 {summary ? formatCurrency(summary.totalInvoiced) : '—'}
               </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('uiOperations.filteredTotalHint')}</p>
             </div>
           </div>
         </Card>

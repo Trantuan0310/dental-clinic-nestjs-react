@@ -183,8 +183,9 @@ export interface RevenueReportByServiceEntry {
 }
 
 /**
- * Revenue = issued invoices (ISSUED/PARTIAL/PAID) by issue date; collected =
- * payments by payment date net of refunds. DRAFT/VOIDED only in `excluded`.
+ * Revenue = issued invoices by issue date, less refunds and voids on their
+ * own date; collected = payments by payment date net of refunds. DRAFT, and
+ * VOIDED never issued, only in `excluded`.
  */
 export interface RevenueReport {
   from: string;
@@ -193,6 +194,10 @@ export interface RevenueReport {
   totalInvoiced: number;
   totalCollected: number;
   totalRefunded: number;
+  /** Taken back by voiding issued invoices in the range (positive). */
+  totalVoided: number;
+  /** Discounts on the invoices issued in the range (BR-BILL-025). */
+  totalDiscount: number;
   totalOutstanding: number;
   invoiceCount: number;
   byStatus: RevenueReportByStatusEntry[];

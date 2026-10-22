@@ -13,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { clinicDateOnly, startOfClinicDay, endOfClinicDay } from '../common/date-range.util';
 import { ExpenseService } from '../expense/expense.service';
+import { REVENUE_INVOICE_STATUSES } from '../reports/revenue-basis';
 import {
   INVOICE_ISSUED_EVENT,
   INVOICE_PAYMENT_RECORDED_EVENT,
@@ -73,6 +74,9 @@ const BACKFILL_GRACE_MS = 10 * 60_000;
 const BACKFILL_WINDOW_DAYS = 30;
 
 const vnd = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)}đ`;
+
+/** BR-BILL-025: a discount above this share of the subtotal needs invoice.discount.large. */
+export const LARGE_DISCOUNT_RATIO = 0.5;
 
 /**
  * BillingService — invoice lifecycle:
@@ -458,7 +462,7 @@ export class BillingService {
     }
 
     const pageSize = query.pageSize ?? 20;
-    const [invoiceRows, aggregate] = await Promise.all([
+    const [invoiceRows, invoiceCount, aggregate] = await Promise.all([
       this.prisma.invoice.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -477,10 +481,12 @@ export class BillingService {
           items: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } },
         },
       }),
+      this.prisma.invoice.count({ where }),
+      // Money totals cover issued, not voided invoices only (5.5): a draft or
+      // a voided one is not money billed, whatever the list shows.
       this.prisma.invoice.aggregate({
-        where,
+        where: { AND: [where, { status: { in: REVENUE_INVOICE_STATUSES } }] },
         _sum: { total: true, paidAmount: true, outstandingAmount: true },
-        _count: { _all: true },
       }),
     ]);
 
@@ -494,7 +500,7 @@ export class BillingService {
         nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
       },
       summary: {
-        invoiceCount: aggregate._count._all,
+        invoiceCount,
         totalInvoiced: Number(aggregate._sum.total ?? 0),
         totalCollected: Number(aggregate._sum.paidAmount ?? 0),
         totalOutstanding: Number(aggregate._sum.outstandingAmount ?? 0),
@@ -1147,7 +1153,19 @@ export class BillingService {
         dto.discountType,
         dto.discountValue,
       );
-      const newTotal = Number(inv.subtotal) - discountAmount;
+      const subtotal = Number(inv.subtotal);
+      if (
+        discountAmount > subtotal * LARGE_DISCOUNT_RATIO &&
+        !actor.permissions.includes('invoice.discount.large')
+      ) {
+        throw new InvoiceCorrectionException(
+          'DISCOUNT_LARGE_FORBIDDEN',
+          `Giảm ${vnd(discountAmount)} là trên 50% tổng hóa đơn (${vnd(subtotal)}). Giảm giá trên 50% cần quản trị viên thực hiện.`,
+          { discountAmount, subtotal, maxRatio: LARGE_DISCOUNT_RATIO },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      const newTotal = subtotal - discountAmount;
       const newOutstanding = newTotal - Number(inv.paidAmount);
 
       const updated = await tx.invoice.update({
@@ -1179,6 +1197,25 @@ export class BillingService {
           },
         },
       });
+      // Money given away: kept in the system log like the other money actions.
+      await this.audit.log(
+        {
+          action: 'INVOICE_DISCOUNT_UPDATED',
+          actorUserId: actor.sub,
+          targetType: 'invoice',
+          targetId: invoiceId,
+          metadata: {
+            subtotal,
+            before: { total: Number(inv.total), discountAmount: subtotal - Number(inv.total) },
+            discountType: dto.discountType,
+            discountValue: dto.discountValue,
+            discountAmount,
+            total: newTotal,
+            ...(dto.reason && { reason: dto.reason }),
+          },
+        },
+        tx,
+      );
       return updated;
     }, SERIALIZABLE);
   }

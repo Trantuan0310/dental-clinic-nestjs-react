@@ -519,6 +519,13 @@ const PERMISSIONS = [
     action: 'item.update',
     description: 'Sửa/bỏ dòng hóa đơn nháp (có lý do)',
   },
+  // BR-BILL-025 (migration 049): clinic admin only.
+  {
+    code: 'invoice.discount.large',
+    resource: 'invoice',
+    action: 'discount.large',
+    description: 'Giảm giá trên 50% tổng hóa đơn (có lý do, ghi nhật ký)',
+  },
   {
     code: 'report.revenue.read',
     resource: 'report',

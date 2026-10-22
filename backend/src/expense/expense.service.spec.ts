@@ -209,4 +209,22 @@ describe('ExpenseService', () => {
       expect(prisma.expense.updateMany).not.toHaveBeenCalled();
     });
   });
+
+  describe('aggregateApproved ("Tổng chi")', () => {
+    it('counts REIMBURSED expenses too: reimbursing comes after approving', async () => {
+      (prisma.expense.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 1200 } });
+      const from = new Date('2026-10-01T00:00:00Z');
+      const to = new Date('2026-10-31T23:59:59Z');
+
+      await expect(service.aggregateApproved(from, to)).resolves.toBe(1200);
+      expect(prisma.expense.aggregate).toHaveBeenCalledWith({
+        _sum: { amount: true },
+        where: {
+          status: { in: [ExpenseStatus.APPROVED, ExpenseStatus.REIMBURSED] },
+          expenseDate: { gte: from, lte: to },
+          deletedAt: null,
+        },
+      });
+    });
+  });
 });

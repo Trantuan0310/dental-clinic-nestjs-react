@@ -61,6 +61,7 @@ export default function InvoiceDetailPage() {
     mutationFn: () => billingApi.issueInvoice(id!, invoice!.version),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      queryClient.invalidateQueries({ queryKey: ['ai-summary', invoice?.patientId] });
       notify.success(t('uiOperations.invoiceIssued'));
     },
     onError: (err) => {
@@ -77,6 +78,7 @@ export default function InvoiceDetailPage() {
     mutationFn: (reason: string) => billingApi.voidInvoice(id!, reason, invoice!.version),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      queryClient.invalidateQueries({ queryKey: ['ai-summary', invoice?.patientId] });
       setShowVoidModal(false);
       notify.success(t('uiOperations.invoiceVoided'));
     },

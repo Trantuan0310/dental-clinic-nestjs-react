@@ -469,6 +469,70 @@ describe('BillingService — corrections (round 4, H6)', () => {
       );
       expect(prisma.invoice.update.mock.calls[0][0].data.total).toEqual(D(283_333));
     });
+
+    describe('above 50% of the subtotal (BR-BILL-025)', () => {
+      const desk = { ...admin, sub: 'desk-1', permissions: ['invoice.update'] };
+      const owner = { ...admin, permissions: [...admin.permissions, 'invoice.discount.large'] };
+      beforeEach(() => {
+        prisma.invoice.findUnique.mockResolvedValue(
+          validInvoice({ subtotal: D(1_000_000), total: D(1_000_000) }),
+        );
+        prisma.invoice.update.mockResolvedValue(validInvoice());
+      });
+
+      it('refuses the front desk, by percent or by amount, and changes nothing', async () => {
+        for (const dto of [
+          { discountType: 'PERCENT' as const, discountValue: 100 },
+          { discountType: 'AMOUNT' as const, discountValue: 500_001 },
+        ]) {
+          await expect(
+            service.updateDiscount('inv-1', { ...dto, reason: 'Khách quen', version: 0 }, desk),
+          ).rejects.toMatchObject({
+            status: 403,
+            response: { code: 'DISCOUNT_LARGE_FORBIDDEN' },
+          });
+        }
+        expect(prisma.invoice.update).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalled();
+      });
+
+      it('lets the front desk give exactly 50%, written to the system audit log', async () => {
+        await service.updateDiscount(
+          'inv-1',
+          { discountType: 'PERCENT', discountValue: 50, reason: 'Khách quen', version: 0 },
+          desk,
+        );
+        expect(prisma.invoice.update.mock.calls[0][0].data.total).toEqual(D(500_000));
+        expect(audit.log).toHaveBeenCalledWith(
+          {
+            action: 'INVOICE_DISCOUNT_UPDATED',
+            actorUserId: 'desk-1',
+            targetType: 'invoice',
+            targetId: 'inv-1',
+            metadata: {
+              subtotal: 1_000_000,
+              before: { total: 1_000_000, discountAmount: 0 },
+              discountType: 'PERCENT',
+              discountValue: 50,
+              discountAmount: 500_000,
+              total: 500_000,
+              reason: 'Khách quen',
+            },
+          },
+          prisma,
+        );
+      });
+
+      it('lets a holder of invoice.discount.large go up to 100%', async () => {
+        await service.updateDiscount(
+          'inv-1',
+          { discountType: 'PERCENT', discountValue: 100, reason: 'Bảo hành', version: 0 },
+          owner,
+        );
+        expect(prisma.invoice.update.mock.calls[0][0].data.total).toEqual(D(0));
+        expect(audit.log.mock.calls[0][0].action).toBe('INVOICE_DISCOUNT_UPDATED');
+      });
+    });
   });
 
   describe('updateItem', () => {

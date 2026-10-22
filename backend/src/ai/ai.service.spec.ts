@@ -157,6 +157,13 @@ describe('AiService', () => {
       const openBullet = result.bullets.find(b => b.id === 'open');
       expect(openBullet?.text).toContain('1 phiên khám');
       expect(openBullet?.text).toContain('2 hóa đơn');
+      // Only issued invoices still owed: a draft is not a bill yet (5.6).
+      expect((prisma.invoice.count as jest.Mock).mock.calls[0][0].where).toEqual({
+        patientId: 'pat-1',
+        status: { in: ['ISSUED', 'PARTIAL'] },
+        outstandingAmount: { gt: 0 },
+        deletedAt: null,
+      });
     });
 
     it('includes "next visit" bullet from latest encounter treatment plan', async () => {
@@ -378,6 +385,24 @@ describe('AiService', () => {
       await service.onEncounterClosed({ patientId: 'pat-2' } as any);
       expect(cache.delByPattern).toHaveBeenNthCalledWith(1, 'ai:patient:pat-1:*');
       expect(cache.delByPattern).toHaveBeenNthCalledWith(2, 'ai:patient:pat-2:*');
+    });
+
+    it('drops them when an invoice is issued, paid, refunded or voided (5.6)', async () => {
+      cache.delByPattern = jest.fn().mockResolvedValue(1);
+      await service.onInvoiceChanged({ patientId: 'pat-3' });
+      expect(cache.delByPattern).toHaveBeenCalledWith('ai:patient:pat-3:*');
+      // Every invoice event that moves the balance is wired to it.
+      const events = Reflect.getMetadata(
+        'EVENT_LISTENER_METADATA',
+        AiService.prototype.onInvoiceChanged,
+      ) as Array<{ event: string }>;
+      expect(events.map(e => e.event).sort()).toEqual([
+        'invoice.issued',
+        'invoice.payment_recorded',
+        'invoice.payment_voided',
+        'invoice.refunded',
+        'invoice.voided',
+      ]);
     });
   });
 });

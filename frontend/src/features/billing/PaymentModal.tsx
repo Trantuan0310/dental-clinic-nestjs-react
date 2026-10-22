@@ -58,6 +58,8 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
+      // The AI summary counts the patient's unpaid invoices.
+      queryClient.invalidateQueries({ queryKey: ['ai-summary', invoice.patientId] });
       onClose();
     },
     onError: (err) => {
