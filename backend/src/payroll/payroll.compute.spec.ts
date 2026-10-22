@@ -84,7 +84,8 @@ function makeTx(over: Record<string, Record<string, jest.Mock>> = {}) {
 function makeService(tx: ReturnType<typeof makeTx>, p = period()) {
   const prisma: any = {
     payrollPeriod: { findUnique: fn(p), findFirst: fn(null) },
-    payrollLineItem: { findFirst: fn(null) },
+    payrollLineItem: { findFirst: fn(null), findMany: fn([]) },
+    user: { findMany: fn([]) },
     dentistCompensation: { findUnique: fn(null) },
     // The transaction client: the tx mocks first, else the outer ones (the
     // period re-read, compensation writes), plus the advisory lock calls.
@@ -685,6 +686,43 @@ describe('PayrollService — business flow review 2026-10-21 (section 4)', () =>
       expect(compute.mock.invocationCallOrder[0]).toBeLessThan(
         prisma.payrollPeriod.updateMany.mock.invocationCallOrder[0],
       );
+    });
+
+    it("does not approve when recomputing moves anybody's pay, and says who", async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma, audit } = setup(period({ status: 'REVIEWING' }));
+      prisma.payrollLineItem.findMany
+        .mockResolvedValueOnce([{ dentistId: 'd1', netPayVnd: new Prisma.Decimal(20_000_000) }])
+        .mockResolvedValueOnce([{ dentistId: 'd1', netPayVnd: new Prisma.Decimal(18_500_000) }]);
+      prisma.user.findMany.mockResolvedValue([{ id: 'd1', fullName: 'BS. Nguyễn Minh Khoa' }]);
+      const err = await service.approvePeriod('p-sep', 'admin').catch(e => e);
+      expect(err).toBeInstanceOf(PayrollStateException);
+      expect(err.message).toContain('BS. Nguyễn Minh Khoa');
+      expect(err.message).toContain('20.000.000');
+      expect(err.message).toContain('18.500.000');
+      expect(prisma.payrollPeriod.updateMany).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PERIOD_APPROVE_RECOMPUTED' }),
+      );
+    });
+
+    it('treats a payslip that appeared or vanished as a change', async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma } = setup(period({ status: 'REVIEWING' }));
+      prisma.payrollLineItem.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ dentistId: 'd2', netPayVnd: new Prisma.Decimal(5_000_000) }]);
+      await expect(service.approvePeriod('p-sep', 'admin')).rejects.toThrow(PayrollStateException);
+      expect(prisma.payrollPeriod.updateMany).not.toHaveBeenCalled();
+    });
+
+    it("approves when the recompute leaves everyone's pay as it was", async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma } = setup(period({ status: 'REVIEWING' }));
+      const same = [{ dentistId: 'd1', netPayVnd: new Prisma.Decimal(20_000_000) }];
+      prisma.payrollLineItem.findMany.mockResolvedValueOnce(same).mockResolvedValueOnce(same);
+      await service.approvePeriod('p-sep', 'admin');
+      expect(prisma.payrollPeriod.updateMany).toHaveBeenCalled();
     });
 
     it('does not recompute an adjustment period', async () => {
