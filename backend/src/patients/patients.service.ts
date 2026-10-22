@@ -1061,6 +1061,8 @@ export class PatientsService {
         // The source's phone is cleared below; keep it on the target when the
         // target has none, rather than losing the only number on file.
         const inheritPhone = !target.primaryPhone && !!source.primaryPhone;
+        // Same for the email: reminders and confirmations go to it.
+        const inheritEmail = !target.email && !!source.email;
 
         // Identity papers follow the person: move the source's to the target,
         // dropping only exact duplicates (same type + number) the target holds.
@@ -1113,6 +1115,7 @@ export class PatientsService {
           data: {
             ...medicalHistory,
             ...(inheritPhone && { primaryPhone: source.primaryPhone }),
+            ...(inheritEmail && { email: source.email }),
             updatedBy: actor.sub,
           },
         });
@@ -1139,10 +1142,11 @@ export class PatientsService {
                 dob: target.dob,
                 gender: target.gender,
                 primaryPhone: inheritPhone ? source.primaryPhone : target.primaryPhone,
+                email: inheritEmail ? source.email : target.email,
               },
               discardedFromSource: {
                 primaryPhone: inheritPhone ? null : source.primaryPhone,
-                email: source.email,
+                email: inheritEmail ? null : source.email,
               },
               medicalHistoryBefore: {
                 target: {
