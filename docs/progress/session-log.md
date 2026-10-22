@@ -9,7 +9,7 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 ### Rà soát nghiệp vụ các luồng (xong)
 
 - Làm lần lượt 5 mảng; báo cáo: `docs/audits/2026-10-21/BUSINESS_FLOW_REVIEW.md`. Chỉ rà soát, chưa sửa code.
-- 32 phát hiện: 9 Cao, 9 Trung bình, 14 Thấp. Phát hiện mức Cao đã kiểm lại trực tiếp trong code.
+- 32 phát hiện: 7 Cao, 8 Trung bình, 17 Thấp. Phát hiện mức Cao đã kiểm lại trực tiếp trong code.
 - Nên sửa trước: giảm giá 100% không dấu vết (5.1), "Tổng chi" bỏ sót khoản đã hoàn (4.1), duyệt lương sớm mất hoa hồng (4.2), không đổi được tỷ lệ hoa hồng giữa chừng (4.3), hoá đơn đã phát hành không điều chỉnh được (3.2), không mở lại phiên khám đã đóng (3.1), hồ sơ trùng không gộp được (2.1).
 
 **Bước tiếp theo:** chờ chủ phòng khám chọn hướng cho các mục cần quyết định (danh sách ở đầu báo cáo); các mục không cần quyết định có thể sửa ngay theo thứ tự ưu tiên.

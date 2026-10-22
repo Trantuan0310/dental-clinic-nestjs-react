@@ -6,7 +6,7 @@ Mức: **Cao** (sai tiền/dữ liệu/quyền, chặn việc hằng ngày) · *
 
 ## Tóm tắt
 
-32 phát hiện: **9 Cao**, 9 Trung bình, 14 Thấp.
+32 phát hiện: **7 Cao**, 8 Trung bình, 17 Thấp.
 
 ### Nên sửa trước (sai tiền, sai số liệu, không có đường xử lý)
 
