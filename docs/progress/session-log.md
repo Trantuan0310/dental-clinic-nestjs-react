@@ -19,6 +19,7 @@ Người dùng: "sửa hết". Với các điểm cần chủ phòng khám quy�
 Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo;
 
 - Xong đợt A (4.1, 4.4, 5.1, 5.3, 5.4, 5.5, 5.6): backend 1398 test xanh, frontend typecheck/lint/build xanh; migration 049 thêm quyền `invoice.discount.large` (chỉ admin).
+- Xong đợt B (4.2, 4.3, 4.5, 4.6, kỳ điều chỉnh trả 2 lần, ngày UTC): backend 1404 test xanh; bỏ route trùng `/appointments/shift-registrations`; E2E `flow-payroll-period-cycle` đổi sang kỳ đã kết thúc. Quyền `shift_registration.*` giờ không dùng.
  (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
 
 ## 21/10/2026
