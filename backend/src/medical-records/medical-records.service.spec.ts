@@ -1016,6 +1016,72 @@ describe('MedicalRecordsService', () => {
     });
   });
 
+  describe('createTreatment from a treatment plan', () => {
+    const planItem = (over: Record<string, unknown> = {}) => ({
+      id: 'item-1',
+      planId: 'plan-1',
+      unitPrice: new Prisma.Decimal(450_000),
+      status: 'PLANNED',
+      plan: { patientId: 'patient-1', status: 'ACCEPTED' },
+      ...over,
+    });
+    beforeEach(() => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ status: EncounterStatus.IN_PROGRESS, patientId: 'patient-1' }),
+      );
+      (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.treatment.create as jest.Mock).mockResolvedValue(validTreatment());
+      (prisma.treatment.findFirst as jest.Mock).mockResolvedValue(null);
+    });
+
+    it('charges the agreed plan price without a reason and links the line', async () => {
+      (prisma.treatmentPlanItem.findUnique as jest.Mock).mockResolvedValue(planItem());
+      await service.createTreatment(
+        'enc-1',
+        { procedure: 'Trám răng', unitPrice: 450_000, planItemId: 'item-1' } as any,
+        dentistActor,
+      );
+      expect((prisma.treatment.create as jest.Mock).mock.calls[0][0].data).toMatchObject({
+        planItemId: 'item-1',
+        listPrice: 450_000,
+        priceReason: null,
+      });
+    });
+
+    it("refuses a line of another patient's plan, or one already done", async () => {
+      for (const bad of [
+        planItem({ plan: { patientId: 'other', status: 'ACCEPTED' } }),
+        planItem({ status: 'DONE' }),
+        planItem({ plan: { patientId: 'patient-1', status: 'PROPOSED' } }),
+      ]) {
+        (prisma.treatmentPlanItem.findUnique as jest.Mock).mockResolvedValue(bad);
+        await expect(
+          service.createTreatment(
+            'enc-1',
+            { procedure: 'Trám', unitPrice: 450_000, planItemId: 'item-1' } as any,
+            dentistActor,
+          ),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ error: 'PLAN_ITEM_NOT_WORKABLE' }),
+        });
+      }
+      expect(prisma.treatment.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a line another treatment already carries out', async () => {
+      (prisma.treatmentPlanItem.findUnique as jest.Mock).mockResolvedValue(planItem());
+      (prisma.treatment.findFirst as jest.Mock).mockResolvedValue({ id: 't-other' });
+      await expect(
+        service.createTreatment(
+          'enc-1',
+          { procedure: 'Trám', unitPrice: 450_000, planItemId: 'item-1' } as any,
+          dentistActor,
+        ),
+      ).rejects.toMatchObject({ response: expect.objectContaining({ error: 'PLAN_ITEM_TAKEN' }) });
+    });
+  });
+
   describe('closeEncounter', () => {
     // BR-MR-013: a note with a chief complaint or diagnosis is on file
     // unless a test says otherwise.

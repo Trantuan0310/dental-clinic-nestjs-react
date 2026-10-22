@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { clinicToday } from '@/lib/clinicTime';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/format';
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
+import { ClipboardList, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
 import { Button, Modal, Input, Textarea, Select, ConfirmDialog } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
@@ -14,6 +15,7 @@ import type { Encounter, Treatment, CreateTreatmentPayload, TreatmentInventoryUs
 import { isValidFdiToothNumber } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
 import { useIsOwnEncounterScope } from './encounterUtils';
+import { planKeys, useOpenPlanItems } from '@/features/treatment-plans/treatmentPlansApi';
 
 interface TreatmentsTabProps {
   encounter: Encounter;
@@ -38,6 +40,17 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const [notes, setNotes] = useState('');
   // ADR-0009 D6: optional catalogue pick; it pre-fills code, name and price.
   const [serviceId, setServiceId] = useState('');
+  // A line of the patient's agreed treatment plan: its quoted price is the
+  // agreed one, and the line is ticked off when the encounter closes.
+  const [planItemId, setPlanItemId] = useState('');
+  const navigate = useNavigate();
+  const canReadPlans = useAuthStore((s) => s.hasPermission('treatment_plan.read'));
+  const canWritePlans = useAuthStore((s) => s.hasPermission('treatment_plan.write'));
+  const { data: openPlanItems = [] } = useOpenPlanItems(
+    encounter.patientId,
+    canReadPlans && showAddModal && !editingTreatment,
+  );
+  const planItem = planItemId ? openPlanItems.find((i) => i.id === planItemId) : undefined;
   const today = clinicToday();
   const { data: catalogServices = [] } = useBookableServices(encounter.dentistId, today);
   // A visit booked with services froze their prices at booking time; those
@@ -60,7 +73,9 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const pickedSnapshot = serviceId ? bookedVisit?.services?.find((b) => b.serviceId === serviceId) : undefined;
   const listPrice: number | null = editingTreatment
     ? (editingTreatment.listPrice ?? null)
-    : serviceId
+    : planItem
+      ? planItem.unitPrice
+      : serviceId
       ? (pickedSnapshot?.price ?? pickable.find((sv) => sv.serviceId === serviceId)?.price ?? null)
       : null;
   const priceNumber = Number(unitPrice);
@@ -68,7 +83,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     ? unitPrice !== '' && priceNumber !== (editingTreatment.unitPrice ?? editingTreatment.priceCents)
     : false;
   // 3.6: a free-text line (no catalogue service) always needs a price reason.
-  const freeText = !editingTreatment && !serviceId;
+  const freeText = !editingTreatment && !serviceId && !planItem;
   const needsReason = editingTreatment
     ? priceChanged && (listPrice === null || priceNumber !== listPrice)
     : freeText || (listPrice !== null && unitPrice !== '' && priceNumber !== listPrice);
@@ -113,6 +128,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setPriceNote('');
     setNotes('');
     setServiceId('');
+    setPlanItemId('');
     setInventoryUsages([]);
     setPickedItemId('');
     setPickedQty('1');
@@ -123,6 +139,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     mutationFn: (payload: CreateTreatmentPayload) => medicalRecordsApi.createTreatment(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
+      queryClient.invalidateQueries({ queryKey: planKeys.all });
       resetForm();
     },
     onError: (err) => {
@@ -147,6 +164,8 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     mutationFn: (id: string) => medicalRecordsApi.deleteTreatment(encounter.id, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
+      // The plan line it carried out is free again.
+      queryClient.invalidateQueries({ queryKey: planKeys.all });
       setConfirmDelete(null);
     },
     onError: (err) => {
@@ -167,6 +186,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setNotes('');
     // A2-21: the next free-text line must not carry the previous pick.
     setServiceId('');
+    setPlanItemId('');
     setInventoryUsages([]);
     setPickedItemId('');
     setPickedQty('1');
@@ -193,7 +213,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
 
   const handleSubmit = () => {
     // Mirrors the backend DTO: permanent 11–48 or primary 51–85 (FDI).
-    if (toothNumber.trim() !== '' && !isValidFdiToothNumber(Number(toothNumber.trim()))) {
+    if (!planItem && toothNumber.trim() !== '' && !isValidFdiToothNumber(Number(toothNumber.trim()))) {
       notify.error(t('uiClinical.invalidToothNumber'));
       return;
     }
@@ -223,6 +243,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         description: notes,
         inventoryItemsUsed: inventoryUsages,
         serviceId: serviceId || undefined,
+        ...(planItem && { planItemId: planItem.id, toothNumbers: planItem.toothNumbers }),
         durationMinutes: pickable.find((sv) => sv.serviceId === serviceId)?.durationMin,
       });
     }
@@ -319,10 +340,21 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
 
       {/* Add Button */}
       {isEditable && (
-        <Button onClick={() => setShowAddModal(true)}>
-          <Plus className="h-4 w-4" />
-          {t('uiClinical.treatmentAddButton')}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setShowAddModal(true)}>
+            <Plus className="h-4 w-4" />
+            {t('uiClinical.treatmentAddButton')}
+          </Button>
+          {canWritePlans && (
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/treatment-plans/new?patientId=${encounter.patientId}&encounterId=${encounter.id}`)}
+            >
+              <ClipboardList className="h-4 w-4" />
+              {t('uiPlans.newPlan')}
+            </Button>
+          )}
+        </div>
       )}
 
       {/* Add/Edit Modal */}
@@ -332,14 +364,50 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
         title={editingTreatment ? t('uiClinical.treatmentEdit') : t('uiClinical.treatmentAdd')}
       >
         <div className="space-y-4">
+          {!editingTreatment && openPlanItems.length > 0 && (
+            <Select
+              label={t('uiPlans.fromPlan')}
+              value={planItemId}
+              hint={planItem ? t('uiPlans.fromPlanHint') : undefined}
+              onChange={(e) => {
+                const item = openPlanItems.find((i) => i.id === e.target.value);
+                setPlanItemId(e.target.value);
+                setPriceNote('');
+                if (item) {
+                  setServiceId(item.serviceId ?? '');
+                  setProcedureCode(item.service?.code ?? '');
+                  setProcedureName(item.procedure);
+                  setQuantity(String(item.quantity));
+                  setUnitPrice(String(item.unitPrice));
+                  setToothNumber(item.toothNumbers.join(', '));
+                } else {
+                  setServiceId('');
+                  setToothNumber('');
+                }
+              }}
+              options={[
+                { value: '', label: t('uiPlans.fromPlanNone') },
+                ...openPlanItems.map((item) => ({
+                  value: item.id,
+                  label: t('uiPlans.planLineOption', {
+                    plan: item.planTitle,
+                    procedure: item.procedure,
+                    teeth: item.toothNumbers.length ? ` (${item.toothNumbers.join(', ')})` : '',
+                    price: formatCurrency(item.quantity * item.unitPrice),
+                  }),
+                })),
+              ]}
+            />
+          )}
           <Input
             label={t('uiClinical.toothNumber')}
             value={toothNumber}
+            disabled={!!planItem}
             onChange={(e) => setToothNumber(String(e.target.value))}
             placeholder={t('uiClinical.toothNumberExample')}
             hint={t('uiClinical.toothNumberHint')}
           />
-          {!editingTreatment && pickable.length > 0 && (
+          {!editingTreatment && !planItem && pickable.length > 0 && (
             <Select
               label={t('uiClinical.serviceCatalog')}
               value={serviceId}

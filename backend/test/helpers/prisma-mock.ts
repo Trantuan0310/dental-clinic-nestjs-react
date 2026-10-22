@@ -34,6 +34,8 @@ export interface PrismaMockShape {
   prescription: Record<string, AnyFn>;
   treatment: Record<string, AnyFn>;
   treatmentInventoryUsage: Record<string, AnyFn>;
+  treatmentPlan: Record<string, AnyFn>;
+  treatmentPlanItem: Record<string, AnyFn>;
   inventoryUsage: Record<string, AnyFn>;
   dentalChart: Record<string, AnyFn>;
   invoice: Record<string, AnyFn>;
@@ -119,6 +121,8 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     prescriptionLine: buildModel(),
     treatment: buildModel(),
     treatmentInventoryUsage: buildModel(),
+    treatmentPlan: buildModel(),
+    treatmentPlanItem: buildModel(),
     inventoryUsage: buildModel(),
     dentalChart: buildModel(),
     invoice: buildModel(),

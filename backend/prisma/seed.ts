@@ -385,6 +385,25 @@ const PERMISSIONS = [
     action: 'cancel',
     description: 'Hủy phiên khám mở nhầm',
   },
+  // Treatment plans (migration 053).
+  {
+    code: 'treatment_plan.read',
+    resource: 'treatment_plan',
+    action: 'read',
+    description: 'Xem kế hoạch điều trị của bệnh nhân',
+  },
+  {
+    code: 'treatment_plan.write',
+    resource: 'treatment_plan',
+    action: 'write',
+    description: 'Lập và sửa kế hoạch điều trị (bác sĩ: kế hoạch của mình)',
+  },
+  {
+    code: 'treatment_plan.accept',
+    resource: 'treatment_plan',
+    action: 'accept',
+    description: 'Ghi nhận khách đồng ý kế hoạch điều trị và báo giá',
+  },
   // BR-MR-024 (migration 050): clinic admin only.
   {
     code: 'encounter.reopen',
@@ -824,6 +843,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'patient.create',
     'patient.read',
     'patient.update',
+    'treatment_plan.read',
+    'treatment_plan.accept',
     'patient.identifier.manage',
     'appointment.create',
     'appointment.read',
@@ -861,6 +882,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   dentist: [
     'patient.read',
+    'treatment_plan.read',
+    'treatment_plan.write',
+    'treatment_plan.accept',
     // Only for patients they have treated (PatientsService / AppointmentsService).
     'patient.medical_history.update',
     'appointment.create',

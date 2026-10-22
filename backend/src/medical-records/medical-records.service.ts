@@ -2,6 +2,10 @@ import { ForbiddenException, HttpStatus, Injectable, Logger } from '@nestjs/comm
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  markPlanItemsForEncounter,
+  WORKABLE_PLAN_STATUSES,
+} from '../treatment-plans/domain/plan-progress';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { isRowScoped } from '../common/row-scope';
@@ -709,6 +713,9 @@ export class MedicalRecordsService {
           data: { isLocked: true, lockedAt: closedAt },
         });
 
+        // Planned procedures carried out in this visit are done now.
+        await markPlanItemsForEncounter(tx, encounterId, true, closedAt);
+
         // Mark appointment COMPLETED
         await tx.appointment.update({
           where: { id: encounter.appointmentId },
@@ -1090,6 +1097,8 @@ export class MedicalRecordsService {
         where: { encounterId },
         data: { isLocked: false, lockedAt: null },
       });
+      // Its planned procedures are open again until it is closed again.
+      await markPlanItemsForEncounter(tx, encounterId, false, now);
       await tx.encounterAudit.create({
         data: {
           encounterId,
@@ -1302,6 +1311,51 @@ export class MedicalRecordsService {
   // Treatments
   // ==========================================================================
 
+  /**
+   * A plan item a treatment in this patient's encounter may carry out: on one
+   * of the patient's agreed plans, still planned, and not already taken by
+   * another treatment that is still on record.
+   */
+  private async workablePlanItem(tx: Prisma.TransactionClient, itemId: string, patientId: string) {
+    const item = await tx.treatmentPlanItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true,
+        planId: true,
+        unitPrice: true,
+        status: true,
+        plan: { select: { patientId: true, status: true } },
+      },
+    });
+    if (
+      !item ||
+      item.plan.patientId !== patientId ||
+      !WORKABLE_PLAN_STATUSES.includes(item.plan.status) ||
+      item.status !== 'PLANNED'
+    ) {
+      throw new BusinessRuleException(
+        'Mục kế hoạch điều trị không dùng được: không thuộc kế hoạch đã được đồng ý của bệnh nhân này hoặc đã làm/bỏ qua.',
+        HttpStatus.BAD_REQUEST,
+        { planItemId: itemId },
+        'PLAN_ITEM_NOT_WORKABLE',
+      );
+    }
+    const taken = await tx.treatment.findFirst({
+      // A treatment in a cancelled encounter never happened.
+      where: { planItemId: itemId, deletedAt: null, encounter: { status: { not: 'CANCELLED' } } },
+      select: { id: true },
+    });
+    if (taken) {
+      throw new BusinessRuleException(
+        'Mục kế hoạch này đã được ghi vào một thủ thuật khác.',
+        HttpStatus.CONFLICT,
+        { planItemId: itemId, treatmentId: taken.id },
+        'PLAN_ITEM_TAKEN',
+      );
+    }
+    return item;
+  }
+
   async createTreatment(encounterId: string, dto: CreateTreatmentDto, actor: JwtPayload) {
     return this.withEditableEncounter(encounterId, actor, async tx => {
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
@@ -1326,7 +1380,15 @@ export class MedicalRecordsService {
       // charging another needs treatment.price_override and a reason
       // (decision 3). Free-text lines have no list price.
       let listPrice: number | null = null;
-      if (dto.serviceId) {
+      // A procedure from the patient's agreed treatment plan: the quoted
+      // price is the agreed one (no reason needed to charge it).
+      const planItem = dto.planItemId
+        ? await this.workablePlanItem(tx, dto.planItemId, encounter.patientId)
+        : null;
+      if (planItem) {
+        listPrice = Number(planItem.unitPrice);
+        this.assertPriceAllowed(actor, listPrice, dto.unitPrice, dto.priceReason);
+      } else if (dto.serviceId) {
         const service = await tx.service.findUnique({ where: { id: dto.serviceId } });
         const booked = await tx.appointmentService.findFirst({
           where: { appointmentId: encounter.appointmentId, serviceId: dto.serviceId },
@@ -1372,6 +1434,7 @@ export class MedicalRecordsService {
             toothNumbers: (dto.toothNumbers ?? []) as unknown as Prisma.InputJsonValue,
             sequence,
             createdBy: actor.sub,
+            planItemId: planItem?.id ?? null,
           },
         });
         for (const usage of dto.inventoryUsages ?? []) {
@@ -1401,6 +1464,7 @@ export class MedicalRecordsService {
             quantity: dto.quantity ?? 1,
             listPrice,
             ...(treatment.priceReason && { priceReason: treatment.priceReason }),
+            ...(planItem && { planItemId: planItem.id, planId: planItem.planId }),
           },
         },
         tx,

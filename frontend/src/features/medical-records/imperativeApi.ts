@@ -46,8 +46,10 @@ function toCreateTreatmentBody(payload: CreateTreatmentPayload) {
     unitPrice: payload.priceCents,
     priceReason: payload.priceReason || undefined,
     quantity: payload.quantity && payload.quantity > 0 ? payload.quantity : undefined,
-    toothNumbers:
-      payload.toothNumber !== undefined && payload.toothNumber !== ''
+    planItemId: payload.planItemId || undefined,
+    toothNumbers: payload.toothNumbers?.length
+      ? payload.toothNumbers
+      : payload.toothNumber !== undefined && payload.toothNumber !== ''
         ? [Number(payload.toothNumber)]
         : undefined,
     // Backend's CreateTreatmentDto.inventoryUsages wants {inventoryItemId,

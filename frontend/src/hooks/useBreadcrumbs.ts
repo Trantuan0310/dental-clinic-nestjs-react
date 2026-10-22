@@ -32,6 +32,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/medical-records': 'medicalRecords',
   '/my-patients': 'myPatients',
   '/encounters': 'encounters',
+  '/treatment-plans': 'treatmentPlans',
+  '/treatment-plans/new': 'newTreatmentPlan',
   '/billing': 'invoices',
   '/billing/list': 'list',
   '/billing/invoices': 'invoices',
