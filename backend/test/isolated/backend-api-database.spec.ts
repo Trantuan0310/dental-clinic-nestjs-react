@@ -62,6 +62,8 @@ describe('Real HTTP and PostgreSQL regression', () => {
         startAt: start,
         endAt: new Date(start.getTime() + 60000),
         status: 'CHECKED_IN',
+        // Seeds the clinical note an encounter needs before it closes (BR-MR-013).
+        chiefComplaint: 'Đau răng',
       },
     });
     const result = await api('post', '/medical-records/encounters/start', 'dentist')
