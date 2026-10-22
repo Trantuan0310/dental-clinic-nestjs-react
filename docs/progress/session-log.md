@@ -25,6 +25,7 @@ Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo;
 - Xong đợt E+F (2.1–2.7, 5.2, 5.7): nút gộp hồ sơ cho admin, giờ mở cửa dùng chung `src/common/clinic-hours.ts` (chưa xét ngày nghỉ của phòng khám), menu theo quyền.
 - Kiểm tra cuối: backend 1432 test, lint, tsc xanh; frontend lint/build xanh; E2E trên DB mới (có migration 049, 050) **90/90**.
 - Còn để ý: lễ tân sửa dị ứng (BR-PT-015 có vẻ cũ, chưa đổi); quyền `shift_registration.*` không còn dùng; deploy cần chạy migration 049, 050.
+- PR #65 (sửa 32 điểm): CI xanh 10/10 (sau khi thêm lý do giá cho thủ thuật ngoài danh mục trong test API PostgreSQL); đã merge vào `main` (7a338ff). Deploy cần chạy migration 049, 050.
  (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
 
 ## 21/10/2026
