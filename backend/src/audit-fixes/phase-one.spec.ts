@@ -9,8 +9,6 @@ import { BillingService } from '../billing/billing.service';
 import { BillingController } from '../billing/billing.controller';
 import { AiService } from '../ai/ai.service';
 import { AiController } from '../ai/ai.controller';
-import { AppointmentsService } from '../appointments/appointments.service';
-import { AvailabilityService } from '../appointments/availability.service';
 import { MedicalRecordsService } from '../medical-records/medical-records.service';
 import {
   EncounterNotClosableException,
@@ -161,51 +159,6 @@ describe('Phase one audit regressions', () => {
           where: { patientId: 'p', dentistId: actor.sub, status: { not: 'CANCELLED' } },
         });
       }
-    },
-  );
-
-  it('SHIFT-01 blocks a dentist registering a colleague even when the slot is empty', async () => {
-    const service = new AppointmentsService(
-      db as unknown as PrismaService,
-      audit as unknown as AuditService,
-      events as unknown as EventEmitter2,
-      new AvailabilityService(db as unknown as PrismaService),
-    );
-    await expect(
-      service.createShiftRegistration(
-        { dentistId: 'other', date: '2099-01-01', startTime: '08:00', endTime: '12:00' },
-        dentist,
-      ),
-    ).rejects.toThrow();
-    expect(db.workingSchedule.findMany).not.toHaveBeenCalled();
-    expect(db.shiftRegistration.create).not.toHaveBeenCalled();
-  });
-
-  it.each([dentist, admin])(
-    'SHIFT-01 preserves self-registration and admin delegation for $sub',
-    async actor => {
-      const dentistId = actor === admin ? dentist.sub : actor.sub;
-      db.workingSchedule.findMany.mockResolvedValue([]);
-      db.shiftRegistration.findMany.mockResolvedValue([]);
-      db.shiftRegistration.create.mockResolvedValue({ id: 's' });
-      // A1-17: the shift's day must be open for an active dentist.
-      db.user.findUnique.mockResolvedValue({
-        status: 'ACTIVE',
-        userRoles: [{ role: { code: 'dentist' } }],
-      });
-      const service = new AppointmentsService(
-        db as unknown as PrismaService,
-        audit as unknown as AuditService,
-        events as unknown as EventEmitter2,
-        new AvailabilityService(db as unknown as PrismaService),
-      );
-      await service.createShiftRegistration(
-        { dentistId, date: '2099-01-01', startTime: '08:00', endTime: '12:00' },
-        actor,
-      );
-      expect(db.shiftRegistration.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ dentistId }) }),
-      );
     },
   );
 

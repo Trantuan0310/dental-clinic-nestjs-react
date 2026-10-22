@@ -35,7 +35,7 @@ export class TreatmentNotInEncounterException extends BusinessRuleException {
 }
 
 export class InsufficientStockException extends BusinessRuleException {
-  constructor(itemName: string, required: number, available: number) {
+  constructor(itemName: string, required: number, available: number, unit = '') {
     // The specific item/quantities used to be shoved into `details` only —
     // getApiErrorMessage() (frontend) reads `message`, never `details`, so
     // a dentist blocked from closing an encounter saw just the generic
@@ -43,9 +43,9 @@ export class InsufficientStockException extends BusinessRuleException {
     // short. Put the specifics in `message` itself; `details` still carries
     // the structured fields for any caller that wants them programmatically.
     super(
-      `Không đủ tồn kho '${itemName}': cần ${required}, chỉ còn ${available}`,
+      `Không đủ tồn kho '${itemName}': cần ${required}${unit ? ' ' + unit : ''}, chỉ còn ${available}${unit ? ' ' + unit : ''}`,
       HttpStatus.UNPROCESSABLE_ENTITY,
-      { itemName, required, available },
+      { itemName, required, available, unit },
       'INSUFFICIENT_STOCK',
     );
   }

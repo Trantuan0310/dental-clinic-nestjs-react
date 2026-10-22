@@ -33,7 +33,8 @@ type Status = {
   /** Changes need the token from the confirmation link; the phone only shows the status. */
   canManage?: boolean;
   status: string;
-  requestedStartAt: string;
+  /** Left out of a lookup by phone alone, like every time (where the person will be when). */
+  requestedStartAt?: string;
   /** While set, the requested time is held for this request. */
   holdUntil?: string | null;
   service?: { name: string | null; durationMinutes?: number | null };
@@ -49,7 +50,7 @@ type Status = {
   patientInitials?: string;
   responseMessage?: string | null;
   appointment?: {
-    startAt: string;
+    startAt?: string;
     endAt?: string;
     status: string;
     /** The clinic moved the visit after confirming it. */
@@ -196,7 +197,7 @@ const when = (value?: string | null, language = "vi") =>
     : "";
 
 const googleCalendarUrl = (status: Status) => {
-  const start = new Date(status.appointment!.startAt);
+  const start = new Date(status.appointment!.startAt!);
   const end = status.appointment?.endAt
     ? new Date(status.appointment.endAt)
     : new Date(start.getTime() + (status.service?.durationMinutes ?? 30) * 60_000);
@@ -640,7 +641,9 @@ export default function PublicBookingStatusPage() {
                       className="w-full rounded-xl border border-gray-200 dark:border-surface-700 p-4 text-left hover:border-brand-200 hover:bg-brand-50"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(itemTime, language)}</span>
+                        <span className="font-semibold capitalize text-gray-900 dark:text-surface-100">
+                          {itemTime ? when(itemTime, language) : t('uiScheduling.bookingRequestNumber', { number: index + 1 })}
+                        </span>
                         <span
                           className={
                             "rounded-full border px-2.5 py-0.5 text-xs font-medium " +
@@ -748,10 +751,15 @@ export default function PublicBookingStatusPage() {
             {(!visit || visitStands) && state && state.step > 0 && <Progress step={state.step} />}
 
             <dl className="mt-6 divide-y divide-gray-100 rounded-xl border border-gray-100 dark:border-surface-700">
-              <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
-                <dt className="text-sm text-gray-500 dark:text-surface-400">{timeLabel}</dt>
-                <dd className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(time, language)}</dd>
-              </div>
+              {time ? (
+                <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
+                  <dt className="text-sm text-gray-500 dark:text-surface-400">{timeLabel}</dt>
+                  <dd className="font-semibold capitalize text-gray-900 dark:text-surface-100">{when(time, language)}</dd>
+                </div>
+              ) : (
+                // Looked up by phone alone: the time is only in the email's link.
+                <p className="px-4 py-3 text-sm text-gray-600 dark:text-surface-300">{t('uiScheduling.bookingTimeHiddenByPhone')}</p>
+              )}
               {status.patientInitials ? (
                 // Shown by phone alone: who it is for, masked; no service or dentist.
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
@@ -775,7 +783,7 @@ export default function PublicBookingStatusPage() {
                   </div>
                 </>
               )}
-              {status.status === "PROPOSED" && status.proposedStartAt && (
+              {status.status === "PROPOSED" && status.proposedStartAt && status.requestedStartAt && (
                 <div className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:justify-between">
                   <dt className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.bookingOriginalTime')}</dt>
                   <dd className="capitalize text-gray-500 dark:text-surface-400 line-through">{when(status.requestedStartAt, language)}</dd>
@@ -839,7 +847,7 @@ export default function PublicBookingStatusPage() {
                   {t('uiScheduling.declineNewTime')}
                 </button>
               )}
-              {visitStands && (
+              {visitStands && !!status.appointment?.startAt && (
                 <a
                   href={googleCalendarUrl(status)}
                   target="_blank"

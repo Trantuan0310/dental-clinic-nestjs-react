@@ -45,7 +45,7 @@ import {
   useUndoAppointmentStatus,
 } from './appointmentApi';
 import type { AxiosError } from 'axios';
-import { getApiErrorMessage } from '@/lib/errors';
+import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
 import {
   formatDate,
@@ -59,7 +59,7 @@ import { cn } from '@/lib/cn';
 import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
-import type { Appointment, AppointmentStatus } from '@/types/appointment';
+import type { Appointment, AppointmentStatus, CheckInPayload } from '@/types/appointment';
 import {
   isOverdueNotArrived,
   minutesLate,
@@ -175,6 +175,9 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const [error, setError] = useState<string | null>(null);
   // "Phòng khám hủy/dời": the clinic's reason, never counted against the patient.
   const [byClinic, setByClinic] = useState(false);
+  // As walk-in: the patient already has an open visit today; the desk confirms
+  // checking in this one too (the check-in it was asked for is kept here).
+  const [openVisit, setOpenVisit] = useState<{ message: string; payload?: CheckInPayload } | null>(null);
 
   const checkIn = useCheckInAppointment();
   const confirm = useConfirmAppointment();
@@ -339,6 +342,10 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       notify.success(t('uiScheduling.patientCheckedIn', { name: appointment.patientName }));
       onClose();
     } catch (err) {
+      if (getApiErrorCode(err) === 'PATIENT_ALREADY_IN_CLINIC') {
+        setOpenVisit({ message: getApiErrorMessage(err, t('uiScheduling.checkInError')) });
+        return;
+      }
       if (offersForcedCheckIn(err)) {
         setActionModal('force_check_in');
         return;
@@ -355,16 +362,35 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       return;
     }
     setError(null);
+    const payload = { override: true, overrideReason: trimmed };
     try {
-      await checkIn.mutateAsync({
-        id: appointment.id,
-        payload: { override: true, overrideReason: trimmed },
-      });
+      await checkIn.mutateAsync({ id: appointment.id, payload });
       notify.success(t(earlyCheckIn ? 'uiScheduling.earlyCheckInSuccess' : 'uiScheduling.lateCheckInSuccess', { name: appointment.patientName }));
       closeAction();
       onClose();
     } catch (err) {
+      if (getApiErrorCode(err) === 'PATIENT_ALREADY_IN_CLINIC') {
+        closeAction();
+        setOpenVisit({ message: getApiErrorMessage(err, t('uiScheduling.checkInError')), payload });
+        return;
+      }
       setError(getApiErrorMessage(err, t('uiScheduling.checkInError')));
+    }
+  };
+
+  const handleCheckInDespiteOpenVisit = async () => {
+    if (!appointment || !openVisit) return;
+    try {
+      await checkIn.mutateAsync({
+        id: appointment.id,
+        payload: { ...openVisit.payload, ignoreOpenVisit: true },
+      });
+      notify.success(t('uiScheduling.patientCheckedIn', { name: appointment.patientName }));
+      setOpenVisit(null);
+      onClose();
+    } catch (err) {
+      setOpenVisit(null);
+      notify.error(getApiErrorMessage(err, t('uiScheduling.checkInError')));
     }
   };
 
@@ -535,11 +561,11 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
       : null;
   // A3-10: after the start, front desk may still cancel a visit not arrived
   // when the clinic is at fault (absent dentist, closed day) — never a no-show.
-  const clinicOnlyCancel = !rowScopedDentist && started && appointment?.status !== 'checked_in';
+  const clinicOnlyCancel = !rowScopedDentist && started;
   const cancelAllowed =
     !!appointment &&
     canCancel(appointment.status) &&
-    (rowScopedDentist ? startMs - now >= 24 * 60 * 60_000 : true); // BR-APPT-009 / 010 / 025
+    (rowScopedDentist ? startMs - now >= 24 * 60 * 60_000 : true); // BR-APPT-009 / 010; checked in → "Đã về" (BR-APPT-025)
   // From +15 min, when the visit shows "Quá giờ" (backend MANUAL_NO_SHOW_AFTER_MIN).
   const noShowAllowed =
     !!appointment && canNoShow(appointment.status) && now >= startMs + OVERDUE_AFTER_MIN * 60_000;
@@ -547,7 +573,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     !!appointment &&
     appointment.status === 'checked_in' &&
     appointment.visitKind !== 'walk_in' &&
-    !appointment.encounterId &&
+    (!appointment.encounterId || !!appointment.encounterCancelled) &&
     visitToday;
   const noShowToday = !!appointment && appointment.status === 'no_show' && visitToday;
   // A3-07: the window is not open yet, but it is the visit's day.
@@ -1016,13 +1042,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         open={actionModal === 'cancel'}
         onClose={closeAction}
         title={t('uiScheduling.cancelAppointment')}
-        description={
-          appointment?.status === 'checked_in'
-            ? // Cancelling a visit the patient came to skews the arrival stats:
-              // point to the action that records what really happened.
-              t('uiScheduling.cancelCheckedInDescription')
-            : t('uiScheduling.cancelReasonDescription')
-        }
+        description={t('uiScheduling.cancelReasonDescription')}
         reason={reason}
         setReason={setReason}
         quickReasons={CANCEL_REASONS}
@@ -1124,6 +1144,16 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
         isLoading={undoStatus.isPending}
         confirmLabel={t('uiScheduling.undoLeft')}
         confirmVariant="primary"
+      />
+
+      <ConfirmDialog
+        open={!!openVisit}
+        onClose={() => setOpenVisit(null)}
+        onConfirm={() => void handleCheckInDespiteOpenVisit()}
+        isLoading={checkIn.isPending}
+        title={t('uiScheduling.patientAlreadyInClinic')}
+        description={openVisit?.message}
+        confirmLabel={t('uiScheduling.checkInAnyway')}
       />
 
       {/* A3-03: starting the wrong patient has no easy way back. */}
@@ -1409,7 +1439,7 @@ function ActionDialog({
 }
 
 function canCancel(status: AppointmentStatus): boolean {
-  return status === 'scheduled' || status === 'confirmed' || status === 'checked_in';
+  return status === 'scheduled' || status === 'confirmed';
 }
 
 function canReschedule(status: AppointmentStatus): boolean {

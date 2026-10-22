@@ -13,6 +13,7 @@ import {
   Plus,
   FileText,
   Receipt,
+  Merge,
 } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
@@ -32,6 +33,7 @@ import { formatPhone, formatCurrency, formatDate, formatTimeOnly } from '@/lib/f
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useTranslation } from 'react-i18next';
+import { MergePatientModal } from './MergePatientModal';
 
 export default function PatientDetailPage() {
   const { t } = useTranslation();
@@ -39,6 +41,7 @@ export default function PatientDetailPage() {
   const { id } = useParams<{ id: string }>();
 
   const [activeTab, setActiveTab] = useState('overview');
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   // /encounters/:id (full clinical detail) only accepts encounter.read.any/
   // .own — a receptionist with only encounter.read.basic can see this
@@ -127,6 +130,12 @@ export default function PatientDetailPage() {
               {t('uiClinical.edit')}
             </Button>
           </PermissionGuard>
+          <PermissionGuard permission="patient.merge">
+            <Button variant="outline" onClick={() => setMergeOpen(true)}>
+              <Merge className="h-4 w-4" />
+              {t('uiClinical.mergeAction')}
+            </Button>
+          </PermissionGuard>
           <PermissionGuard permission="appointment.create">
             <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>
               <Calendar className="h-4 w-4" />
@@ -135,6 +144,12 @@ export default function PatientDetailPage() {
           </PermissionGuard>
         </div>
       </div>
+
+      <MergePatientModal
+        source={patient}
+        open={mergeOpen}
+        onClose={() => setMergeOpen(false)}
+      />
 
       {/* Medical Alerts */}
       {(hasAllergies || hasChronicDiseases) && (

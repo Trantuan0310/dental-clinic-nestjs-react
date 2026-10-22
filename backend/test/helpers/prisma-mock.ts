@@ -124,6 +124,7 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     invoice: buildModel(),
     invoiceAudit: buildModel(),
     invoiceItem: buildModel(),
+    invoiceAdjustment: buildModel(),
     payment: buildModel(),
     inventoryItem: buildModel(),
     inventoryCategory: buildModel(),

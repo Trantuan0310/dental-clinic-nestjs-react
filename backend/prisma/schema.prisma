@@ -113,12 +113,13 @@ model User {
   snapshottedCharts            DentalChartSnapshot[]
 
   // Billing
-  issuedInvoices     Invoice[]      @relation("InvoiceIssuer")
-  createdInvoices    Invoice[]      @relation("InvoiceCreator")
-  voidedInvoices     Invoice[]      @relation("InvoiceVoidedBy")
+  issuedInvoices     Invoice[]           @relation("InvoiceIssuer")
+  createdInvoices    Invoice[]           @relation("InvoiceCreator")
+  voidedInvoices     Invoice[]           @relation("InvoiceVoidedBy")
   receivedPayments   Payment[]
   invoiceAuditActors InvoiceAudit[]
-  paymentsVoided     Payment[]      @relation("PaymentVoidedBy")
+  paymentsVoided     Payment[]           @relation("PaymentVoidedBy")
+  invoiceAdjustments InvoiceAdjustment[]
 
   // Inventory
   createdCategories  InventoryCategory[] @relation("InventoryCategoryCreator")
@@ -844,8 +845,10 @@ model Invoice {
   total             Decimal       @default(0) @db.Decimal(12, 2)
   /// Net money kept: payments minus refunds (voided rows excluded).
   paidAmount        Decimal       @default(0) @map("paid_amount") @db.Decimal(12, 2)
-  /// Σ refunds. A refund does not reopen the debt: outstanding = total − (paid + refunded).
+  /// Σ refunds. A refund does not reopen the debt: outstanding = total − (paid + refunded + adjusted).
   refundedAmount    Decimal       @default(0) @map("refunded_amount") @db.Decimal(12, 2)
+  /// Σ invoice_adjustments: owed amount written down after issue (migration 050).
+  adjustedAmount    Decimal       @default(0) @map("adjusted_amount") @db.Decimal(12, 2)
   outstandingAmount Decimal       @default(0) @map("outstanding_amount") @db.Decimal(12, 2)
   notes             String?
   issuedAt          DateTime?     @map("issued_at") @db.Timestamptz()
@@ -861,16 +864,17 @@ model Invoice {
   /// Set on an invoice re-made after this one was voided.
   replacesInvoiceId String?       @unique @map("replaces_invoice_id") @db.Uuid
 
-  encounter  Encounter      @relation(fields: [encounterId], references: [id])
-  replaces   Invoice?       @relation("InvoiceReplacement", fields: [replacesInvoiceId], references: [id])
-  replacedBy Invoice?       @relation("InvoiceReplacement")
-  patient    Patient        @relation(fields: [patientId], references: [id])
-  issuer     User?          @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
-  voider     User?          @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
-  creator    User?          @relation("InvoiceCreator", fields: [createdBy], references: [id])
-  items      InvoiceItem[]
-  payments   Payment[]
-  audits     InvoiceAudit[]
+  encounter   Encounter           @relation(fields: [encounterId], references: [id])
+  replaces    Invoice?            @relation("InvoiceReplacement", fields: [replacesInvoiceId], references: [id])
+  replacedBy  Invoice?            @relation("InvoiceReplacement")
+  patient     Patient             @relation(fields: [patientId], references: [id])
+  issuer      User?               @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
+  voider      User?               @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
+  creator     User?               @relation("InvoiceCreator", fields: [createdBy], references: [id])
+  items       InvoiceItem[]
+  payments    Payment[]
+  audits      InvoiceAudit[]
+  adjustments InvoiceAdjustment[]
 
   @@unique([code])
   @@index([encounterId])
@@ -923,6 +927,26 @@ model Payment {
   @@unique([invoiceId, requestKey])
   @@index([invoiceId, paidAt(sort: Desc)])
   @@map("payments")
+}
+
+/// "Điều chỉnh giảm / xoá nợ" (migration 050): what the patient owes on an
+/// issued invoice is lowered by `amount`; no money moves, payments are kept.
+/// Like a refund it lowers revenue and the commission basis on its own date
+/// (`adjustedAt`), never in the month the invoice was issued.
+model InvoiceAdjustment {
+  id         String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  invoiceId  String   @map("invoice_id") @db.Uuid
+  amount     Decimal  @db.Decimal(12, 2)
+  reason     String
+  adjustedAt DateTime @default(now()) @map("adjusted_at") @db.Timestamptz()
+  adjustedBy String   @map("adjusted_by") @db.Uuid
+
+  invoice        Invoice @relation(fields: [invoiceId], references: [id])
+  adjustedByUser User    @relation(fields: [adjustedBy], references: [id])
+
+  @@index([invoiceId, adjustedAt(sort: Desc)])
+  @@index([adjustedAt])
+  @@map("invoice_adjustments")
 }
 
 model InvoiceAudit {

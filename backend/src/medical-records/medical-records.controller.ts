@@ -25,6 +25,7 @@ import {
   AddAddendumDto,
   CancelEncounterDto,
   CloseEncounterDto,
+  ReopenEncounterDto,
   CreatePrescriptionDto,
   CreateTreatmentDto,
   SnapshotDentalChartDto,
@@ -106,6 +107,22 @@ export class MedicalRecordsController {
   ) {
     await this.mr.cancelEncounter(id, dto.reason, actor);
     return { data: { cancelled: true } };
+  }
+
+  @Post('encounters/:id/reopen')
+  @RequirePermissions('encounter.reopen')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Reopen a COMPLETED encounter whose invoice is a draft or voided (BR-MR-024): voids the draft, returns stock',
+  })
+  async reopen(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReopenEncounterDto,
+    @User() actor: JwtPayload,
+  ) {
+    await this.mr.reopenEncounter(id, dto.reason, actor);
+    return { data: { reopened: true } };
   }
 
   // ------- Clinical Note -------

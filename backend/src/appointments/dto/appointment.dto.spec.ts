@@ -8,7 +8,6 @@ import {
   RescheduleAppointmentDto,
   ClinicClosureDto,
   CreateScheduleOverrideDto,
-  CreateShiftRegistrationDto,
   CreateWorkingScheduleDto,
   ListAppointmentsQueryDto,
   MarkLeftDto,
@@ -92,7 +91,7 @@ describe('schedule times ("HH:mm", 5-minute grid)', () => {
     expect(schedule(v, '23:59')).toEqual([]);
   });
 
-  it('applies to overrides, shift registrations and bulk blocks too', () => {
+  it('applies to overrides and bulk blocks too', () => {
     expect(
       errors(CreateScheduleOverrideDto, {
         dentistId: DENTIST,
@@ -102,14 +101,6 @@ describe('schedule times ("HH:mm", 5-minute grid)', () => {
         reason: 'Họp',
       }).map(e => e.property),
     ).toEqual(['ranges']);
-    expect(
-      errors(CreateShiftRegistrationDto, {
-        dentistId: DENTIST,
-        date: '2026-10-01',
-        startTime: 'abc',
-        endTime: '12:00',
-      }).map(e => e.property),
-    ).toEqual(['startTime']);
     expect(
       errors(BulkCreateWorkingSchedulesDto, {
         dentistId: DENTIST,

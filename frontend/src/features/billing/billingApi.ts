@@ -112,6 +112,21 @@ export const billingApi = {
     return unwrap(data);
   },
 
+  /** "Điều chỉnh giảm / xoá nợ" of an issued invoice; payments are kept. */
+  async adjustInvoice(
+    id: string,
+    payload: { amount: number; reason: string; version: number },
+  ): Promise<Invoice> {
+    const { data } = await api.post<{ data: Invoice }>(`${BASE}/invoices/${id}/adjustments`, payload);
+    return unwrap(data);
+  },
+
+  /** The encounter's invoice that counts (a voided one only when nothing replaced it). */
+  async getInvoiceByEncounter(encounterId: string): Promise<Invoice | null> {
+    const { data } = await api.get<{ data: Invoice[] }>(`${BASE}/invoices/by-encounter/${encounterId}`);
+    return data.data[0] ?? null;
+  },
+
   /** New DRAFT replacing a voided invoice (returns the existing one if already done). */
   async reissueInvoice(id: string, reason: string): Promise<Invoice> {
     const { data } = await api.post<{ data: Invoice }>(`${BASE}/invoices/${id}/reissue`, { reason });

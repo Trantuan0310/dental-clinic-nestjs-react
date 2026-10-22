@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { BusinessRuleException } from '../common/exceptions/business-rule.exception';
-import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
+import { CLINIC_UTC_OFFSET_MS, clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 import { AppointmentsService, STALE_APPOINTMENT_MSG, VisitPlan } from './appointments.service';
 import { AvailabilityService } from './availability.service';
 import {
@@ -475,7 +475,7 @@ export class DispatchService {
    * the substitute's queue as by transfer(). Each one is checked on its
    * own; the ones the substitute cannot take are listed with the reason
    * and stay where they are. A3-06 / B5: unless `closeFromDentist` is
-   * false, the absent dentist's day is then closed (CLOSED override, from
+   * false, the absent dentist's day is first closed (CLOSED override, from
    * now when today) so nobody books them again; undoReassignDay() reverses
    * the closure and the untouched bookings.
    */
@@ -497,6 +497,11 @@ export class DispatchService {
       );
     }
     await this.appointments.validateDentist(dto.toDentistId);
+    const reason = dto.reason.trim();
+    // Closed first, under the dentist's calendar lock: a booking made while
+    // the visits are being moved would otherwise be left on the absent dentist.
+    const closedOverrideId =
+      dto.closeFromDentist === false ? null : await this.closeDentistDay(dto, reason, actor);
     const dayStart = startOfClinicDay(dto.date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
     // A booking whose patient may still check in (within the check-in
@@ -515,7 +520,6 @@ export class DispatchService {
       },
       orderBy: { startAt: 'asc' },
     });
-    const reason = dto.reason.trim();
     const { moved, failed } = await this.moveVisits(
       candidates,
       dto.fromDentistId,
@@ -556,8 +560,6 @@ export class DispatchService {
         });
       }
     }
-    const closedOverrideId =
-      dto.closeFromDentist === false ? null : await this.closeDentistDay(dto, reason, actor);
     return {
       moved,
       transferred,
@@ -792,7 +794,7 @@ export class DispatchService {
     const date = new Date(dto.date);
     let range: { startTime: Date; endTime: Date } | null = null;
     if (dto.date === today) {
-      const now = new Date(Date.now() + 7 * 60 * 60_000);
+      const now = new Date(Date.now() + CLINIC_UTC_OFFSET_MS);
       const minutes = Math.floor((now.getUTCHours() * 60 + now.getUTCMinutes()) / 15) * 15;
       if (minutes >= 23 * 60 + 45) return null;
       range = {

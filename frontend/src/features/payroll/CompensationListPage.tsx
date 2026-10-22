@@ -1,22 +1,30 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
-import { enUS, vi } from 'date-fns/locale';
 import { DollarSign, Plus, AlertCircle } from 'lucide-react';
-import { useCompensations, useCreateCompensation } from './payrollApi';
-import { Modal, Input, Select, Button, Card, EmptyState } from '@/components/ui';
+import { useCompensations, useCreateCompensation, useDeleteCompensation } from './payrollApi';
+import { Modal, Input, Select, Button, Card, EmptyState, Badge, ConfirmDialog } from '@/components/ui';
 import { Alert } from '@/components/ui/Alert';
 import { Textarea } from '@/components/ui/Textarea';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { clinicToday } from '@/lib/clinicTime';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { SELF_APPROVAL_REASON_MIN, type DentistCompensation } from '@/types/payroll';
 
+/** yyyy-MM-dd of a DATE column value. */
+const day = (value: string) => value.slice(0, 10);
+
+function dayBefore(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function CompensationListPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const canCreateCompensation = useAuthStore((s) => s.hasPermission('payroll.compensation.update'));
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDentist, setSelectedDentist] = useState('');
@@ -33,6 +41,29 @@ export function CompensationListPage() {
   const { data: dentists } = useDentistOptions();
 
   const createMutation = useCreateCompensation();
+  const stopMutation = useDeleteCompensation();
+  const [stopTarget, setStopTarget] = useState<DentistCompensation | null>(null);
+  const today = clinicToday();
+
+  // A new policy ends the dentist's open-ended one the day before (server
+  // side, same transaction); say so before the admin confirms.
+  const endsPrevious =
+    selectedDentist && effectiveFrom
+      ? compensations?.find(
+          (c) => c.dentistId === selectedDentist && !c.effectiveTo && day(c.effectiveFrom) < effectiveFrom,
+        )
+      : undefined;
+
+  const handleStop = async () => {
+    if (!stopTarget) return;
+    try {
+      await stopMutation.mutateAsync(stopTarget.id);
+      notify.success(t('uiWorkforce.payrollCompensationStopped'));
+      setStopTarget(null);
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollCompensationStopError')));
+    }
+  };
 
   const handleCreate = async () => {
     try {
@@ -103,35 +134,68 @@ export function CompensationListPage() {
             }
           />
         ) : (
-          <div className="divide-y divide-gray-100">
-            {Object.entries(compensationsByDentist).map(([dentistId, dentistCompensations]) => {
-              const latestComp = dentistCompensations[0];
-              return (
-                <div key={dentistId} className="p-4 hover:bg-gray-50 dark:hover:bg-surface-800/60">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-surface-100">{latestComp.dentistName}</p>
-                      <p className="text-sm text-gray-500 dark:text-surface-400">
-                        {t('uiWorkforce.payrollEffectiveFrom')}: {format(new Date(latestComp.effectiveFrom), 'dd/MM/yyyy', { locale: i18n.language === 'vi' ? vi : enUS })}
-                      </p>
-                    </div>
-                    <div className="flex gap-6 text-right">
-                      <div>
-                        <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollBaseSalary')}</p>
-                        <p className="font-medium">{formatCurrency(latestComp.baseSalary)}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollCommission')}</p>
-                        <p className="font-medium">{latestComp.commissionPercentage}%</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="divide-y divide-gray-100 dark:divide-surface-800">
+            {Object.entries(compensationsByDentist).map(([dentistId, dentistCompensations]) => (
+              <div key={dentistId} className="p-4">
+                <p className="font-medium text-gray-900 dark:text-surface-100">{dentistCompensations[0].dentistName}</p>
+                <ul className="mt-2 space-y-2">
+                  {dentistCompensations.map((comp) => {
+                    const from = day(comp.effectiveFrom);
+                    const to = comp.effectiveTo ? day(comp.effectiveTo) : null;
+                    const active = from <= today && (!to || to >= today);
+                    // The server ends a policy today, removes one not yet in
+                    // force, and refuses one already ended.
+                    const stoppable = !to || to > today;
+                    return (
+                      <li
+                        key={comp.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-md px-2 py-1 hover:bg-gray-50 dark:hover:bg-surface-800/60"
+                      >
+                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-surface-300">
+                          <span>
+                            {formatDate(from)} → {to ? formatDate(to) : t('uiWorkforce.payrollOpenEnded')}
+                          </span>
+                          {active && <Badge variant="success">{t('uiWorkforce.payrollCurrentlyActive')}</Badge>}
+                        </div>
+                        <div className="flex items-center gap-6 text-right">
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollBaseSalary')}</p>
+                            <p className="font-medium">{formatCurrency(comp.baseSalary)}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollCommission')}</p>
+                            <p className="font-medium">{comp.commissionPercentage}%</p>
+                          </div>
+                          {canCreateCompensation && stoppable && (
+                            <Button variant="outline" size="sm" onClick={() => setStopTarget(comp)}>
+                              {t('uiWorkforce.payrollCompensationStop')}
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={!!stopTarget}
+        onClose={() => setStopTarget(null)}
+        onConfirm={handleStop}
+        title={t('uiWorkforce.payrollCompensationStopTitle')}
+        description={
+          stopTarget && day(stopTarget.effectiveFrom) > today
+            ? t('uiWorkforce.payrollCompensationRemoveFutureDescription')
+            : t('uiWorkforce.payrollCompensationStopDescription', { date: formatDate(today) })
+        }
+        confirmLabel={t('uiWorkforce.payrollCompensationStop')}
+        variant="danger"
+        isLoading={stopMutation.isPending}
+      />
 
       {/* Add Compensation Modal */}
       <Modal
@@ -171,6 +235,16 @@ export function CompensationListPage() {
             value={effectiveFrom}
             onChange={(e) => setEffectiveFrom(e.target.value)}
           />
+          {endsPrevious ? (
+            <Alert variant="info">
+              {t('uiWorkforce.payrollCompensationEndsPrevious', {
+                from: formatDate(day(endsPrevious.effectiveFrom)),
+                to: formatDate(dayBefore(effectiveFrom)),
+              })}
+            </Alert>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-surface-400">{t('uiWorkforce.payrollCompensationChangeHint')}</p>
+          )}
           {isSelf && (
             <>
               <Alert variant="warning" title={t('uiWorkforce.payrollSelfApprovalTitle')}>

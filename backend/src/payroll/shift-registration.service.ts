@@ -105,6 +105,9 @@ export class ShiftRegistrationService {
     );
     if (dayProblem) throw new ShiftConflictException(dayProblem);
 
+    const newStart = this.hhmmToMinutes(dto.startTime);
+    const newEnd = this.hhmmToMinutes(dto.endTime);
+
     // BR-PAY-020: conflict check vs ALL active WorkingSchedules (not just first)
     const dayOfWeek = date.getUTCDay();
     const wsConflicts = await this.prisma.workingSchedule.findMany({
@@ -120,8 +123,6 @@ export class ShiftRegistrationService {
     for (const ws of wsConflicts) {
       const wsStart = this.timeToMinutes(ws.startTime);
       const wsEnd = this.timeToMinutes(ws.endTime);
-      const newStart = this.hhmmToMinutes(dto.startTime);
-      const newEnd = this.hhmmToMinutes(dto.endTime);
 
       if (newStart < wsEnd && newEnd > wsStart) {
         throw new ShiftConflictException(
@@ -130,43 +131,43 @@ export class ShiftRegistrationService {
       }
     }
 
-    // M#4: Check ALL non-cancelled shifts for this dentist on this date.
-    // - APPROVED  → reject (BS already has 1 approved shift for that day)
-    // - PENDING   → reject (admin should process/reject pending first)
-    // (REJECTED/CANCELLED are terminal, don't block)
-    const conflictingShift = await this.prisma.shiftRegistration.findFirst({
-      where: {
-        dentistId,
-        date,
-        status: {
-          in: [ShiftRegistrationStatus.APPROVED, ShiftRegistrationStatus.PENDING],
+    // M#4 / 4.5: a second shift the same day is fine (morning + evening);
+    // it must not overlap one still PENDING or APPROVED (REJECTED/CANCELLED
+    // are terminal). Check and insert under the dentist's calendar lock so
+    // two overlapping requests can't both pass.
+    const created = await this.prisma.$transaction(async tx => {
+      await lockDentistCalendar(tx, dentistId);
+      const sameDay = await tx.shiftRegistration.findMany({
+        where: {
+          dentistId,
+          date,
+          status: { in: [ShiftRegistrationStatus.APPROVED, ShiftRegistrationStatus.PENDING] },
+          deletedAt: null,
         },
-        deletedAt: null,
-        // Exclude self when re-submitting after REJECTED→PENDING (not possible
-        // in current state machine but defense in depth)
-        NOT: { id: '00000000-0000-0000-0000-000000000000' },
-      },
-    });
-    if (conflictingShift) {
-      throw new ShiftConflictException(
-        conflictingShift.status === ShiftRegistrationStatus.APPROVED
-          ? 'BS đã có 1 ShiftRegistration APPROVED cho ngày này'
-          : 'BS đã có 1 ShiftRegistration PENDING cho ngày này — chờ admin duyệt/từ chối trước',
+      });
+      const clash = sameDay.find(
+        p => newStart < this.hhmmToMinutes(p.endTime) && this.hhmmToMinutes(p.startTime) < newEnd,
       );
-    }
-
-    const created = await this.prisma.shiftRegistration.create({
-      data: {
-        dentistId,
-        date,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        maxEncounters: dto.maxEncounters ?? null,
-        notes: dto.notes ?? null,
-        status: ShiftRegistrationStatus.PENDING,
-        createdByUserId: requestorId,
-      },
-    });
+      if (clash) {
+        throw new ShiftConflictException(
+          clash.status === ShiftRegistrationStatus.APPROVED
+            ? `Trùng ca đã duyệt ${clash.startTime}-${clash.endTime} cùng ngày`
+            : `Trùng ca ${clash.startTime}-${clash.endTime} đang chờ duyệt cùng ngày — chờ duyệt/từ chối ca đó hoặc chọn giờ khác`,
+        );
+      }
+      return tx.shiftRegistration.create({
+        data: {
+          dentistId,
+          date,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          maxEncounters: dto.maxEncounters ?? null,
+          notes: dto.notes ?? null,
+          status: ShiftRegistrationStatus.PENDING,
+          createdByUserId: requestorId,
+        },
+      });
+    }, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       actorUserId: requestorId,

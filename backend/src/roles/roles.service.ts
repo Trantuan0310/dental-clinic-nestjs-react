@@ -158,7 +158,10 @@ export class RolesService {
   ): Promise<RoleResponse> {
     const role = await this.prisma.role.findUniqueOrThrow({
       where: { id: roleId },
-      include: { rolePermissions: true, userRoles: true },
+      include: {
+        rolePermissions: { include: { permission: { select: { code: true } } } },
+        userRoles: true,
+      },
     });
 
     // The UI hides Edit entirely for system roles (RolesPage.tsx), matching
@@ -214,7 +217,11 @@ export class RolesService {
         actorEmail,
         targetType: 'role',
         targetId: roleId,
-        metadata: { newPermissions: foundPerms.map(p => p.code) },
+        // Both lists, so the history shows what was taken away too.
+        metadata: {
+          previousPermissions: role.rolePermissions.map(rp => rp.permission.code),
+          newPermissions: foundPerms.map(p => p.code),
+        },
         ipAddress,
         userAgent,
       });

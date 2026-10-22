@@ -332,6 +332,7 @@ export class UsersService {
       );
     }
 
+    let previousRoles: string[] = [];
     await this.prisma.$transaction(
       async tx => {
         // Guard check + write happen inside the SAME Serializable
@@ -350,6 +351,12 @@ export class UsersService {
           await this.assertNoOpenDentistWork(tx, userId);
         }
 
+        previousRoles = (
+          (await tx.userRole.findMany({
+            where: { userId },
+            select: { role: { select: { code: true } } },
+          })) ?? []
+        ).map(ur => ur.role.code);
         await tx.userRole.deleteMany({
           where: { userId },
         });
@@ -380,7 +387,7 @@ export class UsersService {
       actorEmail,
       targetType: 'user',
       targetId: userId,
-      metadata: { newRoles: roles.map(r => r.code) },
+      metadata: { previousRoles, newRoles: roles.map(r => r.code) },
       ipAddress,
       userAgent,
     });

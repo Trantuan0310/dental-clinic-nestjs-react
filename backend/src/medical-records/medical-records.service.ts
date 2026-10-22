@@ -330,7 +330,11 @@ export class MedicalRecordsService {
         dentist: { select: { id: true, fullName: true } },
         appointment: { select: { startAt: true, endAt: true, status: true } },
         // Only whether it was ever reopened after a cancel (formatEncounter).
-        audits: { where: { action: 'REOPENED' }, select: { id: true }, take: 1 },
+        audits: {
+          where: { action: 'REOPENED', before: { path: ['status'], equals: 'CANCELLED' } },
+          select: { id: true },
+          take: 1,
+        },
       },
     });
     if (!e) throw new EncounterNotFoundException(id);
@@ -415,6 +419,7 @@ export class MedicalRecordsService {
       inventoryItemsUsed: (t.inventoryUsages ?? []).map((u: Record<string, any>) => ({
         inventoryItemId: u.inventoryItemId,
         quantityUsed: Number(u.quantity),
+        unit: u.unit,
       })),
     };
   }
@@ -601,6 +606,7 @@ export class MedicalRecordsService {
               select: {
                 id: true,
                 name: true,
+                unit: true,
                 quantityOnHand: true,
                 deletedAt: true,
               },
@@ -625,6 +631,7 @@ export class MedicalRecordsService {
                 before.name,
                 requested,
                 Number(before.quantityOnHand),
+                before.unit ?? usage.unit,
               );
             }
 
@@ -808,6 +815,13 @@ export class MedicalRecordsService {
             : 'Phiên khám đã bị hủy trước đó',
         );
       }
+      // Reopened after a close (BR-MR-024): the visit happened and its
+      // appointment is COMPLETED — close it again instead.
+      if (encounter.closedAt === null && (await this.wasReopenedAfterClose(tx, encounterId))) {
+        throw new EncounterNotClosableException(
+          'Phiên khám được mở lại sau khi kết thúc — hãy kết thúc lại, không hủy được',
+        );
+      }
       // A3-03: a dentist cancels their own encounter opened by mistake, only
       // while nothing was done in it; past that it is the admin's call.
       if (this.isRowScopedDentist(actor)) {
@@ -910,6 +924,169 @@ export class MedicalRecordsService {
             reason: trimmed,
             appointmentReturnedToCheckIn: appointmentStatus === 'CHECKED_IN',
             ...(appointmentStatus === 'LEFT' ? { appointmentClosedAsLeft: true } : {}),
+          },
+        },
+        tx,
+      );
+      return encounter.patientId;
+    });
+    this.emitClinicalDataChanged(patientId);
+  }
+
+  /** An admin reopened this encounter after it was closed (BR-MR-024). */
+  private async wasReopenedAfterClose(
+    tx: Prisma.TransactionClient,
+    encounterId: string,
+  ): Promise<boolean> {
+    const row = await tx.encounterAudit.findFirst({
+      where: { encounterId, action: 'REOPENED', before: { path: ['status'], equals: 'COMPLETED' } },
+      select: { id: true },
+    });
+    return !!row;
+  }
+
+  /**
+   * BR-MR-024: an admin reopens a COMPLETED encounter (a forgotten treatment,
+   * closed by mistake) while its invoice is still a draft or was voided —
+   * an issued one carries money and must be corrected in Billing. In one
+   * transaction: the draft invoice is voided (never issued, so it counts
+   * nowhere; closing again drafts a fresh one that replaces it), every
+   * consumable the close took out of stock is put back, the clinical note is
+   * unlocked and the encounter is IN_PROGRESS again for its dentist. The
+   * appointment stays COMPLETED: the visit did happen.
+   */
+  async reopenEncounter(encounterId: string, reason: string, actor: JwtPayload) {
+    const trimmed = reason?.trim() ?? '';
+    if (trimmed.length < 10) {
+      throw new BusinessRuleException(
+        'Lý do mở lại phiên khám phải có ít nhất 10 ký tự',
+        HttpStatus.BAD_REQUEST,
+        undefined,
+        'ENCOUNTER_REOPEN_REASON_REQUIRED',
+      );
+    }
+    const patientId = await this.prisma.$transaction(async tx => {
+      await this.lockEncounter(tx, encounterId);
+      const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
+      if (!encounter) throw new EncounterNotFoundException(encounterId);
+      if (encounter.status !== EncounterStatus.COMPLETED) {
+        throw new EncounterNotClosableException('Chỉ mở lại được phiên khám đã kết thúc');
+      }
+      const invoice = await tx.invoice.findFirst({
+        where: { encounterId, deletedAt: null, status: { not: 'VOIDED' } },
+      });
+      if (invoice && invoice.status !== 'DRAFT') {
+        throw new BusinessRuleException(
+          `Hóa đơn ${invoice.code} đã phát hành — không mở lại được phiên khám. Sửa ở hóa đơn (hủy hóa đơn khi chưa thu tiền, hoặc điều chỉnh giảm) rồi thử lại.`,
+          HttpStatus.CONFLICT,
+          { invoiceId: invoice.id, invoiceStatus: invoice.status },
+          'ENCOUNTER_REOPEN_INVOICE_ISSUED',
+        );
+      }
+      const now = new Date();
+      if (invoice) {
+        const voidReason = `Mở lại phiên khám: ${trimmed}`;
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: 'VOIDED',
+            voidedAt: now,
+            voidedBy: actor.sub,
+            voidReason,
+            outstandingAmount: new Prisma.Decimal(0),
+            version: { increment: 1 },
+          },
+        });
+        await tx.invoiceAudit.create({
+          data: {
+            invoiceId: invoice.id,
+            action: 'VOIDED',
+            actorId: actor.sub,
+            before: { status: invoice.status },
+            after: { status: 'VOIDED', reason: voidReason, encounterReopened: true },
+          },
+        });
+      }
+
+      // Put back what this encounter's closes took out and has not been
+      // returned yet (net of earlier reopens), item by item.
+      const movements = await tx.stockMovement.findMany({
+        where: { refType: 'ENCOUNTER', refId: encounterId },
+        select: { inventoryItemId: true, diff: true },
+      });
+      const net = new Map<string, Prisma.Decimal>();
+      for (const m of movements) {
+        net.set(
+          m.inventoryItemId,
+          (net.get(m.inventoryItemId) ?? new Prisma.Decimal(0)).plus(m.diff),
+        );
+      }
+      const returned: Array<{ inventoryItemId: string; quantity: number }> = [];
+      for (const [itemId, diff] of net) {
+        if (!diff.lessThan(0)) continue;
+        const quantity = diff.negated();
+        const after = await tx.inventoryItem.update({
+          where: { id: itemId },
+          data: { quantityOnHand: { increment: quantity } },
+          select: { quantityOnHand: true },
+        });
+        await tx.stockMovement.create({
+          data: {
+            inventoryItemId: itemId,
+            type: 'STOCK_IN',
+            refType: 'ENCOUNTER',
+            refId: encounterId,
+            quantityBefore: new Prisma.Decimal(after.quantityOnHand).minus(quantity),
+            quantityAfter: after.quantityOnHand,
+            diff: quantity,
+            reason: `Mở lại phiên khám ${encounterId}: nhập lại vật tư`,
+            performedBy: actor.sub,
+          },
+        });
+        returned.push({ inventoryItemId: itemId, quantity: quantity.toNumber() });
+      }
+
+      await tx.encounter.update({
+        where: { id: encounterId },
+        data: { status: EncounterStatus.IN_PROGRESS, closedAt: null },
+      });
+      await tx.clinicalNote.updateMany({
+        where: { encounterId },
+        data: { isLocked: false, lockedAt: null },
+      });
+      await tx.encounterAudit.create({
+        data: {
+          encounterId,
+          action: 'REOPENED',
+          actorId: actor.sub,
+          // Same instant as the void: closing again drafts the new invoice
+          // only for a reopen at or after the void (BillingService).
+          occurredAt: now,
+          before: {
+            status: encounter.status,
+            closedAt: encounter.closedAt?.toISOString() ?? null,
+          },
+          after: {
+            status: EncounterStatus.IN_PROGRESS,
+            reason: trimmed,
+            voidedInvoiceId: invoice?.id ?? null,
+            stockReturned: returned,
+          },
+        },
+      });
+      await this.audit.log(
+        {
+          action: 'ENCOUNTER_REOPENED',
+          actorUserId: actor.sub,
+          actorEmail: actor.email,
+          targetType: 'encounter',
+          targetId: encounterId,
+          metadata: {
+            patientId: encounter.patientId,
+            appointmentId: encounter.appointmentId,
+            reason: trimmed,
+            voidedInvoiceId: invoice?.id ?? null,
+            stockReturned: returned,
           },
         },
         tx,
@@ -1131,25 +1308,17 @@ export class MedicalRecordsService {
           ? Number(booked.price)
           : await this.assignedPrice(tx, encounter.dentistId, service, encounter.startedAt);
         this.assertPriceAllowed(actor, listPrice, dto.unitPrice, dto.priceReason);
+      } else if (!dto.priceReason || dto.priceReason.length < 3) {
+        // 3.6: a free-text line has no list price to check against.
+        throw new BusinessRuleException(
+          'Thủ thuật ngoài danh mục: nhập lý do cho đơn giá',
+          HttpStatus.BAD_REQUEST,
+          { unitPrice: dto.unitPrice },
+          'TREATMENT_PRICE_REASON_REQUIRED',
+        );
       }
 
-      // A usage pointing at a missing item used to surface as an FK 500.
-      const usageItemIds = [...new Set((dto.inventoryUsages ?? []).map(u => u.inventoryItemId))];
-      if (usageItemIds.length > 0) {
-        const found = await tx.inventoryItem.findMany({
-          where: { id: { in: usageItemIds }, deletedAt: null },
-          select: { id: true },
-        });
-        const missing = usageItemIds.filter(id => !found.some(f => f.id === id));
-        if (missing.length > 0) {
-          throw new BusinessRuleException(
-            'Vật tư được chọn không tồn tại hoặc đã bị xóa',
-            HttpStatus.BAD_REQUEST,
-            { inventoryItemIds: missing },
-            'INVENTORY_ITEM_NOT_FOUND',
-          );
-        }
-      }
+      await this.assertUsableItems(tx, dto.inventoryUsages ?? []);
 
       const treatment = await (async () => {
         const t = await tx.treatment.create({
@@ -1160,7 +1329,8 @@ export class MedicalRecordsService {
             description: dto.description ?? null,
             unitPrice: dto.unitPrice,
             listPrice,
-            priceReason: listPrice !== null && dto.unitPrice !== listPrice ? dto.priceReason : null,
+            priceReason:
+              listPrice === null || dto.unitPrice !== listPrice ? (dto.priceReason ?? null) : null,
             quantity: dto.quantity ?? 1,
             durationMinutes: dto.durationMinutes ?? null,
             toothNumbers: (dto.toothNumbers ?? []) as unknown as Prisma.InputJsonValue,
@@ -1213,7 +1383,7 @@ export class MedicalRecordsService {
     return this.withEditableEncounter(encounterId, actor, async tx => {
       const t = await tx.treatment.findUnique({
         where: { id: treatmentId },
-        include: { encounter: { select: { dentistId: true } } },
+        include: { encounter: { select: { dentistId: true } }, inventoryUsages: true },
       });
       if (!t || t.encounterId !== encounterId) throw new TreatmentNotInEncounterException();
       if (t.deletedAt) throw new TreatmentNotInEncounterException();
@@ -1256,6 +1426,31 @@ export class MedicalRecordsService {
         },
       });
 
+      // 3.4: consumables can be corrected until the close takes them from stock.
+      const usagesBefore = (t.inventoryUsages ?? []).map(u => ({
+        inventoryItemId: u.inventoryItemId,
+        quantity: Number(u.quantity),
+        unit: u.unit,
+      }));
+      if (dto.inventoryUsages !== undefined) {
+        const kept = new Set(usagesBefore.map(u => u.inventoryItemId));
+        await this.assertUsableItems(
+          tx,
+          dto.inventoryUsages.filter(u => !kept.has(u.inventoryItemId)),
+        );
+        await tx.treatmentInventoryUsage.deleteMany({ where: { treatmentId } });
+        for (const usage of dto.inventoryUsages) {
+          await tx.treatmentInventoryUsage.create({
+            data: {
+              treatmentId,
+              inventoryItemId: usage.inventoryItemId,
+              quantity: usage.quantity,
+              unit: usage.unit,
+            },
+          });
+        }
+      }
+
       const before: Record<string, unknown> = {};
       const after: Record<string, unknown> = {};
       const track = (key: string, from: unknown, to: unknown) => {
@@ -1270,6 +1465,15 @@ export class MedicalRecordsService {
       track('quantity', t.quantity, dto.quantity);
       track('toothNumbers', t.toothNumbers, dto.toothNumbers);
       track('durationMinutes', t.durationMinutes, dto.durationMinutes);
+      track(
+        'inventoryUsages',
+        usagesBefore,
+        dto.inventoryUsages?.map(u => ({
+          inventoryItemId: u.inventoryItemId,
+          quantity: u.quantity,
+          unit: u.unit,
+        })),
+      );
       if (Object.keys(after).length > 0) {
         await this.audit.log(
           {
@@ -1290,6 +1494,41 @@ export class MedicalRecordsService {
       }
       return updated;
     });
+  }
+
+  /**
+   * Consumables picked for a treatment must exist (a missing one used to
+   * surface as an FK 500) and not be DISCONTINUED (BR-INV-014, 3.5).
+   */
+  private async assertUsableItems(
+    tx: Prisma.TransactionClient,
+    usages: Array<{ inventoryItemId: string }>,
+  ) {
+    const ids = [...new Set(usages.map(u => u.inventoryItemId))];
+    if (ids.length === 0) return;
+    const found =
+      (await tx.inventoryItem.findMany({
+        where: { id: { in: ids }, deletedAt: null },
+        select: { id: true, name: true, status: true },
+      })) ?? [];
+    const missing = ids.filter(id => !found.some(f => f.id === id));
+    if (missing.length > 0) {
+      throw new BusinessRuleException(
+        'Vật tư được chọn không tồn tại hoặc đã bị xóa',
+        HttpStatus.BAD_REQUEST,
+        { inventoryItemIds: missing },
+        'INVENTORY_ITEM_NOT_FOUND',
+      );
+    }
+    const stopped = found.filter(f => f.status === 'DISCONTINUED');
+    if (stopped.length > 0) {
+      throw new BusinessRuleException(
+        `Vật tư đã ngừng sử dụng: ${stopped.map(f => f.name).join(', ')}`,
+        HttpStatus.BAD_REQUEST,
+        { inventoryItemIds: stopped.map(f => f.id) },
+        'INVENTORY_ITEM_DISCONTINUED',
+      );
+    }
   }
 
   /** The dentist's price for a catalogue service on the visit day (else the base price). */

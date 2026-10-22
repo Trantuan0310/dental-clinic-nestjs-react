@@ -4,7 +4,38 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 22/10/2026
+
+### Sửa toàn bộ 32 điểm của báo cáo rà soát nghiệp vụ (xong)
+
+Người dùng: "sửa hết". Với các điểm cần chủ phòng khám quyết, chọn phương án an toàn nhất (đổi được nếu chủ phòng khám muốn khác):
+
+- 1.1 Đã check-in thì không "Hủy lịch", dùng "Đã về". 1.2 Check-in khi đang có lượt khác mở: chặn, cho "vẫn check-in" kèm xác nhận (giống walk-in).
+- 2.1 Cho gộp hồ sơ khi còn lịch tương lai/hoá đơn mở (chỉ chặn khi đang khám), so tên bỏ dấu, thêm nút gộp cho admin. 2.3 Tự xác nhận bỏ qua khi cùng người có yêu cầu/lịch khác. 2.7 Tra cứu chỉ bằng SĐT không trả giờ hẹn.
+- 3.1 Admin mở lại phiên khám đã đóng (bắt lý do, chỉ khi hoá đơn còn nháp/đã hủy, hoàn kho). 3.2 Thêm "điều chỉnh giảm / xoá nợ" cho hoá đơn đã phát hành (quyền riêng, chỉ admin, bắt lý do). 3.4 Giữ chặn khi thiếu tồn kho, nhưng cho sửa vật tư của thủ thuật khi phiên còn mở.
+- 4.2 Không khoá/duyệt kỳ lương trước khi hết kỳ; tính lại khi duyệt. 4.4 Cộng lương đã trả (theo ngày trả) vào "Tổng chi".
+- 5.1 Giảm giá trên 50% chỉ admin (đúng BR-BILL-025), ghi nhật ký, báo cáo có tổng giảm giá. 5.3 Hủy hoá đơn ghi bút toán âm vào ngày hủy, không sửa tháng đã chốt.
+
+Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo;
+
+- Xong đợt A (4.1, 4.4, 5.1, 5.3, 5.4, 5.5, 5.6): backend 1398 test xanh, frontend typecheck/lint/build xanh; migration 049 thêm quyền `invoice.discount.large` (chỉ admin).
+- Xong đợt B (4.2, 4.3, 4.5, 4.6, kỳ điều chỉnh trả 2 lần, ngày UTC): backend 1404 test xanh; bỏ route trùng `/appointments/shift-registrations`; E2E `flow-payroll-period-cycle` đổi sang kỳ đã kết thúc. Quyền `shift_registration.*` giờ không dùng.
+- Xong đợt C (3.1–3.6): backend 1417 test xanh; migration 050 (bảng `invoice_adjustments`, quyền `encounter.reopen`, `invoice.adjust`, chỉ admin). Điều chỉnh giảm không sửa `total` mà ghi dòng có ngày, để không sửa tháng đã chốt. E2E `flow-inventory-stock-out`, `flow-patient-to-payment` thêm ô lý do giá.
+- Xong đợt D (1.1–1.6): backend 1417 test xanh; check-in có cờ `ignoreOpenVisit` khi xác nhận.
+- Xong đợt E+F (2.1–2.7, 5.2, 5.7): nút gộp hồ sơ cho admin, giờ mở cửa dùng chung `src/common/clinic-hours.ts` (chưa xét ngày nghỉ của phòng khám), menu theo quyền.
+- Kiểm tra cuối: backend 1432 test, lint, tsc xanh; frontend lint/build xanh; E2E trên DB mới (có migration 049, 050) **90/90**.
+- Còn để ý: lễ tân sửa dị ứng (BR-PT-015 có vẻ cũ, chưa đổi); quyền `shift_registration.*` không còn dùng; deploy cần chạy migration 049, 050.
+ (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
+
 ## 21/10/2026
+
+### Rà soát nghiệp vụ các luồng (xong)
+
+- Làm lần lượt 5 mảng; báo cáo: `docs/audits/2026-10-21/BUSINESS_FLOW_REVIEW.md`. Chỉ rà soát, chưa sửa code.
+- 32 phát hiện: 7 Cao, 8 Trung bình, 17 Thấp. Phát hiện mức Cao đã kiểm lại trực tiếp trong code.
+- Nên sửa trước: giảm giá 100% không dấu vết (5.1), "Tổng chi" bỏ sót khoản đã hoàn (4.1), duyệt lương sớm mất hoa hồng (4.2), không đổi được tỷ lệ hoa hồng giữa chừng (4.3), hoá đơn đã phát hành không điều chỉnh được (3.2), không mở lại phiên khám đã đóng (3.1), hồ sơ trùng không gộp được (2.1).
+
+**Bước tiếp theo:** chờ chủ phòng khám chọn hướng cho các mục cần quyết định (danh sách ở đầu báo cáo); các mục không cần quyết định có thể sửa ngay theo thứ tự ưu tiên.
 
 ### Sửa 3 lỗi của lượt kiểm tra (nhánh `claude/admiring-keller-933rkp`, PR vào `main`)
 
@@ -25,7 +56,9 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 - Quét lại 281 lượt mở trang: không 5xx, lỗi JS, khóa thô; request 403 tới `/shifts/registrations` từ 92 → 0. 4xx còn lại là giới hạn phạm vi (bác sĩ mở bệnh nhân/hoá đơn không thuộc mình, admin không có phiếu lương).
 - Chữ tiếng Việt lộ ở giao diện tiếng Anh: 75 → 21 mẫu; 21 mẫu còn lại đều là dữ liệu (tên dịch vụ, người, vai trò, đơn thuốc, chẩn đoán, tiêu đề email) hoặc câu tóm tắt AI do backend viết.
 
-**Bước tiếp theo:** chờ CI của PR; nếu muốn tiếng Anh cho thẻ tóm tắt AI thì backend (`ai.service.ts`) phải trả mã + tham số thay vì câu tiếng Việt.
+**PR #64:** CI xanh 10/10 (gồm Playwright E2E); Codex có 1 nhận xét (select nhân sự giữ nhãn ngôn ngữ cũ) — không tái hiện được vì mọi chỗ dùng đều dịch lại nhãn lúc render, đã trả lời và đóng. Đã merge vào `main` (1d0055e) theo yêu cầu.
+
+**Bước tiếp theo:** nếu muốn tiếng Anh cho thẻ tóm tắt AI thì backend (`ai.service.ts`) phải trả mã + tham số thay vì câu tiếng Việt.
 
 **Ghi chú môi trường:** container khởi động lại thì PostgreSQL mất cấu hình `trust`; đã đặt mật khẩu `postgres` cho user `postgres` (chỉ DB thử local) và dùng trong `DATABASE_URL` của E2E.
 

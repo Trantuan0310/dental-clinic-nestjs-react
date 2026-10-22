@@ -432,6 +432,74 @@ describe('PatientsService', () => {
       ).rejects.toThrow(PatientMergeInvalidException);
     });
 
+    it('matches names without accents or case and allows upcoming appointments/open invoices', async () => {
+      (prisma.patient.findUnique as jest.Mock)
+        .mockResolvedValueOnce(
+          validPatient({
+            id: 'p1',
+            fullName: 'Nguyen Van An',
+            dob: new Date('1990-01-15'),
+            primaryPhone: '0901111111',
+          }),
+        )
+        .mockResolvedValueOnce(
+          validPatient({
+            id: 'p2',
+            fullName: 'Nguyễn Văn  An',
+            dob: new Date('1990-01-15'),
+            primaryPhone: '0902222222',
+          }),
+        );
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(2);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(1);
+      for (const m of [
+        'appointment',
+        'encounter',
+        'invoice',
+        'bookingRequest',
+        'patientPhoneHistory',
+      ])
+        ((prisma as any)[m].updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      (prisma.patientIdentifier.findMany as jest.Mock).mockResolvedValue([]);
+      await service.merge(
+        { sourcePatientId: 'p1', targetPatientId: 'p2', reason: 'x' } as any,
+        actor,
+      );
+      expect(prisma.patientMergeLog.create).toHaveBeenCalled();
+      // The source number stays in the target's phone trail.
+      expect(prisma.patientPhoneHistory.create).toHaveBeenCalledWith({
+        data: {
+          patientId: 'p2',
+          oldPhone: '0901111111',
+          newPhone: '0902222222',
+          changedBy: actor.sub,
+        },
+      });
+    });
+
+    it('refuses while either record has a visit in progress', async () => {
+      (prisma.patient.findUnique as jest.Mock)
+        .mockResolvedValueOnce(validPatient({ id: 'p1', dob: new Date('1990-01-15') }))
+        .mockResolvedValueOnce(validPatient({ id: 'p2', dob: new Date('1990-01-15') }));
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
+      await expect(
+        service.merge({ sourcePatientId: 'p1', targetPatientId: 'p2', reason: 'x' } as any, actor),
+      ).rejects.toThrow('phiên khám chưa kết thúc');
+      expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('update refuses an archived (or merged-away) record', async () => {
+      (prisma.patient.findUnique as jest.Mock).mockResolvedValueOnce(
+        validPatient({ id: 'p1', deletedAt: new Date() }),
+      );
+      await expect(service.update('p1', { address: 'x' } as any, actor)).rejects.toThrow(
+        PatientNotFoundException,
+      );
+    });
+
     it('reassigns appointments, encounters, invoices and writes patientMergeLog', async () => {
       const basePatient = validPatient({ fullName: 'Same Name', dob: new Date('1990-01-15') });
       (prisma.patient.findUnique as jest.Mock)
@@ -571,13 +639,13 @@ describe('PatientsService', () => {
       // The reads happen after the locks, i.e. inside the transaction.
       const lockOrder = (prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[1];
       const readOrder = (prisma.patient.findUnique as jest.Mock).mock.invocationCallOrder[0];
-      const countOrder = (prisma.appointment.count as jest.Mock).mock.invocationCallOrder[0];
+      const countOrder = (prisma.encounter.count as jest.Mock).mock.invocationCallOrder[0];
       expect(readOrder).toBeGreaterThan(lockOrder);
       expect(countOrder).toBeGreaterThan(lockOrder);
     });
 
-    it('aborts without moving anything when the source still has future appointments', async () => {
-      (prisma.appointment.count as jest.Mock).mockResolvedValue(1);
+    it('aborts without moving anything when a visit is still in progress', async () => {
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(1);
       await expect(run()).rejects.toThrow(PatientMergeInvalidException);
       expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
       expect(prisma.patient.update).not.toHaveBeenCalled();

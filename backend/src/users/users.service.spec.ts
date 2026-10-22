@@ -395,6 +395,9 @@ describe('UsersService', () => {
       (prisma.role.findUnique as jest.Mock).mockResolvedValue(null); // skip last-admin check
       (prisma.role.findMany as jest.Mock).mockResolvedValue([validRole({ id: 'r-new' })]);
       (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.userRole.findMany as jest.Mock).mockResolvedValue([
+        { role: { code: 'receptionist' } },
+      ]);
 
       await service.updateRoles(
         'user-1',
@@ -411,7 +414,11 @@ describe('UsersService', () => {
         expect.objectContaining({ where: { userId: 'user-1', revokedAt: null } }),
       );
       expect(audit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: ACTION_AUDIT.USER_ROLE_CHANGED }),
+        expect.objectContaining({
+          action: ACTION_AUDIT.USER_ROLE_CHANGED,
+          // 5.7: the list before the change too.
+          metadata: expect.objectContaining({ previousRoles: ['receptionist'] }),
+        }),
       );
     });
 

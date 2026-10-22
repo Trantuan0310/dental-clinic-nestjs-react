@@ -83,7 +83,10 @@ export interface AppointmentStats {
 
 export interface FinanceSummary {
   totalIncome: number;
+  /** Approved expenses + payrollPaid. */
   totalExpense: number;
+  /** Net pay of payroll periods paid in the range (dentists). */
+  payrollPaid: number;
 }
 
 export interface OutstandingSummary {

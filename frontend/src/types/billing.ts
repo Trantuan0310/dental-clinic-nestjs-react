@@ -33,6 +33,14 @@ export interface Payment {
   voidedByUser?: { fullName: string } | null;
 }
 
+export interface InvoiceAdjustment {
+  id: string;
+  amount: number;
+  reason: string;
+  adjustedAt: string;
+  adjustedByUser?: { fullName: string } | null;
+}
+
 export interface Invoice {
   id: string;
   code: string;
@@ -49,6 +57,9 @@ export interface Invoice {
   /** Net money kept: payments − refunds. */
   paidAmount: number;
   refundedAmount?: number;
+  /** Σ write-downs ("điều chỉnh giảm / xoá nợ"): no longer owed, no money moved. */
+  adjustedAmount?: number;
+  adjustments?: InvoiceAdjustment[];
   outstandingAmount: number;
   version: number;
   encounterId?: string;
@@ -183,8 +194,9 @@ export interface RevenueReportByServiceEntry {
 }
 
 /**
- * Revenue = issued invoices (ISSUED/PARTIAL/PAID) by issue date; collected =
- * payments by payment date net of refunds. DRAFT/VOIDED only in `excluded`.
+ * Revenue = issued invoices by issue date, less refunds and voids on their
+ * own date; collected = payments by payment date net of refunds. DRAFT, and
+ * VOIDED never issued, only in `excluded`.
  */
 export interface RevenueReport {
   from: string;
@@ -193,6 +205,12 @@ export interface RevenueReport {
   totalInvoiced: number;
   totalCollected: number;
   totalRefunded: number;
+  /** Written down ("xoá nợ") in the range; lowers revenue like a refund. */
+  totalAdjusted?: number;
+  /** Taken back by voiding issued invoices in the range (positive). */
+  totalVoided: number;
+  /** Discounts on the invoices issued in the range (BR-BILL-025). */
+  totalDiscount: number;
   totalOutstanding: number;
   invoiceCount: number;
   byStatus: RevenueReportByStatusEntry[];

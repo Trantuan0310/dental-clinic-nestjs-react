@@ -38,8 +38,12 @@ import {
   isValidDob,
   isValidEmail,
   isValidVnPhone,
+  foldName,
+  similarName,
 } from '../patients/domain/patient-rules';
+export { foldName, similarName };
 import { AuditService } from '../audit/audit.service';
+import { nextClinicOpening } from '../common/clinic-hours';
 import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
 import { EmailService } from '../common/services/email.service';
 import {
@@ -218,37 +222,6 @@ function clinicHhmm(value: Date): string {
 /** Names compared the way people type them: NFC, single spaces, any case. */
 export function normalizeName(value: string): string {
   return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi');
-}
-
-/** Lower case, no accents (đ → d), single spaces: how a name typed on a phone compares. */
-export function foldName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('vi')
-    .replace(/đ/g, 'd')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * The same person's name as typed twice: equal once accents and case are
- * ignored, or one leaves out middle names ("Ngô Nam" for "Ngô Quang Nam").
- * The family name (first word) and the given name (last) must both agree, and
- * the shorter name's words must appear in order in the longer. A single word
- * only ever equals itself.
- */
-export function similarName(a: string, b: string): boolean {
-  const x = foldName(a).split(' ').filter(Boolean);
-  const y = foldName(b).split(' ').filter(Boolean);
-  if (!x.length || !y.length) return false;
-  if (x.join(' ') === y.join(' ')) return true;
-  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  if (short.length < 2) return false;
-  if (short[0] !== long[0] || short[short.length - 1] !== long[long.length - 1]) return false;
-  let next = 0;
-  for (const word of long) if (word === short[next]) next++;
-  return next === short.length;
 }
 
 /**
@@ -585,7 +558,9 @@ export class BookingService {
       bufferAfterMin: plan.bufferAfterMin,
     });
     const minLeadMinutes = bookingMinLeadMinutes();
-    const earliest = Date.now() + Math.max(minLeadMinutes * 60_000, 60_000);
+    // The notice runs from when the front desk can first see the request:
+    // sent at 21:00, the early morning slots are not offered.
+    const earliest = this.earliestOnlineStart(minLeadMinutes);
     const afterLead = data.availableSlots.filter(
       time => new Date(date + 'T' + time + ':00+07:00').getTime() > earliest,
     );
@@ -636,6 +611,24 @@ export class BookingService {
    * after it came in), or a clinic proposal the patient has not answered, or
    * has accepted, until it is handled.
    */
+  /**
+   * The first instant an online request may start: the notice period counted
+   * from now, or from the clinic's next opening when it is closed now.
+   */
+  private earliestOnlineStart(minLeadMinutes: number): number {
+    const from = nextClinicOpening(new Date()).getTime();
+    return Math.max(from + minLeadMinutes * 60_000, Date.now() + 60_000);
+  }
+
+  /**
+   * When a request waiting for the front desk stops holding its time: the
+   * hold runs from when it came in, or from the next opening if it came in
+   * while the clinic was closed.
+   */
+  private holdEndsAt(createdAt: Date, holdMs: number): number {
+    return nextClinicOpening(createdAt).getTime() + holdMs;
+  }
+
   /** Whether a visit starting at `start` (buffers included) runs into a hold. */
   private hitsHold(held: Array<{ start: number; end: number }>, start: number, plan: VisitPlan) {
     const from = start - plan.bufferBeforeMin * 60_000;
@@ -678,7 +671,7 @@ export class BookingService {
       if (!(r.createdAt instanceof Date) || !(r.requestedStartAt instanceof Date)) continue;
       const proposal = r.status === 'PROPOSED' || r.status === 'PATIENT_ACCEPTED';
       // Waiting for the front desk lapses; a proposal stands until answered.
-      if (!proposal && now - r.createdAt.getTime() > holdMs) continue;
+      if (!proposal && now > this.holdEndsAt(r.createdAt, holdMs)) continue;
       const start = proposal && r.proposedStartAt ? r.proposedStartAt : r.requestedStartAt;
       const owner = proposal && r.proposedDentistId ? r.proposedDentistId : r.preferredDentistId;
       if (owner !== dentistId || start.getTime() <= now) continue;
@@ -703,7 +696,7 @@ export class BookingService {
       throw new BadRequestException('Thời gian đặt lịch phải ở phía trước');
     }
     const leadMin = bookingMinLeadMinutes();
-    if (startAt.getTime() <= Date.now() + leadMin * 60_000) {
+    if (startAt.getTime() <= this.earliestOnlineStart(leadMin)) {
       throw new BadRequestException(
         'Vui lòng đặt lịch trực tuyến trước giờ khám ít nhất ' +
           (leadMin % 60 === 0 ? leadMin / 60 + ' giờ' : leadMin + ' phút') +
@@ -1448,7 +1441,9 @@ export class BookingService {
     }>,
   ) {
     const open = rows.filter(r => ACTIVE.includes(r.status) && !r.appointmentId);
-    const dentistOf = (r: (typeof open)[number]) => r.proposedDentistId ?? r.preferredDentistId;
+    // The proposed dentist only while the proposal stands (not after the
+    // patient declined it).
+    const dentistOf = (r: (typeof open)[number]) => this.effectiveDentistId(r);
     const result = new Set<string>();
     if (!open.length) return result;
     const closed = await this.prisma.dentistProfile.findMany({
@@ -1816,7 +1811,48 @@ export class BookingService {
     return {
       requests: requests.map(r => ({ ...r, startAt: effectiveStartAt(r) })),
       visits,
+      archivedPatients: await this.archivedMatches(row),
     };
+  }
+
+  /**
+   * Archived records on the request's phones or with its name and date of
+   * birth (BR-PT-018): matching skips them, so without a word the front desk
+   * would open a new record and split the patient's history. Records merged
+   * into another are left out; their history lives on the target.
+   */
+  private async archivedMatches(row: {
+    phone: string;
+    contactPersonPhone?: string | null;
+    fullName: string;
+    dob: Date;
+  }) {
+    const phones = this.requestPhones(row);
+    const byPhone = phones.length
+      ? await this.prisma.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM patients
+          WHERE deleted_at IS NOT NULL
+            AND (
+              regexp_replace(regexp_replace(COALESCE(primary_phone, ''), '[[:space:]().-]', '', 'g'), '^([+]84|0084|84(?=[0-9]{9}$))', '0')
+                = ANY(${phones}::text[])
+              OR regexp_replace(regexp_replace(COALESCE(contact_person_phone, ''), '[[:space:]().-]', '', 'g'), '^([+]84|0084|84(?=[0-9]{9}$))', '0')
+                = ANY(${phones}::text[])
+            )
+          LIMIT 20`
+      : [];
+    const rows = await this.prisma.patient.findMany({
+      where: {
+        deletedAt: { not: null },
+        OR: [{ id: { in: (byPhone ?? []).map(r => r.id) } }, { dob: row.dob }],
+        mergedFrom: { none: {} },
+      },
+      select: { id: true, code: true, fullName: true, dob: true, deletedAt: true },
+      take: 50,
+    });
+    const phoneIds = new Set((byPhone ?? []).map(r => r.id));
+    return (rows ?? [])
+      .filter(p => phoneIds.has(p.id) || this.similarNameAndDob(p, row))
+      .slice(0, 10);
   }
 
   async propose(id: string, dto: ProposeBookingTimeDto, actor: JwtPayload) {
@@ -2008,7 +2044,7 @@ export class BookingService {
    * request no longer expires with a "past due" email.
    */
   async arrived(id: string, dto: BookingArrivedDto, actor: JwtPayload) {
-    const row = await this.requireActive(id);
+    const row = await this.requireArrivable(id);
     const note = dto.note?.trim();
     if (!dto.appointmentId) {
       await this.updateUnbookedRequest(id, row.status, {
@@ -2356,6 +2392,12 @@ export class BookingService {
    */
   private async tryAutoConfirm(id: string, accessToken: string) {
     try {
+      if (await this.hasOtherBooking(id)) {
+        this.logger.log(
+          `Auto-confirm of ${id} left to the front desk: the patient has other bookings`,
+        );
+        return null;
+      }
       const result = await this.confirm(id, AUTO_CONFIRM_ACTOR, {}, { accessToken });
       await this.auditAction('BOOKING_REQUEST_AUTO_CONFIRMED', id, AUTO_CONFIRM_ACTOR, {});
       return { notificationSent: !!result.notificationSent };
@@ -2372,6 +2414,44 @@ export class BookingService {
       this.logger.log(`Auto-confirm of ${id} left to the front desk: ${String(error)}`);
       return null;
     }
+  }
+
+  /**
+   * Whether the person a request is about (same phone, a name and date of
+   * birth that match) already has another open request or an upcoming visit:
+   * repeated bookings are for the front desk to sort out, not auto-confirm.
+   */
+  private async hasOtherBooking(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
+    if (!row) return false;
+    const phones = this.requestPhones(row);
+    const [requests, patients] = await Promise.all([
+      this.prisma.bookingRequest.findMany({
+        where: {
+          id: { not: id },
+          appointmentId: null,
+          status: { in: ACTIVE },
+          OR: [{ phone: { in: phones } }, { contactPersonPhone: { in: phones } }],
+        },
+        select: { fullName: true, dob: true },
+      }),
+      this.prisma.patient.findMany({
+        where: await this.patientsByPhone(phones),
+        select: { id: true, fullName: true, dob: true },
+      }),
+    ]);
+    if ((requests ?? []).some(r => this.similarNameAndDob(r, row))) return true;
+    const same = (patients ?? []).filter(p => this.similarNameAndDob(p, row)).map(p => p.id);
+    if (!same.length) return false;
+    const upcoming = await this.prisma.appointment.count({
+      where: {
+        patientId: { in: same },
+        deletedAt: null,
+        status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
+        startAt: { gte: new Date() },
+      },
+    });
+    return upcoming > 0;
   }
 
   private async alreadyConfirmed(id: string) {
@@ -2805,6 +2885,22 @@ export class BookingService {
     return row;
   }
 
+  /**
+   * An open request, or one that expired earlier today: the patient may still
+   * walk in after the cron closed it, and the desk must be able to say so.
+   */
+  private async requireArrivable(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Không tìm thấy yêu cầu đặt lịch');
+    const today = clinicDateOnly();
+    const expiredToday =
+      row.status === 'EXPIRED' &&
+      [row.requestedStartAt, row.proposedStartAt].some(at => !!at && clinicDateOnly(at) === today);
+    if (row.appointmentId || !(ACTIVE.includes(row.status) || expiredToday))
+      throw new ConflictException('Yêu cầu này đã được xử lý');
+    return row;
+  }
+
   private currentAssignment(day: Date): Prisma.DentistServiceWhereInput {
     return {
       effectiveFrom: { lte: day },
@@ -3071,12 +3167,24 @@ export class BookingService {
       cancelUntil: _until,
       service: _service,
       dentist: _dentist,
+      requestedStartAt: _start,
+      proposedStartAt: _proposed,
+      holdUntil: _hold,
+      appointment,
       ...rest
     } = this.toPublic(row);
-    // Anyone may know a phone number: no service or dentist (health data,
-    // and where the person will be when), only who it is for, masked, so a
-    // family sharing a phone can tell its requests apart.
-    return { ...rest, patientInitials: maskName(row.fullName ?? '') };
+    // Anyone may know a phone number (a reassigned one too): no service or
+    // dentist (health data), and no time (where the person will be when);
+    // only the status and who it is for, masked, so a family sharing a phone
+    // can tell its requests apart. The link from the email shows the rest.
+    return {
+      ...rest,
+      appointment: appointment && {
+        status: appointment.status,
+        rescheduled: appointment.rescheduled,
+      },
+      patientInitials: maskName(row.fullName ?? ''),
+    };
   }
 
   /**
@@ -3101,7 +3209,7 @@ export class BookingService {
     const holdMs = bookingHoldMinutes() * 60_000;
     if (holdMs <= 0 || row.appointment || !(row.createdAt instanceof Date)) return null;
     if (!['PENDING_REVIEW', 'NEEDS_INFORMATION'].includes(row.status)) return null;
-    const until = new Date(row.createdAt.getTime() + holdMs);
+    const until = new Date(this.holdEndsAt(row.createdAt, holdMs));
     return until.getTime() > Date.now() && row.requestedStartAt?.getTime() > Date.now()
       ? until
       : null;

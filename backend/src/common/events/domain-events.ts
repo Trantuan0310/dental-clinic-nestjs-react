@@ -88,6 +88,7 @@ export const INVOICE_VOIDED_EVENT = 'invoice.voided';
 export const INVOICE_PAYMENT_RECORDED_EVENT = 'invoice.payment_recorded';
 export const INVOICE_PAYMENT_VOIDED_EVENT = 'invoice.payment_voided';
 export const INVOICE_REFUNDED_EVENT = 'invoice.refunded';
+export const INVOICE_ADJUSTED_EVENT = 'invoice.adjusted';
 
 /** Minimal shape every invoice.* payload satisfies (payroll reloads by id). */
 export interface InvoiceChangedEvent {
@@ -112,6 +113,8 @@ export interface InvoiceEventBase extends InvoiceChangedEvent {
   /** Net money kept: payments − refunds. */
   paidAmount: number;
   refundedAmount: number;
+  /** Σ write-downs ("điều chỉnh giảm / xoá nợ"), no money moved. */
+  adjustedAmount: number;
   outstandingAmount: number;
   /** Null for an invoice voided while still DRAFT. */
   issuedAt: Date | null;
@@ -169,5 +172,17 @@ export interface InvoiceRefundedEvent extends InvoiceEventBase {
   amount: number;
   method: 'CASH' | 'BANK_TRANSFER';
   refundedAt: Date;
+  reason: string;
+}
+
+/**
+ * "Điều chỉnh giảm / xoá nợ": the debt was lowered without money moving. Like
+ * a refund it lowers revenue and the commission basis on adjustedAt.
+ */
+export interface InvoiceAdjustedEvent extends InvoiceEventBase {
+  /** id of the invoice_adjustments row. */
+  adjustmentId: string;
+  amount: number;
+  adjustedAt: Date;
   reason: string;
 }

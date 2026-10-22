@@ -137,6 +137,22 @@ export class RefundDto {
   version!: number;
 }
 
+/** "Điều chỉnh giảm / xoá nợ" of an ISSUED/PARTIAL invoice (≤ outstanding). */
+export class AdjustInvoiceDto {
+  @ApiProperty()
+  @WholeDong()
+  @Min(1)
+  amount!: number;
+
+  @ApiProperty()
+  @Reason()
+  reason!: string;
+
+  @ApiProperty()
+  @IsNumber()
+  version!: number;
+}
+
 /** Fix one line of a DRAFT invoice (price, quantity, wording) or drop it. */
 export class UpdateInvoiceItemDto {
   @ApiPropertyOptional()

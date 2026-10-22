@@ -13,12 +13,15 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { clinicDateOnly, startOfClinicDay, endOfClinicDay } from '../common/date-range.util';
 import { ExpenseService } from '../expense/expense.service';
+import { REVENUE_INVOICE_STATUSES } from '../reports/revenue-basis';
 import {
+  INVOICE_ADJUSTED_EVENT,
   INVOICE_ISSUED_EVENT,
   INVOICE_PAYMENT_RECORDED_EVENT,
   INVOICE_PAYMENT_VOIDED_EVENT,
   INVOICE_REFUNDED_EVENT,
   INVOICE_VOIDED_EVENT,
+  InvoiceAdjustedEvent,
   InvoiceEventBase,
   InvoiceEventLine,
   InvoiceEventStatus,
@@ -41,6 +44,7 @@ import {
 } from './domain/exceptions';
 import { allocateNet, discountAmountOf, settle } from './domain/invoice-math';
 import {
+  AdjustInvoiceDto,
   IssueInvoiceDto,
   RecordPaymentDto,
   RefundDto,
@@ -53,7 +57,7 @@ import {
 } from './dto/billing.dto';
 
 type DraftLine = {
-  treatmentId: string;
+  treatmentId: string | null;
   procedure: string;
   description: string | null;
   unitPrice: number;
@@ -73,6 +77,9 @@ const BACKFILL_GRACE_MS = 10 * 60_000;
 const BACKFILL_WINDOW_DAYS = 30;
 
 const vnd = (n: number) => `${new Intl.NumberFormat('vi-VN').format(n)}đ`;
+
+/** BR-BILL-025: a discount above this share of the subtotal needs invoice.discount.large. */
+export const LARGE_DISCOUNT_RATIO = 0.5;
 
 /**
  * BillingService — invoice lifecycle:
@@ -145,21 +152,30 @@ export class BillingService {
    * the encounter's non-voided invoice when it already has one.
    * Returns null when there is nothing to bill (no treatments, A5-17) or when
    * the encounter's invoice was voided and this is not a deliberate
-   * re-issue (`replacesInvoiceId`): voiding is a decision, never undone here.
+   * re-issue (`replacesInvoiceId`): voiding is a decision, never undone here —
+   * unless the encounter was reopened since (BR-MR-024) and closed again:
+   * its billing is redone, the new draft replacing the latest voided one.
    */
   async createDraftFromEncounter(
     encounterId: string,
     treatments: DraftLine[],
-    opts: { replacesInvoiceId?: string; actorId?: string; reason?: string } = {},
+    opts: {
+      replacesInvoiceId?: string;
+      actorId?: string;
+      reason?: string;
+      discountType?: 'PERCENT' | 'AMOUNT' | null;
+      discountValue?: number | null;
+    } = {},
   ) {
     const existing = await this.activeInvoiceOf(this.prisma, encounterId);
     if (existing) return existing;
-    if (!opts.replacesInvoiceId) {
-      const voided = await this.prisma.invoice.findFirst({
-        where: { encounterId, status: InvoiceStatus.VOIDED },
-        select: { id: true },
-      });
-      if (voided) return null;
+    let replacesInvoiceId = opts.replacesInvoiceId;
+    if (!replacesInvoiceId) {
+      const voided = await this.latestVoided(encounterId);
+      if (voided) {
+        if (!(await this.reopenedSince(encounterId, voided))) return null;
+        if (!voided.replacedBy) replacesInvoiceId = voided.id;
+      }
     }
     if (treatments.length === 0) return null;
 
@@ -172,6 +188,12 @@ export class BillingService {
     const lineTotal = (t: { unitPrice: number; quantity?: number }) =>
       t.unitPrice * (t.quantity ?? 1);
     const subtotal = treatments.reduce((acc, t) => acc + lineTotal(t), 0);
+    // 3.3: a re-made invoice keeps the discount approved on the voided one.
+    const discountAmount =
+      opts.discountType && opts.discountValue
+        ? Math.min(subtotal, discountAmountOf(subtotal, opts.discountType, opts.discountValue))
+        : 0;
+    const total = subtotal - discountAmount;
 
     try {
       return await this.prisma.$transaction(async tx => {
@@ -182,11 +204,15 @@ export class BillingService {
             patientId: encounter.patientId,
             status: InvoiceStatus.DRAFT,
             subtotal: new Prisma.Decimal(subtotal),
-            total: new Prisma.Decimal(subtotal),
+            ...(discountAmount > 0 && {
+              discountType: opts.discountType,
+              discountValue: new Prisma.Decimal(opts.discountValue!),
+            }),
+            total: new Prisma.Decimal(total),
             paidAmount: new Prisma.Decimal(0),
-            outstandingAmount: new Prisma.Decimal(subtotal),
+            outstandingAmount: new Prisma.Decimal(total),
             createdBy: opts.actorId ?? null,
-            replacesInvoiceId: opts.replacesInvoiceId ?? null,
+            replacesInvoiceId: replacesInvoiceId ?? null,
           },
         });
         let seq = 0;
@@ -206,12 +232,13 @@ export class BillingService {
         await tx.invoiceAudit.create({
           data: {
             invoiceId: invoice.id,
-            action: opts.replacesInvoiceId ? 'REISSUED' : 'DRAFTED_FROM_ENCOUNTER',
+            action: replacesInvoiceId ? 'REISSUED' : 'DRAFTED_FROM_ENCOUNTER',
             actorId: opts.actorId ?? encounter.dentistId,
             after: {
               subtotal,
               code,
-              ...(opts.replacesInvoiceId && { replacesInvoiceId: opts.replacesInvoiceId }),
+              ...(discountAmount > 0 && { discountAmount, total }),
+              ...(replacesInvoiceId && { replacesInvoiceId }),
               ...(opts.reason && { reason: opts.reason }),
             },
           },
@@ -227,6 +254,41 @@ export class BillingService {
       }
       throw err;
     }
+  }
+
+  /** The encounter's most recent voided invoice, if any. */
+  private latestVoided(encounterId: string) {
+    return this.prisma.invoice.findFirst({
+      where: { encounterId, status: InvoiceStatus.VOIDED },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        code: true,
+        voidedAt: true,
+        updatedAt: true,
+        replacedBy: { select: { id: true } },
+      },
+    });
+  }
+
+  /**
+   * Reopened after a close (BR-MR-024) since this invoice was voided: the
+   * encounter's treatments changed, so its billing is redone from them.
+   */
+  private async reopenedSince(
+    encounterId: string,
+    voided: { voidedAt: Date | null; updatedAt: Date },
+  ): Promise<boolean> {
+    const reopen = await this.prisma.encounterAudit.findFirst({
+      where: {
+        encounterId,
+        action: 'REOPENED',
+        before: { path: ['status'], equals: EncounterStatus.COMPLETED },
+        occurredAt: { gte: voided.voidedAt ?? voided.updatedAt },
+      },
+      select: { id: true },
+    });
+    return !!reopen;
   }
 
   /** Billable lines of a closed encounter, as the close event would carry them. */
@@ -260,12 +322,8 @@ export class BillingService {
         'Phiên khám chưa đóng. Hóa đơn được lập khi bác sĩ đóng phiên khám.',
       );
     }
-    const voided = await this.prisma.invoice.findFirst({
-      where: { encounterId, status: InvoiceStatus.VOIDED },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, code: true },
-    });
-    if (voided) {
+    const voided = await this.latestVoided(encounterId);
+    if (voided && !(await this.reopenedSince(encounterId, voided))) {
       throw new InvoiceCorrectionException(
         'INVOICE_REISSUE_REQUIRED',
         `Hóa đơn ${voided.code} của phiên khám này đã bị hủy. Mở hóa đơn đó và chọn "Lập lại hóa đơn".`,
@@ -294,8 +352,11 @@ export class BillingService {
   }
 
   /**
-   * "Lập lại hóa đơn": a new DRAFT, copied from the encounter's treatments,
-   * replacing a VOIDED invoice (A2-02). Idempotent per voided invoice.
+   * "Lập lại hóa đơn": a new DRAFT replacing a VOIDED invoice (A2-02),
+   * copied from the voided invoice's lines still in force (their edited
+   * wording and prices) with its discount (3.3) — from the encounter's
+   * treatments only when it has no line, or when the encounter was reopened
+   * after the void (its treatments changed). Idempotent per voided invoice.
    */
   async reissue(invoiceId: string, dto: ReissueInvoiceDto, actor: JwtPayload) {
     const old = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
@@ -313,10 +374,31 @@ export class BillingService {
     const active = await this.activeInvoiceOf(this.prisma, old.encounterId);
     if (active) throw new InvoiceAlreadyExistsException(old.encounterId);
 
+    const oldLines = await this.prisma.invoiceItem.findMany({
+      where: { invoiceId, deletedAt: null },
+      orderBy: { sequence: 'asc' },
+    });
+    const fromOld = oldLines.length > 0 && !(await this.reopenedSince(old.encounterId, old));
     const created = await this.createDraftFromEncounter(
       old.encounterId,
-      await this.encounterLines(old.encounterId),
-      { replacesInvoiceId: invoiceId, actorId: actor.sub, reason: dto.reason },
+      fromOld
+        ? oldLines.map(i => ({
+            treatmentId: i.treatmentId,
+            procedure: i.description,
+            description: null,
+            unitPrice: Number(i.unitPrice),
+            quantity: Number(i.quantity),
+          }))
+        : await this.encounterLines(old.encounterId),
+      {
+        replacesInvoiceId: invoiceId,
+        actorId: actor.sub,
+        reason: dto.reason,
+        ...(fromOld && {
+          discountType: old.discountType,
+          discountValue: old.discountValue === null ? null : Number(old.discountValue),
+        }),
+      },
     );
     if (!created) {
       throw new InvoiceCorrectionException(
@@ -458,7 +540,7 @@ export class BillingService {
     }
 
     const pageSize = query.pageSize ?? 20;
-    const [invoiceRows, aggregate] = await Promise.all([
+    const [invoiceRows, invoiceCount, aggregate] = await Promise.all([
       this.prisma.invoice.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -477,10 +559,12 @@ export class BillingService {
           items: { where: { deletedAt: null }, orderBy: { sequence: 'asc' } },
         },
       }),
+      this.prisma.invoice.count({ where }),
+      // Money totals cover issued, not voided invoices only (5.5): a draft or
+      // a voided one is not money billed, whatever the list shows.
       this.prisma.invoice.aggregate({
-        where,
+        where: { AND: [where, { status: { in: REVENUE_INVOICE_STATUSES } }] },
         _sum: { total: true, paidAmount: true, outstandingAmount: true },
-        _count: { _all: true },
       }),
     ]);
 
@@ -494,7 +578,7 @@ export class BillingService {
         nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
       },
       summary: {
-        invoiceCount: aggregate._count._all,
+        invoiceCount,
         totalInvoiced: Number(aggregate._sum.total ?? 0),
         totalCollected: Number(aggregate._sum.paidAmount ?? 0),
         totalOutstanding: Number(aggregate._sum.outstandingAmount ?? 0),
@@ -522,6 +606,8 @@ export class BillingService {
       outstandingAmount: unknown;
       items?: Array<{ quantity: unknown; unitPrice: unknown; lineTotal: unknown }>;
       payments?: Array<{ amount: unknown }>;
+      adjustedAmount?: unknown;
+      adjustments?: Array<{ amount: unknown }>;
     },
   >(invoice: T) {
     const { patient, ...rest } = invoice;
@@ -537,6 +623,12 @@ export class BillingService {
       total: Number(invoice.total),
       paidAmount: Number(invoice.paidAmount),
       outstandingAmount: Number(invoice.outstandingAmount),
+      ...(invoice.adjustedAmount !== undefined && {
+        adjustedAmount: Number(invoice.adjustedAmount),
+      }),
+      ...(invoice.adjustments && {
+        adjustments: invoice.adjustments.map(a => ({ ...a, amount: Number(a.amount) })),
+      }),
       items: invoice.items?.map(item => ({
         ...item,
         quantity: Number(item.quantity),
@@ -558,6 +650,10 @@ export class BillingService {
             receivedByUser: { select: { fullName: true, email: true } },
             voidedByUser: { select: { fullName: true } },
           },
+        },
+        adjustments: {
+          orderBy: { adjustedAt: 'desc' },
+          include: { adjustedByUser: { select: { fullName: true } } },
         },
         replaces: { select: { id: true, code: true } },
         replacedBy: { select: { id: true, code: true, status: true } },
@@ -626,6 +722,7 @@ export class BillingService {
       total,
       paidAmount: Number(inv.paidAmount),
       refundedAmount: Number(inv.refundedAmount),
+      adjustedAmount: Number(inv.adjustedAmount ?? 0),
       outstandingAmount: Number(inv.outstandingAmount),
       issuedAt: inv.issuedAt,
       replacesInvoiceId: inv.replacesInvoiceId,
@@ -777,6 +874,7 @@ export class BillingService {
         Number(inv.total),
         newPaid,
         Number(inv.refundedAmount),
+        Number(inv.adjustedAmount ?? 0),
       );
 
       // Atomic guarded update: only succeed if outstanding hasn't been
@@ -920,7 +1018,12 @@ export class BillingService {
           `Tiền của phiếu thu này đã được hoàn cho bệnh nhân (đang giữ ${vnd(Number(inv.paidAmount))}). Hủy phiếu hoàn trước nếu phiếu hoàn cũng là nhầm.`,
         );
       }
-      const { outstanding, status } = settle(Number(inv.total), newPaid, newRefunded);
+      const { outstanding, status } = settle(
+        Number(inv.total),
+        newPaid,
+        newRefunded,
+        Number(inv.adjustedAmount ?? 0),
+      );
 
       const guarded = await tx.invoice.updateMany({
         where: { id: inv.id, version: inv.version },
@@ -1045,7 +1148,12 @@ export class BillingService {
 
       const newPaid = paid - dto.amount;
       const newRefunded = Number(inv.refundedAmount) + dto.amount;
-      const { outstanding, status } = settle(Number(inv.total), newPaid, newRefunded);
+      const { outstanding, status } = settle(
+        Number(inv.total),
+        newPaid,
+        newRefunded,
+        Number(inv.adjustedAmount ?? 0),
+      );
       const guarded = await tx.invoice.updateMany({
         where: { id: invoiceId, version: inv.version },
         data: {
@@ -1115,6 +1223,104 @@ export class BillingService {
     return this.getInvoiceById(invoiceId);
   }
 
+  /**
+   * "Điều chỉnh giảm / xoá nợ" (3.2): lowers what is still owed on an issued
+   * invoice by `amount` (≤ outstanding), with a reason; payments stay as they
+   * are. `total` stays as issued: the write-down is its own dated row, so
+   * revenue and commission drop on that day like a refund, and a month
+   * already closed never changes.
+   */
+  async adjustDown(invoiceId: string, dto: AdjustInvoiceDto, actor: JwtPayload) {
+    const { event } = await this.prisma.$transaction(async tx => {
+      const inv = await tx.invoice.findUnique({ where: { id: invoiceId } });
+      if (!inv || inv.deletedAt) throw new InvoiceNotFoundException(invoiceId);
+      if (inv.status !== InvoiceStatus.ISSUED && inv.status !== InvoiceStatus.PARTIAL) {
+        throw new InvoiceNotEditableException(
+          inv.status,
+          'Chỉ điều chỉnh giảm được hóa đơn đã phát hành và còn nợ.',
+        );
+      }
+      if (inv.version !== dto.version) {
+        throw new InvoiceVersionMismatchException(dto.version, inv.version);
+      }
+      const outstanding = Number(inv.outstandingAmount);
+      if (dto.amount > outstanding) {
+        throw new InvoiceCorrectionException(
+          'ADJUSTMENT_EXCEEDS_OUTSTANDING',
+          `Số tiền điều chỉnh ${vnd(dto.amount)} lớn hơn số còn nợ (${vnd(outstanding)}).`,
+          { requested: dto.amount, outstanding },
+        );
+      }
+      const adjusted = Number(inv.adjustedAmount ?? 0) + dto.amount;
+      const { outstanding: newOutstanding, status } = settle(
+        Number(inv.total),
+        Number(inv.paidAmount),
+        Number(inv.refundedAmount),
+        adjusted,
+      );
+      const guarded = await tx.invoice.updateMany({
+        where: { id: invoiceId, version: inv.version },
+        data: {
+          adjustedAmount: new Prisma.Decimal(adjusted),
+          outstandingAmount: new Prisma.Decimal(newOutstanding),
+          status,
+          version: { increment: 1 },
+        },
+      });
+      if (guarded.count === 0) throw new InvoiceVersionMismatchException(dto.version, -1);
+      const row = await tx.invoiceAdjustment.create({
+        data: { invoiceId, amount: dto.amount, reason: dto.reason, adjustedBy: actor.sub },
+      });
+      await tx.invoiceAudit.create({
+        data: {
+          invoiceId,
+          action: 'ADJUSTED_DOWN',
+          actorId: actor.sub,
+          before: {
+            outstanding: inv.outstandingAmount,
+            adjustedAmount: inv.adjustedAmount,
+            status: inv.status,
+          },
+          after: {
+            outstanding: newOutstanding,
+            adjustedAmount: adjusted,
+            status,
+            adjustmentId: row.id,
+            amount: dto.amount,
+            reason: dto.reason,
+          },
+        },
+      });
+      await this.audit.log(
+        {
+          action: 'INVOICE_ADJUSTED_DOWN',
+          actorUserId: actor.sub,
+          targetType: 'invoice',
+          targetId: invoiceId,
+          metadata: {
+            adjustmentId: row.id,
+            amount: dto.amount,
+            outstandingBefore: outstanding,
+            outstandingAfter: newOutstanding,
+            reason: dto.reason,
+          },
+        },
+        tx,
+      );
+      const updated = await this.loadForEvent(tx, invoiceId);
+      const event: InvoiceAdjustedEvent = {
+        ...this.eventBase(updated, actor.sub, row.adjustedAt),
+        adjustmentId: row.id,
+        amount: dto.amount,
+        adjustedAt: row.adjustedAt,
+        reason: dto.reason,
+      };
+      return { event };
+    }, SERIALIZABLE);
+    this.emit(INVOICE_ADJUSTED_EVENT, event);
+    return this.getInvoiceById(invoiceId);
+  }
+
   async updateDiscount(invoiceId: string, dto: UpdateDiscountDto, actor: JwtPayload) {
     return this.prisma.$transaction(async tx => {
       const inv = await tx.invoice.findUnique({ where: { id: invoiceId } });
@@ -1147,7 +1353,19 @@ export class BillingService {
         dto.discountType,
         dto.discountValue,
       );
-      const newTotal = Number(inv.subtotal) - discountAmount;
+      const subtotal = Number(inv.subtotal);
+      if (
+        discountAmount > subtotal * LARGE_DISCOUNT_RATIO &&
+        !actor.permissions.includes('invoice.discount.large')
+      ) {
+        throw new InvoiceCorrectionException(
+          'DISCOUNT_LARGE_FORBIDDEN',
+          `Giảm ${vnd(discountAmount)} là trên 50% tổng hóa đơn (${vnd(subtotal)}). Giảm giá trên 50% cần quản trị viên thực hiện.`,
+          { discountAmount, subtotal, maxRatio: LARGE_DISCOUNT_RATIO },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      const newTotal = subtotal - discountAmount;
       const newOutstanding = newTotal - Number(inv.paidAmount);
 
       const updated = await tx.invoice.update({
@@ -1179,6 +1397,25 @@ export class BillingService {
           },
         },
       });
+      // Money given away: kept in the system log like the other money actions.
+      await this.audit.log(
+        {
+          action: 'INVOICE_DISCOUNT_UPDATED',
+          actorUserId: actor.sub,
+          targetType: 'invoice',
+          targetId: invoiceId,
+          metadata: {
+            subtotal,
+            before: { total: Number(inv.total), discountAmount: subtotal - Number(inv.total) },
+            discountType: dto.discountType,
+            discountValue: dto.discountValue,
+            discountAmount,
+            total: newTotal,
+            ...(dto.reason && { reason: dto.reason }),
+          },
+        },
+        tx,
+      );
       return updated;
     }, SERIALIZABLE);
   }

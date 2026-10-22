@@ -67,18 +67,21 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
   const priceChanged = editingTreatment
     ? unitPrice !== '' && priceNumber !== (editingTreatment.unitPrice ?? editingTreatment.priceCents)
     : false;
+  // 3.6: a free-text line (no catalogue service) always needs a price reason.
+  const freeText = !editingTreatment && !serviceId;
   const needsReason = editingTreatment
     ? priceChanged && (listPrice === null || priceNumber !== listPrice)
-    : listPrice !== null && unitPrice !== '' && priceNumber !== listPrice;
+    : freeText || (listPrice !== null && unitPrice !== '' && priceNumber !== listPrice);
   const priceLocked = listPrice !== null && !canOverridePrice;
 
-  // Materials consumed by this treatment — only meaningful on create; the
-  // backend's UpdateTreatmentDto has no field for it, so editing an existing
-  // treatment's inventory usage isn't supported and the picker is hidden then.
+  // Materials consumed by this treatment; editable while the encounter is
+  // open (3.4) — stock is only taken when it closes.
   const [inventoryUsages, setInventoryUsages] = useState<TreatmentInventoryUsage[]>([]);
   const [pickedItemId, setPickedItemId] = useState('');
   const [pickedQty, setPickedQty] = useState('1');
   const { data: inventoryData } = useInventoryItems();
+  // BR-INV-014: only ACTIVE items are offered (useInventoryItems asks for
+  // status=ACTIVE); the server refuses a discontinued one too.
   const inventoryItems = inventoryData?.items ?? [];
 
   const addInventoryUsage = () => {
@@ -133,6 +136,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
       setEditingTreatment(null);
+      setInventoryUsages([]);
     },
     onError: (err) => {
       notify.error(getApiErrorMessage(err, t('uiClinical.serviceUpdateError')));
@@ -177,6 +181,14 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     setUnitPrice((treatment.unitPrice ?? treatment.priceCents).toString());
     setPriceReason('');
     setNotes(treatment.notes ?? '');
+    setInventoryUsages(
+      (treatment.inventoryItemsUsed ?? []).map((u) => {
+        const item = inventoryData?.items.find((i) => i.id === u.inventoryItemId);
+        return { ...u, inventoryItemName: item?.name ?? u.inventoryItemName, unit: u.unit ?? item?.unit };
+      }),
+    );
+    setPickedItemId('');
+    setPickedQty('1');
   };
 
   const handleSubmit = () => {
@@ -196,6 +208,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           priceCents: parseInt(unitPrice),
           ...(priceChanged && priceReason.trim() && { priceReason: priceReason.trim() }),
           description: notes,
+          inventoryItemsUsed: inventoryUsages,
         },
       });
     } else {
@@ -386,7 +399,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
           </div>
           {needsReason && (
             <Input
-              label={t('uiClinical.priceChangeReason')}
+              label={freeText ? t('uiClinical.freeTextPriceReason') : t('uiClinical.priceChangeReason')}
               value={priceReason}
               onChange={(e) => setPriceReason(e.target.value)}
               placeholder={t('uiClinical.priceReasonExample')}
@@ -400,71 +413,67 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
             rows={2}
           />
 
-          {/* Materials used — create-only: the backend has no field to
-              change this on an existing treatment (UpdateTreatmentDto),
-              so the picker is hidden while editing. */}
-          {!editingTreatment && (
-            <div className="space-y-2 border-t border-gray-100 pt-4">
-              <label htmlFor="treatment-inventory-item" className="block text-sm font-medium text-gray-700">
-                {t('uiClinical.suppliesUsed')}
-              </label>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Select
-                    id="treatment-inventory-item"
-                    value={pickedItemId}
-                    onChange={(e) => setPickedItemId(e.target.value)}
-                    placeholder={t('uiClinical.selectSupply')}
-                    options={inventoryItems.map((item) => ({
-                      value: item.id,
-                      label: t('uiClinical.supplyOption', { name: item.name, quantity: item.quantityOnHand, unit: item.unit }),
-                      disabled: item.quantityOnHand <= 0,
-                    }))}
-                  />
-                </div>
-                <div className="w-24">
-                  <Input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    aria-label={t('uiClinical.supplyQuantity')}
-                    value={pickedQty}
-                    onChange={(e) => setPickedQty(e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-label={t('uiClinical.addSupply')}
-                  onClick={addInventoryUsage}
-                  disabled={!pickedItemId}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+          {/* Materials used — editable until the encounter closes (3.4). */}
+          <div className="space-y-2 border-t border-gray-100 pt-4">
+            <label htmlFor="treatment-inventory-item" className="block text-sm font-medium text-gray-700">
+              {t('uiClinical.suppliesUsed')}
+            </label>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Select
+                  id="treatment-inventory-item"
+                  value={pickedItemId}
+                  onChange={(e) => setPickedItemId(e.target.value)}
+                  placeholder={t('uiClinical.selectSupply')}
+                  options={inventoryItems.map((item) => ({
+                    value: item.id,
+                    label: t('uiClinical.supplyOption', { name: item.name, quantity: item.quantityOnHand, unit: item.unit }),
+                    disabled: item.quantityOnHand <= 0,
+                  }))}
+                />
               </div>
-              {inventoryUsages.length > 0 && (
-                <ul className="space-y-1">
-                  {inventoryUsages.map((usage, index) => (
-                    <li
-                      key={`${usage.inventoryItemId}-${index}`}
-                      className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-sm"
-                    >
-                      <span>
-                        {usage.inventoryItemName} — {usage.quantityUsed} {usage.unit}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeInventoryUsage(index)}
-                        className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="w-24">
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  aria-label={t('uiClinical.supplyQuantity')}
+                  value={pickedQty}
+                  onChange={(e) => setPickedQty(e.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                aria-label={t('uiClinical.addSupply')}
+                onClick={addInventoryUsage}
+                disabled={!pickedItemId}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
-          )}
+            {inventoryUsages.length > 0 && (
+              <ul className="space-y-1">
+                {inventoryUsages.map((usage, index) => (
+                  <li
+                    key={`${usage.inventoryItemId}-${index}`}
+                    className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-sm"
+                  >
+                    <span>
+                      {usage.inventoryItemName} — {usage.quantityUsed} {usage.unit}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeInventoryUsage(index)}
+                      className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="outline" onClick={resetForm}>

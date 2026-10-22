@@ -10,9 +10,12 @@ import { Alert, Button, Input, Modal, Select, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
+import { useAuthStore } from '@/stores/authStore';
 import type { Invoice, InvoiceLineItem, Payment, PaymentMethod } from '@/types/billing';
 
 const MIN_REASON = 5;
+/** Same threshold as the server (billing.service LARGE_DISCOUNT_RATIO). */
+const LARGE_DISCOUNT_RATIO = 0.5;
 
 function ReasonField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   const { t } = useTranslation();
@@ -42,6 +45,8 @@ function useInvoiceMutation<T>(invoiceId: string, fn: (v: T) => Promise<unknown>
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      // Refunds and cancelled receipts change the AI summary's unpaid count.
+      queryClient.invalidateQueries({ queryKey: ['ai-summary'] });
     },
   });
 }
@@ -52,20 +57,27 @@ export function DiscountModal({ invoice, isOpen, onClose }: { invoice: Invoice; 
   const [type, setType] = useState<'PERCENT' | 'AMOUNT'>('PERCENT');
   const [value, setValue] = useState('');
   const [reason, setReason] = useState('');
+  // Kept in the dialog, not only in a toast: e.g. "above 50% needs an admin".
+  const [apiError, setApiError] = useState<string | null>(null);
   useEffect(() => {
     if (!isOpen) return;
     setType(invoice.discountType ?? 'PERCENT');
     setValue(invoice.discountValue ? String(invoice.discountValue) : '');
     setReason('');
+    setApiError(null);
   }, [isOpen, invoice.discountType, invoice.discountValue]);
 
   const num = value === '' ? 0 : Number(value);
   const preview = type === 'PERCENT' ? Math.round((invoice.subtotal * num) / 100) : num;
+  // BR-BILL-025: above half the subtotal only an admin may discount (the server checks too).
+  const canDiscountLarge = useAuthStore((s) => s.hasPermission('invoice.discount.large'));
+  const tooLarge = !canDiscountLarge && preview > invoice.subtotal * LARGE_DISCOUNT_RATIO;
   const invalid =
     !Number.isFinite(num) ||
     num < 0 ||
     (type === 'PERCENT' ? num > 100 : num > invoice.subtotal || !Number.isInteger(num)) ||
-    (num > 0 && reason.trim().length < MIN_REASON);
+    (num > 0 && reason.trim().length < MIN_REASON) ||
+    tooLarge;
 
   const save = useInvoiceMutation(
     invoice.id,
@@ -120,9 +132,20 @@ export function DiscountModal({ invoice, isOpen, onClose }: { invoice: Invoice; 
           </div>
         </div>
         {num > 0 && <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.discountReasonExample')} />}
+        {tooLarge && <Alert type="warning">{t('uiOperations.discountLargeNeedsAdmin')}</Alert>}
+        {apiError && <Alert type="danger">{apiError}</Alert>}
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
-          <Button onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>{t('uiOperations.save')}</Button>
+          <Button
+            onClick={() => {
+              setApiError(null);
+              save.mutate(undefined, { onError: (err) => setApiError(getApiErrorMessage(err, t('uiOperations.discountFailed'))) });
+            }}
+            isLoading={save.isPending}
+            disabled={invalid}
+          >
+            {t('uiOperations.save')}
+          </Button>
         </div>
       </div>
     </Modal>
@@ -259,6 +282,56 @@ export function RefundModal({ invoice, isOpen, onClose }: { invoice: Invoice; is
           <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
           <Button variant="danger" onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>
             {t('uiOperations.refund')}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * "Điều chỉnh giảm / xoá nợ" (admin): lowers what is still owed on an issued
+ * invoice, payments untouched; revenue and commission drop on that day.
+ */
+export function AdjustModal({ invoice, isOpen, onClose }: { invoice: Invoice; isOpen: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  useEffect(() => {
+    if (!isOpen) return;
+    setAmount(String(Math.floor(invoice.outstandingAmount)));
+    setReason('');
+  }, [isOpen, invoice.outstandingAmount]);
+
+  const num = Number(amount);
+  const invalid =
+    !Number.isInteger(num) || num < 1 || num > invoice.outstandingAmount || reason.trim().length < MIN_REASON;
+  const save = useInvoiceMutation(
+    invoice.id,
+    () => billingApi.adjustInvoice(invoice.id, { amount: num, reason: reason.trim(), version: invoice.version }),
+    t('uiOperations.adjustDone'),
+    onClose,
+    t('uiOperations.adjustFailed'),
+  );
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiOperations.adjustDown')} size="sm">
+      <div className="space-y-4">
+        <Alert type="info">{t('uiOperations.adjustDownHelp')}</Alert>
+        <Input
+          label={t('uiOperations.adjustAmountMax', { amount: formatCurrency(invoice.outstandingAmount) })}
+          type="number"
+          min={1}
+          max={invoice.outstandingAmount}
+          step={1000}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.adjustReasonExample')} />
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
+          <Button variant="danger" onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>
+            {t('uiOperations.adjustDown')}
           </Button>
         </div>
       </div>

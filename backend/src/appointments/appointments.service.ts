@@ -19,7 +19,6 @@ import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { rowScope } from '../common/row-scope';
 import {
-  endOfDayInclusive,
   clinicDateOnly,
   startOfClinicDay,
   endOfClinicDay,
@@ -104,7 +103,7 @@ import { APPOINTMENT_STATUS_LABEL } from './domain/status-label';
 import { reopenCancelledEncounter } from '../medical-records/domain/reopen-encounter';
 import { dentistHasTreatedPatient } from '../common/dentist-patient-access';
 import { dentistProfileFilter, SCHEDULABLE_ACCOUNT_WHERE } from '../staff/staff-rules';
-import { calendarProblems, shiftDayProblem } from './domain/day-calendar-loader';
+import { calendarProblems } from './domain/day-calendar-loader';
 
 const CHECKIN_WINDOW_BEFORE_MIN = 15;
 const CHECKIN_WINDOW_AFTER_MIN = 30;
@@ -488,6 +487,7 @@ export class AppointmentsService {
     override: boolean,
     overrideReason: string | undefined,
     actor: JwtPayload,
+    ignoreOpenVisit = false,
   ) {
     const appt = await this.requireAppointment(appointmentId);
     // Row-level, as confirm/markNoShow: a dentist acts on their own calendar only.
@@ -571,6 +571,30 @@ export class AppointmentsService {
     // inventory stock writes and shift-registration approve/reject/cancel.
     const updated = await this.prisma.$transaction(async tx => {
       if (fromNoShow) await this.assertSlotStillFree(tx, appt, actor);
+      // As walk-in: one open visit per patient in the clinic. Two bookings the
+      // same day (two dentists) need the desk to confirm the second one.
+      if (!ignoreOpenVisit) {
+        await this.lockPatient(tx, appt.patientId);
+        const dayStart = startOfClinicDay(clinicDateOnly(new Date(now)));
+        const open = await tx.appointment.findFirst({
+          where: {
+            patientId: appt.patientId,
+            id: { not: appointmentId },
+            status: { in: [AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS] },
+            startAt: { gte: dayStart, lt: new Date(dayStart.getTime() + DAY_MS) },
+            deletedAt: null,
+          },
+          include: { dentist: { select: { fullName: true } } },
+        });
+        if (open) {
+          throw new BusinessRuleException(
+            `Bệnh nhân đang ${STATUS_LABEL[open.status]} (lượt ${this.toClinicTimeString(open.startAt)} với BS ${open.dentist?.fullName ?? ''}). Nếu bệnh nhân đến cho cả lịch này, chọn "Vẫn check-in".`,
+            HttpStatus.CONFLICT,
+            { appointmentId: open.id },
+            'PATIENT_ALREADY_IN_CLINIC',
+          );
+        }
+      }
       const checkInResult = await this.slotSafe(() =>
         tx.appointment.updateMany({
           where: this.unchangedSince(appt),
@@ -608,8 +632,11 @@ export class AppointmentsService {
             ...(fromNoShow
               ? { fromStatus: AppointmentStatus.NO_SHOW, noShowReason: appt.cancelledReason }
               : {}),
+            ...(ignoreOpenVisit ? { ignoredOpenVisit: true } : {}),
           }
-        : undefined,
+        : ignoreOpenVisit
+          ? { ignoredOpenVisit: true }
+          : undefined,
     });
 
     return updated;
@@ -829,10 +856,16 @@ export class AppointmentsService {
         'Không thể hủy lịch khi bệnh nhân đang khám — hãy kết thúc hoặc hủy lượt khám trước',
       );
     }
+    if (appt.status === AppointmentStatus.CHECKED_IN) {
+      // ADR-0009 D2 / BR-APPT-025: the patient is here; one who leaves before
+      // being seen is "Đã về" (markLeft, undoable), never a cancellation.
+      throw new InvalidAppointmentStateException(
+        'Bệnh nhân đã check-in — không hủy lịch được; nếu bệnh nhân rời đi, hãy ghi nhận "Đã về"',
+      );
+    }
 
     // BR-APPT-009 / 010 — authorization windows
     const now = Date.now();
-    let lateCheckedInCancel = false;
     const byClinic = dto.byClinic === true;
     if (byClinic && this.isRowScopedDentist(actor)) {
       throw new ForbiddenException('Chỉ lễ tân/quản trị ghi nhận "Phòng khám hủy"');
@@ -854,12 +887,9 @@ export class AppointmentsService {
         );
       }
     } else if (now >= appt.startAt.getTime()) {
-      // BR-APPT-025: a CHECKED_IN patient who leaves before being seen can't
-      // be marked no-show (they did arrive), so cancel is the only way out —
-      // without this the appointment stayed CHECKED_IN in the queue forever.
       // A visit the clinic could not honour (absent dentist, closed day) is
-      // cancelled "by the clinic" after its start too, never a no-show.
-      if (appt.status !== AppointmentStatus.CHECKED_IN && !byClinic) {
+      // cancelled "by the clinic" after its start, never a no-show.
+      if (!byClinic) {
         // BR-APPT-010
         throw new InvalidAppointmentStateException(
           'Đã qua giờ hẹn nên không thể hủy — nếu bệnh nhân không đến, hãy đánh vắng mặt; nếu do phòng khám (bác sĩ vắng, đóng cửa), chọn "Phòng khám hủy"',
@@ -867,10 +897,9 @@ export class AppointmentsService {
       }
       if ((dto.reason?.trim().length ?? 0) < LATE_CANCEL_REASON_MIN_LENGTH) {
         throw new InvalidAppointmentStateException(
-          `Hủy lịch đã check-in sau giờ hẹn cần lý do (ít nhất ${LATE_CANCEL_REASON_MIN_LENGTH} ký tự)`,
+          `Hủy lịch sau giờ hẹn cần lý do (ít nhất ${LATE_CANCEL_REASON_MIN_LENGTH} ký tự)`,
         );
       }
-      lateCheckedInCancel = true;
     }
 
     const updated = await this.prisma.$transaction(async tx => {
@@ -916,7 +945,6 @@ export class AppointmentsService {
       targetId: appointmentId,
       metadata: {
         reason: dto.reason,
-        ...(lateCheckedInCancel ? { lateCheckedInCancel: true } : {}),
         ...(byClinic ? { byClinic: true } : {}),
       },
     });
@@ -1711,7 +1739,7 @@ export class AppointmentsService {
         // frontend navigates from an in-progress/completed appointment to
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
-        encounter: { select: { id: true } },
+        encounter: { select: { id: true, status: true } },
         services: { orderBy: { sortOrder: 'asc' } },
       },
     });
@@ -1878,7 +1906,7 @@ export class AppointmentsService {
         // frontend navigates from an in-progress/completed appointment to
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
-        encounter: { select: { id: true } },
+        encounter: { select: { id: true, status: true } },
       },
     });
     const hasMore = items.length > pageSize;
@@ -1913,7 +1941,7 @@ export class AppointmentsService {
         // frontend navigates from an in-progress/completed appointment to
         // its encounter and needs this id even though nothing here
         // otherwise displays details about the encounter itself.
-        encounter: { select: { id: true } },
+        encounter: { select: { id: true, status: true } },
       },
     });
     return { data: items };
@@ -3791,215 +3819,6 @@ export class AppointmentsService {
   // Shift Registration (Phase 9, BD-0010)
   // ==========================================================================
 
-  async createShiftRegistration(
-    dto: {
-      dentistId: string;
-      date: string;
-      startTime: string;
-      endTime: string;
-      maxEncounters?: number;
-      notes?: string;
-    },
-    actor: JwtPayload,
-  ) {
-    if (dto.dentistId !== actor.sub && !actor.permissions.includes('shift.approve')) {
-      throw new AppointmentNotFoundException(dto.dentistId, 'Không tìm thấy bác sĩ');
-    }
-    this.assertTimeOrder(dto.startTime, dto.endTime);
-    const regDate = new Date(dto.date);
-    // `date` is a DATE column; past = before today's clinic date (as the cron).
-    if (regDate < new Date(clinicDateOnly())) {
-      throw new InvalidAppointmentStateException('Không thể đăng ký ca cho ngày đã qua');
-    }
-    // A1-17: no shift on a closed day or inside approved time-off.
-    const dayProblem = await shiftDayProblem(
-      this.prisma,
-      dto.dentistId,
-      regDate,
-      dto.startTime,
-      dto.endTime,
-    );
-    if (dayProblem) throw new InvalidAppointmentStateException(dayProblem);
-
-    // BR-APPT-026 / M#4: conflict check against working schedules
-    const dow = regDate.getUTCDay();
-    const conflictingSchedules = await this.prisma.workingSchedule.findMany({
-      where: {
-        dentistId: dto.dentistId,
-        dayOfWeek: dow,
-        deletedAt: null,
-        validFrom: { lte: regDate },
-        OR: [{ validTo: null }, { validTo: { gte: regDate } }],
-      },
-    });
-    for (const s of conflictingSchedules) {
-      const sStart = this.toMinutes(this.toTimeString(s.startTime));
-      const sEnd = this.toMinutes(this.toTimeString(s.endTime));
-      const oStart = this.toMinutes(dto.startTime);
-      const oEnd = this.toMinutes(dto.endTime);
-      if (oStart < sEnd && sStart < oEnd) {
-        throw new InvalidAppointmentStateException(
-          `Ca đăng ký trùng lịch làm việc cố định ${this.toTimeString(s.startTime)}-${this.toTimeString(s.endTime)}`,
-        );
-      }
-    }
-
-    // M#4: conflict against other PENDING/APPROVED shift registrations
-    const peerShifts = await this.prisma.shiftRegistration.findMany({
-      where: {
-        dentistId: dto.dentistId,
-        date: regDate,
-        status: { in: ['PENDING', 'APPROVED'] },
-        deletedAt: null,
-      },
-    });
-    for (const p of peerShifts) {
-      const pStart = this.toMinutes(p.startTime);
-      const pEnd = this.toMinutes(p.endTime);
-      const oStart = this.toMinutes(dto.startTime);
-      const oEnd = this.toMinutes(dto.endTime);
-      if (oStart < pEnd && pStart < oEnd) {
-        throw new InvalidAppointmentStateException(
-          `Trùng ca đã đăng ký ${p.startTime}-${p.endTime}`,
-        );
-      }
-    }
-
-    const created = await this.prisma.shiftRegistration.create({
-      data: {
-        dentistId: dto.dentistId,
-        date: regDate,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        maxEncounters: dto.maxEncounters ?? null,
-        notes: dto.notes ?? null,
-        status: 'PENDING',
-        createdByUserId: actor.sub,
-      },
-    });
-
-    await this.audit.log({
-      action: 'SHIFT_REGISTRATION_CREATED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'shift_registration',
-      targetId: created.id,
-      metadata: { dentistId: dto.dentistId, date: dto.date, status: 'PENDING' },
-    });
-
-    return created;
-  }
-
-  async approveShiftRegistration(id: string, reason: string | undefined, actor: JwtPayload) {
-    const shift = await this.prisma.shiftRegistration.findUnique({ where: { id } });
-    if (!shift) throw new AppointmentNotFoundException(id);
-    if (shift.status !== 'PENDING') {
-      throw new InvalidAppointmentStateException(`Cannot approve shift in status ${shift.status}`);
-    }
-    // BR-APPT-029: a past day's shift can no longer be approved (clinic date).
-    if (shift.date < new Date(clinicDateOnly())) {
-      throw new InvalidAppointmentStateException('Không thể duyệt ca của ngày đã qua');
-    }
-    // A1-17: the day may have closed (or time-off been approved) since.
-    const dayProblem = await shiftDayProblem(
-      this.prisma,
-      shift.dentistId,
-      shift.date,
-      shift.startTime,
-      shift.endTime,
-    );
-    if (dayProblem) throw new InvalidAppointmentStateException(dayProblem);
-
-    // Guarded write: a concurrent approve/reject/cancel/auto-cancel wins.
-    const res = await this.prisma.shiftRegistration.updateMany({
-      where: { id, status: 'PENDING' },
-      data: {
-        status: 'APPROVED',
-        approvedByUserId: actor.sub,
-        approvedAt: new Date(),
-      },
-    });
-    if (res.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Đăng ký ca vừa được thay đổi, tải lại rồi thử lại',
-      );
-    }
-    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
-
-    await this.audit.log({
-      action: 'SHIFT_REGISTRATION_APPROVED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'shift_registration',
-      targetId: id,
-      metadata: { reason },
-    });
-
-    return updated;
-  }
-
-  async rejectShiftRegistration(id: string, reason: string, actor: JwtPayload) {
-    const shift = await this.prisma.shiftRegistration.findUnique({ where: { id } });
-    if (!shift) throw new AppointmentNotFoundException(id);
-    if (shift.status !== 'PENDING') {
-      throw new InvalidAppointmentStateException(`Cannot reject shift in status ${shift.status}`);
-    }
-
-    // See approveShiftRegistration() — same guarded write.
-    const res = await this.prisma.shiftRegistration.updateMany({
-      where: { id, status: 'PENDING' },
-      data: {
-        status: 'REJECTED',
-        approvedByUserId: actor.sub,
-        approvedAt: new Date(),
-        rejectionReason: reason,
-      },
-    });
-    if (res.count === 0) {
-      throw new InvalidAppointmentStateException(
-        'Đăng ký ca vừa được thay đổi, tải lại rồi thử lại',
-      );
-    }
-    const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
-
-    await this.audit.log({
-      action: 'SHIFT_REGISTRATION_REJECTED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'shift_registration',
-      targetId: id,
-      metadata: { reason },
-    });
-
-    return updated;
-  }
-
-  async listShiftRegistrations(
-    actor: JwtPayload,
-    query: { dentistId?: string; status?: string; from?: string; to?: string },
-  ) {
-    const isAdmin = actor.permissions.includes('shift.read.any');
-    const where: Prisma.ShiftRegistrationWhereInput = {
-      deletedAt: null,
-      ...(isAdmin && query.dentistId ? { dentistId: query.dentistId } : {}),
-      ...(!isAdmin ? { dentistId: actor.sub } : {}),
-      ...(query.status ? { status: query.status as any } : {}),
-      // See list() above — `lte: new Date(query.to)` on a bare date is a
-      // zero-width UTC-midnight instant, not "through end of that day".
-      ...(query.from || query.to
-        ? {
-            date: {
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: endOfDayInclusive(query.to) } : {}),
-            },
-          }
-        : {}),
-    };
-    return {
-      data: await this.prisma.shiftRegistration.findMany({ where, orderBy: { date: 'desc' } }),
-    };
-  }
-
   /**
    * BR-APPT-029: cron auto-cancel PENDING past-date shifts.
    */
@@ -4170,7 +3989,8 @@ export class AppointmentsService {
         where: {
           patientId: dto.patientId,
           status: { in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-          startAt: { gte: dayStart },
+          // Today only: a follow-up weeks away is not why the patient is here.
+          startAt: { gte: dayStart, lt: dayEnd },
           deletedAt: null,
         },
         orderBy: { startAt: 'asc' },
@@ -4179,10 +3999,7 @@ export class AppointmentsService {
       });
       if (upcoming?.length) {
         const first = upcoming[0];
-        const when =
-          first.startAt < dayEnd
-            ? `${this.toClinicTimeString(first.startAt)} hôm nay`
-            : `${this.toClinicTimeString(first.startAt)} ngày ${this.viDate(new Date(clinicDateOnly(first.startAt)))}`;
+        const when = `${this.toClinicTimeString(first.startAt)} hôm nay`;
         throw new BusinessRuleException(
           `Bệnh nhân đã có lịch hẹn ${when} với BS ${first.dentist?.fullName ?? ''}. Nếu bệnh nhân đến cho lịch đó, hãy mở lịch hẹn để check-in (hoặc đổi lịch về hôm nay); nếu là lượt khám khác, chọn "Vẫn tiếp nhận vãng lai".`,
           HttpStatus.CONFLICT,

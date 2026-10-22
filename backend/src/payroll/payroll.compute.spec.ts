@@ -572,6 +572,7 @@ describe('PayrollEventListener — round 4', () => {
     ) as Array<{ event: string }>;
     const names = events.map(e => e.event).sort();
     expect(names).toEqual([
+      'invoice.adjusted',
       'invoice.issued',
       'invoice.payment_voided',
       'invoice.refunded',
@@ -638,6 +639,331 @@ describe('PayrollService — audit 2026-09-14 follow-ups', () => {
       const { service, prisma } = setup(null);
       await service.updateCompensation('c1', { effectiveTo: '2026-09-30' } as any, 'admin-1');
       expect(prisma.dentistCompensation.update).toHaveBeenCalled();
+    });
+  });
+});
+
+describe('PayrollService — business flow review 2026-10-21 (section 4)', () => {
+  afterEach(() => jest.useRealTimers());
+  /** Clinic clock: 2026-09-30 is the last day of the September period. */
+  const at = (iso: string) => jest.useFakeTimers({ now: new Date(iso), doNotFake: ['nextTick'] });
+
+  describe('4.2: lock / approve only after the period ended (clinic date)', () => {
+    const setup = (p = period()) => {
+      const ctx = makeService(makeTx(), p);
+      ctx.prisma.payrollPeriod.updateMany = fn({ count: 1 });
+      ctx.prisma.payrollPeriod.findUniqueOrThrow = fn({ ...p, status: 'REVIEWING' });
+      return ctx;
+    };
+
+    it('refuses to lock on the last day of the period, allows it the next clinic day', async () => {
+      at('2026-09-30T16:30:00Z'); // 23:30 on 30/09 in Vietnam
+      const early = setup();
+      await expect(early.service.lockPeriod('p-sep', 'admin')).rejects.toThrow(
+        /chưa kết thúc \(đến hết ngày 30\/09\/2026\)/,
+      );
+      expect(early.prisma.payrollPeriod.updateMany).not.toHaveBeenCalled();
+
+      at('2026-09-30T17:30:00Z'); // 00:30 on 01/10 in Vietnam, still 30/09 in UTC
+      const onTime = setup();
+      await onTime.service.lockPeriod('p-sep', 'admin');
+      expect(onTime.prisma.payrollPeriod.updateMany).toHaveBeenCalled();
+    });
+
+    it('refuses to approve before the end as a 409', async () => {
+      at('2026-09-25T03:00:00Z');
+      const { service } = setup(period({ status: 'REVIEWING' }));
+      await expect(service.approvePeriod('p-sep', 'admin')).rejects.toThrow(PayrollStateException);
+    });
+
+    it('recomputes the period before approving it', async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma } = setup(period({ status: 'REVIEWING' }));
+      const compute = jest.spyOn(service, 'computePeriod');
+      await service.approvePeriod('p-sep', 'admin');
+      expect(compute).toHaveBeenCalledWith('p-sep', 'admin');
+      expect(compute.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.payrollPeriod.updateMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does not recompute an adjustment period', async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma } = setup(
+        period({ status: 'REVIEWING', openedFromPeriodId: 'p-aug' }),
+      );
+      const compute = jest.spyOn(service, 'computePeriod');
+      await service.approvePeriod('p-sep', 'admin');
+      expect(compute).not.toHaveBeenCalled();
+      expect(prisma.payrollPeriod.updateMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('4.3: changing pay mid-way', () => {
+    const term = (over: Record<string, unknown> = {}) => ({
+      id: 'c-old',
+      dentistId: 'd1',
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null as Date | null,
+      deletedAt: null,
+      baseSalaryVnd: new Prisma.Decimal(30_000_000),
+      commissionPct: new Prisma.Decimal(0.1),
+      overtimeHourlyVnd: new Prisma.Decimal(0),
+      ...over,
+    });
+    const setup = (current: unknown) => {
+      const { service, prisma, audit } = makeService(makeTx());
+      prisma.dentistCompensation = {
+        findUnique: fn(current),
+        findFirst: fn(null),
+        update: jest.fn().mockImplementation(({ where, data }) => ({ id: where.id, ...data })),
+        create: jest.fn().mockImplementation(({ data }) => ({ id: 'c-new', ...data })),
+      };
+      return { service, prisma, audit };
+    };
+
+    it('a new term ends the open-ended one the day before, in the same transaction', async () => {
+      const { service, prisma } = setup(null);
+      prisma.dentistCompensation.findFirst
+        .mockResolvedValueOnce(term()) // the open-ended term
+        .mockResolvedValueOnce(null); // no overlap once it is ended
+      const created = await service.createCompensation(
+        {
+          dentistId: 'd1',
+          effectiveFrom: '2026-10-01',
+          baseSalaryVnd: 32_000_000,
+          commissionPct: 0.12,
+        },
+        'admin',
+      );
+      expect(prisma.dentistCompensation.findFirst.mock.calls[0][0].where).toEqual({
+        dentistId: 'd1',
+        deletedAt: null,
+        effectiveTo: null,
+        effectiveFrom: { lt: new Date('2026-10-01') },
+      });
+      expect(prisma.dentistCompensation.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-old' },
+          data: { effectiveTo: new Date('2026-09-30') },
+        }),
+      );
+      expect(created.endedPrevious).toMatchObject({
+        id: 'c-old',
+        effectiveTo: new Date('2026-09-30'),
+      });
+      expect(prisma.dentistCompensation.create).toHaveBeenCalled();
+    });
+
+    it('refuses a new rate on a term already in force on past days', async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma } = setup(term());
+      await expect(
+        service.updateCompensation('c-old', { commissionPct: 0.2 } as any, 'admin'),
+      ).rejects.toThrow(/thêm chế độ mới/);
+      await expect(
+        service.updateCompensation('c-old', { baseSalaryVnd: 1 } as any, 'admin'),
+      ).rejects.toThrow(PayrollStateException);
+      expect(prisma.dentistCompensation.update).not.toHaveBeenCalled();
+
+      // Same values (a full form sent back) and notes are fine.
+      await service.updateCompensation(
+        'c-old',
+        { commissionPct: 0.1, baseSalaryVnd: 30_000_000, notes: 'HĐ mới' } as any,
+        'admin',
+      );
+      expect(prisma.dentistCompensation.update).toHaveBeenCalled();
+    });
+
+    it('a term starting today or later can still be corrected', async () => {
+      at('2026-10-02T03:00:00Z');
+      const { service, prisma } = setup(term({ effectiveFrom: new Date('2026-10-02') }));
+      await service.updateCompensation('c-old', { commissionPct: 0.2 } as any, 'admin');
+      expect(prisma.dentistCompensation.update).toHaveBeenCalled();
+    });
+
+    it('stop ends the term on the clinic date instead of deleting it', async () => {
+      at('2026-10-01T18:00:00Z'); // 02/10 01:00 in Vietnam
+      const { service, prisma, audit } = setup(term());
+      await service.softDeleteCompensation('c-old', 'admin');
+      expect(prisma.dentistCompensation.update).toHaveBeenCalledWith({
+        where: { id: 'c-old' },
+        data: { effectiveTo: new Date('2026-10-02') },
+      });
+      expect(audit.log.mock.calls[0][0].action).toBe('COMPENSATION_ENDED');
+    });
+
+    it('stop removes a term not yet in force, refuses one already ended', async () => {
+      at('2026-10-02T03:00:00Z');
+      const future = setup(term({ effectiveFrom: new Date('2026-11-01') }));
+      await future.service.softDeleteCompensation('c-old', 'admin');
+      expect(future.prisma.dentistCompensation.update.mock.calls[0][0].data).toEqual({
+        deletedAt: expect.any(Date),
+      });
+
+      const ended = setup(term({ effectiveTo: new Date('2026-09-30') }));
+      await expect(ended.service.softDeleteCompensation('c-old', 'admin')).rejects.toThrow(
+        /đã kết thúc ngày 30\/09\/2026/,
+      );
+      expect(ended.prisma.dentistCompensation.update).not.toHaveBeenCalled();
+    });
+  });
+
+  it('4.6: claws back commission of a dentist with nothing else in the period', async () => {
+    const created: unknown[] = [];
+    const tx = makeTx({
+      // Left the clinic: no pay terms, visits or schedules any more.
+      dentistCompensation: { findMany: fn([]) },
+      user: {
+        findMany: jest
+          .fn()
+          .mockImplementation(({ where }) =>
+            where.id.in.map((id: string) => ({ id, fullName: id })),
+          ),
+      },
+      invoice: {
+        findMany: jest.fn().mockImplementation(({ where }) =>
+          where.id
+            ? [
+                {
+                  id: 'inv-old',
+                  code: 'HD-OLD',
+                  status: 'VOIDED',
+                  voidedAt: new Date('2026-09-10T09:00:00+07:00'),
+                  total: new Prisma.Decimal(4_000_000),
+                  items: [{ id: 'it-a', lineTotal: new Prisma.Decimal(4_000_000) }],
+                  payments: [],
+                },
+              ]
+            : where.OR
+              ? [{ id: 'inv-old' }]
+              : [],
+        ),
+      },
+      payrollEncounterDetail: {
+        findMany: jest.fn().mockImplementation(({ where }) =>
+          where.invoiceId?.in
+            ? [{ lineItem: { dentistId: 'd-left' } }]
+            : [
+                {
+                  invoiceId: 'inv-old',
+                  invoiceItemId: 'it-a',
+                  basisAmountVnd: new Prisma.Decimal(4_000_000),
+                  commissionPct: new Prisma.Decimal(0.1),
+                  period: {
+                    periodStart: new Date('2026-08-01'),
+                    periodEnd: new Date('2026-08-31'),
+                  },
+                },
+              ],
+        ),
+      },
+      payrollAdjustment: {
+        create: jest.fn().mockImplementation(({ data }) => created.push(data)),
+        findMany: jest
+          .fn()
+          .mockImplementation(({ where }) =>
+            where.payrollPeriodId === 'p-sep' && where.dentistId === 'd-left' ? created : [],
+          ),
+      },
+    });
+    const { service } = makeService(tx);
+    const result = await service.computePeriod('p-sep', 'admin-1');
+
+    const changed = tx.invoice.findMany.mock.calls.find(c => c[0].where.OR)![0];
+    expect(changed.where.OR[1]).toEqual({ refundedAmount: { gt: 0 } });
+    expect(created).toEqual([
+      expect.objectContaining({ dentistId: 'd-left', type: 'DEDUCTION', amountVnd: 400_000 }),
+    ]);
+    expect(result.lineItems.map(l => l.dentistId)).toEqual(['d-left']);
+  });
+
+  describe('adjustment period: differences only (no second payment)', () => {
+    it('opens with every amount at 0, the original kept for reference', async () => {
+      const tx = makeTx({
+        payrollPeriod: { create: fn({ id: 'adj-1' }) },
+        payrollLineItem: {
+          findMany: fn([
+            {
+              id: 'li-aug',
+              dentistId: 'd1',
+              grossPayVnd: new Prisma.Decimal(20_000_000),
+              taxTncnVnd: new Prisma.Decimal(500_000),
+              bhxhVnd: new Prisma.Decimal(2_100_000),
+              netPayVnd: new Prisma.Decimal(17_400_000),
+            },
+          ]),
+          create: fn({}),
+        },
+      });
+      const { service, prisma } = makeService(tx, period({ id: 'p-aug', status: 'PAID' }));
+      prisma.payrollConfig = { findFirst: fn({ ...snapshot }) };
+      await service.openAdjustmentPeriod('p-aug', 'admin', ['payroll.admin']);
+
+      const { data } = tx.payrollLineItem.create.mock.calls[0][0];
+      for (const k of [
+        'baseSalaryVnd',
+        'commissionVnd',
+        'grossPayVnd',
+        'taxTncnVnd',
+        'netPayVnd',
+      ]) {
+        expect(data[k]).toBe(0);
+      }
+      expect(data.computationLog.adjustmentFor).toEqual({
+        periodId: 'p-aug',
+        lineItemId: 'li-aug',
+        grossPayVnd: 20_000_000,
+        taxTncnVnd: 500_000,
+        bhxhVnd: 2_100_000,
+        netPayVnd: 17_400_000,
+      });
+    });
+
+    it('a bonus there pays the bonus less the extra tax/insurance it causes', async () => {
+      const adj = period({ id: 'p-adj', openedFromPeriodId: 'p-aug' });
+      const tx = makeTx({
+        payrollPeriod: { findUnique: fn(adj) },
+        payrollAdjustment: {
+          create: fn({ id: 'a-1' }),
+          findMany: fn([{ type: 'BONUS', amountVnd: new Prisma.Decimal(1_000_000) }]),
+        },
+        payrollLineItem: {
+          findUnique: fn({ id: 'li-adj', payrollPeriodId: 'p-adj', dentistId: 'd1' }),
+          // The original payslip: 20tr gross, BHXH 10.5% = 2.1tr, no tax.
+          findFirst: fn({
+            grossPayVnd: new Prisma.Decimal(20_000_000),
+            taxTncnVnd: new Prisma.Decimal(0),
+            bhxhVnd: new Prisma.Decimal(2_100_000),
+          }),
+          update: fn({}),
+        },
+      });
+      const { service, prisma } = makeService(tx, adj);
+      prisma.payrollLineItem.findUnique = fn({
+        id: 'li-adj',
+        payrollPeriodId: 'p-adj',
+        dentistId: 'd1',
+      });
+      await service.addAdjustment(
+        'p-adj',
+        { lineItemId: 'li-adj', type: 'BONUS', amountVnd: 1_000_000, reason: 'Bù thiếu ca' },
+        'admin',
+        ['payroll.admin'],
+      );
+
+      expect(tx.payrollLineItem.findFirst.mock.calls[0][0].where).toEqual({
+        payrollPeriodId: 'p-aug',
+        dentistId: 'd1',
+      });
+      expect(tx.payrollLineItem.update.mock.calls[0][0].data).toMatchObject({
+        baseSalaryVnd: 0,
+        commissionVnd: 0,
+        grossPayVnd: 1_000_000,
+        taxTncnVnd: 0,
+        bhxhVnd: 105_000,
+        netPayVnd: 895_000,
+      });
     });
   });
 });

@@ -48,7 +48,9 @@ export class DashboardAppointmentPointDto {
 
 export class FinanceSummaryDto {
   @ApiProperty() totalIncome!: number;
-  @ApiProperty() totalExpense!: number;
+  @ApiProperty({ description: 'Approved expenses + payrollPaid' }) totalExpense!: number;
+  @ApiProperty({ description: 'Net pay of payroll periods paid in the range' })
+  payrollPaid!: number;
 }
 
 export class OutstandingSummaryDto {

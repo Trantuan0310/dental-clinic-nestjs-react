@@ -66,6 +66,8 @@ export interface Appointment {
   noShowAt?: string | null;
   rescheduleCount?: number;
   encounterId?: string | null;
+  /** The linked encounter was cancelled (A3-03: check-in can still be undone). */
+  encounterCancelled?: boolean;
   /** ADR-0009 phase 5 */
   visitKind?: 'booked' | 'walk_in';
   bufferBeforeMin?: number;
@@ -224,6 +226,8 @@ export interface CheckInPayload {
   notes?: string;
   override?: boolean;
   overrideReason?: string;
+  /** The patient already has another open visit today: check in this one too. */
+  ignoreOpenVisit?: boolean;
 }
 
 /**

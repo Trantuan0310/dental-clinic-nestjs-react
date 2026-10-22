@@ -60,8 +60,8 @@ describe('BillingService', () => {
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 1n }]);
     (prisma.invoice.aggregate as jest.Mock).mockResolvedValue({
       _sum: { total: 0, paidAmount: 0, outstandingAmount: 0 },
-      _count: { _all: 0 },
     });
+    (prisma.invoice.count as jest.Mock).mockResolvedValue(0);
     (prisma.payment.groupBy as jest.Mock).mockResolvedValue([]);
     // Re-read after a change, for the domain event (loadForEvent).
     (prisma.invoice.findUniqueOrThrow as jest.Mock).mockImplementation(async () =>
@@ -200,9 +200,9 @@ describe('BillingService', () => {
       const first = validInvoice({ id: 'inv-1', total: 300_000 });
       const second = validInvoice({ id: 'inv-2', total: 200_000 });
       (prisma.invoice.findMany as jest.Mock).mockResolvedValue([first, second]);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(2);
       (prisma.invoice.aggregate as jest.Mock).mockResolvedValue({
         _sum: { total: 500_000, paidAmount: 200_000, outstandingAmount: 300_000 },
-        _count: { _all: 2 },
       });
 
       const result = await service.listInvoices({
@@ -217,6 +217,30 @@ describe('BillingService', () => {
         totalInvoiced: 500_000,
         totalCollected: 200_000,
         totalOutstanding: 300_000,
+      });
+    });
+
+    it('totals only issued invoices — never drafts or voided ones (5.5)', async () => {
+      (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.invoice.count as jest.Mock).mockResolvedValue(3);
+      (prisma.invoice.aggregate as jest.Mock).mockResolvedValue({
+        _sum: { total: null, paidAmount: null, outstandingAmount: null },
+      });
+
+      const result = await service.listInvoices({
+        status: [InvoiceStatus.DRAFT, InvoiceStatus.PAID],
+        actor: userPayloadWithPermissions(['invoice.read.any']),
+      });
+
+      // The count still matches the list ("load more"); only money is filtered.
+      expect(result.summary.invoiceCount).toBe(3);
+      expect((prisma.invoice.count as jest.Mock).mock.calls[0][0]).toEqual({
+        where: (prisma.invoice.findMany as jest.Mock).mock.calls[0][0].where,
+      });
+      const listWhere = (prisma.invoice.findMany as jest.Mock).mock.calls[0][0].where;
+      expect(listWhere.status).toEqual({ in: ['DRAFT', 'PAID'] });
+      expect((prisma.invoice.aggregate as jest.Mock).mock.calls[0][0].where).toEqual({
+        AND: [listWhere, { status: { in: ['ISSUED', 'PARTIAL', 'PAID'] } }],
       });
     });
   });

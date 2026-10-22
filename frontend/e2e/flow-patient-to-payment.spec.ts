@@ -206,6 +206,8 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await dentistPage.getByLabel(/số răng/i).fill('16');
     await dentistPage.getByLabel(/tên thủ thuật/i).fill('Hàn răng Composite (E2E)');
     await dentistPage.getByLabel(/đơn giá/i).fill('350000');
+    // 3.6: a procedure typed in (no catalogue service) needs a price reason.
+    await dentistPage.getByLabel(/lý do áp giá/i).fill('Thủ thuật ngoài danh mục (E2E)');
     await dentistPage.getByRole('button', { name: /^thêm$/i }).click();
     await expect(dentistPage.getByText('Hàn răng Composite (E2E)', { exact: true })).toBeVisible({ timeout: 10_000 });
     checkpoint('step 5 done: treatment added');

@@ -72,6 +72,14 @@ function toUpdateTreatmentBody(payload: Partial<CreateTreatmentPayload>) {
     ...(payload.priceCents !== undefined && { unitPrice: payload.priceCents }),
     ...(payload.priceReason && { priceReason: payload.priceReason }),
     ...(payload.quantity !== undefined && payload.quantity > 0 && { quantity: payload.quantity }),
+    // Consumables can be corrected while the encounter is open (3.4).
+    ...(payload.inventoryItemsUsed !== undefined && {
+      inventoryUsages: payload.inventoryItemsUsed.map((u) => ({
+        inventoryItemId: u.inventoryItemId,
+        quantity: u.quantityUsed,
+        unit: u.unit ?? '',
+      })),
+    }),
     // Tooth edits were silently dropped before UpdateTreatmentDto accepted them.
     ...(payload.toothNumber !== undefined && {
       toothNumbers: payload.toothNumber !== '' ? [Number(payload.toothNumber)] : [],
@@ -135,6 +143,11 @@ export const medicalRecordsApi = {
       ...(allergyOverrideReason && { allergyOverrideReason }),
     });
     return unwrap(data);
+  },
+
+  /** BR-MR-024 (admin): reopen a closed encounter whose invoice is a draft or voided. */
+  async reopenEncounter(id: string, reason: string): Promise<void> {
+    await api.post(`${BASE}/encounters/${id}/reopen`, { reason });
   },
 
   async cancelEncounter(id: string, reason: string): Promise<Encounter> {

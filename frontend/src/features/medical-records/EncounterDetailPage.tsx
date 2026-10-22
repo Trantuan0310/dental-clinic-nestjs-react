@@ -14,8 +14,10 @@ import {
   CalendarPlus,
   AlertTriangle,
   XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { medicalRecordsApi } from '@/features/medical-records/imperativeApi';
+import { billingApi } from '@/features/billing/billingApi';
 import { Alert, Button, Card, Modal, StatusBadge, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from '@/lib/errors';
@@ -87,7 +89,18 @@ export default function EncounterDetailPage() {
   const canEditChart = useAuthStore((s) => s.hasPermission('dental_chart.write'));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
   const canCancelEncounter = useAuthStore((s) => s.hasPermission('encounter.cancel'));
+  const canReopenEncounter = useAuthStore((s) => s.hasPermission('encounter.reopen'));
   const [booking, setBooking] = useState(false);
+  // BR-MR-024: an admin reopens a closed encounter (draft/voided invoice only).
+  const [reopenOpen, setReopenOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
+  // Close refused for lack of stock: kept on screen, not only in a toast (3.4).
+  const [stockShortage, setStockShortage] = useState<{
+    itemName: string;
+    required: number;
+    available: number;
+    unit?: string;
+  } | null>(null);
   // A3-03: an exam started by mistake (wrong patient / wrong row).
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -112,6 +125,13 @@ export default function EncounterDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['encounter', id] });
     },
     onError: (err, vars) => {
+      if (getApiErrorCode(err) === 'INSUFFICIENT_STOCK') {
+        const details = getApiErrorDetails<{ itemName: string; required: number; available: number; unit?: string }>(err);
+        if (details?.itemName) {
+          setStockShortage(details);
+          return;
+        }
+      }
       if (getApiErrorCode(err) === 'PRESCRIPTION_ALLERGY_CONFLICT') {
         const details = getApiErrorDetails<{ conflicts?: PrescriptionAllergyConflict[] }>(err);
         setCloseSummary(vars.summary);
@@ -131,6 +151,27 @@ export default function EncounterDetailPage() {
       notify.success(t('uiClinical.encounterCancelled'));
     },
     onError: (err) => notify.error(getApiErrorMessage(err, t('uiClinical.encounterCancelError'))),
+  });
+  const showReopen = encounter?.status === 'completed' && canReopenEncounter;
+  const { data: encounterInvoice } = useQuery({
+    queryKey: ['invoice-by-encounter', id],
+    queryFn: () => billingApi.getInvoiceByEncounter(id!),
+    enabled: !!id && showReopen,
+  });
+  // An issued invoice carries money: it is corrected in Billing, not here.
+  const reopenBlocked =
+    !!encounterInvoice && encounterInvoice.status !== 'DRAFT' && encounterInvoice.status !== 'VOIDED';
+  const reopenMutation = useMutation({
+    mutationFn: (reason: string) => medicalRecordsApi.reopenEncounter(id!, reason),
+    onSuccess: () => {
+      setReopenOpen(false);
+      setReopenReason('');
+      queryClient.invalidateQueries({ queryKey: ['encounter', id] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-by-encounter', id] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      notify.success(t('uiClinical.encounterReopened'));
+    },
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiClinical.encounterReopenError'))),
   });
   const dismissCloseConflicts = () => {
     setCloseConflicts(null);
@@ -218,6 +259,17 @@ export default function EncounterDetailPage() {
               {t('uiClinical.closeEncounter')}
             </Button>
           )}
+          {showReopen && (
+            <Button
+              variant="outline"
+              onClick={() => setReopenOpen(true)}
+              disabled={reopenBlocked}
+              title={reopenBlocked ? t('uiClinical.reopenEncounterBlocked') : undefined}
+            >
+              <RotateCcw className="h-4 w-4" />
+              {t('uiClinical.reopenEncounter')}
+            </Button>
+          )}
           {encounter.status === 'in_progress' && canCancelEncounter && ownScope && (
             <Button variant="ghost" onClick={() => setCancelOpen(true)}>
               <XCircle className="h-4 w-4" />
@@ -258,6 +310,78 @@ export default function EncounterDetailPage() {
             placeholder={t('uiClinical.cancelEncounterExample')}
           />
         </div>
+      </Modal>
+
+      {showReopen && reopenBlocked && (
+        <Alert type="info">{t('uiClinical.reopenEncounterBlocked')}</Alert>
+      )}
+
+      <Modal
+        open={reopenOpen}
+        onClose={() => !reopenMutation.isPending && setReopenOpen(false)}
+        title={t('uiClinical.reopenEncounterTitle')}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setReopenOpen(false)} disabled={reopenMutation.isPending}>
+              {t('uiClinical.cancel')}
+            </Button>
+            <Button
+              isLoading={reopenMutation.isPending}
+              disabled={reopenReason.trim().length < 10}
+              onClick={() => reopenMutation.mutate(reopenReason.trim())}
+            >
+              {t('uiClinical.reopenEncounter')}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-sm text-gray-600 dark:text-surface-300">
+          <p>{t('uiClinical.reopenEncounterHelp')}</p>
+          <Textarea
+            label={t('uiClinical.reopenEncounterReasonLabel')}
+            rows={2}
+            value={reopenReason}
+            onChange={(e) => setReopenReason(e.target.value)}
+            placeholder={t('uiClinical.reopenEncounterExample')}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        open={stockShortage !== null}
+        onClose={() => setStockShortage(null)}
+        title={t('uiClinical.insufficientStockTitle')}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setStockShortage(null)}>
+              {t('uiClinical.cancel')}
+            </Button>
+            <Button
+              onClick={() => {
+                setStockShortage(null);
+                setActiveTab('treatments');
+              }}
+            >
+              {t('uiClinical.goToTreatments')}
+            </Button>
+          </>
+        }
+      >
+        {stockShortage && (
+          <div className="space-y-3 text-sm">
+            <Alert type="danger">
+              {t('uiClinical.insufficientStockDetail', {
+                item: stockShortage.itemName,
+                required: stockShortage.required,
+                available: stockShortage.available,
+                unit: stockShortage.unit ?? '',
+              })}
+            </Alert>
+            <p className="text-gray-600 dark:text-surface-300">{t('uiClinical.insufficientStockHelp')}</p>
+          </div>
+        )}
       </Modal>
 
       {encounter.status === 'in_progress' && encounter.reopenedFromCancel && (

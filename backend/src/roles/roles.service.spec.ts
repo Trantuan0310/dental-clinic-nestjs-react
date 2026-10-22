@@ -197,7 +197,7 @@ describe('RolesService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'ROLE_PERMISSIONS_CHANGED',
-          metadata: { newPermissions: [] },
+          metadata: { previousPermissions: ['patient.read'], newPermissions: [] },
         }),
       );
     });

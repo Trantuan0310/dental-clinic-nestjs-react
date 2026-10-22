@@ -57,6 +57,8 @@ type Related = {
     dentist?: { fullName: string } | null;
     bookingRequest?: { id: string } | null;
   }>;
+  /** Archived records of this phone or person: matching skips them. */
+  archivedPatients?: Array<{ id: string; code: string; fullName: string; dob: string }>;
 };
 /** A visit in the next two days whose email reminder did not go out. */
 type ReminderIssue = {
@@ -447,6 +449,14 @@ export default function BookingRequestsPage() {
   // Any open request can get a (new) time or dentist, a standing proposal or
   // one waiting on details included.
   const canPropose = !!selected && OPEN.includes(selected.status);
+  // A request that lapsed earlier today can still be closed as "arrived".
+  const canMarkArrived =
+    !!selected &&
+    (OPEN.includes(selected.status) ||
+      (selected.status === "EXPIRED" &&
+        [selected.requestedStartAt, selected.proposedStartAt].some(
+          (at) => !!at && clinicParts(at).date === clinicParts(new Date(now)).date,
+        )));
 
   return (
     <div className="space-y-5">
@@ -787,6 +797,19 @@ export default function BookingRequestsPage() {
                 </ul>
               </div>
             )}
+            {!!related.data?.archivedPatients?.length && (
+              <div className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="font-medium">{t('uiScheduling.archivedPatientMatchHeading')}</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {related.data.archivedPatients.map((p) => (
+                    <li key={p.id}>
+                      {t('uiScheduling.archivedPatientInline', { name: p.fullName, code: p.code, dob: p.dob.slice(0, 10).split("-").reverse().join("/") })}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1">{t('uiScheduling.archivedPatientMatchHint')}</p>
+              </div>
+            )}
             {overdue && (
               <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
                 {t('uiScheduling.bookingOverdueActionHint')}
@@ -940,7 +963,7 @@ export default function BookingRequestsPage() {
                 </div>
               </div>
             )}
-            {OPEN.includes(selected.status) && (
+            {canMarkArrived && (
               <details className="mt-4 rounded-lg border p-3 text-sm">
                 <summary className="cursor-pointer font-medium">
                   {t('uiScheduling.patientAtReceptionWithReference', { reference: selected.referenceCode })}

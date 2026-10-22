@@ -1,17 +1,26 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AppointmentStatus, InvoiceStatus, PaymentKind, Prisma } from '@prisma/client';
+import {
+  AppointmentStatus,
+  InvoiceStatus,
+  PaymentKind,
+  PayrollPeriodStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExpenseService } from '../expense/expense.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { isRowScoped } from '../common/row-scope';
 import { clinicDateOnly, endOfClinicDay, startOfClinicDay } from '../common/date-range.util';
 import {
-  REVENUE_INVOICE_STATUSES,
   collectedPaymentWhere,
+  countsAsRevenue,
   revenueInvoiceWhere,
+  revenueAdjustmentWhere,
   revenueRefundWhere,
   revenueRowsSql,
   signedPaymentAmount,
+  voidReversalAmount,
+  voidedRevenueWhere,
 } from './revenue-basis';
 
 /** The patient came in (counted by the appointment's final status, never by audit events). */
@@ -67,7 +76,12 @@ interface CollectionRow {
   kind: PaymentKind;
   method: string;
   paidAt: Date;
-  invoice: { status: InvoiceStatus; encounter: { dentistId: string } | null } | null;
+  invoice: {
+    status: InvoiceStatus;
+    issuedAt: Date | null;
+    voidedAt: Date | null;
+    encounter: { dentistId: string } | null;
+  } | null;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -145,7 +159,14 @@ export class ReportsService {
         kind: true,
         method: true,
         paidAt: true,
-        invoice: { select: { status: true, encounter: { select: { dentistId: true } } } },
+        invoice: {
+          select: {
+            status: true,
+            issuedAt: true,
+            voidedAt: true,
+            encounter: { select: { dentistId: true } },
+          },
+        },
       },
     });
     return rows.map(r => {
@@ -154,15 +175,15 @@ export class ReportsService {
         ...r,
         signed: signedPaymentAmount(r),
         refund,
-        // Same rule as revenueRefundWhere: not on a voided invoice.
-        lowersRevenue: refund && !!r.invoice && REVENUE_INVOICE_STATUSES.includes(r.invoice.status),
+        // Same rule as revenueRefundWhere: on an invoice counted at issue.
+        lowersRevenue: refund && !!r.invoice && countsAsRevenue(r.invoice),
       };
     });
   }
 
-  /** Issued revenue minus refunds on counted invoices, both dated in range. */
+  /** Issued revenue minus refunds and voids of issued invoices, all dated in range. */
   private async revenueTotal(from: Date, to: Date): Promise<number> {
-    const [issued, refunds] = await Promise.all([
+    const [issued, refunds, adjustments, voids] = await Promise.all([
       this.prisma.invoice.aggregate({
         _sum: { total: true },
         where: revenueInvoiceWhere(from, to),
@@ -171,8 +192,25 @@ export class ReportsService {
         _sum: { amount: true },
         where: revenueRefundWhere(from, to),
       }),
+      this.prisma.invoiceAdjustment.aggregate({
+        _sum: { amount: true },
+        where: revenueAdjustmentWhere(from, to),
+      }),
+      this.prisma.invoice.aggregate({
+        _sum: { total: true, refundedAmount: true, adjustedAmount: true },
+        where: voidedRevenueWhere(from, to),
+      }),
     ]);
-    return Number(issued._sum.total ?? 0) - Number(refunds._sum.amount ?? 0);
+    return (
+      Number(issued._sum.total ?? 0) -
+      Number(refunds._sum.amount ?? 0) -
+      Number(adjustments?._sum.amount ?? 0) +
+      voidReversalAmount({
+        total: voids._sum.total ?? 0,
+        refundedAmount: voids._sum.refundedAmount ?? 0,
+        adjustedAmount: voids._sum.adjustedAmount ?? 0,
+      })
+    );
   }
 
   private async collectedTotal(from: Date, to: Date): Promise<number> {
@@ -185,9 +223,10 @@ export class ReportsService {
   // ==========================================================================
 
   /**
-   * BR-BILL-008 revenue report. Revenue = issued invoices by issue date;
-   * "Đã thu" = payments by payment date net of refunds. DRAFT/VOIDED only in
-   * `excluded`. `dentistId` filters every section.
+   * BR-BILL-008 revenue report. Revenue = issued invoices by issue date, less
+   * refunds and voids by their own date; "Đã thu" = payments by payment date
+   * net of refunds. DRAFT, and VOIDED never issued, only in `excluded`.
+   * `dentistId` filters every section.
    */
   async revenueReport(query: { from: string; to: string; dentistId?: string }) {
     const fromDate = startOfClinicDay(query.from);
@@ -202,59 +241,93 @@ export class ReportsService {
     };
     const inRange = { gte: fromDate, lte: toDate };
 
-    const [invoices, items, collections, drafts, voided] = await Promise.all([
-      this.prisma.invoice.findMany({
-        where: invoiceWhere,
-        select: {
-          status: true,
-          total: true,
-          outstandingAmount: true,
-          issuedAt: true,
-          encounter: { select: { dentistId: true, dentist: { select: { fullName: true } } } },
-        },
-      }),
-      this.prisma.invoiceItem.findMany({
-        where: { deletedAt: null, invoice: invoiceWhere },
-        select: {
-          description: true,
-          lineTotal: true,
-          invoice: { select: { subtotal: true, total: true } },
-        },
-      }),
-      this.loadCollections(fromDate, toDate, byDentistFilter),
-      this.prisma.invoice.aggregate({
-        where: {
-          deletedAt: null,
-          status: InvoiceStatus.DRAFT,
-          createdAt: inRange,
-          ...byDentistFilter,
-        },
-        _count: { _all: true },
-        _sum: { total: true },
-      }),
-      this.prisma.invoice.aggregate({
-        where: {
-          deletedAt: null,
-          status: InvoiceStatus.VOIDED,
-          OR: [{ issuedAt: inRange }, { issuedAt: null, createdAt: inRange }],
-          ...byDentistFilter,
-        },
-        _count: { _all: true },
-        _sum: { total: true },
-      }),
-    ]);
+    const dentistSelect = {
+      encounter: { select: { dentistId: true, dentist: { select: { fullName: true } } } },
+    } as const;
+    const [invoices, voids, services, collections, drafts, voided, adjustmentRows] =
+      await Promise.all([
+        this.prisma.invoice.findMany({
+          where: invoiceWhere,
+          select: {
+            status: true,
+            subtotal: true,
+            total: true,
+            outstandingAmount: true,
+            issuedAt: true,
+            ...dentistSelect,
+          },
+        }),
+        // Issued invoices voided in the range: taken back on the void date (5.3).
+        this.prisma.invoice.findMany({
+          where: voidedRevenueWhere(fromDate, toDate, byDentistFilter),
+          select: {
+            total: true,
+            refundedAmount: true,
+            adjustedAmount: true,
+            voidedAt: true,
+            ...dentistSelect,
+          },
+        }),
+        this.revenueByServiceRows(fromDate, toDate, query.dentistId),
+        this.loadCollections(fromDate, toDate, byDentistFilter),
+        this.prisma.invoice.aggregate({
+          where: {
+            deletedAt: null,
+            status: InvoiceStatus.DRAFT,
+            createdAt: inRange,
+            ...byDentistFilter,
+          },
+          _count: { _all: true },
+          _sum: { total: true },
+        }),
+        // Voided and never counted: voided as a draft (or an old void with no date).
+        this.prisma.invoice.aggregate({
+          where: {
+            deletedAt: null,
+            status: InvoiceStatus.VOIDED,
+            OR: [
+              { issuedAt: null, createdAt: inRange },
+              { voidedAt: null, issuedAt: inRange },
+            ],
+            ...byDentistFilter,
+          },
+          _count: { _all: true },
+          _sum: { total: true },
+        }),
+        // Write-downs ("xoá nợ") lower revenue on their own date, like refunds.
+        this.prisma.invoiceAdjustment.findMany({
+          where: revenueAdjustmentWhere(fromDate, toDate, byDentistFilter),
+          select: {
+            amount: true,
+            adjustedAt: true,
+            invoice: { select: { encounter: { select: { dentistId: true } } } },
+          },
+        }),
+      ]);
+    const adjustments = (adjustmentRows ?? []).map(a => ({ ...a, signed: -Number(a.amount) }));
+    const totalAdjusted = adjustments.reduce((acc, a) => acc - a.signed, 0);
 
-    // Revenue = issued totals − refunds dated in the range (commission basis).
+    // Revenue = issued totals − refunds − voids dated in the range (commission basis).
     const revenueRefunds = collections.filter(p => p.lowersRevenue);
+    const reversals = voids.map(v => ({ ...v, amount: voidReversalAmount(v) }));
+    const totalVoided = reversals.reduce((acc, v) => acc - v.amount, 0);
     const totalInvoiced =
       invoices.reduce((acc, i) => acc + Number(i.total ?? 0), 0) +
-      revenueRefunds.reduce((acc, p) => acc + p.signed, 0);
+      revenueRefunds.reduce((acc, p) => acc + p.signed, 0) -
+      totalAdjusted -
+      totalVoided;
     const totalCollected = collections.reduce((acc, p) => acc + p.signed, 0);
     const totalRefunded = collections.filter(p => p.refund).reduce((a, p) => a - p.signed, 0);
+    // BR-BILL-025: discounts given on the invoices issued in the range.
+    const totalDiscount = invoices.reduce(
+      (acc, i) => acc + Number(i.subtotal ?? 0) - Number(i.total ?? 0),
+      0,
+    );
 
-    // Status split of the counted invoices.
+    // Status split of the invoices still counted (a voided one is in totalVoided).
     const statusMap = new Map<string, { count: number; total: number; outstanding: number }>();
     for (const inv of invoices) {
+      if (inv.status === InvoiceStatus.VOIDED) continue;
       const cur = statusMap.get(inv.status) ?? { count: 0, total: 0, outstanding: 0 };
       cur.count += 1;
       cur.total += Number(inv.total ?? 0);
@@ -279,6 +352,8 @@ export class ReportsService {
     }
     for (const p of collections) month(clinicMonth(p.paidAt)).paid += p.signed;
     for (const p of revenueRefunds) month(clinicMonth(p.paidAt)).total += p.signed;
+    for (const v of reversals) month(clinicMonth(v.voidedAt as Date)).total += v.amount;
+    for (const a of adjustments) month(clinicMonth(a.adjustedAt)).total += a.signed;
 
     // Dentists: revenue of their encounters' invoices, collected on them.
     const dentistMap = new Map<
@@ -307,6 +382,13 @@ export class ReportsService {
       d.paid += p.signed;
       if (p.lowersRevenue) d.revenue += p.signed;
     }
+    for (const v of reversals) {
+      dentist(v.encounter?.dentistId ?? 'unknown', v.encounter?.dentist?.fullName).revenue +=
+        v.amount;
+    }
+    for (const a of adjustments) {
+      dentist(a.invoice?.encounter?.dentistId ?? 'unknown').revenue += a.signed;
+    }
     // A dentist only paid on older invoices still needs a name.
     const nameless = [...dentistMap.values()].filter(
       d => d.dentistName === 'Chưa rõ' && d.dentistId !== 'unknown',
@@ -317,18 +399,6 @@ export class ReportsService {
         select: { id: true, fullName: true },
       });
       for (const u of users) dentist(u.id, u.fullName);
-    }
-
-    // Services: line totals after the invoice discount (pro rata).
-    const serviceMap = new Map<string, { service: string; total: number; count: number }>();
-    for (const it of items) {
-      const key = it.description || 'Khác';
-      const subtotal = Number(it.invoice?.subtotal ?? 0);
-      const factor = subtotal > 0 ? Number(it.invoice?.total ?? 0) / subtotal : 1;
-      const cur = serviceMap.get(key) ?? { service: key, total: 0, count: 0 };
-      cur.total += Number(it.lineTotal ?? 0) * factor;
-      cur.count += 1;
-      serviceMap.set(key, cur);
     }
 
     // Payment methods: net of refunds, share of what was actually collected.
@@ -348,6 +418,9 @@ export class ReportsService {
       totalInvoiced,
       totalCollected,
       totalRefunded,
+      totalAdjusted,
+      totalVoided,
+      totalDiscount,
       totalOutstanding: invoices.reduce((acc, i) => acc + Number(i.outstandingAmount ?? 0), 0),
       invoiceCount: invoices.length,
       byStatus: [...statusMap.entries()].map(([status, v]) => ({ status, ...v })),
@@ -359,13 +432,46 @@ export class ReportsService {
       byDentist: [...dentistMap.values()]
         .map(d => ({ ...d, sharePct: pct(d.revenue, totalInvoiced) }))
         .sort((a, b) => b.revenue - a.revenue),
-      byService: [...serviceMap.values()]
-        .map(s => ({ ...s, total: Math.round(s.total) }))
-        .sort((a, b) => b.total - a.total),
+      byService: services,
       byPaymentMethod: [...methodMap.values()]
         .map(m => ({ ...m, sharePct: pct(m.amount, totalCollected) }))
         .sort((a, b) => b.amount - a.amount),
     };
+  }
+
+  /**
+   * Report "by service" on the same movements as the Dashboard's
+   * revenueByProcedure (5.4): each issue/refund/void of an invoice spread
+   * over its lines by their share of the subtotal, so after the discount and
+   * net of refunds. Grouped by the line's wording; count = lines issued.
+   */
+  private async revenueByServiceRows(from: Date, to: Date, dentistId?: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ service: string; total: number; count: bigint }>
+    >`
+      SELECT COALESCE(NULLIF(ii."description", ''), 'Khác') AS service,
+             COALESCE(SUM(
+               r.amount * ii."line_total" / NULLIF(i."subtotal", 0)
+             ), 0)::float AS total,
+             SUM(r.cnt) AS count
+      FROM ${revenueRowsSql(from, to)} r
+      JOIN "invoices" i ON i.id = r.invoice_id
+      JOIN "invoice_items" ii ON ii."invoice_id" = i.id AND ii."deleted_at" IS NULL
+      ${
+        dentistId
+          ? Prisma.sql`JOIN "encounters" e ON e.id = i."encounter_id"
+              AND e."dentist_id"::text = ${dentistId}`
+          : Prisma.empty
+      }
+      GROUP BY 1
+    `;
+    return rows
+      .map(r => ({
+        service: r.service,
+        total: Math.round(Number(r.total)),
+        count: Number(r.count),
+      }))
+      .sort((a, b) => b.total - a.total);
   }
 
   /**
@@ -865,14 +971,37 @@ export class ReportsService {
     });
   }
 
-  /** BR-EXP-001: collected (net of refunds) vs APPROVED expenses. */
+  /**
+   * BR-EXP-001: collected (net of refunds) vs spending — approved expenses
+   * plus dentist payroll paid in the range (4.4), the latter also returned
+   * on its own as `payrollPaid` (expense categories cover other staff).
+   */
   async financeSummary(query: { from?: string; to?: string }) {
     const { fromDate, toDate } = this.resolveRange(query.from, query.to);
-    const [totalIncome, totalExpense] = await Promise.all([
+    const [totalIncome, expenses, payrollPaid] = await Promise.all([
       this.collectedTotal(fromDate, toDate),
       this.expense.aggregateApproved(fromDate, toDate),
+      this.payrollPaidTotal(fromDate, toDate),
     ]);
-    return { totalIncome, totalExpense };
+    return { totalIncome, totalExpense: expenses + payrollPaid, payrollPaid };
+  }
+
+  /**
+   * Net pay of payroll periods marked paid in [from, to], by the payment
+   * date (PAID, or LOCKED after being paid). An adjustment period holds
+   * only the difference to its original, so it adds just that.
+   */
+  private async payrollPaidTotal(from: Date, to: Date): Promise<number> {
+    const agg = await this.prisma.payrollLineItem.aggregate({
+      _sum: { netPayVnd: true },
+      where: {
+        period: {
+          status: { in: [PayrollPeriodStatus.PAID, PayrollPeriodStatus.LOCKED] },
+          paidAt: { gte: from, lte: to },
+        },
+      },
+    });
+    return Number(agg._sum.netPayVnd ?? 0);
   }
 
   /** Every open balance (same set as the aging report with no threshold). */

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PayrollService } from './payroll.service';
 import {
   ENCOUNTER_CLOSED_EVENT,
+  INVOICE_ADJUSTED_EVENT,
   INVOICE_ISSUED_EVENT,
   INVOICE_PAYMENT_VOIDED_EVENT,
   INVOICE_REFUNDED_EVENT,
@@ -43,7 +44,7 @@ export class PayrollEventListener {
   }
 
   /**
-   * Issue, void, refund and a cancelled payment/refund row change the
+   * Issue, void, refund, write-down and a cancelled payment/refund row change the
    * commission basis (issued total − refunds). A plain payment does not
    * (basis is the issued invoice, not cash), so it is not listened to.
    */
@@ -51,6 +52,7 @@ export class PayrollEventListener {
   @OnEvent(INVOICE_VOIDED_EVENT)
   @OnEvent(INVOICE_REFUNDED_EVENT)
   @OnEvent(INVOICE_PAYMENT_VOIDED_EVENT)
+  @OnEvent(INVOICE_ADJUSTED_EVENT)
   async handleInvoiceChanged(
     payload: InvoiceChangedEvent & { occurredAt?: Date; refundedAt?: Date },
   ) {

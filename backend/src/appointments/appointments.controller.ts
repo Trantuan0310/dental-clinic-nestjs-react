@@ -19,10 +19,8 @@ import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { AppointmentsService } from './appointments.service';
 import { AvailabilityService } from './availability.service';
-import { ShiftRegistrationService } from '../payroll/shift-registration.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
-  ApproveShiftRegistrationDto,
   AvailabilityQueryDto,
   BulkCreateWorkingSchedulesDto,
   BulkRescheduleDto,
@@ -35,12 +33,10 @@ import {
   CancelAppointmentDto,
   CheckInAppointmentDto,
   CreateAppointmentDto,
-  CreateShiftRegistrationDto,
   CreateTimeOffDto,
   CreateWorkingScheduleDto,
   ListAppointmentsQueryDto,
   NoShowDto,
-  RejectShiftRegistrationDto,
   RescheduleAppointmentDto,
   UpdateAppointmentDto,
   WaitingQueueQueryDto,
@@ -62,7 +58,6 @@ import {
 export class AppointmentsController {
   constructor(
     private readonly appointments: AppointmentsService,
-    private readonly shiftRegistrations: ShiftRegistrationService,
     private readonly availabilityService: AvailabilityService,
   ) {}
 
@@ -329,77 +324,6 @@ export class AppointmentsController {
     return { data: await this.appointments.scheduleImpact(query, actor) };
   }
 
-  // ==========================================================================
-  // Shift registration
-  // ==========================================================================
-
-  @Post('shift-registrations')
-  @RequirePermissions('shift_registration.write')
-  @HttpCode(HttpStatus.CREATED)
-  async createShiftRegistration(
-    @Body() dto: CreateShiftRegistrationDto,
-    @User() actor: JwtPayload,
-  ) {
-    return {
-      data: await this.appointments.createShiftRegistration(dto, actor),
-    };
-  }
-
-  @Get('shift-registrations')
-  @RequirePermissions('shift_registration.read')
-  async listShiftRegistrations(
-    @Query('dentistId') dentistId: string | undefined,
-    @Query('status') status: string | undefined,
-    @User() actor: JwtPayload,
-  ) {
-    return wrapAsPaginated(
-      await this.appointments.listShiftRegistrations(actor, {
-        dentistId,
-        status,
-      }),
-    );
-  }
-
-  @Post('shift-registrations/:id/approve')
-  @RequirePermissions('shift_registration.approve')
-  @HttpCode(HttpStatus.OK)
-  async approveShift(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ApproveShiftRegistrationDto,
-    @User() actor: JwtPayload,
-  ) {
-    return {
-      data: await this.appointments.approveShiftRegistration(id, dto.reason, actor),
-    };
-  }
-
-  @Post('shift-registrations/:id/reject')
-  @RequirePermissions('shift_registration.approve')
-  @HttpCode(HttpStatus.OK)
-  async rejectShift(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: RejectShiftRegistrationDto,
-    @User() actor: JwtPayload,
-  ) {
-    return {
-      data: await this.appointments.rejectShiftRegistration(id, dto.reason, actor),
-    };
-  }
-
-  @Post('shift-registrations/:id/cancel')
-  @RequirePermissions('shift_registration.write')
-  @HttpCode(HttpStatus.OK)
-  async cancelShift(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
-    // One cancel implementation for both routes (POST /shifts/registrations/
-    // :id/cancel is the other): same 24h rule in clinic time, late-cancel
-    // audit, booked-appointment guard and calendar lock.
-    const isAdmin =
-      actor.permissions.includes('shift.cancel') && actor.permissions.includes('shift.approve');
-    return {
-      data: await this.shiftRegistrations.cancel(id, actor.sub, isAdmin),
-    };
-  }
-
   // A walk-in is booked and checked in at once: front-desk work, so it needs
   // check-in rights (a dentist may book follow-ups, not receive walk-ins).
   @Post('walk-in')
@@ -501,7 +425,13 @@ export class AppointmentsController {
     @User() actor: JwtPayload,
   ) {
     return {
-      data: await this.appointments.checkIn(id, dto.override ?? false, dto.overrideReason, actor),
+      data: await this.appointments.checkIn(
+        id,
+        dto.override ?? false,
+        dto.overrideReason,
+        actor,
+        dto.ignoreOpenVisit ?? false,
+      ),
     };
   }
 

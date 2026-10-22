@@ -168,6 +168,8 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     await dentistPage.getByLabel(/số răng/i).fill('24');
     await dentistPage.getByLabel(/tên thủ thuật/i).fill('E2E stock-out probe treatment');
     await dentistPage.getByLabel(/đơn giá/i).fill('200000');
+    // 3.6: a procedure typed in (no catalogue service) needs a price reason.
+    await dentistPage.getByLabel(/lý do áp giá/i).fill('Thủ thuật ngoài danh mục (E2E)');
 
     // ---- Attach 1 unit of the same item checked above via the "Vật tư sử
     // dụng" picker (TreatmentsTab.tsx), then add it to the treatment's usage

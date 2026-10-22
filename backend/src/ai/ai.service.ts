@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InvoiceStatus } from '@prisma/client';
 import { OnEvent } from '@nestjs/event-emitter';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,13 @@ import { dentistCanReadPatient } from '../common/dentist-patient-access';
 import {
   ENCOUNTER_CLOSED_EVENT,
   EncounterClosedEvent,
+  INVOICE_ADJUSTED_EVENT,
+  INVOICE_ISSUED_EVENT,
+  INVOICE_PAYMENT_RECORDED_EVENT,
+  INVOICE_PAYMENT_VOIDED_EVENT,
+  INVOICE_REFUNDED_EVENT,
+  INVOICE_VOIDED_EVENT,
+  InvoiceEventBase,
   PATIENT_CLINICAL_DATA_CHANGED_EVENT,
   PatientClinicalDataChangedEvent,
 } from '../common/events/domain-events';
@@ -146,6 +154,17 @@ export class AiService {
     await this.invalidatePatientSummary(payload.patientId);
   }
 
+  /** The "unpaid invoices" bullet must not outlive a payment (5.6). */
+  @OnEvent(INVOICE_ISSUED_EVENT)
+  @OnEvent(INVOICE_PAYMENT_RECORDED_EVENT)
+  @OnEvent(INVOICE_REFUNDED_EVENT)
+  @OnEvent(INVOICE_PAYMENT_VOIDED_EVENT)
+  @OnEvent(INVOICE_VOIDED_EVENT)
+  @OnEvent(INVOICE_ADJUSTED_EVENT)
+  async onInvoiceChanged(payload: Pick<InvoiceEventBase, 'patientId'>): Promise<void> {
+    await this.invalidatePatientSummary(payload.patientId);
+  }
+
   private async collectSummaryInput(
     patientId: string,
     top: number,
@@ -158,8 +177,14 @@ export class AiService {
         ? this.fetchRecentEncounters(patientId, top)
         : Promise.resolve([] as Awaited<ReturnType<AiService['fetchRecentEncounters']>>),
       this.prisma.encounter.count({ where: { patientId, status: 'IN_PROGRESS' } }),
+      // Issued and still owed: a draft is not a bill yet (5.6).
       this.prisma.invoice.count({
-        where: { patientId, outstandingAmount: { gt: 0 }, voidedAt: null, deletedAt: null },
+        where: {
+          patientId,
+          status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIAL] },
+          outstandingAmount: { gt: 0 },
+          deletedAt: null,
+        },
       }),
     ]);
 

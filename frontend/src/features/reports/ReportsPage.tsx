@@ -337,6 +337,17 @@ export default function ReportsPage() {
               <p className="text-xl font-semibold tabular-nums sm:text-2xl text-gray-900 dark:text-white">
                 {reportLoading ? '—' : formatCurrency(report?.totalInvoiced ?? 0)}
               </p>
+              {!!report?.totalVoided && (
+                <p className="text-xs text-gray-500">{t('uiOperations.voidsDeducted')} {formatCurrency(report.totalVoided)}</p>
+              )}
+              {!!report?.totalAdjusted && (
+                <p className="text-xs text-gray-500">{t('uiOperations.adjustmentsDeducted')} {formatCurrency(report.totalAdjusted)}</p>
+              )}
+              {report && (
+                <p className="text-xs text-gray-500" title={t('uiOperations.totalDiscountHint')}>
+                  {t('uiOperations.totalDiscount')}: {formatCurrency(report.totalDiscount ?? 0)}
+                </p>
+              )}
             </div>
           </div>
         </Card>

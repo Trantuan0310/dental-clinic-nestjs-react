@@ -38,16 +38,7 @@ export function SidebarContent({
 
   if (!user) return null;
 
-  const groups = buildNavGroups(user.roles)
-    .map((g) => ({
-      ...g,
-      items: g.items.filter((i) => {
-        if (i.permission && !hasPermission(i.permission)) return false;
-        if (i.anyPermission && !i.anyPermission.some((p) => hasPermission(p))) return false;
-        return true;
-      }),
-    }))
-    .filter((g) => g.items.length > 0);
+  const groups = buildNavGroups(hasPermission);
 
   return (
     <>
