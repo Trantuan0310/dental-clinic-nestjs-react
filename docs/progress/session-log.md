@@ -4,6 +4,20 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 22/10/2026
+
+### Đang làm: sửa toàn bộ 32 điểm của báo cáo rà soát nghiệp vụ
+
+Người dùng: "sửa hết". Với các điểm cần chủ phòng khám quyết, chọn phương án an toàn nhất (đổi được nếu chủ phòng khám muốn khác):
+
+- 1.1 Đã check-in thì không "Hủy lịch", dùng "Đã về". 1.2 Check-in khi đang có lượt khác mở: chặn, cho "vẫn check-in" kèm xác nhận (giống walk-in).
+- 2.1 Cho gộp hồ sơ khi còn lịch tương lai/hoá đơn mở (chỉ chặn khi đang khám), so tên bỏ dấu, thêm nút gộp cho admin. 2.3 Tự xác nhận bỏ qua khi cùng người có yêu cầu/lịch khác. 2.7 Tra cứu chỉ bằng SĐT không trả giờ hẹn.
+- 3.1 Admin mở lại phiên khám đã đóng (bắt lý do, chỉ khi hoá đơn còn nháp/đã hủy, hoàn kho). 3.2 Thêm "điều chỉnh giảm / xoá nợ" cho hoá đơn đã phát hành (quyền riêng, chỉ admin, bắt lý do). 3.4 Giữ chặn khi thiếu tồn kho, nhưng cho sửa vật tư của thủ thuật khi phiên còn mở.
+- 4.2 Không khoá/duyệt kỳ lương trước khi hết kỳ; tính lại khi duyệt. 4.4 Cộng lương đã trả (theo ngày trả) vào "Tổng chi".
+- 5.1 Giảm giá trên 50% chỉ admin (đúng BR-BILL-025), ghi nhật ký, báo cáo có tổng giảm giá. 5.3 Hủy hoá đơn ghi bút toán âm vào ngày hủy, không sửa tháng đã chốt.
+
+Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo; (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
+
 ## 21/10/2026
 
 ### Rà soát nghiệp vụ các luồng (xong)
