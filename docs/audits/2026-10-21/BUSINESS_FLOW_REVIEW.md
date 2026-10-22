@@ -17,3 +17,21 @@ Mức: **Cao** (sai tiền/dữ liệu/quyền, chặn việc hằng ngày) · *
 6. **[Thấp] Đặc tả cũ hơn code** — BR-APPT-006/012 (`SPEC.md:452,458`) chưa ghi 60 phút ân hạn của cron vắng mặt và check-in muộn từ NO_SHOW trong ngày. Đề xuất: cập nhật SPEC theo code.
 
 Đã kiểm, thấy hợp lý: check-in đồng thời (ghi có điều kiện), check-in sớm/muộn, vắng mặt thủ công và tự động, các thao tác hoàn tác, đóng lượt cuối ngày, bắt đầu khám trong transaction, đổi lịch, chuyển bác sĩ, chống tạo trùng lịch.
+
+## 2. Đặt lịch online và hồ sơ bệnh nhân
+
+1. **[Cao] Hồ sơ trùng sinh từ đặt lịch online không gộp được trước buổi khám** → bác sĩ khám trên hồ sơ mới, thiếu dị ứng/tiền sử.
+   - Gộp bị chặn khi hồ sơ nguồn còn lịch SCHEDULED/CONFIRMED/CHECKED_IN tương lai hoặc hoá đơn DRAFT/ISSUED/PARTIAL (`backend/src/patients/patients.service.ts:1025-1050`); tên phải trùng khớp (chỉ bỏ qua hoa/thường, `:1016`), trong khi đặt lịch coi "Nguyen Van An" = "Nguyễn Văn An" (`backend/src/booking/booking.service.ts:224-252`). Frontend không có màn hình gộp (không gọi `POST /patients/merge`); lịch hẹn không đổi được `patientId`.
+   - Muốn gộp trước giờ khám phải hủy lịch (khách nhận email hủy) rồi đặt lại.
+   - Đề xuất: cho gộp khi còn lịch tương lai/hoá đơn mở (code đã chuyển hết khoá ngoại sang hồ sơ đích, `:1052-1071`), chỉ chặn khi đang có phiên khám IN_PROGRESS; so tên bằng `foldName`; thêm nút gộp cho admin. **Cần chủ phòng khám quyết (BR-PT-010).**
+2. **[Trung bình] Báo trước và giữ chỗ tính theo đồng hồ, không theo giờ mở cửa** — báo trước 120 phút từ `Date.now()` (`booking.service.ts:587-591`), giữ chỗ hết 120 phút sau khi gửi (`:675`). Khách đặt 21:00 cho 08:00 sáng mai: giữ chỗ hết lúc 23:00, người khác đặt chồng được; nếu chưa ai duyệt, khách đứng ở quầy vẫn nhận email "quá hạn" và không bấm "Khách đã đến" được với yêu cầu EXPIRED (`:2800-2806`).
+   - Đề xuất: tính theo giờ làm việc (hoặc không mở các giờ đầu sáng mai cho yêu cầu gửi sau giờ đóng cửa); cho "Khách đã đến" với yêu cầu EXPIRED cùng ngày.
+3. **[Trung bình, quyết định cần xem lại] Bật tự xác nhận thì một khách đặt nhiều lần được xác nhận hết** — `tryAutoConfirm` không xét yêu cầu mở/lịch sắp tới của cùng hồ sơ (`booking.service.ts:2323-2340`). Đề xuất: có yêu cầu/lịch khác của cùng người thì để lễ tân duyệt. (Công tắc `BOOKING_AUTO_CONFIRM` mặc định tắt.)
+4. **[Thấp] Hồ sơ đã lưu trữ bị bỏ qua khi xác nhận yêu cầu** → tạo hồ sơ mới, tách lịch sử (trái BR-PT-018). `patientsByPhone` (`:2612`), `sameNameAndDobPatients` (`:1744`) lọc `deleted_at IS NULL`. Đề xuất: báo lễ tân khi khớp hồ sơ đã lưu trữ.
+5. **[Thấp] Gộp hồ sơ bỏ SĐT nguồn khỏi lịch sử SĐT** (`patients.service.ts:1076`) → lần sau khách đặt bằng số đó không khớp. Đề xuất: ghi một dòng `patientPhoneHistory` cho hồ sơ đích.
+6. **[Thấp] Nhãn "BN mới, BS không nhận" xét nhầm bác sĩ sau khi khách từ chối giờ đề xuất** (`booking.service.ts:1121-1124`, `:1444`). Đề xuất: dùng `effectiveDentistId(r)`.
+7. **[Thấp, quyết định cần xem lại] Tra cứu chỉ bằng SĐT vẫn trả giờ hẹn** (`booking.service.ts:3065-3080`), trái comment trong code. Ai biết số (kể cả số bị cấp lại) thấy lịch khám của cả nhà. Đề xuất: bỏ giờ hẹn khỏi kết quả hoặc chủ phòng khám xác nhận chủ ý.
+
+Chưa xác nhận: `PATCH /patients/:id` có thể sửa hồ sơ đã lưu trữ/gộp; lễ tân sửa được dị ứng (lệch BR-PT-015).
+
+Đã kiểm, thấy hợp lý: chống gửi trùng, hai lễ tân cùng xác nhận, khách đổi SĐT, trẻ em do phụ huynh đặt, đồng ý/từ chối giờ đề xuất, khách tự hủy, gộp hồ sơ chuyển đủ các bảng, xoá mềm có chặn, danh sách "cần gọi".
