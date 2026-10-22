@@ -12,7 +12,8 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 - Xong mảng 1 (lịch hẹn, luồng trong ngày): 6 phát hiện (1 Trung bình, 5 Thấp), phát hiện chính đã kiểm lại trong code.
 - Xong mảng 2 (đặt lịch online, bệnh nhân): 7 phát hiện (1 Cao, 2 Trung bình, 4 Thấp).
 - Xong mảng 3 (phiên khám → hoá đơn → kho): 6 phát hiện (2 Cao, 2 Trung bình, 2 Thấp).
-- Còn: (4) nhân sự, lương, chi phí; (5) phân quyền, báo cáo, AI.
+- Xong mảng 4 (nhân sự, lương, chi phí): 6 phát hiện (3 Cao, 1 Trung bình, 2 Thấp).
+- Còn: (5) phân quyền, báo cáo, AI.
 
 ### Sửa 3 lỗi của lượt kiểm tra (nhánh `claude/admiring-keller-933rkp`, PR vào `main`)
 

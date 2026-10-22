@@ -52,3 +52,18 @@ Chưa xác nhận: `PATCH /patients/:id` có thể sửa hồ sơ đã lưu tr�
 Chưa xác nhận / ngoài phạm vi đặc tả: giao diện có báo rõ lỗi thiếu tồn kho khi đóng phiên không; chưa có quản lý lô và hạn dùng; chưa có kế hoạch điều trị nhiều buổi (lấy tuỷ, implant) — buổi sau chọn lại dịch vụ thì tính lại đủ giá.
 
 Đã kiểm, thấy hợp lý: hủy rồi mở lại phiên đã hủy, không tạo trùng hoá đơn, thu nhiều lần (chống bấm lặp, không thu quá nợ), hủy phiếu thu và hoàn tiền có kiểm soát, đổi giá danh mục không ảnh hưởng hoá đơn cũ, phiên không có thủ thuật không tạo hoá đơn 0đ.
+
+## 4. Nhân sự, lịch làm, danh mục dịch vụ, lương, chi phí
+
+1. **[Cao] "Tổng chi" bỏ sót khoản chi đã hoàn tiền (REIMBURSED)** — `backend/src/expense/expense.service.ts:323-334` chỉ cộng `APPROVED`, mà APPROVED → REIMBURSED là bước cuối; số này lên thẻ "Thu chi" (`reports.service.ts:868-875`). Dữ liệu mẫu: 8 khoản, 111.483.932đ bị bỏ sót → chủ phòng khám thấy lãi cao hơn thật. Đề xuất: cộng cả `APPROVED` và `REIMBURSED`.
+2. **[Cao] Duyệt kỳ lương trước ngày cuối kỳ thì hoa hồng của hoá đơn phát hành sau đó mất hẳn** — `lockPeriod`/`approvePeriod` (`backend/src/payroll/payroll.service.ts:1772-1840`) không kiểm `periodEnd`; listener chỉ ghi vào kỳ còn mở chứa `issuedAt` (`payroll.listener.ts:71-75`). Duyệt lương tháng 3 ngày 25/3 → hoá đơn 26–31/3 không vào kỳ nào. Duyệt kỳ cũng không bắt tính lại (đổi nghỉ phép, ca, chế độ lương không cập nhật phiếu lương).
+   - Đề xuất: chặn khoá/duyệt khi kỳ chưa hết; tự tính lại khi duyệt; nếu muốn trả sớm thì hoá đơn rơi vào kỳ đã đóng chuyển sang kỳ mở kế tiếp.
+3. **[Cao] Không đổi được tỷ lệ hoa hồng/lương cơ bản giữa chừng trên giao diện** — `frontend/src/features/payroll/CompensationListPage.tsx:30-52` chỉ tạo chế độ mới (không có ngày kết thúc), backend từ chối chồng ngày với chế độ đang mở vô hạn (`payroll.service.ts:452-470`) → lỗi 409, không có nút kết thúc chế độ cũ. API sửa tại chỗ thì áp tỷ lệ mới ngược về đầu chế độ; xoá thì lương và hoa hồng cả kỳ về 0.
+   - Đề xuất: tạo chế độ mới thì tự kết thúc chế độ cũ vào `effectiveFrom − 1`; bỏ sửa tỷ lệ tại chỗ; "ngưng" chỉ đặt `effectiveTo`.
+4. **[Trung bình, cần chủ phòng khám chọn] Lương bác sĩ không có trong "Thu – Chi"** (`reports.service.ts:868-875`; danh mục chi mẫu "Lương nhân viên" ghi "ngoài bác sĩ"). Đề xuất: (a) cộng lương kỳ đã trả vào "Tổng chi" theo ngày trả, hoặc (b) đánh dấu kỳ đã trả thì tự sinh khoản chi "Lương bác sĩ".
+5. **[Thấp] Đăng ký ca có hai bản với luật và quyền khác nhau** — `payroll/shift-registration.service.ts:80-180` (chặn mọi ca thứ hai trong ngày) và `appointments.service.ts:3795-3960` (chỉ chặn khi chồng giờ). Đề xuất: giữ một bản.
+6. **[Thấp] Truy thu hoa hồng chỉ xảy ra khi bác sĩ còn được tính lương** (`payroll.service.ts:1068-1075, 798-860`) → hoá đơn bị hủy sau khi bác sĩ nghỉ thì không ghi nhận khoản trả thừa.
+
+Chưa xác nhận: kỳ điều chỉnh chép nguyên `netPayVnd` của kỳ gốc (`payroll.service.ts:2010-2035`) — có thể trả hai lần nếu đánh dấu đã trả theo tổng; `softDeleteCompensation` lấy "hôm nay" theo UTC.
+
+Đã kiểm, thấy hợp lý: hoa hồng tính trên dòng hoá đơn sau giảm giá/hoàn tiền, tỷ lệ theo ngày khám, truy thu khi hoá đơn bị hủy, lập lại hoá đơn không trả hai lần; bác sĩ nghỉ việc bị chặn khi còn lịch; đổi giá dịch vụ không ảnh hưởng lịch đã đặt; không tự duyệt khoản chi của mình.
