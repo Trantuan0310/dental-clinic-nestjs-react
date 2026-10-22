@@ -140,14 +140,9 @@ export function CommandPalette() {
 
   const navItems = useMemo<PaletteItem[]>(() => {
     if (!user) return [];
-    return buildNavGroups(user.roles)
+    return buildNavGroups(hasPermission)
       .flatMap((g) =>
         g.items
-          .filter((i) => {
-            if (i.permission && !hasPermission(i.permission)) return false;
-            if (i.anyPermission && !i.anyPermission.some((p) => hasPermission(p))) return false;
-            return true;
-          })
           .map<PaletteItem>((i) => ({
             id: i.to,
             to: i.to,

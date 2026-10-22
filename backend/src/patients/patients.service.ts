@@ -45,6 +45,7 @@ import {
   isValidEmail,
   isValidIdentifierValue,
   isValidVnPhone,
+  foldName,
   mergeStringLists,
   readJsonStringArray,
 } from './domain/patient-rules';
@@ -225,7 +226,8 @@ export class PatientsService {
 
   async update(id: string, dto: UpdatePatientDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findUnique({ where: { id } });
-    if (!current) throw new PatientNotFoundException(id);
+    // Archived and merged-away records are read-only; restore one first.
+    if (!current || current.deletedAt) throw new PatientNotFoundException(id);
 
     // BR-PT-016: code immutable
     if ('code' in (dto as Record<string, unknown>)) {
@@ -359,7 +361,8 @@ export class PatientsService {
    */
   async overrideDob(id: string, dto: OverrideDobDto, actor: JwtPayload) {
     const current = await this.prisma.patient.findUnique({ where: { id } });
-    if (!current) throw new PatientNotFoundException(id);
+    // Archived and merged-away records are read-only; restore one first.
+    if (!current || current.deletedAt) throw new PatientNotFoundException(id);
     if ((dto.reason?.trim().length ?? 0) < 10) {
       throw new PatientContactRequiredException('Lý do sửa ngày sinh phải có ít nhất 10 ký tự');
     }
@@ -1013,8 +1016,8 @@ export class PatientsService {
         if (!target) throw new PatientNotFoundException(dto.targetPatientId);
         if (source.deletedAt) throw new PatientMergeInvalidException('Hồ sơ nguồn đã bị xóa');
         if (target.deletedAt) throw new PatientMergeInvalidException('Hồ sơ đích đã bị xóa');
-        // The name/DOB match rule is unchanged here (tightening it is a follow-up).
-        if (source.fullName.trim().toLowerCase() !== target.fullName.trim().toLowerCase()) {
+        // Names compare the way online booking matches them: accents and case ignored.
+        if (foldName(source.fullName) !== foldName(target.fullName)) {
           throw new PatientMergeInvalidException('Chỉ gộp được hai hồ sơ cùng họ tên (BR-PT-019)');
         }
         if (source.dob.getTime() !== target.dob.getTime()) {
@@ -1023,31 +1026,14 @@ export class PatientsService {
           );
         }
 
-        const [srcFutureAppts, srcOutstandingInvoices] = await Promise.all([
-          tx.appointment.count({
-            where: {
-              patientId: source.id,
-              status: { in: ['SCHEDULED', 'CONFIRMED', 'CHECKED_IN'] },
-              startAt: { gte: new Date() },
-              deletedAt: null,
-            },
-          }),
-          tx.invoice.count({
-            where: {
-              patientId: source.id,
-              status: { in: ['DRAFT', 'ISSUED', 'PARTIAL'] },
-              deletedAt: null,
-            },
-          }),
-        ]);
-        if (srcFutureAppts > 0) {
+        // Upcoming appointments and open invoices move to the target below, so
+        // they don't block a merge (BR-PT-010); a visit being charted right now does.
+        const inProgress = await tx.encounter.count({
+          where: { patientId: { in: [source.id, target.id] }, status: 'IN_PROGRESS' },
+        });
+        if (inProgress > 0) {
           throw new PatientMergeInvalidException(
-            `Hồ sơ nguồn còn ${srcFutureAppts} lịch hẹn sắp tới`,
-          );
-        }
-        if (srcOutstandingInvoices > 0) {
-          throw new PatientMergeInvalidException(
-            `Hồ sơ nguồn còn ${srcOutstandingInvoices} hóa đơn chưa thanh toán`,
+            'Một trong hai hồ sơ đang có phiên khám chưa kết thúc',
           );
         }
 
@@ -1130,12 +1116,14 @@ export class PatientsService {
             updatedBy: actor.sub,
           },
         });
-        if (inheritPhone) {
+        // The source's number stays findable on the target (online booking also
+        // matches by phone history), whether or not it becomes the primary.
+        if (source.primaryPhone) {
           await tx.patientPhoneHistory.create({
             data: {
               patientId: target.id,
-              oldPhone: null,
-              newPhone: source.primaryPhone as string,
+              oldPhone: inheritPhone ? null : source.primaryPhone,
+              newPhone: (inheritPhone ? source.primaryPhone : target.primaryPhone) as string,
               changedBy: actor.sub,
             },
           });

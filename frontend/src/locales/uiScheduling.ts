@@ -122,6 +122,11 @@ export const vi = {
   bookingOnlineClosed: 'Phòng khám chưa mở dịch vụ đặt lịch trực tuyến. Vui lòng gọi trực tiếp cho lễ tân.',
   bookingEstimatedDuration: 'Thời gian khám dự kiến khoảng {{minutes}} phút.',
   patientAlreadyInClinic: 'Bệnh nhân đang có lượt khác hôm nay',
+  archivedPatientMatchHeading: 'Có hồ sơ đã lưu trữ khớp với yêu cầu này',
+  archivedPatientMatchHint: 'Hồ sơ đã lưu trữ không được tự động chọn. Nếu đúng là khách này, hãy khôi phục hồ sơ ở trang Bệnh nhân trước khi xác nhận, để không tạo hồ sơ mới và tách lịch sử khám.',
+  archivedPatientInline: '{{name}} ({{code}}), sinh {{dob}}',
+  bookingRequestNumber: 'Yêu cầu {{number}}',
+  bookingTimeHiddenByPhone: 'Giờ hẹn không hiển thị khi tra cứu bằng số điện thoại. Mở liên kết trong email xác nhận để xem giờ hẹn.',
 } as const;
 
 export const en = {
@@ -248,4 +253,9 @@ export const en = {
   bookingOnlineClosed: 'The clinic is not taking online bookings yet. Please call reception directly.',
   bookingEstimatedDuration: 'Estimated visit length: about {{minutes}} minutes.',
   patientAlreadyInClinic: 'Patient already has another visit today',
+  archivedPatientMatchHeading: 'An archived record matches this request',
+  archivedPatientMatchHint: 'Archived records are not matched automatically. If this is the same patient, restore the record on the Patients page before confirming, so a new record does not split their history.',
+  archivedPatientInline: '{{name}} ({{code}}), born {{dob}}',
+  bookingRequestNumber: 'Request {{number}}',
+  bookingTimeHiddenByPhone: 'The visit time is not shown when looking up by phone number. Open the link in your confirmation email to see it.',
 } as const;

@@ -61,3 +61,34 @@ export const mergeStringLists = (...lists: string[][]): string[] => {
   }
   return out;
 };
+
+/** Lower case, no accents (đ → d), single spaces: how a name typed on a phone compares. */
+export function foldName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('vi')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The same person's name as typed twice: equal once accents and case are
+ * ignored, or one leaves out middle names ("Ngô Nam" for "Ngô Quang Nam").
+ * The family name (first word) and the given name (last) must both agree, and
+ * the shorter name's words must appear in order in the longer. A single word
+ * only ever equals itself.
+ */
+export function similarName(a: string, b: string): boolean {
+  const x = foldName(a).split(' ').filter(Boolean);
+  const y = foldName(b).split(' ').filter(Boolean);
+  if (!x.length || !y.length) return false;
+  if (x.join(' ') === y.join(' ')) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (short.length < 2) return false;
+  if (short[0] !== long[0] || short[short.length - 1] !== long[long.length - 1]) return false;
+  let next = 0;
+  for (const word of long) if (word === short[next]) next++;
+  return next === short.length;
+}

@@ -494,7 +494,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route
                 path="admin/roles"
                 element={
-                  <ProtectedRoute permission="role.read">
+                  <ProtectedRoute permission="role.upsert">
                     <RolesPage />
                   </ProtectedRoute>
                 }
@@ -502,7 +502,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route
                 path="admin/audit"
                 element={
-                  <ProtectedRoute permission="audit.read">
+                  <ProtectedRoute permission="system.audit.read">
                     <AuditLogsPage />
                   </ProtectedRoute>
                 }
