@@ -130,6 +130,39 @@ describe('MedicalRecordsService', () => {
       );
     });
 
+    it('starts the clinical note with the reason given at booking (BR-MR-013)', async () => {
+      const appt = {
+        id: 'appt-1',
+        status: 'CHECKED_IN',
+        deletedAt: null,
+        patientId: 'patient-1',
+        dentistId: dentistActor.sub,
+        patient: {},
+        dentist: {},
+      };
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.encounter.create as jest.Mock).mockResolvedValue({ id: 'enc-new' });
+
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        ...appt,
+        reason: '  Đau răng hàm dưới  ',
+      });
+      await service.startEncounterForAppointment('appt-1', dentistActor);
+      expect(prisma.clinicalNote.create).toHaveBeenCalledWith({
+        data: {
+          encounterId: 'enc-new',
+          chiefComplaint: 'Đau răng hàm dưới',
+          lastEditedBy: dentistActor.sub,
+        },
+      });
+
+      (prisma.clinicalNote.create as jest.Mock).mockClear();
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({ ...appt, reason: null });
+      await service.startEncounterForAppointment('appt-1', dentistActor);
+      expect(prisma.clinicalNote.create).not.toHaveBeenCalled();
+    });
+
     it('returns existing encounter if IN_PROGRESS (idempotent)', async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         id: 'appt-1',
@@ -984,6 +1017,31 @@ describe('MedicalRecordsService', () => {
   });
 
   describe('closeEncounter', () => {
+    // BR-MR-013: a note with a chief complaint or diagnosis is on file
+    // unless a test says otherwise.
+    beforeEach(() => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue({
+        chiefComplaint: 'Đau răng',
+        diagnosis: null,
+      });
+    });
+
+    it('refuses to close without a chief complaint or diagnosis (BR-MR-013)', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+        validEncounter({ treatments: [] }),
+      );
+      for (const note of [null, { chiefComplaint: '  ', diagnosis: '' }]) {
+        (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue(note);
+        await expect(
+          service.closeEncounter('enc-1', {} as any, dentistActor),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ error: 'CLINICAL_NOTE_REQUIRED' }),
+        });
+      }
+      expect(prisma.encounter.update).not.toHaveBeenCalled();
+    });
+
     it('throws when encounter is COMPLETED (BR-MR-003)', async () => {
       (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
       (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
@@ -1850,6 +1908,12 @@ describe('MedicalRecordsService', () => {
   });
 
   describe('business flow review 3.1, 3.4–3.6', () => {
+    beforeEach(() => {
+      (prisma.clinicalNote.findUnique as jest.Mock).mockResolvedValue({
+        chiefComplaint: 'Đau răng',
+        diagnosis: null,
+      });
+    });
     const admin = userPayloadWithPermissions(['encounter.reopen', 'encounter.read.any']);
     const closed = () =>
       validEncounter({

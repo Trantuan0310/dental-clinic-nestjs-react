@@ -277,6 +277,29 @@ describe('AppointmentsService', () => {
       });
     });
 
+    it('refuses a check-in while the dentist has approved time off over the visit (BR-APPT-020)', async () => {
+      const start = new Date(Date.now() + 5 * 60_000);
+      (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'appt-1',
+        status: AppointmentStatus.CONFIRMED,
+        patientId: 'patient-1',
+        dentistId: 'dentist-1',
+        startAt: start,
+        endAt: new Date(start.getTime() + 30 * 60_000),
+        deletedAt: null,
+      });
+      (prisma.timeOff.findFirst as jest.Mock).mockResolvedValue({
+        startAt: new Date(start.getTime() - 60 * 60_000),
+        endAt: new Date(start.getTime() + 4 * 60 * 60_000),
+      });
+      const error = await service.checkIn('appt-1', false, undefined, actor).catch(e => e);
+      expect(error.getResponse()).toMatchObject({ error: 'DENTIST_ON_TIME_OFF' });
+      expect(error.message).toMatch(/nghỉ phép/);
+      const where = (prisma.timeOff.findFirst as jest.Mock).mock.calls[0][0].where;
+      expect(where).toMatchObject({ dentistId: 'dentist-1', status: 'APPROVED', deletedAt: null });
+      expect(prisma.appointment.updateMany).not.toHaveBeenCalled();
+    });
+
     it('refuses a check-in into the queue of a dentist on leave (ON_LEAVE)', async () => {
       (prisma.appointment.findUnique as jest.Mock).mockResolvedValue({
         id: 'appt-1',

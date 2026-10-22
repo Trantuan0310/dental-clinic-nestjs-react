@@ -42,6 +42,21 @@ describe('InventoryService', () => {
       ).rejects.toThrow(SkuAlreadyExistsException);
     });
 
+    it('refuses a name already used by an item in use, case ignored (BR-INV-001)', async () => {
+      (prisma.inventoryItem.findFirst as jest.Mock)
+        .mockResolvedValueOnce(null) // SKU free
+        .mockResolvedValueOnce({ id: 'other' }); // name taken
+      const error = await service
+        .createItem({ sku: 'SKU-NEW', name: ' găng tay ', unit: 'box' } as any, adminActor)
+        .catch(e => e);
+      expect(error.getStatus()).toBe(409);
+      expect((prisma.inventoryItem.findFirst as jest.Mock).mock.calls[1][0].where).toMatchObject({
+        deletedAt: null,
+        name: { equals: 'găng tay', mode: 'insensitive' },
+      });
+      expect(prisma.inventoryItem.create).not.toHaveBeenCalled();
+    });
+
     it('creates item with ACTIVE status, logs audit', async () => {
       (prisma.inventoryItem.findFirst as jest.Mock).mockResolvedValue(null);
       (prisma.inventoryItem.create as jest.Mock).mockResolvedValue(validInventoryItem());
@@ -209,6 +224,20 @@ describe('InventoryService', () => {
           }),
         }),
       );
+    });
+
+    it('writes nothing when the count matches what is on hand (BR-INV-023)', async () => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(
+        validInventoryItem({ quantityOnHand: new Prisma.Decimal(50) }),
+      );
+      await service.adjustStock(
+        'item-1',
+        { newQuantity: 50, reason: 'kiểm kê' } as any,
+        adminActor,
+      );
+      expect(prisma.inventoryItem.updateMany).not.toHaveBeenCalled();
+      expect(prisma.stockMovement.create).not.toHaveBeenCalled();
     });
 
     it('runs inside a Serializable transaction', async () => {

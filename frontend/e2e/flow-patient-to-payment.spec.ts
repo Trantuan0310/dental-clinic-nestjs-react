@@ -1,5 +1,5 @@
 import { test, expect, getSharedContext, saveDemoVideo, persistAuthState } from './fixtures';
-import { loginAs, ACCOUNTS, randomVnPhone, clinicNowMinutes } from './flow-helpers';
+import { loginAs, ACCOUNTS, randomVnPhone, clinicNowMinutes, addChiefComplaint } from './flow-helpers';
 
 /**
  * Detailed end-to-end journey ("test luồng chi tiết") requested by the
@@ -246,6 +246,7 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     checkpoint('step 7 done: prescription persisted after reload');
 
     // ---- Step 8: dentist closes the encounter ----
+    await addChiefComplaint(dentistPage, 'E2E: khám và trám răng');
     await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
     await dentistPage.getByLabel(/tóm tắt cuối cùng/i).fill('E2E: hoàn tất hàn răng 16, hẹn tái khám nếu cần.');
     const checkboxes = dentistPage.locator('input[type="checkbox"]');

@@ -353,7 +353,8 @@ export default function InventoryItemDetailPage() {
               isLoading={adjustMutation.isPending}
               disabled={
                 !adjustmentQuantity ||
-                !adjustmentReason ||
+                // Same minimum as the server (BR-INV-006/008).
+                adjustmentReason.trim().length < 3 ||
                 parsedAdjustQty <= 0 ||
                 previewQuantity === null ||
                 previewQuantity < 0

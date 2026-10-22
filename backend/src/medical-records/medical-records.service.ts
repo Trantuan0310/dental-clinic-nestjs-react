@@ -28,7 +28,12 @@ import {
   DentalChartPatientMismatchException,
   DentalChartInvalidToothException,
 } from './domain/exceptions';
-import { isValidFdiToothNumber } from './domain/tooth-numbers';
+import {
+  isValidFdiToothNumber,
+  invalidToothEntries,
+  TOOTH_NOTE_MAX,
+  TOOTH_STATUSES,
+} from './domain/tooth-numbers';
 import {
   ClinicalNoteField,
   CloseEncounterDto,
@@ -289,7 +294,17 @@ export class MedicalRecordsService {
             },
           })
         ).id;
-      if (!existing) opened = true;
+      if (!existing) {
+        opened = true;
+        // The reason the patient gave when booking starts the clinical note,
+        // so the chief complaint (needed to close, BR-MR-013) is already there.
+        const reason = (current.chiefComplaint ?? current.reason ?? '').trim();
+        if (reason) {
+          await tx.clinicalNote.create({
+            data: { encounterId, chiefComplaint: reason.slice(0, 2000), lastEditedBy: actor.sub },
+          });
+        }
+      }
       // BR-APPT-034: the exam start is part of the visit's history.
       if (current.status === 'CHECKED_IN') {
         await this.appointmentHistory(tx, actor, appointmentId, 'APPOINTMENT_EXAM_STARTED', {
@@ -585,6 +600,27 @@ export class MedicalRecordsService {
         }
         if (encounter.status === EncounterStatus.CANCELLED) {
           throw new EncounterNotClosableException('Phiên khám đã bị hủy');
+        }
+
+        // BR-MR-013: a closed encounter is a medical record; it needs at
+        // least why the patient came or what was found.
+        const note = await tx.clinicalNote.findUnique({
+          where: { encounterId },
+          select: { chiefComplaint: true, diagnosis: true },
+        });
+        const filled = [
+          note?.chiefComplaint,
+          note?.diagnosis,
+          encounter.chiefComplaint,
+          encounter.diagnosis,
+        ].some(v => !!v?.trim());
+        if (!filled) {
+          throw new BusinessRuleException(
+            'Chưa thể kết thúc phiên khám: hãy ghi lý do khám hoặc chẩn đoán trong ghi chú lâm sàng (BR-MR-013).',
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            undefined,
+            'CLINICAL_NOTE_REQUIRED',
+          );
         }
 
         // An allergy recorded after the prescription was saved must not slip
@@ -1950,6 +1986,16 @@ export class MedicalRecordsService {
       });
       if (invalidTeeth.length > 0) {
         throw new DentalChartInvalidToothException(invalidTeeth, dto.patientType);
+      }
+      // BR-MR-008: only the tooth states the chart offers.
+      const badEntries = invalidToothEntries(dto.teeth);
+      if (badEntries.length > 0) {
+        throw new BusinessRuleException(
+          `Trạng thái răng không hợp lệ ở răng ${badEntries.join(', ')}: chỉ nhận ${TOOTH_STATUSES.join(', ')}; ghi chú tối đa ${TOOTH_NOTE_MAX} ký tự.`,
+          HttpStatus.BAD_REQUEST,
+          { teeth: badEntries },
+          'DENTAL_CHART_INVALID_STATUS',
+        );
       }
 
       const existing = await tx.dentalChartSnapshot.findUnique({

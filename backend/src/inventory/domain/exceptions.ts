@@ -13,6 +13,18 @@ export class SkuAlreadyExistsException extends BusinessRuleException {
   }
 }
 
+/** BR-INV-001: two items in use with the same name confuse stock-outs and the materials picker. */
+export class ItemNameAlreadyExistsException extends BusinessRuleException {
+  constructor(name: string) {
+    super(
+      `Đã có vật tư tên "${name}" đang dùng. Đặt tên khác (ví dụ thêm quy cách) hoặc dùng vật tư sẵn có.`,
+      HttpStatus.CONFLICT,
+      { name },
+      'ITEM_NAME_EXISTS',
+    );
+  }
+}
+
 export class InsufficientStockException extends BusinessRuleException {
   constructor(itemName: string, required: number, available: number) {
     // Same fix as MedicalRecords' InsufficientStockException: the specific

@@ -16,3 +16,37 @@ export function isValidFdiToothNumber(n: unknown): boolean {
 export const FDI_TOOTH_NUMBERS: readonly number[] = Array.from({ length: 90 }, (_, i) => i).filter(
   isValidFdiToothNumber,
 );
+
+/**
+ * BR-MR-008: the tooth states a chart may record — the ones the chart screen
+ * offers (frontend/src/types/medical-records.ts TOOTH_STATUSES).
+ */
+export const TOOTH_STATUSES = [
+  'healthy',
+  'cavity',
+  'filled',
+  'crowned',
+  'missing',
+  'implant',
+  'extraction_needed',
+] as const;
+
+export const TOOTH_NOTE_MAX = 1000;
+
+/** Teeth whose entry is not `{ status: <one of TOOTH_STATUSES>, notes?: string ≤ 1000 }`. */
+export function invalidToothEntries(teeth: Record<string, unknown>): string[] {
+  return Object.entries(teeth ?? {})
+    .filter(([, v]) => {
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return true;
+      const { status, notes } = v as { status?: unknown; notes?: unknown };
+      if (typeof status !== 'string' || !(TOOTH_STATUSES as readonly string[]).includes(status)) {
+        return true;
+      }
+      return (
+        notes !== undefined &&
+        notes !== null &&
+        (typeof notes !== 'string' || notes.length > TOOTH_NOTE_MAX)
+      );
+    })
+    .map(([k]) => k);
+}

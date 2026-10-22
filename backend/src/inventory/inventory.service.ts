@@ -7,6 +7,7 @@ import { endOfDayInclusive } from '../common/date-range.util';
 import {
   InventoryItemNotFoundException,
   InsufficientStockException,
+  ItemNameAlreadyExistsException,
   SkuAlreadyExistsException,
   StockMovementInvalidException,
 } from './domain/exceptions';
@@ -51,6 +52,7 @@ export class InventoryService {
       select: { id: true },
     });
     if (skuExists) throw new SkuAlreadyExistsException(dto.sku);
+    await this.assertNameFree(dto.name);
 
     const created = await this.prisma.inventoryItem.create({
       data: {
@@ -79,9 +81,28 @@ export class InventoryService {
     return created;
   }
 
+  /** BR-INV-001: no other item in use (not deleted) has this name, case ignored. */
+  private async assertNameFree(name: string, exceptId?: string) {
+    const taken = await this.prisma.inventoryItem.findFirst({
+      where: {
+        deletedAt: null,
+        name: { equals: name.trim(), mode: 'insensitive' },
+        ...(exceptId && { id: { not: exceptId } }),
+      },
+      select: { id: true },
+    });
+    if (taken) throw new ItemNameAlreadyExistsException(name.trim());
+  }
+
   async updateItem(id: string, dto: UpdateInventoryItemDto, actor: JwtPayload) {
     const item = await this.prisma.inventoryItem.findUnique({ where: { id } });
     if (!item || item.deletedAt) throw new InventoryItemNotFoundException(id);
+    if (
+      dto.name !== undefined &&
+      dto.name.trim().toLowerCase() !== item.name.trim().toLowerCase()
+    ) {
+      await this.assertNameFree(dto.name, id);
+    }
 
     const updated = await this.prisma.inventoryItem.update({
       where: { id },
@@ -321,6 +342,9 @@ export class InventoryService {
           throw new StockMovementInvalidException('Adjusted quantity cannot be negative');
         }
         const diff = after - before;
+        // BR-INV-023: a count that matches what is on hand changes nothing;
+        // no movement row or audit entry for it.
+        if (diff === 0) return item;
 
         // Atomic absolute-set: use guarded updateMany in case item was just
         // soft-deleted in a concurrent tx.

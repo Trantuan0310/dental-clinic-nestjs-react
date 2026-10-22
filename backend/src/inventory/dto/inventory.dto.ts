@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsNumber, Min, IsUUID, IsEnum } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  Min,
+  IsUUID,
+  IsEnum,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemStatus, MovementType, MovementRefType } from '@prisma/client';
 
@@ -155,10 +165,13 @@ export class StockAdjustmentDto {
   @IsNumber()
   quantity?: number;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  reason?: string;
+  /** BR-INV-006 / BR-INV-008: why stock went down or was corrected. */
+  @ApiProperty({ minLength: 3, maxLength: 500 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Lý do không hợp lệ' })
+  @MinLength(3, { message: 'Nhập lý do (ít nhất 3 ký tự)' })
+  @MaxLength(500, { message: 'Lý do tối đa 500 ký tự' })
+  reason!: string;
 }
 
 export class StockInDto {
@@ -187,10 +200,13 @@ export class StockOutDto {
   @IsNumber()
   quantity!: number;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  reason?: string;
+  /** BR-INV-006 / BR-INV-008: why stock went down or was corrected. */
+  @ApiProperty({ minLength: 3, maxLength: 500 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Lý do không hợp lệ' })
+  @MinLength(3, { message: 'Nhập lý do (ít nhất 3 ký tự)' })
+  @MaxLength(500, { message: 'Lý do tối đa 500 ký tự' })
+  reason!: string;
 
   @ApiPropertyOptional({ enum: MovementRefType })
   @IsOptional()
