@@ -16,7 +16,10 @@ Người dùng: "sửa hết". Với các điểm cần chủ phòng khám quy�
 - 4.2 Không khoá/duyệt kỳ lương trước khi hết kỳ; tính lại khi duyệt. 4.4 Cộng lương đã trả (theo ngày trả) vào "Tổng chi".
 - 5.1 Giảm giá trên 50% chỉ admin (đúng BR-BILL-025), ghi nhật ký, báo cáo có tổng giảm giá. 5.3 Hủy hoá đơn ghi bút toán âm vào ngày hủy, không sửa tháng đã chốt.
 
-Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo; (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
+Làm theo đợt, mỗi đợt commit + push: (A) tiền và báo cáo;
+
+- Xong đợt A (4.1, 4.4, 5.1, 5.3, 5.4, 5.5, 5.6): backend 1398 test xanh, frontend typecheck/lint/build xanh; migration 049 thêm quyền `invoice.discount.large` (chỉ admin).
+ (B) lương; (C) phiên khám, hoá đơn, kho; (D) lịch hẹn; (E) đặt lịch, bệnh nhân; (F) menu theo quyền.
 
 ## 21/10/2026
 
