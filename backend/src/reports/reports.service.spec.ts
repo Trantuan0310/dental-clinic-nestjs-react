@@ -48,7 +48,9 @@ describe('revenue basis (H7)', () => {
     const from = new Date('2026-10-01T00:00:00+07:00');
     const to = new Date('2026-10-31T23:59:59.999+07:00');
     const sql = revenueRowsSql(from, to).sql;
-    expect(sql).toContain('-(i."total" - i."refunded_amount")');
+    expect(sql).toContain('-(i."total" - i."refunded_amount" - i."adjusted_amount")');
+    // 3.2: a write-down lowers revenue on its own date, like a refund.
+    expect(sql).toContain('-a."amount"');
     expect(sql).toContain('i."voided_at" >=');
     // A refund on an invoice voided later still lowers its own month.
     expect(sql).toContain(`i."status"::text = 'VOIDED' AND i."voided_at" IS NOT NULL`);

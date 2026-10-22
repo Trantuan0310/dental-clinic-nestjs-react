@@ -239,6 +239,17 @@ export class UpdateTreatmentDto {
   @Min(1)
   @Max(600)
   durationMinutes?: number;
+
+  /**
+   * 3.4: replaces the consumables of the treatment while the encounter is
+   * open (stock is only taken at close). Omit to keep them.
+   */
+  @ApiPropertyOptional({ type: [TreatmentInventoryUsageInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TreatmentInventoryUsageInputDto)
+  inventoryUsages?: TreatmentInventoryUsageInputDto[];
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +441,15 @@ export class CancelEncounterDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(10, { message: 'Lý do hủy phiên khám phải có ít nhất 10 ký tự' })
+  @MaxLength(1000)
+  reason!: string;
+}
+
+export class ReopenEncounterDto {
+  @ApiProperty({ minLength: 10, maxLength: 1000 })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(10, { message: 'Lý do mở lại phiên khám phải có ít nhất 10 ký tự' })
   @MaxLength(1000)
   reason!: string;
 }

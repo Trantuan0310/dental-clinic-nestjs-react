@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Undo2,
   FilePlus2,
+  MinusCircle,
 } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
 import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } from '@/components/ui';
@@ -27,6 +28,7 @@ import { ClinicPrintHeading } from '@/components/brand/ClinicPrintHeading';
 import { useAuthStore } from '@/stores/authStore';
 import type { InvoiceLineItem, Payment } from '@/types/billing';
 import {
+  AdjustModal,
   DiscountModal,
   ItemEditModal,
   RefundModal,
@@ -46,6 +48,7 @@ export default function InvoiceDetailPage() {
   const [showDiscount, setShowDiscount] = useState(false);
   const [showRefund, setShowRefund] = useState(false);
   const [showReissue, setShowReissue] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
   const [editingItem, setEditingItem] = useState<InvoiceLineItem | null>(null);
   const [voidingPayment, setVoidingPayment] = useState<Payment | null>(null);
   const hasPermission = useAuthStore((s) => s.hasPermission);
@@ -118,6 +121,7 @@ export default function InvoiceDetailPage() {
   const editLines = isDraft && hasPermission('invoice.item.update');
   const discountAmount = invoice.subtotal - invoice.total;
   const refunded = invoice.refundedAmount ?? 0;
+  const adjusted = invoice.adjustedAmount ?? 0;
 
   return (
     <div className="print-document space-y-3">
@@ -173,6 +177,14 @@ export default function InvoiceDetailPage() {
               <Button variant="outline" onClick={() => setShowRefund(true)}>
                 <Undo2 className="h-4 w-4" />
                 {t('uiOperations.refund')}
+              </Button>
+            </PermissionGuard>
+          )}
+          {canPay && invoice.outstandingAmount > 0 && (
+            <PermissionGuard permission="invoice.adjust">
+              <Button variant="outline" onClick={() => setShowAdjust(true)}>
+                <MinusCircle className="h-4 w-4" />
+                {t('uiOperations.adjustDown')}
               </Button>
             </PermissionGuard>
           )}
@@ -333,6 +345,19 @@ export default function InvoiceDetailPage() {
                   <span>{formatCurrency(refunded)}</span>
                 </div>
               )}
+              {adjusted > 0 && (
+                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-300">
+                  <span>{t('uiOperations.adjustedDown')}</span>
+                  <span>-{formatCurrency(adjusted)}</span>
+                </div>
+              )}
+              {(invoice.adjustments ?? []).map((a) => (
+                <p key={a.id} className="text-xs text-gray-500">
+                  {format(new Date(a.adjustedAt), 'dd/MM/yyyy HH:mm', { locale: vi })} •{' '}
+                  {t('uiOperations.adjustmentLine', { amount: formatCurrency(a.amount), reason: a.reason })}
+                  {a.adjustedByUser ? ` (${a.adjustedByUser.fullName})` : ''}
+                </p>
+              ))}
               {invoice.outstandingAmount > 0 && (
                 <div className="flex justify-between text-sm font-medium text-amber-600 border-t border-gray-100 pt-2">
                   <span>{t('uiOperations.outstanding')}</span>
@@ -431,6 +456,7 @@ export default function InvoiceDetailPage() {
       <ItemEditModal invoice={invoice} item={editingItem} onClose={() => setEditingItem(null)} />
       <RefundModal invoice={invoice} isOpen={showRefund} onClose={() => setShowRefund(false)} />
       <VoidPaymentModal invoice={invoice} payment={voidingPayment} onClose={() => setVoidingPayment(null)} />
+      <AdjustModal invoice={invoice} isOpen={showAdjust} onClose={() => setShowAdjust(false)} />
       <ReissueModal invoice={invoice} isOpen={showReissue} onClose={() => setShowReissue(false)} />
 
       {/* Void Modal */}

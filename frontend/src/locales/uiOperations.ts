@@ -122,6 +122,15 @@ export const vi = {
   totalDiscount: 'Tổng giảm giá',
   totalDiscountHint: 'Trên hóa đơn phát hành trong kỳ',
   voidsDeducted: 'Đã trừ hóa đơn hủy',
+  adjustDown: 'Điều chỉnh giảm / xoá nợ',
+  adjustDownHelp: 'Giảm số bệnh nhân còn phải trả mà không đụng tới phiếu thu (VD: tính sai giá, khách ngưng điều trị). Khoản giảm trừ vào doanh thu và hoa hồng của ngày điều chỉnh.',
+  adjustAmountMax: 'Số tiền giảm (tối đa {{amount}})',
+  adjustReasonExample: 'VD: Khách ngưng điều trị implant sau lần 1',
+  adjustDone: 'Đã điều chỉnh giảm hóa đơn',
+  adjustFailed: 'Không thể điều chỉnh hóa đơn',
+  adjustedDown: 'Đã điều chỉnh giảm / xoá nợ',
+  adjustmentLine: 'Điều chỉnh giảm {{amount}} — {{reason}}',
+  adjustmentsDeducted: 'Đã trừ điều chỉnh giảm / xoá nợ',
 } as const;
 
 export const en = {
@@ -241,4 +250,13 @@ export const en = {
   totalDiscount: 'Total discounts',
   totalDiscountHint: 'On invoices issued in this period',
   voidsDeducted: 'Voided invoices deducted',
+  adjustDown: 'Adjust down / write off',
+  adjustDownHelp: 'Lowers what the patient still owes without touching payments (e.g. wrong price, treatment stopped). The amount is taken off revenue and commission on the day of the adjustment.',
+  adjustAmountMax: 'Amount to write off (max {{amount}})',
+  adjustReasonExample: 'e.g. Patient stopped the implant treatment after the first stage',
+  adjustDone: 'Invoice adjusted down',
+  adjustFailed: 'Could not adjust the invoice',
+  adjustedDown: 'Adjusted down / written off',
+  adjustmentLine: 'Adjusted down {{amount}} — {{reason}}',
+  adjustmentsDeducted: 'Write-offs deducted',
 } as const;

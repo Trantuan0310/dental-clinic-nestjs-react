@@ -340,6 +340,9 @@ export default function ReportsPage() {
               {!!report?.totalVoided && (
                 <p className="text-xs text-gray-500">{t('uiOperations.voidsDeducted')} {formatCurrency(report.totalVoided)}</p>
               )}
+              {!!report?.totalAdjusted && (
+                <p className="text-xs text-gray-500">{t('uiOperations.adjustmentsDeducted')} {formatCurrency(report.totalAdjusted)}</p>
+              )}
               {report && (
                 <p className="text-xs text-gray-500" title={t('uiOperations.totalDiscountHint')}>
                   {t('uiOperations.totalDiscount')}: {formatCurrency(report.totalDiscount ?? 0)}

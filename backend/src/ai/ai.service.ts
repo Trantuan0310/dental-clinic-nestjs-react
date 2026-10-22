@@ -13,6 +13,7 @@ import { dentistCanReadPatient } from '../common/dentist-patient-access';
 import {
   ENCOUNTER_CLOSED_EVENT,
   EncounterClosedEvent,
+  INVOICE_ADJUSTED_EVENT,
   INVOICE_ISSUED_EVENT,
   INVOICE_PAYMENT_RECORDED_EVENT,
   INVOICE_PAYMENT_VOIDED_EVENT,
@@ -159,6 +160,7 @@ export class AiService {
   @OnEvent(INVOICE_REFUNDED_EVENT)
   @OnEvent(INVOICE_PAYMENT_VOIDED_EVENT)
   @OnEvent(INVOICE_VOIDED_EVENT)
+  @OnEvent(INVOICE_ADJUSTED_EVENT)
   async onInvoiceChanged(payload: Pick<InvoiceEventBase, 'patientId'>): Promise<void> {
     await this.invalidatePatientSummary(payload.patientId);
   }

@@ -976,7 +976,7 @@ describe('MedicalRecordsService', () => {
 
       const result = await service.createTreatment(
         'enc-1',
-        { procedure: 'D1110', description: 'Cleaning' } as any,
+        { procedure: 'D1110', description: 'Cleaning', priceReason: 'Ngoài danh mục' } as any,
         dentistActor,
       );
       expect(result).toBeDefined();
@@ -1802,6 +1802,7 @@ describe('MedicalRecordsService', () => {
           {
             procedure: 'Trám',
             unitPrice: 1,
+            priceReason: 'Ngoài danh mục',
             inventoryUsages: [
               { inventoryItemId: '00000000-0000-4000-8000-000000000001', quantity: 1, unit: 'g' },
             ],
@@ -1845,6 +1846,221 @@ describe('MedicalRecordsService', () => {
         TreatmentNotInEncounterException,
       );
       expect(prisma.treatment.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('business flow review 3.1, 3.4–3.6', () => {
+    const admin = userPayloadWithPermissions(['encounter.reopen', 'encounter.read.any']);
+    const closed = () =>
+      validEncounter({
+        status: EncounterStatus.COMPLETED,
+        closedAt: new Date('2026-10-20T03:00:00Z'),
+      });
+
+    describe('reopenEncounter (BR-MR-024)', () => {
+      it('voids the draft invoice, returns the stock still out and reopens, with audits', async () => {
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(closed());
+        (prisma.invoice.findFirst as jest.Mock).mockResolvedValue({
+          id: 'inv-1',
+          code: 'INV-1',
+          status: 'DRAFT',
+        });
+        // Closed once (−2), reopened (+2), closed again (−3): 3 still out.
+        (prisma.stockMovement.findMany as jest.Mock).mockResolvedValue([
+          { inventoryItemId: 'item-1', diff: new Prisma.Decimal(-2) },
+          { inventoryItemId: 'item-1', diff: new Prisma.Decimal(2) },
+          { inventoryItemId: 'item-1', diff: new Prisma.Decimal(-3) },
+        ]);
+        (prisma.inventoryItem.update as jest.Mock).mockResolvedValue({
+          quantityOnHand: new Prisma.Decimal(10),
+        });
+
+        await service.reopenEncounter('enc-1', 'Quên ghi thủ thuật cạo vôi', admin);
+
+        expect(prisma.invoice.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'inv-1' },
+            data: expect.objectContaining({ status: 'VOIDED' }),
+          }),
+        );
+        expect(prisma.inventoryItem.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: 'item-1' },
+            data: { quantityOnHand: { increment: new Prisma.Decimal(3) } },
+          }),
+        );
+        expect(prisma.stockMovement.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            type: 'STOCK_IN',
+            refType: 'ENCOUNTER',
+            refId: 'enc-1',
+            diff: new Prisma.Decimal(3),
+          }),
+        });
+        expect(prisma.encounter.update).toHaveBeenCalledWith({
+          where: { id: 'enc-1' },
+          data: { status: EncounterStatus.IN_PROGRESS, closedAt: null },
+        });
+        expect(prisma.clinicalNote.updateMany).toHaveBeenCalledWith({
+          where: { encounterId: 'enc-1' },
+          data: { isLocked: false, lockedAt: null },
+        });
+        expect(prisma.encounterAudit.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            action: 'REOPENED',
+            before: expect.objectContaining({ status: EncounterStatus.COMPLETED }),
+          }),
+        });
+        expect(audit.log).toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'ENCOUNTER_REOPENED' }),
+          prisma,
+        );
+      });
+
+      it('refuses while the invoice is issued, and an open encounter', async () => {
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(closed());
+        (prisma.invoice.findFirst as jest.Mock).mockResolvedValue({
+          id: 'inv-1',
+          code: 'INV-1',
+          status: 'PARTIAL',
+        });
+        await expect(
+          service.reopenEncounter('enc-1', 'Quên ghi thủ thuật cạo vôi', admin),
+        ).rejects.toMatchObject({ status: 409 });
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+          validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+        );
+        await expect(
+          service.reopenEncounter('enc-1', 'Quên ghi thủ thuật cạo vôi', admin),
+        ).rejects.toThrow(EncounterNotClosableException);
+        await expect(service.reopenEncounter('enc-1', 'ngắn', admin)).rejects.toMatchObject({
+          status: 400,
+        });
+        expect(prisma.encounter.update).not.toHaveBeenCalled();
+        expect(prisma.stockMovement.create).not.toHaveBeenCalled();
+      });
+
+      it('does not let a reopened encounter be cancelled', async () => {
+        (prisma.encounter.findUnique as jest.Mock).mockResolvedValue(
+          validEncounter({ status: EncounterStatus.IN_PROGRESS, closedAt: null }),
+        );
+        (prisma.encounterAudit.findFirst as jest.Mock).mockResolvedValue({ id: 'aud-1' });
+        await expect(
+          service.cancelEncounter('enc-1', 'Hủy phiên khám này đi', admin),
+        ).rejects.toThrow(EncounterNotClosableException);
+      });
+    });
+
+    it('3.4: the stock error names the item, what is needed and on hand, with the unit', async () => {
+      (prisma.encounter.findUnique as jest.Mock).mockResolvedValue({
+        ...validEncounter({ status: EncounterStatus.IN_PROGRESS }),
+        treatments: [
+          {
+            id: 'tr-1',
+            procedure: 'Trám',
+            unitPrice: 1,
+            inventoryUsages: [{ inventoryItemId: 'item-1', quantity: 3, unit: 'ống' }],
+          },
+        ],
+      });
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue({
+        id: 'item-1',
+        name: 'Composite',
+        unit: 'ống',
+        quantityOnHand: 1,
+        deletedAt: null,
+      });
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await expect(
+        service.closeEncounter('enc-1', { summary: 'x' } as any, dentistActor),
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/Composite.*cần 3 ống.*chỉ còn 1 ống/),
+      });
+    });
+
+    it('3.4: replaces the consumables of a treatment while the encounter is open', async () => {
+      (prisma.treatment.findUnique as jest.Mock).mockResolvedValue({
+        id: 'tr-1',
+        encounterId: 'enc-1',
+        deletedAt: null,
+        unitPrice: 1,
+        encounter: { dentistId: 'dentist-1' },
+        inventoryUsages: [{ inventoryItemId: 'item-old', quantity: 2, unit: 'g' }],
+      });
+      (prisma.inventoryItem.findMany as jest.Mock).mockResolvedValue([
+        { id: 'item-new', name: 'Gạc', status: 'ACTIVE' },
+      ]);
+      await service.updateTreatment(
+        'enc-1',
+        'tr-1',
+        {
+          inventoryUsages: [
+            { inventoryItemId: 'item-old', quantity: 1, unit: 'g' },
+            { inventoryItemId: 'item-new', quantity: 1, unit: 'cái' },
+          ],
+        } as any,
+        dentistActor,
+      );
+      // Only the newly added item is checked (a kept one may be discontinued since).
+      expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { in: ['item-new'] } }),
+        }),
+      );
+      expect(prisma.treatmentInventoryUsage.deleteMany).toHaveBeenCalledWith({
+        where: { treatmentId: 'tr-1' },
+      });
+      expect(prisma.treatmentInventoryUsage.create).toHaveBeenCalledTimes(2);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'TREATMENT_UPDATED',
+          metadata: expect.objectContaining({
+            after: expect.objectContaining({ inventoryUsages: expect.any(Array) }),
+          }),
+        }),
+        prisma,
+      );
+    });
+
+    it('3.5: refuses a DISCONTINUED consumable on a new treatment', async () => {
+      (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
+      (prisma.inventoryItem.findMany as jest.Mock).mockResolvedValue([
+        { id: 'item-1', name: 'Gạc cũ', status: 'DISCONTINUED' },
+      ]);
+      await expect(
+        service.createTreatment(
+          'enc-1',
+          {
+            procedure: 'Trám',
+            unitPrice: 1,
+            priceReason: 'Ngoài danh mục',
+            inventoryUsages: [{ inventoryItemId: 'item-1', quantity: 1, unit: 'g' }],
+          } as any,
+          dentistActor,
+        ),
+      ).rejects.toMatchObject({ code: 'INVENTORY_ITEM_DISCONTINUED' });
+      expect(prisma.treatment.create).not.toHaveBeenCalled();
+    });
+
+    it('3.6: a free-text treatment needs a price reason, which is kept', async () => {
+      (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
+      await expect(
+        service.createTreatment(
+          'enc-1',
+          { procedure: 'Tư vấn', unitPrice: 0 } as any,
+          dentistActor,
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(prisma.treatment.create).not.toHaveBeenCalled();
+      (prisma.treatment.create as jest.Mock).mockResolvedValue(validTreatment());
+      await service.createTreatment(
+        'enc-1',
+        { procedure: 'Tư vấn', unitPrice: 0, priceReason: 'Tư vấn miễn phí' } as any,
+        dentistActor,
+      );
+      expect(prisma.treatment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ listPrice: null, priceReason: 'Tư vấn miễn phí' }),
+      });
     });
   });
 });

@@ -289,6 +289,56 @@ export function RefundModal({ invoice, isOpen, onClose }: { invoice: Invoice; is
   );
 }
 
+/**
+ * "Điều chỉnh giảm / xoá nợ" (admin): lowers what is still owed on an issued
+ * invoice, payments untouched; revenue and commission drop on that day.
+ */
+export function AdjustModal({ invoice, isOpen, onClose }: { invoice: Invoice; isOpen: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  useEffect(() => {
+    if (!isOpen) return;
+    setAmount(String(Math.floor(invoice.outstandingAmount)));
+    setReason('');
+  }, [isOpen, invoice.outstandingAmount]);
+
+  const num = Number(amount);
+  const invalid =
+    !Number.isInteger(num) || num < 1 || num > invoice.outstandingAmount || reason.trim().length < MIN_REASON;
+  const save = useInvoiceMutation(
+    invoice.id,
+    () => billingApi.adjustInvoice(invoice.id, { amount: num, reason: reason.trim(), version: invoice.version }),
+    t('uiOperations.adjustDone'),
+    onClose,
+    t('uiOperations.adjustFailed'),
+  );
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('uiOperations.adjustDown')} size="sm">
+      <div className="space-y-4">
+        <Alert type="info">{t('uiOperations.adjustDownHelp')}</Alert>
+        <Input
+          label={t('uiOperations.adjustAmountMax', { amount: formatCurrency(invoice.outstandingAmount) })}
+          type="number"
+          min={1}
+          max={invoice.outstandingAmount}
+          step={1000}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <ReasonField value={reason} onChange={setReason} placeholder={t('uiOperations.adjustReasonExample')} />
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={onClose}>{t('uiOperations.cancel')}</Button>
+          <Button variant="danger" onClick={() => save.mutate(undefined)} isLoading={save.isPending} disabled={invalid}>
+            {t('uiOperations.adjustDown')}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /** "Hủy phiếu thu": cancels a payment/refund entered by mistake (A2-01, A5-01). */
 export function VoidPaymentModal({ invoice, payment, onClose }: { invoice: Invoice; payment: Payment | null; onClose: () => void }) {
   const { t } = useTranslation();

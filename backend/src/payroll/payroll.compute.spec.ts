@@ -572,6 +572,7 @@ describe('PayrollEventListener — round 4', () => {
     ) as Array<{ event: string }>;
     const names = events.map(e => e.event).sort();
     expect(names).toEqual([
+      'invoice.adjusted',
       'invoice.issued',
       'invoice.payment_voided',
       'invoice.refunded',

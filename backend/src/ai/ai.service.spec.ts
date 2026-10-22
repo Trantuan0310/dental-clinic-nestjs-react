@@ -397,6 +397,7 @@ describe('AiService', () => {
         AiService.prototype.onInvoiceChanged,
       ) as Array<{ event: string }>;
       expect(events.map(e => e.event).sort()).toEqual([
+        'invoice.adjusted',
         'invoice.issued',
         'invoice.payment_recorded',
         'invoice.payment_voided',

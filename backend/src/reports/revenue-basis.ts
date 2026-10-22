@@ -8,7 +8,9 @@ import { InvoiceStatus, PaymentKind, PaymentStatus, Prisma } from '@prisma/clien
  *     `issuedAt` (clinic time), minus refunds dated by the refund's `paidAt`.
  *     Voiding an issued invoice takes back what was left of it (total −
  *     refunds) on `voidedAt`, like a refund: a month already closed never
- *     changes (5.3). DRAFT, and VOIDED never issued, are never summed — they
+ *     changes (5.3). A write-down ("điều chỉnh giảm / xoá nợ",
+ *     invoice_adjustments) lowers it on its own `adjustedAt`, like a refund.
+ *     DRAFT, and VOIDED never issued, are never summed — they
  *     only appear in their own "not counted" box.
  *   - Collected ("Đã thu") = payments dated by `paidAt`, minus refunds dated
  *     by the refund's own `paidAt` (a refund next month lowers next month,
@@ -68,14 +70,32 @@ export function voidedRevenueWhere(
 }
 
 /**
- * What a void takes back (≤ 0): the total less the refunds already counted.
- * Voiding needs nothing kept, so payments and refunds have netted out.
+ * What a void takes back (≤ 0): the total less the refunds and write-downs
+ * already counted. Voiding needs nothing kept, so payments and refunds have
+ * netted out.
  */
 export function voidReversalAmount(inv: {
   total: Prisma.Decimal | number | string;
   refundedAmount: Prisma.Decimal | number | string;
+  adjustedAmount?: Prisma.Decimal | number | string | null;
 }): number {
-  return -(Number(inv.total ?? 0) - Number(inv.refundedAmount ?? 0));
+  return -(
+    Number(inv.total ?? 0) -
+    Number(inv.refundedAmount ?? 0) -
+    Number(inv.adjustedAmount ?? 0)
+  );
+}
+
+/** Write-downs dated in [from, to] on an invoice counted at issue: lower revenue like refunds. */
+export function revenueAdjustmentWhere(
+  from: Date,
+  to: Date,
+  invoice: Prisma.InvoiceWhereInput = {},
+): Prisma.InvoiceAdjustmentWhereInput {
+  return {
+    adjustedAt: { gte: from, lte: to },
+    invoice: { ...REVENUE_INVOICE_WHERE, ...invoice },
+  };
 }
 
 /** The same rule as SQL for raw aggregates; `alias` is the invoices alias. */
@@ -152,7 +172,8 @@ export function revenueRefundWhere(
 /**
  * Revenue movements as SQL rows (invoice_id, at, amount, cnt): each issued
  * invoice at its issue time (+total, cnt 1), each refund on it at its refund
- * time (−amount, cnt 0) and its void at the void time (−(total − refunds),
+ * time (−amount, cnt 0), each write-down at its own time (−amount, cnt 0)
+ * and its void at the void time (−(total − refunds),
  * cnt 0). Aggregates group these; a voided invoice's rows net to zero.
  */
 export function revenueRowsSql(from: Date, to: Date): Prisma.Sql {
@@ -171,7 +192,14 @@ export function revenueRowsSql(from: Date, to: Date): Prisma.Sql {
       AND p."paid_at" <= ${to}
       AND ${countsAsRevenueSql(Prisma.raw('i'))}
     UNION ALL
-    SELECT i.id, i."voided_at", -(i."total" - i."refunded_amount"), 0
+    SELECT i.id, a."adjusted_at", -a."amount", 0
+    FROM "invoice_adjustments" a
+    JOIN "invoices" i ON i.id = a."invoice_id"
+    WHERE a."adjusted_at" >= ${from}
+      AND a."adjusted_at" <= ${to}
+      AND ${countsAsRevenueSql(Prisma.raw('i'))}
+    UNION ALL
+    SELECT i.id, i."voided_at", -(i."total" - i."refunded_amount" - i."adjusted_amount"), 0
     FROM "invoices" i
     WHERE i."deleted_at" IS NULL
       AND i."status"::text = 'VOIDED'

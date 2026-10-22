@@ -21,6 +21,7 @@ import { InvoiceStatus } from '@prisma/client';
 import { BillingService } from './billing.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
+  AdjustInvoiceDto,
   IssueInvoiceDto,
   ListInvoicesQueryDto,
   RecordPaymentDto,
@@ -142,6 +143,21 @@ export class BillingController {
     @User() actor: JwtPayload,
   ) {
     return { data: await this.billing.refund(id, dto, actor) };
+  }
+
+  @Post('invoices/:id/adjustments')
+  @RequirePermissions('invoice.adjust')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Write down what is owed on an ISSUED/PARTIAL invoice (reason required, payments kept)',
+  })
+  async adjust(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdjustInvoiceDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.billing.adjustDown(id, dto, actor) };
   }
 
   @Post('payments/:paymentId/void')

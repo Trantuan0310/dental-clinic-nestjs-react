@@ -301,6 +301,7 @@ export const validInvoice = (overrides: Partial<any> = {}) => ({
   total: new Prisma.Decimal(500_000),
   paidAmount: new Prisma.Decimal(0),
   refundedAmount: new Prisma.Decimal(0),
+  adjustedAmount: new Prisma.Decimal(0),
   outstandingAmount: new Prisma.Decimal(500_000),
   notes: null,
   issuedAt: null,

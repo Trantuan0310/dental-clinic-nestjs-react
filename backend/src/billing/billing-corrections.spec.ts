@@ -637,6 +637,7 @@ describe('BillingService — corrections (round 4, H6)', () => {
         validInvoice({ status: InvoiceStatus.VOIDED }),
       );
       prisma.invoice.findFirst.mockResolvedValue(null);
+      prisma.invoiceItem.findMany.mockResolvedValue([]);
       prisma.treatment.findMany.mockResolvedValue(treatments);
       prisma.encounter.findUnique.mockResolvedValue({
         id: 'enc-1',
@@ -749,6 +750,180 @@ describe('BillingService — corrections (round 4, H6)', () => {
       await expect(
         new BillingCron(billing as unknown as BillingService).reconcileClosedEncounters(),
       ).resolves.toBeUndefined();
+    });
+  });
+});
+
+describe('BillingService — 3.1–3.3 (business flow review)', () => {
+  let prisma: PrismaMockShape;
+  let events: { emit: jest.Mock };
+  let audit: { log: jest.Mock };
+  let service: BillingService;
+  const admin = adminPayload('admin-1');
+
+  beforeEach(() => {
+    prisma = createPrismaMock();
+    events = { emit: jest.fn() };
+    audit = { log: jest.fn().mockResolvedValue(undefined) };
+    prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma));
+    prisma.$queryRaw.mockResolvedValue([{ nextval: 8n }]);
+    service = new BillingService(
+      prisma as unknown as PrismaService,
+      audit as unknown as AuditService,
+      {} as ExpenseService,
+      events as unknown as EventEmitter2,
+    );
+    prisma.invoice.findUniqueOrThrow.mockImplementation(async () => withItems(validInvoice()));
+  });
+
+  describe('adjustDown ("điều chỉnh giảm / xoá nợ")', () => {
+    const partial = () =>
+      validInvoice({
+        status: InvoiceStatus.PARTIAL,
+        issuedAt: new Date('2026-10-01T03:00:00Z'),
+        total: D(30_000_000),
+        paidAmount: D(10_000_000),
+        outstandingAmount: D(20_000_000),
+        version: 3,
+      });
+
+    it('writes the debt off, keeps payments and total, settles to PAID and audits it', async () => {
+      prisma.invoice.findUnique
+        .mockResolvedValueOnce(partial())
+        .mockResolvedValue(withItems(partial()));
+      prisma.invoice.updateMany.mockResolvedValue({ count: 1 });
+      prisma.invoiceAdjustment.create.mockResolvedValue({
+        id: 'adj-1',
+        adjustedAt: new Date('2026-11-02T03:00:00Z'),
+      });
+      await service.adjustDown(
+        'inv-1',
+        { amount: 20_000_000, reason: 'Khách ngưng điều trị', version: 3 },
+        admin,
+      );
+      expect(prisma.invoice.updateMany).toHaveBeenCalledWith({
+        where: { id: 'inv-1', version: 3 },
+        data: expect.objectContaining({
+          adjustedAmount: D(20_000_000),
+          outstandingAmount: D(0),
+          status: InvoiceStatus.PAID,
+        }),
+      });
+      const data = prisma.invoice.updateMany.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('total');
+      expect(data).not.toHaveProperty('paidAmount');
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+      expect(prisma.invoiceAudit.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: 'ADJUSTED_DOWN' }),
+      });
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'INVOICE_ADJUSTED_DOWN' }),
+        prisma,
+      );
+      expect(events.emit).toHaveBeenCalledWith(
+        'invoice.adjusted',
+        expect.objectContaining({ amount: 20_000_000, adjustmentId: 'adj-1' }),
+      );
+    });
+
+    it('refuses more than is owed, and drafts or paid invoices', async () => {
+      prisma.invoice.findUnique.mockResolvedValueOnce(partial());
+      await expect(
+        service.adjustDown('inv-1', { amount: 20_000_001, reason: 'Xoá nợ', version: 3 }, admin),
+      ).rejects.toMatchObject({ response: { code: 'ADJUSTMENT_EXCEEDS_OUTSTANDING' } });
+      prisma.invoice.findUnique.mockResolvedValueOnce(validInvoice());
+      await expect(
+        service.adjustDown('inv-1', { amount: 1, reason: 'Xoá nợ', version: 0 }, admin),
+      ).rejects.toMatchObject({ response: { code: 'INVOICE_NOT_EDITABLE' } });
+      expect(prisma.invoiceAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('a payment after a write-down owes only what is left', () => {
+      expect(settle(30_000_000, 10_000_000, 0, 15_000_000)).toEqual({
+        outstanding: 5_000_000,
+        status: InvoiceStatus.PARTIAL,
+      });
+    });
+  });
+
+  describe('reissue (3.3)', () => {
+    it("copies the voided invoice's active lines and its discount", async () => {
+      prisma.invoice.findUnique.mockResolvedValue(withItems(validInvoice({ id: 'inv-2' })));
+      prisma.invoice.findUnique.mockResolvedValueOnce(
+        validInvoice({
+          status: InvoiceStatus.VOIDED,
+          voidedAt: new Date('2026-10-02T03:00:00Z'),
+          discountType: 'PERCENT',
+          discountValue: D(10),
+        }),
+      );
+      prisma.invoice.findFirst.mockResolvedValue(null);
+      prisma.encounterAudit.findFirst.mockResolvedValue(null);
+      prisma.invoiceItem.findMany.mockResolvedValue([
+        item('a', 400_000, { description: 'Trám (sửa lời)', unitPrice: D(400_000) }),
+      ]);
+      prisma.encounter.findUnique.mockResolvedValue({ id: 'enc-1', patientId: 'patient-1' });
+      prisma.invoice.create.mockResolvedValue(validInvoice({ id: 'inv-2' }));
+      await service.reissue('inv-1', { reason: 'Phát hành nhầm' }, admin);
+      expect(prisma.treatment.findMany).not.toHaveBeenCalled();
+      expect(prisma.invoice.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          subtotal: D(400_000),
+          discountType: 'PERCENT',
+          discountValue: D(10),
+          total: D(360_000),
+          replacesInvoiceId: 'inv-1',
+        }),
+      });
+      expect(prisma.invoiceItem.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ description: 'Trám (sửa lời)', treatmentId: 'tr-a' }),
+      });
+    });
+  });
+
+  describe('closing again after a reopen (3.1)', () => {
+    it('drafts a new invoice replacing the one voided by the reopen', async () => {
+      prisma.invoice.findFirst
+        .mockResolvedValueOnce(null) // no active invoice
+        .mockResolvedValueOnce({
+          id: 'inv-1',
+          voidedAt: new Date('2026-10-02T03:00:00Z'),
+          updatedAt: new Date('2026-10-02T03:00:00Z'),
+          replacedBy: null,
+        });
+      prisma.encounterAudit.findFirst.mockResolvedValue({ id: 'aud-reopen' });
+      prisma.encounter.findUnique.mockResolvedValue({ id: 'enc-1', patientId: 'patient-1' });
+      prisma.invoice.create.mockResolvedValue(validInvoice({ id: 'inv-2' }));
+      await service.createDraftFromEncounter('enc-1', [
+        { treatmentId: 'tr-1', procedure: 'Trám', description: null, unitPrice: 300_000 },
+      ]);
+      expect(prisma.encounterAudit.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            action: 'REOPENED',
+            before: { path: ['status'], equals: EncounterStatus.COMPLETED },
+          }),
+        }),
+      );
+      expect(prisma.invoice.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ replacesInvoiceId: 'inv-1', subtotal: D(300_000) }),
+      });
+    });
+
+    it('still leaves a voided invoice alone when the encounter was not reopened', async () => {
+      prisma.invoice.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'inv-1',
+        voidedAt: new Date(),
+        updatedAt: new Date(),
+        replacedBy: null,
+      });
+      prisma.encounterAudit.findFirst.mockResolvedValue(null);
+      expect(
+        await service.createDraftFromEncounter('enc-1', [
+          { treatmentId: 'tr-1', procedure: 'Trám', description: null, unitPrice: 1 },
+        ]),
+      ).toBeNull();
+      expect(prisma.invoice.create).not.toHaveBeenCalled();
     });
   });
 });

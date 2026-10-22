@@ -938,6 +938,7 @@ export class PayrollService {
               OR: [{ voidedAt: null }, { voidedAt: { lt: range.toExclusive } }],
             },
             { refundedAmount: { gt: 0 } },
+            { adjustedAmount: { gt: 0 } },
           ],
         },
         select: { id: true },
@@ -1061,6 +1062,11 @@ export class PayrollService {
           where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
           select: { amount: true },
         },
+        // Write-downs ("xoá nợ") lower the basis like refunds, on their own date.
+        adjustments: {
+          where: { adjustedAt: { lt: range.toExclusive } },
+          select: { amount: true },
+        },
       },
       orderBy: { issuedAt: 'asc' },
     });
@@ -1090,7 +1096,10 @@ export class PayrollService {
       const term = compensationOn(terms, workDay);
       if (!term) invoicesWithoutTerms.push(inv.code);
       const pct = term?.commissionPct ?? 0;
-      const refundedVnd = (inv.payments ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      const refundedVnd = [...(inv.payments ?? []), ...(inv.adjustments ?? [])].reduce(
+        (sum, r) => sum + Number(r.amount),
+        0,
+      );
       const basis = invoiceBasisByLine(
         inv.items.map(i => ({ id: i.id, lineTotal: Number(i.lineTotal) })),
         Number(inv.total),
@@ -1309,6 +1318,7 @@ export class PayrollService {
           OR: [
             { status: InvoiceStatus.VOIDED },
             { refundedAmount: { gt: 0 } },
+            { adjustedAmount: { gt: 0 } },
             { id: { in: touched.map(t => t.sourceInvoiceId as string) } },
           ],
         },
@@ -1325,6 +1335,10 @@ export class PayrollService {
           },
           payments: {
             where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
+            select: { amount: true },
+          },
+          adjustments: {
+            where: { adjustedAt: { lt: range.toExclusive } },
             select: { amount: true },
           },
         },
@@ -1348,7 +1362,10 @@ export class PayrollService {
       const voided =
         inv.status === InvoiceStatus.VOIDED &&
         (!inv.voidedAt || inv.voidedAt.getTime() < range.toExclusive.getTime());
-      const refunded = (inv.payments ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+      const refunded = [...(inv.payments ?? []), ...(inv.adjustments ?? [])].reduce(
+        (sum, r) => sum + Number(r.amount),
+        0,
+      );
       const basisNow = voided
         ? new Map<string, number>()
         : invoiceBasisByLine(
@@ -1381,7 +1398,7 @@ export class PayrollService {
           amountVnd: Math.abs(due),
           reason:
             due > 0
-              ? `Truy thu hoa hồng: hóa đơn ${inv.code} ${voided ? 'đã hủy' : 'đã hoàn tiền'} sau khi ${closed}`
+              ? `Truy thu hoa hồng: hóa đơn ${inv.code} ${voided ? 'đã hủy' : 'đã hoàn tiền/điều chỉnh giảm'} sau khi ${closed}`
               : `Trả lại hoa hồng: hóa đơn ${inv.code} — phiếu hoàn đã hủy sau khi ${closed}`,
           adjustedByUserId: null,
           sourceInvoiceId: inv.id,
