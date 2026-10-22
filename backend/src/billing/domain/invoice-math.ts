@@ -19,14 +19,16 @@ export function discountAmountOf(
 /**
  * Outstanding and status of an issued invoice. `paid` is the net money kept
  * (payments − refunds); a refund does not reopen the debt, so outstanding is
- * total − (paid + refunded).
+ * total − (paid + refunded). `adjusted` is the debt written down after issue
+ * ("điều chỉnh giảm / xoá nợ"): no longer owed, though nothing was paid.
  */
 export function settle(
   total: number,
   paid: number,
   refunded: number,
+  adjusted = 0,
 ): { outstanding: number; status: InvoiceStatus } {
-  const outstanding = Math.max(0, total - paid - refunded);
+  const outstanding = Math.max(0, total - paid - refunded - adjusted);
   const status =
     outstanding < SETTLED_BELOW
       ? InvoiceStatus.PAID

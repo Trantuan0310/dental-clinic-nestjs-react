@@ -405,6 +405,13 @@ const PERMISSIONS = [
     action: 'cancel',
     description: 'Hủy phiên khám mở nhầm',
   },
+  // BR-MR-024 (migration 050): clinic admin only.
+  {
+    code: 'encounter.reopen',
+    resource: 'encounter',
+    action: 'reopen',
+    description: 'Mở lại phiên khám đã kết thúc khi hóa đơn còn nháp hoặc đã hủy (có lý do)',
+  },
   {
     code: 'clinical_note.write',
     resource: 'clinical_note',
@@ -525,6 +532,13 @@ const PERMISSIONS = [
     resource: 'invoice',
     action: 'discount.large',
     description: 'Giảm giá trên 50% tổng hóa đơn (có lý do, ghi nhật ký)',
+  },
+  // Migration 050: clinic admin only.
+  {
+    code: 'invoice.adjust',
+    resource: 'invoice',
+    action: 'adjust',
+    description: 'Điều chỉnh giảm / xoá nợ hóa đơn đã phát hành (có lý do, giữ phiếu thu)',
   },
   {
     code: 'report.revenue.read',
