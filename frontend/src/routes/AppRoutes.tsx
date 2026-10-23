@@ -20,6 +20,8 @@ const DashboardPage = lazy(() => import('@/features/DashboardPage'));
 const PatientListPage = lazy(() => import('@/features/patients/PatientListPage'));
 const PatientDetailPage = lazy(() => import('@/features/patients/PatientDetailPage'));
 const TreatmentPlanPage = lazy(() => import('@/features/treatment-plans/TreatmentPlanPage'));
+const RecallsPage = lazy(() => import('@/features/recalls/RecallsPage'));
+const RecallUnsubscribePage = lazy(() => import('@/features/recalls/RecallUnsubscribePage'));
 const PatientForm = lazy(() =>
   import('@/features/patients/PatientForm').then((m) => ({ default: m.PatientForm })),
 );
@@ -111,6 +113,7 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
             <Route path="/booking" element={<PublicBookingPage />} />
             <Route path="/booking/status" element={<PublicBookingStatusPage />} />
+            <Route path="/recall/unsubscribe" element={<RecallUnsubscribePage />} />
 
             <Route element={<StaffLayout />}>
               <Route
@@ -207,6 +210,16 @@ const router = createBrowserRouter(createRoutesFromElements(
                     <ErrorBoundary componentName="AppointmentCalendarPage">
                       {/* key: a separate page state from /appointments */}
                       <AppointmentCalendarPage key="mine" mine />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="recalls"
+                element={
+                  <ProtectedRoute permission="recall.read">
+                    <ErrorBoundary componentName="RecallsPage">
+                      <RecallsPage />
                     </ErrorBoundary>
                   </ProtectedRoute>
                 }

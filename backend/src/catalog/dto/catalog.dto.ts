@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  ValidateIf,
   Max,
   MaxLength,
   Min,
@@ -108,6 +109,18 @@ class ServiceFieldsDto {
   @IsOptional()
   @IsBoolean()
   showPublicPrice?: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Months after a visit with this service the patient is due back (null: no recall)',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  recallIntervalMonths?: number | null;
 
   @ApiPropertyOptional({ enum: DENTIST_SPECIALTIES, nullable: true })
   @IsOptional()

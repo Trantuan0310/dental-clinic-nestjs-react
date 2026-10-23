@@ -36,6 +36,8 @@ describe('PatientsService', () => {
     events = { emit: jest.fn() };
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 42n }]);
     (prisma.treatmentPlan.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    (prisma.recall.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.recall.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
     // softDelete runs its check-then-write inside $transaction (BR-PT-010
     // TOCTOU fix) — the default mock's tx stub only has $executeRaw/$queryRaw,
     // not full model methods, so route callbacks through the full mock.
@@ -547,6 +549,8 @@ describe('PatientsService', () => {
       (prisma.bookingRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
       (prisma.patientPhoneHistory.updateMany as jest.Mock).mockResolvedValue({ count: 4 });
       (prisma.patientIdentifier.findMany as jest.Mock).mockResolvedValue([]);
+      // The target is already due back for scaling.
+      (prisma.recall.findMany as jest.Mock).mockResolvedValue([{ serviceId: 's1' }]);
 
       await service.merge(
         {
@@ -575,6 +579,19 @@ describe('PatientsService', () => {
       });
       // Treatment plans follow the person too.
       expect(prisma.treatmentPlan.updateMany).toHaveBeenCalledWith({
+        where: { patientId: 'p1' },
+        data: { patientId: 'p2' },
+      });
+      // One open recall per service: the source's duplicate is closed, the rest move.
+      expect(prisma.recall.updateMany).toHaveBeenCalledWith({
+        where: {
+          patientId: 'p1',
+          status: { in: ['PENDING', 'POSTPONED', 'BOOKED'] },
+          serviceId: { in: ['s1'] },
+        },
+        data: { status: 'DISMISSED', closedAt: expect.any(Date), lastContactNote: 'Gộp hồ sơ' },
+      });
+      expect(prisma.recall.updateMany).toHaveBeenCalledWith({
         where: { patientId: 'p1' },
         data: { patientId: 'p2' },
       });

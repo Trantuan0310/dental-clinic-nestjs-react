@@ -25,6 +25,8 @@ export interface CatalogService {
   /** Listed on the public price list. */
   showPublicPrice: boolean;
   requiredSpecialty: string | null;
+  /** Months after a visit with it the patient is due back; null = no recall. */
+  recallIntervalMonths: number | null;
   isActive: boolean;
   assignedDentists: number;
 }
@@ -52,6 +54,7 @@ export interface ServicePayload {
   bookableOnline: boolean;
   showPublicPrice: boolean;
   requiredSpecialty: string | null;
+  recallIntervalMonths: number | null;
 }
 
 export interface DentistServiceAssignment {

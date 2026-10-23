@@ -404,6 +404,19 @@ const PERMISSIONS = [
     action: 'accept',
     description: 'Ghi nhận khách đồng ý kế hoạch điều trị và báo giá',
   },
+  // Recall reminders (migration 054).
+  {
+    code: 'recall.read',
+    resource: 'recall',
+    action: 'read',
+    description: 'Xem danh sách bệnh nhân đến hạn tái khám',
+  },
+  {
+    code: 'recall.manage',
+    resource: 'recall',
+    action: 'manage',
+    description: 'Ghi kết quả gọi nhắc tái khám, hẹn gọi lại, bỏ nhắc, bật lại nhắc qua email',
+  },
   // BR-MR-024 (migration 050): clinic admin only.
   {
     code: 'encounter.reopen',
@@ -845,6 +858,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'patient.update',
     'treatment_plan.read',
     'treatment_plan.accept',
+    'recall.read',
+    'recall.manage',
     'patient.identifier.manage',
     'appointment.create',
     'appointment.read',
