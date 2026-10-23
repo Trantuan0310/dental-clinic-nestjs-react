@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
  * Shared helpers for the "detailed flow" E2E specs (flow-*.spec.ts).
@@ -85,4 +85,18 @@ export function isoDateOnly(d: Date): string {
 export function randomVnPhone(): string {
   const rest = Math.floor(Math.random() * 90_000_000 + 10_000_000); // 8 digits
   return `09${rest}`; // "0" + "9" + 8 digits = 10 total
+}
+
+/**
+ * Writes the reason for visit on the open encounter's "Ghi chú" tab:
+ * closing an encounter needs a chief complaint or a diagnosis (BR-MR-013).
+ */
+export async function addChiefComplaint(page: Page, text: string): Promise<void> {
+  await page.getByRole('tab', { name: 'Ghi chú', exact: true }).click();
+  await page.locator('#encounter-panel-notes select').first().selectOption('chief_complaint');
+  await page.getByRole('button', { name: 'Thêm ghi chú', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Thêm ghi chú' });
+  await dialog.getByLabel('Nội dung').fill(text);
+  await dialog.getByRole('button', { name: 'Thêm', exact: true }).click();
+  await expect(page.getByText(text, { exact: true })).toBeVisible({ timeout: 10_000 });
 }

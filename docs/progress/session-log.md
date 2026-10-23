@@ -431,3 +431,24 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - 1.4 Menu theo quyền: Playwright đăng nhập admin (20 mục), lễ tân (12), bác sĩ (12) trên DB demo, mở từng mục: không 403/5xx/lỗi JS.
 - 1.5 Giao diện A–D trên demo: điều chỉnh giảm hóa đơn qua giao diện (còn nợ 3,5tr → 3tr, hiện dòng điều chỉnh có ngày/lý do/người); mở lại phiên khám qua giao diện (về "đang khám", hóa đơn nháp bị hủy); giảm giá: lễ tân 40% được, 60% bị chặn 403 `DISCOUNT_LARGE_FORBIDDEN`, admin 60% được, đều ghi `INVOICE_DISCOUNT_UPDATED`.
 - 1.6 Migration 049, 050 trên DB demo có dữ liệu (1.721 hóa đơn): chạy sạch, số liệu hóa đơn không đổi, 3 quyền mới chỉ gán `clinic_admin`. (DB demo cục bộ: đặt lại mật khẩu admin về mặc định để kiểm; sao lưu `guidedemo_bak`.)
+
+## 22/10 — Phần 2 của kế hoạch: dọn việc tồn đọng
+
+- 2.1 Dị ứng / BR-PT-015: đặc tả cũ ghi lễ tân không thấy medical history, nhưng thực tế lễ tân ghi dị ứng khi tiếp nhận — giữ cách làm này (thông tin an toàn cần có trước khi khám), sửa đặc tả. Thêm nhật ký: mọi lần sửa dị ứng / bệnh nền / thuốc đang dùng (lễ tân qua `PATCH /patients/:id`, bác sĩ qua `/medical-history`) ghi `medicalChanges` = mục thêm/bớt từng danh sách (`medicalListChanges` trong `patient-rules.ts`), để truy được ai xoá một dị ứng. +2 test.
+- 2.2 Gỡ quyền `shift_registration.read/write/approve` (không route nào dùng): migration 051 xoá quyền và gán vai trò; `seed.ts` không tạo nữa.
+- 2.3 Giờ mở cửa tính ngày phòng khám nghỉ: `nextClinicOpening(at, hours, closed)` bỏ qua khoảng nghỉ (`closureIntervals` từ `clinic_closures`, ngày đầu có thể từ `startTime`). Đặt lịch đọc ngày nghỉ (bộ đệm 60 giây) trước khi tính báo trước và giữ chỗ. +3 test.
+- 2.4 Ticket PAY-006/007/012 đã xong từ trước, PAY-011 không còn áp dụng (trang đã thay) → chuyển `docs/Tickets/done/`, cập nhật `INDEX.md`.
+- 2.5 Nhắc lễ tân khi yêu cầu chờ quá 30 phút (đúng lời hứa trên trang khách, `BOOKING_RESPONSE_MINUTES`): cron 5 phút, tính từ giờ mở cửa kế tiếp (có ngày nghỉ), gửi một lần qua email danh sách nhận báo của lễ tân; migration 052 thêm `booking_requests.staff_reminded_at`, chiếm quyền gửi bằng ghi có điều kiện. +3 test.
+- 2.6 Nhật ký hiển thị "Hệ thống" khi không có người thực hiện — đã có sẵn, không sửa.
+- backend `tsc`, lint sạch, toàn bộ 1444 test xanh; migration 051, 052 chạy sạch trên DB demo.
+
+## 22/10 — Phần 3 của kế hoạch: kiểm từng module
+
+- Báo cáo: `docs/audits/2026-10-22/MODULE_REVIEW.md`. Đối chiếu 192 BR của 7 đặc tả; 108 BR không có mã trong code được kiểm thực tế từng cái. Đăng nhập, Bệnh nhân, Hoá đơn, Lương khớp; 6 điểm lệch ở Hồ sơ khám, Kho, Lịch hẹn — đã sửa:
+  - M1 (BR-MR-013): kết thúc phiên khám cần lý do khám hoặc chẩn đoán (ghi chú hoặc phiên khám), 422 `CLINICAL_NOTE_REQUIRED`. Bắt đầu khám tự chép lý do khám đặt lịch vào ghi chú, nên đa số ca không phải gõ thêm. E2E `flow-inventory-stock-out`, `flow-patient-to-payment` thêm bước ghi lý do khám (`addChiefComplaint` trong `flow-helpers.ts`); đã chạy thử các bước này trên giao diện demo (bị từ chối khi thiếu, đóng được sau khi thêm).
+  - M2 (BR-MR-008): sơ đồ răng chỉ nhận 7 trạng thái giao diện dùng, ghi chú ≤ 1000 ký tự (400 `DENTAL_CHART_INVALID_STATUS`); sửa danh sách trong đặc tả.
+  - M3 (BR-INV-006/008): xuất kho thủ công và điều chỉnh tồn bắt buộc lý do ≥ 3 ký tự (DTO + nút xác nhận trên giao diện).
+  - M4 (BR-INV-023): điều chỉnh bằng đúng số đang có không ghi gì.
+  - M5 (BR-APPT-020): không check-in khi bác sĩ có nghỉ phép đã duyệt trùng giờ lịch (409 `DENTIST_ON_TIME_OFF`).
+  - M6 (BR-INV-001): không tạo/đổi tên vật tư trùng tên vật tư đang dùng (409 `ITEM_NAME_EXISTS`).
+- backend `tsc`, lint sạch, 1453 test xanh (thêm 10). Một test sẵn có (`A1-13`, dời lịch hàng loạt) đỏ 1 lần khi chạy toàn bộ rồi xanh khi chạy lại — không liên quan thay đổi này, đã tạo việc riêng để tìm nguyên nhân. frontend `typecheck`, `typecheck:e2e`, lint, build sạch.

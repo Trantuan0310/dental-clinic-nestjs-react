@@ -3445,6 +3445,70 @@ describe('BookingService public request security and validation', () => {
   });
 });
 
+describe('BookingService reminding the front desk of waiting requests', () => {
+  let service: BookingService;
+  let prisma: any;
+  let notify: jest.SpyInstance;
+  // Thursday 1/10/2026; the clinic opens 08:00 (01:00Z), default hours.
+  const at = (iso: string) => new Date(iso);
+
+  beforeEach(() => {
+    prisma = {
+      clinicClosure: { findMany: jest.fn().mockResolvedValue([]) },
+      bookingRequest: {
+        findMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    service = new BookingService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any);
+    notify = jest.spyOn(service as any, 'notifyStaff').mockResolvedValue(undefined);
+  });
+
+  it('waits the promised 30 minutes, then reminds once', async () => {
+    prisma.bookingRequest.findMany.mockResolvedValue([
+      { id: 'r1', createdAt: at('2026-10-01T03:00:00Z') }, // 10:00
+    ]);
+    await expect(service.remindSlowRequests(at('2026-10-01T03:20:00Z'))).resolves.toEqual({
+      reminded: 0,
+    });
+    expect(notify).not.toHaveBeenCalled();
+
+    await expect(service.remindSlowRequests(at('2026-10-01T03:31:00Z'))).resolves.toEqual({
+      reminded: 1,
+    });
+    expect(notify).toHaveBeenCalledWith('r1', expect.stringContaining('30 phút'));
+    // Claimed only while not yet reminded and still waiting.
+    expect(prisma.bookingRequest.updateMany.mock.calls[0][0].where).toEqual({
+      id: 'r1',
+      staffRemindedAt: null,
+      status: 'PENDING_REVIEW',
+    });
+  });
+
+  it('counts from the next opening for a request sent at night', async () => {
+    prisma.bookingRequest.findMany.mockResolvedValue([
+      { id: 'r2', createdAt: at('2026-09-30T15:00:00Z') }, // 22:00 Wednesday
+    ]);
+    // 08:20 Thursday: 20 minutes after opening, not yet due.
+    await service.remindSlowRequests(at('2026-10-01T01:20:00Z'));
+    expect(notify).not.toHaveBeenCalled();
+    // 08:31 Thursday: due.
+    await service.remindSlowRequests(at('2026-10-01T01:31:00Z'));
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send when another run already claimed it', async () => {
+    prisma.bookingRequest.findMany.mockResolvedValue([
+      { id: 'r3', createdAt: at('2026-10-01T03:00:00Z') },
+    ]);
+    prisma.bookingRequest.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.remindSlowRequests(at('2026-10-01T05:00:00Z'))).resolves.toEqual({
+      reminded: 0,
+    });
+    expect(notify).not.toHaveBeenCalled();
+  });
+});
+
 describe('BookingService returning-patient lookup', () => {
   let service: BookingService;
   let prisma: any;

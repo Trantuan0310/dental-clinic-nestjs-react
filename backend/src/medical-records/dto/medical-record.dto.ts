@@ -402,7 +402,7 @@ export class SnapshotDentalChartDto {
   @IsEnum(PatientType)
   patientType!: 'ADULT' | 'CHILD';
 
-  /** Free-form JSON: e.g., { "16": "Filling", "26": "Crown" } */
+  /** FDI tooth → { status, notes? }, e.g. { "16": { "status": "filled", "notes": "" } } (BR-MR-008: status in TOOTH_STATUSES). */
   @ApiProperty({ type: Object, additionalProperties: true })
   @IsObject()
   teeth!: Record<string, unknown>;

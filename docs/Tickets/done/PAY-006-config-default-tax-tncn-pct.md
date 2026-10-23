@@ -4,7 +4,7 @@
 🔴 P0 — Blocking
 
 ## Status
-Open
+Done (đóng 22/10/2026)
 
 ## Owner
 Backend
@@ -81,3 +81,10 @@ Sau khi backend confirm contract:
 
 - `docs/03_Specification/Payroll/SPEC.md` §8.1 — Payroll config
 - `docs/05_API/permissions.md` (§3.9 — Permission matrix)
+
+
+---
+
+## Đóng 22/10/2026
+
+Đã có: `PayrollConfigDto.defaultTaxTncnPct` và ô "Thuế TNCN mặc định" ở `PayrollConfigPage.tsx`.

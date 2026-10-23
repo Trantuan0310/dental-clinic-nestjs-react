@@ -1,5 +1,5 @@
 import { test, expect, getSharedContext } from './fixtures';
-import { loginAs, ACCOUNTS, randomVnPhone, clinicNowMinutes } from './flow-helpers';
+import { loginAs, ACCOUNTS, randomVnPhone, clinicNowMinutes, addChiefComplaint } from './flow-helpers';
 
 /**
  * Detailed flow: inventory stock-out via encounter close.
@@ -193,6 +193,7 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     await dentistPage.getByRole('button', { name: /^thêm$/i }).click();
     await expect(dentistPage.getByText('E2E stock-out probe treatment', { exact: true })).toBeVisible({ timeout: 10_000 });
 
+    await addChiefComplaint(dentistPage, 'E2E: đau răng 24');
     await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
     await dentistPage.getByLabel(/tóm tắt cuối cùng/i).fill('E2E inventory probe — 1 unit attached via the materials picker.');
     const checkboxes = dentistPage.locator('input[type="checkbox"]');

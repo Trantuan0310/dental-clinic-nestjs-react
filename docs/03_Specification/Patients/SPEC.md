@@ -331,7 +331,7 @@ Mọi table có: `created_at`, `updated_at`, `created_by` (cho Patient).
 | BR-PT-012 | ContactPerson cho trẻ em | Nếu `age < 12` tại thời điểm tạo → bắt buộc có `contactPersonName` + `contactPersonPhone`. |
 | BR-PT-013 | Liên hệ tối thiểu | Có ít nhất 1 trong: `primaryPhone`, `contactPersonPhone`. |
 | BR-PT-014 | Row-level filter (BS) | Dentist chỉ thấy BN đã từng có encounter do mình phụ trách. |
-| BR-PT-015 | Receptionist không thấy medical history | Receptionist có `patient.read.basic` nhưng KHÔNG có `patient.read.medical_history`. |
+| BR-PT-015 | Lễ tân: thông tin an toàn có, lịch sử khám không | Lễ tân xem và ghi **dị ứng, bệnh nền, thuốc đang dùng** khi tiếp nhận (thông tin an toàn cần có trước khi khám, qua `PATCH /patients/:id`, quyền `patient.update`), nhưng KHÔNG xem ghi chú lâm sàng, chẩn đoán, số liệu tài chính (BR-PT-021). Mọi thay đổi ba danh sách này (lễ tân, bác sĩ, admin) ghi nhật ký kèm mục thêm/bớt (`medicalChanges`), để truy được ai xoá một dị ứng. (Cập nhật 22/10/2026; trước đây ghi lễ tân không thấy medical history.) |
 | BR-PT-016 | Code immutable sau khi tạo | API không nhận `code` trong PATCH. |
 | BR-PT-017 | DOB locked sau encounter | Nếu BN đã có ≥ 1 encounter, không cho đổi DOB (chỉ admin override với lý do). |
 | BR-PT-018 | Deactivated patient không login | Mặc dù BN không phải user, rule này nhắc nhở: code vẫn bị khóa cho mọi flow tạo appointment/invoice mới nếu BN đã soft-delete (phải restore trước). |

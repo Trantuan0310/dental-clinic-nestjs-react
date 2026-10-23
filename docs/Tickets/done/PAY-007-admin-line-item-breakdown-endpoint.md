@@ -4,7 +4,7 @@
 🔴 P0 — Blocking
 
 ## Status
-Open
+Done (đóng 22/10/2026)
 
 ## Owner
 Backend
@@ -125,3 +125,10 @@ GET /api/v1/payroll/periods/:periodId/line-items/:lineItemId/breakdown
 
 - `docs/03_Specification/Payroll/SPEC.md` (§6 — Period detail & breakdown)
 - `docs/03_Specification/Permissions/SPEC.md` (§3.9 — Permission matrix)
+
+
+---
+
+## Đóng 22/10/2026
+
+Đã có: `GET /payroll/periods/:id` trả `encounterDetails` và `adjustments` cho từng dòng; `PeriodDetailPage.tsx` dùng dữ liệu này, không gọi `/payroll/me/...`.

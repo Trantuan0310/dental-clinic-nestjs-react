@@ -92,3 +92,31 @@ export function similarName(a: string, b: string): boolean {
   for (const word of long) if (word === short[next]) next++;
   return next === short.length;
 }
+
+type MedicalListKey = 'allergies' | 'chronicDiseases' | 'currentMedications';
+const MEDICAL_LIST_KEYS: MedicalListKey[] = ['allergies', 'chronicDiseases', 'currentMedications'];
+
+/**
+ * What changed in the safety-critical lists (allergies, chronic diseases,
+ * current medications), for the audit log: entries added and removed per
+ * list. A removed allergy must be traceable to who removed it. Lists not in
+ * `next` (not sent) or unchanged are left out.
+ */
+export function medicalListChanges(
+  before: Partial<Record<MedicalListKey, unknown>>,
+  next: Partial<Record<MedicalListKey, unknown>>,
+): Partial<Record<MedicalListKey, { added: string[]; removed: string[] }>> {
+  const out: Partial<Record<MedicalListKey, { added: string[]; removed: string[] }>> = {};
+  for (const key of MEDICAL_LIST_KEYS) {
+    if (next[key] === undefined) continue;
+    const was = readJsonStringArray(before[key]);
+    const now = readJsonStringArray(next[key]);
+    const fold = (v: string) => v.trim().toLocaleLowerCase('vi');
+    const wasSet = new Set(was.map(fold));
+    const nowSet = new Set(now.map(fold));
+    const added = now.filter(v => !wasSet.has(fold(v)));
+    const removed = was.filter(v => !nowSet.has(fold(v)));
+    if (added.length || removed.length) out[key] = { added, removed };
+  }
+  return out;
+}

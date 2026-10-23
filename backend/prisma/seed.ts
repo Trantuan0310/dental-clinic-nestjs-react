@@ -342,26 +342,6 @@ const PERMISSIONS = [
     description: 'Tạo/sửa/xóa ngày nghỉ toàn phòng khám (Tết, lễ)',
   },
 
-  // Shift Registration permissions (controllers use shift_registration.*)
-  {
-    code: 'shift_registration.write',
-    resource: 'shift_registration',
-    action: 'write',
-    description: 'Đăng ký/hủy ca làm việc',
-  },
-  {
-    code: 'shift_registration.read',
-    resource: 'shift_registration',
-    action: 'read',
-    description: 'Xem ca đăng ký',
-  },
-  {
-    code: 'shift_registration.approve',
-    resource: 'shift_registration',
-    action: 'approve',
-    description: 'Duyệt/từ chối ca đăng ký',
-  },
-
   // Medical Record permissions
   {
     code: 'encounter.read',
@@ -897,8 +877,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'dentist.update.own',
     'dentist.manage_schedule',
     'service.read',
-    'shift_registration.write',
-    'shift_registration.read',
     'encounter.start',
     'encounter.read',
     'encounter.read.own',

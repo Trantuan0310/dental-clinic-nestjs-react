@@ -371,17 +371,13 @@ Encounter.status ∈ { 'in_progress', 'completed', 'cancelled' }
 
 Tooth status ∈ {
   'healthy',
-  'caries',
+  'cavity',
   'filled',
-  'missing',
   'crowned',
-  'extracted',
-  'root_canal',
+  'missing',
   'implant',
-  'bridge',
-  'partial_denture',
-  'watch'  // chưa có vấn đề gì nhưng cần theo dõi
-}
+  'extraction_needed'
+}   -- các trạng thái màn hình sơ đồ răng dùng (cập nhật 22/10/2026); ghi chú mỗi răng ≤ 1000 ký tự
 
 PatientType ∈ { 'adult' (32 răng), 'child' (20 răng sữa) }
 ```

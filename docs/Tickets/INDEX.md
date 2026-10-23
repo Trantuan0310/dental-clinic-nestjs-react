@@ -2,18 +2,23 @@
 
 Tổng hợp tất cả các ticket đang mở. Mỗi ticket được track trong `pending/` (chưa bắt đầu) hoặc `in-progress/` / `done/` (cập nhật khi có owner nhận).
 
-Last updated: 2026-07-18
+Last updated: 2026-10-22
 
 ---
 
 ## Pending
 
-| ID | Priority | Title | Owner | Estimate | Status |
-|----|----------|-------|-------|----------|--------|
-| [PAY-006](./pending/PAY-006-config-default-tax-tncn-pct.md) | 🔴 P0 | PayrollConfigPage thiếu field `defaultTaxTncnPct` (verify backend DTO contract) | Backend | 15 min | Open |
-| [PAY-007](./pending/PAY-007-admin-line-item-breakdown-endpoint.md) | 🔴 P0 | Admin PeriodDetail dùng sai endpoint `payslip/me/...` — tạo admin-side line-item breakdown | Backend | 45–60 min | Open |
-| [PAY-011](./pending/PAY-011-me-working-schedules-endpoint.md) | 🟡 P2 | RegisterShiftPage thiếu working schedule preview — endpoint cho user hiện tại | Backend | 10–30 min | Open |
-| [PAY-012](./pending/PAY-012-rfc7807-error-code-mapping.md) | 🟡 P2 | Payroll + Shift modules thiếu error code discriminator trong RFC 7807 responses | Backend | 2–3 h | Open |
+Không còn ticket mở.
+
+## Done
+
+| ID | Title | Đóng |
+|----|-------|------|
+| [PAY-006](./done/PAY-006-config-default-tax-tncn-pct.md) | PayrollConfigPage thiếu field `defaultTaxTncnPct` | 22/10/2026 — đã có |
+| [PAY-007](./done/PAY-007-admin-line-item-breakdown-endpoint.md) | Admin PeriodDetail dùng sai endpoint | 22/10/2026 — đã có |
+| [PAY-011](./done/PAY-011-me-working-schedules-endpoint.md) | RegisterShiftPage thiếu working schedule preview | 22/10/2026 — không còn áp dụng |
+| [PAY-012](./done/PAY-012-rfc7807-error-code-mapping.md) | Payroll + Shift thiếu error code | 22/10/2026 — đã có |
+
 
 ---
 

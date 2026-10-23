@@ -250,6 +250,7 @@ describe('Phase one audit regressions', () => {
   });
 
   it('MR-03 serializes two closes on the same encounter and emits only once', async () => {
+    db.clinicalNote.findUnique.mockResolvedValue({ chiefComplaint: 'Đau răng', diagnosis: null });
     let status = 'IN_PROGRESS';
     let stock = 10;
     let tail = Promise.resolve();

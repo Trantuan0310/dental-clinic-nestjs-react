@@ -512,6 +512,28 @@ export class AppointmentsService {
       );
     }
 
+    // BR-APPT-020: the dentist was granted time off over this visit after it
+    // was booked. Check-in would queue the patient for nobody: move the
+    // visit to another dentist (or reschedule) first.
+    const timeOff = await this.prisma.timeOff.findFirst({
+      where: {
+        dentistId: appt.dentistId,
+        status: 'APPROVED',
+        deletedAt: null,
+        startAt: { lt: appt.endAt },
+        endAt: { gt: appt.startAt },
+      },
+      select: { startAt: true, endAt: true },
+    });
+    if (timeOff) {
+      throw new BusinessRuleException(
+        `Bác sĩ của lịch này đang nghỉ phép (${this.toClinicTimeString(timeOff.startAt)} ngày ${this.viDate(new Date(clinicDateOnly(timeOff.startAt)))} – ${this.toClinicTimeString(timeOff.endAt)} ngày ${this.viDate(new Date(clinicDateOnly(timeOff.endAt)))}). Hãy đổi sang bác sĩ khác hoặc đổi giờ trước khi check-in.`,
+        HttpStatus.CONFLICT,
+        { timeOff },
+        'DENTIST_ON_TIME_OFF',
+      );
+    }
+
     // A3-07: earlier than the window the same clinic day, a patient may be
     // checked in early with a reason; the booking keeps its time and the
     // patient lines up by it (queue dueAt), not ahead of earlier bookings.
