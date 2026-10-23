@@ -4,6 +4,7 @@ import { Modal, Button, Input, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { useCreateShift } from '@/features/payroll/payrollApi';
+import { clinicToday } from '@/lib/clinicTime';
 
 interface RegisterShiftModalProps {
   open: boolean;
@@ -55,7 +56,7 @@ export function RegisterShiftModal({ open, onClose }: RegisterShiftModalProps) {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          min={new Date().toISOString().split('T')[0]}
+          min={clinicToday()}
           required
         />
 

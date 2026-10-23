@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
 import { Plus, Pencil, KeyRound, Stethoscope, UserX, RotateCcw } from 'lucide-react';
 import {
   Alert,
@@ -79,7 +78,7 @@ function EmployeeForm({
     phone: employee?.phone ?? '',
     email: employee?.email ?? '',
     address: employee?.address ?? '',
-    hireDate: employee?.hireDate ?? format(new Date(), 'yyyy-MM-dd'),
+    hireDate: employee?.hireDate ?? clinicToday(),
     employmentStatus: (employee?.employmentStatus === 'ON_LEAVE' ? 'ON_LEAVE' : 'ACTIVE') as
       | 'ACTIVE'
       | 'ON_LEAVE',

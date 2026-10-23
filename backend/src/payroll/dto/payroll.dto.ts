@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PayrollCycle, PayrollAdjustmentType } from '@prisma/client';
+import { PayrollCycle, PayrollAdjustmentType, PayrollPeriodStatus } from '@prisma/client';
 
 const SELF_APPROVAL_REASON_DOC =
   'Required (min 10 chars) when acting on your own pay as the only admin; logged as PAYROLL_SELF_APPROVED';
@@ -211,14 +211,17 @@ export class MarkPaidDto {
 }
 
 export class ListPeriodsQueryDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: PayrollPeriodStatus })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(PayrollPeriodStatus)
+  status?: PayrollPeriodStatus;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
   year?: number;
 }
 

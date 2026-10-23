@@ -84,11 +84,15 @@ export class PatientsProxyController {
     // Admin (`encounter.read.any`) → full data
     // Dentist (`encounter.read.own`) → every encounter (read-only) of a
     // patient they treated or are booked with; otherwise only their own.
-    const where =
-      actor.permissions.includes('encounter.read.any') ||
-      (await dentistCanReadPatient(this.prisma, id, actor.sub))
-        ? { patientId: id }
-        : { patientId: id, dentistId: actor.sub };
+    // A dentist sees nothing of a patient they may not read: the same 404 as
+    // a missing patient, so the answer does not tell whether the id exists.
+    if (
+      !actor.permissions.includes('encounter.read.any') &&
+      !(await dentistCanReadPatient(this.prisma, id, actor.sub))
+    ) {
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
+    }
+    const where = { patientId: id };
 
     const rows = await this.prisma.encounter.findMany({
       where,
@@ -145,7 +149,7 @@ export class PatientsProxyController {
       lastEncounter.dentistId !== actor.sub &&
       !(await dentistCanReadPatient(this.prisma, id, actor.sub))
     ) {
-      throw new ForbiddenException('Dental chart not visible');
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
     }
 
     await this.audit.log({
@@ -179,6 +183,9 @@ export class PatientsProxyController {
     }
     // Dentist row-level: BR-BILL-003 → only invoices linked to encounter they own
     if (scope === 'own') {
+      if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
+        throw new NotFoundException('Không tìm thấy bệnh nhân');
+      }
       const rows = await this.prisma.invoice.findMany({
         where: {
           patientId: id,

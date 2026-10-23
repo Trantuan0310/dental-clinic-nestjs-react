@@ -499,3 +499,12 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Nhắn tin: tin SMS/Zalo gửi lỗi (nhà cung cấp tạm hỏng, token hết hạn) không bao giờ được gửi lại vì khoá chống trùng đã bị chiếm. Migration 056 thêm `message_logs.attempts`; lần chạy sau lấy lại tin FAILED và thử tiếp, tối đa 3 lần (như email nhắc lịch), mỗi lần một mã theo dõi mới. Trang Tin nhắn hiện số lần thử. +1 test; trên DB demo: 3 lần FAILED (attempts 1→3), lần thứ 4 không thử nữa.
 - Tải PDF bị từ chối (403/404) chỉ hiện câu chung chung: lỗi trả về dạng blob nay được đọc lại để hiện đúng lời máy chủ.
 - Kiểm: backend 1511 test, `test:isolated` (migration 056) xanh; frontend typecheck, lint, build, locales sạch.
+
+## 23/10 — Rà lỗi toàn hệ thống (ngoài Phần 4)
+
+- Dò menu cả 3 vai trò trên demo (admin 22, lễ tân 13, bác sĩ 12 mục + trang chi tiết): không lỗi 4xx/5xx/JS.
+- Quét tĩnh mọi controller: endpoint công khai chỉ là đăng nhập, đặt lịch công khai, ảnh trang chủ/bác sĩ, link ngừng nhận nhắc tái khám — đúng thiết kế.
+- Thử truy cập chéo bằng bác sĩ 1 trên bệnh nhân / phiên khám / hoá đơn / lịch hẹn / kế hoạch của bác sĩ khác: đọc và ghi đều bị chặn. **Sửa:** 3 endpoint proxy `patients/:id/encounters|invoices|dental-chart` trả danh sách rỗng (hoặc 403) cho bệnh nhân bác sĩ không được xem nhưng 404 cho bệnh nhân không tồn tại — dò được id có phải bệnh nhân hay không. Nay trả 404 như bệnh nhân không tồn tại. Test cập nhật + 1 test.
+- Thử dữ liệu sai vào 265 endpoint (admin) và các endpoint công khai: **sửa** 3 chỗ trả 500 thay vì 400 — `GET /inventory/movements` (from/to không phải ngày), `GET /patients` (pageSize không phải số), `GET /payroll/periods` (status sai). Chạy lại: 0 lỗi 500.
+- Múi giờ: **sửa** các chỗ lấy ngày theo UTC / theo máy thay cho giờ phòng khám — tóm tắt AI (ngày khám), ngày trả lương mặc định, ngày tối thiểu đăng ký ca, tên file xuất nhật ký, ngày mặc định trên form bệnh nhân / nhân sự / chi phí, và tuổi (`isMinor`) / ngày sinh hợp lệ (`isValidDob`) tính theo ngày tại phòng khám (+2 test).
+- Kiểm: backend 1514 test, `test:isolated` xanh; frontend typecheck, lint, build, locales sạch.

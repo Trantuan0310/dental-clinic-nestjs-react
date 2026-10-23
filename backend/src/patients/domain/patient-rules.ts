@@ -1,3 +1,5 @@
+import { clinicDateOnly } from '../../common/date-range.util';
+
 export const isValidVnPhone = (phone: string): boolean => {
   const cleaned = phone.replace(/\s/g, '').replace(/^\+84/, '0');
   const patterns = [/^0[3-9]\d{8}$/, /^0[1-9]\d{8}$/];
@@ -9,19 +11,22 @@ export const isValidEmail = (email: string): boolean => {
   return emailRegex.test(email);
 };
 
-export const isValidDob = (dob: Date): boolean => {
-  const now = new Date();
-  const minDate = new Date(now.getFullYear() - 150, now.getMonth(), now.getDate());
-  return dob >= minDate && dob <= now;
+/** Today at the clinic as [year, month 0–11, day]; a DOB is a DATE (UTC midnight). */
+const clinicToday = (now: Date): [number, number, number] => {
+  const [y, m, d] = clinicDateOnly(now).split('-').map(Number);
+  return [y, m - 1, d];
 };
 
-export const isMinor = (dob: Date): boolean => {
-  const now = new Date();
-  const age = now.getFullYear() - dob.getFullYear();
-  const monthDiff = now.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
-    return age - 1 < 12;
-  }
+export const isValidDob = (dob: Date, now: Date = new Date()): boolean => {
+  const [y, m, d] = clinicToday(now);
+  const minDate = Date.UTC(y - 150, m, d);
+  return dob.getTime() >= minDate && dob.getTime() <= Date.UTC(y, m, d);
+};
+
+export const isMinor = (dob: Date, now: Date = new Date()): boolean => {
+  const [y, m, d] = clinicToday(now);
+  let age = y - dob.getUTCFullYear();
+  if (m < dob.getUTCMonth() || (m === dob.getUTCMonth() && d < dob.getUTCDate())) age--;
   return age < 12;
 };
 

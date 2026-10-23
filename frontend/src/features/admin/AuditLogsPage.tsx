@@ -6,6 +6,7 @@ import { AUDIT_EXPORT_MAX, fetchAllAuditLogs, useAuditLogs } from './adminApi';
 import type { AuditLog } from '@/types/admin';
 import { exportCsv } from '@/lib/csv';
 import { notify } from '@/components/ui/Toast';
+import { clinicToday } from '@/lib/clinicTime';
 
 const PAGE_SIZE = 20;
 
@@ -91,7 +92,7 @@ export default function AuditLogsPage() {
         ...(dateFrom ? { from: dateFrom } : {}),
         ...(dateTo ? { to: dateTo } : {}),
       });
-      exportCsv(`nhat-ky-${new Date().toISOString().slice(0, 10)}`, rows.filter(matchesSearch), [
+      exportCsv(`nhat-ky-${clinicToday()}`, rows.filter(matchesSearch), [
         { header: t('uiWorkforce.auditTime'), accessor: (log) => new Date(log.occurredAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { timeZone: 'Asia/Ho_Chi_Minh' }) },
         { header: t('uiWorkforce.auditAction'), accessor: (log) => ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : log.action },
         { header: t('uiWorkforce.auditActor'), accessor: (log) => actorLabel(log) ?? t('uiWorkforce.auditSystem') },

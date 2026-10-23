@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui/Alert';
 import { useMarkPaid } from '@/features/payroll/payrollApi';
 import { getApiErrorMessage } from '@/lib/errors';
 import { notify } from '@/components/ui/Toast';
+import { clinicToday } from '@/lib/clinicTime';
 
 const schema = z.object({
   paymentReference: z.string().min(1, 'uiWorkforce.payrollFieldRequired').max(200),
@@ -35,7 +36,7 @@ export function MarkPaidModal({ open, onClose, periodId }: Props) {
     resolver: zodResolver(schema),
     defaultValues: {
       paymentReference: '',
-      paymentDate: new Date().toISOString().slice(0, 10),
+      paymentDate: clinicToday(),
     },
   });
   const [serverError, setServerError] = useState<string | null>(null);
