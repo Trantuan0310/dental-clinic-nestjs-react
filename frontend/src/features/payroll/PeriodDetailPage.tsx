@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calculator, Lock, CheckCircle, Wallet, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Calculator, Lock, CheckCircle, Wallet, SlidersHorizontal, FileDown } from 'lucide-react';
+import { downloadPdf } from '@/lib/pdf';
 import { Card, Button, StatusBadge, EmptyState } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageLoader } from '@/components/ui/Loading';
@@ -120,6 +121,7 @@ export default function PeriodDetailPage() {
   const isOpenPeriod = period?.status === 'DRAFT' || period?.status === 'REVIEWING';
   const { data: warnings } = usePeriodWarnings(id, isOpenPeriod);
   const [confirmLock, setConfirmLock] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const myId = useAuthStore((s) => s.user?.id);
   const [confirmSelfApprove, setConfirmSelfApprove] = useState(false);
   const [selfReason, setSelfReason] = useState('');
@@ -171,6 +173,16 @@ export default function PeriodDetailPage() {
   };
 
   // The approver has their own payslip here (owner who also practises).
+  const getPdf = async (key: string, url: string) => {
+    setPdfBusy(key);
+    try {
+      await downloadPdf(url, 'phieu-luong.pdf');
+    } catch (err) {
+      notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollPdfError')));
+    } finally {
+      setPdfBusy(null);
+    }
+  };
   const ownLine = period.lineItems.find((li) => li.dentistId === myId);
 
   const runApprove = async () => {
@@ -245,6 +257,15 @@ export default function PeriodDetailPage() {
               title={periodEnded ? t('uiWorkforce.payrollApproveRecomputes') : notEndedHint}
             >
               <CheckCircle className="h-4 w-4" /> {t('uiWorkforce.payrollReviewApprove')}
+            </Button>
+          )}
+          {period.lineItems.length > 0 && (
+            <Button
+              variant="outline"
+              isLoading={pdfBusy === 'all'}
+              onClick={() => getPdf('all', `/payroll/periods/${period.id}/payslips/pdf`)}
+            >
+              <FileDown className="h-4 w-4" /> {t('uiWorkforce.payrollPayslipsPdf')}
             </Button>
           )}
           {canMarkPaid && (
@@ -327,6 +348,18 @@ export default function PeriodDetailPage() {
                     <td className="whitespace-nowrap text-right">
                       <Button variant="outline" size="sm" onClick={() => setBreakdownItem(li)}>
                         {t('uiWorkforce.payrollViewDetails')}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2"
+                        aria-label={t('uiWorkforce.payrollPayslipPdf')}
+                        isLoading={pdfBusy === li.dentistId}
+                        onClick={() =>
+                          getPdf(li.dentistId, `/payroll/periods/${period.id}/payslips/${li.dentistId}/pdf`)
+                        }
+                      >
+                        <FileDown className="h-3.5 w-3.5" /> PDF
                       </Button>
                       {canAdjust && (
                         <Button

@@ -12,6 +12,7 @@ import * as uiScheduling from './uiScheduling';
 import * as uiWorkforce from './uiWorkforce';
 import * as uiPlans from './uiPlans';
 import * as uiRecalls from './uiRecalls';
+import * as uiMessaging from './uiMessaging';
 
 /**
  * Initialize i18next once at app boot.
@@ -31,8 +32,8 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      vi: { translation: { ...vi, uiCommon: uiCommon.vi, uiClinical: uiClinical.vi, uiEntry: uiEntry.vi, uiOperations: uiOperations.vi, uiScheduling: uiScheduling.vi, uiWorkforce: uiWorkforce.vi, uiPlans: uiPlans.vi, uiRecalls: uiRecalls.vi } },
-      en: { translation: { ...en, uiCommon: uiCommon.en, uiClinical: uiClinical.en, uiEntry: uiEntry.en, uiOperations: uiOperations.en, uiScheduling: uiScheduling.en, uiWorkforce: uiWorkforce.en, uiPlans: uiPlans.en, uiRecalls: uiRecalls.en } },
+      vi: { translation: { ...vi, uiCommon: uiCommon.vi, uiClinical: uiClinical.vi, uiEntry: uiEntry.vi, uiOperations: uiOperations.vi, uiScheduling: uiScheduling.vi, uiWorkforce: uiWorkforce.vi, uiPlans: uiPlans.vi, uiRecalls: uiRecalls.vi, uiMessaging: uiMessaging.vi } },
+      en: { translation: { ...en, uiCommon: uiCommon.en, uiClinical: uiClinical.en, uiEntry: uiEntry.en, uiOperations: uiOperations.en, uiScheduling: uiScheduling.en, uiWorkforce: uiWorkforce.en, uiPlans: uiPlans.en, uiRecalls: uiRecalls.en, uiMessaging: uiMessaging.en } },
     },
     fallbackLng: DEFAULT_LOCALE,
     supportedLngs: LOCALES.map((l) => l.code),

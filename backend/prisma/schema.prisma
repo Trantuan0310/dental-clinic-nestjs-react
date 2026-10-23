@@ -1901,3 +1901,39 @@ model Recall {
   @@index([resolvedByEncounterId])
   @@map("recalls")
 }
+
+/// Migration 055: every SMS / Zalo message the clinic sends (or would send:
+/// MOCKED while no provider is configured). dedupeKey makes a message go
+/// out at most once (e.g. one reminder per visit and time).
+enum MessageChannel {
+  SMS
+  ZALO
+}
+
+enum MessageStatus {
+  SENT
+  MOCKED
+  FAILED
+  SKIPPED
+}
+
+model MessageLog {
+  id         String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  channel    MessageChannel
+  provider   String         @db.VarChar(30)
+  recipient  String         @db.VarChar(30)
+  template   String         @db.VarChar(50)
+  body       String
+  status     MessageStatus
+  error      String?        @db.VarChar(500)
+  providerId String?        @map("provider_id") @db.VarChar(100)
+  dedupeKey  String         @unique @map("dedupe_key") @db.VarChar(200)
+  patientId  String?        @map("patient_id") @db.Uuid
+  targetType String?        @map("target_type") @db.VarChar(30)
+  targetId   String?        @map("target_id") @db.Uuid
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([createdAt(sort: Desc)])
+  @@index([patientId])
+  @@map("message_logs")
+}

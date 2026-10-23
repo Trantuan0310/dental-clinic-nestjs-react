@@ -134,6 +134,7 @@ Trong đó:
 | Ghi nhận khách đồng ý kế hoạch điều trị | ✅ | ✅ | 🔒 (bệnh nhân mình được xem) | `treatment_plan.accept` |
 | Xem danh sách nhắc tái khám | ✅ | ✅ | ❌ | `recall.read` |
 | Ghi kết quả gọi nhắc tái khám, mở lại, bật/tắt email nhắc | ✅ | ✅ | ❌ | `recall.manage` |
+| Xem nhật ký tin nhắn SMS / Zalo, gửi tin thử | ✅ | ❌ | ❌ | `message_log.read` |
 | Tạo / sửa Prescription | ❌ | ❌ | 🔒 | `prescription.write` |
 | Cập nhật Dental Chart | ❌ | ❌ | 🔒 | `dental_chart.write` |
 | Xem Dental Chart | ✅ | ❌ | ✅ | `dental_chart.read` |

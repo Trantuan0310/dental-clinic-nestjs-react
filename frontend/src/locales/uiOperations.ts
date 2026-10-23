@@ -131,6 +131,10 @@ export const vi = {
   adjustedDown: 'Đã điều chỉnh giảm / xoá nợ',
   adjustmentLine: 'Điều chỉnh giảm {{amount}} — {{reason}}',
   adjustmentsDeducted: 'Đã trừ điều chỉnh giảm / xoá nợ',
+  pdfError: 'Không tải được PDF',
+  emailInvoice: 'Gửi email',
+  invoiceEmailed: 'Đã gửi hoá đơn tới {{to}}',
+  invoiceEmailError: 'Không gửi được email hoá đơn',
 } as const;
 
 export const en = {
@@ -259,4 +263,8 @@ export const en = {
   adjustedDown: 'Adjusted down / written off',
   adjustmentLine: 'Adjusted down {{amount}} — {{reason}}',
   adjustmentsDeducted: 'Write-offs deducted',
+  pdfError: 'Could not download the PDF',
+  emailInvoice: 'Email',
+  invoiceEmailed: 'Invoice sent to {{to}}',
+  invoiceEmailError: 'Could not email the invoice',
 } as const;
