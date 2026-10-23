@@ -76,6 +76,7 @@ const DentistDetailPage = lazy(() => import('@/features/staff/DentistDetailPage'
 const ServicesPage = lazy(() => import('@/features/catalog/ServicesPage'));
 const RolesPage = lazy(() => import('@/features/admin/RolesPage'));
 const AuditLogsPage = lazy(() => import('@/features/admin/AuditLogsPage'));
+const MessagesPage = lazy(() => import('@/features/messaging/MessagesPage'));
 const SettingsPage = lazy(() => import('@/features/admin/SettingsPage'));
 const SiteMediaPage = lazy(() => import('@/features/media/SiteMediaPage'));
 const MyAccountPage = lazy(() => import('@/features/auth/MyAccountPage'));
@@ -539,6 +540,14 @@ const router = createBrowserRouter(createRoutesFromElements(
                 element={
                   <ProtectedRoute permission="system.audit.read">
                     <AuditLogsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/messages"
+                element={
+                  <ProtectedRoute permission="message_log.read">
+                    <MessagesPage />
                   </ProtectedRoute>
                 }
               />

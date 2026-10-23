@@ -481,3 +481,12 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Phiếu lương: `GET /payroll/me/payslip/:periodId/pdf` (bác sĩ, kỳ đã duyệt), `GET /payroll/periods/:id/payslips/:dentistId/pdf` và `/payslips/pdf` cả kỳ, mỗi người một trang (`payroll.read.any`).
 - Giao diện: nút PDF và Gửi email trên hoá đơn; "Tải phiếu lương (PDF)" và PDF từng dòng trong kỳ lương; nút PDF trong phiếu lương của tôi.
 - Kiểm: backend 1495 test (+8: mẫu PDF, nhiều trang, gửi email); frontend typecheck, lint, build, locales sạch. Trên demo: tải PDF hoá đơn (lễ tân), gửi email (bản giả lập ghi đính kèm 25 KB), PDF cả kỳ 16 trang, từng phiếu, phiếu của bác sĩ; xem ảnh kết xuất (dấu tiếng Việt đúng). Quyền: bác sĩ / lễ tân lấy PDF cả kỳ → 403; bác sĩ lấy PDF hoá đơn của bác sĩ khác → 404, gửi email → 403.
+
+## 23/10 — Phần 4.4: lớp nhắn tin SMS / Zalo (chế độ giả lập)
+
+- Migration 055: bảng `message_logs` (kênh, nhà cung cấp, người nhận, nội dung, trạng thái SENT / MOCKED / FAILED / SKIPPED, `dedupe_key` duy nhất), quyền `message_log.read` (admin).
+- `backend/src/messaging/`: cấu hình bằng env (`SMS_PROVIDER` off|mock|esms, `ZALO_PROVIDER` off|mock|zns, mặc định tắt); bộ chuyển đổi eSMS.vn (brandname, không dấu) và Zalo ZNS (mẫu đã duyệt, số 84…); Zalo thử trước, lỗi thì sang SMS; mỗi `dedupe_key` gửi một lần (giành trước bằng khoá duy nhất); số không phải di động VN → SKIPPED.
+- Cron: nhắc lịch khám mỗi giờ (cùng khung 24 giờ như email, không cho lịch vừa đặt), nhắc tái khám 09:15 (bỏ người đã có lịch / từ chối); không gửi 21:00–07:00.
+- Trang **Quản trị → Tin nhắn SMS / Zalo**: kênh đang bật, cấu hình còn thiếu, gửi tin thử, nhật ký. `docker-compose.prod.yml` và `.env.production.example` có các biến mới; hướng dẫn cho chủ phòng khám: `docs/08_Deployment/SMS_ZALO.md`.
+- Kiểm: backend 1508 test (+13: số điện thoại, bỏ dấu, thiếu cấu hình, gửi một lần, chuyển Zalo → SMS, eSMS / ZNS gửi đúng định dạng, nhắc lịch / tái khám); `test:isolated` xanh với migration 055. Frontend typecheck, lint, build, locales sạch. Trên demo (SMS mock, Zalo zns thiếu mẫu): 8 lịch được nhắc, chạy lại không gửi trùng; tin thử chuyển sang SMS kèm lý do Zalo lỗi; trang quản trị hiện đúng.
+- **Còn chờ chủ phòng khám:** chọn nhà cung cấp SMS, đăng ký Zalo OA + mẫu ZNS, cung cấp khoá API (xem hướng dẫn).

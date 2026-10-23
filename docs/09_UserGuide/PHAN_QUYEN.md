@@ -29,6 +29,7 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Lập, sửa, báo giá, thêm / bỏ qua mục, huỷ kế hoạch | ✔ | ✔ kế hoạch của mình | — |
 | Ghi nhận khách đồng ý kế hoạch | ✔ | ✔ | ✔ |
 | **Nhắc tái khám**: xem danh sách đến hạn, ghi kết quả gọi, bật/tắt email nhắc | ✔ | — | ✔ |
+| **Tin nhắn SMS / Zalo**: xem nhật ký, gửi tin thử | ✔ | — | — |
 | **Báo cáo**: công nợ (mọi khoản nợ, chia nhóm tuổi nợ) | ✔ | — | ✔ |
 | Doanh thu, chi phí, lợi nhuận, doanh thu theo bác sĩ | ✔ | — | — |
 | Thống kê lịch khám (đến / vắng / hủy / về sớm / vãng lai / online), KPI hôm nay | ✔ toàn phòng khám | ✔ lịch của mình | ✔ toàn phòng khám |

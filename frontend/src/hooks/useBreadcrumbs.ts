@@ -63,6 +63,7 @@ const ROUTE_LABELS: Record<string, string> = {
   // `/admin/audit-logs`, which never matched, so both breadcrumb segments
   // fell back to the parent label and rendered "Quản trị / Quản trị".
   '/admin/audit': 'auditLog',
+  '/admin/messages': 'messages',
   '/admin/shifts/pending': 'shiftApproval',
 };
 

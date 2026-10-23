@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   BellRing,
+  MessageSquare,
   Inbox,
   Users,
   CalendarDays,
@@ -260,6 +261,12 @@ const NAV_GROUPS: NavGroupDef[] = [
         labelKey: 'AuditLogs',
         icon: ClipboardList,
         permission: 'system.audit.read',
+      },
+      {
+        to: '/admin/messages',
+        labelKey: 'Messages',
+        icon: MessageSquare,
+        permission: 'message_log.read',
       },
       {
         to: '/admin/site-media',

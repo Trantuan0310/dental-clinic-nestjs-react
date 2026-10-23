@@ -417,6 +417,13 @@ const PERMISSIONS = [
     action: 'manage',
     description: 'Ghi kết quả gọi nhắc tái khám, hẹn gọi lại, bỏ nhắc, bật lại nhắc qua email',
   },
+  // SMS / Zalo message log (migration 055): admin only.
+  {
+    code: 'message_log.read',
+    resource: 'message_log',
+    action: 'read',
+    description: 'Xem nhật ký tin nhắn SMS / Zalo và cấu hình kênh gửi',
+  },
   // BR-MR-024 (migration 050): clinic admin only.
   {
     code: 'encounter.reopen',
