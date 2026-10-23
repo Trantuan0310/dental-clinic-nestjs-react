@@ -1067,6 +1067,10 @@ export class PatientsService {
           where: { patientId: source.id },
           data: { patientId: target.id },
         });
+        const planUpdate = await tx.treatmentPlan.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
         // The source's phone is cleared below; keep it on the target when the
         // target has none, rather than losing the only number on file.
         const inheritPhone = !target.primaryPhone && !!source.primaryPhone;
@@ -1177,6 +1181,7 @@ export class PatientsService {
               invoices: invUpdate.count,
               bookingRequests: bookingUpdate.count,
               phoneHistory: phoneHistoryUpdate.count,
+              treatmentPlans: planUpdate.count,
               identifiersMoved: movedIds.length,
               identifiersDropped: duplicateIds.length,
             },
@@ -1203,6 +1208,7 @@ export class PatientsService {
             invoices: invUpdate.count,
             bookingRequests: bookingUpdate.count,
             phoneHistory: phoneHistoryUpdate.count,
+            treatmentPlans: planUpdate.count,
             identifiersMoved: movedIds.length,
             identifiersDropped: duplicateIds.length,
           },
