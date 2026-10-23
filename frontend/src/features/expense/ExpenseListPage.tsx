@@ -21,6 +21,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useAuthStore } from '@/stores/authStore';
 import type { Expense, ExpenseCategory, CreateExpensePayload, ExpenseFilters } from './types';
+import { clinicToday } from '@/lib/clinicTime';
 
 function ExpenseFormModal({
   expense,
@@ -37,7 +38,7 @@ function ExpenseFormModal({
   const [form, setForm] = useState<CreateExpensePayload>({
     amount: expense?.amount ?? 0,
     description: expense?.description ?? '',
-    expenseDate: expense?.expenseDate ?? format(new Date(), 'yyyy-MM-dd'),
+    expenseDate: expense?.expenseDate ?? clinicToday(),
     categoryId: expense?.category?.id,
     notes: expense?.notes ?? '',
   });

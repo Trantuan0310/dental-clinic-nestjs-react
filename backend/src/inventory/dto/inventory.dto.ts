@@ -6,6 +6,7 @@ import {
   Min,
   IsUUID,
   IsEnum,
+  IsDateString,
   MinLength,
   MaxLength,
 } from 'class-validator';
@@ -136,14 +137,14 @@ export class ListMovementsQueryDto {
   @IsEnum(MovementType)
   type?: MovementType;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: '2026-10-01' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   from?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: '2026-10-31' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   to?: string;
 }
 

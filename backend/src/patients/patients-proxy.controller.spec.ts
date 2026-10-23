@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PatientsProxyController } from './patients-proxy.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -30,15 +30,13 @@ describe('PatientsProxyController — dentist read scope', () => {
     expect(db.encounter.findMany.mock.calls[0][0].where).toEqual({ patientId: 'p' });
   });
 
-  it('keeps an unrelated dentist to their own encounters', async () => {
+  it('answers an unrelated dentist as for a missing patient (no id probing)', async () => {
     db.encounter.count.mockResolvedValue(0);
     db.appointment.count.mockResolvedValue(0);
-    db.encounter.findMany.mockResolvedValue([]);
-    await controller.patientEncounters('p', dentist);
-    expect(db.encounter.findMany.mock.calls[0][0].where).toEqual({
-      patientId: 'p',
-      dentistId: dentist.sub,
-    });
+    await expect(controller.patientEncounters('p', dentist)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(db.encounter.findMany).not.toHaveBeenCalled();
   });
 
   it('shows the latest chart written by a colleague to a dentist who treated the patient', async () => {
@@ -64,7 +62,7 @@ describe('PatientsProxyController — dentist read scope', () => {
     db.encounter.count.mockResolvedValue(0);
     db.appointment.count.mockResolvedValue(0);
     await expect(controller.patientDentalChart('p', dentist)).rejects.toBeInstanceOf(
-      ForbiddenException,
+      NotFoundException,
     );
   });
 
@@ -75,6 +73,7 @@ describe('PatientsProxyController — dentist read scope', () => {
   });
 
   it("keeps invoice.read.own to invoices of the caller's encounters", async () => {
+    db.encounter.count.mockResolvedValue(1);
     db.invoice.findMany.mockResolvedValue([]);
     await controller.patientInvoices('p', dentist);
     expect(db.invoice.findMany.mock.calls[0][0].where).toEqual({
@@ -82,5 +81,14 @@ describe('PatientsProxyController — dentist read scope', () => {
       deletedAt: null,
       encounter: { dentistId: dentist.sub },
     });
+  });
+
+  it('answers an unrelated dentist the invoice list as for a missing patient', async () => {
+    db.encounter.count.mockResolvedValue(0);
+    db.appointment.count.mockResolvedValue(0);
+    await expect(controller.patientInvoices('p', dentist)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(db.invoice.findMany).not.toHaveBeenCalled();
   });
 });

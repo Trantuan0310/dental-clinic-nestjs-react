@@ -10,6 +10,9 @@ import {
   ArrayMaxSize,
   MaxLength,
   MinLength,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -254,8 +257,12 @@ export class ListPatientsQueryDto {
   @IsString()
   includeDeleted?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ minimum: 1, maximum: 500 })
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
   pageSize?: number;
 
   @ApiPropertyOptional({ format: 'uuid' })

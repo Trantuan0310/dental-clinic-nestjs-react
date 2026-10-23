@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { differenceInYears, format, parseISO } from 'date-fns';
+import { differenceInYears, parseISO } from 'date-fns';
 import { isValidDob } from './dobRules';
 import { ArrowLeft, Save, Plus, X } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
@@ -13,6 +13,7 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorCode, getApiErrorMessage } from '@/lib/errors';
 import type { CreatePatientPayload, UpdatePatientPayload, PatientLookupResult } from '@/types/patients';
 import { useTranslation } from 'react-i18next';
+import { clinicToday } from '@/lib/clinicTime';
 
 // VN mobile numbers: 10 digits starting 0, next digit one of 3/5/7/8/9.
 const VN_PHONE_REGEX = /^0(3|5|7|8|9)[0-9]{8}$/;
@@ -234,7 +235,7 @@ export function PatientForm() {
   const age = dob && isValidDob(dob)
     ? differenceInYears(new Date(), parseISO(dob))
     : null;
-  const todayIso = format(new Date(), 'yyyy-MM-dd');
+  const todayIso = clinicToday();
   const hasUnsavedChanges =
     isDirty || tagsDirty || Object.values(newTag).some((value) => value.trim());
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>

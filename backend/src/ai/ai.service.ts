@@ -23,6 +23,7 @@ import {
   PATIENT_CLINICAL_DATA_CHANGED_EVENT,
   PatientClinicalDataChangedEvent,
 } from '../common/events/domain-events';
+import { clinicDateOnly } from '../common/date-range.util';
 
 const CACHE_TTL_SECONDS = 3600;
 const MAX_TOKENS = 350;
@@ -193,7 +194,8 @@ export class AiService {
       chronicDiseases: this.normalizeStringList(patient.chronicDiseases),
       currentMedications: this.normalizeStringList(patient.currentMedications),
       recentEncounters: encounters.map(e => ({
-        date: e.startedAt.toISOString().slice(0, 10),
+        // The visit's day at the clinic, not in UTC (an early visit is the day before in UTC).
+        date: clinicDateOnly(e.startedAt),
         chiefComplaint: e.clinicalNote?.chiefComplaint ?? null,
         diagnosis: e.clinicalNote?.diagnosis ?? null,
         treatmentPlan: e.clinicalNote?.treatmentPlan ?? null,
