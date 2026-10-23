@@ -465,3 +465,11 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Kiểm: backend `tsc`, lint, 1471 test xanh (+18); `test:isolated` xanh với migration 053. Frontend `typecheck`, lint, build, `check-ui-locales` sạch. Playwright trên demo: bác sĩ lập → báo giá → đồng ý → làm 1 mục trong phiên khám (răng/giá điền sẵn, ô răng khoá) → đóng phiên → mục "Đã làm", kế hoạch "Đang điều trị" → bỏ qua mục còn lại → "Hoàn thành"; lễ tân chỉ thấy nút In. E2E mới `flow-treatment-plan.spec.ts` chạy đạt trên demo (bản thay tài khoản demo).
 - Sửa lỗi gặp khi chạy thử: sau khi lưu kế hoạch mới, trang vẫn ở chế độ soạn (React giữ component giữa hai route) → gắn `key` riêng cho hai route.
 - Gộp hồ sơ bệnh nhân chuyển cả kế hoạch điều trị của hồ sơ nguồn (+ kiểm trong test gộp).
+
+## 23/10 — Phần 4.2: nhắc tái khám định kỳ
+
+- Đặc tả `docs/03_Specification/Recalls/SPEC.md` (BR-RC-001…009). Migration 054: `services.recall_interval_months`, `patients.recall_opt_out_at`, bảng `recalls` (một lượt mở mỗi bệnh nhân + dịch vụ), quyền `recall.read/manage` (admin, lễ tân).
+- Đóng phiên khám có dịch vụ có chu kỳ: lượt cũ → `DONE`, tạo lượt mới đến hạn ngày khám + chu kỳ; mở lại phiên khám thì hoàn tác. Gộp hồ sơ chuyển lượt nhắc (trùng dịch vụ đang mở thì đóng của hồ sơ nguồn), giữ từ chối nhận email.
+- Cron 09:10 giờ phòng khám: một email mỗi bệnh nhân đến hạn (gộp dịch vụ), bỏ qua người đã có lịch / từ chối / không có email; link đặt lịch và link ngừng nhận (mã ngẫu nhiên, lưu băm). Máy chủ thư không nhận thì nhả ra cho hôm sau.
+- Giao diện: ô "Nhắc tái khám sau (tháng)" trong form dịch vụ; menu "Nhắc tái khám" cho lễ tân (cần gọi / đã đặt lịch / đã xong; ghi kết quả: đã đặt lịch, hẹn gọi lại, không liên lạc được, bỏ nhắc có lý do; bật/tắt email nhắc; mở lại); trang công khai `/recall/unsubscribe`.
+- Kiểm: backend `tsc`, lint, 1487 test (+16); `test:isolated` xanh với migration 054. Frontend typecheck, lint, build, `check-ui-locales` sạch. Playwright trên demo: admin đặt chu kỳ qua giao diện; lễ tân thấy 3 bệnh nhân (14 ngày) / 2 (đến hôm nay), lịch sắp tới hiện kèm; hẹn gọi lại → rời danh sách; bỏ nhắc cần lý do → sang tab đã xong; link ngừng nhận đúng / sai mã. Đóng phiên khám có cạo vôi → lượt mới đến hạn +6 tháng; mở lại → xoá; đóng lại → tạo lại.

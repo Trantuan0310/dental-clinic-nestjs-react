@@ -6,6 +6,10 @@ import {
   markPlanItemsForEncounter,
   WORKABLE_PLAN_STATUSES,
 } from '../treatment-plans/domain/plan-progress';
+import {
+  revertRecallsForEncounter,
+  scheduleRecallsForEncounter,
+} from '../recalls/domain/recall-schedule';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { isRowScoped } from '../common/row-scope';
@@ -715,6 +719,8 @@ export class MedicalRecordsService {
 
         // Planned procedures carried out in this visit are done now.
         await markPlanItemsForEncounter(tx, encounterId, true, closedAt);
+        // Services with a recall interval: due back that long after this visit.
+        await scheduleRecallsForEncounter(tx, encounterId, closedAt);
 
         // Mark appointment COMPLETED
         await tx.appointment.update({
@@ -1099,6 +1105,7 @@ export class MedicalRecordsService {
       });
       // Its planned procedures are open again until it is closed again.
       await markPlanItemsForEncounter(tx, encounterId, false, now);
+      await revertRecallsForEncounter(tx, encounterId);
       await tx.encounterAudit.create({
         data: {
           encounterId,

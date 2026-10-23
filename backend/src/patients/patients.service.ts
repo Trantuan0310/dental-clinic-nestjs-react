@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, Gender } from '@prisma/client';
+import { Prisma, Gender, RecallStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
@@ -1071,6 +1071,30 @@ export class PatientsService {
           where: { patientId: source.id },
           data: { patientId: target.id },
         });
+        // One open recall per patient and service: where both records are due
+        // back for the same service, the target's stands and the source's is
+        // closed; the rest move over.
+        const OPEN_RECALL: RecallStatus[] = ['PENDING', 'POSTPONED', 'BOOKED'];
+        const targetOpen = await tx.recall.findMany({
+          where: { patientId: target.id, status: { in: OPEN_RECALL } },
+          select: { serviceId: true },
+        });
+        if (targetOpen.length > 0) {
+          await tx.recall.updateMany({
+            where: {
+              patientId: source.id,
+              status: { in: OPEN_RECALL },
+              serviceId: { in: targetOpen.map(r => r.serviceId) },
+            },
+            data: { status: 'DISMISSED', closedAt: new Date(), lastContactNote: 'Gộp hồ sơ' },
+          });
+        }
+        const recallUpdate = await tx.recall.updateMany({
+          where: { patientId: source.id },
+          data: { patientId: target.id },
+        });
+        // Asking for no recall emails on either record holds for the person.
+        const inheritRecallOptOut = !target.recallOptOutAt && !!source.recallOptOutAt;
         // The source's phone is cleared below; keep it on the target when the
         // target has none, rather than losing the only number on file.
         const inheritPhone = !target.primaryPhone && !!source.primaryPhone;
@@ -1129,6 +1153,7 @@ export class PatientsService {
             ...medicalHistory,
             ...(inheritPhone && { primaryPhone: source.primaryPhone }),
             ...(inheritEmail && { email: source.email }),
+            ...(inheritRecallOptOut && { recallOptOutAt: source.recallOptOutAt }),
             updatedBy: actor.sub,
           },
         });
@@ -1182,6 +1207,7 @@ export class PatientsService {
               bookingRequests: bookingUpdate.count,
               phoneHistory: phoneHistoryUpdate.count,
               treatmentPlans: planUpdate.count,
+              recalls: recallUpdate.count,
               identifiersMoved: movedIds.length,
               identifiersDropped: duplicateIds.length,
             },
@@ -1209,6 +1235,7 @@ export class PatientsService {
             bookingRequests: bookingUpdate.count,
             phoneHistory: phoneHistoryUpdate.count,
             treatmentPlans: planUpdate.count,
+            recalls: recallUpdate.count,
             identifiersMoved: movedIds.length,
             identifiersDropped: duplicateIds.length,
           },

@@ -3,6 +3,7 @@ import { translatedLabels } from '@/locales/labels';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
+  BellRing,
   Inbox,
   Users,
   CalendarDays,
@@ -100,6 +101,12 @@ const NAV_GROUPS: NavGroupDef[] = [
         icon: Inbox,
         permission: 'booking_request.read',
         badge: 'pendingBookings',
+      },
+      {
+        to: '/recalls',
+        labelKey: 'Recalls',
+        icon: BellRing,
+        permission: 'recall.read',
       },
     ],
   },

@@ -125,6 +125,7 @@ model User {
   dentistTreatmentPlans  TreatmentPlan[] @relation("TreatmentPlanDentist")
   createdTreatmentPlans  TreatmentPlan[] @relation("TreatmentPlanCreator")
   acceptedTreatmentPlans TreatmentPlan[] @relation("TreatmentPlanAcceptedBy")
+  recallContacts         Recall[]        @relation("RecallLastContactBy")
 
   // Inventory
   createdCategories  InventoryCategory[] @relation("InventoryCategoryCreator")
@@ -320,6 +321,9 @@ model Patient {
   contactPersonName  String?   @map("contact_person_name") @db.VarChar(200)
   contactPersonPhone String?   @map("contact_person_phone") @db.VarChar(20)
   notes              String?
+  // Migration 054: the patient asked (link in a recall email, or at the
+  // desk) not to receive recall emails.
+  recallOptOutAt     DateTime? @map("recall_opt_out_at") @db.Timestamptz()
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy          String?   @map("created_by") @db.Uuid
@@ -341,6 +345,7 @@ model Patient {
 
   bookingRequests BookingRequest[]
   treatmentPlans  TreatmentPlan[]
+  recalls         Recall[]
 
   @@unique([code])
   @@index([primaryPhone])
@@ -629,19 +634,21 @@ model Encounter {
   createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
 
-  appointment    Appointment              @relation(fields: [appointmentId], references: [id])
-  patient        Patient                  @relation(fields: [patientId], references: [id])
-  dentist        User                     @relation(fields: [dentistId], references: [id])
-  clinicalNote   ClinicalNote?
-  treatments     Treatment[]
-  prescription   Prescription?
-  dentalChart    DentalChartSnapshot?
-  audits         EncounterAudit[]
-  treatmentPlans TreatmentPlan[]
+  appointment     Appointment              @relation(fields: [appointmentId], references: [id])
+  patient         Patient                  @relation(fields: [patientId], references: [id])
+  dentist         User                     @relation(fields: [dentistId], references: [id])
+  clinicalNote    ClinicalNote?
+  treatments      Treatment[]
+  prescription    Prescription?
+  dentalChart     DentalChartSnapshot?
+  audits          EncounterAudit[]
+  treatmentPlans  TreatmentPlan[]
+  recallsCreated  Recall[]                 @relation("RecallSource")
+  recallsResolved Recall[]                 @relation("RecallResolvedBy")
   // At most one non-VOIDED invoice per encounter (partial unique index,
   // migration 045); voided ones stay as history next to their replacement.
-  invoices       Invoice[]
-  payrollDetails PayrollEncounterDetail[]
+  invoices        Invoice[]
+  payrollDetails  PayrollEncounterDetail[]
 
   @@index([patientId, startedAt(sort: Desc)])
   @@index([dentistId, startedAt(sort: Desc)])
@@ -1504,32 +1511,36 @@ model ServiceCategory {
 }
 
 model Service {
-  id                 String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  code               String   @unique @db.VarChar(30)
-  categoryId         String   @map("category_id") @db.Uuid
-  name               String   @db.VarChar(200)
-  description        String?
-  defaultDurationMin Int      @map("default_duration_min") @db.SmallInt
-  bufferBeforeMin    Int      @default(0) @map("buffer_before_min") @db.SmallInt
-  bufferAfterMin     Int      @default(0) @map("buffer_after_min") @db.SmallInt
-  basePrice          Decimal  @default(0) @map("base_price") @db.Decimal(15, 0)
-  requiredSpecialty  String?  @map("required_specialty") @db.VarChar(30)
-  isActive           Boolean  @default(true) @map("is_active")
+  id                   String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code                 String   @unique @db.VarChar(30)
+  categoryId           String   @map("category_id") @db.Uuid
+  name                 String   @db.VarChar(200)
+  description          String?
+  defaultDurationMin   Int      @map("default_duration_min") @db.SmallInt
+  bufferBeforeMin      Int      @default(0) @map("buffer_before_min") @db.SmallInt
+  bufferAfterMin       Int      @default(0) @map("buffer_after_min") @db.SmallInt
+  basePrice            Decimal  @default(0) @map("base_price") @db.Decimal(15, 0)
+  requiredSpecialty    String?  @map("required_specialty") @db.VarChar(30)
+  isActive             Boolean  @default(true) @map("is_active")
   // Migration 038: patients may request it online / it is on the public
   // price list / a price of 0 really means free (not "not set yet").
-  bookableOnline     Boolean  @default(true) @map("bookable_online")
-  showPublicPrice    Boolean  @default(true) @map("show_public_price")
-  isFree             Boolean  @default(false) @map("is_free")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz()
-  createdBy          String?  @map("created_by") @db.Uuid
-  updatedBy          String?  @map("updated_by") @db.Uuid
+  bookableOnline       Boolean  @default(true) @map("bookable_online")
+  showPublicPrice      Boolean  @default(true) @map("show_public_price")
+  isFree               Boolean  @default(false) @map("is_free")
+  // Migration 054: months after a visit with this service the patient is
+  // due back (null = no recall).
+  recallIntervalMonths Int?     @map("recall_interval_months") @db.SmallInt
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy            String?  @map("created_by") @db.Uuid
+  updatedBy            String?  @map("updated_by") @db.Uuid
 
   category            ServiceCategory      @relation(fields: [categoryId], references: [id])
   dentistServices     DentistService[]
   appointmentServices AppointmentService[]
   treatments          Treatment[]
   treatmentPlanItems  TreatmentPlanItem[]
+  recalls             Recall[]
 
   bookingRequests BookingRequest[]
 
@@ -1844,4 +1855,49 @@ model TreatmentPlanItem {
 
   @@index([planId, sequence])
   @@map("treatment_plan_items")
+}
+
+/// Migration 054: a patient is due back for a service at a set interval
+/// after a visit that included it (Service.recallIntervalMonths). Created
+/// when that encounter closes; the front desk calls the patients due and a
+/// daily job emails them once.
+enum RecallStatus {
+  PENDING
+  POSTPONED
+  BOOKED
+  DISMISSED
+  DONE
+}
+
+model Recall {
+  id                    String       @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId             String       @map("patient_id") @db.Uuid
+  serviceId             String       @map("service_id") @db.Uuid
+  sourceEncounterId     String?      @map("source_encounter_id") @db.Uuid
+  dueDate               DateTime     @map("due_date") @db.Date
+  status                RecallStatus @default(PENDING)
+  postponedUntil        DateTime?    @map("postponed_until") @db.Date
+  emailedAt             DateTime?    @map("emailed_at") @db.Timestamptz()
+  emailTokenHash        String?      @unique @map("email_token_hash") @db.VarChar(64)
+  contactAttempts       Int          @default(0) @map("contact_attempts")
+  lastContactAt         DateTime?    @map("last_contact_at") @db.Timestamptz()
+  lastContactBy         String?      @map("last_contact_by") @db.Uuid
+  lastContactResult     String?      @map("last_contact_result") @db.VarChar(20)
+  lastContactNote       String?      @map("last_contact_note") @db.VarChar(500)
+  resolvedByEncounterId String?      @map("resolved_by_encounter_id") @db.Uuid
+  closedAt              DateTime?    @map("closed_at") @db.Timestamptz()
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
+
+  patient             Patient    @relation(fields: [patientId], references: [id])
+  service             Service    @relation(fields: [serviceId], references: [id])
+  sourceEncounter     Encounter? @relation("RecallSource", fields: [sourceEncounterId], references: [id], onDelete: SetNull)
+  resolvedByEncounter Encounter? @relation("RecallResolvedBy", fields: [resolvedByEncounterId], references: [id], onDelete: SetNull)
+  contactedBy         User?      @relation("RecallLastContactBy", fields: [lastContactBy], references: [id])
+
+  @@index([status, dueDate])
+  @@index([patientId])
+  @@index([sourceEncounterId])
+  @@index([resolvedByEncounterId])
+  @@map("recalls")
 }

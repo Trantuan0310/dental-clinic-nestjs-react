@@ -210,6 +210,7 @@ export class CatalogService {
         bookableOnline: dto.bookableOnline ?? true,
         showPublicPrice: dto.showPublicPrice ?? true,
         requiredSpecialty: dto.requiredSpecialty ?? null,
+        recallIntervalMonths: dto.recallIntervalMonths ?? null,
         createdBy: actor.sub,
         updatedBy: actor.sub,
       },
@@ -245,6 +246,8 @@ export class CatalogService {
     if (dto.bookableOnline !== undefined) data.bookableOnline = dto.bookableOnline;
     if (dto.showPublicPrice !== undefined) data.showPublicPrice = dto.showPublicPrice;
     if (dto.requiredSpecialty !== undefined) data.requiredSpecialty = dto.requiredSpecialty;
+    if (dto.recallIntervalMonths !== undefined)
+      data.recallIntervalMonths = dto.recallIntervalMonths;
 
     const updated = await this.prisma.service.update({
       where: { id },
@@ -912,6 +915,7 @@ export class CatalogService {
       bookableOnline: r.bookableOnline,
       showPublicPrice: r.showPublicPrice,
       requiredSpecialty: r.requiredSpecialty,
+      recallIntervalMonths: r.recallIntervalMonths,
       isActive: r.isActive,
       assignedDentists: r._count.dentistServices,
       updatedAt: r.updatedAt,

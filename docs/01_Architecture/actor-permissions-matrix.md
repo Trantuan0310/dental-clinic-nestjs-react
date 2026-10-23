@@ -132,6 +132,8 @@ Trong đó:
 | Xem kế hoạch điều trị | ✅ | ✅ | 🔒 (bệnh nhân mình được xem) | `treatment_plan.read` |
 | Lập, sửa, báo giá, thêm/bỏ qua mục, huỷ kế hoạch điều trị | ✅ | ❌ | 🔒 (kế hoạch của mình) | `treatment_plan.write` |
 | Ghi nhận khách đồng ý kế hoạch điều trị | ✅ | ✅ | 🔒 (bệnh nhân mình được xem) | `treatment_plan.accept` |
+| Xem danh sách nhắc tái khám | ✅ | ✅ | ❌ | `recall.read` |
+| Ghi kết quả gọi nhắc tái khám, mở lại, bật/tắt email nhắc | ✅ | ✅ | ❌ | `recall.manage` |
 | Tạo / sửa Prescription | ❌ | ❌ | 🔒 | `prescription.write` |
 | Cập nhật Dental Chart | ❌ | ❌ | 🔒 | `dental_chart.write` |
 | Xem Dental Chart | ✅ | ❌ | ✅ | `dental_chart.read` |

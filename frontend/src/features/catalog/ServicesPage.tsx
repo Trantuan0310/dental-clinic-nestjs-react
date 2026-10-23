@@ -63,6 +63,7 @@ function ServiceForm({
     bookableOnline: service?.bookableOnline ?? true,
     showPublicPrice: service?.showPublicPrice ?? true,
     requiredSpecialty: service?.requiredSpecialty ?? '',
+    recallIntervalMonths: service?.recallIntervalMonths ? String(service.recallIntervalMonths) : '',
   });
   return (
     <form
@@ -82,6 +83,7 @@ function ServiceForm({
           bookableOnline: form.bookableOnline,
           showPublicPrice: form.showPublicPrice,
           requiredSpecialty: form.requiredSpecialty || null,
+          recallIntervalMonths: form.recallIntervalMonths ? Number(form.recallIntervalMonths) : null,
         });
       }}
     >
@@ -168,6 +170,16 @@ function ServiceForm({
           ]}
         />
       </div>
+      <Input
+        label={t('uiRecalls.intervalLabel')}
+        type="number"
+        min={1}
+        max={60}
+        step={1}
+        hint={t('uiRecalls.intervalHint')}
+        value={form.recallIntervalMonths}
+        onChange={(e) => setForm({ ...form, recallIntervalMonths: e.target.value })}
+      />
       <Textarea
         label={t('uiWorkforce.serviceDescription')}
         rows={2}
@@ -441,6 +453,9 @@ export default function ServicesPage() {
                               </Badge>
                             )}
                             {!s.bookableOnline && <Badge>{t('uiWorkforce.noOnlineBooking')}</Badge>}
+                            {s.recallIntervalMonths && (
+                              <Badge variant="info">{t('uiRecalls.intervalBadge', { count: s.recallIntervalMonths })}</Badge>
+                            )}
                           {s.isFree && !!s.paidAssignments && (
                             <Badge variant="warning">
                               {t('uiWorkforce.paidAssignmentsWarning', { count: s.paidAssignments })}
