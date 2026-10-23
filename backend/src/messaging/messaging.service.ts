@@ -26,6 +26,8 @@ import { ZaloZnsProvider } from './providers/zalo-zns.provider';
 const LAST_CALL_MS = 30 * 60_000;
 const MIN_AHEAD_MS = 2 * 60 * 60_000;
 const BATCH = 200;
+/** A message that failed is tried by this many runs of its job in all. */
+export const MESSAGE_MAX_ATTEMPTS = 3;
 
 export interface PhoneSendInput {
   phone: string | null | undefined;
@@ -88,6 +90,7 @@ export class MessagingService {
     };
     // Claim the key first: a second run (or another instance) gets P2002.
     let logId: string;
+    let attempt = 1;
     try {
       const row = await this.prisma.messageLog.create({
         data: {
@@ -102,9 +105,13 @@ export class MessagingService {
       });
       logId = row.id;
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-        return null;
-      throw error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) {
+        throw error;
+      }
+      // Sent (or being sent) before: only a failed one is tried again.
+      const retry = await this.reclaimFailed(input.dedupeKey);
+      if (!retry) return null;
+      ({ id: logId, attempts: attempt } = retry);
     }
     if (!phone) return MessageStatus.SKIPPED;
 
@@ -115,7 +122,8 @@ export class MessagingService {
         template: input.template,
         text: input.text,
         params: input.params ?? {},
-        trackingId: logId,
+        // A retry gets a new id: providers drop a repeated one.
+        trackingId: attempt > 1 ? `${logId}-${attempt}` : logId,
       });
       if (result.ok) {
         const status = result.mocked ? MessageStatus.MOCKED : MessageStatus.SENT;
@@ -139,6 +147,19 @@ export class MessagingService {
     });
     this.logger.warn(`Message ${input.dedupeKey} failed: ${errors.join(' | ')}`);
     return MessageStatus.FAILED;
+  }
+
+  /** Takes a FAILED message back for another try, up to MESSAGE_MAX_ATTEMPTS in all. */
+  private async reclaimFailed(dedupeKey: string) {
+    const { count } = await this.prisma.messageLog.updateMany({
+      where: { dedupeKey, status: MessageStatus.FAILED, attempts: { lt: MESSAGE_MAX_ATTEMPTS } },
+      data: { status: MessageStatus.SKIPPED, attempts: { increment: 1 } },
+    });
+    if (count === 0) return null;
+    return this.prisma.messageLog.findUnique({
+      where: { dedupeKey },
+      select: { id: true, attempts: true },
+    });
   }
 
   /** Admin: a test message to a phone number. */

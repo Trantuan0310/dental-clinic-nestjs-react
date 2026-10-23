@@ -12,6 +12,8 @@ function setup(env: NodeJS.ProcessEnv) {
     messageLog: {
       create: jest.fn().mockResolvedValue({ id: 'log-1' }),
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findUnique: jest.fn().mockResolvedValue({ id: 'log-1', attempts: 2 }),
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
     },
@@ -80,6 +82,32 @@ describe('MessagingService.send', () => {
     );
     expect(await service.send(input)).toBeNull();
     expect(prisma.messageLog.update).not.toHaveBeenCalled();
+  });
+
+  it('tries a failed message again on a later run, up to 3 tries, with a new tracking id', async () => {
+    const { service, prisma } = setup({
+      ZALO_PROVIDER: 'zns',
+      ZALO_OA_ACCESS_TOKEN: 't',
+      ZALO_ZNS_TEMPLATE_VISIT_REMINDER: '1',
+    });
+    prisma.messageLog.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }),
+    );
+    prisma.messageLog.updateMany.mockResolvedValue({ count: 1 });
+    const send = jest.spyOn(service, 'providers').mockReturnValue([
+      {
+        name: 'zns',
+        channel: 'ZALO',
+        send: jest.fn().mockResolvedValue({ ok: true, providerId: 'z' }),
+      } as any,
+    ]);
+    expect(await service.send(input)).toBe('SENT');
+    expect(prisma.messageLog.updateMany).toHaveBeenCalledWith({
+      where: { dedupeKey: input.dedupeKey, status: 'FAILED', attempts: { lt: 3 } },
+      data: { status: 'SKIPPED', attempts: { increment: 1 } },
+    });
+    const provider = send.mock.results[0].value[0];
+    expect(provider.send.mock.calls[0][0].trackingId).toBe('log-1-2');
   });
 
   it('skips a number that is not a Vietnamese mobile', async () => {

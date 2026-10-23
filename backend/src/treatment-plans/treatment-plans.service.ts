@@ -292,6 +292,12 @@ export class TreatmentPlansService {
     ) {
       throw this.state('Kế hoạch đã kết thúc hoặc đã huỷ');
     }
+    // Closing that encounter would tick off a line of a cancelled plan.
+    if (row.items.some(i => this.liveTreatment(i))) {
+      throw this.state(
+        'Có mục đang được ghi trong một phiên khám chưa đóng: xoá thủ thuật đó hoặc đóng phiên khám trước',
+      );
+    }
     await this.transition(
       id,
       row.status,

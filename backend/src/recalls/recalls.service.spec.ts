@@ -74,7 +74,13 @@ describe('scheduleRecallsForEncounter', () => {
   const tx = (treatments: unknown[]) => {
     const t: any = {
       encounter: { findUnique: jest.fn().mockResolvedValue({ patientId: 'p1', treatments }) },
-      recall: { updateMany: jest.fn(), create: jest.fn() },
+      recall: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'r0', dueDate: new Date('2026-10-20T00:00:00Z') }),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
     };
     return t;
   };
@@ -88,12 +94,13 @@ describe('scheduleRecallsForEncounter', () => {
     // 23:30 clinic time on 22/10 is still the 22nd at the clinic.
     const closedAt = new Date('2026-10-22T16:30:00Z');
     expect(await scheduleRecallsForEncounter(t, 'e1', closedAt)).toBe(1);
-    expect(t.recall.updateMany).toHaveBeenCalledWith({
-      where: {
-        patientId: 'p1',
-        serviceId: 's1',
-        status: { in: ['PENDING', 'POSTPONED', 'BOOKED'] },
-      },
+    expect(t.recall.findFirst.mock.calls[0][0].where).toEqual({
+      patientId: 'p1',
+      serviceId: 's1',
+      status: { in: ['PENDING', 'POSTPONED', 'BOOKED'] },
+    });
+    expect(t.recall.update).toHaveBeenCalledWith({
+      where: { id: 'r0' },
       data: { status: 'DONE', resolvedByEncounterId: 'e1', closedAt },
     });
     expect(t.recall.create).toHaveBeenCalledTimes(1);
@@ -103,6 +110,15 @@ describe('scheduleRecallsForEncounter', () => {
       sourceEncounterId: 'e1',
       dueDate: new Date('2027-04-22T00:00:00Z'),
     });
+  });
+
+  it('an older visit closed again does not replace the recall of a later visit', async () => {
+    const t = tx([{ service: { id: 's1', recallIntervalMonths: 6 } }]);
+    // A later visit already made a recall due in 2027-06.
+    t.recall.findFirst.mockResolvedValue({ id: 'r9', dueDate: new Date('2027-06-01T00:00:00Z') });
+    expect(await scheduleRecallsForEncounter(t, 'e-old', new Date('2026-10-22T03:00:00Z'))).toBe(0);
+    expect(t.recall.update).not.toHaveBeenCalled();
+    expect(t.recall.create).not.toHaveBeenCalled();
   });
 
   it('makes nothing for services without an interval', async () => {

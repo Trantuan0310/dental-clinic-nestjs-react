@@ -265,6 +265,29 @@ describe('TreatmentPlansService', () => {
     });
   });
 
+  it('is not cancelled while a line is being done in an open encounter', async () => {
+    const { service, prisma } = setup(
+      plan({
+        status: 'ACCEPTED',
+        items: [
+          item({
+            treatments: [
+              {
+                id: 't1',
+                encounterId: 'enc-1',
+                encounter: { status: 'IN_PROGRESS', closedAt: null },
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+    await expect(service.cancel('plan-1', 'Khách đổi ý', dentist as any)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(prisma.treatmentPlan.updateMany).not.toHaveBeenCalled();
+  });
+
   it('the view totals quoted, done and remaining money', async () => {
     const { service } = setup(
       plan({

@@ -61,7 +61,7 @@
 | BR-TP-007 | Giá đã báo trong kế hoạch là giá chốt của thủ thuật đó; ghi giá khác cần `treatment.price_override` và lý do, như giá đặt lịch (quyết định 3). |
 | BR-TP-008 | Kết thúc phiên khám đánh dấu `DONE` các mục được thực hiện; mở lại phiên khám trả chúng về `PLANNED`. Trạng thái kế hoạch tính theo BR §2. |
 | BR-TP-009 | Không bỏ qua mục đang được ghi trong một phiên khám chưa đóng (xoá thủ thuật đó trước). Bỏ qua cần lý do ≥ 5 ký tự. |
-| BR-TP-010 | Huỷ cần lý do ≥ 5 ký tự; không huỷ kế hoạch đã xong hoặc đã huỷ. |
+| BR-TP-010 | Huỷ cần lý do ≥ 5 ký tự; không huỷ kế hoạch đã xong hoặc đã huỷ, hay khi có mục đang được ghi trong một phiên khám chưa đóng. |
 | BR-TP-011 | Mọi thao tác ghi nhật ký: `TREATMENT_PLAN_CREATED`, `_UPDATED`, `_PROPOSED`, `_ACCEPTED`, `_CANCELLED`, `_ITEMS_ADDED`, `_ITEM_SKIPPED`, `_ITEM_UNSKIPPED`. |
 
 ## 4. Quyền

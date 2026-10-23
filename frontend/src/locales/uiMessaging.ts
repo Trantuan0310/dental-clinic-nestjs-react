@@ -21,6 +21,7 @@ export const vi = {
   recipient: 'Người nhận',
   content: 'Nội dung',
   statusLabel: 'Trạng thái',
+  attempts: '{{count}} lần thử',
   status: { SENT: 'Đã gửi', MOCKED: 'Giả lập', FAILED: 'Lỗi', SKIPPED: 'Bỏ qua' },
   template: { VISIT_REMINDER: 'Nhắc lịch khám', RECALL_REMINDER: 'Nhắc tái khám', TEST: 'Tin thử' },
 };
@@ -48,6 +49,7 @@ export const en: typeof vi = {
   recipient: 'Recipient',
   content: 'Content',
   statusLabel: 'Status',
+  attempts: '{{count}} tries',
   status: { SENT: 'Sent', MOCKED: 'Mocked', FAILED: 'Failed', SKIPPED: 'Skipped' },
   template: { VISIT_REMINDER: 'Visit reminder', RECALL_REMINDER: 'Recall reminder', TEST: 'Test' },
 };

@@ -1,6 +1,6 @@
 # Bật nhắn tin SMS / Zalo
 
-Phần 4.4 của `docs/progress/plan-2026-10-22.md`. Hệ thống gửi tin nhắc lịch khám (mỗi giờ, cho lịch trong 24 giờ tới) và nhắc tái khám (mỗi sáng 09:15) qua điện thoại. Mỗi tin chỉ gửi một lần. Zalo được thử trước, lỗi thì chuyển sang SMS. Nhật ký mọi tin xem ở **Quản trị → Tin nhắn SMS / Zalo** (quyền `message_log.read`, chỉ admin).
+Phần 4.4 của `docs/progress/plan-2026-10-22.md`. Hệ thống gửi tin nhắc lịch khám (mỗi giờ, cho lịch trong 24 giờ tới) và nhắc tái khám (mỗi sáng 09:15) qua điện thoại. Mỗi tin chỉ gửi một lần; tin gửi lỗi được các lần chạy sau thử lại, tối đa 3 lần. Zalo được thử trước, lỗi thì chuyển sang SMS. Nhật ký mọi tin xem ở **Quản trị → Tin nhắn SMS / Zalo** (quyền `message_log.read`, chỉ admin).
 
 Mặc định cả hai kênh **tắt**: chưa có nhà cung cấp thì không có gì thay đổi.
 
