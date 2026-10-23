@@ -14,6 +14,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { BookingModule } from './booking/booking.module';
 import { MediaModule } from './media/media.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
+import { TreatmentPlansModule } from './treatment-plans/treatment-plans.module';
 import { BillingModule } from './billing/billing.module';
 import { ReportsModule } from './reports/reports.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -55,6 +56,7 @@ import { CatalogModule } from './catalog/catalog.module';
     BookingModule,
     MediaModule,
     MedicalRecordsModule,
+    TreatmentPlansModule,
     BillingModule,
     ReportsModule,
     InventoryModule,

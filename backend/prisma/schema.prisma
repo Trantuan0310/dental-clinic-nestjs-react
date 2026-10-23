@@ -121,6 +121,11 @@ model User {
   paymentsVoided     Payment[]           @relation("PaymentVoidedBy")
   invoiceAdjustments InvoiceAdjustment[]
 
+  // Treatment plans (migration 053)
+  dentistTreatmentPlans  TreatmentPlan[] @relation("TreatmentPlanDentist")
+  createdTreatmentPlans  TreatmentPlan[] @relation("TreatmentPlanCreator")
+  acceptedTreatmentPlans TreatmentPlan[] @relation("TreatmentPlanAcceptedBy")
+
   // Inventory
   createdCategories  InventoryCategory[] @relation("InventoryCategoryCreator")
   updatedCategories  InventoryCategory[] @relation("InventoryCategoryUpdater")
@@ -335,6 +340,7 @@ model Patient {
   invoices     Invoice[]
 
   bookingRequests BookingRequest[]
+  treatmentPlans  TreatmentPlan[]
 
   @@unique([code])
   @@index([primaryPhone])
@@ -631,6 +637,7 @@ model Encounter {
   prescription   Prescription?
   dentalChart    DentalChartSnapshot?
   audits         EncounterAudit[]
+  treatmentPlans TreatmentPlan[]
   // At most one non-VOIDED invoice per encounter (partial unique index,
   // migration 045); voided ones stay as history next to their replacement.
   invoices       Invoice[]
@@ -705,8 +712,12 @@ model Treatment {
   inventoryUsages TreatmentInventoryUsage[]
   invoiceItems    InvoiceItem[]
   payrollDetails  PayrollEncounterDetail[]
+  /// Migration 053: the planned procedure this treatment carries out.
+  planItemId      String?                   @map("plan_item_id") @db.Uuid
+  planItem        TreatmentPlanItem?        @relation(fields: [planItemId], references: [id])
 
   @@index([encounterId, sequence])
+  @@index([planItemId])
   @@map("treatments")
 }
 
@@ -1518,6 +1529,7 @@ model Service {
   dentistServices     DentistService[]
   appointmentServices AppointmentService[]
   treatments          Treatment[]
+  treatmentPlanItems  TreatmentPlanItem[]
 
   bookingRequests BookingRequest[]
 
@@ -1758,4 +1770,78 @@ model MediaAsset {
 
   @@index([purpose, sortOrder, createdAt])
   @@map("media_assets")
+}
+
+// -----------------------------------------------------------------------------
+// Treatment plans (migration 053)
+// -----------------------------------------------------------------------------
+
+enum TreatmentPlanStatus {
+  DRAFT
+  PROPOSED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TreatmentPlanItemStatus {
+  PLANNED
+  DONE
+  SKIPPED
+}
+
+model TreatmentPlan {
+  id                String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId         String              @map("patient_id") @db.Uuid
+  dentistId         String              @map("dentist_id") @db.Uuid
+  title             String              @db.VarChar(200)
+  notes             String?
+  status            TreatmentPlanStatus @default(DRAFT)
+  sourceEncounterId String?             @map("source_encounter_id") @db.Uuid
+  proposedAt        DateTime?           @map("proposed_at") @db.Timestamptz()
+  acceptedAt        DateTime?           @map("accepted_at") @db.Timestamptz()
+  acceptedBy        String?             @map("accepted_by") @db.Uuid
+  acceptanceNote    String?             @map("acceptance_note")
+  completedAt       DateTime?           @map("completed_at") @db.Timestamptz()
+  cancelledAt       DateTime?           @map("cancelled_at") @db.Timestamptz()
+  cancelReason      String?             @map("cancel_reason")
+  createdBy         String              @map("created_by") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()
+
+  patient         Patient             @relation(fields: [patientId], references: [id])
+  dentist         User                @relation("TreatmentPlanDentist", fields: [dentistId], references: [id])
+  creator         User                @relation("TreatmentPlanCreator", fields: [createdBy], references: [id])
+  acceptor        User?               @relation("TreatmentPlanAcceptedBy", fields: [acceptedBy], references: [id])
+  sourceEncounter Encounter?          @relation(fields: [sourceEncounterId], references: [id])
+  items           TreatmentPlanItem[]
+
+  @@index([patientId, createdAt(sort: Desc)])
+  @@index([dentistId, status])
+  @@map("treatment_plans")
+}
+
+model TreatmentPlanItem {
+  id           String                  @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  planId       String                  @map("plan_id") @db.Uuid
+  sequence     Int                     @default(0)
+  serviceId    String?                 @map("service_id") @db.Uuid
+  procedure    String                  @db.VarChar(200)
+  toothNumbers Json?                   @map("tooth_numbers") @db.JsonB
+  quantity     Int                     @default(1)
+  unitPrice    Decimal                 @default(0) @map("unit_price") @db.Decimal(15, 0)
+  notes        String?
+  status       TreatmentPlanItemStatus @default(PLANNED)
+  doneAt       DateTime?               @map("done_at") @db.Timestamptz()
+  skipReason   String?                 @map("skip_reason")
+  createdAt    DateTime                @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime                @updatedAt @map("updated_at") @db.Timestamptz()
+
+  plan       TreatmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  service    Service?      @relation(fields: [serviceId], references: [id])
+  treatments Treatment[]
+
+  @@index([planId, sequence])
+  @@map("treatment_plan_items")
 }

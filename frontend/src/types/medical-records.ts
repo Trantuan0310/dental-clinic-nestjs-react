@@ -519,6 +519,10 @@ export interface CreateTreatmentPayload {
   serviceId?: string;
   durationMinutes?: number;
   toothNumber: number | string;
+  /** Several teeth at once (a treatment-plan line); wins over toothNumber. */
+  toothNumbers?: number[];
+  /** Line of the patient's agreed treatment plan this procedure carries out. */
+  planItemId?: string;
   treatmentCode: string;
   treatmentName?: string;
   description?: string;

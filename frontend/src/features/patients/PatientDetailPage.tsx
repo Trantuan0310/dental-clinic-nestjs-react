@@ -34,6 +34,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { useTranslation } from 'react-i18next';
 import { MergePatientModal } from './MergePatientModal';
+import { PatientPlansCard } from '@/features/treatment-plans/PatientPlansCard';
 
 export default function PatientDetailPage() {
   const { t } = useTranslation();
@@ -50,6 +51,7 @@ export default function PatientDetailPage() {
   const canViewEncounterDetail = useAuthStore((s) =>
     s.hasAnyPermission(['encounter.read.any', 'encounter.read.own']),
   );
+  const canReadPlans = useAuthStore((s) => s.hasPermission('treatment_plan.read'));
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -254,6 +256,7 @@ export default function PatientDetailPage() {
               <TabsTrigger value="overview">{t('uiClinical.overview')}</TabsTrigger>
               <TabsTrigger value="appointments">{t('uiClinical.appointments')}</TabsTrigger>
               <TabsTrigger value="encounters">{t('uiClinical.encounterHistory')}</TabsTrigger>
+              {canReadPlans && <TabsTrigger value="plans">{t('uiPlans.plans')}</TabsTrigger>}
               <TabsTrigger value="invoices">{t('uiClinical.invoice')}</TabsTrigger>
             </TabsList>
 
@@ -399,6 +402,12 @@ export default function PatientDetailPage() {
                 )}
               </Card>
             </TabsContent>
+
+            {canReadPlans && id && (
+              <TabsContent value="plans">
+                <PatientPlansCard patientId={id} />
+              </TabsContent>
+            )}
 
             <TabsContent value="invoices">
               <Card

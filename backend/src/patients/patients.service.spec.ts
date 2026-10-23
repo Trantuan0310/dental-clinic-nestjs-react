@@ -35,6 +35,7 @@ describe('PatientsService', () => {
     audit = { log: jest.fn().mockResolvedValue(undefined) };
     events = { emit: jest.fn() };
     (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ nextval: 42n }]);
+    (prisma.treatmentPlan.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
     // softDelete runs its check-then-write inside $transaction (BR-PT-010
     // TOCTOU fix) — the default mock's tx stub only has $executeRaw/$queryRaw,
     // not full model methods, so route callbacks through the full mock.
@@ -569,6 +570,11 @@ describe('PatientsService', () => {
         data: { patientId: 'p2' },
       });
       expect(prisma.patientPhoneHistory.updateMany).toHaveBeenCalledWith({
+        where: { patientId: 'p1' },
+        data: { patientId: 'p2' },
+      });
+      // Treatment plans follow the person too.
+      expect(prisma.treatmentPlan.updateMany).toHaveBeenCalledWith({
         where: { patientId: 'p1' },
         data: { patientId: 'p2' },
       });

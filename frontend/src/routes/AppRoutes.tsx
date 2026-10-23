@@ -19,6 +19,7 @@ const DashboardPage = lazy(() => import('@/features/DashboardPage'));
 
 const PatientListPage = lazy(() => import('@/features/patients/PatientListPage'));
 const PatientDetailPage = lazy(() => import('@/features/patients/PatientDetailPage'));
+const TreatmentPlanPage = lazy(() => import('@/features/treatment-plans/TreatmentPlanPage'));
 const PatientForm = lazy(() =>
   import('@/features/patients/PatientForm').then((m) => ({ default: m.PatientForm })),
 );
@@ -151,6 +152,27 @@ const router = createBrowserRouter(createRoutesFromElements(
                   <ProtectedRoute permission="patient.read">
                     <ErrorBoundary componentName="PatientDetailPage">
                       <PatientDetailPage />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="treatment-plans/new"
+                element={
+                  // Own key: after saving, /:id must mount a fresh page, not keep the editor state.
+                  <ProtectedRoute key="plan-new" permission="treatment_plan.write">
+                    <ErrorBoundary componentName="TreatmentPlanPage (new)">
+                      <TreatmentPlanPage />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="treatment-plans/:id"
+                element={
+                  <ProtectedRoute key="plan-view" permission="treatment_plan.read">
+                    <ErrorBoundary componentName="TreatmentPlanPage">
+                      <TreatmentPlanPage />
                     </ErrorBoundary>
                   </ProtectedRoute>
                 }

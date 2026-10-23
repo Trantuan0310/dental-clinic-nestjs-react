@@ -452,3 +452,16 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
   - M5 (BR-APPT-020): không check-in khi bác sĩ có nghỉ phép đã duyệt trùng giờ lịch (409 `DENTIST_ON_TIME_OFF`).
   - M6 (BR-INV-001): không tạo/đổi tên vật tư trùng tên vật tư đang dùng (409 `ITEM_NAME_EXISTS`).
 - backend `tsc`, lint sạch, 1453 test xanh (thêm 10). Một test sẵn có (`A1-13`, dời lịch hàng loạt) đỏ 1 lần khi chạy toàn bộ rồi xanh khi chạy lại — không liên quan thay đổi này, đã tạo việc riêng để tìm nguyên nhân. frontend `typecheck`, `typecheck:e2e`, lint, build sạch.
+
+## 22/10 — PR #68: test Postgres đỏ sau M1
+
+- Job "Release migrations and PostgreSQL API tests" đỏ ở "rejects competing payments…": lịch hẹn trong fixture không có lý do khám nên phiên khám không đóng được sau M1 (BR-MR-013). Sửa fixture (thêm `chiefComplaint`), chạy lại `npm run test:isolated` trên Postgres cục bộ: xanh.
+
+## 22/10 — Phần 4.1: kế hoạch điều trị nhiều buổi
+
+- Đặc tả: `docs/03_Specification/TreatmentPlans/SPEC.md` (BR-TP-001…011). Migration 053: bảng `treatment_plans`, `treatment_plan_items`, cột `treatments.plan_item_id`, quyền `treatment_plan.read/write/accept` (admin và bác sĩ đủ ba, lễ tân xem + ghi nhận đồng ý).
+- Backend `src/treatment-plans/`: lập, sửa (chống sửa đè bằng `expectedUpdatedAt`), báo giá, đồng ý, thêm/bỏ qua/làm lại mục, huỷ; mục đã báo giá khoá sau khi khách đồng ý; bác sĩ chỉ ghi kế hoạch của mình. Thủ thuật nhận `planItemId` (giá kế hoạch là giá chốt); đóng phiên khám đánh dấu mục đã làm và tính lại trạng thái kế hoạch, mở lại phiên khám trả về.
+- Giao diện: tab "Kế hoạch điều trị" trong hồ sơ bệnh nhân; trang `/treatment-plans/:id` (soạn mục từ danh mục dịch vụ của bác sĩ hoặc nhập tay, tổng tiền, báo giá, đồng ý, bỏ qua, thêm mục, huỷ, in báo giá, đặt lịch buổi tiếp); trong phiên khám chọn "Từ kế hoạch điều trị" khi thêm thủ thuật, nút "Lập kế hoạch". Ma trận quyền và `PHAN_QUYEN.md` cập nhật.
+- Kiểm: backend `tsc`, lint, 1471 test xanh (+18); `test:isolated` xanh với migration 053. Frontend `typecheck`, lint, build, `check-ui-locales` sạch. Playwright trên demo: bác sĩ lập → báo giá → đồng ý → làm 1 mục trong phiên khám (răng/giá điền sẵn, ô răng khoá) → đóng phiên → mục "Đã làm", kế hoạch "Đang điều trị" → bỏ qua mục còn lại → "Hoàn thành"; lễ tân chỉ thấy nút In. E2E mới `flow-treatment-plan.spec.ts` chạy đạt trên demo (bản thay tài khoản demo).
+- Sửa lỗi gặp khi chạy thử: sau khi lưu kế hoạch mới, trang vẫn ở chế độ soạn (React giữ component giữa hai route) → gắn `key` riêng cho hai route.
+- Gộp hồ sơ bệnh nhân chuyển cả kế hoạch điều trị của hồ sơ nguồn (+ kiểm trong test gộp).

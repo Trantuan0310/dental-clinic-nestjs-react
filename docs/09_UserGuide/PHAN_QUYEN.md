@@ -25,6 +25,9 @@ Hệ thống có 3 vai trò có sẵn. Một tài khoản có thể giữ nhiề
 | Giảm giá trên 50% tổng hóa đơn (`invoice.discount.large`, BR-BILL-025; mọi lần đổi giảm giá đều ghi nhật ký hệ thống) | ✔ | — | — |
 | Điều chỉnh giảm / xoá nợ hóa đơn đã phát hành (`invoice.adjust`, bắt buộc lý do; giữ phiếu thu; trừ doanh thu và hoa hồng vào ngày điều chỉnh) | ✔ | — | — |
 | Áp đơn giá thủ thuật khác giá đã chốt khi đặt lịch/giá phân công (`treatment.price_override`, bắt buộc lý do, ghi audit) | ✔ (chỉ có tác dụng khi giữ cả vai trò Bác sĩ) | ✔ phiên khám của mình | — |
+| **Kế hoạch điều trị**: xem, in báo giá | ✔ | ✔ bệnh nhân mình được xem | ✔ |
+| Lập, sửa, báo giá, thêm / bỏ qua mục, huỷ kế hoạch | ✔ | ✔ kế hoạch của mình | — |
+| Ghi nhận khách đồng ý kế hoạch | ✔ | ✔ | ✔ |
 | **Báo cáo**: công nợ (mọi khoản nợ, chia nhóm tuổi nợ) | ✔ | — | ✔ |
 | Doanh thu, chi phí, lợi nhuận, doanh thu theo bác sĩ | ✔ | — | — |
 | Thống kê lịch khám (đến / vắng / hủy / về sớm / vãng lai / online), KPI hôm nay | ✔ toàn phòng khám | ✔ lịch của mình | ✔ toàn phòng khám |

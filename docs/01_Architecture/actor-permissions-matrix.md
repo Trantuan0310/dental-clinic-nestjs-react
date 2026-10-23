@@ -129,6 +129,9 @@ Trong đó:
 | Tạo / sửa Treatment | ❌ | ❌ | 🔒 | `treatment.write` |
 | Xóa Treatment | ❌ | ❌ | 🔒 | `treatment.delete` |
 | Ghi đơn giá khác giá đã chốt (bắt buộc nhập lý do, có audit) | ❌ | ❌ | 🔒 | `treatment.price_override` |
+| Xem kế hoạch điều trị | ✅ | ✅ | 🔒 (bệnh nhân mình được xem) | `treatment_plan.read` |
+| Lập, sửa, báo giá, thêm/bỏ qua mục, huỷ kế hoạch điều trị | ✅ | ❌ | 🔒 (kế hoạch của mình) | `treatment_plan.write` |
+| Ghi nhận khách đồng ý kế hoạch điều trị | ✅ | ✅ | 🔒 (bệnh nhân mình được xem) | `treatment_plan.accept` |
 | Tạo / sửa Prescription | ❌ | ❌ | 🔒 | `prescription.write` |
 | Cập nhật Dental Chart | ❌ | ❌ | 🔒 | `dental_chart.write` |
 | Xem Dental Chart | ✅ | ❌ | ✅ | `dental_chart.read` |

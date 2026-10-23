@@ -99,6 +99,14 @@ export class CreateTreatmentDto {
   @IsUUID()
   serviceId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Treatment-plan item this procedure carries out (ticked off when the encounter closes)',
+  })
+  @IsOptional()
+  @IsUUID()
+  planItemId?: string;
+
   @ApiProperty({ example: 'Composite filling' })
   @IsString()
   @MinLength(2)
