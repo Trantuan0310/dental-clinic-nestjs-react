@@ -11,7 +11,10 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard, JwtPayload } from '../common/guards/permissions.guard';
@@ -19,6 +22,7 @@ import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { InvoiceStatus } from '@prisma/client';
 import { BillingService } from './billing.service';
+import { InvoicePdfService } from './invoice-pdf.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   AdjustInvoiceDto,
@@ -39,7 +43,10 @@ import {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly invoicePdf: InvoicePdfService,
+  ) {}
 
   // ==========================================================================
   // Invoices
@@ -66,6 +73,31 @@ export class BillingController {
   @RequirePermissions('invoice.read.any', 'invoice.read.own')
   async getOne(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
     return { data: await this.billing.getInvoiceById(id, actor) };
+  }
+
+  @Get('invoices/:id/pdf')
+  @RequirePermissions('invoice.read.any', 'invoice.read.own')
+  @ApiOperation({ summary: 'The invoice as a PDF (download / print)' })
+  async pdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @User() actor: JwtPayload,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { bytes, filename } = await this.invoicePdf.pdf(id, actor);
+    res.set({ 'Cache-Control': 'no-store' });
+    return new StreamableFile(bytes, {
+      type: 'application/pdf',
+      length: bytes.length,
+      disposition: `inline; filename="${filename}"`,
+    });
+  }
+
+  @Post('invoices/:id/email')
+  @RequirePermissions('invoice.payment.create')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Email the invoice PDF to the patient's email on file" })
+  async emailPdf(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.invoicePdf.emailToPatient(id, actor) };
   }
 
   @Post('invoices/:id/issue')

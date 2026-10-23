@@ -5,6 +5,7 @@ export interface EmailOptions {
   subject: string;
   html: string;
   text?: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
 /**
@@ -29,11 +30,16 @@ export class EmailService {
 
   /** True when the message was actually handed to an SMTP server. */
   async send(options: EmailOptions): Promise<boolean> {
-    const { to, subject, html, text } = options;
+    const { to, subject, html, text, attachments } = options;
 
     if (process.env.EMAIL_MOCK === 'true') {
       this.logger.log(`[EMAIL_MOCK] To: ${to}`);
       this.logger.log(`[EMAIL_MOCK] Subject: ${subject}`);
+      if (attachments?.length) {
+        this.logger.log(
+          `[EMAIL_MOCK] Attachments: ${attachments.map(a => `${a.filename} (${a.content.length} bytes)`).join(', ')}`,
+        );
+      }
       this.logger.log(`[EMAIL_MOCK] Body preview: ${html.substring(0, 200)}...`);
       // In development the log IS the delivery; in production nobody reads
       // it, so report the email as not sent rather than pretend.
@@ -69,6 +75,7 @@ export class EmailService {
         subject,
         html,
         text,
+        ...(attachments?.length && { attachments }),
       });
 
       this.logger.log(`[EmailService] Email sent to ${to}: ${subject}`);

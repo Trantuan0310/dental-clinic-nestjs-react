@@ -7,6 +7,8 @@ import { vi } from 'date-fns/locale';
 import {
   ArrowLeft,
   Printer,
+  FileDown,
+  Mail,
   Send,
   XCircle,
   Plus,
@@ -26,6 +28,8 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { ClinicPrintHeading } from '@/components/brand/ClinicPrintHeading';
 import { useAuthStore } from '@/stores/authStore';
+import { downloadPdf } from '@/lib/pdf';
+import { api } from '@/lib/api';
 import type { InvoiceLineItem, Payment } from '@/types/billing';
 import {
   AdjustModal,
@@ -58,6 +62,16 @@ export default function InvoiceDetailPage() {
     queryKey: ['invoice', id],
     queryFn: () => billingApi.getInvoice(id!),
     enabled: !!id,
+  });
+
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const emailMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<{ data: { to: string } }>(`/billing/invoices/${id}/email`);
+      return data.data;
+    },
+    onSuccess: (res) => notify.success(t('uiOperations.invoiceEmailed', { to: res.to })),
+    onError: (err) => notify.error(getApiErrorMessage(err, t('uiOperations.invoiceEmailError'))),
   });
 
   const issueMutation = useMutation({
@@ -208,6 +222,35 @@ export default function InvoiceDetailPage() {
             <Printer className="h-4 w-4" />
             {t('uiOperations.print')}
           </Button>
+          <Button
+            variant="outline"
+            isLoading={pdfLoading}
+            onClick={async () => {
+              setPdfLoading(true);
+              try {
+                await downloadPdf(`/billing/invoices/${invoice.id}/pdf`, `${invoice.code}.pdf`);
+              } catch (err) {
+                notify.error(getApiErrorMessage(err, t('uiOperations.pdfError')));
+              } finally {
+                setPdfLoading(false);
+              }
+            }}
+          >
+            <FileDown className="h-4 w-4" />
+            PDF
+          </Button>
+          {!isDraft && invoice.status !== 'VOIDED' && (
+            <PermissionGuard permission="invoice.payment.create">
+              <Button
+                variant="outline"
+                isLoading={emailMutation.isPending}
+                onClick={() => emailMutation.mutate()}
+              >
+                <Mail className="h-4 w-4" />
+                {t('uiOperations.emailInvoice')}
+              </Button>
+            </PermissionGuard>
+          )}
         </div>
       </div>
 

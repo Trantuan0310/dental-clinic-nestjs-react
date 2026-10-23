@@ -12,13 +12,17 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard, JwtPayload } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { PayrollService } from './payroll.service';
+import { PayslipPdfService } from './payslip-pdf.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   UpdatePayrollConfigDto,
@@ -38,7 +42,10 @@ import {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('payroll')
 export class PayrollController {
-  constructor(private readonly payroll: PayrollService) {}
+  constructor(
+    private readonly payroll: PayrollService,
+    private readonly payslipPdf: PayslipPdfService,
+  ) {}
 
   // ============================================================================
   // Config
@@ -138,6 +145,27 @@ export class PayrollController {
     return { data };
   }
 
+  @Get('periods/:id/payslips/pdf')
+  @RequirePermissions('payroll.read.any')
+  @ApiOperation({ summary: 'Every payslip of the period in one PDF' })
+  async periodPayslipsPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return pdfFile(res, await this.payslipPdf.period(id));
+  }
+
+  @Get('periods/:id/payslips/:dentistId/pdf')
+  @RequirePermissions('payroll.read.any')
+  @ApiOperation({ summary: "One dentist's payslip for the period, as a PDF" })
+  async dentistPayslipPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('dentistId', ParseUUIDPipe) dentistId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return pdfFile(res, await this.payslipPdf.one(id, dentistId));
+  }
+
   @Get('periods/:id/warnings')
   @RequirePermissions('payroll.read.any')
   @ApiOperation({
@@ -233,6 +261,17 @@ export class PayrollController {
     return { data };
   }
 
+  @Get('me/payslip/:periodId/pdf')
+  @RequirePermissions('payslip.read.own')
+  @ApiOperation({ summary: 'My payslip for a period, as a PDF' })
+  async myPayslipPdf(
+    @Param('periodId', ParseUUIDPipe) periodId: string,
+    @User() user: JwtPayload,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return pdfFile(res, await this.payslipPdf.mine(periodId, user.sub));
+  }
+
   @Get('me/payslip/:periodId')
   @RequirePermissions('payslip.read.own')
   @ApiOperation({ summary: 'My payslip for a period' })
@@ -256,4 +295,13 @@ export class PayrollController {
     const data = await this.payroll.getMyPreview(user.sub);
     return { data };
   }
+}
+
+function pdfFile(res: Response, file: { bytes: Buffer; filename: string }) {
+  res.set({ 'Cache-Control': 'no-store' });
+  return new StreamableFile(file.bytes, {
+    type: 'application/pdf',
+    length: file.bytes.length,
+    disposition: `inline; filename="${file.filename}"`,
+  });
 }

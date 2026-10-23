@@ -73,6 +73,9 @@ export const vi = {
   payrollCompensationRemoveFutureDescription: 'Chính sách này chưa có hiệu lực nên sẽ bị xóa.',
   payrollCompensationStopped: 'Đã ngưng chính sách lương.',
   payrollCompensationStopError: 'Không thể ngưng chính sách lương.',
+  payrollPayslipsPdf: 'Tải phiếu lương (PDF)',
+  payrollPayslipPdf: 'Tải phiếu lương PDF',
+  payrollPdfError: 'Không tải được PDF phiếu lương',
 } as const;
 
 export const en = {
@@ -149,4 +152,7 @@ export const en = {
   payrollCompensationRemoveFutureDescription: 'This policy has not started yet, so it will be removed.',
   payrollCompensationStopped: 'Pay policy stopped.',
   payrollCompensationStopError: 'Could not stop the pay policy.',
+  payrollPayslipsPdf: 'Payslips (PDF)',
+  payrollPayslipPdf: 'Download payslip PDF',
+  payrollPdfError: 'Could not download the payslip PDF',
 };

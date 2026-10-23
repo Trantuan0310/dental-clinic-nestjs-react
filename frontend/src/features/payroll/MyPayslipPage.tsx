@@ -4,7 +4,11 @@ import { formatCurrency } from '@/lib/format';
 import { format } from 'date-fns';
 import { enUS, vi } from 'date-fns/locale';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, FileX } from 'lucide-react';
+import { ArrowLeft, FileDown, FileX } from 'lucide-react';
+import { useState } from 'react';
+import { downloadPdf } from '@/lib/pdf';
+import { notify } from '@/components/ui/Toast';
+import { getApiErrorMessage } from '@/lib/errors';
 import { useMyPayslip } from './payrollApi';
 
 export default function MyPayslipPage() {
@@ -12,6 +16,7 @@ export default function MyPayslipPage() {
   const dateLocale = i18n.language === 'vi' ? vi : enUS;
   const { periodId } = useParams<{ periodId: string }>();
   const { data: payslip, isLoading } = useMyPayslip(periodId);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   if (isLoading) {
     return (
@@ -62,6 +67,22 @@ export default function MyPayslipPage() {
             {t('uiWorkforce.payrollMyPayslips')} {format(new Date(payslip.periodStart), 'MM/yyyy', { locale: dateLocale })}
           </h1>
         </div>
+        <Button
+          variant="outline"
+          isLoading={pdfBusy}
+          onClick={async () => {
+            setPdfBusy(true);
+            try {
+              await downloadPdf(`/payroll/me/payslip/${periodId}/pdf`, 'phieu-luong.pdf');
+            } catch (err) {
+              notify.error(getApiErrorMessage(err, t('uiWorkforce.payrollPdfError')));
+            } finally {
+              setPdfBusy(false);
+            }
+          }}
+        >
+          <FileDown className="h-4 w-4" /> PDF
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
