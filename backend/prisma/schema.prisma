@@ -1928,6 +1928,8 @@ model MessageLog {
   error      String?        @db.VarChar(500)
   providerId String?        @map("provider_id") @db.VarChar(100)
   dedupeKey  String         @unique @map("dedupe_key") @db.VarChar(200)
+  /// Migration 056: tries so far (a FAILED message is retried by later runs).
+  attempts   Int            @default(1)
   patientId  String?        @map("patient_id") @db.Uuid
   targetType String?        @map("target_type") @db.VarChar(30)
   targetId   String?        @map("target_id") @db.Uuid

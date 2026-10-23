@@ -40,7 +40,7 @@
 | Mã | Quy tắc |
 | -- | ------- |
 | BR-RC-001 | Chu kỳ 1–60 tháng; cộng tháng theo lịch, ngày cuối tháng thì lấy ngày cuối của tháng đích (31/08 + 6 tháng = 28/02). |
-| BR-RC-002 | Mỗi bệnh nhân + dịch vụ có tối đa một lượt nhắc đang mở (`PENDING`, `POSTPONED`, `BOOKED`) — chỉ mục duy nhất một phần trong DB. |
+| BR-RC-002 | Mỗi bệnh nhân + dịch vụ có tối đa một lượt nhắc đang mở (`PENDING`, `POSTPONED`, `BOOKED`) — chỉ mục duy nhất một phần trong DB. Đóng lại một phiên khám cũ (sau khi mở lại) không thay lượt nhắc đến hạn muộn hơn của lần khám sau. |
 | BR-RC-003 | Email nhắc gửi tối đa một lần mỗi lượt, giành quyền gửi bằng ghi có điều kiện; máy chủ thư không nhận thì nhả ra cho lần chạy sau. Không gửi khi `APPOINTMENT_EMAIL_NOTICES=false` hoặc email chưa cấu hình. |
 | BR-RC-004 | Không gửi email cho bệnh nhân đã có lịch hẹn sắp tới (SCHEDULED, CONFIRMED, CHECKED_IN, IN_PROGRESS) hoặc đã từ chối nhận. |
 | BR-RC-005 | Link ngừng nhận dùng mã ngẫu nhiên, chỉ lưu bản băm SHA-256; mã sai trả 404. |

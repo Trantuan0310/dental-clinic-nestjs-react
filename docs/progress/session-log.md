@@ -490,3 +490,12 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Trang **Quản trị → Tin nhắn SMS / Zalo**: kênh đang bật, cấu hình còn thiếu, gửi tin thử, nhật ký. `docker-compose.prod.yml` và `.env.production.example` có các biến mới; hướng dẫn cho chủ phòng khám: `docs/08_Deployment/SMS_ZALO.md`.
 - Kiểm: backend 1508 test (+13: số điện thoại, bỏ dấu, thiếu cấu hình, gửi một lần, chuyển Zalo → SMS, eSMS / ZNS gửi đúng định dạng, nhắc lịch / tái khám); `test:isolated` xanh với migration 055. Frontend typecheck, lint, build, locales sạch. Trên demo (SMS mock, Zalo zns thiếu mẫu): 8 lịch được nhắc, chạy lại không gửi trùng; tin thử chuyển sang SMS kèm lý do Zalo lỗi; trang quản trị hiện đúng.
 - **Còn chờ chủ phòng khám:** chọn nhà cung cấp SMS, đăng ký Zalo OA + mẫu ZNS, cung cấp khoá API (xem hướng dẫn).
+
+## 23/10 — Rà lại Phần 4 sau khi gộp (#69–#71)
+
+Đọc lại toàn bộ code kế hoạch điều trị, nhắc tái khám, PDF, nhắn tin; 4 điểm sửa:
+- Nhắc tái khám: mở lại rồi đóng lại một phiên khám **cũ** làm lượt nhắc của lần khám **sau** bị đóng và thay bằng mốc sớm hơn. Nay giữ lượt nhắc đang mở nếu nó đến hạn muộn hơn. +1 test.
+- Kế hoạch điều trị: huỷ được kế hoạch khi một mục đang được ghi trong phiên khám chưa đóng, rồi đóng phiên thì mục của kế hoạch đã huỷ thành "đã làm". Nay chặn huỷ (409) cho tới khi xoá thủ thuật đó hoặc đóng phiên. +1 test.
+- Nhắn tin: tin SMS/Zalo gửi lỗi (nhà cung cấp tạm hỏng, token hết hạn) không bao giờ được gửi lại vì khoá chống trùng đã bị chiếm. Migration 056 thêm `message_logs.attempts`; lần chạy sau lấy lại tin FAILED và thử tiếp, tối đa 3 lần (như email nhắc lịch), mỗi lần một mã theo dõi mới. Trang Tin nhắn hiện số lần thử. +1 test; trên DB demo: 3 lần FAILED (attempts 1→3), lần thứ 4 không thử nữa.
+- Tải PDF bị từ chối (403/404) chỉ hiện câu chung chung: lỗi trả về dạng blob nay được đọc lại để hiện đúng lời máy chủ.
+- Kiểm: backend 1511 test, `test:isolated` (migration 056) xanh; frontend typecheck, lint, build, locales sạch.

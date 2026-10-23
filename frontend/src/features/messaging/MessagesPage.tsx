@@ -28,6 +28,7 @@ interface MessageLog {
   body: string;
   status: MessageStatus;
   error: string | null;
+  attempts: number;
   createdAt: string;
 }
 
@@ -165,6 +166,9 @@ export default function MessagesPage() {
                       </td>
                       <td className="px-3 py-2">
                         <Badge variant={STATUS_VARIANT[m.status]}>{t(`uiMessaging.status.${m.status}`)}</Badge>
+                        {m.attempts > 1 && (
+                          <p className="mt-1 text-xs text-gray-500">{t('uiMessaging.attempts', { count: m.attempts })}</p>
+                        )}
                       </td>
                     </tr>
                   ))

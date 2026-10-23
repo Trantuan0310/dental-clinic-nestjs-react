@@ -50,25 +50,32 @@ export async function scheduleRecallsForEncounter(
     if (t.service && months && months > 0) intervals.set(t.service.id, months);
   }
   const visitDay = clinicDateOnly(closedAt);
+  let made = 0;
   for (const [serviceId, months] of intervals) {
-    await tx.recall.updateMany({
+    const dueDate = new Date(`${addMonthsToDate(visitDay, months)}T00:00:00Z`);
+    const open = await tx.recall.findFirst({
       where: {
         patientId: encounter.patientId,
         serviceId,
         status: { in: OPEN_RECALL_STATUSES },
       },
-      data: { status: RecallStatus.DONE, resolvedByEncounterId: encounterId, closedAt },
+      select: { id: true, dueDate: true },
     });
+    // An older visit closed again (reopened, then closed) does not replace
+    // the recall a later visit made.
+    if (open && open.dueDate.getTime() > dueDate.getTime()) continue;
+    if (open) {
+      await tx.recall.update({
+        where: { id: open.id },
+        data: { status: RecallStatus.DONE, resolvedByEncounterId: encounterId, closedAt },
+      });
+    }
     await tx.recall.create({
-      data: {
-        patientId: encounter.patientId,
-        serviceId,
-        sourceEncounterId: encounterId,
-        dueDate: new Date(`${addMonthsToDate(visitDay, months)}T00:00:00Z`),
-      },
+      data: { patientId: encounter.patientId, serviceId, sourceEncounterId: encounterId, dueDate },
     });
+    made++;
   }
-  return intervals.size;
+  return made;
 }
 
 /**
