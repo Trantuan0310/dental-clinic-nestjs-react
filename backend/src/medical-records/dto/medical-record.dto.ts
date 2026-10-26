@@ -184,11 +184,14 @@ export class TreatmentInventoryUsageInputDto {
   @IsUUID()
   inventoryItemId!: string;
 
-  @ApiProperty({ minimum: 0 })
-  @IsNumber()
-  @Min(0)
+  /** Stock is DECIMAL(12,4); a zero line would record a use of nothing. */
+  @ApiProperty({ minimum: 0.0001, maximum: 99_999_999 })
+  @IsNumber({ maxDecimalPlaces: 4 }, { message: 'Số lượng vật tư tối đa 4 chữ số thập phân' })
+  @Min(0.0001, { message: 'Số lượng vật tư phải lớn hơn 0' })
+  @Max(99_999_999)
   quantity!: number;
 
+  /** Must be the item's own unit. */
   @ApiProperty({ example: 'ml' })
   @IsString()
   @MaxLength(20)

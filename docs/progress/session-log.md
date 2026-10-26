@@ -508,3 +508,13 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Thử dữ liệu sai vào 265 endpoint (admin) và các endpoint công khai: **sửa** 3 chỗ trả 500 thay vì 400 — `GET /inventory/movements` (from/to không phải ngày), `GET /patients` (pageSize không phải số), `GET /payroll/periods` (status sai). Chạy lại: 0 lỗi 500.
 - Múi giờ: **sửa** các chỗ lấy ngày theo UTC / theo máy thay cho giờ phòng khám — tóm tắt AI (ngày khám), ngày trả lương mặc định, ngày tối thiểu đăng ký ca, tên file xuất nhật ký, ngày mặc định trên form bệnh nhân / nhân sự / chi phí, và tuổi (`isMinor`) / ngày sinh hợp lệ (`isValidDob`) tính theo ngày tại phòng khám (+2 test).
 - Kiểm: backend 1514 test, `test:isolated` xanh; frontend typecheck, lint, build, locales sạch.
+
+## 26/10 — fix/full-module-review: nhóm Tài chính
+
+Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này trước đó chỉ có bản kế hoạch). Xác minh từng lỗi trên code hiện tại rồi mới sửa.
+- **AI:** tóm tắt AI tự coi `patient.update` là xem toàn bộ bệnh nhân, trong khi `rowScope` coi vai trò kiểu bác sĩ (lịch hẹn chỉ của mình) là `own`. Nay dùng `rowScope`; `none` → 404, kiểm trước cache. +2 test. (Đếm hoá đơn chưa trả chỉ ISSUED/PARTIAL và báo cáo theo dịch vụ đã có trên main, không lấy lại bản sửa cũ của `fix/business-flow-hardening`.)
+- **Kho:** nhập/xuất số âm hoặc 0 làm đảo chiều kho; quá 4 số lẻ hoặc vượt DECIMAL(12,4) gây lỗi 500 → kiểm ở DTO và service. Kiểm kê tính bằng Decimal. Đổi đơn vị khi đã có tồn / lịch sử / đã dùng → 409 `INVENTORY_UNIT_LOCKED`. Xoá vật tư bằng lệnh ghi có điều kiện tồn ≤ 0. Báo cáo sắp hết so sánh trong DB (trước đây lọc sau 200 dòng). Danh sách vật tư / lịch sử nhận `page`, `pageSize`, trả `total` (trước đây frontend gửi tham số bị bỏ qua, nút trang vô tác dụng, mất dòng sau 200). Tồn đầu khi tạo vật tư ghi một lượt nhập. Lỗi kho trả lời tiếng Việt trong `message`.
+- **Vật tư trong thủ thuật:** số lượng > 0, ≤ 4 số lẻ; đơn vị phải trùng đơn vị vật tư (`INVENTORY_UNIT_MISMATCH`), dòng lưu đơn vị của vật tư. +1 test.
+- **Giao diện kho:** "Kiểm kê" nhập số đếm được (trước đây nhập 50 thì tồn bị trừ 50); số lượng nhận số lẻ (bỏ `parseInt`); trạng thái sắp hết dùng `≤` như backend.
+- **Thu tiền:** hộp thoại thu sinh khoá chống trùng mới khi số còn nợ tải lại lúc đang mở → bấm lại sau khi mất phản hồi có thể thu hai lần. Nay chỉ đặt lại khi mở hộp thoại. Hoàn tiền / xoá nợ đã chặn trùng bằng `version`.
+- Kiểm: backend `tsc`, eslint các file sửa, 1526 test đạt. Frontend typecheck đạt.

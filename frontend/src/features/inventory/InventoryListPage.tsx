@@ -68,9 +68,9 @@ export default function InventoryListPage() {
         name: newName,
         unit: newUnit,
         categoryId: newCategoryId || undefined,
-        currentQuantity: parseInt(newQuantity, 10) || 0,
-        minStockLevel: newMinStock ? parseInt(newMinStock, 10) : undefined,
-        costPrice: newCostPrice ? parseInt(newCostPrice, 10) : undefined,
+        currentQuantity: Number(newQuantity) || 0,
+        minStockLevel: newMinStock ? Number(newMinStock) : undefined,
+        costPrice: newCostPrice ? Number(newCostPrice) : undefined,
         sellingPrice: 0,
         status: 'ACTIVE',
       } as Omit<InventoryItem, 'id' | 'createdAt' | 'updatedAt'>),
@@ -114,8 +114,9 @@ export default function InventoryListPage() {
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
 
   const getStockStatus = (item: InventoryItem) => {
-    if (item.currentQuantity === 0) return 'out_of_stock';
-    if (item.currentQuantity < item.minStockLevel) return 'low_stock';
+    if (item.currentQuantity <= 0) return 'out_of_stock';
+    // Same rule as the low-stock filter: at or below the minimum.
+    if (item.minStockLevel > 0 && item.currentQuantity <= item.minStockLevel) return 'low_stock';
     return 'in_stock';
   };
 

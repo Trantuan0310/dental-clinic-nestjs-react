@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal, Button, Input, Select } from '@/components/ui';
@@ -37,14 +37,19 @@ export function PaymentModal({ isOpen, onClose, invoice }: PaymentModalProps) {
   // so state from a previous payment (e.g. a partial amount + note) would
   // otherwise stick around and default to a stale outstandingAmount next
   // time it's opened. Re-sync to the current invoice whenever it (re)opens.
+  // Only on opening: the invoice is refetched while the dialog is open (window
+  // focus, a lost response), and a new key or amount then would let a retry
+  // of a payment that did go through record the money a second time.
+  const outstandingRef = useRef(invoice.outstandingAmount);
+  outstandingRef.current = invoice.outstandingAmount;
   useEffect(() => {
     if (isOpen) {
-      setAmount(String(Math.floor(invoice.outstandingAmount)));
+      setAmount(String(Math.floor(outstandingRef.current)));
       setMethod('CASH');
       setNote('');
       setRequestKey(newRequestKey());
     }
-  }, [isOpen, invoice.outstandingAmount]);
+  }, [isOpen]);
 
   const parsedAmount = parseFloat(amount);
 

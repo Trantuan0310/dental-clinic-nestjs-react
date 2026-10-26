@@ -2172,6 +2172,26 @@ describe('MedicalRecordsService', () => {
       expect(prisma.treatment.create).not.toHaveBeenCalled();
     });
 
+    it('refuses a consumable counted in another unit than the item', async () => {
+      (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
+      (prisma.inventoryItem.findMany as jest.Mock).mockResolvedValue([
+        { id: 'item-1', name: 'Composite', status: 'ACTIVE', unit: 'tuýp' },
+      ]);
+      await expect(
+        service.createTreatment(
+          'enc-1',
+          {
+            procedure: 'Trám',
+            unitPrice: 1,
+            priceReason: 'Ngoài danh mục',
+            inventoryUsages: [{ inventoryItemId: 'item-1', quantity: 1, unit: 'g' }],
+          } as any,
+          dentistActor,
+        ),
+      ).rejects.toMatchObject({ code: 'INVENTORY_UNIT_MISMATCH' });
+      expect(prisma.treatment.create).not.toHaveBeenCalled();
+    });
+
     it('3.6: a free-text treatment needs a price reason, which is kept', async () => {
       (prisma.treatment.aggregate as jest.Mock).mockResolvedValue({ _max: { sequence: null } });
       await expect(

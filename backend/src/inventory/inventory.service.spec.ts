@@ -104,21 +104,14 @@ describe('InventoryService', () => {
 
       await service.stockIn('item-1', { quantity: 20, reason: 'Restock' } as any, adminActor);
 
-      expect(prisma.inventoryItem.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ id: 'item-1', deletedAt: null }),
-          data: expect.objectContaining({ quantityOnHand: { increment: 20 } }),
-        }),
-      );
-      expect(prisma.stockMovement.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            type: MovementType.STOCK_IN,
-            diff: 20,
-            inventoryItemId: 'item-1',
-          }),
-        }),
-      );
+      const update = (prisma.inventoryItem.updateMany as jest.Mock).mock.calls[0][0];
+      expect(update.where).toMatchObject({ id: 'item-1', deletedAt: null });
+      expect(Number(update.data.quantityOnHand.increment)).toBe(20);
+      // The total stays inside DECIMAL(12,4).
+      expect(Number(update.where.quantityOnHand.lte)).toBe(99_999_979);
+      const { data } = (prisma.stockMovement.create as jest.Mock).mock.calls[0][0];
+      expect(data).toMatchObject({ type: MovementType.STOCK_IN, inventoryItemId: 'item-1' });
+      expect(Number(data.diff)).toBe(20);
     });
 
     it('INV-02: derives before from the locked row, not a stale first read', async () => {
@@ -135,7 +128,7 @@ describe('InventoryService', () => {
       const { data } = (prisma.stockMovement.create as jest.Mock).mock.calls[0][0];
       expect(Number(data.quantityBefore)).toBe(110);
       expect(Number(data.quantityAfter)).toBe(130);
-      expect(Number(data.quantityAfter) - Number(data.quantityBefore)).toBe(data.diff);
+      expect(Number(data.quantityAfter) - Number(data.quantityBefore)).toBe(Number(data.diff));
     });
 
     it('throws when item not found', async () => {
@@ -161,16 +154,10 @@ describe('InventoryService', () => {
         adminActor,
       );
 
-      expect(prisma.inventoryItem.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            id: 'item-1',
-            quantityOnHand: { gte: 20 },
-            deletedAt: null,
-          }),
-          data: expect.objectContaining({ quantityOnHand: { decrement: 20 } }),
-        }),
-      );
+      const update = (prisma.inventoryItem.updateMany as jest.Mock).mock.calls[0][0];
+      expect(update.where).toMatchObject({ id: 'item-1', deletedAt: null });
+      expect(Number(update.where.quantityOnHand.gte)).toBe(20);
+      expect(Number(update.data.quantityOnHand.decrement)).toBe(20);
       expect(prisma.stockMovement.create).toHaveBeenCalled();
     });
 
@@ -214,16 +201,11 @@ describe('InventoryService', () => {
       );
 
       expect(prisma.inventoryItem.updateMany).toHaveBeenCalled();
-      expect(prisma.stockMovement.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            type: MovementType.ADJUSTMENT,
-            diff: 20, // 70 - 50
-            quantityBefore: 50,
-            quantityAfter: 70,
-          }),
-        }),
-      );
+      const { data } = (prisma.stockMovement.create as jest.Mock).mock.calls[0][0];
+      expect(data.type).toBe(MovementType.ADJUSTMENT);
+      expect(Number(data.diff)).toBe(20); // 70 - 50
+      expect(Number(data.quantityBefore)).toBe(50);
+      expect(Number(data.quantityAfter)).toBe(70);
     });
 
     it('writes nothing when the count matches what is on hand (BR-INV-023)', async () => {
@@ -281,14 +263,100 @@ describe('InventoryService', () => {
   });
 
   describe('list low-stock', () => {
-    it('filters items where quantityOnHand <= minStockLevel', async () => {
+    it('compares quantityOnHand <= minStockLevel in the database, before the row cap', async () => {
+      (prisma.inventoryItem as any).fields = { minStockLevel: 'field:minStockLevel' };
       (prisma.inventoryItem.findMany as jest.Mock).mockResolvedValue([]);
       await service.lowStockReport();
       expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ status: ItemStatus.ACTIVE }),
+          where: expect.objectContaining({
+            status: ItemStatus.ACTIVE,
+            quantityOnHand: { lte: 'field:minStockLevel' },
+          }),
         }),
       );
+    });
+  });
+
+  describe('movement quantities', () => {
+    beforeEach(() => {
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(validInventoryItem());
+    });
+
+    it.each([[-5], [0], [1.23456], [100_000_000]])(
+      'refuses a stock-in or stock-out of %p without touching stock',
+      async quantity => {
+        await expect(
+          service.stockIn('item-1', { quantity, reason: 'x' } as any, adminActor),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ error: 'STOCK_MOVEMENT_INVALID' }),
+        });
+        await expect(
+          service.stockOut('item-1', { quantity, reason: 'xxx' } as any, adminActor),
+        ).rejects.toMatchObject({
+          response: expect.objectContaining({ error: 'STOCK_MOVEMENT_INVALID' }),
+        });
+        expect(prisma.inventoryItem.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('a stock-in that would overflow the column is refused, not a database error', async () => {
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await expect(
+        service.stockIn('item-1', { quantity: 50_000_000, reason: 'x' } as any, adminActor),
+      ).rejects.toThrow(/vượt quá/);
+    });
+
+    it('adjusts with exact decimals (0.1 + 0.2 is 0.3)', async () => {
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(
+        validInventoryItem({ quantityOnHand: new Prisma.Decimal('0.1') }),
+      );
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      await service.adjustStock('item-1', { quantity: 0.2, reason: 'count' } as any, adminActor);
+      const { data } = (prisma.stockMovement.create as jest.Mock).mock.calls[0][0];
+      expect(data.quantityAfter.toString()).toBe('0.3');
+    });
+  });
+
+  describe('unit (BR-INV-024)', () => {
+    it('refuses to change the unit of an item with history', async () => {
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(
+        validInventoryItem({ quantityOnHand: new Prisma.Decimal(0) }),
+      );
+      (prisma.stockMovement.count as jest.Mock).mockResolvedValue(3);
+      (prisma.treatmentInventoryUsage.count as jest.Mock).mockResolvedValue(0);
+      const error = await service.updateItem('item-1', { unit: 'cái' }, adminActor).catch(e => e);
+      expect(error.getStatus()).toBe(409);
+      expect(error.getResponse().error).toBe('INVENTORY_UNIT_LOCKED');
+      expect(prisma.inventoryItem.update).not.toHaveBeenCalled();
+    });
+
+    it('lets a new, unused item change its unit', async () => {
+      (prisma.inventoryItem.findUnique as jest.Mock).mockResolvedValue(
+        validInventoryItem({ quantityOnHand: new Prisma.Decimal(0) }),
+      );
+      (prisma.stockMovement.count as jest.Mock).mockResolvedValue(0);
+      (prisma.treatmentInventoryUsage.count as jest.Mock).mockResolvedValue(0);
+      (prisma.inventoryItem.update as jest.Mock).mockResolvedValue(validInventoryItem());
+      await service.updateItem('item-1', { unit: ' cái ' }, adminActor);
+      expect((prisma.inventoryItem.update as jest.Mock).mock.calls[0][0].data.unit).toBe('cái');
+    });
+  });
+
+  describe('deleteItem', () => {
+    it('does not hide stock that arrived after the check', async () => {
+      (prisma.inventoryItem.findUnique as jest.Mock)
+        .mockResolvedValueOnce(validInventoryItem({ quantityOnHand: new Prisma.Decimal(0) }))
+        .mockResolvedValueOnce(validInventoryItem({ quantityOnHand: new Prisma.Decimal(10) }));
+      (prisma.inventoryItem.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await expect(service.deleteItem('item-1', adminActor)).rejects.toThrow(/còn tồn/);
+      expect((prisma.inventoryItem.updateMany as jest.Mock).mock.calls[0][0].where).toMatchObject({
+        id: 'item-1',
+        deletedAt: null,
+        quantityOnHand: { lte: 0 },
+      });
+      expect(audit.log).not.toHaveBeenCalled();
     });
   });
 });

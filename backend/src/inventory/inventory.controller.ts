@@ -30,6 +30,16 @@ import {
   UpdateInventoryItemDto,
 } from './dto/inventory.dto';
 
+/** Page of rows plus `total`, so the list screens can page past the first 200. */
+function paged<T>(data: T[], total: number, page: number, pageSize: number) {
+  const hasMore = page * pageSize < total;
+  return {
+    data,
+    total,
+    pagination: { page, pageSize, hasMore, nextCursor: hasMore ? String(page + 1) : null },
+  };
+}
+
 @ApiTags('Inventory')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -45,7 +55,8 @@ export class InventoryController {
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'List inventory items (BR-INV-005 low-stock filter)' })
   async list(@Query() q: ListInventoryQueryDto) {
-    return wrapAsPaginated(await this.inventory.listItems(q));
+    const { data, total, page, pageSize } = await this.inventory.listItems(q);
+    return paged(data, total, page, pageSize);
   }
 
   @Get('items/low-stock')
@@ -129,7 +140,8 @@ export class InventoryController {
   @RequirePermissions('inventory.read')
   @ApiOperation({ summary: 'Stock movement history' })
   async listMovements(@Query() q: ListMovementsQueryDto) {
-    return wrapAsPaginated(await this.inventory.listMovements(q));
+    const { data, total, page, pageSize } = await this.inventory.listMovements(q);
+    return paged(data, total, page, pageSize);
   }
 
   // ==========================================================================
