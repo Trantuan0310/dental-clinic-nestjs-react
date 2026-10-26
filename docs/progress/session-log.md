@@ -518,3 +518,11 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 - **Giao diện kho:** "Kiểm kê" nhập số đếm được (trước đây nhập 50 thì tồn bị trừ 50); số lượng nhận số lẻ (bỏ `parseInt`); trạng thái sắp hết dùng `≤` như backend.
 - **Thu tiền:** hộp thoại thu sinh khoá chống trùng mới khi số còn nợ tải lại lúc đang mở → bấm lại sau khi mất phản hồi có thể thu hai lần. Nay chỉ đặt lại khi mở hộp thoại. Hoàn tiền / xoá nợ đã chặn trùng bằng `version`.
 - Kiểm: backend `tsc`, eslint các file sửa, 1526 test đạt. Frontend typecheck đạt.
+
+## 26/10 — fix/full-module-review: nhóm Quản trị
+
+- **Danh sách người dùng:** con trỏ trang sau là ngày giờ nhưng DTO đòi UUID → trang 2 luôn 400; phân trang theo `createdAt` bỏ sót người tạo cùng lúc. Nay keyset `(createdAt, id)`, con trỏ là id dòng cuối. Trang Người dùng gửi `limit` (bị bỏ qua, chỉ 20 dòng) và tìm trong 20 dòng đó → nay tìm phía máy chủ (chờ 300 ms), 50 dòng mỗi trang, nút "Tải thêm". +3 test.
+- **Chống nâng quyền (BR-ADM-001, `common/permission-escalation.ts`):** người có `user.update` tự gán được vai trò quản trị; `role.upsert` thêm được quyền mình không có vào vai trò; người có quyền đặt lại mật khẩu chiếm được tài khoản quản trị. Nay: chỉ cấp / thu hồi / thao tác trên quyền mình có (đọc từ DB) — tạo/sửa vai trò, tạo người dùng, đổi vai trò, cấp vai trò bác sĩ ở Nhân sự, sửa / vô hiệu / kích hoạt / đặt lại mật khẩu / gửi link. 403 `PERMISSION_ESCALATION`. Sửa vai trò đã xoá → 404. +5 test.
+- **Đọc vai trò:** form người dùng cần danh sách vai trò nhưng API đòi `role.upsert` → mở cho `role.read`, `user.create`, `user.update`.
+- **Nhật ký hệ thống:** bộ lọc gửi `invoice.issued`, `USR`… trong khi máy chủ ghi `INVOICE_ISSUED`, `user` → lọc luôn rỗng, nhãn không hiện. Đồng bộ theo mã thật; phát hành hoá đơn nay ghi `INVOICE_ISSUED` vào nhật ký hệ thống.
+- Kiểm: backend `tsc`, eslint, 1532 test; frontend typecheck, lint, `check-ui-locales` đạt.

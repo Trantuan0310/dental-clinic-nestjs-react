@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EmployeeType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { assertActorHolds, permissionCodesOfRoles } from '../common/permission-escalation';
 import { UsersService } from '../users/users.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { isValidVnPhone } from '../patients/domain/patient-rules';
@@ -674,6 +675,8 @@ export class EmployeesService {
 
       const dentistRole = await tx.role.findFirst({ where: { code: 'dentist', deletedAt: null } });
       if (!dentistRole) throw new DentistProfileNotAllowedException('Role "dentist" is missing');
+      // BR-ADM-001: granting the dentist role is granting its permissions.
+      await assertActorHolds(tx, actor.sub, await permissionCodesOfRoles(tx, [dentistRole.id]));
       await tx.userRole.upsert({
         where: { userId_roleId: { userId, roleId: dentistRole.id } },
         update: {},

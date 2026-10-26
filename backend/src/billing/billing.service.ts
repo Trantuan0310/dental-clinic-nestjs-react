@@ -1609,6 +1609,17 @@ export class BillingService {
           after: { status, ...(free && { note: 'Hóa đơn 0đ — không phát sinh thu' }) },
         },
       });
+      // The system log too, so the Audit screen can find who issued what.
+      await this.audit.log(
+        {
+          action: 'INVOICE_ISSUED',
+          actorUserId: actor.sub,
+          targetType: 'invoice',
+          targetId: invoiceId,
+          metadata: { status, total: Number(inv.total) },
+        },
+        tx,
+      );
       const updated = await this.loadForEvent(tx, invoiceId);
       const event: InvoiceIssuedEvent = {
         ...this.eventBase(updated, actor.sub, issuedAt),

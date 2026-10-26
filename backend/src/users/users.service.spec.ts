@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import { UserStatus } from '@prisma/client';
@@ -90,31 +91,34 @@ describe('UsersService', () => {
       );
     });
 
-    it('searches by email or fullName case-insensitive', async () => {
+    it('searches by email or fullName case-insensitive, on the server', async () => {
       (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
-      await service.list({ q: 'alice' });
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            OR: [
-              { email: { contains: 'alice', mode: 'insensitive' } },
-              { fullName: { contains: 'alice', mode: 'insensitive' } },
-            ],
-          }),
-        }),
-      );
+      await service.list({ q: ' alice ' });
+      expect((prisma.user.findMany as jest.Mock).mock.calls[0][0].where.AND).toEqual([
+        {
+          OR: [
+            { email: { contains: 'alice', mode: 'insensitive' } },
+            { fullName: { contains: 'alice', mode: 'insensitive' } },
+          ],
+        },
+      ]);
     });
 
-    it('applies cursor pagination when provided', async () => {
+    it('pages by (createdAt, id) from the last row, so users created together are not skipped', async () => {
+      const createdAt = new Date('2026-08-15T00:00:00.000Z');
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u-20', createdAt });
       (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
-      await service.list({ cursor: '2026-08-15T00:00:00.000Z' });
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            createdAt: { lt: new Date('2026-08-15T00:00:00.000Z') },
-          }),
-        }),
-      );
+      await service.list({ cursor: 'u-20' });
+      const args = (prisma.user.findMany as jest.Mock).mock.calls[0][0];
+      expect(args.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+      expect(args.where.AND).toEqual([
+        { OR: [{ createdAt: { lt: createdAt } }, { createdAt, id: { lt: 'u-20' } }] },
+      ]);
+    });
+
+    it('refuses a cursor that is not a user', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      await expect(service.list({ cursor: 'gone' })).rejects.toThrow(BadRequestException);
     });
 
     it('sets nextCursor when there is more data', async () => {
@@ -125,7 +129,8 @@ describe('UsersService', () => {
 
       const result = await service.list({ pageSize: 20 });
       expect(result.pagination.hasMore).toBe(true);
-      expect(result.pagination.nextCursor).not.toBeNull();
+      // The id of the last row shown: what the cursor DTO (a UUID) accepts.
+      expect(result.pagination.nextCursor).toBe('u19');
     });
   });
 
@@ -614,6 +619,51 @@ describe('UsersService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: ACTION_AUDIT.USER_PASSWORD_RESET_BY_ADMIN }),
       );
+    });
+  });
+
+  describe('no escalation (BR-ADM-001)', () => {
+    // rolePermission.findMany answers "what does this user / these roles hold".
+    const holds = (byUser: Record<string, string[]>, byRoles: string[] = []) =>
+      (prisma.rolePermission.findMany as jest.Mock).mockImplementation(async (args: any) => {
+        const userId = args.where.role?.userRoles?.some?.userId;
+        const codes = userId ? (byUser[userId] ?? []) : byRoles;
+        return codes.map(code => ({ permission: { code } }));
+      });
+
+    it('a manager cannot give anyone (themselves included) a role with powers they lack', async () => {
+      holds({ 'mgr-1': ['user.update', 'patient.read'] }, ['role.upsert', 'patient.read']);
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser({ id: 'mgr-1' }));
+      (prisma.role.findMany as jest.Mock).mockResolvedValue([validRole({ id: 'r-admin' })]);
+      const error = await service
+        .updateRoles('mgr-1', { roleIds: ['r-admin'] }, 'mgr-1', 'm@x', null, null)
+        .catch(e => e);
+      expect(error.getStatus()).toBe(403);
+      expect(error.getResponse()).toMatchObject({ details: { missing: ['role.upsert'] } });
+      expect(prisma.userRole.createMany).not.toHaveBeenCalled();
+    });
+
+    it('a manager cannot reset the password of an account that outranks them', async () => {
+      holds({
+        'mgr-1': ['user.reset_password'],
+        'admin-9': ['user.reset_password', 'role.upsert'],
+      });
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser({ id: 'admin-9' }));
+      await expect(
+        service.resetPassword('admin-9', false, 'mgr-1', 'm@x', null, null),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ error: 'PERMISSION_ESCALATION' }),
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('an admin holding everything is not stopped', async () => {
+      holds({ 'admin-1': ['user.reset_password', 'role.upsert'], 'user-2': ['role.upsert'] });
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(validUser({ id: 'user-2' }));
+      (prisma.$transaction as jest.Mock).mockImplementation(async (cb: any) => cb(prisma));
+      await expect(
+        service.resetPassword('user-2', false, 'admin-1', 'a@x', null, null),
+      ).resolves.toMatchObject({ temporaryPassword: expect.any(String) });
     });
   });
 

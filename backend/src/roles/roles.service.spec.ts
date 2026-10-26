@@ -30,6 +30,10 @@ describe('RolesService', () => {
     }).compile();
 
     service = module.get(RolesService);
+    // The acting admin holds these permissions (BR-ADM-001 checks).
+    (prisma.rolePermission.findMany as jest.Mock).mockResolvedValue(
+      ['patient.read', 'patient.write'].map(code => ({ permission: { code } })),
+    );
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -270,6 +274,44 @@ describe('RolesService', () => {
       const result = await service.getPermissions();
       expect(result).toHaveLength(2);
       expect(result[0].code).toBe('patient.read');
+    });
+  });
+
+  describe('no escalation (BR-ADM-001)', () => {
+    it('refuses to create a role carrying a permission the actor lacks', async () => {
+      (prisma.role.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.permission.findMany as jest.Mock).mockResolvedValue([
+        { id: 'perm-9', code: 'role.upsert' },
+      ]);
+      const error = await service
+        .create(
+          { code: 'boss', name: 'Boss', permissionCodes: ['role.upsert'] } as any,
+          'actor-1',
+          'a@x',
+          null,
+          null,
+        )
+        .catch(e => e);
+      expect(error.getStatus()).toBe(403);
+      expect(error.getResponse()).toMatchObject({
+        error: 'PERMISSION_ESCALATION',
+        details: { missing: ['role.upsert'] },
+      });
+      expect(prisma.role.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses to take a permission the actor lacks away from a role', async () => {
+      (prisma.role.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        ...validRole({ isSystem: false }),
+        rolePermissions: [{ permission: { code: 'payroll.approve' } }],
+        userRoles: [],
+      });
+      await expect(
+        service.update('role-1', { permissionCodes: [] } as any, 'actor-1', 'a@x', null, null),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ error: 'PERMISSION_ESCALATION' }),
+      });
+      expect(prisma.rolePermission.deleteMany).not.toHaveBeenCalled();
     });
   });
 });
