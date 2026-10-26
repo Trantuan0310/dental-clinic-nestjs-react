@@ -167,27 +167,29 @@ describe('PayrollService — period lifecycle (integration)', () => {
       ).rejects.toThrow(PayrollValidationException);
     });
 
-    it('allows LOCKED historical periods to coexist with new ones', async () => {
-      (prisma.payrollPeriod.findFirst as jest.Mock).mockResolvedValue(null);
-      (prisma.payrollPeriod.create as jest.Mock).mockResolvedValue(mockPeriod);
+    it('a paid / LOCKED period still blocks a new one over its days, and shared last days count', async () => {
+      (prisma.payrollPeriod.findFirst as jest.Mock).mockResolvedValue({
+        ...mockPeriod,
+        status: PayrollPeriodStatus.LOCKED,
+      });
 
-      await service.createPeriod(
-        {
-          periodStart: '2026-08-01',
-          periodEnd: '2026-08-31',
-          payrollCycle: PayrollCycle.MONTHLY,
-        },
-        'user-1',
-      );
-
-      // Verify that findFirst excludes LOCKED status
-      expect(prisma.payrollPeriod.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            status: { not: PayrollPeriodStatus.LOCKED },
-          }),
-        }),
-      );
+      await expect(
+        service.createPeriod(
+          {
+            periodStart: '2026-08-31',
+            periodEnd: '2026-09-30',
+            payrollCycle: PayrollCycle.MONTHLY,
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(PeriodOverlapException);
+      const { where } = (prisma.payrollPeriod.findFirst as jest.Mock).mock.calls[0][0];
+      expect(where).toEqual({
+        openedFromPeriodId: null,
+        periodStart: { lte: new Date('2026-09-30') },
+        periodEnd: { gte: new Date('2026-08-31') },
+      });
+      expect(prisma.payrollPeriod.create).not.toHaveBeenCalled();
     });
   });
 
