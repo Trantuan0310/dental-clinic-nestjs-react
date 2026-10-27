@@ -54,13 +54,13 @@ export function SidebarContent({
       )}
       <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 scrollbar-thin" aria-label={t('shell.menu.dialogLabel')}>
         {groups.map((group) => (
-          <div key={group.titleKey} className="mb-5">
+          <div key={group.titleKey} className="mb-4 last:mb-0">
             {!collapsed && (
-              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-surface-500">
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-surface-500">
                 {t(`nav.groups.${group.titleKey}`, group.titleKey)}
               </p>
             )}
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const hasChildren = !!item.children?.length;
@@ -76,7 +76,7 @@ export function SidebarContent({
                         className={({ isActive }) =>
                           cn(
                             'flex items-center gap-2.5 rounded-md text-sm font-medium transition-colors',
-                            collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5',
+                            collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2',
                             isActive
                               ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
                               : 'text-gray-700 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800',
@@ -158,12 +158,14 @@ export function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse
         aria-label={t('shell.menu.dialogLabel')}
       >
         <div className="flex h-full flex-col">
+          <SidebarContent collapsed={collapsed} showBrand={false} />
+          {/* At the foot, like most apps: the menu starts level with the header. */}
           <button
             type="button"
             onClick={onToggleCollapsed}
             aria-label={collapsed ? t('shell.sidebar.expand') : t('shell.sidebar.collapse')}
             aria-expanded={!collapsed}
-            className="flex items-center justify-center gap-1 border-b border-gray-100 px-3 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800"
+            className="flex items-center justify-center gap-1 shrink-0 border-t border-gray-100 px-3 py-2.5 text-xs text-gray-500 hover:bg-gray-50 dark:border-surface-700 dark:text-surface-400 dark:hover:bg-surface-800"
           >
             {collapsed ? <Menu className="h-4 w-4" aria-hidden="true" /> : (
               <>
@@ -171,7 +173,6 @@ export function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse
               </>
             )}
           </button>
-          <SidebarContent collapsed={collapsed} showBrand={false} />
         </div>
       </aside>
 
@@ -304,7 +305,7 @@ function NavItemWithChildren({
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center justify-center rounded-md px-2 py-2.5 text-sm font-medium transition-colors',
+              'flex items-center justify-center rounded-md px-2 py-2 text-sm font-medium transition-colors',
               isActive || hasActiveChild
                 ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
                 : 'text-gray-700 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800',
@@ -323,7 +324,7 @@ function NavItemWithChildren({
             aria-expanded={open}
             aria-controls={childrenId}
             className={cn(
-              'flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors',
+              'flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors',
               hasActiveChild
                 ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
                 : 'text-gray-700 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-800',
