@@ -517,3 +517,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 ## 27/10 — Gỡ tự động deploy
 
 - Deploy tự động (#74) chưa chạy được: lần 1 secret `VPS_PORT` có dấu xuống dòng; lần 2–3 `VPS_SSH_KEY` không đọc được (`ssh: no key found`). Theo yêu cầu chủ phòng khám, gỡ `.github/workflows/deploy.yml` và `docs/08_Deployment/AUTO_DEPLOY.md`; deploy lại bằng tay (`scripts/deploy-vps.sh`). Secrets / deploy key trên GitHub và khoá trên VPS do chủ phòng khám tự dọn nếu không dùng.
+
+## 27/10 — Làm đẹp giao diện, phần 1: thanh menu
+
+Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, chia nhỏ từng phần (mỗi phần một PR, ảnh trước/sau bằng Playwright).
+- Mục menu thấp hơn (py-2), nhóm sát hơn: màn 900px thấy thêm Báo cáo và đầu nhóm Quản trị. Nút "Thu gọn" chuyển xuống đáy menu để menu bắt đầu ngang header.
+- Phần tiếp theo dự kiến: (2) trang Tổng quan — tiêu đề lặp, ô trạng thái lệch; (3) thẻ số liệu — nhãn chữ hoa xuống dòng, "↑0%" khi chưa có dữ liệu; (4) nhãn trạng thái + bảng (số thẳng cột); (5) Card / Modal.
