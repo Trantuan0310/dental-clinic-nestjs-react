@@ -513,3 +513,7 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 
 - Thêm `.github/workflows/deploy.yml`: sau khi CI xanh trên `main` (push/merge), SSH vào VPS chạy `scripts/deploy-vps.sh origin/main`; chạy tay được ở tab Actions. Một lượt mỗi lúc, không huỷ giữa chừng. Hướng dẫn: `docs/08_Deployment/AUTO_DEPLOY.md`.
 - Chủ phòng khám đã tạo deploy key, khoá SSH và 4 secret (`VPS_HOST`, `VPS_USER`, `VPS_PORT`, `VPS_SSH_KEY`).
+
+## 27/10 — Gỡ tự động deploy
+
+- Deploy tự động (#74) chưa chạy được: lần 1 secret `VPS_PORT` có dấu xuống dòng; lần 2–3 `VPS_SSH_KEY` không đọc được (`ssh: no key found`). Theo yêu cầu chủ phòng khám, gỡ `.github/workflows/deploy.yml` và `docs/08_Deployment/AUTO_DEPLOY.md`; deploy lại bằng tay (`scripts/deploy-vps.sh`). Secrets / deploy key trên GitHub và khoá trên VPS do chủ phòng khám tự dọn nếu không dùng.
