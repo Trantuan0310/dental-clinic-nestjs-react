@@ -508,3 +508,8 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 - Thử dữ liệu sai vào 265 endpoint (admin) và các endpoint công khai: **sửa** 3 chỗ trả 500 thay vì 400 — `GET /inventory/movements` (from/to không phải ngày), `GET /patients` (pageSize không phải số), `GET /payroll/periods` (status sai). Chạy lại: 0 lỗi 500.
 - Múi giờ: **sửa** các chỗ lấy ngày theo UTC / theo máy thay cho giờ phòng khám — tóm tắt AI (ngày khám), ngày trả lương mặc định, ngày tối thiểu đăng ký ca, tên file xuất nhật ký, ngày mặc định trên form bệnh nhân / nhân sự / chi phí, và tuổi (`isMinor`) / ngày sinh hợp lệ (`isValidDob`) tính theo ngày tại phòng khám (+2 test).
 - Kiểm: backend 1514 test, `test:isolated` xanh; frontend typecheck, lint, build, locales sạch.
+
+## 27/10 — Tự động deploy khi merge vào main
+
+- Thêm `.github/workflows/deploy.yml`: sau khi CI xanh trên `main` (push/merge), SSH vào VPS chạy `scripts/deploy-vps.sh origin/main`; chạy tay được ở tab Actions. Một lượt mỗi lúc, không huỷ giữa chừng. Hướng dẫn: `docs/08_Deployment/AUTO_DEPLOY.md`.
+- Chủ phòng khám đã tạo deploy key, khoá SSH và 4 secret (`VPS_HOST`, `VPS_USER`, `VPS_PORT`, `VPS_SSH_KEY`).
