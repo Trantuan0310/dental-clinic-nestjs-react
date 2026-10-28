@@ -47,6 +47,11 @@
     }
   }
 
+  /* Same-width digits in every table, so amounts and dates line up in columns. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
   h1 {
     @apply text-2xl font-semibold;
   }
