@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
@@ -10,6 +10,7 @@ import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
 import { i18n } from "@/locales";
 import { useTranslation } from "react-i18next";
+import type { BookingPrefill } from "@/features/landing/LandingPage";
 
 type Dentist = {
   id: string;
@@ -119,13 +120,15 @@ export default function PublicBookingPage() {
   // Details from this device's last booking, if any (never fetched from the server).
   const [remembered, setRemembered] = useState(() => loadSavedProfile());
   const [remember, setRemember] = useState(true);
+  // Name and phone typed in the home page's quick form (router state, never the URL).
+  const prefill = (useLocation().state ?? null) as BookingPrefill | null;
   const [form, setForm] = useState(() => {
     const saved = loadSavedProfile();
     return {
-      fullName: saved?.fullName ?? "",
+      fullName: prefill?.fullName ?? saved?.fullName ?? "",
       dob: saved?.dob ?? "",
       gender: saved?.gender || "UNDISCLOSED",
-      phone: saved?.phone ?? "",
+      phone: prefill?.phone ?? saved?.phone ?? "",
       email: saved?.email ?? "",
       contactPersonName: saved?.contactPersonName ?? "",
       contactPersonPhone: saved?.contactPersonPhone ?? "",

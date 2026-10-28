@@ -569,3 +569,17 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - `/admin` báo "Không tìm thấy trang" (breadcrumb "Quản trị" trỏ tới). Rà mọi đường dẫn cha: thêm 8 chỗ tương tự (`/billing/invoices`, `/encounters`, `/inventory/items`, `/treatment-plans`, `/shifts`, `/payroll/shifts`, `/admin/shifts`, `/my-payroll/payslip`) → chuyển tới trang đầu tiên người dùng được xem.
 - `npm run typecheck` của frontend không kiểm tra file nào (`tsconfig.json` có `files: []`) → nay chạy `tsconfig.app.json`, `node`, `e2e` (đều sạch).
 - Kiểm: backend tsc, eslint, 1525 test; frontend typecheck (thật), lint, build, locales; Playwright: 9 link cha × 2 vai trò, chuông 2 tab, mở thông báo (4 → 3 chưa đọc), đánh dấu tất cả (→ 0), trang lịch sử, không lỗi JS.
+
+## 28/10 — Trang chủ mới (gensmile.online)
+
+- Làm lại `features/landing/LandingPage.tsx` theo bản thiết kế đã duyệt (trắng + xanh ngọc như production):
+  - thanh thông tin trên cùng (giờ, địa chỉ, hotline);
+  - logo đầy đủ "GENSMILE / Nha khoa thẩm mỹ";
+  - phần đầu trang có 4 cam kết và khung ảnh. Ảnh lấy từ ảnh admin tải lên; chưa có ảnh thì hiện logo;
+  - ô "Đăng ký khám" (họ tên, số điện thoại, dịch vụ) chuyển sang `/booking`. Họ tên và số điện thoại đi qua router state, không nằm trên URL; `PublicBookingPage` điền sẵn;
+  - số liệu (số bác sĩ, số dịch vụ, đặt online 24/7, phí đặt lịch 0đ);
+  - 6 dịch vụ nổi bật, bảng giá dạng bảng có lọc nhóm, bác sĩ khung ảnh 3:4, quy trình 3 bước, hỏi đáp;
+  - chân trang xanh có bản đồ; nút Zalo/gọi nổi (máy tính) và thanh "Gọi · Zalo · Đặt lịch" (điện thoại).
+- Hiệu ứng: chữ phần đầu trượt lên, khối trượt lên khi cuộn tới, vệt sáng trên nút chính, nút gọi lan sóng. Máy bật giảm chuyển động thì tắt.
+- Giữ nguyên `#top`, `#dich-vu`, nhãn `Đặt lịch …` và các tiêu đề mà e2e `landing` / `site-media` dùng.
+- Kiểm: typecheck, eslint, build, locales. Playwright với API thật: các ý của e2e landing đều đúng, ô đăng ký điền sẵn sang trang đặt lịch. Trên điện thoại ban đầu bị tràn ngang, đã sửa (chữ ẩn trong ô tiêu đề bảng), không tràn ngang nữa.
