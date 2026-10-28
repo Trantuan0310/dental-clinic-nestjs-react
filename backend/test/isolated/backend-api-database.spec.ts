@@ -210,14 +210,16 @@ describe('Real HTTP and PostgreSQL regression', () => {
     expect(p.fullName).toContain('Test patient');
   });
   it('distinguishes the twelfth birthday from the day before it', async () => {
-    const birthday = new Date();
-    birthday.setFullYear(birthday.getFullYear() - 12);
-    const today = `${birthday.getFullYear()}-${String(birthday.getMonth() + 1).padStart(2, '0')}-${String(birthday.getDate()).padStart(2, '0')}`;
+    // The clinic's date, not the runner's: from 00:00 to 07:00 clinic time
+    // the UTC runner is still on yesterday and the check was off by a day.
+    const [y, m, d] = clinicDateOnly().split('-').map(Number);
+    const birthday = new Date(Date.UTC(y - 12, m - 1, d));
+    const today = birthday.toISOString().slice(0, 10);
     await api('post', '/patients')
       .send({ ...patientBody(), dob: today })
       .expect(201);
-    birthday.setDate(birthday.getDate() + 1);
-    const tomorrow = `${birthday.getFullYear()}-${String(birthday.getMonth() + 1).padStart(2, '0')}-${String(birthday.getDate()).padStart(2, '0')}`;
+    birthday.setUTCDate(birthday.getUTCDate() + 1);
+    const tomorrow = birthday.toISOString().slice(0, 10);
     await api('post', '/patients')
       .send({ ...patientBody(), dob: tomorrow })
       .expect(400);
@@ -331,7 +333,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
   });
   it('adds a treatment and persists its decimal price', async () => {
     await api('post', `/medical-records/encounters/${encounterId}/treatments`, 'dentist')
-      .send({ procedure: 'Dental filling', toothNumbers: [16], unitPrice: 350000, priceReason: 'Ngoài danh mục' })
+      .send({
+        procedure: 'Dental filling',
+        toothNumbers: [16],
+        unitPrice: 350000,
+        priceReason: 'Ngoài danh mục',
+      })
       .expect(201);
     const t = await db.treatment.findFirstOrThrow({ where: { encounterId } });
     expect(Number(t.unitPrice)).toBe(350000);
@@ -512,7 +519,11 @@ describe('Real HTTP and PostgreSQL regression', () => {
   it('rejects competing payments without double collecting or a server error', async () => {
     const id = await fixtureEncounter();
     await api('post', `/medical-records/encounters/${id}/treatments`, 'dentist')
-      .send({ procedure: 'Concurrent payment fixture', unitPrice: 100000, priceReason: 'Ngoài danh mục' })
+      .send({
+        procedure: 'Concurrent payment fixture',
+        unitPrice: 100000,
+        priceReason: 'Ngoài danh mục',
+      })
       .expect(201);
     await api('post', `/medical-records/encounters/${id}/close`, 'dentist').send({}).expect(200);
     const invoice = await invoiceFor(id);

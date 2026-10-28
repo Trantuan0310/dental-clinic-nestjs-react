@@ -70,6 +70,7 @@ const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'));
 
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'));
 const UsersPage = lazy(() => import('@/features/admin/UsersPage'));
+const NotificationsPage = lazy(() => import('@/features/notifications/NotificationsPage'));
 const EmployeesPage = lazy(() => import('@/features/staff/EmployeesPage'));
 const DentistsPage = lazy(() => import('@/features/staff/DentistsPage'));
 const DentistDetailPage = lazy(() => import('@/features/staff/DentistDetailPage'));
@@ -82,6 +83,40 @@ const SiteMediaPage = lazy(() => import('@/features/media/SiteMediaPage'));
 const MyAccountPage = lazy(() => import('@/features/auth/MyAccountPage'));
 
 const BrandPreviewPage = lazy(() => import('@/features/brand/BrandPreviewPage'));
+
+/**
+ * Parent paths with no page of their own (the breadcrumb links to every
+ * parent, e.g. "Hóa đơn" on /billing/invoices/:id): open the first listed
+ * page the user may see. An entry without a permission always matches.
+ */
+const ADMIN_PAGES: Array<[string, string?]> = [
+  ['/admin/users', 'user.read'],
+  ['/admin/roles', 'role.upsert'],
+  ['/admin/settings', 'settings.read'],
+  ['/admin/audit', 'system.audit.read'],
+  ['/admin/messages', 'message_log.read'],
+  ['/admin/site-media', 'site_media.manage'],
+  ['/admin/shifts/pending', 'shift.approve'],
+  ['/'],
+];
+
+const PARENT_REDIRECTS: Array<[string, Array<[string, string?]>]> = [
+  ['admin', ADMIN_PAGES],
+  ['admin/shifts', [['/admin/shifts/pending']]],
+  ['billing/invoices', [['/billing/list']]],
+  ['encounters', [['/today']]],
+  ['inventory/items', [['/inventory']]],
+  ['my-payroll/payslip', [['/my-payroll']]],
+  ['payroll/shifts', [['/payroll/shifts/approval']]],
+  ['shifts', [['/shifts/pending', 'shift.approve'], ['/my-shifts']]],
+  ['treatment-plans', [['/patients']]],
+];
+
+function FirstAllowedRedirect({ to }: { to: Array<[string, string?]> }) {
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const target = to.find(([, perm]) => !perm || hasPermission(perm))?.[0] ?? '/';
+  return <Navigate to={target} replace />;
+}
 
 /**
  * The staff app lives at "/", which is also the address patients type in.
@@ -519,6 +554,9 @@ const router = createBrowserRouter(createRoutesFromElements(
                 }
               />
 
+              {PARENT_REDIRECTS.map(([path, to]) => (
+                <Route key={path} path={path} element={<FirstAllowedRedirect to={to} />} />
+              ))}
               <Route
                 path="admin/users"
                 element={
@@ -560,6 +598,7 @@ const router = createBrowserRouter(createRoutesFromElements(
                 }
               />
               <Route path="me" element={<MyAccountPage />} />
+              <Route path="notifications" element={<NotificationsPage />} />
               <Route
                 path="admin/settings"
                 element={
@@ -584,6 +623,8 @@ const router = createBrowserRouter(createRoutesFromElements(
             </Route>
   </Route>,
 ), { future: { v7_relativeSplatPath: true } });
+
+
 
 export function AppRoutes() {
   return <RouterProvider router={router} future={{ v7_startTransition: true }} />;

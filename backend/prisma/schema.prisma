@@ -164,6 +164,7 @@ model User {
   bookingRequestsProposed  BookingRequest[] @relation("BookingProposedDentist")
   bookingRequestsHandled   BookingRequest[] @relation("BookingHandler")
   mediaPhotos              MediaAsset[]     @relation("DentistPhotos")
+  notifications            Notification[]
 
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
@@ -1938,4 +1939,25 @@ model MessageLog {
   @@index([createdAt(sort: Desc)])
   @@index([patientId])
   @@map("message_logs")
+}
+
+/// Migration 057: in-app notification for one user (header bell, history).
+model Notification {
+  id        String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// bookingRequest | shiftRegistration | draftInvoice | recallsDue | lowStock | staleEncounters
+  type      String    @db.VarChar(40)
+  title     String    @db.VarChar(200)
+  body      String?   @db.VarChar(500)
+  /// The record it is about, when there is one (opens its page).
+  targetId  String?   @map("target_id") @db.Uuid
+  dedupeKey String    @map("dedupe_key") @db.VarChar(200)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  readAt    DateTime? @map("read_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
 }
