@@ -536,3 +536,9 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - Mức thay đổi 0% hiện xám với dấu "–" thay vì "↑0%" xanh; tăng xanh, giảm đỏ như cũ.
 - Nhãn "Mới / Cũ" của thẻ Bệnh nhân không ngắt dòng, có màu cho chế độ tối.
 - Kiểm: typecheck, eslint, build; ảnh Playwright khoảng "Hôm nay" và "6 tháng", không lỗi JS.
+
+## 28/10 — Làm đẹp giao diện, phần 4: nhãn trạng thái và bảng
+
+- `StatusBadge`: chấm màu theo trạng thái trước chữ (nhìn lướt cả cột), không ngắt dòng. Chữ không đổi.
+- Mọi `<table>`: chữ số cùng độ rộng (`tabular-nums`) — tiền, ngày, mã thẳng cột.
+- Kiểm: typecheck, eslint, build; ảnh Playwright 13 trang, không lỗi JS.
