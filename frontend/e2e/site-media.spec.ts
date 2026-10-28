@@ -46,6 +46,7 @@ test('admin puts clinic photos on the home page', async ({ page, browser }) => {
   await page.getByRole('button', { name: 'Xóa', exact: true }).click();
   await expect(hero).toBeHidden();
   await home.reload();
-  await expect(home.locator('#top img[src="/logo-full.svg"]')).toBeVisible();
+  await expect(home.locator('#top img[src="/logo-icon.png"]')).toBeVisible();
+  await expect(home.locator('#top img[src*="/public/media/"]')).toHaveCount(0);
   await guest.close();
 });
