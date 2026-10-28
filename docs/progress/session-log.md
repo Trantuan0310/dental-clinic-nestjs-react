@@ -555,3 +555,9 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - Backend `GET /notifications/summary` (mọi người đã đăng nhập; mỗi mục chỉ tính khi có quyền của trang đích): yêu cầu đặt lịch online chờ xử lý (`booking_request.read`), đăng ký ca chờ duyệt từ hôm nay (`shift.approve`), nhắc tái khám đến hạn hôm nay (`recall.read`), hoá đơn nháp (`invoice.issue` + `invoice.read.any`), phiên khám còn mở từ hôm trước (`encounter.read.any` tất cả / `encounter.read.own` của mình), vật tư ≤ mức tối thiểu (`inventory.update` / `inventory.stock_in`). +4 test.
 - Frontend `layouts/NotificationBell.tsx` thay link chuông cũ (chỉ đếm ca chờ duyệt): bấm mở danh sách thả xuống — biểu tượng màu, tên, mô tả, số lượng, bấm tới đúng trang; ẩn mục 0; trạng thái trống "Không có việc nào đang chờ"; tự cập nhật mỗi phút; Esc / bấm ra ngoài để đóng; trên điện thoại hiện thành tấm ngang màn hình. Locale `uiNotifications`.
 - Kiểm: backend tsc, eslint, 1518 test; frontend typecheck, eslint, build, locales; API thử 3 vai trò (admin 6 mục, lễ tân 4, bác sĩ 1); ảnh Playwright desktop + mobile + bác sĩ (trạng thái trống), không lỗi JS.
+
+## 28/10 — Thông báo nổi (toast) làm lại
+
+- Lỗi: `AppToaster` dùng hàm render riêng nên nền / viền / bóng trong `toastOptions.style` không áp dụng — thông báo trong suốt, chữ đè lên trang; cảnh báo và thông tin cùng biểu tượng (kiểu `blank`); không có nút đóng, không hiệu ứng.
+- Nay: thẻ có nền (sáng / tối), bo góc, bóng, vạch màu bên trái, biểu tượng trong vòng tròn màu theo loại (thành công / lỗi / cảnh báo / thông tin), nút ✕ đóng, hiện ra / ẩn đi mượt; tối đa 3 thông báo trên màn hình. Lỗi vẫn `role="alert"`, còn lại `role="status"` (e2e dùng `[role="alert"]` vẫn khớp). Cảnh báo hiện 7 giây, lỗi 8 giây.
+- Kiểm: typecheck, eslint, build; ảnh Playwright 4 loại sáng / tối / điện thoại, nút đóng hoạt động, không lỗi JS.
