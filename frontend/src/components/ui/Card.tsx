@@ -28,11 +28,11 @@ export function Card({
       )}
     >
       {(title || description || actions) && (
-        <div className="border-b border-gray-100 px-6 py-4 dark:border-surface-700">
+        <div className="border-b border-gray-100 px-5 py-4 dark:border-surface-700">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div className="min-w-0">
               {title && (
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-surface-100">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-surface-100">
                   {title}
                 </h3>
               )}
@@ -46,7 +46,7 @@ export function Card({
       )}
       <div
         className={cn(
-          noPadding ? '' : 'p-6',
+          noPadding ? '' : 'p-5',
           bodyClassName,
         )}
       >
