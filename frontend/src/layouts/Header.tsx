@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bell, ChevronDown, Search as SearchIcon, LogOut, User as UserIcon, Building2, CalendarDays, Menu } from 'lucide-react';
+import { ChevronDown, Search as SearchIcon, LogOut, User as UserIcon, Building2, CalendarDays, Menu } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/features/auth/authApi';
 import { cn } from '@/lib/cn';
-import { useShiftRegistrations } from '@/features/payroll/payrollApi';
+import { NotificationBell } from './NotificationBell';
 import { Logo } from '@/components/brand';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -30,11 +30,6 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
   const accountButtonRef = useRef<HTMLButtonElement>(null);
   const [search, setSearch] = useState('');
   const [now, setNow] = useState(new Date());
-
-  const canApprove = !!user?.permissions.includes('shift.approve');
-  // Only approvers see the badge; others (front desk) may not list shifts at all.
-  const { data: pendingShifts } = useShiftRegistrations({ status: 'PENDING' }, { enabled: canApprove });
-  const pendingCount = pendingShifts?.length ?? 0;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -164,23 +159,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
           <LanguageSwitcher />
           <ThemeToggle />
 
-          {canApprove && (
-            <Link
-              to={user.roles.includes('clinic_admin') ? '/admin/shifts/pending' : '/shifts/pending'}
-              className="relative rounded-full p-2 text-gray-500 hover:bg-gray-100 dark:text-surface-400 dark:hover:bg-surface-800"
-              aria-label={t('shell.user.notifications')}
-            >
-              <Bell className="h-5 w-5" />
-              {pendingCount > 0 && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white"
-                >
-                  {pendingCount}
-                </span>
-              )}
-            </Link>
-          )}
+          <NotificationBell />
 
           <div
             ref={accountRef}

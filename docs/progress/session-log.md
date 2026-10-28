@@ -549,3 +549,9 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - `Card`: tiêu đề `text-base`, khoảng đệm `p-5` / `px-5` — gọn, cân với các trang.
 - Kiểm: typecheck, eslint, build; ảnh Playwright 13 trang, không lỗi JS.
 - Đợt làm đẹp 5 phần: #76 menu, #77 Tổng quan, #78 thẻ số liệu, #79 nhãn trạng thái + bảng, phần 5 này.
+
+## 28/10 — Phần 6: chuông thông báo thật
+
+- Backend `GET /notifications/summary` (mọi người đã đăng nhập; mỗi mục chỉ tính khi có quyền của trang đích): yêu cầu đặt lịch online chờ xử lý (`booking_request.read`), đăng ký ca chờ duyệt từ hôm nay (`shift.approve`), nhắc tái khám đến hạn hôm nay (`recall.read`), hoá đơn nháp (`invoice.issue` + `invoice.read.any`), phiên khám còn mở từ hôm trước (`encounter.read.any` tất cả / `encounter.read.own` của mình), vật tư ≤ mức tối thiểu (`inventory.update` / `inventory.stock_in`). +4 test.
+- Frontend `layouts/NotificationBell.tsx` thay link chuông cũ (chỉ đếm ca chờ duyệt): bấm mở danh sách thả xuống — biểu tượng màu, tên, mô tả, số lượng, bấm tới đúng trang; ẩn mục 0; trạng thái trống "Không có việc nào đang chờ"; tự cập nhật mỗi phút; Esc / bấm ra ngoài để đóng; trên điện thoại hiện thành tấm ngang màn hình. Locale `uiNotifications`.
+- Kiểm: backend tsc, eslint, 1518 test; frontend typecheck, eslint, build, locales; API thử 3 vai trò (admin 6 mục, lễ tân 4, bác sĩ 1); ảnh Playwright desktop + mobile + bác sĩ (trạng thái trống), không lỗi JS.
