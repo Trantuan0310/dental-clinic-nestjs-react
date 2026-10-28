@@ -155,7 +155,7 @@ export function KpiRow({kpis, range, isLoading, isError, onRetry}: KpiRowProps) 
                   </span>
                 }
               >
-                <span className="cursor-help rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">
+                <span className="cursor-help whitespace-nowrap rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                   {t('uiEntry.dashboard.new')}: {kpis.patients.newCount}
                 </span>
               </Tooltip>
@@ -166,7 +166,7 @@ export function KpiRow({kpis, range, isLoading, isError, onRetry}: KpiRowProps) 
                   </span>
                 }
               >
-                <span className="cursor-help rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-700">
+                <span className="cursor-help whitespace-nowrap rounded bg-blue-50 px-1.5 py-0.5 font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                   {t('uiEntry.dashboard.returning')}: {kpis.patients.returningCount}
                 </span>
               </Tooltip>

@@ -529,3 +529,10 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - Tiêu đề "Tổng quan" cùng kiểu với các trang khác (bỏ chữ to màu teal và nhãn "TỔNG QUAN" lặp lại).
 - Ô trạng thái "Lịch khám — Hôm nay" đều nhau, phủ kín lưới (trước rộng hẹp lệch do tooltip bọc inline), nền nhạt, số thẳng cột.
 - Kiểm: typecheck, eslint, build; ảnh Playwright desktop + mobile, không lỗi JS.
+
+## 28/10 — Làm đẹp giao diện, phần 3: thẻ số liệu
+
+- `KpiCard`: nhãn viết thường (chữ hoa dài xuống dòng khó đọc), số căn thẳng cột, không ngắt dòng ("916.650.000 ₫" từng tách "₫" xuống dòng).
+- Mức thay đổi 0% hiện xám với dấu "–" thay vì "↑0%" xanh; tăng xanh, giảm đỏ như cũ.
+- Nhãn "Mới / Cũ" của thẻ Bệnh nhân không ngắt dòng, có màu cho chế độ tối.
+- Kiểm: typecheck, eslint, build; ảnh Playwright khoảng "Hôm nay" và "6 tháng", không lỗi JS.

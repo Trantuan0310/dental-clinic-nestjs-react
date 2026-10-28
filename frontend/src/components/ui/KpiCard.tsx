@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Sparkline } from './Sparkline';
 import { Tooltip } from './Tooltip';
@@ -55,17 +55,24 @@ export function KpiCard({
   className,
 }: KpiCardProps) {
   const showDelta = typeof delta === 'number' && Number.isFinite(delta);
-  const isUp = showDelta && (delta as number) >= 0;
+  // No change (often: no data yet in either period) is neutral grey, not a green "up".
+  const trend = !showDelta || delta === 0 ? 'flat' : (delta as number) > 0 ? 'up' : 'down';
   const deltaElement = showDelta ? (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
-        isUp
-          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-          : 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+        'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums',
+        trend === 'up' && 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+        trend === 'down' && 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+        trend === 'flat' && 'bg-gray-100 text-gray-500 dark:bg-surface-800 dark:text-surface-400',
       )}
     >
-      {isUp ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+      {trend === 'up' ? (
+        <ArrowUp className="h-3 w-3" />
+      ) : trend === 'down' ? (
+        <ArrowDown className="h-3 w-3" />
+      ) : (
+        <Minus className="h-3 w-3" />
+      )}
       {formatDelta(delta as number)}
     </span>
   ) : null;
@@ -90,8 +97,9 @@ export function KpiCard({
             </span>
           )}
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-surface-400">{label}</p>
-            <p className={cn('mt-0.5 text-2xl font-semibold leading-tight', toneClass[tone])}>
+            {/* Sentence case: long Vietnamese labels in capitals wrapped and read poorly. */}
+            <p className="text-xs font-medium leading-snug text-gray-500 dark:text-surface-400">{label}</p>
+            <p className={cn('mt-1 whitespace-nowrap text-2xl font-semibold leading-tight tabular-nums', toneClass[tone])}>
               {value}
             </p>
             {sublabel && <div className="mt-1 text-xs text-gray-500 dark:text-surface-400">{sublabel}</div>}
