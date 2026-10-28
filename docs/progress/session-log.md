@@ -542,3 +542,10 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - `StatusBadge`: chấm màu theo trạng thái trước chữ (nhìn lướt cả cột), không ngắt dòng. Chữ không đổi.
 - Mọi `<table>`: chữ số cùng độ rộng (`tabular-nums`) — tiền, ngày, mã thẳng cột.
 - Kiểm: typecheck, eslint, build; ảnh Playwright 13 trang, không lỗi JS.
+
+## 28/10 — Làm đẹp giao diện, phần 5: hộp thoại và thẻ (hết đợt)
+
+- `Modal`: nút đóng ✕ chỉ hiện viền khi dùng bàn phím (`focus-visible`) — trước đây mở bằng chuột cũng hiện viền xanh vì focus tự đặt vào nút; góc bo `rounded-xl`.
+- `Card`: tiêu đề `text-base`, khoảng đệm `p-5` / `px-5` — gọn, cân với các trang.
+- Kiểm: typecheck, eslint, build; ảnh Playwright 13 trang, không lỗi JS.
+- Đợt làm đẹp 5 phần: #76 menu, #77 Tổng quan, #78 thẻ số liệu, #79 nhãn trạng thái + bảng, phần 5 này.

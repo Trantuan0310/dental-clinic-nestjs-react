@@ -66,7 +66,7 @@ export function Modal({
       <div
         ref={panelRef}
         className={cn(
-          'relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-lg bg-white shadow-xl dark:bg-surface-900 dark:shadow-black/40',
+          'relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-xl bg-white shadow-xl dark:bg-surface-900 dark:shadow-black/40',
           'animate-in fade-in zoom-in-95 duration-200',
           SIZES[size],
           className,
@@ -96,7 +96,7 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 aria-label={t('common.cancel')}
-                className="ml-2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="ml-2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-surface-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               >
                 <X className="h-5 w-5" aria-hidden="true" />
               </button>
