@@ -54,6 +54,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/shifts': 'shifts',
   '/shifts/pending': 'shiftApproval',
   '/me': 'myAccount',
+  '/notifications': 'notifications',
   '/admin': 'admin',
   '/admin/users': 'users',
   '/admin/roles': 'roles',

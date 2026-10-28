@@ -561,3 +561,11 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - Lỗi: `AppToaster` dùng hàm render riêng nên nền / viền / bóng trong `toastOptions.style` không áp dụng — thông báo trong suốt, chữ đè lên trang; cảnh báo và thông tin cùng biểu tượng (kiểu `blank`); không có nút đóng, không hiệu ứng.
 - Nay: thẻ có nền (sáng / tối), bo góc, bóng, vạch màu bên trái, biểu tượng trong vòng tròn màu theo loại (thành công / lỗi / cảnh báo / thông tin), nút ✕ đóng, hiện ra / ẩn đi mượt; tối đa 3 thông báo trên màn hình. Lỗi vẫn `role="alert"`, còn lại `role="status"` (e2e dùng `[role="alert"]` vẫn khớp). Cảnh báo hiện 7 giây, lỗi 8 giây.
 - Kiểm: typecheck, eslint, build; ảnh Playwright 4 loại sáng / tối / điện thoại, nút đóng hoạt động, không lỗi JS.
+
+## 28/10 — Thông báo: đã đọc, lịch sử; sửa link cha bị 404; typecheck frontend
+
+- Migration 057 `notifications` (mỗi người một dòng, `read_at`, khoá chống trùng `(user_id, dedupe_key)`, xoá sau 90 ngày). `InboxService`: quét mỗi 2 phút sự kiện mới trong 24 giờ (yêu cầu đặt lịch online, đăng ký ca chờ duyệt, hoá đơn nháp) gửi cho người có quyền trang xử lý; tổng hợp 07:31 (bệnh nhân cần gọi tái khám, vật tư sắp hết, phiên khám còn mở — bác sĩ nhận phần của mình). API `GET /notifications`, `/unread-count`, `POST /notifications/:id/read`, `/read-all` (chỉ của chính mình). +7 test.
+- Chuông: số đỏ = chưa đọc; 2 tab "Thông báo" (8 mới nhất, bấm = đã đọc + mở trang) và "Việc cần xử lý"; "Đánh dấu tất cả đã đọc"; "Xem tất cả" → trang `/notifications` (lọc Tất cả / Chưa đọc, tải thêm).
+- `/admin` báo "Không tìm thấy trang" (breadcrumb "Quản trị" trỏ tới). Rà mọi đường dẫn cha: thêm 8 chỗ tương tự (`/billing/invoices`, `/encounters`, `/inventory/items`, `/treatment-plans`, `/shifts`, `/payroll/shifts`, `/admin/shifts`, `/my-payroll/payslip`) → chuyển tới trang đầu tiên người dùng được xem.
+- `npm run typecheck` của frontend không kiểm tra file nào (`tsconfig.json` có `files: []`) → nay chạy `tsconfig.app.json`, `node`, `e2e` (đều sạch).
+- Kiểm: backend tsc, eslint, 1525 test; frontend typecheck (thật), lint, build, locales; Playwright: 9 link cha × 2 vai trò, chuông 2 tab, mở thông báo (4 → 3 chưa đọc), đánh dấu tất cả (→ 0), trang lịch sử, không lỗi JS.
