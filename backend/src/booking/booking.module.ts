@@ -12,5 +12,6 @@ import { BookingRequestsController, PublicBookingController } from './booking.co
   imports: [PrismaModule, AuditModule, AppointmentsModule, PatientsModule],
   controllers: [PublicBookingController, BookingRequestsController],
   providers: [BookingService, BookingCron, AppointmentNoticesService],
+  exports: [BookingService],
 })
 export class BookingModule {}

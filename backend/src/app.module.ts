@@ -16,6 +16,7 @@ import { MediaModule } from './media/media.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
 import { TreatmentPlansModule } from './treatment-plans/treatment-plans.module';
 import { RecallsModule } from './recalls/recalls.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { BillingModule } from './billing/billing.module';
 import { ReportsModule } from './reports/reports.module';
@@ -60,6 +61,7 @@ import { CatalogModule } from './catalog/catalog.module';
     MedicalRecordsModule,
     TreatmentPlansModule,
     RecallsModule,
+    NotificationsModule,
     MessagingModule,
     BillingModule,
     ReportsModule,
