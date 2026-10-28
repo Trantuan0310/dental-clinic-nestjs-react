@@ -523,3 +523,9 @@ Phạm vi: nhân viên, hồ sơ bác sĩ, lịch làm việc, giờ làm, ngày
 Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, chia nhỏ từng phần (mỗi phần một PR, ảnh trước/sau bằng Playwright).
 - Mục menu thấp hơn (py-2), nhóm sát hơn: màn 900px thấy thêm Báo cáo và đầu nhóm Quản trị. Nút "Thu gọn" chuyển xuống đáy menu để menu bắt đầu ngang header.
 - Phần tiếp theo dự kiến: (2) trang Tổng quan — tiêu đề lặp, ô trạng thái lệch; (3) thẻ số liệu — nhãn chữ hoa xuống dòng, "↑0%" khi chưa có dữ liệu; (4) nhãn trạng thái + bảng (số thẳng cột); (5) Card / Modal.
+
+## 28/10 — Làm đẹp giao diện, phần 2: trang Tổng quan
+
+- Tiêu đề "Tổng quan" cùng kiểu với các trang khác (bỏ chữ to màu teal và nhãn "TỔNG QUAN" lặp lại).
+- Ô trạng thái "Lịch khám — Hôm nay" đều nhau, phủ kín lưới (trước rộng hẹp lệch do tooltip bọc inline), nền nhạt, số thẳng cột.
+- Kiểm: typecheck, eslint, build; ảnh Playwright desktop + mobile, không lỗi JS.
