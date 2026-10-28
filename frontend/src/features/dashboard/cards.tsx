@@ -1078,10 +1078,12 @@ export function AppointmentStatsCard({stats, range, isLoading, isError, onRetry}
     <Card title={title} description={description}>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
         {tiles.map((t) => (
-          <Tooltip key={t.label} label={<span>{t.hint}</span>}>
-            <div className="cursor-help rounded-md border border-gray-100 dark:border-surface-700 px-2 py-2 dark:border-surface-700">
-              <p className="text-[11px] font-medium text-gray-500 dark:text-surface-400">{t.label}</p>
-              <p className={`text-xl font-semibold ${t.cls} dark:text-surface-100`}>{formatNumber(t.value)}</p>
+          // The tooltip wrapper is inline by default; stretched here so every
+          // tile fills its grid cell (the tiles were uneven widths).
+          <Tooltip key={t.label} label={<span>{t.hint}</span>} className="flex w-full">
+            <div className="flex w-full cursor-help flex-col justify-between rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5 dark:border-surface-700 dark:bg-surface-800/40">
+              <p className="text-xs font-medium leading-snug text-gray-500 dark:text-surface-400">{t.label}</p>
+              <p className={`mt-1 text-xl font-semibold tabular-nums ${t.cls} dark:text-surface-100`}>{formatNumber(t.value)}</p>
             </div>
           </Tooltip>
         ))}

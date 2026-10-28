@@ -28,14 +28,10 @@ export function DashboardHeader({ range, setRange }: DashboardHeaderProps) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold leading-tight text-brand-700 md:text-3xl dark:text-brand-300">
-              {t('uiEntry.dashboard.overview')}
-            </h1>
-            <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
-              {t('uiEntry.dashboard.overview')}
-            </span>
-          </div>
+          {/* Same title style as every other page (PageHeader). */}
+          <h1 className="text-2xl font-semibold leading-tight text-gray-900 dark:text-surface-100">
+            {t('uiEntry.dashboard.overview')}
+          </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
             <span className="font-medium text-gray-700 dark:text-surface-200">{rangeDescription}</span>
             {' · '}
