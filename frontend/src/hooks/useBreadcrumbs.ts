@@ -18,6 +18,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/expenses': 'expenses',
   '/inventory': 'inventory',
   '/inventory/items': 'supplyList',
+  '/inventory/movements': 'stockMovements',
   '/my-queue': 'myQueue',
   '/my-appointments': 'mySchedule',
   '/dispatch': 'dispatch',
