@@ -171,8 +171,13 @@
 - Chưa triển khai tích hợp EHR (Bộ Y tế).
 - AI features còn hạn chế (chỉ summary).
 - Performance chưa benchmark với 10K+ records.
+- Đợt rà soát nghiệp vụ toàn hệ thống (26/10, `docs/progress/full_module_fix_plan.md`) mới hoàn tất nhóm Quản trị, Tài chính và phần lõi tính lương. Các điểm đã xác định nhưng chưa sửa:
+  - **Tiếp nhận:** phản hồi cũ của form đặt lịch có thể ghi đè lựa chọn mới khi người dùng đổi nhanh; nhận diện bệnh nhân cũ còn dựa nhiều vào số điện thoại (dễ nhầm người trong một gia đình); giữ chỗ tạm cần dùng chung khóa và so sánh–ghi (CAS) với đặt lịch; phiên tiếp nhận tồn đọng qua ngày; tiếp nhận bệnh nhân khi bác sĩ ngoài ca.
+  - **Lâm sàng:** sơ đồ răng chưa lưu có thể mất khi rời trang; gửi nhắc tái khám theo lô dừng ở 200 bệnh nhân mỗi lượt; đồng ý nhận tin chưa tách theo kênh; nhắn tin chưa có cơ chế khôi phục khi không biết kết quả gửi (tránh gửi lặp); đóng phiên khám khi vượt giờ.
+  - **Nhân sự:** đăng ký ca cần chuẩn hóa múi giờ +07 ở mọi chỗ; giao diện đổi chế độ lương "áp dụng từ ngày X"; khóa phiên bản và trạng thái cho chi phí; kiểm tra chuyên môn bác sĩ khi phân công dịch vụ.
 
 6.3. Hướng phát triển
+- Hoàn tất các điểm Tiếp nhận, Lâm sàng, Nhân sự ở mục 6.2, mỗi nhóm kèm test hồi quy chạy trên PostgreSQL thật (khóa, đồng thời, phản hồi cũ).
 - Tích hợp EHR (HL7 FHIR).
 - Mobile app (React Native).
 - Microservices decomposition (nếu cần scale).

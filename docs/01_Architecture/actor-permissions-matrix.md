@@ -365,6 +365,15 @@ Trong DB sẽ có:
 
 ---
 
+## Không nâng quyền qua màn quản trị (BR-ADM-001)
+
+- Người quản lý tài khoản / vai trò chỉ cấp, thu hồi hoặc thao tác trên những quyền **chính mình đang có** (đọc từ DB, không từ token).
+- Tạo vai trò / sửa quyền vai trò: mọi mã thêm vào hoặc bỏ đi phải nằm trong quyền của người sửa.
+- Tạo người dùng, gán vai trò, cấp hồ sơ bác sĩ (vai trò `dentist`): mọi quyền của vai trò được cấp (và quyền người đó đang có, khi đổi vai trò) phải nằm trong quyền của người thao tác.
+- Sửa, vô hiệu hoá, kích hoạt lại, đặt lại mật khẩu, gửi link mật khẩu: không được làm với tài khoản có quyền mà người thao tác không có (trừ chính mình).
+- Vi phạm → 403 `PERMISSION_ESCALATION`, `details.missing` liệt kê mã thiếu. Quản trị phòng khám có đủ mọi quyền nên không bị chặn.
+- Đọc danh sách vai trò: `role.upsert`, `role.read`, `user.create` hoặc `user.update` (form người dùng cần chọn vai trò).
+
 ## 8. Liên kết
 
 - [`business-context.md`](business-context.md) — tổng quan vai trò.

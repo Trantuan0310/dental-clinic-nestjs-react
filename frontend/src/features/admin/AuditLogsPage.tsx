@@ -14,18 +14,26 @@ const PAGE_SIZE = 20;
 const actorLabel = (log: AuditLog) =>
   log.actorName && log.actorEmailAtTime ? `${log.actorName} (${log.actorEmailAtTime})` : (log.actorName ?? log.actorEmailAtTime);
 
+// Keyed by the codes the server writes (audit_logs.action / target_type);
+// the filters send these same values, so they must match exactly.
 const ACTION_LABEL_KEYS: Record<string, string> = {
-  'invoice.issued': 'auditInvoiceIssued', 'invoice.void': 'auditInvoiceVoid',
-  'payment.created': 'auditPaymentCreated', 'payment.reversed': 'auditPaymentReversed',
-  'user.created': 'auditUserCreated', 'user.updated': 'auditUserUpdated',
-  'user.deactivated': 'auditUserDeactivated', 'user.password_reset': 'auditPasswordReset',
-  'encounter.created': 'auditEncounterCreated', 'encounter.closed': 'auditEncounterClosed',
-  'inventory.adjusted': 'auditInventoryAdjusted',
+  INVOICE_ISSUED: 'auditInvoiceIssued', INVOICE_VOIDED: 'auditInvoiceVoid',
+  INVOICE_PAYMENT_RECORDED: 'auditPaymentCreated', PAYMENT_SELF_VOIDED: 'auditPaymentReversed',
+  USER_CREATED: 'auditUserCreated', USER_UPDATED: 'auditUserUpdated',
+  USER_DEACTIVATED: 'auditUserDeactivated', USER_PASSWORD_RESET_BY_ADMIN: 'auditPasswordReset',
+  USER_ROLE_CHANGED: 'auditUserRoleChanged', ROLE_PERMISSIONS_CHANGED: 'auditRolePermissionsChanged',
+  ENCOUNTER_CLOSED: 'auditEncounterClosed', INVENTORY_ADJUSTMENT: 'auditInventoryAdjusted',
+  LOGIN_FAILED: 'auditLoginFailed',
 };
+const ACTION_FILTERS = [
+  'INVOICE_ISSUED', 'INVOICE_PAYMENT_RECORDED', 'INVOICE_VOIDED', 'USER_CREATED',
+  'USER_DEACTIVATED', 'USER_ROLE_CHANGED', 'ROLE_PERMISSIONS_CHANGED', 'ENCOUNTER_CLOSED',
+  'INVENTORY_ADJUSTMENT', 'LOGIN_FAILED',
+];
 const TARGET_TYPE_LABEL_KEYS: Record<string, string> = {
-  USR: 'auditEntityUser', APT: 'auditEntityAppointment', PTN: 'auditEntityPatient',
-  ENC: 'auditEntityEncounter', INV: 'auditEntityInvoice', PAY: 'auditEntityPayment',
-  ITM: 'auditEntityInventory', ROL: 'auditEntityRole',
+  user: 'auditEntityUser', appointment: 'auditEntityAppointment', patient: 'auditEntityPatient',
+  encounter: 'auditEntityEncounter', invoice: 'auditEntityInvoice',
+  inventory_item: 'auditEntityInventory', role: 'auditEntityRole',
 };
 
 export default function AuditLogsPage() {
@@ -145,11 +153,11 @@ export default function AuditLogsPage() {
               onChange={(e) => setActionFilter(e.target.value)}
             >
               <option value="">{t('uiWorkforce.auditAllActions')}</option>
-              <option value="invoice.issued">{t('uiWorkforce.auditInvoiceIssued')}</option>
-              <option value="payment.created">{t('uiWorkforce.auditPaymentCreated')}</option>
-              <option value="user.created">{t('uiWorkforce.auditUserCreated')}</option>
-              <option value="user.deactivated">{t('uiWorkforce.auditUserDeactivated')}</option>
-              <option value="encounter.closed">{t('uiWorkforce.auditEncounterClosed')}</option>
+              {ACTION_FILTERS.map((code) => (
+                <option key={code} value={code}>
+                  {t(`uiWorkforce.${ACTION_LABEL_KEYS[code]}`)}
+                </option>
+              ))}
             </select>
             <select
               className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
@@ -158,12 +166,11 @@ export default function AuditLogsPage() {
               onChange={(e) => setEntityFilter(e.target.value)}
             >
               <option value="">{t('uiWorkforce.auditAllTargets')}</option>
-              <option value="USR">{t('uiWorkforce.auditEntityUser')}</option>
-              <option value="APT">{t('uiWorkforce.auditEntityAppointment')}</option>
-              <option value="ENC">{t('uiWorkforce.auditEntityEncounter')}</option>
-              <option value="INV">{t('uiWorkforce.auditEntityInvoice')}</option>
-              <option value="PAY">{t('uiWorkforce.auditEntityPayment')}</option>
-              <option value="ITM">{t('uiWorkforce.auditEntityInventory')}</option>
+              {Object.entries(TARGET_TYPE_LABEL_KEYS).map(([type, key]) => (
+                <option key={type} value={type}>
+                  {t(`uiWorkforce.${key}`)}
+                </option>
+              ))}
             </select>
             <input
               type="date"

@@ -44,8 +44,10 @@ export class RolesController {
     await this.cache.delByPattern('permissions:*');
   }
 
+  // Reading roles: role managers, and whoever creates or edits accounts —
+  // the Users form picks roles from this list (role.read is the FE alias).
   @Get()
-  @RequirePermissions('role.upsert')
+  @RequirePermissions('role.upsert', 'role.read', 'user.create', 'user.update')
   @ApiOperation({ summary: 'List all roles' })
   @ApiResponse({ status: 200, description: 'List of roles' })
   async list() {
@@ -56,7 +58,7 @@ export class RolesController {
   }
 
   @Get('permissions')
-  @RequirePermissions('role.upsert')
+  @RequirePermissions('role.upsert', 'role.read')
   @ApiOperation({ summary: 'List all permissions' })
   @ApiResponse({ status: 200, description: 'List of permissions' })
   async getPermissions() {
@@ -67,7 +69,7 @@ export class RolesController {
   }
 
   @Get(':id')
-  @RequirePermissions('role.upsert')
+  @RequirePermissions('role.upsert', 'role.read', 'user.create', 'user.update')
   @ApiOperation({ summary: 'Get role by ID' })
   @ApiResponse({ status: 200, description: 'Role details' })
   @ApiResponse({ status: 404, description: 'Role not found' })

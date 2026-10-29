@@ -276,7 +276,7 @@ describe('AiService', () => {
     const dentist = {
       sub: 'dentist-1',
       email: 'd@example.invalid',
-      permissions: ['ai.summary.read'],
+      permissions: ['ai.summary.read', 'patient.read', 'appointment.read.own'],
     };
 
     it('allows a dentist with a live appointment and refuses one whose bookings were cancelled', async () => {
@@ -299,6 +299,32 @@ describe('AiService', () => {
           ]),
         }),
       });
+    });
+
+    it('keeps a dentist-like role holding patient.update to its own patients, cached or not', async () => {
+      const custom = { ...dentist, permissions: [...dentist.permissions, 'patient.update'] };
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue({ patientId: 'pat-1', bullets: [] });
+      (prisma.encounter.count as jest.Mock).mockResolvedValue(0);
+      (prisma.appointment.count as jest.Mock).mockResolvedValue(0);
+
+      await expect(service.getPatientSummary('pat-1', 3, false, custom)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(cache.getJSON).not.toHaveBeenCalled();
+    });
+
+    it('refuses a caller with no patient read scope', async () => {
+      (prisma.patient.findFirst as jest.Mock).mockResolvedValue(basePatient);
+      (cache.getJSON as jest.Mock).mockResolvedValue({ patientId: 'pat-1', bullets: [] });
+
+      await expect(
+        service.getPatientSummary('pat-1', 3, false, {
+          ...dentist,
+          permissions: ['ai.summary.read'],
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(cache.getJSON).not.toHaveBeenCalled();
     });
   });
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Plus, MoreHorizontal, UserX, UserCheck, KeyRound, LockKeyhole } from 'lucide-react';
@@ -63,8 +63,15 @@ export default function UsersPage() {
   const [tempPassword, setTempPassword] = useState<TempPasswordTarget | null>(null);
   const canResetPassword = useAuthStore((s) => s.hasPermission('user.reset_password'));
 
-  const { data, isLoading } = useUsers({
-    limit: PAGE_SIZE,
+  // Searched on the server (all users, not only the loaded page), after a pause in typing.
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useUsers({
+    pageSize: PAGE_SIZE,
+    ...(query ? { q: query } : {}),
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
   });
 
@@ -73,17 +80,7 @@ export default function UsersPage() {
   const reactivateMutation = useReactivateUser();
   const sendLinkMutation = useSendPasswordLink();
 
-  const allUsers = data?.data ?? [];
-  const filteredUsers = allUsers.filter((user) => {
-    if (
-      search &&
-      !user.fullName.toLowerCase().includes(search.toLowerCase()) &&
-      !user.email.toLowerCase().includes(search.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filteredUsers = data?.pages.flatMap((page) => page.data) ?? [];
 
   const handleCreate = async (payload: CreateAdminUserPayload) => {
     try {
@@ -300,6 +297,18 @@ export default function UsersPage() {
         {filteredUsers.length === 0 && !isLoading && (
           <div className="p-6 text-center text-gray-500">
             {t('uiWorkforce.noUsers')}
+          </div>
+        )}
+        {hasNextPage && (
+          <div className="flex justify-center border-t border-gray-100 p-3 dark:border-surface-800">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchNextPage()}
+              isLoading={isFetchingNextPage}
+            >
+              {t('uiWorkforce.loadMoreUsers')}
+            </Button>
           </div>
         )}
       </Card>
