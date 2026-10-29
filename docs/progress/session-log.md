@@ -612,3 +612,7 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
   - răng đặt theo bề rộng thật (mm) của từng răng, co giãn cho vừa cung hàm;
   - hình mặt nhai theo loại răng: răng cửa dẹt có bờ cắn, răng nanh nhọn về phía má, răng cối nhỏ có rãnh giữa, răng cối lớn vuông có rãnh chữ thập;
   - men răng màu ngà. Số răng đặt phía ngoài cung hàm.
+- Người dùng thấy bản có nướu hồng và men ngà vẫn "slop", chọn kiểu nét vẽ kỹ thuật:
+  - bỏ nướu và màu đổ chuyển, răng chỉ còn nét viền xám mảnh trên nền trắng, rãnh mặt nhai nhạt hơn;
+  - răng được chọn tô xanh đặc;
+  - thêm đường giữa và mặt phẳng cắn nét đứt chia 4 phần hàm theo FDI (1, 2, 3, 4).
