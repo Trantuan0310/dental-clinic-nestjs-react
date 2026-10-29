@@ -328,7 +328,7 @@ StockMovement.refType ∈ { 'manual', 'encounter', 'adjustment' }
 | ------- | ----- | -------- |
 | BR-INV-001 | Item name unique | Trong cùng active status. Soft-delete cho phép tên lặp. |
 | BR-INV-002 | Quantity ≥ 0 | Không bao giờ âm. |
-| BR-INV-003 | Stock-in/out quantity > 0 | Decimal ≥ 0, nhưng reject nếu = 0. |
+| BR-INV-003 | Stock-in/out quantity > 0 | Từ 0,0001 tới 99.999.999, tối đa 4 chữ số thập phân (cột DECIMAL(12,4)); kiểm ở DTO và ở service. Số âm / 0 bị từ chối (không đảo chiều nhập ↔ xuất). Nhập làm tồn vượt 99.999.999 → 422. |
 | BR-INV-004 | Auto stock-out | Subscribe event `encounter.closed` từ MedicalRecords (ADR-0007). Handler chạy sync trong cùng transaction (ADR-0008). Tạo StockMovement(type=stock_out, refType=encounter, refId=encounterId) + giảm quantityOnHand theo TreatmentInventoryUsage. |
 | BR-INV-005 | Atomic transaction (xem ADR-0008) | Auto stock-out chạy trong transaction encounter close. Fail → rollback toàn bộ chain (Encounter close + Appointment close + Stock-out + Invoice draft). Xem [ADR-0008](../../ADR/0008-transactional-encounter-close.md). |
 | BR-INV-006 | Manual stock-out có reason | `reason` required, ≤ 500 chars. |
@@ -337,18 +337,21 @@ StockMovement.refType ∈ { 'manual', 'encounter', 'adjustment' }
 | BR-INV-009 | StockMovement append-only | Không update/delete trong application layer. |
 | BR-INV-010 | Unit free text | "g", "ml", "cái", "hộp" — tự do, không enum. |
 | BR-INV-011 | Cost price ≥ 0 | Decimal(12,4), optional. |
-| BR-INV-012 | Low-stock condition | `quantityOnHand < minStockLevel AND status = active AND deletedAt IS NULL`. |
+| BR-INV-012 | Low-stock condition | `minStockLevel > 0 AND quantityOnHand ≤ minStockLevel AND status = active AND deletedAt IS NULL`, so sánh trong DB (trước giới hạn 200 dòng). |
 | BR-INV-013 | Soft-delete giữ stock | Soft-delete: quantityOnHand giữ nguyên, không cho stock-in/out mới. |
 | BR-INV-014 | Discontinued ≠ deleted | Discontinued: vẫn stock-in/out được, nhưng không pick trong encounter mới. |
 | BR-INV-015 | Category phải tồn tại | Validate khi tạo/update item. |
 | BR-INV-016 | Category name unique per parent | Cho phép cùng tên ở 2 parent khác nhau. |
 | BR-INV-017 | Không cycle category | `parent_id` không được là chính nó hoặc descendants. |
 | BR-INV-018 | Cost price snapshot | Tại thời điểm stock-in, lưu vào StockMovement (sau tính giá vốn TB). |
-| BR-INV-019 | QuantityOnHand chỉ qua Movement | Không cho PATCH trực tiếp quantityOnHand. |
+| BR-INV-019 | QuantityOnHand chỉ qua Movement | Không cho PATCH trực tiếp quantityOnHand. Tồn đầu khi tạo vật tư ghi một `STOCK_IN` ("Tồn đầu khi tạo vật tư"). |
 | BR-INV-020 | Low-stock query | Partial index cho performance. |
 | BR-INV-021 | BS xem read-only | BS chỉ GET, không POST/PATCH/DELETE. |
 | BR-INV-022 | Admin only cho create/delete | Lễ tân chỉ stock-in/out manual. |
 | BR-INV-023 | Skip no-op adjustment | Adjustment với `newQuantity = currentQuantity` thì không tạo `StockMovement` (tránh audit log rác). |
+| BR-INV-024 | Khoá đơn vị | Đổi `unit` chỉ khi vật tư chưa có tồn, chưa có movement và chưa được dùng trong thủ thuật; ngược lại 409 `INVENTORY_UNIT_LOCKED`. Vật tư dùng trong thủ thuật phải ghi đúng đơn vị của vật tư (khác → 400 `INVENTORY_UNIT_MISMATCH`), dòng lưu đơn vị của vật tư. |
+| BR-INV-025 | Xoá vật tư | Chỉ khi tồn = 0, kiểm bằng lệnh ghi có điều kiện: nhập kho vừa commit không bị giấu dưới vật tư đã xoá. |
+| BR-INV-026 | Phân trang | `GET /inventory/items` và `/inventory/movements` nhận `page`, `pageSize` (≤ 200, mặc định 200), trả `total`. |
 
 ---
 

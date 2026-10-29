@@ -1423,7 +1423,7 @@ export class MedicalRecordsService {
         );
       }
 
-      await this.assertUsableItems(tx, dto.inventoryUsages ?? []);
+      const itemUnits = await this.assertUsableItems(tx, dto.inventoryUsages ?? []);
 
       const treatment = await (async () => {
         const t = await tx.treatment.create({
@@ -1450,7 +1450,7 @@ export class MedicalRecordsService {
               treatmentId: t.id,
               inventoryItemId: usage.inventoryItemId,
               quantity: usage.quantity,
-              unit: usage.unit,
+              unit: itemUnits.get(usage.inventoryItemId) ?? usage.unit,
             },
           });
         }
@@ -1541,10 +1541,12 @@ export class MedicalRecordsService {
       }));
       if (dto.inventoryUsages !== undefined) {
         const kept = new Set(usagesBefore.map(u => u.inventoryItemId));
-        await this.assertUsableItems(
+        const itemUnits = await this.assertUsableItems(
           tx,
           dto.inventoryUsages.filter(u => !kept.has(u.inventoryItemId)),
         );
+        // A line already recorded keeps the unit it was recorded in.
+        const keptUnits = new Map(usagesBefore.map(u => [u.inventoryItemId, u.unit as string]));
         await tx.treatmentInventoryUsage.deleteMany({ where: { treatmentId } });
         for (const usage of dto.inventoryUsages) {
           await tx.treatmentInventoryUsage.create({
@@ -1552,7 +1554,10 @@ export class MedicalRecordsService {
               treatmentId,
               inventoryItemId: usage.inventoryItemId,
               quantity: usage.quantity,
-              unit: usage.unit,
+              unit:
+                itemUnits.get(usage.inventoryItemId) ??
+                keptUnits.get(usage.inventoryItemId) ??
+                usage.unit,
             },
           });
         }
@@ -1607,16 +1612,21 @@ export class MedicalRecordsService {
    * Consumables picked for a treatment must exist (a missing one used to
    * surface as an FK 500) and not be DISCONTINUED (BR-INV-014, 3.5).
    */
+  /**
+   * New material lines: the item exists, is in use, and the line is counted
+   * in the item's own unit (stock is decremented in that unit on close).
+   * Returns each item's unit, which is what gets stored on the line.
+   */
   private async assertUsableItems(
     tx: Prisma.TransactionClient,
-    usages: Array<{ inventoryItemId: string }>,
-  ) {
+    usages: Array<{ inventoryItemId: string; unit?: string }>,
+  ): Promise<Map<string, string>> {
     const ids = [...new Set(usages.map(u => u.inventoryItemId))];
-    if (ids.length === 0) return;
+    if (ids.length === 0) return new Map();
     const found =
       (await tx.inventoryItem.findMany({
         where: { id: { in: ids }, deletedAt: null },
-        select: { id: true, name: true, status: true },
+        select: { id: true, name: true, status: true, unit: true },
       })) ?? [];
     const missing = ids.filter(id => !found.some(f => f.id === id));
     if (missing.length > 0) {
@@ -1636,6 +1646,21 @@ export class MedicalRecordsService {
         'INVENTORY_ITEM_DISCONTINUED',
       );
     }
+    const norm = (u: string | undefined) => (u ?? '').trim().toLowerCase();
+    const wrongUnit = usages.filter(u => {
+      const item = found.find(f => f.id === u.inventoryItemId);
+      return item?.unit && u.unit !== undefined && norm(u.unit) !== norm(item.unit);
+    });
+    if (wrongUnit.length > 0) {
+      const item = found.find(f => f.id === wrongUnit[0].inventoryItemId)!;
+      throw new BusinessRuleException(
+        `Vật tư "${item.name}" tính theo đơn vị "${item.unit}", không phải "${wrongUnit[0].unit}"`,
+        HttpStatus.BAD_REQUEST,
+        { inventoryItemIds: wrongUnit.map(u => u.inventoryItemId) },
+        'INVENTORY_UNIT_MISMATCH',
+      );
+    }
+    return new Map(found.map(f => [f.id, f.unit]));
   }
 
   /** The dentist's price for a catalogue service on the visit day (else the base price). */

@@ -616,3 +616,35 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
   - bỏ nướu và màu đổ chuyển, răng chỉ còn nét viền xám mảnh trên nền trắng, rãnh mặt nhai nhạt hơn;
   - răng được chọn tô xanh đặc;
   - thêm đường giữa và mặt phẳng cắn nét đứt chia 4 phần hàm theo FDI (1, 2, 3, 4).
+## 26/10 — fix/full-module-review: nhóm Tài chính
+
+Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này trước đó chỉ có bản kế hoạch). Xác minh từng lỗi trên code hiện tại rồi mới sửa.
+- **AI:** tóm tắt AI tự coi `patient.update` là xem toàn bộ bệnh nhân, trong khi `rowScope` coi vai trò kiểu bác sĩ (lịch hẹn chỉ của mình) là `own`. Nay dùng `rowScope`; `none` → 404, kiểm trước cache. +2 test. (Đếm hoá đơn chưa trả chỉ ISSUED/PARTIAL và báo cáo theo dịch vụ đã có trên main, không lấy lại bản sửa cũ của `fix/business-flow-hardening`.)
+- **Kho:** nhập/xuất số âm hoặc 0 làm đảo chiều kho; quá 4 số lẻ hoặc vượt DECIMAL(12,4) gây lỗi 500 → kiểm ở DTO và service. Kiểm kê tính bằng Decimal. Đổi đơn vị khi đã có tồn / lịch sử / đã dùng → 409 `INVENTORY_UNIT_LOCKED`. Xoá vật tư bằng lệnh ghi có điều kiện tồn ≤ 0. Báo cáo sắp hết so sánh trong DB (trước đây lọc sau 200 dòng). Danh sách vật tư / lịch sử nhận `page`, `pageSize`, trả `total` (trước đây frontend gửi tham số bị bỏ qua, nút trang vô tác dụng, mất dòng sau 200). Tồn đầu khi tạo vật tư ghi một lượt nhập. Lỗi kho trả lời tiếng Việt trong `message`.
+- **Vật tư trong thủ thuật:** số lượng > 0, ≤ 4 số lẻ; đơn vị phải trùng đơn vị vật tư (`INVENTORY_UNIT_MISMATCH`), dòng lưu đơn vị của vật tư. +1 test.
+- **Giao diện kho:** "Kiểm kê" nhập số đếm được (trước đây nhập 50 thì tồn bị trừ 50); số lượng nhận số lẻ (bỏ `parseInt`); trạng thái sắp hết dùng `≤` như backend.
+- **Thu tiền:** hộp thoại thu sinh khoá chống trùng mới khi số còn nợ tải lại lúc đang mở → bấm lại sau khi mất phản hồi có thể thu hai lần. Nay chỉ đặt lại khi mở hộp thoại. Hoàn tiền / xoá nợ đã chặn trùng bằng `version`.
+- Kiểm: backend `tsc`, eslint các file sửa, 1526 test đạt. Frontend typecheck đạt.
+
+## 26/10 — fix/full-module-review: nhóm Quản trị
+
+- **Danh sách người dùng:** con trỏ trang sau là ngày giờ nhưng DTO đòi UUID → trang 2 luôn 400; phân trang theo `createdAt` bỏ sót người tạo cùng lúc. Nay keyset `(createdAt, id)`, con trỏ là id dòng cuối. Trang Người dùng gửi `limit` (bị bỏ qua, chỉ 20 dòng) và tìm trong 20 dòng đó → nay tìm phía máy chủ (chờ 300 ms), 50 dòng mỗi trang, nút "Tải thêm". +3 test.
+- **Chống nâng quyền (BR-ADM-001, `common/permission-escalation.ts`):** người có `user.update` tự gán được vai trò quản trị; `role.upsert` thêm được quyền mình không có vào vai trò; người có quyền đặt lại mật khẩu chiếm được tài khoản quản trị. Nay: chỉ cấp / thu hồi / thao tác trên quyền mình có (đọc từ DB) — tạo/sửa vai trò, tạo người dùng, đổi vai trò, cấp vai trò bác sĩ ở Nhân sự, sửa / vô hiệu / kích hoạt / đặt lại mật khẩu / gửi link. 403 `PERMISSION_ESCALATION`. Sửa vai trò đã xoá → 404. +5 test.
+- **Đọc vai trò:** form người dùng cần danh sách vai trò nhưng API đòi `role.upsert` → mở cho `role.read`, `user.create`, `user.update`.
+- **Nhật ký hệ thống:** bộ lọc gửi `invoice.issued`, `USR`… trong khi máy chủ ghi `INVOICE_ISSUED`, `user` → lọc luôn rỗng, nhãn không hiện. Đồng bộ theo mã thật; phát hành hoá đơn nay ghi `INVOICE_ISSUED` vào nhật ký hệ thống.
+- Kiểm: backend `tsc`, eslint, 1532 test; frontend typecheck, lint, `check-ui-locales` đạt.
+
+## 26/10 — fix/full-module-review: nhóm Nhân sự / Lương (ĐANG DỞ — WIP)
+
+Đã sửa (chưa chạy lại đủ test sau thay đổi cuối):
+- **Kỳ lương trùng:** kiểm tra chồng lấn bỏ qua kỳ `LOCKED` và dùng `>` cho ngày cuối (ngày tính trọn) → tạo được kỳ trùng kỳ đã trả. Nay xét mọi kỳ thường (`openedFromPeriodId = null`), biên `lte/gte`. Test cập nhật. **Còn phải sửa spec** `docs/03_Specification/Payroll` BR-PAY-003 (đang ghi "WHERE status != LOCKED").
+- **Hoa hồng theo ngày khám (D2):** hoá đơn phát hành trong kỳ cho lần khám trước khi đổi chế độ → không tìm thấy mức → hoa hồng 0. Nay nạp thêm chế độ cũ phủ ngày khám. +1 test (đạt).
+- **BHXH (D3):** hàm chung `payrollDeductions` cho tính kỳ và thêm thưởng/phạt; nền BHXH kẹp [0, trần] (trước đây phạt > gross cho BHXH âm, tăng thực nhận). +1 test (đạt).
+- **Kỳ bổ sung (D1):** cấm mở kỳ bổ sung từ kỳ bổ sung; mỗi kỳ gốc chỉ một kỳ bổ sung chưa thanh toán (khoá `periods`); mốc thuế/BHXH = kỳ gốc + các kỳ bổ sung đã PAID/LOCKED (findMany thay findFirst).
+
+**Bước tiếp theo:**
+1. `npx jest src/payroll`: 3 test hỏng sau thay đổi D1 — 2 test `openAdjustmentPeriod` trong `payroll.service.major.spec.ts` (mock thiếu `payrollPeriod.findFirst` / `$executeRaw` cho khoá trong tx) và test "a bonus there pays the bonus…" trong `payroll.compute.spec.ts` (mock `payrollLineItem.findFirst` → đổi sang `findMany` trả mảng). Sửa mock, thêm test: mở bổ sung từ kỳ bổ sung → 409; bổ sung lần 2 tính mốc gồm lần 1.
+2. Cập nhật spec BR-PAY-003, ghi chú D1/D2/D3.
+3. Còn lại nhóm Nhân sự: ca +07 (shift-registration), D4 UI đổi chế độ từ ngày X, D5 expense version/status, specialty, UI tổng/tìm kiếm.
+4. Nhóm Tiếp nhận (task 2) và Lâm sàng (task 5) chưa làm — xem `full_module_fix_plan.md` và `business_flow_hardening_plan.md` trên nhánh `fix/business-flow-hardening` (mô tả chi tiết A1–A4, B1–B4, C3).
+5. Môi trường: container mới cần `npm ci` hai thư mục; DB demo `guidedemo` tạo bằng `node scripts/release.cjs` + `prisma/seed.ts` + `seed-clinical.ts` (không dùng `prisma migrate deploy` trực tiếp — thiếu `uuid_generate_v7`).

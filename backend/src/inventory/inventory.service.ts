@@ -7,6 +7,7 @@ import { endOfDayInclusive } from '../common/date-range.util';
 import {
   InventoryItemNotFoundException,
   InsufficientStockException,
+  InventoryUnitLockedException,
   ItemNameAlreadyExistsException,
   SkuAlreadyExistsException,
   StockMovementInvalidException,
@@ -20,7 +21,30 @@ import {
   StockInDto,
   StockOutDto,
   UpdateInventoryItemDto,
+  MAX_STOCK_QUANTITY,
+  QUANTITY_DECIMALS,
 } from './dto/inventory.dto';
+
+const DEFAULT_PAGE_SIZE = 200;
+
+/**
+ * A movement quantity: positive, at most 4 decimals and within DECIMAL(12,4).
+ * Checked here as well as in the DTO, since other services call in directly.
+ */
+function movementQuantity(value: number): Prisma.Decimal {
+  const q = new Prisma.Decimal(value);
+  if (
+    !q.isFinite() ||
+    q.lte(0) ||
+    q.gt(MAX_STOCK_QUANTITY) ||
+    q.decimalPlaces() > QUANTITY_DECIMALS
+  ) {
+    throw new StockMovementInvalidException(
+      `Số lượng phải lớn hơn 0, tối đa ${MAX_STOCK_QUANTITY} và tối đa ${QUANTITY_DECIMALS} chữ số thập phân`,
+    );
+  }
+  return q;
+}
 
 /**
  * InventoryService — items, categories, stock movements.
@@ -54,19 +78,38 @@ export class InventoryService {
     if (skuExists) throw new SkuAlreadyExistsException(dto.sku);
     await this.assertNameFree(dto.name);
 
-    const created = await this.prisma.inventoryItem.create({
-      data: {
-        sku: dto.sku,
-        categoryId: dto.categoryId ?? null,
-        name: dto.name,
-        description: dto.description ?? null,
-        quantityOnHand: dto.quantityOnHand ?? 0,
-        minStockLevel: dto.minStockLevel ?? 0,
-        unit: dto.unit,
-        costPrice: dto.costPrice ?? null,
-        status: (dto.status ?? 'ACTIVE') as ItemStatus,
-        createdBy: actor.sub,
-      },
+    const opening = new Prisma.Decimal(dto.quantityOnHand ?? 0);
+    const created = await this.prisma.$transaction(async tx => {
+      const row = await tx.inventoryItem.create({
+        data: {
+          sku: dto.sku,
+          categoryId: dto.categoryId ?? null,
+          name: dto.name,
+          description: dto.description ?? null,
+          quantityOnHand: opening,
+          minStockLevel: dto.minStockLevel ?? 0,
+          unit: dto.unit.trim(),
+          costPrice: dto.costPrice ?? null,
+          status: (dto.status ?? 'ACTIVE') as ItemStatus,
+          createdBy: actor.sub,
+        },
+      });
+      // BR-INV-019: stock on hand is only ever explained by movements, the
+      // opening balance included.
+      if (opening.gt(0)) {
+        await tx.stockMovement.create({
+          data: {
+            inventoryItemId: row.id,
+            type: MovementType.STOCK_IN,
+            quantityBefore: 0,
+            quantityAfter: opening,
+            diff: opening,
+            reason: 'Tồn đầu khi tạo vật tư',
+            performedBy: actor.sub,
+          },
+        });
+      }
+      return row;
     });
 
     await this.audit.log({
@@ -103,6 +146,17 @@ export class InventoryService {
     ) {
       await this.assertNameFree(dto.name, id);
     }
+    // BR-INV-024: stock, movements and treatment usages are counted in the
+    // item's unit; renaming it (hộp → cái) would silently rescale them all.
+    if (dto.unit !== undefined && dto.unit.trim() !== item.unit.trim()) {
+      const [moves, usages] = await Promise.all([
+        this.prisma.stockMovement.count({ where: { inventoryItemId: id } }),
+        this.prisma.treatmentInventoryUsage.count({ where: { inventoryItemId: id } }),
+      ]);
+      if (!new Prisma.Decimal(item.quantityOnHand).isZero() || moves > 0 || usages > 0) {
+        throw new InventoryUnitLockedException(item.unit);
+      }
+    }
 
     const updated = await this.prisma.inventoryItem.update({
       where: { id },
@@ -111,7 +165,7 @@ export class InventoryService {
         ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.minStockLevel !== undefined && { minStockLevel: dto.minStockLevel }),
-        ...(dto.unit !== undefined && { unit: dto.unit }),
+        ...(dto.unit !== undefined && { unit: dto.unit.trim() }),
         ...(dto.costPrice !== undefined && { costPrice: dto.costPrice }),
         ...(dto.status !== undefined && { status: dto.status as ItemStatus }),
       },
@@ -131,15 +185,22 @@ export class InventoryService {
   async deleteItem(id: string, actor: JwtPayload) {
     const item = await this.prisma.inventoryItem.findUnique({ where: { id } });
     if (!item || item.deletedAt) throw new InventoryItemNotFoundException(id);
-    if (Number(item.quantityOnHand) > 0) {
-      throw new StockMovementInvalidException(
-        `Cannot delete item with quantityOnHand=${item.quantityOnHand}; zero it out first`,
+    const stockLeft = () =>
+      new StockMovementInvalidException(
+        `Vật tư còn tồn ${item.quantityOnHand} ${item.unit}; điều chỉnh tồn về 0 trước khi xoá`,
       );
-    }
-    await this.prisma.inventoryItem.update({
-      where: { id },
+    if (Number(item.quantityOnHand) > 0) throw stockLeft();
+    // Guarded write: a stock-in committed after the read above must not be
+    // hidden under a deleted item.
+    const deleted = await this.prisma.inventoryItem.updateMany({
+      where: { id, deletedAt: null, quantityOnHand: { lte: 0 } },
       data: { deletedAt: new Date(), status: 'DISCONTINUED' },
     });
+    if (deleted.count === 0) {
+      const now = await this.prisma.inventoryItem.findUnique({ where: { id } });
+      if (!now || now.deletedAt) throw new InventoryItemNotFoundException(id);
+      throw stockLeft();
+    }
     await this.audit.log({
       action: 'INVENTORY_ITEM_DELETED',
       actorUserId: actor.sub,
@@ -183,16 +244,21 @@ export class InventoryService {
       }),
     };
 
-    const items = await this.prisma.inventoryItem.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      take: 200,
-      include: {
-        category: { select: { id: true, name: true } },
-      },
-    });
-
-    return items;
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+    const page = query.page ?? 1;
+    const [data, total] = await Promise.all([
+      this.prisma.inventoryItem.findMany({
+        where,
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          category: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.inventoryItem.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
   }
 
   // ==========================================================================
@@ -204,14 +270,22 @@ export class InventoryService {
       const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
       if (!item || item.deletedAt) throw new InventoryItemNotFoundException(itemId);
 
-      const requested = Number(dto.quantity);
-      // Atomic guarded increment — also returns the updated row.
+      const requested = movementQuantity(dto.quantity);
+      // Atomic guarded increment; the cap keeps the total inside DECIMAL(12,4).
       const result = await tx.inventoryItem.updateMany({
-        where: { id: itemId, deletedAt: null },
+        where: {
+          id: itemId,
+          deletedAt: null,
+          quantityOnHand: { lte: new Prisma.Decimal(MAX_STOCK_QUANTITY).minus(requested) },
+        },
         data: { quantityOnHand: { increment: requested } },
       });
       if (result.count === 0) {
-        throw new InventoryItemNotFoundException(itemId);
+        const now = await tx.inventoryItem.findUnique({ where: { id: itemId } });
+        if (!now || now.deletedAt) throw new InventoryItemNotFoundException(itemId);
+        throw new StockMovementInvalidException(
+          `Tồn kho sau khi nhập vượt quá ${MAX_STOCK_QUANTITY} ${item.unit}`,
+        );
       }
       const updated = await tx.inventoryItem.findUnique({
         where: { id: itemId },
@@ -243,7 +317,7 @@ export class InventoryService {
           targetType: 'inventory_item',
           targetId: itemId,
           metadata: {
-            quantity: requested,
+            quantity: requested.toNumber(),
             before: quantityBefore,
             after: quantityAfter,
           },
@@ -260,7 +334,7 @@ export class InventoryService {
       const item = await tx.inventoryItem.findUnique({ where: { id: itemId } });
       if (!item || item.deletedAt) throw new InventoryItemNotFoundException(itemId);
 
-      const requested = Number(dto.quantity);
+      const requested = movementQuantity(dto.quantity);
       // Atomic guarded decrement (BR-INV-003): only succeed if stock is
       // sufficient — prevents read-then-update races.
       const result = await tx.inventoryItem.updateMany({
@@ -272,7 +346,13 @@ export class InventoryService {
         data: { quantityOnHand: { decrement: requested } },
       });
       if (result.count === 0) {
-        throw new InsufficientStockException(item.name, requested, Number(item.quantityOnHand));
+        const now = await tx.inventoryItem.findUnique({ where: { id: itemId } });
+        if (!now || now.deletedAt) throw new InventoryItemNotFoundException(itemId);
+        throw new InsufficientStockException(
+          item.name,
+          requested.toNumber(),
+          Number(now.quantityOnHand),
+        );
       }
 
       const after = await tx.inventoryItem.findUnique({
@@ -291,7 +371,7 @@ export class InventoryService {
           refId: dto.refId ?? null,
           quantityBefore,
           quantityAfter: updated.quantityOnHand,
-          diff: -requested,
+          diff: requested.negated(),
           reason: dto.reason ?? null,
           performedBy: actor.sub,
         },
@@ -304,7 +384,7 @@ export class InventoryService {
           targetType: 'inventory_item',
           targetId: itemId,
           metadata: {
-            quantity: requested,
+            quantity: requested.toNumber(),
             before: quantityBefore,
             after: updated.quantityOnHand,
           },
@@ -327,24 +407,29 @@ export class InventoryService {
         //   - `newQuantity` (target absolute value, recommended)
         //   - `quantity`    (delta; the service resolves to current + delta)
         // If both are provided, `newQuantity` wins. At least one must be set.
-        const before = Number(item.quantityOnHand);
-        let after: number;
+        const before = new Prisma.Decimal(item.quantityOnHand);
+        let after: Prisma.Decimal;
         if (dto.newQuantity !== undefined && dto.newQuantity !== null) {
-          after = Number(dto.newQuantity);
+          after = new Prisma.Decimal(dto.newQuantity);
         } else if (dto.quantity !== undefined && dto.quantity !== null) {
-          after = before + Number(dto.quantity);
+          after = before.plus(dto.quantity);
         } else {
           throw new StockMovementInvalidException(
             'StockAdjustmentDto requires either `newQuantity` (absolute) or `quantity` (delta)',
           );
         }
-        if (after < 0) {
-          throw new StockMovementInvalidException('Adjusted quantity cannot be negative');
+        if (after.isNegative()) {
+          throw new StockMovementInvalidException('Số lượng sau điều chỉnh không được âm');
         }
-        const diff = after - before;
+        if (after.gt(MAX_STOCK_QUANTITY) || after.decimalPlaces() > QUANTITY_DECIMALS) {
+          throw new StockMovementInvalidException(
+            `Số lượng tối đa ${MAX_STOCK_QUANTITY}, tối đa ${QUANTITY_DECIMALS} chữ số thập phân`,
+          );
+        }
+        const diff = after.minus(before);
         // BR-INV-023: a count that matches what is on hand changes nothing;
         // no movement row or audit entry for it.
-        if (diff === 0) return item;
+        if (diff.isZero()) return item;
 
         // Atomic absolute-set: use guarded updateMany in case item was just
         // soft-deleted in a concurrent tx.
@@ -374,13 +459,18 @@ export class InventoryService {
             actorUserId: actor.sub,
             targetType: 'inventory_item',
             targetId: itemId,
-            metadata: { before, after, diff, reason: dto.reason },
+            metadata: {
+              before: before.toNumber(),
+              after: after.toNumber(),
+              diff: diff.toNumber(),
+              reason: dto.reason,
+            },
           },
           tx,
         );
 
         // BR-INV-005: low-stock notification
-        if (after <= Number(item.minStockLevel) && before > Number(item.minStockLevel)) {
+        if (after.lte(item.minStockLevel) && before.gt(item.minStockLevel)) {
           this.logger.warn(
             `Low-stock triggered for ${item.sku}: ${after} ${item.unit} ≤ min ${item.minStockLevel}`,
           );
@@ -416,15 +506,22 @@ export class InventoryService {
       }),
     };
 
-    return this.prisma.stockMovement.findMany({
-      where,
-      orderBy: { performedAt: 'desc' },
-      take: 200,
-      include: {
-        inventoryItem: { select: { id: true, sku: true, name: true, unit: true } },
-        performedByUser: { select: { id: true, fullName: true } },
-      },
-    });
+    const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+    const page = query.page ?? 1;
+    const [data, total] = await Promise.all([
+      this.prisma.stockMovement.findMany({
+        where,
+        orderBy: [{ performedAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          inventoryItem: { select: { id: true, sku: true, name: true, unit: true } },
+          performedByUser: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.stockMovement.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
   }
 
   // ==========================================================================
@@ -458,15 +555,20 @@ export class InventoryService {
    * inventory exceeds the page cap.
    */
   async lowStockReport() {
-    return this.prisma.inventoryItem
-      .findMany({
-        where: { deletedAt: null, status: ItemStatus.ACTIVE, minStockLevel: { gt: 0 } },
-        orderBy: [{ quantityOnHand: 'asc' }, { name: 'asc' }],
-        take: 200,
-        include: {
-          category: { select: { id: true, name: true } },
-        },
-      })
-      .then(items => items.filter(i => Number(i.quantityOnHand) <= Number(i.minStockLevel)));
+    // The comparison runs in the database, before the row cap: filtering
+    // after `take` missed low items beyond the first 200 by quantity.
+    return this.prisma.inventoryItem.findMany({
+      where: {
+        deletedAt: null,
+        status: ItemStatus.ACTIVE,
+        minStockLevel: { gt: 0 },
+        quantityOnHand: { lte: this.prisma.inventoryItem.fields.minStockLevel },
+      },
+      orderBy: [{ quantityOnHand: 'asc' }, { name: 'asc' }],
+      take: 200,
+      include: {
+        category: { select: { id: true, name: true } },
+      },
+    });
   }
 }

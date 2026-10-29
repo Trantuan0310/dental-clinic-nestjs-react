@@ -41,6 +41,19 @@ export class InsufficientStockException extends BusinessRuleException {
 
 export class StockMovementInvalidException extends BusinessRuleException {
   constructor(reason: string) {
-    super('Invalid stock movement', HttpStatus.UNPROCESSABLE_ENTITY, reason);
+    // The reason is the message: the frontend shows `message`, not `details`.
+    super(reason, HttpStatus.UNPROCESSABLE_ENTITY, reason, 'STOCK_MOVEMENT_INVALID');
+  }
+}
+
+/** BR-INV-024: the unit is fixed once stock or history is counted in it. */
+export class InventoryUnitLockedException extends BusinessRuleException {
+  constructor(unit: string) {
+    super(
+      `Không đổi được đơn vị "${unit}": vật tư đã có tồn kho hoặc lịch sử nhập / xuất / sử dụng. Tạo vật tư mới với đơn vị khác nếu cần.`,
+      HttpStatus.CONFLICT,
+      { unit },
+      'INVENTORY_UNIT_LOCKED',
+    );
   }
 }

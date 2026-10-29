@@ -1,9 +1,11 @@
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsString,
   IsOptional,
   IsNumber,
+  IsInt,
   Min,
+  Max,
   IsUUID,
   IsEnum,
   IsDateString,
@@ -12,6 +14,13 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ItemStatus, MovementType, MovementRefType } from '@prisma/client';
+
+/** Quantities are DECIMAL(12,4) in the database. */
+export const MAX_STOCK_QUANTITY = 99_999_999;
+export const QUANTITY_DECIMALS = 4;
+const QTY_FORMAT = { maxDecimalPlaces: QUANTITY_DECIMALS };
+const QTY_FORMAT_MSG = { message: 'Số lượng tối đa 4 chữ số thập phân' };
+const QTY_MAX_MSG = { message: `Số lượng tối đa ${MAX_STOCK_QUANTITY.toLocaleString('vi-VN')}` };
 
 export class CreateInventoryCategoryDto {
   @ApiProperty()
@@ -61,24 +70,29 @@ export class CreateInventoryItemDto {
   description?: string;
 
   @ApiProperty()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
   @Min(0)
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   quantityOnHand!: number;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
   @Min(0)
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   minStockLevel?: number;
 
   @ApiProperty()
   @IsString()
+  @MinLength(1)
+  @MaxLength(20)
   unit!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT)
   @Min(0)
+  @Max(MAX_STOCK_QUANTITY)
   costPrice?: number;
 
   @ApiPropertyOptional({ enum: ItemStatus })
@@ -105,19 +119,24 @@ export class UpdateInventoryItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
   @Min(0)
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   minStockLevel?: number;
 
+  /** Only while the item has no stock and no history (BR-INV-024). */
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(1)
+  @MaxLength(20)
   unit?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT)
   @Min(0)
+  @Max(MAX_STOCK_QUANTITY)
   costPrice?: number;
 
   @ApiPropertyOptional({ enum: ItemStatus })
@@ -146,6 +165,21 @@ export class ListMovementsQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 200, maximum: 200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  pageSize?: number;
 }
 
 // BR-INV-004: Adjustment is an ABSOLUTE set of quantityOnHand. The client
@@ -156,14 +190,18 @@ export class ListMovementsQueryDto {
 export class StockAdjustmentDto {
   @ApiPropertyOptional({ description: 'Absolute target quantity after adjustment' })
   @IsOptional()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
+  @Min(0, { message: 'Số lượng sau điều chỉnh không được âm' })
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   newQuantity?: number;
 
   @ApiPropertyOptional({
     description: 'Optional delta to apply to current quantityOnHand',
   })
   @IsOptional()
-  @IsNumber()
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
+  @Min(-MAX_STOCK_QUANTITY)
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   quantity?: number;
 
   /** BR-INV-006 / BR-INV-008: why stock went down or was corrected. */
@@ -176,8 +214,10 @@ export class StockAdjustmentDto {
 }
 
 export class StockInDto {
-  @ApiProperty()
-  @IsNumber()
+  @ApiProperty({ minimum: 0.0001, maximum: MAX_STOCK_QUANTITY })
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
+  @Min(0.0001, { message: 'Số lượng phải lớn hơn 0' })
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   quantity!: number;
 
   @ApiPropertyOptional()
@@ -197,8 +237,10 @@ export class StockInDto {
 }
 
 export class StockOutDto {
-  @ApiProperty()
-  @IsNumber()
+  @ApiProperty({ minimum: 0.0001, maximum: MAX_STOCK_QUANTITY })
+  @IsNumber(QTY_FORMAT, QTY_FORMAT_MSG)
+  @Min(0.0001, { message: 'Số lượng phải lớn hơn 0' })
+  @Max(MAX_STOCK_QUANTITY, QTY_MAX_MSG)
   quantity!: number;
 
   /** BR-INV-006 / BR-INV-008: why stock went down or was corrected. */
@@ -274,4 +316,19 @@ export class ListInventoryQueryDto {
   @IsOptional()
   @IsString()
   lowStockOnly?: string;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 200, maximum: 200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  pageSize?: number;
 }

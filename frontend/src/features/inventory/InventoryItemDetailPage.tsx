@@ -38,9 +38,16 @@ export default function InventoryItemDetailPage() {
     enabled: !!id,
   });
 
-  const parsedAdjustQty = parseInt(adjustmentQuantity, 10) || 0;
-  const adjustDelta = adjustmentType === 'STOCK_IN' ? parsedAdjustQty : -parsedAdjustQty;
-  const previewQuantity = item ? item.currentQuantity + adjustDelta : null;
+  // Quantities are decimals (ml, g): parseInt would turn 2.5 into 2.
+  const parsedAdjustQty = Number(adjustmentQuantity) || 0;
+  // A stocktake ("Kiểm kê") enters the counted quantity itself; stock-in and
+  // stock-out enter how much comes in or goes out.
+  const isCount = adjustmentType === 'ADJUSTMENT';
+  const previewQuantity = !item
+    ? null
+    : isCount
+      ? parsedAdjustQty
+      : item.currentQuantity + (adjustmentType === 'STOCK_IN' ? parsedAdjustQty : -parsedAdjustQty);
 
   const adjustMutation = useMutation({
     mutationFn: () => {
@@ -58,7 +65,7 @@ export default function InventoryItemDetailPage() {
       // BR-INV-004: adjustment is an ABSOLUTE set of `quantityOnHand`,
       // not a delta. Send only the target value + reason.
       return inventoryApi.adjust(id!, {
-        newQuantity: previewQuantity ?? 0,
+        newQuantity: parsedAdjustQty,
         reason: adjustmentReason,
       });
     },
@@ -94,8 +101,9 @@ export default function InventoryItemDetailPage() {
   }
 
   const getStockStatus = () => {
-    if (item.currentQuantity === 0) return 'out_of_stock';
-    if (item.currentQuantity < item.minStockLevel) return 'low_stock';
+    if (item.currentQuantity <= 0) return 'out_of_stock';
+    // Same rule as the low-stock list: at or below the minimum.
+    if (item.minStockLevel > 0 && item.currentQuantity <= item.minStockLevel) return 'low_stock';
     return 'in_stock';
   };
 
@@ -312,9 +320,10 @@ export default function InventoryItemDetailPage() {
           </div>
 
           <Input
-            label={t('uiOperations.quantity')}
+            label={isCount ? t('uiOperations.countedQuantity') : t('uiOperations.quantity')}
             type="number"
-            min="1"
+            min={isCount ? '0' : '0.0001'}
+            step="any"
             value={adjustmentQuantity}
             onChange={(e) => setAdjustmentQuantity(e.target.value)}
             placeholder={t('uiOperations.quantityExample')}
@@ -355,7 +364,8 @@ export default function InventoryItemDetailPage() {
                 !adjustmentQuantity ||
                 // Same minimum as the server (BR-INV-006/008).
                 adjustmentReason.trim().length < 3 ||
-                parsedAdjustQty <= 0 ||
+                parsedAdjustQty < 0 ||
+                (!isCount && parsedAdjustQty === 0) ||
                 previewQuantity === null ||
                 previewQuantity < 0
               }

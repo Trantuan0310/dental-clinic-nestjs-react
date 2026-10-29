@@ -17,6 +17,12 @@ import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { assertDentistHasNoOpenWork } from '../staff/staff-rules';
 import { normalizeEmail } from '../common/email.util';
+import {
+  assertActorHolds,
+  assertActorOutranks,
+  permissionCodesOfRoles,
+  permissionCodesOfUser,
+} from '../common/permission-escalation';
 
 @Injectable()
 export class UsersService {
@@ -63,20 +69,40 @@ export class UsersService {
       };
     }
 
-    if (q) {
-      where.OR = [
-        { email: { contains: q, mode: 'insensitive' } },
-        { fullName: { contains: q, mode: 'insensitive' } },
-      ];
+    const term = q?.trim();
+    const and: Prisma.UserWhereInput[] = [];
+    if (term) {
+      and.push({
+        OR: [
+          { email: { contains: term, mode: 'insensitive' } },
+          { fullName: { contains: term, mode: 'insensitive' } },
+        ],
+      });
     }
 
+    // Keyset on (createdAt, id): users created in the same instant (a seed,
+    // an import) are neither skipped nor repeated between pages. The cursor
+    // is the id of the last row of the previous page.
     if (cursor) {
-      where.createdAt = { lt: new Date(cursor) };
+      const last = await this.prisma.user.findUnique({
+        where: { id: cursor },
+        select: { id: true, createdAt: true },
+      });
+      if (!last) {
+        throw new BadRequestException('Trang danh sách không còn hợp lệ, tải lại từ đầu');
+      }
+      and.push({
+        OR: [
+          { createdAt: { lt: last.createdAt } },
+          { createdAt: last.createdAt, id: { lt: last.id } },
+        ],
+      });
     }
+    if (and.length > 0) where.AND = and;
 
     const users = await this.prisma.user.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: pageSize + 1,
       include: {
         userRoles: {
@@ -106,8 +132,7 @@ export class UsersService {
       })),
       pagination: {
         pageSize,
-        nextCursor:
-          hasMore && data.length > 0 ? data[data.length - 1].createdAt.toISOString() : null,
+        nextCursor: hasMore && data.length > 0 ? data[data.length - 1].id : null,
         hasMore,
       },
     };
@@ -161,6 +186,12 @@ export class UsersService {
         'Vai trò không tồn tại hoặc đã bị xóa. Hãy tải lại danh sách vai trò rồi chọn lại.',
       );
     }
+    // BR-ADM-001: only roles whose every permission the actor holds.
+    await assertActorHolds(
+      this.prisma,
+      actorUserId,
+      await permissionCodesOfRoles(this.prisma, roleIds),
+    );
 
     const tempPassword = crypto.randomBytes(16).toString('base64').slice(0, 16);
     const passwordHash = await argon2.hash(tempPassword, this.argon2Options);
@@ -227,6 +258,7 @@ export class UsersService {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
+    await assertActorOutranks(this.prisma, actorUserId, userId);
 
     // login() gates on deactivatedAt (not status) — setting status=ACTIVE
     // here without clearing deactivatedAt leaves the user still locked out
@@ -331,6 +363,13 @@ export class UsersService {
         'Vai trò không tồn tại hoặc đã bị xóa. Hãy tải lại danh sách vai trò rồi chọn lại.',
       );
     }
+    // BR-ADM-001: what the user holds now and what they are given must both
+    // be within the actor's own permissions (no self-promotion, no demoting
+    // someone more senior).
+    await assertActorHolds(this.prisma, actorUserId, [
+      ...(await permissionCodesOfUser(this.prisma, userId)),
+      ...(await permissionCodesOfRoles(this.prisma, updateRolesDto.roleIds)),
+    ]);
 
     let previousRoles: string[] = [];
     await this.prisma.$transaction(
@@ -404,6 +443,7 @@ export class UsersService {
     userAgent: string | null,
   ): Promise<void> {
     await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await assertActorOutranks(this.prisma, actorUserId, userId);
 
     await this.prisma.$transaction(
       async tx => {
@@ -451,6 +491,7 @@ export class UsersService {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
+    await assertActorOutranks(this.prisma, actorUserId, userId);
     await this.assertEmailFreeForReactivation(user);
 
     await this.prisma.user.update({
@@ -484,6 +525,8 @@ export class UsersService {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
     });
+    // Resetting a password hands over the account: never one that outranks you.
+    await assertActorOutranks(this.prisma, actorUserId, userId);
 
     const tempPassword = crypto.randomBytes(16).toString('base64').slice(0, 16);
     const passwordHash = await argon2.hash(tempPassword, this.argon2Options);
@@ -541,6 +584,7 @@ export class UsersService {
   ): Promise<{ sent: boolean; expiresInMinutes: number; kind: 'setup' | 'reset' }> {
     const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng');
+    await assertActorOutranks(this.prisma, actorUserId, userId);
     if (user.deactivatedAt) {
       throw new BadRequestException(
         'Tài khoản đã bị vô hiệu hóa; hãy kích hoạt lại trước khi gửi link',

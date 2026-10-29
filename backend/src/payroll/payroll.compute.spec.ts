@@ -178,6 +178,58 @@ describe('PayrollService.computePeriod — round 4', () => {
     expect(tx.payrollLineItem.upsert.mock.calls[0][0].update.baseSalaryVnd).toBe(20_000_000);
   });
 
+  it('D2: an invoice issued now for a visit under earlier terms earns the rate of the visit day', async () => {
+    // 10% until 31/08, 20% from 01/09; the visit was on 28/08, invoiced 02/09.
+    const old = { ...comp, id: 'comp-old', effectiveTo: new Date('2026-08-31') };
+    const current = {
+      ...comp,
+      id: 'comp-new',
+      commissionPct: new Prisma.Decimal(0.2),
+      effectiveFrom: new Date('2026-09-01'),
+    };
+    const tx = makeTx({
+      dentistCompensation: {
+        findMany: jest
+          .fn()
+          .mockImplementation(({ where }) => (where.effectiveFrom?.lt ? [old] : [current])),
+      },
+      invoice: {
+        findMany: jest.fn().mockImplementation(({ where }) =>
+          where.encounter?.dentistId === 'd1'
+            ? [
+                {
+                  id: 'inv-1',
+                  code: 'HD-1',
+                  subtotal: new Prisma.Decimal(1_000_000),
+                  total: new Prisma.Decimal(1_000_000),
+                  issuedAt: new Date('2026-09-02T10:00:00+07:00'),
+                  encounter: {
+                    id: 'enc-1',
+                    startedAt: new Date('2026-08-28T09:00:00+07:00'),
+                    closedAt: new Date('2026-08-28T09:30:00+07:00'),
+                  },
+                  items: [
+                    {
+                      id: 'it-1',
+                      treatmentId: 't-1',
+                      description: 'A',
+                      lineTotal: new Prisma.Decimal(1_000_000),
+                    },
+                  ],
+                  payments: [],
+                  adjustments: [],
+                },
+              ]
+            : [],
+        ),
+      },
+    });
+    const { service } = makeService(tx);
+    await service.computePeriod('p-sep', 'admin-1');
+    const line = tx.payrollLineItem.upsert.mock.calls[0][0].update;
+    expect(line.commissionVnd).toBe(100_000);
+  });
+
   it('H1/H5: commission on issued invoices of the clinic period, after discount, per invoice line', async () => {
     const tx = makeTx({
       invoice: {
@@ -1001,6 +1053,42 @@ describe('PayrollService — business flow review 2026-10-21 (section 4)', () =>
         taxTncnVnd: 0,
         bhxhVnd: 105_000,
         netPayVnd: 895_000,
+      });
+    });
+
+    it('D3: a penalty above the gross never makes BHXH negative (it would raise net pay)', async () => {
+      const p = period({ id: 'p-sep' });
+      const tx = makeTx({
+        payrollPeriod: { findUnique: fn(p) },
+        payrollAdjustment: {
+          create: fn({ id: 'a-1' }),
+          findMany: fn([{ type: 'PENALTY', amountVnd: new Prisma.Decimal(3_000_000) }]),
+        },
+        payrollLineItem: {
+          findUnique: fn({
+            id: 'li-1',
+            payrollPeriodId: 'p-sep',
+            dentistId: 'd1',
+            baseSalaryVnd: new Prisma.Decimal(1_000_000),
+            commissionVnd: new Prisma.Decimal(0),
+            overtimePayVnd: new Prisma.Decimal(0),
+          }),
+          update: fn({}),
+        },
+      });
+      const { service, prisma } = makeService(tx, p);
+      prisma.payrollLineItem.findUnique = tx.payrollLineItem.findUnique;
+      await service.addAdjustment(
+        'p-sep',
+        { lineItemId: 'li-1', type: 'PENALTY', amountVnd: 3_000_000, reason: 'Làm hỏng máy' },
+        'admin',
+        ['payroll.admin'],
+      );
+      expect(tx.payrollLineItem.update.mock.calls[0][0].data).toMatchObject({
+        grossPayVnd: -2_000_000,
+        taxTncnVnd: 0,
+        bhxhVnd: 0,
+        netPayVnd: -2_000_000,
       });
     });
   });

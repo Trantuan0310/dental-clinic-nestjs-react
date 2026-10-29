@@ -3,7 +3,7 @@
 // All endpoints are under /admin/* (authenticated).
 // =============================================================================
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/lib/api';
 import type {
   AdminUser,
@@ -64,15 +64,22 @@ const postVoid = async (url: string, body?: unknown) => {
 interface ListUsersParams {
   q?: string;
   status?: string;
-  limit?: number;
-  cursor?: string;
+  pageSize?: number;
 }
 
-export function useUsers(params?: ListUsersParams) {
-  return useQuery({
+/**
+ * Users page by page (keyset cursor from the server). Search runs on the
+ * server, so a user beyond the first page is still found.
+ */
+export function useUsers(params: ListUsersParams = {}) {
+  return useInfiniteQuery({
     queryKey: ['admin', 'users', params],
-    queryFn: (): Promise<AdminUserListResponse> =>
-      getList<AdminUserListResponse>('/admin/users', { params }),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }): Promise<AdminUserListResponse> =>
+      getList<AdminUserListResponse>('/admin/users', {
+        params: { ...params, cursor: pageParam ?? undefined },
+      }),
+    getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.nextCursor : null),
   });
 }
 

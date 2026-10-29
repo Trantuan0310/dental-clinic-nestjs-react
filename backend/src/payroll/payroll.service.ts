@@ -94,6 +94,34 @@ export function sumAdjustments(rows: Array<{ type: string; amountVnd: Prisma.Dec
   return { bonusVnd, penaltyVnd };
 }
 
+/**
+ * Tax and insurance withheld from a gross (BR-PAY-009/010): one rule for the
+ * compute and for a bonus / penalty added afterwards. The insurance base is
+ * the gross clamped to [0, 20 × minGrossForBhxh]: a penalty larger than the
+ * gross never turns the contribution negative (which would raise net pay).
+ */
+export function payrollDeductions(
+  grossVnd: number,
+  config: {
+    bhxhPct: Prisma.Decimal;
+    bhytPct: Prisma.Decimal;
+    bhtnPct: Prisma.Decimal;
+    minGrossForBhxh: Prisma.Decimal;
+  },
+  taxConfig: TaxBracketsConfig,
+) {
+  const cap = config.minGrossForBhxh.mul(20).toNumber();
+  const bhxhBase = Math.min(Math.max(grossVnd, 0), cap);
+  const bhxhRate = config.bhxhPct.add(config.bhytPct).add(config.bhtnPct);
+  return {
+    taxResult: computeProgressiveTax(Math.max(grossVnd, 0), taxConfig),
+    bhxhCap: cap,
+    bhxhBase,
+    bhxhRate: bhxhRate.toNumber(),
+    bhxhVnd: Math.round(bhxhBase * bhxhRate.toNumber()),
+  };
+}
+
 const isSerializationFailure = (err: unknown): boolean =>
   (err as { code?: string })?.code === 'P2034' ||
   /could not serialize|deadlock detected|write conflict/i.test((err as Error)?.message ?? '');
@@ -590,15 +618,20 @@ export class PayrollService {
       snapshottedAt: new Date().toISOString(),
     };
 
-    // BR-PAY-003: no two live periods overlap. No database constraint backs
-    // it (PAY-08), so the check and the insert run under one lock.
+    // BR-PAY-003: no two regular periods share a day. Both bounds are
+    // inclusive days, so a period starting on another's last day overlaps.
+    // A LOCKED period counts too: its days are paid, and a new period over
+    // them would pay base salary and commission again. Adjustment periods
+    // (openedFromPeriodId) repeat their original's dates on purpose and are
+    // only opened through openAdjustmentPeriod(). No database constraint
+    // backs it (PAY-08), so the check and the insert run under one lock.
     const created = await this.prisma.$transaction(async tx => {
       await lockPayroll(tx, 'periods');
       const overlap = await tx.payrollPeriod.findFirst({
         where: {
-          status: { not: PayrollPeriodStatus.LOCKED },
-          periodStart: { lt: end },
-          periodEnd: { gt: start },
+          openedFromPeriodId: null,
+          periodStart: { lte: end },
+          periodEnd: { gte: start },
         },
       });
       if (overlap) {
@@ -1090,12 +1123,51 @@ export class PayrollService {
       breakdown: Record<string, unknown>;
     }> = [];
 
+    // The rate of a visit is the terms in force on its day, which may be
+    // before this period (visit last month, invoice issued now) and covered
+    // by terms that ended before the period began: look those up too, or the
+    // commission silently drops to 0.
+    const workDayOf = (inv: (typeof invoices)[number]) =>
+      clinicDateOnly(
+        inv.encounter?.closedAt ?? inv.encounter?.startedAt ?? inv.issuedAt ?? new Date(),
+      );
+    const earliestWorkDay = (invoices ?? [])
+      .filter(inv => inv.encounter)
+      .map(workDayOf)
+      .reduce<string | null>((min, d) => (min === null || d < min ? d : min), null);
+    let commissionTerms = terms;
+    if (earliestWorkDay && earliestWorkDay < dateKey(payPeriod.start)) {
+      const earlier = await tx.dentistCompensation.findMany({
+        where: {
+          dentistId,
+          deletedAt: null,
+          effectiveFrom: { lt: payPeriod.start },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date(earliestWorkDay) } }],
+        },
+        orderBy: { effectiveFrom: 'asc' },
+      });
+      const known = new Set(terms.map(t => t.id));
+      commissionTerms = [
+        ...(earlier ?? [])
+          .filter(c => !known.has(c.id))
+          .map(c => ({
+            id: c.id,
+            monthlySalary: Number(c.baseSalaryVnd),
+            commissionPct: Number(c.commissionPct),
+            overtimeHourlyVnd: Number(c.overtimeHourlyVnd),
+            effectiveFrom: c.effectiveFrom,
+            effectiveTo: c.effectiveTo,
+          })),
+        ...terms,
+      ].sort((a, b) => a.effectiveFrom.getTime() - b.effectiveFrom.getTime());
+    }
+
     for (const inv of invoices ?? []) {
       if (!inv.encounter) continue;
       const enc = inv.encounter;
       encounterIds.add(enc.id);
-      const workDay = clinicDateOnly(enc.closedAt ?? enc.startedAt ?? inv.issuedAt ?? new Date());
-      const term = compensationOn(terms, workDay);
+      const workDay = workDayOf(inv);
+      const term = compensationOn(commissionTerms, workDay);
       if (!term) invoicesWithoutTerms.push(inv.code);
       const pct = term?.commissionPct ?? 0;
       const refundedVnd = [...(inv.payments ?? []), ...(inv.adjustments ?? [])].reduce(
@@ -1194,17 +1266,14 @@ export class PayrollService {
     // 6. Gross pay
     const grossPayVnd = paidBaseVnd + commissionVnd + overtimePayVnd + bonusVnd - penaltyVnd;
 
-    // 7. Tax TNCN (BR-PAY-009)
-    const taxableGrossForTax = Math.max(grossPayVnd, 0);
-    const taxResult = computeProgressiveTax(taxableGrossForTax, taxConfig);
+    // 7–8. Tax TNCN (BR-PAY-009) and BHXH (BR-PAY-010, capped at
+    // minGrossForBhxh × 20): the same rule addAdjustment() uses.
+    const { taxResult, bhxhCap, bhxhBase, bhxhVnd } = payrollDeductions(
+      grossPayVnd,
+      config,
+      taxConfig,
+    );
     const taxTncnVnd = taxResult.totalTaxVnd;
-
-    // 8. BHXH (BR-PAY-010): cap at minGrossForBhxh Ã— 20
-    // Use Prisma.Decimal math to avoid float precision loss.
-    const bhxhCap = config.minGrossForBhxh.mul(20);
-    const bhxhBase = grossPayVnd < bhxhCap.toNumber() ? grossPayVnd : bhxhCap.toNumber();
-    const bhxhRate = config.bhxhPct.add(config.bhytPct).add(config.bhtnPct);
-    const bhxhVnd = Math.round(Math.max(bhxhBase, 0) * bhxhRate.toNumber());
 
     // 9. Net pay
     const netPayVnd = grossPayVnd - taxTncnVnd - bhxhVnd;
@@ -1824,11 +1893,35 @@ export class PayrollService {
         // An adjustment period holds differences only: its gross is the
         // adjustments, taxed as the original payslip plus them, minus what
         // the original already withheld (its own config snapshot).
+        // Baseline: the original payslip plus every supplement of it paid
+        // before this one (D1), so a second supplement neither re-taxes nor
+        // re-insures what an earlier one already settled.
         const original = period.openedFromPeriodId
-          ? await tx.payrollLineItem.findFirst({
-              where: { payrollPeriodId: period.openedFromPeriodId, dentistId: lineItem.dentistId },
-              select: { grossPayVnd: true, taxTncnVnd: true, bhxhVnd: true },
-            })
+          ? (
+              (await tx.payrollLineItem.findMany({
+                where: {
+                  dentistId: lineItem.dentistId,
+                  OR: [
+                    { payrollPeriodId: period.openedFromPeriodId },
+                    {
+                      payrollPeriodId: { not: periodId },
+                      period: {
+                        openedFromPeriodId: period.openedFromPeriodId,
+                        status: { in: [PayrollPeriodStatus.PAID, PayrollPeriodStatus.LOCKED] },
+                      },
+                    },
+                  ],
+                },
+                select: { grossPayVnd: true, taxTncnVnd: true, bhxhVnd: true },
+              })) ?? []
+            ).reduce(
+              (sum, l) => ({
+                grossPayVnd: sum.grossPayVnd + Number(l.grossPayVnd),
+                taxTncnVnd: sum.taxTncnVnd + Number(l.taxTncnVnd),
+                bhxhVnd: sum.bhxhVnd + Number(l.bhxhVnd),
+              }),
+              { grossPayVnd: 0, taxTncnVnd: 0, bhxhVnd: 0 },
+            )
           : null;
         const grossPayVnd = period.openedFromPeriodId
           ? bonusVnd - penaltyVnd
@@ -1843,15 +1936,11 @@ export class PayrollService {
         );
         const taxConfig =
           (config.taxBrackets as unknown as TaxBracketsConfig) ?? DEFAULT_TAX_BRACKETS;
-        // Critical #8: Decimal-precision-safe math for BHXH rate.
-        const bhxhCap = config.minGrossForBhxh.mul(20);
-        const bhxhRate = config.bhxhPct.add(config.bhytPct).add(config.bhtnPct);
+        // The compute's own rule (payrollDeductions): a penalty larger than
+        // the gross used to give a negative BHXH here, raising net pay.
         const deductions = (gross: number) => {
-          const bhxhBase = gross < bhxhCap.toNumber() ? gross : bhxhCap.toNumber();
-          return {
-            tax: computeProgressiveTax(Math.max(gross, 0), taxConfig).totalTaxVnd,
-            bhxh: Math.round(bhxhBase * bhxhRate.toNumber()),
-          };
+          const d = payrollDeductions(gross, config, taxConfig);
+          return { tax: d.taxResult.totalTaxVnd, bhxh: d.bhxhVnd };
         };
         let taxTncnVnd: number;
         let bhxhVnd: number;
@@ -2197,6 +2286,13 @@ export class PayrollService {
     });
     if (!original) throw new PayrollNotFoundException('PayrollPeriod', originalPeriodId);
 
+    // A supplement is opened from the regular period it corrects; opened from
+    // another supplement, its baseline would be that supplement's difference.
+    if (original.openedFromPeriodId) {
+      throw new PayrollStateException(
+        'Kỳ này đã là kỳ bổ sung: mở kỳ bổ sung mới từ kỳ lương gốc.',
+      );
+    }
     // Only allow adjustment on PAID or LOCKED originals
     const allowed =
       original.status === PayrollPeriodStatus.PAID ||
@@ -2228,6 +2324,22 @@ export class PayrollService {
     // step (period create OR line item copy) fails midway.
     const adjustment = await this.prisma.$transaction(
       async tx => {
+        // One supplement in progress per period: each one is taxed against
+        // the original plus the supplements paid before it, so two open at
+        // once would both leave the other out.
+        await lockPayroll(tx, 'periods');
+        const pending = await tx.payrollPeriod.findFirst({
+          where: {
+            openedFromPeriodId: original.id,
+            status: { notIn: [PayrollPeriodStatus.PAID, PayrollPeriodStatus.LOCKED] },
+          },
+          select: { id: true },
+        });
+        if (pending) {
+          throw new PayrollStateException(
+            'Kỳ lương này đang có một kỳ bổ sung chưa thanh toán: hoàn tất kỳ đó trước khi mở kỳ mới.',
+          );
+        }
         const created = await tx.payrollPeriod.create({
           data: {
             periodStart: original.periodStart,

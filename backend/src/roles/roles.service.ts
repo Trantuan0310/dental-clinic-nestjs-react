@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AuditService } from '../audit/audit.service';
+import { assertActorHolds } from '../common/permission-escalation';
 import {
   CannotDeleteSystemRoleException,
   CannotDeleteRoleWithUsersException,
@@ -95,10 +96,16 @@ export class RolesService {
 
     if (
       createRoleDto.permissionCodes &&
-      permissions.length !== createRoleDto.permissionCodes.length
+      permissions.length !== new Set(createRoleDto.permissionCodes).size
     ) {
       throw new NotFoundException('One or more permissions not found');
     }
+    // BR-ADM-001: a role can only carry permissions its author holds.
+    await assertActorHolds(
+      this.prisma,
+      actorUserId,
+      permissions.map(p => p.code),
+    );
 
     const role = await this.prisma.role.create({
       data: {
@@ -172,6 +179,7 @@ export class RolesService {
     if (role.isSystem) {
       throw new CannotModifySystemRoleException();
     }
+    if (role.deletedAt) throw new NotFoundException('Vai trò đã bị xóa');
 
     // `permissionCodes` omitted (undefined) means "don't touch permissions";
     // `permissionCodes: []` means "revoke all". Collapsing both to the same
@@ -187,10 +195,17 @@ export class RolesService {
         foundPerms = await this.prisma.permission.findMany({
           where: { code: { in: newPermissionCodes } },
         });
-        if (foundPerms.length !== newPermissionCodes.length) {
+        if (foundPerms.length !== new Set(newPermissionCodes).size) {
           throw new NotFoundException('One or more permissions not found');
         }
       }
+      // BR-ADM-001: the actor must hold every code added or taken away.
+      const before = new Set(role.rolePermissions.map(rp => rp.permission.code));
+      const after = new Set(foundPerms.map(p => p.code));
+      await assertActorHolds(this.prisma, actorUserId, [
+        ...[...after].filter(c => !before.has(c)),
+        ...[...before].filter(c => !after.has(c)),
+      ]);
 
       await this.prisma.$transaction(async tx => {
         await tx.rolePermission.deleteMany({ where: { roleId } });
