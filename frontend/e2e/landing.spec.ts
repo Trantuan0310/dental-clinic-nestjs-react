@@ -12,7 +12,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 test('visitors get the landing page and can book a listed service', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Nụ cười khỏe đẹp');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Đau răng nào?');
   await expect(page.getByRole('heading', { name: 'Dịch vụ & bảng giá' })).toBeVisible();
 
   const services = page.locator('#dich-vu');

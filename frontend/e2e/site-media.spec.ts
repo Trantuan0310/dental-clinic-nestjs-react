@@ -40,13 +40,13 @@ test('admin puts clinic photos on the home page', async ({ page, browser }) => {
   await expect(home.getByRole('heading', { name: 'Không gian phòng khám' })).toBeVisible();
   await expect(home.getByRole('img', { name: 'Phòng điều trị e2e' })).toBeVisible();
 
-  // Clean up so the spec can run again and the home page is back to the logo.
+  // Clean up so the spec can run again and the home page has no photo again.
   await page.getByRole('button', { name: 'Xóa ảnh Phòng điều trị e2e' }).click();
   await expect(page.getByRole('img', { name: 'Phòng điều trị e2e' })).toBeHidden();
   await page.getByRole('button', { name: 'Xóa', exact: true }).click();
   await expect(hero).toBeHidden();
   await home.reload();
-  await expect(home.locator('#top img[src="/logo-icon.png"]')).toBeVisible();
+  await expect(home.getByRole('heading', { level: 1 })).toBeVisible();
   await expect(home.locator('#top img[src*="/public/media/"]')).toHaveCount(0);
   await guest.close();
 });

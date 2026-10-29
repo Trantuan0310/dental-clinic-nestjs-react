@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -182,38 +182,3 @@
   }
 }
 
-/* Public landing page motion (reduced-motion users get the global rule above). */
-@keyframes lp-rise {
-  from { opacity: 0; transform: translateY(18px); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes lp-floaty {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-@keyframes lp-shine {
-  0%, 60% { left: -60%; }
-  100% { left: 130%; }
-}
-@keyframes lp-ring {
-  0% { box-shadow: 0 0 0 0 rgb(27 122 120 / 0.55); }
-  100% { box-shadow: 0 0 0 16px rgb(27 122 120 / 0); }
-}
-.lp-rise { animation: lp-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-/* A block below the fold slides up when it scrolls into view; until then it stays visible. */
-.lp-reveal.lp-in { animation: lp-rise 0.65s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.lp-floaty { animation: lp-floaty 5s ease-in-out infinite; }
-.lp-ring { animation: lp-ring 2.4s infinite; }
-.lp-shine { position: relative; overflow: hidden; }
-.lp-shine::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -60%;
-  width: 40%;
-  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.5), transparent);
-  transform: skewX(-20deg);
-  animation: lp-shine 3.2s ease-in-out infinite;
-  pointer-events: none;
-}

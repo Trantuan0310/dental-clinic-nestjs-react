@@ -583,3 +583,27 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
 - Hiệu ứng: chữ phần đầu trượt lên, khối trượt lên khi cuộn tới, vệt sáng trên nút chính, nút gọi lan sóng. Máy bật giảm chuyển động thì tắt.
 - Giữ nguyên `#top`, `#dich-vu`, nhãn `Đặt lịch …` và các tiêu đề mà e2e `landing` / `site-media` dùng.
 - Kiểm: typecheck, eslint, build, locales. Playwright với API thật: các ý của e2e landing đều đúng, ô đăng ký điền sẵn sang trang đặt lịch. Trên điện thoại ban đầu bị tràn ngang, đã sửa (chữ ẩn trong ô tiêu đề bảng), không tràn ngang nữa.
+
+## 29/10 — Giao diện mới, đợt 1: trang chủ (ghép hướng A "Lịch ghế" + B "Sơ đồ răng")
+
+- Người dùng duyệt cả hai hướng trong bản mẫu và chọn ghép lại. Kế hoạch các đợt:
+  1. trang chủ (đợt này);
+  2. màn hình Hôm nay dạng bảng ghế theo bác sĩ, kèm hàng chờ;
+  3. hồ sơ bệnh nhân với sơ đồ răng theo cung hàm và kế hoạch điều trị;
+  4. rà các trang nội bộ còn lại.
+- Phông chữ: trước đây khai báo `Inter` nhưng không tải file nào, nên máy khách hiện phông mặc định của hệ thống. Nay tải từ Google Fonts trong `index.html`: Be Vietnam Pro (chữ chính, cho cả ứng dụng), Bricolage Grotesque (`font-display`, tiêu đề lớn), JetBrains Mono (`font-mono`, giờ, giá, mã răng).
+- Trang chủ:
+  - `ToothArch.tsx` vẽ sơ đồ 32 răng đánh số FDI. Mỗi răng là một nút, dùng được bằng bàn phím.
+  - Chọn răng thì hiện dịch vụ hợp với răng đó lấy từ bảng giá thật (so theo tên dịch vụ; răng khôn so "răng khôn", vì "không" chứa chữ "khôn").
+  - "Đặt lịch khám răng này" điền sẵn lý do khám sang `/booking` qua router state.
+  - Khối "Giờ trống": 6 ngày tới theo dịch vụ và bác sĩ, gọi `/public/booking/slots` cho từng ngày; mỗi ngày tối đa 6 giờ, kèm link "+N giờ khác".
+  - Bấm một giờ mở `/booking?service&dentist&date&time`. `PublicBookingPage` nhận thêm `dentist`, `date`, `time` (giờ chỉ chọn sẵn nếu còn trống) và `reason`.
+  - Bảng giá dạng danh sách chia theo nhóm. Bác sĩ có ảnh 3:4 hoặc chữ viết tắt tên. Quy trình 1/3, 2/3, 3/3. Hỏi đáp và chân trang không dùng thẻ.
+- Bỏ: thẻ bo góc xếp lưới, icon trong vòng tròn, tiêu đề căn giữa có gạch màu, vệt sáng, vật bay, trượt lên khi cuộn, khối số liệu, thẻ dịch vụ nổi bật dùng logo thay ảnh. Xoá CSS `lp-*`.
+- E2E: `landing.spec` chờ tiêu đề "Đau răng nào?"; `site-media.spec` sau khi xoá ảnh kiểm tra không còn ảnh trong `#top`.
+- Kiểm: typecheck, eslint, locales, build. Playwright với API thật:
+  - răng 18 hiện "Nhổ răng khôn" và "Chụp X-quang";
+  - bấm một giờ thì trang đặt lịch chọn sẵn đúng bác sĩ và giờ;
+  - "Đặt lịch khám răng này" điền sẵn lý do khám;
+  - các ý của e2e landing đều đúng;
+  - điện thoại 390px không tràn ngang, không lỗi JS.
