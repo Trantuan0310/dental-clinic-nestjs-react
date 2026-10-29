@@ -87,7 +87,7 @@ export const vi = {
   breadcrumbRoutes: {
     overview: 'Tổng quan', patients: 'Bệnh nhân', addPatient: 'Thêm bệnh nhân', appointments: 'Lịch hẹn',
     list: 'Danh sách', reports: 'Báo cáo', invoices: 'Hóa đơn', expenses: 'Chi phí', inventory: 'Tồn kho',
-    supplyList: 'Danh sách vật tư', myQueue: 'Hàng chờ của tôi', mySchedule: 'Lịch của tôi', dispatch: 'Điều phối',
+    supplyList: 'Danh sách vật tư', stockMovements: 'Lịch sử xuất nhập', myQueue: 'Hàng chờ của tôi', mySchedule: 'Lịch của tôi', dispatch: 'Điều phối',
     bookingRequests: 'Yêu cầu đặt lịch', today: 'Hôm nay', queue: 'Hàng chờ', medicalRecords: 'Bệnh án', treatmentPlans: 'Kế hoạch điều trị', recalls: 'Nhắc tái khám', messages: 'Tin nhắn SMS / Zalo', newTreatmentPlan: 'Lập kế hoạch',
     myPatients: 'Bệnh nhân của tôi', encounters: 'Lượt khám', payroll: 'Bảng lương', payrollConfig: 'Cấu hình lương',
     compensation: 'Đãi ngộ', shiftApproval: 'Duyệt ca làm việc', myPayroll: 'Lương của tôi', history: 'Lịch sử',
@@ -190,7 +190,7 @@ export const en = {
   breadcrumbRoutes: {
     overview: 'Overview', patients: 'Patients', addPatient: 'Add patient', appointments: 'Appointments',
     list: 'List', reports: 'Reports', invoices: 'Invoices', expenses: 'Expenses', inventory: 'Inventory',
-    supplyList: 'Supplies', myQueue: 'My queue', mySchedule: 'My schedule', dispatch: 'Dispatch',
+    supplyList: 'Supplies', stockMovements: 'Stock history', myQueue: 'My queue', mySchedule: 'My schedule', dispatch: 'Dispatch',
     bookingRequests: 'Booking requests', today: 'Today', queue: 'Queue', medicalRecords: 'Medical records', treatmentPlans: 'Treatment plans', recalls: 'Recalls', messages: 'SMS / Zalo messages', newTreatmentPlan: 'New plan',
     myPatients: 'My patients', encounters: 'Encounters', payroll: 'Payroll', payrollConfig: 'Payroll settings',
     compensation: 'Compensation', shiftApproval: 'Shift approval', myPayroll: 'My payroll', history: 'History',

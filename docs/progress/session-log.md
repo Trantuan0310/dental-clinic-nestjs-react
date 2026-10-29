@@ -669,3 +669,19 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 - **Kiểm:**
   - backend tsc, eslint, 1552 test, `test:isolated` (PostgreSQL thật) xanh;
   - frontend typecheck, eslint, locales, build.
+
+## 29/10 — Trang lịch sử xuất nhập kho (sửa 404)
+
+- Người dùng báo `/inventory/movements?itemId=…` báo 404. Link "Xem tất cả" trên trang chi tiết vật tư trỏ tới trang chưa từng có (API `GET /inventory/movements` thì có sẵn). Lần rà đường dẫn cha trước đó (PR #83) chỉ xét đường dẫn cha, không xét link trong trang nên bỏ sót.
+- Thêm `features/inventory/StockMovementsPage.tsx` và route `inventory/movements` (quyền `inventory.read`, breadcrumb "Lịch sử xuất nhập"):
+  - lọc theo vật tư (có nút bỏ lọc), loại phiếu (Nhập, Xuất, Kiểm kê) và khoảng ngày; bộ lọc nằm trên URL;
+  - 30 dòng mỗi trang;
+  - cột thời gian, vật tư (khi xem tất cả), loại, số lượng (+ xanh / − đỏ), còn lại, lý do, người thực hiện;
+  - nút "Quay lại vật tư".
+- Quét lại mọi `to=`, `navigate(`, `href=`, `link:` trong frontend so với 68 route: không còn link nào trỏ tới trang không tồn tại.
+- E2E mới `inventory-movements.spec.ts`: từ trang vật tư bấm "Xem tất cả", thấy trang lịch sử lọc theo vật tư, bỏ lọc thì thấy tất cả.
+- Kiểm: typecheck, eslint, locales, build. Playwright với API thật:
+  - 1 vật tư: 9 dòng, gồm cả lượt nhập kho ban đầu;
+  - tất cả vật tư: 30 dòng;
+  - lọc "Xuất kho": URL có `type=STOCK_OUT`, 30 dòng;
+  - không lỗi JS.

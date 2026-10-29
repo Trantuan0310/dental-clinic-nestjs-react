@@ -49,6 +49,7 @@ const InventoryListPage = lazy(() => import('@/features/inventory/InventoryListP
 const InventoryItemDetailPage = lazy(
   () => import('@/features/inventory/InventoryItemDetailPage'),
 );
+const StockMovementsPage = lazy(() => import('@/features/inventory/StockMovementsPage'));
 
 const ExpenseListPage = lazy(() => import('@/features/expense/ExpenseListPage'));
 
@@ -401,6 +402,14 @@ const router = createBrowserRouter(createRoutesFromElements(
                 element={
                   <ProtectedRoute permission="inventory.read">
                     <InventoryItemDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="inventory/movements"
+                element={
+                  <ProtectedRoute permission="inventory.read">
+                    <StockMovementsPage />
                   </ProtectedRoute>
                 }
               />
