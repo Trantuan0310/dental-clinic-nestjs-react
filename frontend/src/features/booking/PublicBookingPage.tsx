@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { bookingErrorMessage } from "./errorMessage";
@@ -95,6 +95,10 @@ export default function PublicBookingPage() {
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
   const preselected = searchParams.get("service") ?? "";
+  // An open time tapped on the home page: dentist, day and time to start from.
+  const preDentist = searchParams.get("dentist") ?? "";
+  const preDate = searchParams.get("date") ?? "";
+  const preTime = useRef(searchParams.get("time") ?? "");
   const [services, setServices] = useState<Service[]>([]);
   const [serviceId, setServiceId] = useState("");
   const service = useMemo(
@@ -102,7 +106,9 @@ export default function PublicBookingPage() {
     [services, serviceId],
   );
   const [dentistId, setDentistId] = useState("");
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(() =>
+    /^\d{4}-\d{2}-\d{2}$/.test(preDate) && preDate >= today() ? preDate : today(),
+  );
   const [slots, setSlots] = useState<string[]>([]);
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
   const [closedReason, setClosedReason] = useState<string | null>(null);
@@ -132,7 +138,7 @@ export default function PublicBookingPage() {
       email: saved?.email ?? "",
       contactPersonName: saved?.contactPersonName ?? "",
       contactPersonPhone: saved?.contactPersonPhone ?? "",
-      reason: "",
+      reason: prefill?.reason ?? "",
       consent: false,
     };
   });
@@ -145,14 +151,15 @@ export default function PublicBookingPage() {
         const pick = r.data.data.find((x) => x.id === preselected);
         if (pick) {
           setServiceId(pick.id);
-          if (pick.dentists.length === 1) setDentistId(pick.dentists[0].id);
+          if (pick.dentists.some((d) => d.id === preDentist)) setDentistId(preDentist);
+          else if (pick.dentists.length === 1) setDentistId(pick.dentists[0].id);
         }
       })
       .catch(() =>
         setError(i18n.t("uiScheduling.bookingServicesError")),
       )
       .finally(() => setLoading(false));
-  }, [preselected]);
+  }, [preselected, preDentist]);
 
   useEffect(() => {
     let active = true;
@@ -174,6 +181,9 @@ export default function PublicBookingPage() {
         if (!active) return;
         const data = r.data.data;
         setSlots(data.availableSlots);
+        // The home page's time, once, if it is still free.
+        if (preTime.current && data.availableSlots.includes(preTime.current)) setTime(preTime.current);
+        preTime.current = "";
         setEmptyReason(data.emptyReason ?? null);
         setClosedReason(data.closedReason ?? null);
         setNextDate(data.nextAvailableDate ?? null);
