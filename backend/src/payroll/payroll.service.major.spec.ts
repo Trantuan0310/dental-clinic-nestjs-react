@@ -581,7 +581,11 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
       // R2-3.1: openAdjustmentPeriod now uses $transaction. Mock tx.payrollPeriod.create.
       (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
         return cb({
+          // lockPayroll(tx, 'periods') and the "one open supplement" check.
+          $executeRaw: jest.fn().mockResolvedValue(0),
+          $executeRawUnsafe: jest.fn().mockResolvedValue(0),
           payrollPeriod: {
+            findFirst: jest.fn().mockResolvedValue(null),
             create: jest.fn().mockResolvedValue({ id: 'adj-1', openedFromPeriodId: 'paid-1' }),
           },
           payrollLineItem: {
@@ -704,7 +708,10 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
       });
       (prisma.$transaction as jest.Mock).mockImplementation(async cb => {
         return cb({
+          $executeRaw: jest.fn().mockResolvedValue(0),
+          $executeRawUnsafe: jest.fn().mockResolvedValue(0),
           payrollPeriod: {
+            findFirst: jest.fn().mockResolvedValue(null),
             create: jest.fn().mockResolvedValue({ id: 'period-adj' }),
           },
           payrollLineItem: {

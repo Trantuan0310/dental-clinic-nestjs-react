@@ -648,3 +648,24 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 3. Còn lại nhóm Nhân sự: ca +07 (shift-registration), D4 UI đổi chế độ từ ngày X, D5 expense version/status, specialty, UI tổng/tìm kiếm.
 4. Nhóm Tiếp nhận (task 2) và Lâm sàng (task 5) chưa làm — xem `full_module_fix_plan.md` và `business_flow_hardening_plan.md` trên nhánh `fix/business-flow-hardening` (mô tả chi tiết A1–A4, B1–B4, C3).
 5. Môi trường: container mới cần `npm ci` hai thư mục; DB demo `guidedemo` tạo bằng `node scripts/release.cjs` + `prisma/seed.ts` + `seed-clinical.ts` (không dùng `prisma migrate deploy` trực tiếp — thiếu `uuid_generate_v7`).
+
+## 29/10 — Chốt nhánh fix/full-module-review vào main
+
+- Gộp `origin/fix/full-module-review` (kế hoạch, Tài chính, Quản trị, lõi lương) vào nhánh làm việc dựng từ main mới. Chỉ xung đột ở nhật ký này, giữ cả hai phía.
+- **3 test lương hỏng (mock cũ):**
+  - 2 test `openAdjustmentPeriod`: thiếu `$executeRaw*` cho khóa `lockPayroll` và `payrollPeriod.findFirst` cho kiểm tra kỳ bổ sung đang mở;
+  - test "a bonus there pays…": mốc thuế nay đọc bằng `findMany` (kỳ gốc + kỳ bổ sung đã trả). Test kiểm cả điều kiện `OR`.
+- **+3 test lương (D1):**
+  - kỳ bổ sung thứ hai đóng BHXH trên nền kỳ gốc + kỳ bổ sung thứ nhất: 210k, nếu chỉ tính kỳ gốc thì ra 105k và test hỏng;
+  - không mở kỳ bổ sung từ một kỳ bổ sung;
+  - mỗi kỳ gốc chỉ một kỳ bổ sung chưa thanh toán.
+- **Đặc tả lương:**
+  - BR-PAY-003 sửa theo code: chồng ngày với mọi kỳ thường kể cả LOCKED, kiểm dưới khóa, không có unique index;
+  - bổ sung BR-PAY-006 (chế độ phủ ngày khám) và BR-PAY-010 (nền BHXH kẹp, hàm chung);
+  - thêm BR-PAY-025 (kỳ bổ sung).
+- **Lỗi thật phát hiện khi chạy `test:isolated`:** chống nâng quyền (BR-ADM-001) giả định admin có mọi quyền. Thực tế `clinic_admin` không có 8 quyền ghi lâm sàng nên bị 403 khi tạo bác sĩ và khi sửa, khóa, đặt lại mật khẩu tài khoản bác sĩ (5 test API hỏng). Sửa: vai trò hệ thống `clinic_admin` luôn qua (không sửa được quyền của vai trò hệ thống); vai trò tùy chỉnh vẫn bị chặn. Thêm `permission-escalation.spec.ts` (4 test).
+- **Test kho:** tạo vật tư có tồn đầu nay ghi một lượt nhập. Test kiểm cả chuỗi `STOCK_IN 0→5, STOCK_IN 5→7, STOCK_OUT 7→4`.
+- **Tiếp nhận, Lâm sàng và phần còn lại của Nhân sự** không làm vội: ghi vào hạn chế và hướng phát triển (`docs/10_Thesis/THESIS_OUTLINE.md` mục 6.2, 6.3); bảng trạng thái trong `full_module_fix_plan.md`.
+- **Kiểm:**
+  - backend tsc, eslint, 1552 test, `test:isolated` (PostgreSQL thật) xanh;
+  - frontend typecheck, eslint, locales, build.

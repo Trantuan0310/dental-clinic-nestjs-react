@@ -27,4 +27,12 @@
 
 ## Trạng thái
 
-Đang triển khai; chưa nghiệm thu. Không deploy/merge main. Khi hoàn thành cập nhật báo cáo test, review và giới hạn trong cùng thư mục.
+Chốt ngày 29/10/2026 để tập trung cho luận văn (hạn bảo vệ 09/11/2026). Phần đã xong được merge vào `main`:
+
+| Nhóm | Trạng thái |
+|---|---|
+| Admin | Xong: phân trang người dùng, chống nâng quyền (BR-ADM-001), mã nhật ký hệ thống |
+| Tài chính | Xong: kho, vật tư thủ thuật, khóa chống thu trùng, phạm vi AI |
+| Nhân sự | Xong phần lõi lương: chống trùng kỳ (BR-PAY-003), hoa hồng theo chế độ phủ ngày khám (BR-PAY-006), BHXH kẹp nền (BR-PAY-010), kỳ bổ sung (BR-PAY-025). Chưa làm: ca +07, giao diện đổi chế độ từ ngày X, phiên bản/trạng thái chi phí, kiểm tra chuyên môn |
+| Tiếp nhận | Chưa làm, ghi vào hạn chế của luận văn (`docs/10_Thesis/THESIS_OUTLINE.md`, mục 6.2) |
+| Lâm sàng | Chưa làm, ghi vào hạn chế của luận văn (mục 6.2) |

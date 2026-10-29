@@ -382,14 +382,14 @@ PayrollAdjustment.type ∈ {
 | ------- | ----- | -------- |
 | BR-PAY-001 | Cycle | Payroll cycle mặc định MONTHLY. Có thể config WEEKLY/BIWEEKLY trong `PayrollConfig`. |
 | BR-PAY-002 | Period boundaries | Period start = ngày 1 (monthly), period end = ngày cuối tháng (inclusive). |
-| BR-PAY-003 | Period không overlap | Hai period active không được overlap date range (BR unique index). |
+| BR-PAY-003 | Period không overlap | Kỳ thường mới không được chồng ngày với **bất kỳ** kỳ thường nào khác, kể cả kỳ đã `LOCKED` (đã trả thì càng không được trả lần hai). Ngày cuối tính trọn ngày: so sánh `periodStart <= end AND periodEnd >= start`. Kỳ bổ sung (`openedFromPeriodId` khác null) không tính vào kiểm tra này. Kiểm tra trong service dưới khóa `lockPayroll('periods')`; không có unique index trong DB. |
 | BR-PAY-004 | Auto-create period | Cron hàng ngày 00:00 check nếu thiếu period cho tháng hiện tại → tạo DRAFT (BR-PAY-004 cron). Admin vẫn có thể tạo tay trước. |
 | BR-PAY-005 | Commission base | Commission = `treatment.unitPriceCents × qty × commissionPct` cho encounter status=completed, đã đóng trong kỳ. |
-| BR-PAY-006 | Effective dating | Compensation lấy theo version có `effective_from <= encounter.closedAt < effective_to`. |
+| BR-PAY-006 | Effective dating | Compensation lấy theo version có `effective_from <= encounter.closedAt < effective_to`. Hóa đơn phát hành trong kỳ cho lần khám **trước** ngày đổi chế độ dùng chế độ cũ phủ ngày khám đó (không tính hoa hồng 0). |
 | BR-PAY-007 | Pro-rate compensation | Nếu nhiều compensation version trong kỳ → pro-rate theo số ngày áp dụng (BR-PAY-013). |
 | BR-PAY-008 | Pro-rate base salary | BS nghỉ việc giữa kỳ (deactivate date != period_start) → base_salary × `(days_worked / days_in_period)`. |
 | BR-PAY-009 | Thuế TNCN lũy tiến | Áp dụng bậc lũy tiến VN (giảm trừ gia cảnh 11 triệu/người/tháng). Bậc: 5% (≤5tr), 10% (5-10tr), 15% (10-18tr), 20% (18-32tr), 25% (>32tr). Snapshot trong `PayrollConfig.tax_brackets_json` để update theo NĐ. |
-| BR-PAY-010 | BHXH + BHYT + BHTN | Tổng 10.5% trên `min(gross_pay, 20 × lương cơ sở)` (trần đóng). Lương cơ sở cập nhật theo NĐ. |
+| BR-PAY-010 | BHXH + BHYT + BHTN | Tổng 10.5% trên `min(gross_pay, 20 × lương cơ sở)` (trần đóng). Lương cơ sở cập nhật theo NĐ. Nền đóng kẹp trong `[0, trần]`: phạt lớn hơn gross không làm BHXH âm. Tính kỳ và thêm thưởng/phạt dùng chung hàm `payrollDeductions`. |
 | BR-PAY-011 | Overtime | Worked hours > `standard_hours_per_week × weeks_in_period` × `overtime_multiplier` → OT pay. |
 | BR-PAY-012 | Net pay formula | `net_pay = gross_pay - tax_tncn - bhxh_total - other_deductions + adjustments`. |
 | BR-PAY-013 | Pro-rate rules | Days overlap dùng inclusive bounds. Pro-rate = `actual_days / period_days`. |
@@ -404,6 +404,7 @@ PayrollAdjustment.type ∈ {
 | BR-PAY-022 | Idempotent compute | Re-run compute trên period DRAFT → xóa hết line item cũ + tạo mới. Không duplicate. |
 | BR-PAY-023 | Config snapshot | Mỗi period snapshot `PayrollConfig` lúc tạo period. Re-compute sau config change KHÔNG thay đổi kỳ đã tạo. |
 | BR-PAY-024 | Payslip redaction | BS chỉ xem payslip của mình. Admin xem tất cả. Receptionist không xem lương. |
+| BR-PAY-025 | Kỳ bổ sung | Chỉ mở từ kỳ gốc `PAID`/`LOCKED`, không mở từ một kỳ bổ sung. Mỗi kỳ gốc chỉ có **một** kỳ bổ sung chưa thanh toán tại một thời điểm (khóa `lockPayroll('periods')`). Kỳ bổ sung chỉ chứa phần chênh lệch; thuế và BHXH tính trên nền = kỳ gốc + các kỳ bổ sung đã `PAID`/`LOCKED` trước nó, trừ phần đã khấu trừ. |
 
 ---
 
@@ -691,7 +692,7 @@ PayrollAdjustment.type ∈ {
 | ----- | ---- |
 | `payroll_config` | Singleton (chỉ 1 row enforced by app + partial unique index) |
 | `dentist_compensations` | Index `(dentist_id, effective_from)`, `(effective_from, effective_to)` |
-| `payroll_periods` | Index `(status, period_start)`, unique `(period_start, period_end) WHERE status NOT IN ('LOCKED')` (BR-PAY-003) |
+| `payroll_periods` | Index `(status, period_start)`. Chống chồng kỳ (BR-PAY-003) do service kiểm dưới khóa advisory, không bằng unique index |
 | `payroll_line_items` | Index `(payroll_period_id, dentist_id)`, unique `(payroll_period_id, dentist_id)` |
 | `payroll_encounter_details` | Index `(payroll_line_item_id)`, unique `(encounter_id, payroll_line_item_id)` |
 | `payroll_adjustments` | Index `(payroll_line_item_id, adjusted_at DESC)` |
@@ -701,10 +702,8 @@ PayrollAdjustment.type ∈ {
 ### 9.2 Indexes quan trọng
 
 ```sql
--- BR-PAY-003: prevent overlap
-CREATE UNIQUE INDEX idx_payroll_periods_unique_active
-  ON payroll_periods (period_start, period_end)
-  WHERE status != 'LOCKED';
+-- BR-PAY-003: không có index; service kiểm chồng ngày với mọi kỳ thường
+-- (kể cả LOCKED) trong transaction có pg_advisory_xact_lock.
 
 -- BR-PAY-022: idempotent compute
 CREATE UNIQUE INDEX idx_payroll_line_items_unique

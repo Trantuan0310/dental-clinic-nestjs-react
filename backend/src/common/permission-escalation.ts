@@ -4,13 +4,18 @@ import { BusinessRuleException } from './exceptions/business-rule.exception';
 
 type Db = Prisma.TransactionClient;
 
+/** The built-in administrator role (seeded, its permissions not editable). */
+const SYSTEM_ADMIN_ROLE = 'clinic_admin';
+
 /**
  * No escalation through the admin screens (BR-ADM-001): whoever manages
  * roles and accounts can only hand out, take away or act on permissions
- * they hold themselves. A clinic admin holds every permission and is never
- * stopped; a custom "office manager" role with user.update cannot make
- * itself (or anyone) an admin, and one with role.upsert cannot add codes it
- * does not have to a role.
+ * they hold themselves. The system clinic_admin role is never stopped: it
+ * does not hold the clinical write permissions (treatment, chart,
+ * prescription…) by design, yet it must still create dentists and manage
+ * their accounts. A custom "office manager" role with user.update cannot
+ * make itself (or anyone) an admin, and one with role.upsert cannot add
+ * codes it does not have to a role.
  *
  * Read from the database, not the access token: a token minted before a
  * role change must not keep powers that were taken away.
@@ -42,7 +47,14 @@ export async function assertActorHolds(
 ): Promise<void> {
   const wanted = [...new Set(codes)];
   if (wanted.length === 0) return;
-  const held = await permissionCodesOfUser(db, actorUserId);
+  const rows = await db.rolePermission.findMany({
+    where: {
+      role: { deletedAt: null, userRoles: { some: { userId: actorUserId } } },
+    },
+    select: { permission: { select: { code: true } }, role: { select: { code: true } } },
+  });
+  if ((rows ?? []).some(r => r.role?.code === SYSTEM_ADMIN_ROLE)) return;
+  const held = new Set((rows ?? []).map(r => r.permission.code));
   const missing = wanted.filter(code => !held.has(code)).sort();
   if (missing.length > 0) {
     throw new BusinessRuleException(

@@ -644,7 +644,18 @@ describe('Real HTTP and PostgreSQL regression', () => {
     expect(
       Number((await db.inventoryItem.findUniqueOrThrow({ where: { id } })).quantityOnHand),
     ).toBe(4);
-    expect(await db.stockMovement.count({ where: { inventoryItemId: id } })).toBe(2);
+    // The opening stock of 5 is recorded as a receipt too, so the history
+    // adds up to what is on hand: +5 +2 -3 = 4.
+    const moves = await db.stockMovement.findMany({
+      where: { inventoryItemId: id },
+      // uuid v7 ids sort by creation time, also within one millisecond.
+      orderBy: [{ performedAt: 'asc' }, { id: 'asc' }],
+    });
+    expect(moves.map(m => [m.type, Number(m.quantityBefore), Number(m.quantityAfter)])).toEqual([
+      ['STOCK_IN', 0, 5],
+      ['STOCK_IN', 5, 7],
+      ['STOCK_OUT', 7, 4],
+    ]);
   });
   it('rejects foreign keys and rolls back the enclosing transaction', async () => {
     const code = `ROLLBACK-${++serial}`;
