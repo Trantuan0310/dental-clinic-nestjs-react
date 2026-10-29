@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /** FDI codes as the dentist sees the mouth: patient's right on the left. */
@@ -70,11 +70,7 @@ function placeArch(codes: number[], upper: boolean) {
     }
     out.push({ code, x: x + VIEW_W / 2, y, angle, w, d, buccal: outward ? 1 : -1, nx, ny });
   }
-  const gum = Array.from({ length: 41 }, (_, i) => {
-    const x = -halfW + (2 * halfW * i) / 40;
-    return `${i ? 'L' : 'M'}${(x + VIEW_W / 2).toFixed(1)} ${curve(x).toFixed(1)}`;
-  }).join(' ');
-  return { teeth: out, gum, gumWidth: Math.max(...size.d.slice(1)) * scale + 12 };
+  return { teeth: out };
 }
 
 /** Crown outline seen from the biting surface, in tooth-local coordinates. */
@@ -111,12 +107,11 @@ function grooves(n: number, w: number, d: number, b: 1 | -1) {
 
 /**
  * The 32 permanent teeth on two U-shaped arches as seen from the biting
- * surface, numbered the FDI way and sized from average crown widths. Each
- * tooth is a button; `selected` is filled with the brand colour.
+ * surface, numbered the FDI way and sized from average crown widths, drawn
+ * as a plain line chart. Each tooth is a button; `selected` is filled.
  */
 export function ToothArch({ selected, onSelect }: { selected: number; onSelect: (code: number) => void }) {
   const { t } = useTranslation();
-  const uid = useId().replace(/:/g, '');
   const upper = useMemo(() => placeArch(UPPER, true), []);
   const lower = useMemo(() => placeArch(LOWER, false), []);
   const kinds = t('uiEntry.landing.toothKinds', { returnObjects: true }) as string[];
@@ -124,16 +119,17 @@ export function ToothArch({ selected, onSelect }: { selected: number; onSelect: 
 
   return (
     <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="block h-auto w-full" role="group" aria-label={t('uiEntry.landing.toothChart')}>
-      <defs>
-        <radialGradient id={`enamel-${uid}`} cx="45%" cy="40%" r="70%">
-          <stop offset="0%" stopColor="#fffdf8" />
-          <stop offset="70%" stopColor="#f4efe4" />
-          <stop offset="100%" stopColor="#e3dccd" />
-        </radialGradient>
-      </defs>
-      {[upper, lower].map((arch, i) => (
-        <path key={i} d={arch.gum} fill="none" strokeWidth={arch.gumWidth} strokeLinecap="round" strokeLinejoin="round" className="stroke-[#f6d7d4] dark:stroke-[#5a3a3a]" />
-      ))}
+      {/* Midline and occlusal plane split the mouth into the four FDI quadrants. */}
+      <g className="stroke-gray-300 dark:stroke-surface-600" strokeWidth={1} strokeDasharray="3 4" aria-hidden>
+        <line x1={VIEW_W / 2} y1={12} x2={VIEW_W / 2} y2={VIEW_H - 12} />
+        <line x1={40} y1={VIEW_H / 2} x2={VIEW_W - 40} y2={VIEW_H / 2} />
+      </g>
+      <g className="fill-gray-400 font-mono text-[10px] dark:fill-surface-500" aria-hidden>
+        <text x={VIEW_W / 2 - 8} y={VIEW_H / 2 - 6} textAnchor="end">1</text>
+        <text x={VIEW_W / 2 + 8} y={VIEW_H / 2 - 6}>2</text>
+        <text x={VIEW_W / 2 + 8} y={VIEW_H / 2 + 14}>3</text>
+        <text x={VIEW_W / 2 - 8} y={VIEW_H / 2 + 14} textAnchor="end">4</text>
+      </g>
       <text x={VIEW_W / 2} y={170} textAnchor="middle" className="fill-gray-500 text-[11px] tracking-wider dark:fill-surface-400">{t('uiEntry.landing.upperJaw')}</text>
       <text x={VIEW_W / 2} y={VIEW_H - 162} textAnchor="middle" className="fill-gray-500 text-[11px] tracking-wider dark:fill-surface-400">{t('uiEntry.landing.lowerJaw')}</text>
       <text x={14} y={VIEW_H / 2 + 4} className="fill-gray-500 text-[10px] dark:fill-surface-400">{t('uiEntry.landing.patientRight')}</text>
@@ -159,17 +155,18 @@ export function ToothArch({ selected, onSelect }: { selected: number; onSelect: 
                     onSelect(p.code);
                   }
                 }}
-                fill={on ? 'currentColor' : `url(#enamel-${uid})`}
                 className={
-                  'cursor-pointer outline-none transition-[filter] focus-visible:stroke-gray-900 focus-visible:stroke-[2.5] ' +
-                  (on ? 'stroke-brand-700 stroke-[1.5] text-brand-600' : 'stroke-[#cfc6b4] stroke-[1.2] hover:[filter:brightness(0.93)]')
+                  'cursor-pointer outline-none transition-colors focus-visible:stroke-gray-900 focus-visible:stroke-[2] dark:focus-visible:stroke-white ' +
+                  (on
+                    ? 'fill-brand-600 stroke-brand-700 stroke-[1.25]'
+                    : 'fill-white stroke-gray-400 stroke-1 hover:fill-brand-50 dark:fill-surface-900 dark:stroke-surface-500 dark:hover:fill-surface-800')
                 }
               />
               <path
                 d={grooves(n, p.w, p.d, p.buccal)}
                 fill="none"
                 strokeLinecap="round"
-                className={'pointer-events-none stroke-[1.1] ' + (on ? 'stroke-white/70' : 'stroke-[#c8bea9]')}
+                className={'pointer-events-none stroke-[0.8] ' + (on ? 'stroke-white/70' : 'stroke-gray-300 dark:stroke-surface-600')}
                 aria-hidden
               />
             </g>
