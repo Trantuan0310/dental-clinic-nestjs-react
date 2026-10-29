@@ -607,3 +607,8 @@ Theo yêu cầu: nâng cấp bộ UI dùng chung, giữ nhận diện GENSMILE, 
   - "Đặt lịch khám răng này" điền sẵn lý do khám;
   - các ý của e2e landing đều đúng;
   - điện thoại 390px không tràn ngang, không lỗi JS.
+- Người dùng muốn sơ đồ giống hàm răng thật nên `ToothArch` được vẽ lại:
+  - hai cung hàm hình chữ U nhìn từ mặt nhai, có viền nướu;
+  - răng đặt theo bề rộng thật (mm) của từng răng, co giãn cho vừa cung hàm;
+  - hình mặt nhai theo loại răng: răng cửa dẹt có bờ cắn, răng nanh nhọn về phía má, răng cối nhỏ có rãnh giữa, răng cối lớn vuông có rãnh chữ thập;
+  - men răng màu ngà. Số răng đặt phía ngoài cung hàm.
