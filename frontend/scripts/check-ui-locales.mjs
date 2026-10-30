@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
-const modules=['uiCommon','uiClinical','uiEntry','uiOperations','uiScheduling','uiWorkforce','uiPlans','uiRecalls','uiMessaging','uiNotifications'];
+const modules=['uiCommon','uiClinical','uiEntry','uiOperations','uiScheduling','uiWorkforce','uiPlans','uiRecalls','uiMessaging','uiNotifications','uiAi'];
 function flatten(value,prefix='',out={}) {
  for(const [key,item] of Object.entries(value)) {
   const path=prefix?`${prefix}.${key}`:key;
@@ -36,7 +36,7 @@ for(const file of walk('src').filter(p=>/\.(ts|tsx)$/.test(p)&&!p.includes('/loc
   // Any string literal that is a whole key: t('ui…') calls and translatedLabels() maps alike.
   if(ts.isStringLiteral(node)||ts.isNoSubstitutionTemplateLiteral(node)) {
    const key=node.text;
-   if(/^ui(Common|Clinical|Entry|Operations|Scheduling|Workforce|Plans|Recalls|Messaging)\.[A-Za-z0-9_.]+$/.test(key)) {
+   if(/^ui(Common|Clinical|Entry|Operations|Scheduling|Workforce|Plans|Recalls|Messaging|Ai)\.[A-Za-z0-9_.]+$/.test(key)) {
     const [module,...parts]=key.split('.');
     for(const locale of ['vi','en'])if(parts.reduce((o,p)=>o?.[p],resources[module][locale])===undefined)issues.push(`${file}: missing ${locale} ${key}`);
     checked++;

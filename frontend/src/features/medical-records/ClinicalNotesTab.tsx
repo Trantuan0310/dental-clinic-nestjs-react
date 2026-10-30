@@ -4,12 +4,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { formatDateTime } from '@/lib/format';
 import { vi } from 'date-fns/locale';
-import { Plus } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import { medicalRecordsApi } from './imperativeApi';
 import { Button, Modal, Select, Textarea } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { AddendumModal } from './AddendumModal';
+import { QuickNoteModal } from '@/features/ai/QuickNoteModal';
 import type { Encounter, ClinicalNote, NoteType } from '@/types/medical-records';
 import { useAuthStore } from '@/stores/authStore';
 import { useIsOwnEncounterScope } from './encounterUtils';
@@ -77,6 +78,7 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
   // After the encounter is closed, edits go through addendums only —
   // see the AddendumModal render below (isCompleted branch).
   const [showAddendumModal, setShowAddendumModal] = useState(false);
+  const [showQuickNote, setShowQuickNote] = useState(false);
 
   const notes = encounter.notes || [];
   const chiefComplaintNotes = notes.filter((n) => n.type === 'chief_complaint');
@@ -212,7 +214,15 @@ export function ClinicalNotesTab({ encounter }: ClinicalNotesTabProps) {
             <Plus className="h-4 w-4" />
             {t('uiClinical.noteAdd')}
           </Button>
+          <Button variant="outline" onClick={() => setShowQuickNote(true)}>
+            <Sparkles className="h-4 w-4" />
+            {t('uiAi.note.open')}
+          </Button>
         </div>
+      )}
+
+      {isEditable && (
+        <QuickNoteModal encounterId={encounter.id} open={showQuickNote} onClose={() => setShowQuickNote(false)} />
       )}
 
       {isCompleted && (
