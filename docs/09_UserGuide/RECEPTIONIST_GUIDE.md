@@ -90,6 +90,13 @@ Chỉ gửi khi hồ sơ bệnh nhân có email:
 - Bệnh nhân quay lại: **Hoàn tác trạng thái vắng mặt** rồi check-in.
 - Đã check-in nhưng về trước khi khám: **Bệnh nhân đã về**.
 
+### AI soạn tin nhắn
+Trong ngăn chi tiết lịch hẹn (hoặc ở dòng bệnh nhân trên trang **Nhắc tái khám**), bấm **AI soạn tin**:
+- tab **Nhắc lịch hẹn** / **Mời tái khám**: AI soạn tin theo giờ hẹn, bác sĩ, dịch vụ;
+- tab **Trả lời tin nhắn khách**: dán tin khách gửi, AI soạn câu trả lời (không tự hứa giá hay giờ trống).
+
+Sửa nội dung nếu cần rồi bấm **Sao chép** / **Mở Zalo** / **Gọi**. Hệ thống không tự gửi tin. AI không nhận tên và số điện thoại khách; tên được điền vào sau.
+
 ---
 
 ## 4. Hóa đơn và thanh toán

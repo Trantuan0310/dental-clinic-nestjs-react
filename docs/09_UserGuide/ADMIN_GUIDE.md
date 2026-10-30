@@ -122,6 +122,7 @@ Giao diện sáng/tối đổi bằng nút trên header.
    - **Đã thu** theo phương thức (tiền mặt, chuyển khoản), đã trừ hoàn tiền.
    - **Công nợ** theo tuổi nợ, từng hóa đơn còn nợ.
 3. Bấm **Xuất CSV** để tải doanh thu hoặc công nợ.
+4. Thẻ **AI nhận xét kỳ báo cáo**: bấm **Nhận xét** để AI đọc số liệu của khoảng ngày đang chọn (so với kỳ liền trước) và viết 3–6 nhận xét kèm gợi ý. Chỉ số tổng được gửi cho AI. Kết quả giữ 1 giờ; bấm **Soạn lại** để soạn mới.
 
 Biểu đồ theo ngày, theo tháng, theo bác sĩ và theo thủ thuật nằm ở **Dashboard**.
 

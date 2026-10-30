@@ -15,6 +15,7 @@ import {
   Stethoscope,
   Trash2,
   Undo2,
+  Sparkles,
   User,
   X,
 } from 'lucide-react';
@@ -59,6 +60,7 @@ import { cn } from '@/lib/cn';
 import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
+import { MessageDraftModal } from '@/features/ai/MessageDraftModal';
 import type { Appointment, AppointmentStatus, CheckInPayload } from '@/types/appointment';
 import {
   isOverdueNotArrived,
@@ -170,6 +172,9 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
   const rowScopedDentist = useAuthStore(
     (s) => s.hasPermission('appointment.read.own') && !s.hasPermission('appointment.read.any'),
   );
+  // The front desk drafts a reminder / reply to send from Zalo (AI, never sent by the system).
+  const canDraftMessage = useAuthStore((s) => s.hasPermission('appointment.read.any'));
+  const [showMessageDraft, setShowMessageDraft] = useState(false);
   const [actionModal, setActionModal] = useState<ActionKey | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -660,6 +665,16 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                   >
                     {t('uiScheduling.viewPatientProfile')}
                   </Button>
+                  {canDraftMessage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<Sparkles className="h-3.5 w-3.5" />}
+                      onClick={() => setShowMessageDraft(true)}
+                    >
+                      {t('uiAi.message.open')}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1311,6 +1326,13 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           )}
         </div>
       </Modal>
+      {appointment && showMessageDraft && (
+        <MessageDraftModal
+          context={{ kind: 'appointment_reminder', appointmentId: appointment.id }}
+          open
+          onClose={() => setShowMessageDraft(false)}
+        />
+      )}
     </>
   );
 }

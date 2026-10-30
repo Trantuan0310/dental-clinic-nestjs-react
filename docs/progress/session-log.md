@@ -685,3 +685,27 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
   - tất cả vật tư: 30 dòng;
   - lọc "Xuất kho": URL có `type=STOCK_OUT`, 30 dòng;
   - không lỗi JS.
+
+## 30/10 — Ba chức năng AI cho ba vai trò (soạn nháp)
+
+- Người dùng chọn 3 chức năng: bác sĩ **ghi nhanh thành ghi chú khám**, lễ tân **soạn tin nhắn nhắc lịch / mời tái khám / trả lời khách**, quản lý **nhận xét báo cáo**.
+- Nguyên tắc: AI chỉ soạn nháp; lưu ghi chú hay gửi tin vẫn qua chức năng thường. Không thêm quyền, không migration.
+- **Backend** (`backend/src/ai/`):
+  - `AiModel` dùng chung cấu hình với tóm tắt hồ sơ (`AI_BASE_URL` hoặc Gemini);
+  - `AiAssistService` có 3 hàm, mỗi hàm có câu trả lời dự phòng khi chưa cấu hình hoặc AI lỗi;
+  - endpoint `POST /ai/drafts/clinical-note` (`clinical_note.write`, phiên của mình, đang mở), `POST /ai/drafts/message` (`appointment.read.any` / `recall.*`), `GET /ai/report-commentary` (`report.revenue.read`, lưu đệm 1 giờ);
+  - tin nhắn: mô hình viết `{ten}`, máy chủ điền "chị Lan" / "anh Minh", nên mô hình không thấy tên và SĐT; nhận xét báo cáo chỉ gửi số tổng;
+  - nhật ký `AI_NOTE_DRAFTED`, `AI_MESSAGE_DRAFTED`;
+  - `ReportsModule` export `ReportsService`.
+- **Frontend** (`features/ai/`, locale mới `uiAi`):
+  - tab Ghi chú: nút "AI soạn từ ghi nhanh", sửa 4 phần rồi "Thêm vào ghi chú" (nối từng phần qua `appendNote`);
+  - ngăn chi tiết lịch hẹn và trang Nhắc tái khám: "AI soạn tin", 2 tab (nhắc / trả lời khách), nút Sao chép, Mở Zalo, Gọi;
+  - trang Báo cáo: thẻ "AI nhận xét kỳ báo cáo", chỉ gọi khi bấm.
+- Tài liệu: `docs/05_API/ai.md` §8 (BR-AI-006..008), hướng dẫn bác sĩ, lễ tân, quản trị.
+- **Kiểm:**
+  - backend tsc, eslint, 1568 test (16 test mới `ai-assist.service.spec.ts`);
+  - frontend typecheck, eslint, locales, build;
+  - chạy thật với một gateway giả lập kiểu OpenAI: ghi chú lưu được và hiện trên tab, tin nhắc lịch điền đúng "chị Dung", nhận xét báo cáo hiện; kiểm prompt gửi đi không chứa tên, SĐT.
+- Lỗi tìm ra khi chạy thử và đã sửa: tab "Trả lời khách" mở từ lịch hẹn chào "quý khách" vì bỏ qua lịch hẹn. Nay trả lời cũng lấy khách của lịch hẹn hoặc lượt tái khám (thêm test).
+- E2E mới `ai-assist.spec.ts` (thẻ nhận xét trên trang Báo cáo, đường dự phòng vì CI không có AI). Chưa chạy được trên máy (phiên bản Playwright của repo khác bản cài sẵn), để CI chạy.
+- Production: cần `AI_BASE_URL`/`AI_API_KEY`/`AI_MODEL` (hoặc `GEMINI_API_KEY`) trong env để dùng AI thật; thiếu thì cả 3 nút vẫn chạy bằng bản mẫu.

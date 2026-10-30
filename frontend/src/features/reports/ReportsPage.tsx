@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { billingApi } from '@/features/billing/billingApi';
 import { useAuthStore } from '@/stores/authStore';
+import { ReportCommentaryCard } from '@/features/ai/ReportCommentaryCard';
 import { Button, Card, Alert } from '@/components/ui';
 import { formatCurrency, formatNumber, formatPercent, vndCompact } from '@/lib/format';
 import { useChartTheme } from '@/lib/chartTheme';
@@ -303,6 +304,10 @@ export default function ReportsPage() {
 
       {!canSeeRevenue && !canSeeOutstanding && (
         <Alert type="info" title={t('uiOperations.noReportPermission')}>{t('uiOperations.noReportPermissionDescription')}</Alert>
+      )}
+
+      {canSeeRevenue && isDateRangeValid && (
+        <ReportCommentaryCard key={`${fromDate}:${toDate}`} from={fromDate} to={toDate} />
       )}
 
       {canSeeRevenue && (

@@ -8,5 +8,6 @@ import { ReportsService } from './reports.service';
   imports: [PrismaModule, ExpenseModule],
   controllers: [ReportsController],
   providers: [ReportsService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

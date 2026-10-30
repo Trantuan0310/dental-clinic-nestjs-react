@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CalendarPlus, PhoneCall, RotateCcw } from 'lucide-react';
+import { CalendarPlus, PhoneCall, RotateCcw, Sparkles } from 'lucide-react';
 import { Alert, Badge, Button, Card, Checkbox, Input, Modal, Select, Textarea } from '@/components/ui';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui';
@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { clinicToday } from '@/lib/clinicTime';
 import { useAuthStore } from '@/stores/authStore';
+import { MessageDraftModal } from '@/features/ai/MessageDraftModal';
 import {
   recallsApi,
   useRecallMutation,
@@ -31,6 +32,7 @@ export default function RecallsPage() {
   const navigate = useNavigate();
   const canManage = useAuthStore((s) => s.hasPermission('recall.manage'));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
+  const [messageFor, setMessageFor] = useState<string | null>(null);
   const [scope, setScope] = useState<RecallScope>('due');
   const [days, setDays] = useState(14);
   const [q, setQ] = useState('');
@@ -198,6 +200,12 @@ export default function RecallsPage() {
                             </Button>
                           )}
                           {canManage && scope === 'due' && (
+                            <Button variant="outline" size="sm" onClick={() => setMessageFor(r.id)}>
+                              <Sparkles className="h-4 w-4" />
+                              {t('uiAi.message.open')}
+                            </Button>
+                          )}
+                          {canManage && scope === 'due' && (
                             <Button size="sm" onClick={() => openContact(r)}>
                               <PhoneCall className="h-4 w-4" />
                               {t('uiRecalls.record')}
@@ -288,6 +296,15 @@ export default function RecallsPage() {
           </div>
         )}
       </Modal>
+
+      {messageFor && (
+        <MessageDraftModal
+          key={messageFor}
+          context={{ kind: 'recall_reminder', recallId: messageFor }}
+          open
+          onClose={() => setMessageFor(null)}
+        />
+      )}
     </div>
   );
 }

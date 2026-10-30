@@ -45,6 +45,7 @@ Thông tin chính của lần khám và tiền sử bệnh nhân.
 ### Tab 2: Ghi chú
 - **Lý do khám**, **Chẩn đoán**, **Kế hoạch điều trị**, ghi chú khác.
 - Nhấn **Lưu**.
+- **AI soạn từ ghi nhanh**: gõ vắn tắt như lúc khám (ví dụ "đau R46 3 ngày, gõ đau, sâu ngà, hàn composite, TD 1 tuần"), bấm **Soạn ghi chú**. AI tách ra lý do khám, chẩn đoán, kế hoạch, ghi chú tiến triển. Đọc, sửa rồi bấm **Thêm vào ghi chú**; phần để trống không được thêm. AI chỉ nhận đúng ghi nhanh bạn gõ, không nhận hồ sơ bệnh nhân.
 - Sau khi đóng phiên, ghi chú bị khóa. Muốn sửa thì **Thêm addendum** (ghi chú bổ sung), trong vòng 30 ngày sau khi đóng.
 
 ### Tab 3: Điều trị
