@@ -109,6 +109,10 @@ services:
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_API_FORMAT: ${AI_API_FORMAT:-}
+      # Bank account the invoice transfer QR (VietQR) pays into; blank = no QR on invoices.
+      VIETQR_BANK_BIN: ${VIETQR_BANK_BIN:-}
+      VIETQR_ACCOUNT_NO: ${VIETQR_ACCOUNT_NO:-}
+      VIETQR_ACCOUNT_NAME: ${VIETQR_ACCOUNT_NAME:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -3,11 +3,12 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ExpenseModule } from '../expense/expense.module';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
+import { PracticeMetricsService } from './practice-metrics.service';
 
 @Module({
   imports: [PrismaModule, ExpenseModule],
   controllers: [ReportsController],
-  providers: [ReportsService],
+  providers: [ReportsService, PracticeMetricsService],
   exports: [ReportsService],
 })
 export class ReportsModule {}

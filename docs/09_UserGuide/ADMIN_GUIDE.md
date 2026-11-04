@@ -33,6 +33,10 @@ Quản trị viên thấy:
 
 - **Hàng KPI**: doanh thu, bệnh nhân (khách mới / khách cũ), lịch hẹn (không tính lịch hủy)…
 - **Thống kê lịch khám**: đến, vắng, hủy, về sớm, vãng lai, online.
+- **Chỉ số vận hành**: bốn chỉ số so với mục tiêu, mỗi chỉ số một thanh ngang. Vạch đen là mục tiêu, thanh xanh là kết quả của kỳ; bên cạnh có chữ "Đạt mục tiêu / Chấp nhận được / Cần cải thiện". Rê chuột vào dấu (i) để xem cách tính.
+  - Tỷ lệ vắng mặt (mục tiêu ≤ 5%), có lịch hẹn tiếp sau lượt khám (≥ 85%), chấp nhận kế hoạch điều trị (≥ 75%), thời gian chờ khám trung vị (≤ 15 phút).
+  - Chỉ số chưa có dữ liệu trong kỳ hiện "—", không phải 0%.
+- **Công suất theo giờ**: bảng thứ × giờ, ô càng đậm là giờ làm việc của bác sĩ càng kín lịch. Ô viền đứt là giờ không làm việc. Chọn một bác sĩ để xem riêng. Giờ đã trừ ngày nghỉ phép và ngày phòng khám đóng cửa.
 - **AI tóm tắt hồ sơ**: chọn một bệnh nhân có lịch hôm nay để xem tóm tắt (xem [DENTIST_GUIDE.md](DENTIST_GUIDE.md#8-ai-tóm-tắt-hồ-sơ)).
 - Doanh thu theo nhóm khách, theo nguồn, theo thủ thuật, xếp hạng bác sĩ.
 - Biểu đồ doanh thu theo ngày và theo tháng, lịch hẹn theo ngày.

@@ -8,6 +8,7 @@ import { ExpenseService } from '../expense/expense.service';
 import { BillingService } from '../billing/billing.service';
 import { BillingController } from '../billing/billing.controller';
 import { InvoicePdfService } from '../billing/invoice-pdf.service';
+import { PaymentQrService } from '../billing/payment-qr.service';
 import { AiService } from '../ai/ai.service';
 import { AiController } from '../ai/ai.controller';
 import { MedicalRecordsService } from '../medical-records/medical-records.service';
@@ -62,10 +63,11 @@ describe('Phase one audit regressions', () => {
         {} as ExpenseService,
         events as unknown as EventEmitter2,
       );
-      const response = await new BillingController(billing, {} as InvoicePdfService).byEncounter(
-        'other-encounter',
-        actor,
-      );
+      const response = await new BillingController(
+        billing,
+        {} as InvoicePdfService,
+        {} as PaymentQrService,
+      ).byEncounter('other-encounter', actor);
       expect(response.data).toEqual([]);
       expect(db.invoice.findFirst).toHaveBeenCalledWith({
         where: {
@@ -91,8 +93,13 @@ describe('Phase one audit regressions', () => {
       events as unknown as EventEmitter2,
     );
     expect(
-      (await new BillingController(billing, {} as InvoicePdfService).byEncounter('e', dentist))
-        .data,
+      (
+        await new BillingController(
+          billing,
+          {} as InvoicePdfService,
+          {} as PaymentQrService,
+        ).byEncounter('e', dentist)
+      ).data,
     ).toEqual([invoice]);
   });
 

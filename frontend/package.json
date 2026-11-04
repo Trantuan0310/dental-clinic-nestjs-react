@@ -26,6 +26,7 @@
     "i18next": "^23.16.8",
     "i18next-browser-languagedetector": "^8.2.1",
     "lucide-react": "^0.408.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.52.0",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@types/node": "^20.14.10",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^7.15.0",

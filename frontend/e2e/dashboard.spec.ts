@@ -23,6 +23,19 @@ test.describe('Dashboard', () => {
     await expect(kpiCards).toBeVisible({ timeout: 15_000 });
   });
 
+  test('dashboard shows the scorecard against targets and the capacity heatmap', async ({ page }) => {
+    await expect(page.getByText(/Chỉ số vận hành/)).toBeVisible({ timeout: 15_000 });
+    for (const key of ['noShowRate', 'rebookRate', 'planAcceptance', 'medianWait']) {
+      await expect(page.getByTestId(`scorecard-${key}`)).toBeVisible();
+    }
+    // A target and a verdict in words, not colour alone.
+    await expect(page.getByTestId('scorecard-noShowRate')).toContainText(/Mục tiêu ≤ 5%/);
+    await expect(page.getByText(/Công suất theo giờ/).first()).toBeVisible();
+    await expect(
+      page.getByTestId('capacity-heatmap').or(page.getByText('Chưa có giờ làm việc nào trong kỳ này')),
+    ).toBeVisible({ timeout: 15_000 });
+  });
+
   test('dashboard time range selector works', async ({ page }) => {
     // If there's a time range selector, clicking it should not throw
     const rangeSelect = page.getByRole('combobox').first();

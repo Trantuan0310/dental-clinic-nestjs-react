@@ -78,6 +78,10 @@ jobs:
       EMAIL_MOCK: 'true'
       REDIS_URL: ''
       GEMINI_API_KEY: ''
+      # The invoice transfer QR (VietQR) only shows once the clinic account is set.
+      VIETQR_BANK_BIN: '970436'
+      VIETQR_ACCOUNT_NO: '0011004123456'
+      VIETQR_ACCOUNT_NAME: 'E2E CLINIC'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

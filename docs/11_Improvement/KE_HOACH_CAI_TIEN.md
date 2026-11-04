@@ -4,7 +4,15 @@
 > Cách làm: đọc lại hệ thống hiện tại (menu, route, quyền, luồng, biểu đồ), so với tài liệu mở của phần mềm nha khoa khác, nghiên cứu y tế, hướng dẫn trực quan hoá dữ liệu và văn bản pháp luật Việt Nam. Mỗi đề xuất ghi nguồn bằng số `[n]`, danh sách ở cuối.
 > Ưu tiên: **luồng nghiệp vụ chính** (một lượt khám từ đặt lịch tới thanh toán và tái khám) trước, **luồng quản lý** sau.
 
-## 0. Tóm tắt
+## 0. Tiến độ
+
+| Đợt | Việc | Trạng thái |
+|---|---|---|
+| 0 | B2 Heatmap công suất | Đã làm: thẻ "Công suất theo giờ" trên Dashboard (`GET /billing/reports/capacity-heatmap`) |
+| 0 | B1 Bullet graph | Đã làm cho 4 chỉ số (vắng mặt, có lịch hẹn tiếp, chấp nhận kế hoạch, thời gian chờ); `GET /billing/reports/scorecard`. Còn lại 3 chỉ số của bảng B1 (huỷ sát giờ, công suất ghế tổng, tỉ lệ thu) |
+| 0 | A6.1 VietQR trên hoá đơn | Đã làm; cấu hình ở `docs/08_Deployment/VIETQR.md`. Còn lại: A6.2 đặt hẹn tiếp khi thu tiền, A6.3 webhook ngân hàng |
+
+## Tóm tắt
 
 | # | Đề xuất | Actor | Vì sao đáng làm | Công sức | Đợt |
 |---|---|---|---|---|---|

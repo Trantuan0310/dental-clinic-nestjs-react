@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional } from 'class-validator';
+import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class DashboardRangeQueryDto {
   @ApiPropertyOptional({
@@ -78,4 +78,11 @@ export class RevenueByDentistDto {
   @ApiProperty() revenue!: number;
   @ApiProperty() percentage!: number;
   @ApiProperty() count!: number;
+}
+
+export class CapacityHeatmapQueryDto extends DashboardRangeQueryDto {
+  @ApiPropertyOptional({ description: 'Only this dentist; all dentists when absent.' })
+  @IsOptional()
+  @IsUUID()
+  dentistId?: string;
 }

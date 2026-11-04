@@ -5,13 +5,20 @@ import { ExpenseModule } from '../expense/expense.module';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { InvoicePdfService } from './invoice-pdf.service';
+import { PaymentQrService } from './payment-qr.service';
 import { EncounterClosedListener } from './encounter-closed.listener';
 import { BillingCron } from './billing.cron';
 
 @Module({
   imports: [PrismaModule, AuditModule, ExpenseModule],
   controllers: [BillingController],
-  providers: [BillingService, InvoicePdfService, EncounterClosedListener, BillingCron],
+  providers: [
+    BillingService,
+    InvoicePdfService,
+    PaymentQrService,
+    EncounterClosedListener,
+    BillingCron,
+  ],
   exports: [BillingService],
 })
 export class BillingModule {}

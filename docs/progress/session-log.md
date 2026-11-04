@@ -4,6 +4,31 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 04/11 — Đợt 0 của kế hoạch cải tiến: heatmap công suất, bullet graph, VietQR
+
+- Người dùng: "làm cả 3 việc đợt 0". Kế hoạch ở `docs/11_Improvement/KE_HOACH_CAI_TIEN.md` (PR #88, đã merge).
+- **B2 Heatmap công suất** (`GET /billing/reports/capacity-heatmap`, quyền `appointment.read.any`):
+  - dùng lại `loadDayCalendars` của đặt lịch nên giờ mở cửa khớp trang đặt lịch (lịch tuần, đổi giờ, ca đã duyệt, trừ nghỉ phép và ngày đóng cửa);
+  - giờ có lịch = lịch còn giữ chỗ (không huỷ, vắng, về sớm) cắt theo giờ mở cửa; lọc theo bác sĩ.
+- **B1 Bullet graph** (`GET /billing/reports/scorecard`, quyền `report.revenue.read`): 4 chỉ số có mục tiêu, tử số và mẫu số, công thức hiện khi rê chuột:
+  - vắng mặt ≤5%, có lịch hẹn tiếp ≥85%, chấp nhận kế hoạch ≥75%, thời gian chờ trung vị ≤15 phút (mục tiêu chờ là đề xuất);
+  - thiếu dữ liệu hiện "—", không hiện 0%;
+  - kết quả ghi bằng chữ ("Đạt mục tiêu / Chấp nhận được / Cần cải thiện"), không chỉ bằng màu.
+- **A6.1 VietQR** (`GET /billing/invoices/:id/payment-qr`):
+  - chuỗi EMV/NAPAS (`A000000727`, `QRIBFTTA`) và CRC-16 sinh ngay trên máy chủ, không gọi dịch vụ ngoài;
+  - thẻ "Thu bằng chuyển khoản" trên hoá đơn còn nợ, số tiền = phần còn nợ, nội dung = mã hoá đơn;
+  - bật bằng `VIETQR_BANK_BIN`, `VIETQR_ACCOUNT_NO`, `VIETQR_ACCOUNT_NAME` (đã nối vào cả hai file compose); hướng dẫn `docs/08_Deployment/VIETQR.md`;
+  - thư viện `qrcode` (frontend), tải khi cần.
+- **Kiểm chứng:**
+  - backend tsc, eslint, 1598 test (30 test mới); frontend typecheck, eslint, locale, build;
+  - chạy thật trên DB demo: heatmap khớp tính tay bằng SQL (2160 phút mở + 30 phút ca thêm, 30 phút có lịch), 6 tháng trả lời trong 0,08 giây;
+  - QR vẽ ra rồi giải mã lại bằng jsQR cho đúng chuỗi payload;
+  - trình duyệt: không lỗi JS, màn 375px không tràn ngang.
+- Lỗi tìm ra khi chạy thử: thẻ QR đặt trong cột hẹp bị bóp chữ → xếp dọc.
+- E2E: `dashboard.spec` (thẻ chỉ số + heatmap), `flow-patient-to-payment` (QR hiện khi còn nợ, mất khi đã thu đủ); CI thêm biến `VIETQR_*`. Chưa chạy được E2E trên máy, để CI chạy.
+- Còn lại của kế hoạch: A6.2 đặt hẹn tiếp khi thu tiền, A6.3 webhook ngân hàng; 3 chỉ số B1 còn thiếu (huỷ sát giờ, công suất ghế tổng, tỉ lệ thu); đợt 1 và 2.
+- Production: thêm 3 biến `VIETQR_*` vào `.env.production` (không bắt buộc), rồi deploy thường; không có migration.
+
 ## 04/11 — Nghiên cứu nghiệp vụ tổng thể và lập kế hoạch cải tiến
 
 - Yêu cầu: nghiên cứu lại nghiệp vụ của mọi actor, tìm điểm tối ưu về giao diện, thao tác, nghiệp vụ, tinh giản việc làm tay, cách trực quan số liệu khác; tham khảo nguồn mở bên ngoài, ghi rõ nguồn; ưu tiên luồng chính rồi luồng quản lý.
