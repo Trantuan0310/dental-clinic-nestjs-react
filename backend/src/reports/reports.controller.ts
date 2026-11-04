@@ -5,13 +5,14 @@ import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
-import { DashboardRangeQueryDto } from './dto/dashboard.dto';
+import { CapacityHeatmapQueryDto, DashboardRangeQueryDto } from './dto/dashboard.dto';
 import {
   AppointmentStatsQueryDto,
   OutstandingReportQueryDto,
   RevenueReportQueryDto,
 } from './dto/reports.dto';
 import { ReportsService } from './reports.service';
+import { PracticeMetricsService } from './practice-metrics.service';
 
 /**
  * Reports page + Dashboard. Routes keep their historical /billing/reports
@@ -23,7 +24,10 @@ import { ReportsService } from './reports.service';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('billing/reports')
 export class ReportsController {
-  constructor(private readonly reports: ReportsService) {}
+  constructor(
+    private readonly reports: ReportsService,
+    private readonly metrics: PracticeMetricsService,
+  ) {}
 
   @Get('revenue')
   @RequirePermissions('report.revenue.read')
@@ -113,5 +117,21 @@ export class ReportsController {
         actor,
       ),
     };
+  }
+
+  @Get('capacity-heatmap')
+  @RequirePermissions('appointment.read.any')
+  @ApiOperation({ summary: 'Booked share of dentists open hours by weekday × hour' })
+  async capacityHeatmap(@Query() q: CapacityHeatmapQueryDto) {
+    return {
+      data: await this.metrics.capacityHeatmap({ from: q.from, to: q.to, dentistId: q.dentistId }),
+    };
+  }
+
+  @Get('scorecard')
+  @RequirePermissions('report.revenue.read')
+  @ApiOperation({ summary: 'No-show, rebooking, plan acceptance and wait time against targets' })
+  async scorecard(@Query() q: DashboardRangeQueryDto) {
+    return { data: await this.metrics.scorecard({ from: q.from, to: q.to }) };
   }
 }

@@ -15,7 +15,7 @@ import type {
   RevenueByProcedure,
   RevenueBySource,
 } from '@/types/dashboard';
-import type { AppointmentStats, RevenueByCustomerType } from './types';
+import type { AppointmentStats, CapacityHeatmap, RevenueByCustomerType, Scorecard } from './types';
 
 export interface RangeQuery {
   from?: string;
@@ -104,5 +104,19 @@ export const dashboardApi = {
   outstanding: async (): Promise<OutstandingSummary> => {
     const { data } = await api.get<OutstandingSummary>('/billing/reports/outstanding-summary');
     return data;
+  },
+
+  capacityHeatmap: async (q: RangeQuery & { dentistId?: string }): Promise<CapacityHeatmap> => {
+    const { params } = range(q);
+    if (q.dentistId) params.dentistId = q.dentistId;
+    const { data } = await api.get<{ data: CapacityHeatmap }>('/billing/reports/capacity-heatmap', {
+      params,
+    });
+    return data.data;
+  },
+
+  scorecard: async (q: RangeQuery): Promise<Scorecard> => {
+    const { data } = await api.get<{ data: Scorecard }>('/billing/reports/scorecard', range(q));
+    return data.data;
   },
 };

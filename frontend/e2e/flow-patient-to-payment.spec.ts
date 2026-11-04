@@ -292,12 +292,16 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
 
     const payBtn = adminPage.getByRole('button', { name: /thu tiền/i });
     await expect(payBtn).toBeVisible({ timeout: 10_000 });
+    // The owed invoice offers a transfer QR (VietQR) with the amount filled in.
+    await expect(adminPage.getByTestId('payment-qr-image')).toBeVisible({ timeout: 10_000 });
     await payBtn.click();
 
     const paymentDialog = adminPage.getByRole('dialog');
     await paymentDialog.getByText(/^thu hết/i).click();
     await paymentDialog.getByRole('button', { name: /xác nhận/i }).click();
     await expect(paymentDialog).toBeHidden({ timeout: 10_000 });
+    // Paid in full: nothing left to collect, so the QR goes away.
+    await expect(adminPage.getByTestId('payment-qr-image')).toBeHidden({ timeout: 10_000 });
     checkpoint('step 10 done: invoice issued + payment recorded');
 
     // ---- Step 11: confirm invoice status reflects the payment ----

@@ -104,7 +104,7 @@ export class ReportsService {
   // Shared loaders
   // ==========================================================================
 
-  private resolveRange(from?: string, to?: string): { fromDate: Date; toDate: Date } {
+  resolveRange(from?: string, to?: string): { fromDate: Date; toDate: Date } {
     // Clinic calendar boundaries are independent of the server's timezone.
     const toDate = endOfClinicDay(to ?? clinicDateOnly());
     let fromDate: Date;

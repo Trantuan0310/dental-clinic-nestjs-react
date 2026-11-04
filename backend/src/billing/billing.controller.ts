@@ -23,6 +23,7 @@ import { User } from '../common/decorators/user.decorator';
 import { InvoiceStatus } from '@prisma/client';
 import { BillingService } from './billing.service';
 import { InvoicePdfService } from './invoice-pdf.service';
+import { PaymentQrService } from './payment-qr.service';
 import { wrapAsPaginated } from '../common/dto/pagination.dto';
 import {
   AdjustInvoiceDto,
@@ -46,6 +47,7 @@ export class BillingController {
   constructor(
     private readonly billing: BillingService,
     private readonly invoicePdf: InvoicePdfService,
+    private readonly paymentQr: PaymentQrService,
   ) {}
 
   // ==========================================================================
@@ -90,6 +92,13 @@ export class BillingController {
       length: bytes.length,
       disposition: `inline; filename="${filename}"`,
     });
+  }
+
+  @Get('invoices/:id/payment-qr')
+  @RequirePermissions('invoice.read.any', 'invoice.read.own')
+  @ApiOperation({ summary: 'VietQR transfer code for what the invoice still owes' })
+  async paymentQrCode(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    return { data: await this.paymentQr.forInvoice(id, actor) };
   }
 
   @Post('invoices/:id/email')

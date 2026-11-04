@@ -22,6 +22,7 @@ import {
 import { billingApi } from '@/features/billing/billingApi';
 import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } from '@/components/ui';
 import { PaymentModal } from './PaymentModal';
+import { PaymentQrCard } from './PaymentQrCard';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -47,6 +48,7 @@ export default function InvoiceDetailPage() {
   const queryClient = useQueryClient();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const canRecordPayment = useAuthStore((s) => s.hasPermission('invoice.payment.create'));
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [voidReason, setVoidReason] = useState('');
   const [showDiscount, setShowDiscount] = useState(false);
@@ -425,6 +427,10 @@ export default function InvoiceDetailPage() {
           </Card>
 
           {/* Payment History */}
+          {canPay && invoice.outstandingAmount > 0 && canRecordPayment && (
+            <PaymentQrCard invoiceId={invoice.id} invoiceCode={invoice.code} />
+          )}
+
           <Card title={t('uiOperations.paymentHistory')}>
             {invoice.payments && invoice.payments.length > 0 ? (
               <div className="space-y-2">

@@ -118,6 +118,12 @@ Sửa nội dung nếu cần rồi bấm **Sao chép** / **Mở Zalo** / **Gọi
 3. Thu nhiều lần được; trạng thái là **Một phần** cho tới khi đủ thì **Đã thanh toán**.
 4. Số tiền không được lớn hơn số còn nợ.
 
+### Thu bằng chuyển khoản (mã QR)
+Khi hóa đơn còn nợ và phòng khám đã khai tài khoản nhận tiền (xem [VIETQR.md](../08_Deployment/VIETQR.md)), trang hóa đơn có thẻ **Thu bằng chuyển khoản**:
+1. Cho khách quét mã bằng app ngân hàng. Số tiền (phần còn nợ) và nội dung (mã hóa đơn) đã điền sẵn.
+2. Khi tin nhắn ngân hàng báo đã nhận, bấm **Thu tiền**, chọn **Chuyển khoản**. Hệ thống chưa tự biết khách đã chuyển.
+3. Khách trả một phần: quét mã rồi sửa lại số tiền trong app, hoặc thu phần còn lại ở lần sau; mã luôn tính theo số còn nợ.
+
 ### Hủy hóa đơn, phiếu thu, hoàn tiền
 Lễ tân **không** làm được các việc sau; nhờ quản trị:
 - Hủy hóa đơn (chỉ hủy được khi chưa có phiếu thu còn hiệu lực).

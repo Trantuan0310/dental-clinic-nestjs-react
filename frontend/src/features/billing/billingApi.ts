@@ -24,6 +24,18 @@ import type {
 
 const BASE = '/billing';
 
+export interface PaymentQr {
+  /** False when the clinic has not set its receiving account: show nothing. */
+  configured: boolean;
+  /** False for an invoice that is not owed. */
+  payable: boolean;
+  payload?: string;
+  amount?: number;
+  content?: string;
+  accountNo?: string;
+  accountName?: string;
+}
+
 export const billingApi = {
   // Invoices
   async listInvoices(params?: InvoiceFilters): Promise<InvoiceListResponse> {
@@ -33,6 +45,11 @@ export const billingApi = {
 
   async getInvoice(id: string): Promise<Invoice> {
     const { data } = await api.get<{ data: Invoice }>(`${BASE}/invoices/${id}`);
+    return unwrap(data);
+  },
+
+  async getPaymentQr(id: string): Promise<PaymentQr> {
+    const { data } = await api.get<{ data: PaymentQr }>(`${BASE}/invoices/${id}/payment-qr`);
     return unwrap(data);
   },
 

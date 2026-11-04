@@ -13,6 +13,7 @@ import { formatTimeOnly } from '@/lib/format';
 import { resolveRange, type TimeRange } from './dashboard/types';
 import { DashboardHeader } from './dashboard/DashboardHeader';
 import { AiSummaryCard } from './dashboard/AiSummaryCard';
+import { CapacityHeatmapCard, ScorecardCard } from './dashboard/practiceCards';
 import {
   AppointmentStatsCard,
   AppointmentsCard,
@@ -46,6 +47,8 @@ export default function DashboardPage() {
   // A dentist's appointment widgets cover their own calendar only (A6-18).
   const ownAppointmentsOnly = !hasPermission('appointment.read.any');
   const canSeeOutstanding = hasPermission('report.outstanding.read');
+  // The capacity grid is the front desk's and the manager's view of the whole book.
+  const canSeeCapacity = hasPermission('appointment.read.any');
 
   const {
     data: kpis,
@@ -123,6 +126,17 @@ export default function DashboardPage() {
     queryKey: ['appointments', 'dashboard-stats', dateRange],
     queryFn: () => dashboardApi.appointmentStats(commonParams),
     enabled: canSeeAppointmentsByDay,
+  });
+
+  const {
+    data: scorecard,
+    isLoading: scorecardLoading,
+    isError: scorecardError,
+    refetch: refetchScorecard,
+  } = useQuery({
+    queryKey: ['appointments', 'scorecard', dateRange],
+    queryFn: () => dashboardApi.scorecard(commonParams),
+    enabled: canSeeRevenue,
   });
 
   const {
@@ -214,6 +228,28 @@ export default function DashboardPage() {
           isError={appointmentStatsError}
           onRetry={refetchAppointmentStats}
         />
+      )}
+
+      {/* Row 1.3 — practice measures: scorecard against targets + capacity by hour */}
+      {(canSeeRevenue || canSeeCapacity) && (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+          {canSeeRevenue && (
+            <div className={canSeeCapacity ? 'lg:col-span-6' : 'lg:col-span-12'}>
+              <ScorecardCard
+                scorecard={scorecard}
+                range={range}
+                isLoading={scorecardLoading}
+                isError={scorecardError}
+                onRetry={refetchScorecard}
+              />
+            </div>
+          )}
+          {canSeeCapacity && (
+            <div className={canSeeRevenue ? 'lg:col-span-6' : 'lg:col-span-12'}>
+              <CapacityHeatmapCard range={dateRange} rangeKey={range} />
+            </div>
+          )}
+        </div>
       )}
 
       {/* Row 1.5 — AI tóm tắt hồ sơ bệnh nhân */}

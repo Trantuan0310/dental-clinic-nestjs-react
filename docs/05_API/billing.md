@@ -358,6 +358,20 @@
 
 ---
 
+### 2.4 `GET /api/v1/billing/invoices/:id/payment-qr`
+
+VietQR (NAPAS) transfer code for what the invoice still owes. Same read rule as the invoice (`invoice.read.any` or `invoice.read.own` for the dentist's own).
+
+```json
+{ "data": { "configured": true, "payable": true,
+  "payload": "000201010212...6304XXXX", "amount": 400000,
+  "content": "INV2026000003", "accountNo": "0011004123456", "accountName": "NHA KHOA GENSMILE" } }
+```
+
+- `configured: false` when `VIETQR_BANK_BIN` / `VIETQR_ACCOUNT_NO` are not set (the screen shows no code).
+- `payable: false` for a draft, paid or voided invoice, or one with nothing outstanding. No `payload` then.
+- `content` is the invoice code without special characters (max 19), so the bank statement names the invoice. The payload is drawn as a QR by the client; nothing is sent to a third party. Setup: `docs/08_Deployment/VIETQR.md`.
+
 ## 3. Cross-module helpers
 
 ### 3.1 `GET /api/v1/patients/:id/invoices`
@@ -461,6 +475,21 @@ Hoặc 404 nếu encounter không có invoice.
 ```
 
 ---
+
+### 4.3 `GET /api/v1/billing/reports/scorecard?from&to` (`report.revenue.read`)
+
+Four practice measures for the Dashboard, each `{ key, value, unit, direction, target, okAt, numerator, denominator }`; `value` is `null` when nothing was measured.
+
+| key | Meaning | Target |
+|---|---|---|
+| `noShowRate` | no-shows ÷ (came + no-shows) | ≤ 5% |
+| `rebookRate` | finished visits whose patient has a later live appointment ÷ finished visits | ≥ 85% |
+| `planAcceptance` | plans accepted ÷ plans proposed in the range | ≥ 75% |
+| `medianWait` | median minutes from the booked time (or later check-in) to the start of the exam | ≤ 15 min |
+
+### 4.4 `GET /api/v1/billing/reports/capacity-heatmap?from&to&dentistId` (`appointment.read.any`)
+
+Booked share of the dentists' open hours by weekday × clinic hour: `cells[] = { weekday (0=Sun), hour, availableMin, bookedMin, utilization }` plus `dentists[]` for the filter and `totals`. Open time is the working windows (weekly schedule, changed hours, approved shifts) minus time-off and clinic closures; booked time counts bookings that hold a slot (not cancelled, no-show or left), clipped to the open time. Built from the same day calendars as booking, so the grid and the booking page agree.
 
 ## 5. Validation rules (Billing-specific)
 

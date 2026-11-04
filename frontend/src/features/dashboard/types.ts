@@ -193,3 +193,47 @@ export interface CardScaffoldProps {
   children: ReactNode;
   className?: string;
 }
+
+// -----------------------------------------------------------------------------
+// Practice measures (docs/11_Improvement B1, B2)
+// -----------------------------------------------------------------------------
+
+export interface CapacityCell {
+  /** 0 = Sunday … 6 = Saturday. */
+  weekday: number;
+  /** Clinic hour 0–23. */
+  hour: number;
+  availableMin: number;
+  bookedMin: number;
+  utilization: number;
+}
+
+export interface CapacityHeatmap {
+  from: string;
+  to: string;
+  dentistId: string | null;
+  dentists: Array<{ id: string; fullName: string }>;
+  cells: CapacityCell[];
+  totals: { availableMin: number; bookedMin: number; utilization: number | null };
+}
+
+export type ScorecardKey = 'noShowRate' | 'rebookRate' | 'planAcceptance' | 'medianWait';
+
+export interface ScorecardMetric {
+  key: ScorecardKey;
+  value: number | null;
+  unit: 'percent' | 'minutes';
+  /** `lower`: at or under the target is good. */
+  direction: 'lower' | 'higher';
+  target: number;
+  /** The edge of "acceptable". */
+  okAt: number;
+  numerator: number | null;
+  denominator: number | null;
+}
+
+export interface Scorecard {
+  from: string;
+  to: string;
+  metrics: ScorecardMetric[];
+}
