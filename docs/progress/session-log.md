@@ -4,6 +4,17 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 04/11 — A6.2 Đặt hẹn tiếp khi thu tiền
+
+- Người dùng: "làm A6.2". Chỉ frontend, không đổi API, không migration.
+- Hoá đơn **Đã thanh toán** có thẻ "Hẹn lần khám tiếp" (`NextVisitCard`):
+  - đọc lịch của bệnh nhân từ hôm nay trở đi (còn giữ chỗ, sau giờ hiện tại): có thì hiện ngày giờ và link mở lịch;
+  - chưa có thì nút "Đặt hẹn tiếp" đi tới `/appointments?patientId&dentistId&type=follow_up`; trang lịch nay đọc thêm `type` để chọn sẵn loại lịch;
+  - chỉ hiện cho người có quyền `appointment.create`; bác sĩ lấy từ phiên khám của hoá đơn (`encounter.dentistId`).
+- Chạy thật với tài khoản lễ tân: thẻ hiện, bấm ra form mở sẵn đúng bệnh nhân, đúng bác sĩ, loại Tái khám, không lỗi JS. Frontend typecheck, eslint, locale xanh.
+- E2E: `flow-patient-to-payment` thêm bước thấy thẻ sau khi thu đủ.
+- Giới hạn: ngày giờ hẹn chưa được gợi ý (mặc định hôm nay 09:00, form báo "giờ đã qua" cho tới khi chọn); bước tiếp theo có thể lấy từ `recallIntervalMonths` của dịch vụ.
+
 ## 04/11 — Đợt 0 của kế hoạch cải tiến: heatmap công suất, bullet graph, VietQR
 
 - Người dùng: "làm cả 3 việc đợt 0". Kế hoạch ở `docs/11_Improvement/KE_HOACH_CAI_TIEN.md` (PR #88, đã merge).

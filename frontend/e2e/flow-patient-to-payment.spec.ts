@@ -302,6 +302,8 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
     await expect(paymentDialog).toBeHidden({ timeout: 10_000 });
     // Paid in full: nothing left to collect, so the QR goes away.
     await expect(adminPage.getByTestId('payment-qr-image')).toBeHidden({ timeout: 10_000 });
+    // And it is the moment to book the next visit, while the patient is at the desk.
+    await expect(adminPage.getByTestId('next-visit-card')).toBeVisible({ timeout: 10_000 });
     checkpoint('step 10 done: invoice issued + payment recorded');
 
     // ---- Step 11: confirm invoice status reflects the payment ----

@@ -124,6 +124,11 @@ Khi hóa đơn còn nợ và phòng khám đã khai tài khoản nhận tiền (
 2. Khi tin nhắn ngân hàng báo đã nhận, bấm **Thu tiền**, chọn **Chuyển khoản**. Hệ thống chưa tự biết khách đã chuyển.
 3. Khách trả một phần: quét mã rồi sửa lại số tiền trong app, hoặc thu phần còn lại ở lần sau; mã luôn tính theo số còn nợ.
 
+### Đặt hẹn tiếp khi thu đủ tiền
+Khi hóa đơn **Đã thanh toán**, trang hóa đơn có thẻ **Hẹn lần khám tiếp**:
+- bệnh nhân đã có lịch hẹn sau này: thẻ hiện ngày giờ đó và nút **Xem lịch hẹn**;
+- chưa có: bấm **Đặt hẹn tiếp**, form đặt lịch mở sẵn với bệnh nhân, bác sĩ vừa khám và loại **Tái khám**; chọn ngày giờ rồi bấm **Tạo lịch hẹn**.
+
 ### Hủy hóa đơn, phiếu thu, hoàn tiền
 Lễ tân **không** làm được các việc sau; nhờ quản trị:
 - Hủy hóa đơn (chỉ hủy được khi chưa có phiếu thu còn hiệu lực).
