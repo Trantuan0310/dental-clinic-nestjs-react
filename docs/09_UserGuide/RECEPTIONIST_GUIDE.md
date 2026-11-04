@@ -99,6 +99,13 @@ Sửa nội dung nếu cần rồi bấm **Sao chép** / **Mở Zalo** / **Gọi
 
 ---
 
+### Điều trị chờ đặt lịch
+**Menu → Điều trị chờ đặt lịch** (`/pending-treatments`): bệnh nhân đã đồng ý kế hoạch điều trị nhưng còn mục chưa làm.
+- Tab **Chưa đặt lịch** (mở sẵn): chưa có lịch hẹn nào sau hôm nay. Người chờ lâu nhất ở trên, quá 14 ngày chữ hiện đỏ. Ba ô phía trên cho biết số bệnh nhân và tổng giá trị còn dở.
+- Mỗi dòng có **Gọi** (mở app gọi trên máy có hỗ trợ) và **Đặt lịch**: form đặt lịch mở sẵn với bệnh nhân, bác sĩ lập kế hoạch và loại **Điều trị**.
+- Tab **Đã có lịch**: những người dở điều trị nhưng đã có lịch hẹn kế, kèm ngày giờ đó.
+- Bệnh nhân rời khỏi danh sách khi làm xong mọi mục, hoặc khi kế hoạch bị hủy.
+
 ## 4. Hóa đơn và thanh toán
 
 **Menu → Hóa đơn** (`/billing`)
@@ -123,6 +130,11 @@ Khi hóa đơn còn nợ và phòng khám đã khai tài khoản nhận tiền (
 1. Cho khách quét mã bằng app ngân hàng. Số tiền (phần còn nợ) và nội dung (mã hóa đơn) đã điền sẵn.
 2. Khi tin nhắn ngân hàng báo đã nhận, bấm **Thu tiền**, chọn **Chuyển khoản**. Hệ thống chưa tự biết khách đã chuyển.
 3. Khách trả một phần: quét mã rồi sửa lại số tiền trong app, hoặc thu phần còn lại ở lần sau; mã luôn tính theo số còn nợ.
+
+### Đặt hẹn tiếp khi thu đủ tiền
+Khi hóa đơn **Đã thanh toán**, trang hóa đơn có thẻ **Hẹn lần khám tiếp**:
+- bệnh nhân đã có lịch hẹn sau này: thẻ hiện ngày giờ đó và nút **Xem lịch hẹn**;
+- chưa có: bấm **Đặt hẹn tiếp**, form đặt lịch mở sẵn với bệnh nhân, bác sĩ vừa khám và loại **Tái khám**; chọn ngày giờ rồi bấm **Tạo lịch hẹn**.
 
 ### Hủy hóa đơn, phiếu thu, hoàn tiền
 Lễ tân **không** làm được các việc sau; nhờ quản trị:

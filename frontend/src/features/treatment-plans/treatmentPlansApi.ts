@@ -102,8 +102,31 @@ export interface UpdatePlanInput {
   expectedUpdatedAt: string;
 }
 
+export interface PendingTreatment {
+  patientId: string;
+  patientCode: string;
+  patientName: string;
+  phone: string | null;
+  dentistId: string;
+  dentistName: string | null;
+  planTitles: string[];
+  procedures: string[];
+  lineCount: number;
+  value: number;
+  acceptedAt: string;
+  waitingDays: number;
+  /** null: nothing booked for the patient. */
+  nextAppointmentAt: string | null;
+}
+
+export interface PendingTreatments {
+  summary: { patients: number; unscheduledPatients: number; unscheduledValue: number };
+  rows: PendingTreatment[];
+}
+
 export const planKeys = {
   all: ['treatment-plans'] as const,
+  pending: ['treatment-plans', 'pending'] as const,
   patient: (patientId: string) => ['treatment-plans', 'patient', patientId] as const,
   openItems: (patientId: string) => ['treatment-plans', 'open-items', patientId] as const,
   detail: (id: string) => ['treatment-plans', 'detail', id] as const,
@@ -114,6 +137,10 @@ const BASE = '/treatment-plans';
 export const treatmentPlansApi = {
   async listForPatient(patientId: string): Promise<TreatmentPlan[]> {
     const { data } = await api.get<AuthEnvelope<TreatmentPlan[]>>(BASE, { params: { patientId } });
+    return unwrap(data);
+  },
+  async pending(): Promise<PendingTreatments> {
+    const { data } = await api.get<AuthEnvelope<PendingTreatments>>(`${BASE}/pending`);
     return unwrap(data);
   },
   async openItems(patientId: string): Promise<OpenPlanItem[]> {
@@ -173,6 +200,10 @@ export function usePatientPlans(patientId: string | undefined, enabled = true) {
     queryFn: () => treatmentPlansApi.listForPatient(patientId!),
     enabled: !!patientId && enabled,
   });
+}
+
+export function usePendingTreatments() {
+  return useQuery({ queryKey: planKeys.pending, queryFn: () => treatmentPlansApi.pending() });
 }
 
 export function useOpenPlanItems(patientId: string | undefined, enabled = true) {

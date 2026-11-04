@@ -21,6 +21,7 @@ const PatientListPage = lazy(() => import('@/features/patients/PatientListPage')
 const PatientDetailPage = lazy(() => import('@/features/patients/PatientDetailPage'));
 const TreatmentPlanPage = lazy(() => import('@/features/treatment-plans/TreatmentPlanPage'));
 const RecallsPage = lazy(() => import('@/features/recalls/RecallsPage'));
+const PendingTreatmentsPage = lazy(() => import('@/features/treatment-plans/PendingTreatmentsPage'));
 const RecallUnsubscribePage = lazy(() => import('@/features/recalls/RecallUnsubscribePage'));
 const PatientForm = lazy(() =>
   import('@/features/patients/PatientForm').then((m) => ({ default: m.PatientForm })),
@@ -257,6 +258,16 @@ const router = createBrowserRouter(createRoutesFromElements(
                   <ProtectedRoute permission="recall.read">
                     <ErrorBoundary componentName="RecallsPage">
                       <RecallsPage />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="pending-treatments"
+                element={
+                  <ProtectedRoute permission="treatment_plan.read">
+                    <ErrorBoundary componentName="PendingTreatmentsPage">
+                      <PendingTreatmentsPage />
                     </ErrorBoundary>
                   </ProtectedRoute>
                 }

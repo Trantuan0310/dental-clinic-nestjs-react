@@ -1,4 +1,15 @@
 export const vi = {
+  pending: {
+    title: 'Điều trị chờ đặt lịch',
+    description: 'Bệnh nhân đã đồng ý kế hoạch điều trị nhưng chưa làm xong. Gọi và đặt lịch để không mất khách giữa chừng.',
+    scope: { unscheduled: 'Chưa đặt lịch', booked: 'Đã có lịch' },
+    patients: 'Bệnh nhân chưa đặt lịch', value: 'Giá trị chưa làm', total: 'Bệnh nhân còn điều trị dở',
+    patient: 'Bệnh nhân', treatment: 'Điều trị còn lại', worth: 'Giá trị', waiting: 'Chờ', nextVisit: 'Lịch hẹn kế',
+    waitingDays: '{{count}} ngày', today: 'Hôm nay', moreLines: '+{{count}} mục nữa', by: '{{name}}',
+    book: 'Đặt lịch', call: 'Gọi', callLabel: 'Gọi {{name}}', noPhone: 'Chưa có số',
+    emptyUnscheduled: 'Không ai đang chờ đặt lịch.', emptyBooked: 'Chưa có bệnh nhân nào đã có lịch cho điều trị dở.',
+    loadError: 'Không tải được danh sách điều trị chờ đặt lịch', basis: 'Tính theo kế hoạch ở trạng thái "Khách đã đồng ý" hoặc "Đang điều trị" còn mục chưa làm. Lịch hẹn kế là lịch còn giữ chỗ sau giờ hiện tại.',
+  },
   plans: 'Kế hoạch điều trị',
   newPlan: 'Lập kế hoạch',
   noPlans: 'Chưa có kế hoạch điều trị nào.',
@@ -89,6 +100,17 @@ export const vi = {
 };
 
 export const en: typeof vi = {
+  pending: {
+    title: 'Treatment waiting to be booked',
+    description: 'Patients who agreed to a treatment plan that is not finished. Call and book them so they do not drop out half-way.',
+    scope: { unscheduled: 'Not booked', booked: 'Booked' },
+    patients: 'Patients not booked', value: 'Value not yet done', total: 'Patients with unfinished treatment',
+    patient: 'Patient', treatment: 'Treatment left', worth: 'Value', waiting: 'Waiting', nextVisit: 'Next appointment',
+    waitingDays: '{{count}} days', today: 'Today', moreLines: '+{{count}} more', by: '{{name}}',
+    book: 'Book', call: 'Call', callLabel: 'Call {{name}}', noPhone: 'No number',
+    emptyUnscheduled: 'Nobody is waiting to be booked.', emptyBooked: 'No patient with unfinished treatment has an appointment yet.',
+    loadError: 'Could not load the treatment waiting list', basis: 'From plans that are "Accepted" or "In progress" with lines still to do. The next appointment is one that still holds a slot after now.',
+  },
   plans: 'Treatment plans',
   newPlan: 'New plan',
   noPlans: 'No treatment plans yet.',

@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, TreatmentPlanItemStatus, TreatmentPlanStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  Prisma,
+  TreatmentPlanItemStatus,
+  TreatmentPlanStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
@@ -14,6 +19,15 @@ import {
   UpdateTreatmentPlanDto,
 } from './dto/treatment-plan.dto';
 import { syncPlanProgress, WORKABLE_PLAN_STATUSES } from './domain/plan-progress';
+import { groupPendingTreatments, summarizePending } from './domain/pending-treatments';
+
+/** Appointments that still hold a slot for the patient. */
+const HOLDING_APPOINTMENTS: AppointmentStatus[] = [
+  AppointmentStatus.SCHEDULED,
+  AppointmentStatus.CONFIRMED,
+  AppointmentStatus.CHECKED_IN,
+  AppointmentStatus.IN_PROGRESS,
+];
 
 /** Plans whose lines may still be rewritten (nothing agreed yet). */
 const EDITABLE: TreatmentPlanStatus[] = [TreatmentPlanStatus.DRAFT, TreatmentPlanStatus.PROPOSED];
@@ -92,6 +106,76 @@ export class TreatmentPlansService {
       unitPrice: Number(i.unitPrice),
       notes: i.notes,
     }));
+  }
+
+  /**
+   * Patients who accepted a plan whose lines are not done, with when their
+   * next appointment is (null = nothing booked). A dentist sees their own
+   * plans; the front desk sees everyone's.
+   */
+  async pendingTreatments(actor: JwtPayload, now: Date = new Date()) {
+    const items = await this.prisma.treatmentPlanItem.findMany({
+      where: {
+        status: TreatmentPlanItemStatus.PLANNED,
+        plan: {
+          status: { in: WORKABLE_PLAN_STATUSES },
+          patient: { deletedAt: null },
+          ...(this.isOwnScope(actor) ? { dentistId: actor.sub } : {}),
+        },
+        treatments: { none: { deletedAt: null, encounter: { status: { not: 'CANCELLED' } } } },
+      },
+      select: {
+        procedure: true,
+        quantity: true,
+        unitPrice: true,
+        plan: {
+          select: {
+            id: true,
+            title: true,
+            dentistId: true,
+            acceptedAt: true,
+            createdAt: true,
+            dentist: { select: { fullName: true } },
+            patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
+          },
+        },
+      },
+    });
+    const patientIds = [...new Set(items.map(i => i.plan.patient.id))];
+    const booked = patientIds.length
+      ? await this.prisma.appointment.groupBy({
+          by: ['patientId'],
+          where: {
+            patientId: { in: patientIds },
+            deletedAt: null,
+            status: { in: HOLDING_APPOINTMENTS },
+            startAt: { gt: now },
+          },
+          _min: { startAt: true },
+        })
+      : [];
+    const next = new Map(
+      booked.flatMap(b => (b._min.startAt ? [[b.patientId, b._min.startAt] as const] : [])),
+    );
+    const rows = groupPendingTreatments(
+      items.map(i => ({
+        procedure: i.procedure,
+        quantity: i.quantity,
+        unitPrice: Number(i.unitPrice),
+        plan: {
+          id: i.plan.id,
+          title: i.plan.title,
+          dentistId: i.plan.dentistId,
+          dentistName: i.plan.dentist.fullName,
+          acceptedAt: i.plan.acceptedAt,
+          createdAt: i.plan.createdAt,
+          patient: i.plan.patient,
+        },
+      })),
+      next,
+      now,
+    );
+    return { summary: summarizePending(rows), rows };
   }
 
   async get(id: string, actor: JwtPayload) {

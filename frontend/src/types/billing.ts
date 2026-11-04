@@ -63,6 +63,8 @@ export interface Invoice {
   outstandingAmount: number;
   version: number;
   encounterId?: string;
+  /** The visit the invoice is for (the API includes it); the dentist who treated the patient. */
+  encounter?: { dentistId: string } | null;
   /** Voided invoice this one re-made, and the invoice that replaced this one. */
   replaces?: { id: string; code: string } | null;
   replacedBy?: { id: string; code: string; status: InvoiceStatus } | null;

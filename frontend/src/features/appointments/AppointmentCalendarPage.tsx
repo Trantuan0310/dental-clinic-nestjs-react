@@ -88,6 +88,9 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
   // Arriving from a patient's profile with ?patientId= opens the create
   // modal pre-filled with that patient, instead of landing on a plain calendar.
   const prefilledPatientId = searchParams.get('patientId') ?? undefined;
+  // ?type=follow_up (from a paid invoice's "Đặt hẹn tiếp") pre-selects the visit type.
+  const typeParam = searchParams.get('type');
+  const prefilledType = (['consultation', 'treatment', 'follow_up'] as const).find((v) => v === typeParam);
   // Dashboard's empty-state "Tạo lịch hẹn" links here with ?action=create —
   // previously ignored, landing on a bare calendar instead of the modal.
   const wantsCreateModal = searchParams.get('action') === 'create';
@@ -531,6 +534,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
             defaultStartTime={selectedSlot?.time}
             defaultDentistId={dentistId || undefined}
             defaultPatientId={prefilledPatientId}
+            defaultType={prefilledType}
           />
         </Suspense>
       )}

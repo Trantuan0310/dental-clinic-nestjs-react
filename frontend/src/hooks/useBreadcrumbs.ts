@@ -24,6 +24,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/dispatch': 'dispatch',
   '/booking-requests': 'bookingRequests',
   '/recalls': 'recalls',
+  '/pending-treatments': 'pendingTreatments',
   '/today': 'today',
   '/queue': 'queue',
   // Below: every route added for the medical-records redirect, billing

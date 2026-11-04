@@ -23,6 +23,7 @@ import { billingApi } from '@/features/billing/billingApi';
 import { Button, Card, InvoiceStatusBadge, Modal, Alert, Textarea, Spinner } from '@/components/ui';
 import { PaymentModal } from './PaymentModal';
 import { PaymentQrCard } from './PaymentQrCard';
+import { NextVisitCard } from './NextVisitCard';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
@@ -427,6 +428,10 @@ export default function InvoiceDetailPage() {
           </Card>
 
           {/* Payment History */}
+          {invoice.status === 'PAID' && (
+            <NextVisitCard patientId={invoice.patientId} dentistId={invoice.encounter?.dentistId} />
+          )}
+
           {canPay && invoice.outstandingAmount > 0 && canRecordPayment && (
             <PaymentQrCard invoiceId={invoice.id} invoiceCode={invoice.code} />
           )}
