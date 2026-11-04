@@ -4,6 +4,18 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 04/11 — Nghiên cứu nghiệp vụ tổng thể và lập kế hoạch cải tiến
+
+- Yêu cầu: nghiên cứu lại nghiệp vụ của mọi actor, tìm điểm tối ưu về giao diện, thao tác, nghiệp vụ, tinh giản việc làm tay, cách trực quan số liệu khác; tham khảo nguồn mở bên ngoài, ghi rõ nguồn; ưu tiên luồng chính rồi luồng quản lý.
+- Kết quả: `docs/11_Improvement/KE_HOACH_CAI_TIEN.md`:
+  - 15 đề xuất (A1–A7 luồng khám chính, B1–B5 quản lý, C1–C3 pháp luật), mỗi đề xuất có hiện trạng, cách làm, chỉ số đo, công sức, nguồn;
+  - 24 nguồn: tài liệu Open Dental, ADA, Curve, Henry Schein One, các tổng quan về nhắc lịch, nghiên cứu bảng trạng thái, EHR, VietQR, TT 13/2025, TT 27/2021 và 26/2025, NĐ 356/2025 (thay NĐ 13/2023), bullet graph của Stephen Few, FT Visual Vocabulary.
+- Đối chiếu code trước khi đề xuất:
+  - đã có: thời gian chờ trên Điều phối, tự tạo tái khám theo dịch vụ, eSMS/ZNS, nhắc lịch tự động;
+  - chưa có: khách tự xác nhận lịch, danh sách chờ lấp giờ, danh sách điều trị chấp nhận chưa đặt lịch, VietQR, chỉ số có mục tiêu, heatmap/phễu/thác nước.
+- Đề xuất đợt 0 (trước bảo vệ 09/11, chỉ thêm, không migration): heatmap công suất, bullet graph 4 chỉ số, VietQR trên hoá đơn. Chưa làm, chờ người dùng chọn.
+- Giới hạn: mạng phiên chặn đọc trực tiếp luatvietnam.vn, ey.com; các mốc pháp luật lấy từ kết quả tìm kiếm, ghi "cần đối chiếu văn bản gốc".
+
 ## 22/10/2026
 
 ### Sửa toàn bộ 32 điểm của báo cáo rà soát nghiệp vụ (xong)
