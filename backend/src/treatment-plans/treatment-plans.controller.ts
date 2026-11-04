@@ -40,6 +40,13 @@ export class TreatmentPlansController {
     return { data: await this.plans.listForPatient(q.patientId, actor) };
   }
 
+  @Get('pending')
+  @RequirePermissions('treatment_plan.read')
+  @ApiOperation({ summary: 'Accepted treatment still to do, with the next appointment (if any)' })
+  async pending(@User() actor: JwtPayload) {
+    return { data: await this.plans.pendingTreatments(actor) };
+  }
+
   @Get('open-items')
   @RequirePermissions('treatment_plan.read')
   @ApiOperation({ summary: 'Planned lines an encounter of this patient may carry out' })

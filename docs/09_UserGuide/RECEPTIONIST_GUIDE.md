@@ -99,6 +99,13 @@ Sửa nội dung nếu cần rồi bấm **Sao chép** / **Mở Zalo** / **Gọi
 
 ---
 
+### Điều trị chờ đặt lịch
+**Menu → Điều trị chờ đặt lịch** (`/pending-treatments`): bệnh nhân đã đồng ý kế hoạch điều trị nhưng còn mục chưa làm.
+- Tab **Chưa đặt lịch** (mở sẵn): chưa có lịch hẹn nào sau hôm nay. Người chờ lâu nhất ở trên, quá 14 ngày chữ hiện đỏ. Ba ô phía trên cho biết số bệnh nhân và tổng giá trị còn dở.
+- Mỗi dòng có **Gọi** (mở app gọi trên máy có hỗ trợ) và **Đặt lịch**: form đặt lịch mở sẵn với bệnh nhân, bác sĩ lập kế hoạch và loại **Điều trị**.
+- Tab **Đã có lịch**: những người dở điều trị nhưng đã có lịch hẹn kế, kèm ngày giờ đó.
+- Bệnh nhân rời khỏi danh sách khi làm xong mọi mục, hoặc khi kế hoạch bị hủy.
+
 ## 4. Hóa đơn và thanh toán
 
 **Menu → Hóa đơn** (`/billing`)

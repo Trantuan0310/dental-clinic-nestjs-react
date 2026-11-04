@@ -4,6 +4,18 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 04/11 — A7 Điều trị chờ đặt lịch
+
+- Người dùng: "làm A7 danh sách điều trị chưa đặt lịch". Plan: `docs/11_Improvement/KE_HOACH_CAI_TIEN.md` mục A7. Không migration.
+- **Backend** `GET /treatment-plans/pending` (quyền `treatment_plan.read`, bác sĩ chỉ thấy kế hoạch của mình):
+  - gom theo bệnh nhân các mục `PLANNED` của kế hoạch `ACCEPTED`/`IN_PROGRESS` chưa có thủ thuật còn hiệu lực (cùng điều kiện với `open-items`);
+  - kèm giá trị còn dở, số ngày chờ từ ngày khách đồng ý, lịch hẹn kế (còn giữ chỗ, sau giờ hiện tại);
+  - thuật toán gom/sắp xếp nằm ở `domain/pending-treatments.ts` (hàm thuần); BR-TP-012 trong `SPEC.md`.
+- **Frontend** trang `/pending-treatments` (menu "Điều trị chờ đặt lịch", cạnh Nhắc tái khám): ba ô tổng, hai tab Chưa đặt lịch / Đã có lịch, nút Gọi và Đặt lịch (mở form điền sẵn bệnh nhân, bác sĩ, loại Điều trị).
+- Kiểm: backend tsc, eslint, 9 test mới (gom nhóm, sắp xếp, tổng, phân quyền, điều kiện lịch hẹn); frontend typecheck, eslint, locale. Chạy thật trên DB demo với 3 kế hoạch tạo bằng API: danh sách đúng 3 người, một người có lịch nằm ở tab "Đã có lịch" kèm ngày giờ, nút Đặt lịch ra form loại Điều trị, màn 375px không tràn, không lỗi JS.
+- Lỗi tìm ra khi chạy thử: dòng bác sĩ hiện "BS BS. Nguyễn Văn An" vì tên đã có "BS." → bỏ tiền tố.
+- E2E mới `pending-treatments.spec.ts` (mở từ menu, hai tab); chưa chạy được trên máy, chờ CI.
+
 ## 04/11 — A6.2 Đặt hẹn tiếp khi thu tiền
 
 - Người dùng: "làm A6.2". Chỉ frontend, không đổi API, không migration.

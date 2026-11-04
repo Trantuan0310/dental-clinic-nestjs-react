@@ -109,6 +109,12 @@ const NAV_GROUPS: NavGroupDef[] = [
         icon: BellRing,
         permission: 'recall.read',
       },
+      {
+        to: '/pending-treatments',
+        labelKey: 'PendingTreatments',
+        icon: ClipboardList,
+        permission: 'treatment_plan.read',
+      },
     ],
   },
   // Today's schedule and the checked-in queue read from Appointments

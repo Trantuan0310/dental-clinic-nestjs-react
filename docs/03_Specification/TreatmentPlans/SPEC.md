@@ -62,6 +62,7 @@
 | BR-TP-008 | Kết thúc phiên khám đánh dấu `DONE` các mục được thực hiện; mở lại phiên khám trả chúng về `PLANNED`. Trạng thái kế hoạch tính theo BR §2. |
 | BR-TP-009 | Không bỏ qua mục đang được ghi trong một phiên khám chưa đóng (xoá thủ thuật đó trước). Bỏ qua cần lý do ≥ 5 ký tự. |
 | BR-TP-010 | Huỷ cần lý do ≥ 5 ký tự; không huỷ kế hoạch đã xong hoặc đã huỷ, hay khi có mục đang được ghi trong một phiên khám chưa đóng. |
+| BR-TP-012 | Danh sách **điều trị chờ đặt lịch** (`GET /pending`): mỗi bệnh nhân có kế hoạch `ACCEPTED`/`IN_PROGRESS` còn mục `PLANNED` mà chưa phiên khám nào còn hiệu lực đang ghi (cùng điều kiện BR-TP-006). Giá trị = Σ số lượng × đơn giá đã báo của các mục đó. Lịch hẹn kế là lịch sớm nhất còn giữ chỗ (đã đặt, đã xác nhận, đã check-in, đang khám) sau giờ hiện tại; chưa có thì bệnh nhân thuộc nhóm "chưa đặt lịch". Bác sĩ chỉ thấy kế hoạch của mình, lễ tân thấy tất cả. Sắp xếp: chưa đặt lịch trước, chờ lâu nhất trước (tính từ ngày khách đồng ý). |
 | BR-TP-011 | Mọi thao tác ghi nhật ký: `TREATMENT_PLAN_CREATED`, `_UPDATED`, `_PROPOSED`, `_ACCEPTED`, `_CANCELLED`, `_ITEMS_ADDED`, `_ITEM_SKIPPED`, `_ITEM_UNSKIPPED`. |
 
 ## 4. Quyền
@@ -78,6 +79,7 @@
 | ------ | ---- | ----- | ------- |
 | GET | `/?patientId=` | read | Kế hoạch của bệnh nhân, mới nhất trước |
 | GET | `/open-items?patientId=` | read | Mục còn làm được (cho phiên khám) |
+| GET | `/pending` | read | Bệnh nhân còn điều trị dở kèm lịch hẹn kế (BR-TP-012) |
 | GET | `/:id` | read | Kế hoạch kèm mục và tổng tiền (`quoted`, `done`, `remaining`, `skipped`) |
 | POST | `/` | write | Lập kế hoạch |
 | PATCH | `/:id` | write | Sửa (cần `expectedUpdatedAt`) |
@@ -94,6 +96,7 @@ Thủ thuật trong phiên khám: `POST /medical-records/encounters/:id/treatmen
 
 - Hồ sơ bệnh nhân: tab **Kế hoạch điều trị** (danh sách, nút Lập kế hoạch).
 - `/treatment-plans/new?patientId=&encounterId=`: lập kế hoạch; `/treatment-plans/:id`: xem, sửa, báo giá, đồng ý, thêm/bỏ qua mục, huỷ, in báo giá, đặt lịch buổi tiếp.
+- `/pending-treatments` (menu **Điều trị chờ đặt lịch**): hai danh sách Chưa đặt lịch / Đã có lịch; nút Gọi và Đặt lịch (mở form đặt lịch điền sẵn bệnh nhân, bác sĩ, loại Điều trị).
 - Phiên khám, tab Điều trị: ô **Từ kế hoạch điều trị** khi thêm thủ thuật; nút **Lập kế hoạch**.
 
 ## 7. Kiểm thử
