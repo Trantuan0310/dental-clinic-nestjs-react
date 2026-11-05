@@ -26,6 +26,7 @@ export const vi = {
     draftInvoices: { title: 'Hoá đơn nháp chưa phát hành', hint: 'Phiên khám đã đóng nhưng chưa xuất hoá đơn' },
     staleEncounters: { title: 'Phiên khám chưa đóng', hint: 'Mở từ hôm trước, cần đóng hoặc huỷ' },
     lowStock: { title: 'Vật tư sắp hết', hint: 'Tồn kho bằng hoặc dưới mức tối thiểu' },
+    bankReview: { title: 'Chuyển khoản cần xử lý', hint: 'Tiền đã về tài khoản nhưng hệ thống chưa tự ghi vào hóa đơn' },
   },
 };
 
@@ -57,5 +58,6 @@ export const en: typeof vi = {
     draftInvoices: { title: 'Draft invoices not issued', hint: 'Closed visits not billed yet' },
     staleEncounters: { title: 'Encounters still open', hint: 'Opened on an earlier day; close or cancel them' },
     lowStock: { title: 'Low-stock items', hint: 'At or below their minimum level' },
+    bankReview: { title: 'Bank transfers to check', hint: 'Money arrived but could not be applied to an invoice automatically' },
   },
 };

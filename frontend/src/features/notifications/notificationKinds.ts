@@ -1,5 +1,6 @@
 import {
   CalendarClock,
+  Landmark,
   ClipboardList,
   FileText,
   Inbox,
@@ -65,6 +66,7 @@ export const PENDING_KINDS: Record<PendingKey, Kind & { to: (c: LinkContext) => 
     to: (c) => (c.anyEncounter ? '/dispatch' : '/my-queue'),
   },
   lowStock: { icon: PackageMinus, tone: TONES.orange, to: () => '/inventory' },
+  bankReview: { icon: Landmark, tone: TONES.teal, to: () => '/billing/bank-transactions' },
 };
 
 export function notificationLink(n: InboxNotification, c: LinkContext): string {

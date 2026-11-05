@@ -547,6 +547,82 @@ describe('Real HTTP and PostgreSQL regression', () => {
       Number((await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).outstandingAmount),
     ).toBe(0);
   });
+  it('records a bank transfer once from the webhook, however often the bank sends it', async () => {
+    const saved = { ...process.env };
+    process.env.BANK_WEBHOOK_API_KEY = 'isolated-test-key';
+    process.env.BANK_WEBHOOK_ACTOR_EMAIL = 'admin@clinic.local';
+    process.env.VIETQR_ACCOUNT_NO = '0011004123456';
+    try {
+      const id = await fixtureEncounter();
+      await api('post', `/medical-records/encounters/${id}/treatments`, 'dentist')
+        .send({
+          procedure: 'Bank webhook fixture',
+          unitPrice: 100000,
+          priceReason: 'Ngoài danh mục',
+        })
+        .expect(201);
+      await api('post', `/medical-records/encounters/${id}/close`, 'dentist').send({}).expect(200);
+      const invoice = await invoiceFor(id);
+      await api('post', `/billing/invoices/${invoice.id}/issue`)
+        .send({ version: invoice.version })
+        .expect(200);
+
+      const hook = (body: object, auth = 'Apikey isolated-test-key') =>
+        request(app.getHttpServer())
+          .post('/api/v1/webhooks/bank/sepay')
+          .set('Authorization', auth)
+          .send(body);
+      const transfer = (over: Record<string, unknown> = {}) => ({
+        id: 880000 + ++serial,
+        transactionDate: '2026-11-05 09:30:15',
+        accountNumber: '0011004123456',
+        content: invoice.code.replace(/-/g, ''),
+        transferType: 'in',
+        transferAmount: 100000,
+        referenceCode: 'MBVCB.1',
+        ...over,
+      });
+
+      const first = transfer();
+      await hook(first, 'Apikey wrong').expect(401);
+      expect(await db.payment.count({ where: { invoiceId: invoice.id } })).toBe(0);
+
+      // The bank resends on any hiccup: three copies at once are still one payment.
+      const copies = await Promise.all([hook(first), hook(first), hook(first)]);
+      expect(copies.map(r => r.status)).toEqual([200, 200, 200]);
+      expect(await db.payment.count({ where: { invoiceId: invoice.id } })).toBe(1);
+      expect(await db.bankTransaction.count({ where: { externalId: String(first.id) } })).toBe(1);
+      const paid = await db.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+      expect(paid.status).toBe('PAID');
+      expect(Number(paid.outstandingAmount)).toBe(0);
+      const row = await db.bankTransaction.findFirstOrThrow({
+        where: { externalId: String(first.id) },
+      });
+      expect(row).toMatchObject({ status: 'RECORDED', invoiceId: invoice.id });
+      expect(row.paymentId).not.toBeNull();
+
+      // A later transfer for the same, now paid, invoice is not recorded: it waits for a person.
+      const late = transfer();
+      await hook(late).expect(200);
+      expect(await db.payment.count({ where: { invoiceId: invoice.id } })).toBe(1);
+      expect(
+        await db.bankTransaction.findFirstOrThrow({ where: { externalId: String(late.id) } }),
+      ).toMatchObject({ status: 'NEEDS_REVIEW', reason: 'NOT_PAYABLE' });
+
+      // And the front desk sees it, and can close it.
+      const list = await api('get', '/billing/bank-transactions', 'reception').expect(200);
+      const listed = list.body.data.find((r: { content: string }) => r.content === late.content);
+      expect(listed).toBeDefined();
+      await api('post', `/billing/bank-transactions/${listed.id}/resolve`, 'reception')
+        .send({ note: 'Khách chuyển nhầm, đã hoàn tiền' })
+        .expect(200);
+      await api('post', `/billing/bank-transactions/${listed.id}/resolve`, 'reception')
+        .send({ note: 'lần hai' })
+        .expect(404);
+    } finally {
+      process.env = saved;
+    }
+  });
   it('rolls back all inventory changes when closing with insufficient stock', async () => {
     const id = await fixtureEncounter();
     const first = await db.inventoryItem.create({

@@ -160,11 +160,12 @@ model User {
   clinicClosuresCreated ClinicClosure[]    @relation("ClinicClosureCreator")
 
   // Online booking requests (migration 025)
-  bookingRequestsPreferred BookingRequest[] @relation("BookingPreferredDentist")
-  bookingRequestsProposed  BookingRequest[] @relation("BookingProposedDentist")
-  bookingRequestsHandled   BookingRequest[] @relation("BookingHandler")
-  mediaPhotos              MediaAsset[]     @relation("DentistPhotos")
+  bookingRequestsPreferred BookingRequest[]  @relation("BookingPreferredDentist")
+  bookingRequestsProposed  BookingRequest[]  @relation("BookingProposedDentist")
+  bookingRequestsHandled   BookingRequest[]  @relation("BookingHandler")
+  mediaPhotos              MediaAsset[]      @relation("DentistPhotos")
   notifications            Notification[]
+  bankTransactionsResolved BankTransaction[] @relation("BankTransactionResolvedBy")
 
   // NOT a plain @@unique: Prisma's schema DSL can't express a partial index,
   // and email must stay reusable once a user is deactivated/deleted. The
@@ -883,17 +884,18 @@ model Invoice {
   /// Set on an invoice re-made after this one was voided.
   replacesInvoiceId String?       @unique @map("replaces_invoice_id") @db.Uuid
 
-  encounter   Encounter           @relation(fields: [encounterId], references: [id])
-  replaces    Invoice?            @relation("InvoiceReplacement", fields: [replacesInvoiceId], references: [id])
-  replacedBy  Invoice?            @relation("InvoiceReplacement")
-  patient     Patient             @relation(fields: [patientId], references: [id])
-  issuer      User?               @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
-  voider      User?               @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
-  creator     User?               @relation("InvoiceCreator", fields: [createdBy], references: [id])
-  items       InvoiceItem[]
-  payments    Payment[]
-  audits      InvoiceAudit[]
-  adjustments InvoiceAdjustment[]
+  encounter        Encounter           @relation(fields: [encounterId], references: [id])
+  replaces         Invoice?            @relation("InvoiceReplacement", fields: [replacesInvoiceId], references: [id])
+  replacedBy       Invoice?            @relation("InvoiceReplacement")
+  patient          Patient             @relation(fields: [patientId], references: [id])
+  issuer           User?               @relation("InvoiceIssuer", fields: [issuedBy], references: [id])
+  voider           User?               @relation("InvoiceVoidedBy", fields: [voidedBy], references: [id])
+  creator          User?               @relation("InvoiceCreator", fields: [createdBy], references: [id])
+  items            InvoiceItem[]
+  payments         Payment[]
+  bankTransactions BankTransaction[]
+  audits           InvoiceAudit[]
+  adjustments      InvoiceAdjustment[]
 
   @@unique([code])
   @@index([encounterId])
@@ -939,9 +941,10 @@ model Payment {
   /// returns this payment instead of recording the money twice.
   requestKey String?       @map("request_key") @db.VarChar(64)
 
-  invoice        Invoice @relation(fields: [invoiceId], references: [id])
-  receivedByUser User    @relation(fields: [receivedBy], references: [id])
-  voidedByUser   User?   @relation("PaymentVoidedBy", fields: [voidedBy], references: [id])
+  invoice          Invoice           @relation(fields: [invoiceId], references: [id])
+  receivedByUser   User              @relation(fields: [receivedBy], references: [id])
+  voidedByUser     User?             @relation("PaymentVoidedBy", fields: [voidedBy], references: [id])
+  bankTransactions BankTransaction[]
 
   @@unique([invoiceId, requestKey])
   @@index([invoiceId, paidAt(sort: Desc)])
@@ -1960,4 +1963,43 @@ model Notification {
   @@unique([userId, dedupeKey])
   @@index([userId, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+enum BankTransactionStatus {
+  RECORDED
+  NEEDS_REVIEW
+  RESOLVED
+}
+
+/// Migration 058: an incoming bank transfer reported by the bank's aggregator
+/// (SePay). (provider, externalId) is unique so a resent notification never
+/// records a second payment. See BankWebhookService.
+model BankTransaction {
+  id             String                @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  provider       String                @db.VarChar(20)
+  externalId     String                @map("external_id") @db.VarChar(100)
+  referenceCode  String?               @map("reference_code") @db.VarChar(100)
+  accountNo      String                @map("account_no") @db.VarChar(30)
+  amount         Decimal               @db.Decimal(15, 0)
+  content        String                @db.VarChar(500)
+  transactionAt  DateTime              @map("transaction_at") @db.Timestamptz()
+  status         BankTransactionStatus
+  /// NO_CODE | INVOICE_NOT_FOUND | NOT_PAYABLE | AMOUNT_EXCEEDS | NO_ACTOR
+  reason         String?               @db.VarChar(40)
+  invoiceId      String?               @map("invoice_id") @db.Uuid
+  paymentId      String?               @map("payment_id") @db.Uuid
+  resolvedBy     String?               @map("resolved_by") @db.Uuid
+  resolvedAt     DateTime?             @map("resolved_at") @db.Timestamptz()
+  resolutionNote String?               @map("resolution_note") @db.VarChar(500)
+  raw            Json
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz()
+
+  invoice      Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payment      Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  resolvedUser User?    @relation("BankTransactionResolvedBy", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalId])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([invoiceId])
+  @@map("bank_transactions")
 }

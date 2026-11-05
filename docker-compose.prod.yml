@@ -113,6 +113,9 @@ services:
       VIETQR_BANK_BIN: ${VIETQR_BANK_BIN:-}
       VIETQR_ACCOUNT_NO: ${VIETQR_ACCOUNT_NO:-}
       VIETQR_ACCOUNT_NAME: ${VIETQR_ACCOUNT_NAME:-}
+      # Bank transfers reported by SePay are recorded on their own (docs/08_Deployment/BANK_WEBHOOK.md); blank = off.
+      BANK_WEBHOOK_API_KEY: ${BANK_WEBHOOK_API_KEY:-}
+      BANK_WEBHOOK_ACTOR_EMAIL: ${BANK_WEBHOOK_ACTOR_EMAIL:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

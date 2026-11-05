@@ -372,6 +372,14 @@ VietQR (NAPAS) transfer code for what the invoice still owes. Same read rule as 
 - `payable: false` for a draft, paid or voided invoice, or one with nothing outstanding. No `payload` then.
 - `content` is the invoice code without special characters (max 19), so the bank statement names the invoice. The payload is drawn as a QR by the client; nothing is sent to a third party. Setup: `docs/08_Deployment/VIETQR.md`.
 
+### 2.5 `POST /api/v1/webhooks/bank/sepay` (no login; `Authorization: Apikey <BANK_WEBHOOK_API_KEY>`)
+
+SePay's webhook for an incoming bank transfer (payload: `id`, `transactionDate`, `accountNumber`, `transferType`, `transferAmount`, `content`, `code`, `referenceCode`). Missing `BANK_WEBHOOK_API_KEY` → 404; wrong key → 401; unreadable body → 400. Otherwise 200 `{ success: true, outcome }`, `outcome` being `recorded` (payment recorded on the invoice named in the note), `needs_review` (kept in `bank_transactions` for a person), `duplicate` (this `id` was seen) or `ignored` (money out, or another account). Rules and setup: `docs/08_Deployment/BANK_WEBHOOK.md`.
+
+### 2.6 `GET /api/v1/billing/bank-transactions?status=` and `POST /api/v1/billing/bank-transactions/:id/resolve` (`invoice.payment.create`)
+
+List by status (`NEEDS_REVIEW` default, or `RESOLVED`; 200 newest) and mark a `NEEDS_REVIEW` transfer handled with a note (min 3 characters; a second resolve → 404). The bell's `bankReview` count is the number still needing review.
+
 ## 3. Cross-module helpers
 
 ### 3.1 `GET /api/v1/patients/:id/invoices`

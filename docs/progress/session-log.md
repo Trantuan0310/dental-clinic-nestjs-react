@@ -4,6 +4,25 @@ Mục mới nhất ở trên cùng. Quy tắc ghi: xem `CLAUDE.md` ở thư mụ
 
 ---
 
+## 05/11 — A6.3 Tự ghi nhận chuyển khoản (webhook SePay)
+
+- Người dùng: "đã deploy xong, làm tiếp A6.3". Cần **migration 058** khi deploy.
+- **Backend:**
+  - `POST /api/v1/webhooks/bank/sepay` (không đăng nhập; `Authorization: Apikey <BANK_WEBHOOK_API_KEY>`, so sánh không lộ độ dài; chưa đặt khóa thì 404);
+  - định dạng theo tài liệu SePay (nguồn: developer.sepay.vn); tìm mã `INV-YYYY-NNNNNN` trong nội dung (chịu được dấu cách, gạch, tiền tố của ngân hàng);
+  - ghi phiếu thu `BANK_TRANSFER` qua `recordPayment` hiện có, dùng `requestKey = bank:sepay:<id>`; bảng `bank_transactions` (khóa duy nhất provider + id) nên gửi lặp hay gửi đồng thời vẫn một phiếu;
+  - không đoán: thiếu mã, không có hóa đơn, hóa đơn không còn nợ, số tiền lớn hơn số nợ, chưa khai tài khoản ghi nhận, ghi lỗi → `NEEDS_REVIEW` kèm lý do; chuyển ra và chuyển vào tài khoản khác bị bỏ qua;
+  - `GET /billing/bank-transactions` và `POST …/:id/resolve` (quyền `invoice.payment.create`), nhật ký `BANK_TRANSFER_RECORDED/FLAGGED/RESOLVED`, chuông thông báo có mục `bankReview`.
+- **Frontend:** thẻ QR tự hỏi lại mỗi 8 giây, khi tiền về thì hóa đơn đang mở tự chuyển Đã thanh toán và báo "Hóa đơn đã được thanh toán"; trang `/billing/bank-transactions` (menu "Chuyển khoản cần xử lý") với hai tab và nút Đã xử lý (ghi chú bắt buộc).
+- **Cấu hình:** `BANK_WEBHOOK_API_KEY`, `BANK_WEBHOOK_ACTOR_EMAIL` (cùng `VIETQR_*`), đã nối vào hai file compose; hướng dẫn cài SePay ở `docs/08_Deployment/BANK_WEBHOOK.md`.
+- **Kiểm chứng:**
+  - backend tsc, eslint, 32 test mới (đọc payload, tìm mã, khóa, quyết định, trùng lặp);
+  - **PostgreSQL thật** (`test:isolated`, gồm chạy migration 058 hai lần): 108 test qua, trong đó test mới gửi cùng một giao dịch 3 lần đồng thời chỉ ra một phiếu thu, hóa đơn PAID, giao dịch sau đó chờ xử lý, lễ tân thấy và đóng được, đóng lần hai 404;
+  - chạy thật với trình duyệt: mở hóa đơn, gọi webhook, vài giây sau hóa đơn thành Đã thanh toán, gửi lại là `duplicate`, hai chuyển khoản không khớp hiện ở trang cần xử lý và đóng được, không lỗi JS.
+- E2E mới `bank-transactions.spec.ts` (mở từ menu, hai tab); chưa chạy được trên máy, chờ CI.
+- Chưa làm: nhà cung cấp khác (Casso, payOS), gợi ý hóa đơn khớp cho giao dịch chờ xử lý.
+- **Chưa thử với SePay thật** (không truy cập được dịch vụ ngoài từ phiên này): định dạng và kiểu chứng thực lấy từ tài liệu SePay.
+
 ## 04/11 — A7 Điều trị chờ đặt lịch
 
 - Người dùng: "làm A7 danh sách điều trị chưa đặt lịch". Plan: `docs/11_Improvement/KE_HOACH_CAI_TIEN.md` mục A7. Không migration.

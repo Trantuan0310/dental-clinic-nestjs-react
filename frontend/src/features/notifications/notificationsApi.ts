@@ -28,7 +28,8 @@ export type PendingKey =
   | 'recallsDue'
   | 'draftInvoices'
   | 'staleEncounters'
-  | 'lowStock';
+  | 'lowStock'
+  | 'bankReview';
 
 export interface PendingSummary {
   items: Array<{ key: PendingKey; count: number }>;

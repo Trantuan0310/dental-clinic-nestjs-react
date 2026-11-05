@@ -131,6 +131,10 @@ Khi hóa đơn còn nợ và phòng khám đã khai tài khoản nhận tiền (
 2. Khi tin nhắn ngân hàng báo đã nhận, bấm **Thu tiền**, chọn **Chuyển khoản**. Hệ thống chưa tự biết khách đã chuyển.
 3. Khách trả một phần: quét mã rồi sửa lại số tiền trong app, hoặc thu phần còn lại ở lần sau; mã luôn tính theo số còn nợ.
 
+Khi phòng khám đã nối SePay (xem [BANK_WEBHOOK.md](../08_Deployment/BANK_WEBHOOK.md)), bước 2 không cần làm: khách chuyển xong, vài giây sau trang hóa đơn đang mở tự báo **Đã thanh toán** và phiếu thu ghi "Tự ghi từ ngân hàng". Chuyển khoản mà hệ thống không tự ghi được (nội dung không có mã hóa đơn, hóa đơn đã thanh toán, chuyển dư tiền…) nằm ở menu **Chuyển khoản cần xử lý** và trên chuông thông báo:
+1. Xem nội dung chuyển khoản và lý do. Tìm hóa đơn đúng rồi bấm **Thu tiền** thủ công, hoặc hoàn tiền nếu khách chuyển nhầm.
+2. Bấm **Đã xử lý** và ghi ngắn đã làm gì. Dòng chuyển sang tab "Đã xử lý".
+
 ### Đặt hẹn tiếp khi thu đủ tiền
 Khi hóa đơn **Đã thanh toán**, trang hóa đơn có thẻ **Hẹn lần khám tiếp**:
 - bệnh nhân đã có lịch hẹn sau này: thẻ hiện ngày giờ đó và nút **Xem lịch hẹn**;
