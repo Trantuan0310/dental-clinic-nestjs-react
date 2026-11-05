@@ -788,3 +788,9 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 - Lỗi tìm ra khi chạy thử và đã sửa: tab "Trả lời khách" mở từ lịch hẹn chào "quý khách" vì bỏ qua lịch hẹn. Nay trả lời cũng lấy khách của lịch hẹn hoặc lượt tái khám (thêm test).
 - E2E mới `ai-assist.spec.ts` (thẻ nhận xét trên trang Báo cáo, đường dự phòng vì CI không có AI). Chưa chạy được trên máy (phiên bản Playwright của repo khác bản cài sẵn), để CI chạy.
 - Production: cần `AI_BASE_URL`/`AI_API_KEY`/`AI_MODEL` (hoặc `GEMINI_API_KEY`) trong env để dùng AI thật; thiếu thì cả 3 nút vẫn chạy bằng bản mẫu.
+
+## 05/11/2026 — Viết lại kịch bản demo (DEMO_SCRIPT.md v2.0)
+- `docs/10_Thesis/DEMO_SCRIPT.md` viết lại theo cốt truyện một bệnh nhân đi hết vòng, qua 3 vai (lễ tân, bác sĩ, quản lý).
+- Thêm các tính năng mới: AI soạn ghi chú/tin nhắn/nhận xét báo cáo, chỉ số vận hành, heatmap công suất, QR VietQR, webhook ngân hàng (kèm lệnh PowerShell mô phỏng), Điều trị chờ đặt lịch, hẹn tiếp khi thu tiền.
+- Thêm: dữ liệu cần dựng sẵn, cấu hình cần bật, phương án dự phòng, bản rút gọn 15 phút (mục ⏱), bảng câu hỏi hội đồng, số liệu mới (1.639 test backend, 108 test PostgreSQL, 38 E2E, 124 quyền).
+- Chỉ sửa tài liệu, không cần chạy test hay deploy.
