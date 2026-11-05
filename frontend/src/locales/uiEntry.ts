@@ -19,16 +19,18 @@ export const vi = {
   },
   dashboard: {
     practice: {
-      scorecardTitle: 'Chỉ số vận hành', scorecardDescription: 'Bốn chỉ số của phòng khám so với mục tiêu: vạch đen là mục tiêu, thanh xanh là kết quả kỳ này',
+      scorecardTitle: 'Chỉ số vận hành', scorecardDescription: 'Các chỉ số của phòng khám so với mục tiêu: vạch đen là mục tiêu, thanh xanh là kết quả kỳ này',
       scorecardSources: 'Mục tiêu tham khảo hướng dẫn của ADA và báo cáo của Curve Dental, Henry Schein One; mục tiêu thời gian chờ là đề xuất, chỉnh theo phòng khám.',
       loadError: 'Không tải được chỉ số.', formulaLabel: 'Cách tính: {{metric}}', target: 'Mục tiêu {{target}}', countsOf: '{{num}}/{{den}} lượt', countsVisits: '{{n}} lượt khám',
       minutes: '{{value}} phút', noData: 'Chưa có dữ liệu',
-      metric: { noShowRate: 'Tỷ lệ vắng mặt', rebookRate: 'Có lịch hẹn tiếp', planAcceptance: 'Chấp nhận kế hoạch điều trị', medianWait: 'Thời gian chờ khám (trung vị)' },
+      metric: { noShowRate: 'Tỷ lệ vắng mặt', rebookRate: 'Có lịch hẹn tiếp', planAcceptance: 'Chấp nhận kế hoạch điều trị', medianWait: 'Thời gian chờ khám (trung vị)', lateCancelRate: 'Hủy sát giờ (dưới 24 giờ)', collectionRate: 'Tỷ lệ thu tiền' },
       formula: {
         noShowRate: 'Lịch vắng ÷ (lịch đã đến + lịch vắng) trong kỳ. Lịch chưa tới giờ không tính.',
         rebookRate: 'Lượt khám đã xong mà bệnh nhân có lịch hẹn sau đó (chưa hủy, chưa vắng) ÷ tổng lượt khám đã xong.',
         planAcceptance: 'Kế hoạch được bệnh nhân chấp nhận ÷ kế hoạch đã đề xuất trong kỳ.',
         medianWait: 'Từ giờ hẹn (hoặc lúc check-in nếu muộn hơn) đến lúc bắt đầu khám; lấy số ở giữa.',
+        lateCancelRate: 'Lịch khách hủy trong vòng 24 giờ trước giờ hẹn ÷ tổng lịch trong kỳ (lịch do phòng khám hủy không tính).',
+        collectionRate: 'Số tiền đã thu ÷ doanh thu điều trị của kỳ, cùng cách tính với báo cáo; tối đa 100%.',
       },
       verdict: { good: 'Đạt mục tiêu', ok: 'Chấp nhận được', poor: 'Cần cải thiện' },
       heatmapTitle: 'Công suất theo giờ', heatmapDescription: 'Phần giờ làm việc của bác sĩ đã có lịch, theo thứ và giờ',
@@ -172,16 +174,18 @@ export const en = {
   },
   dashboard: {
     practice: {
-      scorecardTitle: 'Practice scorecard', scorecardDescription: 'Four clinic measures against their targets: the black tick is the target, the teal bar is this period',
+      scorecardTitle: 'Practice scorecard', scorecardDescription: 'Clinic measures against their targets: the black tick is the target, the teal bar is this period',
       scorecardSources: 'Targets follow ADA guidance and reports from Curve Dental and Henry Schein One; the wait-time target is a proposal, adjust it to your clinic.',
       loadError: 'Could not load the measures.', formulaLabel: 'How it is calculated: {{metric}}', target: 'Target {{target}}', countsOf: '{{num}}/{{den}} visits', countsVisits: '{{n}} visits',
       minutes: '{{value}} min', noData: 'No data yet',
-      metric: { noShowRate: 'No-show rate', rebookRate: 'Has a next appointment', planAcceptance: 'Treatment plan acceptance', medianWait: 'Wait to be seen (median)' },
+      metric: { noShowRate: 'No-show rate', rebookRate: 'Has a next appointment', planAcceptance: 'Treatment plan acceptance', medianWait: 'Wait to be seen (median)', lateCancelRate: 'Late cancellations (under 24 h)', collectionRate: 'Collection rate' },
       formula: {
         noShowRate: 'No-shows ÷ (visits that came + no-shows) in the period. Bookings not yet due are left out.',
         rebookRate: 'Finished visits where the patient has a later appointment (not cancelled, not a no-show) ÷ all finished visits.',
         planAcceptance: 'Plans the patient accepted ÷ plans proposed in the period.',
         medianWait: 'From the booked time (or the check-in, if later) to the start of the exam; the middle value.',
+        lateCancelRate: 'Bookings the patient cancelled less than 24 hours ahead ÷ all bookings in the period (clinic-side cancellations are left out).',
+        collectionRate: 'Money collected ÷ treatment revenue of the period, on the same basis as the reports; capped at 100%.',
       },
       verdict: { good: 'On target', ok: 'Acceptable', poor: 'Needs work' },
       heatmapTitle: 'Capacity by hour', heatmapDescription: 'Share of dentists’ open hours that hold a booking, by weekday and hour',

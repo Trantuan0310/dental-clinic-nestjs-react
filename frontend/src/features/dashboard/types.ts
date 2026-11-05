@@ -217,7 +217,7 @@ export interface CapacityHeatmap {
   totals: { availableMin: number; bookedMin: number; utilization: number | null };
 }
 
-export type ScorecardKey = 'noShowRate' | 'rebookRate' | 'planAcceptance' | 'medianWait';
+export type ScorecardKey = 'noShowRate' | 'rebookRate' | 'planAcceptance' | 'medianWait' | 'lateCancelRate' | 'collectionRate';
 
 export interface ScorecardMetric {
   key: ScorecardKey;

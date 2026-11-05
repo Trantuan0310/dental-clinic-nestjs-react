@@ -1,6 +1,6 @@
 // =============================================================================
 // Practice measures on the Dashboard (docs/11_Improvement B1, B2):
-//   - ScorecardCard: four rates as bullet graphs against a target
+//   - ScorecardCard: six rates as bullet graphs against a target
 //   - CapacityHeatmapCard: how full the dentists' open hours are, weekday × hour
 // Both are drawn with plain markup (no chart library), so they cost no bundle.
 // =============================================================================

@@ -13,14 +13,14 @@ function setup() {
   };
   const reports = new ReportsService(prisma as never, {} as never);
   const service = new PracticeMetricsService(prisma as never, reports);
-  return { service, prisma };
+  return { service, prisma, reports };
 }
 
 const RANGE = { from: '2026-10-01', to: '2026-10-31' };
 
 describe('PracticeMetricsService.scorecard', () => {
   it('computes the four rates with their counts', async () => {
-    const { service, prisma } = setup();
+    const { service, prisma, reports } = setup();
     // no-show: 2 of (2 + 38); rebooking: 3 of 4 finished visits; acceptance 3 of 4 plans.
     prisma.appointment.count.mockImplementation(async ({ where }: any) =>
       where.status === AppointmentStatus.NO_SHOW ? 2 : 38,
@@ -56,27 +56,30 @@ describe('PracticeMetricsService.scorecard', () => {
       },
     ]);
 
+    jest.spyOn(reports, 'revenueAndCollected').mockResolvedValue({ revenue: 100, collected: 90 });
     const card = await service.scorecard(RANGE);
     const by = Object.fromEntries(card.metrics.map(m => [m.key, m]));
     expect(by.noShowRate).toMatchObject({ value: 5, numerator: 2, denominator: 40 });
     expect(by.rebookRate).toMatchObject({ value: 50, numerator: 2, denominator: 4 });
     expect(by.planAcceptance).toMatchObject({ value: 75, numerator: 3, denominator: 4 });
     expect(by.medianWait).toMatchObject({ value: 20, unit: 'minutes' });
+    expect(by.collectionRate).toMatchObject({ value: 90 });
   });
 
   it('gives null, not 0%, when there is nothing to measure', async () => {
-    const { service, prisma } = setup();
+    const { service, prisma, reports } = setup();
     prisma.appointment.count.mockResolvedValue(0);
     prisma.appointment.findMany.mockResolvedValue([]);
     prisma.treatmentPlan.count.mockResolvedValue(0);
     prisma.encounter.findMany.mockResolvedValue([]);
+    jest.spyOn(reports, 'revenueAndCollected').mockResolvedValue({ revenue: 0, collected: 0 });
     const card = await service.scorecard(RANGE);
-    expect(card.metrics.map(m => m.value)).toEqual([null, null, null, null]);
+    expect(card.metrics.map(m => m.value)).toEqual([null, null, null, null, null, null]);
     expect(prisma.appointment.groupBy).not.toHaveBeenCalled();
   });
 
   it('asks for rebookings that still hold a slot, after the range starts', async () => {
-    const { service, prisma } = setup();
+    const { service, prisma, reports } = setup();
     prisma.appointment.count.mockResolvedValue(0);
     prisma.appointment.findMany.mockResolvedValue([
       { patientId: 'a', startAt: at('2026-10-05T03:00:00Z') },
@@ -84,10 +87,33 @@ describe('PracticeMetricsService.scorecard', () => {
     prisma.appointment.groupBy.mockResolvedValue([]);
     prisma.treatmentPlan.count.mockResolvedValue(0);
     prisma.encounter.findMany.mockResolvedValue([]);
+    jest.spyOn(reports, 'revenueAndCollected').mockResolvedValue({ revenue: 0, collected: 0 });
     await service.scorecard(RANGE);
     const where = prisma.appointment.groupBy.mock.calls[0][0].where;
     expect(where.status.notIn).toEqual(expect.arrayContaining(['CANCELLED', 'NO_SHOW', 'LEFT']));
     expect(where.patientId.in).toEqual(['a']);
+  });
+});
+
+describe('PracticeMetricsService late cancellations and collection', () => {
+  it('counts cancellations under 24h ahead and caps the collection rate at 100%', async () => {
+    const { service, prisma, reports } = setup();
+    prisma.appointment.count.mockResolvedValue(20);
+    prisma.appointment.findMany.mockImplementation(async ({ where }: any) =>
+      where.status === AppointmentStatus.CANCELLED
+        ? [
+            { startAt: at('2026-10-10T03:00:00Z'), cancelledAt: at('2026-10-10T01:00:00Z') }, // 2h ahead: late
+            { startAt: at('2026-10-12T03:00:00Z'), cancelledAt: at('2026-10-09T03:00:00Z') }, // 3 days ahead
+          ]
+        : [],
+    );
+    prisma.appointment.groupBy.mockResolvedValue([]);
+    prisma.treatmentPlan.count.mockResolvedValue(0);
+    prisma.encounter.findMany.mockResolvedValue([]);
+    jest.spyOn(reports, 'revenueAndCollected').mockResolvedValue({ revenue: 100, collected: 120 });
+    const by = Object.fromEntries((await service.scorecard(RANGE)).metrics.map(m => [m.key, m]));
+    expect(by.lateCancelRate).toMatchObject({ value: 5, numerator: 1, denominator: 20 });
+    expect(by.collectionRate.value).toBe(100);
   });
 });
 
