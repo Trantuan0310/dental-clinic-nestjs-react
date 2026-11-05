@@ -16,6 +16,9 @@ import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { AiService } from './ai.service';
 import { AiAssistService } from './ai-assist.service';
 import { MessageDraftDto, NoteDraftDto, ReportCommentaryQueryDto } from './dto/assist.dto';
+import { AiChatService } from './assistant/ai-chat.service';
+import { ChatDto, CreateAppointmentActionDto } from './dto/chat.dto';
+import { Throttle } from '@nestjs/throttler';
 import { SummaryQuerySchema } from './dto/summary-query.dto';
 import type { AiPatientSummary } from './ai.types';
 import { User } from '../common/decorators/user.decorator';
@@ -29,6 +32,7 @@ export class AiController {
   constructor(
     private readonly ai: AiService,
     private readonly assist: AiAssistService,
+    private readonly chat: AiChatService,
   ) {}
 
   @Get('summary/patient/:id')
@@ -71,5 +75,30 @@ export class AiController {
   @ApiOperation({ summary: 'AI nhận xét báo cáo của một khoảng ngày (chỉ dùng số tổng)' })
   async reportCommentary(@Query() q: ReportCommentaryQueryDto) {
     return { data: await this.assist.reportCommentary(q.from, q.to, q.refresh ?? false) };
+  }
+
+  @Post('assistant/chat')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @RequirePermissions(
+    'patient.read',
+    'appointment.read.any',
+    'treatment_plan.read',
+    'invoice.read.any',
+    'invoice.read.own',
+  )
+  @ApiOperation({
+    summary: 'Trợ lý AI: tra cứu và soạn thẻ đặt lịch; không tự ghi gì (cần người dùng xác nhận)',
+  })
+  async assistantChat(@Body() dto: ChatDto, @User() actor: JwtPayload) {
+    return { data: await this.chat.chat(dto.messages, dto.refs, actor) };
+  }
+
+  @Post('assistant/actions/create-appointment')
+  @HttpCode(201)
+  @RequirePermissions('appointment.create')
+  @ApiOperation({ summary: 'Người dùng xác nhận thẻ đặt lịch do trợ lý AI soạn' })
+  async confirmAppointment(@Body() dto: CreateAppointmentActionDto, @User() actor: JwtPayload) {
+    return { data: await this.chat.confirmAppointment(dto, actor) };
   }
 }

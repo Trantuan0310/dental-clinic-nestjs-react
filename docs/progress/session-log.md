@@ -794,3 +794,12 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 - Thêm các tính năng mới: AI soạn ghi chú/tin nhắn/nhận xét báo cáo, chỉ số vận hành, heatmap công suất, QR VietQR, webhook ngân hàng (kèm lệnh PowerShell mô phỏng), Điều trị chờ đặt lịch, hẹn tiếp khi thu tiền.
 - Thêm: dữ liệu cần dựng sẵn, cấu hình cần bật, phương án dự phòng, bản rút gọn 15 phút (mục ⏱), bảng câu hỏi hội đồng, số liệu mới (1.639 test backend, 108 test PostgreSQL, 38 E2E, 124 quyền).
 - Chỉ sửa tài liệu, không cần chạy test hay deploy.
+
+## 05/11/2026 — Trợ lý AI dạng chat (nhân viên)
+- Người dùng chọn làm bot chat bản nhỏ: tra cứu + đặt lịch có xác nhận, 5 công cụ.
+- **Backend** (`backend/src/ai/assistant/`): `AiChatService` chạy vòng lặp tối đa 4 lần gọi công cụ bằng JSON (`{"tool","args"}` / `{"reply"}`), dùng chung `AiModel` nên chạy với cả cổng OpenAI/Anthropic lẫn Gemini. Công cụ: `find_patient`, `free_slots`, `pending_treatments`, `unpaid_invoices`, `propose_appointment`; mỗi công cụ bọc service sẵn có với quyền của người dùng, công cụ thiếu quyền bị ẩn.
+- Riêng tư: kết quả công cụ dùng mã ref `P1..`, mô hình không thấy tên/SĐT; trình duyệt điền tên. Bot chỉ tạo **thẻ xác nhận**; endpoint `POST /ai/assistant/actions/create-appointment` mới tạo lịch (qua `AppointmentsService.create`) khi người dùng bấm. Nhật ký `AI_ASSISTANT_CHAT`, `AI_ACTION_EXECUTED`. Giới hạn 20 lượt/phút.
+- **Frontend**: `features/ai/AssistantChat.tsx` (nút nổi trong `AppShell`, ví dụ câu hỏi, thẻ xác nhận), locale `uiAi.assistant`.
+- Tài liệu `docs/05_API/ai.md` §9 (BR-AI-009..012); `DEMO_SCRIPT.md` thêm mục 5.4 và câu hỏi hội đồng.
+- **Kiểm:** backend tsc, eslint, 1653 test (14 test mới `ai-chat.service.spec.ts`); frontend typecheck, eslint, locales, build. Chạy thật với cổng giả lập: hỏi "ai chưa đặt lịch" ra danh sách, "đặt lịch cho chị A ngày mai" ra thẻ, bấm Xác nhận tạo được lịch; kiểm log gửi mô hình không chứa tên/SĐT. E2E mới `ai-assistant.spec.ts` (đường dự phòng, CI không có AI).
+- Chưa thử với mô hình thật trên VPS: mô hình thật có thể đôi khi trả JSON lệch; khi đó bot trả "chưa trả lời được", không làm hỏng chức năng khác. Nên thử vài câu trên VPS trước buổi bảo vệ.
