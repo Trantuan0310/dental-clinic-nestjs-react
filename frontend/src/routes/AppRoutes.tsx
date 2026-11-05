@@ -21,6 +21,7 @@ const PatientListPage = lazy(() => import('@/features/patients/PatientListPage')
 const PatientDetailPage = lazy(() => import('@/features/patients/PatientDetailPage'));
 const TreatmentPlanPage = lazy(() => import('@/features/treatment-plans/TreatmentPlanPage'));
 const RecallsPage = lazy(() => import('@/features/recalls/RecallsPage'));
+const BankTransactionsPage = lazy(() => import('@/features/billing/BankTransactionsPage'));
 const PendingTreatmentsPage = lazy(() => import('@/features/treatment-plans/PendingTreatmentsPage'));
 const RecallUnsubscribePage = lazy(() => import('@/features/recalls/RecallUnsubscribePage'));
 const PatientForm = lazy(() =>
@@ -380,6 +381,16 @@ const router = createBrowserRouter(createRoutesFromElements(
                 element={
                   <ProtectedRoute permission="invoice.read">
                     <Navigate to="/billing/list" replace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="billing/bank-transactions"
+                element={
+                  <ProtectedRoute permission="invoice.payment.create">
+                    <ErrorBoundary componentName="BankTransactionsPage">
+                      <BankTransactionsPage />
+                    </ErrorBoundary>
                   </ProtectedRoute>
                 }
               />

@@ -10,9 +10,10 @@
 |---|---|---|
 | 0 | B2 Heatmap công suất | Đã làm: thẻ "Công suất theo giờ" trên Dashboard (`GET /billing/reports/capacity-heatmap`) |
 | 0 | B1 Bullet graph | Đã làm cho 4 chỉ số (vắng mặt, có lịch hẹn tiếp, chấp nhận kế hoạch, thời gian chờ); `GET /billing/reports/scorecard`. Còn lại 3 chỉ số của bảng B1 (huỷ sát giờ, công suất ghế tổng, tỉ lệ thu) |
-| 0 | A6.1 VietQR trên hoá đơn | Đã làm; cấu hình ở `docs/08_Deployment/VIETQR.md`. Còn lại: A6.3 webhook ngân hàng |
+| 0 | A6.1 VietQR trên hoá đơn | Đã làm; cấu hình ở `docs/08_Deployment/VIETQR.md`. A6.3 webhook ngân hàng đã làm (xem dòng dưới) |
 | 1 | A6.2 Đặt hẹn tiếp khi thu tiền | Đã làm: hoá đơn **Đã thanh toán** có thẻ "Hẹn lần khám tiếp" (xem lịch hẹn đã có, hoặc mở form đặt lịch điền sẵn bệnh nhân, bác sĩ, loại tái khám). Chưa gợi ý ngày từ lượt tái khám của dịch vụ |
 | 1 | A7 Điều trị chờ đặt lịch | Đã làm: trang `/pending-treatments`, `GET /treatment-plans/pending` (BR-TP-012). Còn lại: ghi lần liên hệ gần nhất, soạn tin AI cho nhóm này, chỉ số tỉ lệ chấp nhận theo bác sĩ |
+| 1 | A6.3 Webhook ngân hàng | Đã làm cho SePay: `POST /webhooks/bank/sepay` tự ghi phiếu thu khi nội dung có mã hóa đơn và số tiền vừa đủ; còn lại vào danh sách "Chuyển khoản cần xử lý" và chuông thông báo. Cài đặt: `docs/08_Deployment/BANK_WEBHOOK.md`. Chưa làm: nhà cung cấp khác (Casso, payOS), tự gợi ý hóa đơn khớp cho giao dịch chờ |
 
 ## Tóm tắt
 

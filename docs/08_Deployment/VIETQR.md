@@ -2,7 +2,7 @@
 
 Trang hóa đơn có thẻ **Thu bằng chuyển khoản** với mã VietQR (chuẩn NAPAS): khách quét bằng app ngân hàng, số tiền còn nợ và nội dung (mã hóa đơn) đã điền sẵn. Mã được tạo ngay trên máy chủ, không gọi dịch vụ bên ngoài và không cần khóa API.
 
-Hệ thống **chưa tự biết khách đã chuyển**: lễ tân vẫn bấm **Thu tiền** sau khi ngân hàng báo đã nhận.
+Mặc định hệ thống **chưa tự biết khách đã chuyển**: lễ tân bấm **Thu tiền** sau khi ngân hàng báo đã nhận. Muốn hệ thống tự ghi, nối thêm SePay theo [BANK_WEBHOOK.md](BANK_WEBHOOK.md).
 
 ## Bật mã QR
 
@@ -29,4 +29,4 @@ Sau đó deploy lại (lệnh deploy thông thường). Để trống ba biến 
 - Chuỗi mã theo EMV QR + dịch vụ NAPAS 247 chuyển đến tài khoản (`A000000727`, `QRIBFTTA`), kèm CRC-16/CCITT. Xem `backend/src/billing/vietqr.ts`.
 - Nội dung chuyển khoản là mã hóa đơn bỏ ký tự đặc biệt (tối đa 19 ký tự), để sao kê ngân hàng đối chiếu được với hóa đơn.
 - API: `GET /billing/invoices/:id/payment-qr` (quyền đọc hóa đơn, bác sĩ chỉ thấy hóa đơn của mình). Hóa đơn nháp, đã thanh toán hoặc đã hủy không có mã.
-- Hướng phát triển: nhận thông báo giao dịch từ ngân hàng để tự đánh dấu đã thu.
+- Tự đánh dấu đã thu khi tiền về: [BANK_WEBHOOK.md](BANK_WEBHOOK.md).

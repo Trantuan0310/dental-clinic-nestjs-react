@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   BellRing,
+  Landmark,
   MessageSquare,
   Inbox,
   Users,
@@ -162,6 +163,12 @@ const NAV_GROUPS: NavGroupDef[] = [
         labelKey: 'Billing',
         icon: Wallet,
         permission: 'invoice.read',
+      },
+      {
+        to: '/billing/bank-transactions',
+        labelKey: 'BankTransactions',
+        icon: Landmark,
+        permission: 'invoice.payment.create',
       },
       {
         to: '/expenses',

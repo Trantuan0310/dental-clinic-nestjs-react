@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { EncounterStatus, InvoiceStatus, ItemStatus, Prisma, RecallStatus } from '@prisma/client';
+import {
+  BankTransactionStatus,
+  EncounterStatus,
+  InvoiceStatus,
+  ItemStatus,
+  Prisma,
+  RecallStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BookingService } from '../booking/booking.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
@@ -12,7 +19,8 @@ export type NotificationKey =
   | 'recallsDue'
   | 'draftInvoices'
   | 'staleEncounters'
-  | 'lowStock';
+  | 'lowStock'
+  | 'bankReview';
 
 export interface NotificationItem {
   key: NotificationKey;
@@ -102,6 +110,15 @@ export class NotificationsService {
               minStockLevel: { gt: 0 },
               quantityOnHand: { lte: this.prisma.inventoryItem.fields.minStockLevel },
             },
+          }),
+      ],
+      // Bank transfers the system could not apply by itself (A6.3), for the cashier.
+      [
+        'bankReview',
+        has('invoice.payment.create'),
+        () =>
+          this.prisma.bankTransaction.count({
+            where: { status: BankTransactionStatus.NEEDS_REVIEW },
           }),
       ],
     ];

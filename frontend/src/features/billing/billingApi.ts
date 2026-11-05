@@ -36,6 +36,29 @@ export interface PaymentQr {
   accountName?: string;
 }
 
+export type BankTransactionReason =
+  | 'NO_CODE'
+  | 'INVOICE_NOT_FOUND'
+  | 'NOT_PAYABLE'
+  | 'AMOUNT_EXCEEDS'
+  | 'NO_ACTOR'
+  | 'RECORD_FAILED';
+
+export interface BankTransaction {
+  id: string;
+  status: 'RECORDED' | 'NEEDS_REVIEW' | 'RESOLVED';
+  reason: BankTransactionReason | null;
+  amount: number;
+  content: string;
+  referenceCode: string | null;
+  transactionAt: string;
+  createdAt: string;
+  invoice: { id: string; code: string; status: string; outstandingAmount: number } | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+}
+
 export const billingApi = {
   // Invoices
   async listInvoices(params?: InvoiceFilters): Promise<InvoiceListResponse> {
@@ -46,6 +69,17 @@ export const billingApi = {
   async getInvoice(id: string): Promise<Invoice> {
     const { data } = await api.get<{ data: Invoice }>(`${BASE}/invoices/${id}`);
     return unwrap(data);
+  },
+
+  async listBankTransactions(status: 'NEEDS_REVIEW' | 'RESOLVED'): Promise<BankTransaction[]> {
+    const { data } = await api.get<{ data: BankTransaction[] }>(`${BASE}/bank-transactions`, {
+      params: { status },
+    });
+    return unwrap(data);
+  },
+
+  async resolveBankTransaction(id: string, note: string): Promise<void> {
+    await api.post(`${BASE}/bank-transactions/${id}/resolve`, { note });
   },
 
   async getPaymentQr(id: string): Promise<PaymentQr> {
