@@ -11,7 +11,7 @@ test('assistant chat opens and answers', async ({ browser }) => {
   const admin = await getSharedContext(browser, 'e2e/.auth/admin.json');
   const page = await admin.newPage();
   try {
-    await page.goto('/dashboard');
+    await page.goto('/');
     await page.getByTestId('assistant-open').click();
     await expect(page.getByTestId('assistant-panel')).toBeVisible();
 

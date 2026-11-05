@@ -808,3 +808,9 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 ## 05/11/2026 — B1: thêm 2 chỉ số vận hành (hủy sát giờ, tỷ lệ thu)
 - Thẻ "Chỉ số vận hành" từ 4 lên 6 chỉ số. **Hủy sát giờ:** lịch khách hủy trước giờ hẹn dưới 24 giờ ÷ tổng lịch (bỏ lịch phòng khám tự hủy), mục tiêu ≤ 5%. **Tỷ lệ thu:** đã thu ÷ doanh thu điều trị của kỳ (cùng cơ sở với báo cáo, tối đa 100%), mục tiêu ≥ 95% (đề xuất). Công suất ghế tổng đã có ở heatmap nên không thêm vào thẻ.
 - `ReportsService.revenueAndCollected` (public), `isLateCancel`, 2 hàm trong `PracticeMetricsService`; test mới; locale vi/en; cập nhật DEMO_SCRIPT mục 5.1 và kế hoạch cải tiến.
+
+## 05/11/2026 — B3: phễu bệnh nhân
+- Thẻ **Hành trình bệnh nhân** trên Dashboard: đặt lịch → đã đến → đã khám → đã thanh toán đủ → có lịch hẹn tiếp; mỗi bước là tập con của bước trước (thanh không bao giờ dài hơn bước trước); lọc theo nguồn đặt lịch khi có từ 2 nguồn trở lên. Lịch do phòng khám tự hủy không tính; "có lịch hẹn tiếp" chỉ xét bệnh nhân đã thanh toán đủ.
+- Backend: `patientFunnel` (hàm thuần) trong `practice-metrics.ts`, `PracticeMetricsService.patientFunnel`, `GET /billing/reports/patient-funnel` (`report.revenue.read`), 6 test mới. Frontend: `features/dashboard/funnelCard.tsx`, locale `uiEntry.dashboard.funnel`, E2E `patient-funnel.spec.ts`.
+- Chạy thật trên dữ liệu demo 6 tháng: 96 → 96 → 96 → 64 → 9; không lỗi console/API. Thêm: E2E trợ lý AI trước đó mở `/dashboard` (404 nhưng vẫn có header); sửa thành `/`.
+- Chưa làm trong B3: thác nước tài chính, small multiples theo bác sĩ, thanh chồng tuổi nợ.

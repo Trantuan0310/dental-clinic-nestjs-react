@@ -182,3 +182,50 @@ export function isLateCancel(startAt: Date, cancelledAt: Date | null): boolean {
   const ahead = startAt.getTime() - cancelledAt.getTime();
   return ahead < 24 * HOUR;
 }
+
+export const FUNNEL_STAGES = ['booked', 'arrived', 'examined', 'paid', 'rebooked'] as const;
+export type FunnelStageKey = (typeof FUNNEL_STAGES)[number];
+
+/** What happened to one booking, as the funnel reads it. */
+export interface FunnelRow {
+  source: string;
+  arrived: boolean;
+  examined: boolean;
+  paid: boolean;
+  rebooked: boolean;
+}
+
+export interface FunnelStage {
+  key: FunnelStageKey;
+  count: number;
+}
+
+export interface Funnel {
+  stages: FunnelStage[];
+  bySource: Record<string, FunnelStage[]>;
+}
+
+function stageCounts(rows: FunnelRow[]): FunnelStage[] {
+  const counts = new Array<number>(FUNNEL_STAGES.length).fill(0);
+  for (const r of rows) {
+    const passed = [true, r.arrived, r.examined, r.paid, r.rebooked];
+    // A booking counts at a step only if it got through every step before it,
+    // so the bars never grow from one step to the next.
+    for (let i = 0; i < passed.length && passed[i]; i++) counts[i] += 1;
+  }
+  return FUNNEL_STAGES.map((key, i) => ({ key, count: counts[i] }));
+}
+
+/**
+ * Booked → came → examined → paid → has a later booking, overall and by how
+ * the booking was made. Each step is a subset of the one before.
+ */
+export function patientFunnel(rows: FunnelRow[]): Funnel {
+  const sources = [...new Set(rows.map(r => r.source))].sort();
+  return {
+    stages: stageCounts(rows),
+    bySource: Object.fromEntries(
+      sources.map(s => [s, stageCounts(rows.filter(r => r.source === s))]),
+    ),
+  };
+}

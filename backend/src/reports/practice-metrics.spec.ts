@@ -2,6 +2,7 @@ import { buildDayCalendar } from '../appointments/domain/day-calendar';
 import {
   capacityCells,
   median,
+  patientFunnel,
   percent,
   scorecardMetric,
   SCORECARD_TARGETS,
@@ -142,5 +143,41 @@ describe('scorecard helpers', () => {
       numerator: 2,
       denominator: 50,
     });
+  });
+});
+
+describe('patientFunnel', () => {
+  const row = (source: string, upTo: 0 | 1 | 2 | 3 | 4) => ({
+    source,
+    arrived: upTo >= 1,
+    examined: upTo >= 2,
+    paid: upTo >= 3,
+    rebooked: upTo >= 4,
+  });
+
+  it('counts each booking only as far as it got, so no step is bigger than the one before', () => {
+    const f = patientFunnel([
+      row('ONLINE', 4),
+      row('ONLINE', 3),
+      row('ONLINE', 0), // never came
+      row('PHONE', 2),
+      row('PHONE', 1),
+    ]);
+    expect(f.stages.map(s => s.count)).toEqual([5, 4, 3, 2, 1]);
+    expect(f.bySource.ONLINE.map(s => s.count)).toEqual([3, 2, 2, 2, 1]);
+    expect(f.bySource.PHONE.map(s => s.count)).toEqual([2, 2, 1, 0, 0]);
+  });
+
+  it('does not count a later step when an earlier one is missing', () => {
+    const f = patientFunnel([
+      { source: 'PHONE', arrived: false, examined: true, paid: true, rebooked: true },
+    ]);
+    expect(f.stages.map(s => s.count)).toEqual([1, 0, 0, 0, 0]);
+  });
+
+  it('is all zeros, with no sources, when there are no bookings', () => {
+    const f = patientFunnel([]);
+    expect(f.stages.map(s => s.count)).toEqual([0, 0, 0, 0, 0]);
+    expect(f.bySource).toEqual({});
   });
 });
