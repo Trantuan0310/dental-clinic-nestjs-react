@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/features/auth/authApi';
 import { cn } from '@/lib/cn';
 import { NotificationBell } from './NotificationBell';
+import { AssistantButton } from '@/features/ai/AssistantChat';
 import { Logo } from '@/components/brand';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -156,6 +157,7 @@ export function Header({ onMenuClick, mobileNavOpen = false }: HeaderProps) {
             <span className="font-medium text-gray-800 dark:text-surface-100">{formatDate(clinicWallClock(now), 'dd/MM/yyyy')}</span>
           </div>
 
+          <AssistantButton />
           <LanguageSwitcher />
           <ThemeToggle />
 

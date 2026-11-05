@@ -7,6 +7,7 @@ import { notify } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
+import { useAssistantStore } from '@/stores/assistantStore';
 import { aiAssistApi, type AssistantCard, type ChatTurn } from './aiAssistApi';
 
 /** Same permissions the endpoint accepts: the button only shows to those who can use it. */
@@ -38,7 +39,8 @@ export function AssistantChat() {
   const allowed = useAuthStore((s) => s.hasAnyPermission(CHAT_PERMISSIONS));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const open = useAssistantStore((s) => s.open);
+  const setOpen = useAssistantStore((s) => s.setOpen);
   const [input, setInput] = useState('');
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [refs, setRefs] = useState<Record<string, string>>({});
@@ -94,17 +96,6 @@ export function AssistantChat() {
 
   return (
     <>
-      {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          data-testid="assistant-open"
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-primary-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2"
-        >
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          {t('uiAi.assistant.open')}
-        </button>
-      )}
       {open && (
         <section
           role="dialog"
@@ -204,5 +195,28 @@ export function AssistantChat() {
         </section>
       )}
     </>
+  );
+}
+
+/** The header button that opens the assistant; shown only to users who can use it. */
+export function AssistantButton() {
+  const { t } = useTranslation();
+  const allowed = useAuthStore((s) => s.hasAnyPermission(CHAT_PERMISSIONS));
+  const open = useAssistantStore((s) => s.open);
+  const setOpen = useAssistantStore((s) => s.setOpen);
+  if (!allowed) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(!open)}
+      aria-pressed={open}
+      aria-label={t('uiAi.assistant.open')}
+      title={t('uiAi.assistant.open')}
+      data-testid="assistant-open"
+      className="inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-primary-700 hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:bg-surface-800"
+    >
+      <Sparkles className="h-4 w-4" aria-hidden="true" />
+      <span className="hidden lg:inline">{t('uiAi.assistant.open')}</span>
+    </button>
   );
 }
