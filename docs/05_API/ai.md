@@ -146,3 +146,33 @@ Trả về `{ from, to, points[3..6], facts, generatedAt, source, model?, cached
 | BR-AI-006 | Bản nháp AI không bao giờ tự lưu hoặc tự gửi; người dùng phải bấm lưu/gửi bằng chức năng thường (áp dụng đủ quy tắc nghiệp vụ và nhật ký của chức năng đó). |
 | BR-AI-007 | Mỗi lần soạn ghi chú / tin nhắn ghi nhật ký `AI_NOTE_DRAFTED` / `AI_MESSAGE_DRAFTED` (nguồn, loại; không lưu nội dung). |
 | BR-AI-008 | Nhận xét báo cáo chỉ dùng số tổng; không gửi bệnh nhân nào cho mô hình. |
+
+## 9. Trợ lý AI dạng chat (nhân viên)
+
+Khung chat nổi ở góc màn hình (mọi vai trò có quyền xem bệnh nhân, lịch, kế hoạch điều trị hoặc hóa đơn). Bot tra cứu và soạn việc đặt lịch; **không tự ghi gì**.
+
+### Endpoint
+
+| Method | Path | Quyền | Mô tả |
+|---|---|---|---|
+| POST | `/ai/assistant/chat` | một trong `patient.read`, `appointment.read.any`, `treatment_plan.read`, `invoice.read.any`, `invoice.read.own` (giới hạn 20 lượt/phút) | Nhận `messages` (tối đa 20, tin cuối của người dùng) và `refs`; trả `reply`, `refs`, `names`, `actions`, `tools`, `source` |
+| POST | `/ai/assistant/actions/create-appointment` | `appointment.create` | Người dùng bấm **Xác nhận** trên thẻ: tạo lịch bằng `AppointmentsService.create` dưới quyền của họ |
+
+### Cách chạy
+
+- Vòng lặp tối đa 4 lần gọi công cụ, mỗi lượt mô hình trả một JSON: `{"tool","args"}` hoặc `{"reply"}`. Dùng chung cấu hình `AI_BASE_URL/AI_API_KEY/AI_MODEL` (hoặc Gemini); không cần tính năng gọi hàm riêng của nhà cung cấp.
+- Công cụ (mỗi cái bọc một service sẵn có, chạy với quyền của người dùng; công cụ không đủ quyền bị ẩn): `find_patient`, `free_slots`, `pending_treatments`, `unpaid_invoices`, `propose_appointment`.
+- `propose_appointment` kiểm giờ còn trống rồi chỉ trả **thẻ xác nhận**. Lịch chỉ được tạo khi người dùng bấm nút; mọi quy tắc đặt lịch (BR-APPT) vẫn áp dụng như khi tự đặt.
+- Chưa cấu hình AI hoặc AI lỗi: trả thông báo, `source: "fallback"`, các chức năng khác không ảnh hưởng.
+
+### Quy tắc
+
+| Mã | Nội dung |
+|---|---|
+| BR-AI-009 | Bot không gửi tên, SĐT của bệnh nhân cho mô hình: kết quả công cụ dùng mã ref (`P1`, `P2`…), trình duyệt điền tên khi hiển thị. Điều người dùng tự gõ vào khung chat thì mô hình thấy. |
+| BR-AI-010 | Bot không ghi dữ liệu: việc duy nhất có thể làm là soạn thẻ đặt lịch, người dùng bấm Xác nhận mới tạo. Không kê đơn, không sửa/xóa, không thu tiền. |
+| BR-AI-011 | Bot không có quyền hơn người dùng: công cụ gọi service với `actor` của người dùng; dentist chỉ thấy phạm vi của mình như ở các màn hình thường. |
+| BR-AI-012 | Nhật ký `AI_ASSISTANT_CHAT` (nguồn, tên công cụ đã dùng, số thẻ; không lưu nội dung) và `AI_ACTION_EXECUTED` khi người dùng xác nhận. Dữ liệu trả về từ công cụ được coi là dữ liệu, không phải chỉ dẫn. |
+
+### Kiểm thử
+`backend/src/ai/assistant/ai-chat.service.spec.ts` (không lộ tên/SĐT cho mô hình, thẻ không tự tạo lịch, từ chối giờ kín và ref lạ, ẩn công cụ thiếu quyền, giới hạn vòng lặp, lỗi mô hình, xác nhận có nhật ký); E2E `frontend/e2e/ai-assistant.spec.ts` (khung chat mở, gửi, đường dự phòng).

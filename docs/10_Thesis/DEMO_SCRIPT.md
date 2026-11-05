@@ -178,8 +178,15 @@ Invoke-RestMethod -Method Post -Uri 'https://<tên-miền>/api/v1/webhooks/bank/
 - Đọc 1-2 nhận xét. Nói: "AI chỉ đọc **số tổng** của báo cáo, không có thông tin bệnh nhân nào. Mọi con số do hệ thống tính; AI chỉ diễn giải thành lời, và chân thẻ ghi rõ điều đó."
 - Cuộn xuống: doanh thu theo trạng thái, công nợ theo tuổi nợ, nút xuất CSV.
 
-### 5.4. ⏱ Nhật ký kiểm toán
-- **Quản trị → Nhật ký**: lọc theo hôm nay → thấy các dòng vừa làm, trong đó có `AI_NOTE_DRAFTED`, `AI_MESSAGE_DRAFTED`, `BANK_TRANSFER_RECORDED`.
+### 5.4. Trợ lý AI dạng chat (điểm mới, 1,5 phút)
+- Ở bất kỳ màn hình nào, bấm nút **Trợ lý AI** góc dưới phải (cửa sổ lễ tân).
+- Hỏi: **"Ai chưa đặt lịch điều trị?"** → bot trả danh sách bệnh nhân chờ lâu nhất (lấy từ trang Điều trị chờ đặt lịch).
+- Gõ: **"Đặt lịch cho chị <tên bệnh nhân demo> vào ngày mai"** → bot tìm bệnh nhân, xem giờ trống của các bác sĩ, rồi hiện **thẻ đề xuất đặt lịch**. Chỉ vào thẻ: chưa có lịch nào được tạo; bấm **Xác nhận đặt lịch** thì lịch mới có (thấy ở trang Lịch hẹn).
+- Nói: "Bot không tự ghi gì: nó chỉ chuẩn bị, người dùng bấm xác nhận. Bot chạy với quyền của chính người đang đăng nhập nên không thấy hay làm được gì hơn họ. Tên bệnh nhân không gửi cho AI: AI chỉ thấy mã P1, P2, trình duyệt điền tên khi hiển thị."
+- Dự phòng: nếu AI không dùng được, khung chat báo "chưa cấu hình / không phản hồi", các chức năng khác vẫn bình thường; chuẩn bị video quay sẵn đoạn này.
+
+### 5.5. ⏱ Nhật ký kiểm toán
+- **Quản trị → Nhật ký**: lọc theo hôm nay → thấy các dòng vừa làm, trong đó có `AI_NOTE_DRAFTED`, `AI_MESSAGE_DRAFTED`, `AI_ASSISTANT_CHAT`, `BANK_TRANSFER_RECORDED`.
 - Nói: "Mọi lần dùng AI và mọi khoản tiền tự ghi đều để lại dấu vết: ai, lúc nào, nguồn nào. Nhật ký không lưu nội dung ghi chú hay tin nhắn."
 
 ---
@@ -205,6 +212,7 @@ Mời câu hỏi từ hội đồng. Xem phần dưới để chuẩn bị.
 |---|---|
 | **AI có đọc dữ liệu bệnh nhân không? Có lộ thông tin không?** | Không gửi tên, số điện thoại, ngày sinh, địa chỉ. Ghi chú: chỉ gửi đúng dòng bác sĩ gõ. Tin nhắn: tên được điền ở máy chủ sau khi AI trả lời. Báo cáo: chỉ số tổng. Mỗi lần dùng đều ghi nhật ký. Phù hợp yêu cầu bảo vệ dữ liệu cá nhân (Nghị định 356/2025). |
 | **AI sai thì sao?** | AI chỉ soạn nháp, người dùng đọc và sửa trước khi lưu hoặc gửi; trên giao diện luôn có dòng nhắc "có thể sai". Việc rủi ro cao (dị ứng, giờ trống, tiền) **không giao cho AI**. |
+| **Bot chat có tự đặt lịch hay sửa dữ liệu được không?** | Không. Việc duy nhất bot làm được là soạn thẻ đặt lịch; người dùng bấm Xác nhận thì hệ thống mới tạo, qua đúng quy tắc đặt lịch như khi tự làm. Không kê đơn, không sửa, không xóa, không thu tiền. Bot chạy với quyền của người dùng nên không vượt quyền. |
 | **Nếu AI hỏng hoặc hết hạn mức?** | Mỗi tính năng có bản soạn theo mẫu; nút vẫn chạy và hiện rõ là bản mẫu. Hệ thống không phụ thuộc AI để hoạt động. |
 | **Chuyển khoản tự ghi có thể ghi sai tiền không?** | Chỉ ghi khi nội dung có mã hóa đơn, hóa đơn còn nợ và số tiền không vượt số nợ. Gửi lặp không ghi hai lần (kiểm bằng cả bảng giao dịch lẫn khóa của phiếu thu, đã thử 3 yêu cầu đồng thời trên PostgreSQL thật). Còn lại vào danh sách để người xử lý. |
 | **Ai chắc rằng thông báo đến từ ngân hàng?** | Địa chỉ webhook yêu cầu khóa bí mật chung với SePay; sai khóa trả 401; chưa cấu hình khóa thì địa chỉ không tồn tại. |

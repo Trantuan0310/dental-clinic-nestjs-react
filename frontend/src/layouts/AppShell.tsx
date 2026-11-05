@@ -6,6 +6,7 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { SkipLink, Breadcrumb } from '@/components/ui';
 import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
+import { AssistantChat } from '@/features/ai/AssistantChat';
 import { PendingBookingWatcher } from '@/features/booking/usePendingBookingCount';
 
 // Grid-style pages (calendar, dispatch board, working schedules) use the whole
@@ -29,6 +30,7 @@ export function AppShell() {
     <div className="min-h-screen bg-surface-50 text-surface-900 dark:bg-surface-950 dark:text-surface-100">
       <SkipLink>{t('a11y.skipToMain')}</SkipLink>
       <PendingBookingWatcher />
+      <AssistantChat />
       {/*
         Layout strategy:
         - On mobile (<md) the Sidebar is a fixed overlay drawer (rendered by

@@ -160,7 +160,11 @@ describe('Phase one audit regressions', () => {
       db.patient.findFirst.mockResolvedValue({ id: 'p' });
       db.encounter.count.mockResolvedValue(1);
       const { service } = ai();
-      const result = await new AiController(service, {} as any).getPatientSummary('p', {}, actor);
+      const result = await new AiController(service, {} as any, {} as any).getPatientSummary(
+        'p',
+        {},
+        actor,
+      );
       expect(result.data.cached).toBe(true);
       if (
         !actor.permissions.includes('patient.update') &&

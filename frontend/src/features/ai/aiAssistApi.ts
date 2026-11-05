@@ -37,6 +37,28 @@ export interface ReportCommentary {
   cached: boolean;
 }
 
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AssistantCard {
+  type: 'create_appointment';
+  payload: { patientId: string; dentistId: string; startAt: string; reason?: string };
+  view: { patientRef: string; dentistName: string; startAt: string; reason: string | null };
+}
+
+export interface AssistantReply {
+  /** Patients appear as [P1]; fill them with `names`. */
+  reply: string;
+  refs: Record<string, string>;
+  names: Record<string, string>;
+  actions: AssistantCard[];
+  tools: string[];
+  source: SummarySource;
+  model?: string;
+}
+
 /** Drafts only: saving a note or sending a message goes through the usual endpoints. */
 export const aiAssistApi = {
   async draftNote(encounterId: string, text: string): Promise<NoteDraft> {
@@ -51,6 +73,14 @@ export const aiAssistApi = {
     const { data } = await api.get<{ data: ReportCommentary }>('/ai/report-commentary', {
       params: { from, to, ...(refresh ? { refresh: 'true' } : {}) },
     });
+    return unwrap(data);
+  },
+  async assistantChat(messages: ChatTurn[], refs: Record<string, string>): Promise<AssistantReply> {
+    const { data } = await api.post<{ data: AssistantReply }>('/ai/assistant/chat', { messages, refs });
+    return unwrap(data);
+  },
+  async confirmAppointment(payload: AssistantCard['payload']): Promise<{ id: string }> {
+    const { data } = await api.post<{ data: { id: string } }>('/ai/assistant/actions/create-appointment', payload);
     return unwrap(data);
   },
 };
