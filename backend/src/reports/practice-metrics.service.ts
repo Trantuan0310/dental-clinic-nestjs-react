@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus, InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { clinicDateOnly, endOfClinicDay, startOfClinicDay } from '../common/date-range.util';
 import { loadDayCalendars, type DayKey } from '../appointments/domain/day-calendar-loader';
@@ -7,11 +7,14 @@ import { ARRIVED_STATUSES, ReportsService } from './reports.service';
 import {
   capacityCells,
   isLateCancel,
+  patientFunnel,
   median,
   percent,
   scorecardMetric,
   waitMinutes,
   type CapacityCell,
+  type Funnel,
+  type FunnelRow,
   type ScorecardMetric,
 } from './practice-metrics';
 
@@ -30,6 +33,11 @@ export interface CapacityHeatmap {
   dentists: Array<{ id: string; fullName: string }>;
   cells: Array<CapacityCell & { utilization: number }>;
   totals: { availableMin: number; bookedMin: number; utilization: number | null };
+}
+
+export interface PatientFunnel extends Funnel {
+  from: string;
+  to: string;
 }
 
 export interface Scorecard {
@@ -113,6 +121,67 @@ export class PracticeMetricsService {
       to: clinicDateOnly(toDate),
       metrics: [noShow, rebook, acceptance, wait, lateCancel, collection],
     };
+  }
+
+  /**
+   * What became of the bookings in the range (those the clinic did not cancel
+   * itself): came, was examined, paid in full, and has a later booking.
+   */
+  async patientFunnel(query: { from?: string; to?: string }): Promise<PatientFunnel> {
+    const { fromDate, toDate } = this.reports.resolveRange(query.from, query.to);
+    const appts = await this.prisma.appointment.findMany({
+      where: {
+        deletedAt: null,
+        cancelledByClinic: false,
+        startAt: { gte: fromDate, lte: toDate },
+      },
+      select: {
+        patientId: true,
+        startAt: true,
+        status: true,
+        source: true,
+        encounter: {
+          select: {
+            invoices: {
+              where: { status: { not: InvoiceStatus.VOIDED } },
+              select: { status: true },
+            },
+          },
+        },
+      },
+    });
+    const paidPatients = [
+      ...new Set(
+        appts
+          .filter(a => a.encounter?.invoices.some(i => i.status === InvoiceStatus.PAID))
+          .map(a => a.patientId),
+      ),
+    ];
+    const latest = paidPatients.length
+      ? await this.prisma.appointment.groupBy({
+          by: ['patientId'],
+          where: {
+            deletedAt: null,
+            status: { notIn: NOT_HOLDING },
+            patientId: { in: paidPatients },
+            startAt: { gt: fromDate },
+          },
+          _max: { startAt: true },
+        })
+      : [];
+    const next = new Map(latest.map(l => [l.patientId, l._max.startAt]));
+    const rows: FunnelRow[] = appts.map(a => {
+      const paid = !!a.encounter?.invoices.some(i => i.status === InvoiceStatus.PAID);
+      const later = next.get(a.patientId);
+      return {
+        source: a.source,
+        arrived: ARRIVED_STATUSES.includes(a.status),
+        examined: !!a.encounter,
+        paid,
+        rebooked: paid && later != null && later.getTime() > a.startAt.getTime(),
+      };
+    });
+    return { from: clinicDateOnly(fromDate), to: clinicDateOnly(toDate), ...patientFunnel(rows) };
   }
 
   /** No-shows ÷ (visits that came + no-shows): a booking not yet due is in neither. */

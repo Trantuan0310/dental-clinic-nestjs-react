@@ -14,6 +14,7 @@ import { resolveRange, type TimeRange } from './dashboard/types';
 import { DashboardHeader } from './dashboard/DashboardHeader';
 import { AiSummaryCard } from './dashboard/AiSummaryCard';
 import { CapacityHeatmapCard, ScorecardCard } from './dashboard/practiceCards';
+import { FunnelCard } from './dashboard/funnelCard';
 import {
   AppointmentStatsCard,
   AppointmentsCard,
@@ -251,6 +252,9 @@ export default function DashboardPage() {
           )}
         </div>
       )}
+
+      {/* Row 1.4 — patient funnel: booked → came → examined → paid → booked again */}
+      {canSeeRevenue && <FunnelCard range={dateRange} rangeKey={range} />}
 
       {/* Row 1.5 — AI tóm tắt hồ sơ bệnh nhân */}
       <AiSummaryCard patientOptions={aiPatientOptions} />

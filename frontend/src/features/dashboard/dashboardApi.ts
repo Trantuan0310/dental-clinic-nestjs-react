@@ -15,7 +15,7 @@ import type {
   RevenueByProcedure,
   RevenueBySource,
 } from '@/types/dashboard';
-import type { AppointmentStats, CapacityHeatmap, RevenueByCustomerType, Scorecard } from './types';
+import type { AppointmentStats, CapacityHeatmap, PatientFunnel, RevenueByCustomerType, Scorecard } from './types';
 
 export interface RangeQuery {
   from?: string;
@@ -117,6 +117,11 @@ export const dashboardApi = {
 
   scorecard: async (q: RangeQuery): Promise<Scorecard> => {
     const { data } = await api.get<{ data: Scorecard }>('/billing/reports/scorecard', range(q));
+    return data.data;
+  },
+
+  patientFunnel: async (q: RangeQuery): Promise<PatientFunnel> => {
+    const { data } = await api.get<{ data: PatientFunnel }>('/billing/reports/patient-funnel', range(q));
     return data.data;
   },
 };

@@ -237,3 +237,17 @@ export interface Scorecard {
   to: string;
   metrics: ScorecardMetric[];
 }
+
+export type FunnelStageKey = 'booked' | 'arrived' | 'examined' | 'paid' | 'rebooked';
+
+export interface FunnelStage {
+  key: FunnelStageKey;
+  count: number;
+}
+
+export interface PatientFunnel {
+  from: string;
+  to: string;
+  stages: FunnelStage[];
+  bySource: Record<string, FunnelStage[]>;
+}

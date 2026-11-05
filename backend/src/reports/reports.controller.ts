@@ -134,4 +134,11 @@ export class ReportsController {
   async scorecard(@Query() q: DashboardRangeQueryDto) {
     return { data: await this.metrics.scorecard({ from: q.from, to: q.to }) };
   }
+
+  @Get('patient-funnel')
+  @RequirePermissions('report.revenue.read')
+  @ApiOperation({ summary: 'Booked → came → examined → paid → has a later booking, by source' })
+  async patientFunnel(@Query() q: DashboardRangeQueryDto) {
+    return { data: await this.metrics.patientFunnel({ from: q.from, to: q.to }) };
+  }
 }

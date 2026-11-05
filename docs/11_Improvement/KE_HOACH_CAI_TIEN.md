@@ -10,6 +10,7 @@
 |---|---|---|
 | 0 | B2 Heatmap công suất | Đã làm: thẻ "Công suất theo giờ" trên Dashboard (`GET /billing/reports/capacity-heatmap`) |
 | 0 | B1 Bullet graph | Đã làm cho 6 chỉ số (vắng mặt, huỷ sát giờ, có lịch hẹn tiếp, chấp nhận kế hoạch, thời gian chờ, tỉ lệ thu); `GET /billing/reports/scorecard`. Công suất ghế tổng đã có ở thẻ heatmap (dòng "Tổng cộng"). Chưa làm: mục tiêu chỉnh được trong Cài đặt |
+| 0 | B3 Phễu bệnh nhân | Đã làm: thẻ "Hành trình bệnh nhân" trên Dashboard (`GET /billing/reports/patient-funnel`): đặt lịch → đã đến → đã khám → đã thanh toán đủ → có lịch hẹn tiếp, lọc theo nguồn đặt lịch. Chưa làm: thác nước tài chính, small multiples theo bác sĩ, thanh chồng tuổi nợ |
 | 0 | A6.1 VietQR trên hoá đơn | Đã làm; cấu hình ở `docs/08_Deployment/VIETQR.md`. A6.3 webhook ngân hàng đã làm (xem dòng dưới) |
 | 1 | A6.2 Đặt hẹn tiếp khi thu tiền | Đã làm: hoá đơn **Đã thanh toán** có thẻ "Hẹn lần khám tiếp" (xem lịch hẹn đã có, hoặc mở form đặt lịch điền sẵn bệnh nhân, bác sĩ, loại tái khám). Chưa gợi ý ngày từ lượt tái khám của dịch vụ |
 | 1 | A7 Điều trị chờ đặt lịch | Đã làm: trang `/pending-treatments`, `GET /treatment-plans/pending` (BR-TP-012). Còn lại: ghi lần liên hệ gần nhất, soạn tin AI cho nhóm này, chỉ số tỉ lệ chấp nhận theo bác sĩ |

@@ -18,6 +18,15 @@ export const vi = {
     home: 'Về trang chủ',
   },
   dashboard: {
+    funnel: {
+      title: 'Hành trình bệnh nhân', description: 'Các lịch hẹn trong kỳ đi được tới đâu: từ đặt lịch tới có lịch hẹn tiếp',
+      sourceFilter: 'Lọc theo nguồn đặt lịch', allSources: 'Tất cả nguồn',
+      source: { ONLINE: 'Đặt online', PHONE: 'Điện thoại', WALK_IN: 'Vãng lai', RETURNING: 'Tái khám' },
+      stage: { booked: 'Đặt lịch', arrived: 'Đã đến', examined: 'Đã khám', paid: 'Đã thanh toán đủ', rebooked: 'Có lịch hẹn tiếp' },
+      kept: '{{percent}}% so với bước trước', barLabel: '{{stage}}: {{count}} trên {{total}} lịch đặt',
+      empty: 'Chưa có lịch hẹn nào trong kỳ này',
+      note: 'Mỗi bước chỉ tính những lịch đã qua bước trước. Lịch do phòng khám tự hủy không tính. "Có lịch hẹn tiếp" chỉ xét bệnh nhân đã thanh toán đủ.',
+    },
     practice: {
       scorecardTitle: 'Chỉ số vận hành', scorecardDescription: 'Các chỉ số của phòng khám so với mục tiêu: vạch đen là mục tiêu, thanh xanh là kết quả kỳ này',
       scorecardSources: 'Mục tiêu tham khảo hướng dẫn của ADA và báo cáo của Curve Dental, Henry Schein One; mục tiêu thời gian chờ là đề xuất, chỉnh theo phòng khám.',
@@ -173,6 +182,15 @@ export const en = {
     home: 'Go to home',
   },
   dashboard: {
+    funnel: {
+      title: 'Patient journey', description: 'How far the bookings of the period got: from booked to having a next appointment',
+      sourceFilter: 'Filter by booking source', allSources: 'All sources',
+      source: { ONLINE: 'Online', PHONE: 'Phone', WALK_IN: 'Walk-in', RETURNING: 'Recall' },
+      stage: { booked: 'Booked', arrived: 'Came', examined: 'Examined', paid: 'Paid in full', rebooked: 'Has a next appointment' },
+      kept: '{{percent}}% of the step before', barLabel: '{{stage}}: {{count}} of {{total}} bookings',
+      empty: 'No bookings in this period',
+      note: 'Each step counts only bookings that got through the one before. Bookings the clinic cancelled itself are left out. "Has a next appointment" looks at patients who paid in full.',
+    },
     practice: {
       scorecardTitle: 'Practice scorecard', scorecardDescription: 'Clinic measures against their targets: the black tick is the target, the teal bar is this period',
       scorecardSources: 'Targets follow ADA guidance and reports from Curve Dental and Henry Schein One; the wait-time target is a proposal, adjust it to your clinic.',

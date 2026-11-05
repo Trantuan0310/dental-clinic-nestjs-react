@@ -173,6 +173,10 @@ Invoke-RestMethod -Method Post -Uri 'https://<tên-miền>/api/v1/webhooks/bank/
 - Chọn một bác sĩ để lọc.
 - Nói: "Con số trung bình che mất chuyện giờ nào kín, giờ nào trống. Chủ phòng khám nhìn bảng này biết nên mời khách vào khung nào và nên xếp ca ra sao. Giờ làm việc ở đây **tính từ chính lịch của hệ thống đặt lịch**, đã trừ nghỉ phép và ngày đóng cửa nên khớp với thực tế."
 
+### 5.2b. Hành trình bệnh nhân (điểm mới, 45 giây)
+- Dưới hai thẻ trên là thẻ **Hành trình bệnh nhân** (chọn 6 tháng): các thanh ngang đi từ **Đặt lịch → Đã đến → Đã khám → Đã thanh toán đủ → Có lịch hẹn tiếp**, mỗi thanh ghi số lượt và phần trăm còn lại so với bước trước.
+- Nói: "Chỗ thanh ngắn lại nhiều nhất là chỗ phòng khám đang mất khách. Ví dụ ở đây phần lớn đã khám nhưng ít người có lịch hẹn tiếp: đó là lý do ta làm thẻ Hẹn lần khám tiếp ở bước thu tiền." Nếu có nhiều nguồn đặt lịch, chọn lọc theo nguồn (online, điện thoại, vãng lai) để so sánh.
+
 ### 5.3. Báo cáo và AI nhận xét (điểm mới, 1 phút)
 - Menu **Báo cáo** → chọn khoảng ngày → thẻ **AI nhận xét kỳ báo cáo** → **Nhận xét**.
 - Đọc 1-2 nhận xét. Nói: "AI chỉ đọc **số tổng** của báo cáo, không có thông tin bệnh nhân nào. Mọi con số do hệ thống tính; AI chỉ diễn giải thành lời, và chân thẻ ghi rõ điều đó."

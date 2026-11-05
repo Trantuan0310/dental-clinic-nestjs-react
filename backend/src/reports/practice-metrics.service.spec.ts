@@ -117,6 +117,64 @@ describe('PracticeMetricsService late cancellations and collection', () => {
   });
 });
 
+describe('PracticeMetricsService.patientFunnel', () => {
+  it('follows bookings from booked to a later booking, skipping clinic-side cancellations', async () => {
+    const { service, prisma } = setup();
+    const paid = { invoices: [{ status: 'PAID' }] };
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        patientId: 'a',
+        startAt: at('2026-10-05T03:00:00Z'),
+        status: 'COMPLETED',
+        source: 'ONLINE',
+        encounter: paid,
+      },
+      {
+        patientId: 'b',
+        startAt: at('2026-10-06T03:00:00Z'),
+        status: 'COMPLETED',
+        source: 'PHONE',
+        encounter: paid,
+      },
+      {
+        patientId: 'c',
+        startAt: at('2026-10-07T03:00:00Z'),
+        status: 'COMPLETED',
+        source: 'PHONE',
+        encounter: { invoices: [{ status: 'ISSUED' }] },
+      },
+      {
+        patientId: 'd',
+        startAt: at('2026-10-08T03:00:00Z'),
+        status: 'NO_SHOW',
+        source: 'ONLINE',
+        encounter: null,
+      },
+    ]);
+    prisma.appointment.groupBy.mockResolvedValue([
+      { patientId: 'a', _max: { startAt: at('2026-11-05T03:00:00Z') } },
+      { patientId: 'b', _max: { startAt: at('2026-10-06T03:00:00Z') } }, // only the visit itself
+    ]);
+    const f = await service.patientFunnel(RANGE);
+    expect(f.stages.map(s => s.count)).toEqual([4, 3, 3, 2, 1]);
+    expect(f.bySource.PHONE.map(s => s.count)).toEqual([2, 2, 2, 1, 0]);
+    const where = prisma.appointment.findMany.mock.calls[0][0].where;
+    expect(where.cancelledByClinic).toBe(false);
+    expect(prisma.appointment.groupBy.mock.calls[0][0].where.patientId.in.sort()).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
+  it('skips the rebooking query when nobody paid', async () => {
+    const { service, prisma } = setup();
+    prisma.appointment.findMany.mockResolvedValue([]);
+    const f = await service.patientFunnel(RANGE);
+    expect(f.stages.map(s => s.count)).toEqual([0, 0, 0, 0, 0]);
+    expect(prisma.appointment.groupBy).not.toHaveBeenCalled();
+  });
+});
+
 describe('PracticeMetricsService.capacityHeatmap', () => {
   it('lists dentists and returns an empty grid when nobody is open', async () => {
     const { service, prisma } = setup();
