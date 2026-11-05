@@ -6,6 +6,7 @@ import { loadDayCalendars, type DayKey } from '../appointments/domain/day-calend
 import { ARRIVED_STATUSES, ReportsService } from './reports.service';
 import {
   capacityCells,
+  isLateCancel,
   median,
   percent,
   scorecardMetric,
@@ -99,16 +100,18 @@ export class PracticeMetricsService {
 
   async scorecard(query: { from?: string; to?: string }): Promise<Scorecard> {
     const { fromDate, toDate } = this.reports.resolveRange(query.from, query.to);
-    const [noShow, rebook, acceptance, wait] = await Promise.all([
+    const [noShow, rebook, acceptance, wait, lateCancel, collection] = await Promise.all([
       this.noShowRate(fromDate, toDate),
       this.rebookRate(fromDate, toDate),
       this.planAcceptance(fromDate, toDate),
       this.medianWait(fromDate, toDate),
+      this.lateCancelRate(fromDate, toDate),
+      this.collectionRate(fromDate, toDate),
     ]);
     return {
       from: clinicDateOnly(fromDate),
       to: clinicDateOnly(toDate),
-      metrics: [noShow, rebook, acceptance, wait],
+      metrics: [noShow, rebook, acceptance, wait, lateCancel, collection],
     };
   }
 
@@ -179,5 +182,30 @@ export class PracticeMetricsService {
       if (minutes != null) waits.push(minutes);
     }
     return scorecardMetric('medianWait', median(waits), null, waits.length);
+  }
+
+  /** Cancellations made less than 24 hours ahead ÷ bookings (those the clinic cancelled itself are left out). */
+  private async lateCancelRate(from: Date, to: Date) {
+    const where = {
+      deletedAt: null,
+      startAt: { gte: from, lte: to },
+      cancelledByClinic: false,
+    };
+    const [total, cancelled] = await Promise.all([
+      this.prisma.appointment.count({ where }),
+      this.prisma.appointment.findMany({
+        where: { ...where, status: AppointmentStatus.CANCELLED, cancelledAt: { not: null } },
+        select: { startAt: true, cancelledAt: true },
+      }),
+    ]);
+    const late = cancelled.filter(a => isLateCancel(a.startAt, a.cancelledAt)).length;
+    return scorecardMetric('lateCancelRate', percent(late, total), late, total);
+  }
+
+  /** Collected ÷ treatment revenue of the range, on the report's shared basis; capped at 100%. */
+  private async collectionRate(from: Date, to: Date) {
+    const { revenue, collected } = await this.reports.revenueAndCollected(from, to);
+    const value = percent(collected, revenue);
+    return scorecardMetric('collectionRate', value == null ? null : Math.min(value, 100));
   }
 }

@@ -182,6 +182,15 @@ export class ReportsService {
   }
 
   /** Issued revenue minus refunds and voids of issued invoices, all dated in range. */
+  /** Revenue and collections of a range on the shared basis, for the scorecard's collection rate. */
+  async revenueAndCollected(from: Date, to: Date): Promise<{ revenue: number; collected: number }> {
+    const [revenue, collected] = await Promise.all([
+      this.revenueTotal(from, to),
+      this.collectedTotal(from, to),
+    ]);
+    return { revenue, collected };
+  }
+
   private async revenueTotal(from: Date, to: Date): Promise<number> {
     const [issued, refunds, adjustments, voids] = await Promise.all([
       this.prisma.invoice.aggregate({

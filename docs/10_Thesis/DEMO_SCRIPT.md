@@ -164,7 +164,7 @@ Invoke-RestMethod -Method Post -Uri 'https://<tên-miền>/api/v1/webhooks/bank/
 ### 5.1. Chỉ số vận hành so với mục tiêu (điểm mới, 1,5 phút)
 - Cửa sổ quản trị → Dashboard, chọn **6 tháng qua**, kéo xuống thẻ **Chỉ số vận hành**.
 - Giải thích cách đọc: mỗi chỉ số một thanh ngang, **vạch đen là mục tiêu**, thanh xanh là kết quả; bên phải ghi bằng chữ **Đạt mục tiêu / Chấp nhận được / Cần cải thiện**.
-- Bốn chỉ số: **tỷ lệ vắng mặt** (mục tiêu ≤ 5%), **có lịch hẹn tiếp** (≥ 85%), **chấp nhận kế hoạch điều trị** (≥ 75%), **thời gian chờ khám** (≤ 15 phút).
+- Sáu chỉ số: **tỷ lệ vắng mặt** (mục tiêu ≤ 5%), **hủy sát giờ** (≤ 5%), **có lịch hẹn tiếp** (≥ 85%), **chấp nhận kế hoạch điều trị** (≥ 75%), **thời gian chờ khám** (≤ 15 phút), **tỷ lệ thu tiền** (≥ 95%).
 - Rê chuột vào dấu (i) để cho thấy **công thức tính**, và chỉ vào dòng "17/96 lượt" (tử số/mẫu số) để chứng minh số liệu kiểm chứng được.
 - Nói: "Mục tiêu lấy từ hướng dẫn của Hiệp hội Nha khoa Hoa Kỳ và báo cáo ngành (có ghi nguồn ở chân thẻ). Chỉ số chưa có dữ liệu hiện dấu gạch, **không hiện 0%** để khỏi gây hiểu lầm."
 

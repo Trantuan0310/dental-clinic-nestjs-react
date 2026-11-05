@@ -110,7 +110,13 @@ export function capacityCells(calendars: DayCalendar[]): CapacityCell[] {
 export type MetricDirection = 'lower' | 'higher';
 
 export interface ScorecardMetric {
-  key: 'noShowRate' | 'rebookRate' | 'planAcceptance' | 'medianWait';
+  key:
+    | 'noShowRate'
+    | 'rebookRate'
+    | 'planAcceptance'
+    | 'medianWait'
+    | 'lateCancelRate'
+    | 'collectionRate';
   /** null when there is nothing to measure in the range. */
   value: number | null;
   unit: 'percent' | 'minutes';
@@ -123,7 +129,7 @@ export interface ScorecardMetric {
   denominator: number | null;
 }
 
-/** Targets from the sources in docs/11_Improvement; the wait target is a proposal. */
+/** Targets from the sources in docs/11_Improvement; the wait and collection targets are proposals. */
 export const SCORECARD_TARGETS: Record<
   ScorecardMetric['key'],
   { unit: ScorecardMetric['unit']; direction: MetricDirection; target: number; okAt: number }
@@ -132,6 +138,8 @@ export const SCORECARD_TARGETS: Record<
   rebookRate: { unit: 'percent', direction: 'higher', target: 85, okAt: 70 },
   planAcceptance: { unit: 'percent', direction: 'higher', target: 75, okAt: 60 },
   medianWait: { unit: 'minutes', direction: 'lower', target: 15, okAt: 30 },
+  lateCancelRate: { unit: 'percent', direction: 'lower', target: 5, okAt: 10 },
+  collectionRate: { unit: 'percent', direction: 'higher', target: 95, okAt: 85 },
 };
 
 export function percent(part: number, whole: number): number | null {
@@ -166,4 +174,11 @@ export function scorecardMetric(
   denominator: number | null = null,
 ): ScorecardMetric {
   return { key, value, numerator, denominator, ...SCORECARD_TARGETS[key] };
+}
+
+/** A cancellation less than 24 hours before the booked time. */
+export function isLateCancel(startAt: Date, cancelledAt: Date | null): boolean {
+  if (!cancelledAt) return false;
+  const ahead = startAt.getTime() - cancelledAt.getTime();
+  return ahead < 24 * HOUR;
 }

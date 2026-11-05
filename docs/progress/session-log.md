@@ -804,3 +804,7 @@ Làm tiếp kế hoạch `docs/progress/full_module_fix_plan.md` (nhánh này tr
 - **Kiểm:** backend tsc, eslint, 1653 test (14 test mới `ai-chat.service.spec.ts`); frontend typecheck, eslint, locales, build. Chạy thật với cổng giả lập: hỏi "ai chưa đặt lịch" ra danh sách, "đặt lịch cho chị A ngày mai" ra thẻ, bấm Xác nhận tạo được lịch; kiểm log gửi mô hình không chứa tên/SĐT. E2E mới `ai-assistant.spec.ts` (đường dự phòng, CI không có AI).
 - Chưa thử với mô hình thật trên VPS: mô hình thật có thể đôi khi trả JSON lệch; khi đó bot trả "chưa trả lời được", không làm hỏng chức năng khác. Nên thử vài câu trên VPS trước buổi bảo vệ.
 - CI E2E đỏ ở `flow-treatment-plan.spec.ts`: nút nổi "Trợ lý AI" (góc phải dưới) che nút "Lưu" của trang. Sửa: nút mở trợ lý chuyển lên thanh header (`AssistantButton`, trạng thái ở `stores/assistantStore.ts`), không còn nút nổi che nội dung; khung chat chỉ hiện khi bấm mở.
+
+## 05/11/2026 — B1: thêm 2 chỉ số vận hành (hủy sát giờ, tỷ lệ thu)
+- Thẻ "Chỉ số vận hành" từ 4 lên 6 chỉ số. **Hủy sát giờ:** lịch khách hủy trước giờ hẹn dưới 24 giờ ÷ tổng lịch (bỏ lịch phòng khám tự hủy), mục tiêu ≤ 5%. **Tỷ lệ thu:** đã thu ÷ doanh thu điều trị của kỳ (cùng cơ sở với báo cáo, tối đa 100%), mục tiêu ≥ 95% (đề xuất). Công suất ghế tổng đã có ở heatmap nên không thêm vào thẻ.
+- `ReportsService.revenueAndCollected` (public), `isLateCancel`, 2 hàm trong `PracticeMetricsService`; test mới; locale vi/en; cập nhật DEMO_SCRIPT mục 5.1 và kế hoạch cải tiến.
