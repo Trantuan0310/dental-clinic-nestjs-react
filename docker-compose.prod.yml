@@ -65,6 +65,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Set by scripts/deploy-vps.sh so /health says which commit is running.
+      GIT_SHA: ${GIT_SHA:-unknown}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=require
       JWT_SECRET: ${JWT_SECRET:?Set random JWT secret}
       CORS_ORIGIN: https://${DOMAIN:?Set public domain}

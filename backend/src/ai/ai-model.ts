@@ -42,7 +42,7 @@ export class AiModel {
         user,
         maxTokens,
       );
-      return { data: asObject(extractJsonObject(text)), source: 'llm', model: this.gateway.model };
+      return { data: asObject(parseOrPlain(text)), source: 'llm', model: this.gateway.model };
     }
     if (this.genAI) {
       const model = this.genAI.getGenerativeModel({
@@ -55,9 +55,29 @@ export class AiModel {
       });
       const text = (await model.generateContent(`${system}\n\n${user}`)).response.text();
       if (!text) throw new Error('Empty Gemini response');
-      return { data: asObject(extractJsonObject(text)), source: 'gemini', model: this.geminiModel };
+      return { data: asObject(parseOrPlain(text)), source: 'gemini', model: this.geminiModel };
     }
     return null;
+  }
+
+  /**
+   * Like `json`, for a chat: when the model answers in plain words instead of
+   * a JSON object, those words are the reply. Still throws on gateway errors.
+   */
+  async jsonOrText(system: string, user: string, maxTokens: number): Promise<ModelReply | null> {
+    try {
+      return await this.json(system, user, maxTokens);
+    } catch (err) {
+      const text = (err as { plainText?: string }).plainText;
+      if (text) {
+        return {
+          data: { reply: text },
+          source: this.gateway ? 'llm' : 'gemini',
+          model: this.gateway?.model ?? this.geminiModel,
+        };
+      }
+      throw err;
+    }
   }
 
   /** `json`, with any failure logged and turned into null (the caller's fallback). */
@@ -73,6 +93,18 @@ export class AiModel {
       this.logger.warn(`AI ${feature} failed, using fallback: ${(err as Error).message}`);
       return null;
     }
+  }
+}
+
+/** The JSON object in `text`; when there is none the error carries the text itself. */
+function parseOrPlain(text: string): unknown {
+  try {
+    return extractJsonObject(text);
+  } catch (err) {
+    if ((err as Error).message.startsWith('No JSON object') && text.trim()) {
+      throw Object.assign(err as Error, { plainText: text.trim().slice(0, 1500) });
+    }
+    throw err;
   }
 }
 

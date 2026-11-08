@@ -86,5 +86,11 @@ describe('extractJsonObject', () => {
     expect(extractJsonObject('```json\n{"next":"Tái khám"}\n```')).toEqual({ next: 'Tái khám' });
     expect(extractJsonObject('Đây là kết quả: {"open":"Không"} xong.')).toEqual({ open: 'Không' });
     expect(() => extractJsonObject('không có json')).toThrow('No JSON object');
+    // two objects, braces inside strings and placeholders in prose
+    expect(extractJsonObject('{"tool":"a"}\nGiải thích: {"x":1}')).toEqual({ tool: 'a' });
+    expect(extractJsonObject('{"reply":"Chào {ten}, mã } lạ"}')).toEqual({
+      reply: 'Chào {ten}, mã } lạ',
+    });
+    expect(extractJsonObject('Chào {ten}! {"reply":"ok"}')).toEqual({ reply: 'ok' });
   });
 });
