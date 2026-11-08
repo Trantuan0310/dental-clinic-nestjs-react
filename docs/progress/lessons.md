@@ -71,3 +71,6 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Trả lời tiếng Việt, ngắn: kết quả trước, rồi việc người dùng cần làm. Không kể lại từng bước.
 - Việc dài: một dòng trạng thái khi bắt đầu và khi đổi hướng.
 - Báo thật các hạn chế (chưa thử với dịch vụ thật, dữ liệu demo mỏng, việc chưa làm) và việc còn lại cho người dùng.
+
+- Trước deploy, so fingerprint ED25519 với console VPS. Windows ssh-keyscan có thể lỗi KEX dù cổng 22 hoạt động; bản đi kèm Git lấy được khóa để đối chiếu.
+- Smoke phải đọc SHA từ JSON /health qua nginx. Trang SPA có thể trả HTTP 200 cho đường dẫn sai. Trên Windows kiểm tra Vite/esbuild đang giữ file trước khi chạy npm ci trong checkout.
