@@ -12,6 +12,7 @@ import { AiModel, textField } from '../ai-model';
 import type { SummarySource } from '../ai.types';
 import { PendingAction, RefBook, Tool, ToolContext, toolsFor } from './assistant-tools';
 import type { ChatTurn, CreateAppointmentActionDto } from '../dto/chat.dto';
+import { FALLBACK_HELP, FALLBACK_NOTICE, matchIntent, renderResult } from './fallback-intents';
 
 const MAX_STEPS = 4;
 const REPLY_MAX = 1500;
@@ -103,13 +104,6 @@ export class AiChatService {
       ...(model ? { model } : {}),
     });
 
-    if (!this.model.configured) {
-      return finish(
-        'Trợ lý AI chưa được cấu hình trên hệ thống này (thiếu AI_BASE_URL / AI_API_KEY / AI_MODEL). Các chức năng khác vẫn dùng bình thường.',
-        'fallback',
-      );
-    }
-
     const ctx: ToolContext = {
       services: {
         patients: this.patients,
@@ -123,6 +117,26 @@ export class AiChatService {
       refs,
       actions,
     };
+    /** The answer without the model: keywords pick a lookup tool, a template writes the reply. */
+    const plainAnswer = async (): Promise<ChatResult> => {
+      const last = messages[messages.length - 1].content;
+      const intent = matchIntent(last, now);
+      const tool = intent && tools.find(t => t.name === intent.tool);
+      if (!intent || !tool) return finish(FALLBACK_HELP, 'fallback');
+      used.push(tool.name);
+      try {
+        const result = await tool.run(intent.args, ctx);
+        return finish(
+          `${renderResult(tool.name, result as Record<string, unknown>)}\n\n(${FALLBACK_NOTICE})`,
+          'fallback',
+        );
+      } catch (err) {
+        return finish(toolError(err), 'fallback');
+      }
+    };
+
+    if (!this.model.configured) return this.logged(actor, await plainAnswer());
+
     const system = buildSystemPrompt(tools, now);
     const steps: string[] = [];
     const deadline = Date.now() + DEADLINE_MS;
@@ -132,7 +146,7 @@ export class AiChatService {
 
     try {
       for (let i = 0; i < MAX_STEPS + 1 && Date.now() < deadline; i++) {
-        const out = await this.model.json(system, buildTranscript(messages, steps), 700);
+        const out = await this.model.jsonOrText(system, buildTranscript(messages, steps), 700);
         if (!out) break;
         modelName = out.model;
         source = out.source;
@@ -166,10 +180,7 @@ export class AiChatService {
       }
     } catch (err) {
       this.logger.warn(`AI assistant failed: ${(err as Error).message}`);
-      return this.logged(
-        actor,
-        finish('Trợ lý AI đang không phản hồi, bạn thử lại sau ít phút.', 'fallback'),
-      );
+      return this.logged(actor, await plainAnswer());
     }
 
     return this.logged(

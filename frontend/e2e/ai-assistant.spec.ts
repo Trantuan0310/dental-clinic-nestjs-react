@@ -1,5 +1,31 @@
 import { test, expect, getSharedContext } from './fixtures';
 
+test('only template replies carry the fallback label in a mixed conversation', async ({ browser }) => {
+  const admin = await getSharedContext(browser, 'e2e/.auth/admin.json');
+  const page = await admin.newPage();
+  try {
+    let source = 'fallback';
+    await page.route('**/ai/assistant/chat', (route) => route.fulfill({
+      json: { data: { source, reply: 'Câu trả lời', actions: [], refs: {}, names: {} } },
+    }));
+    await page.goto('/');
+    await page.getByTestId('assistant-open').click();
+    const input = page.getByTestId('assistant-input');
+    const replies = page.getByTestId('assistant-reply');
+    await input.fill('Lịch hôm nay?');
+    await input.press('Enter');
+    await expect(replies.first().getByText('Trả lời theo mẫu', { exact: true })).toBeVisible();
+
+    source = 'llm';
+    await input.fill('Lịch ngày mai?');
+    await input.press('Enter');
+    await expect(replies.nth(1)).toHaveText('Câu trả lời');
+    await expect(replies.first().getByText('Trả lời theo mẫu', { exact: true })).toBeVisible();
+  } finally {
+    await page.close();
+  }
+});
+
 /**
  * The floating assistant. CI runs without a model, so the answer is the
  * "not configured" notice; the tool loop and the confirm card are covered by

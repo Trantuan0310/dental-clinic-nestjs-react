@@ -8,7 +8,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { useAssistantStore } from '@/stores/assistantStore';
-import { aiAssistApi, type AssistantCard, type ChatTurn } from './aiAssistApi';
+import { aiAssistApi, type AssistantCard, type AssistantReply, type ChatTurn } from './aiAssistApi';
 
 /** Same permissions the endpoint accepts: the button only shows to those who can use it. */
 const CHAT_PERMISSIONS = ['patient.read', 'appointment.read.any', 'treatment_plan.read', 'invoice.read.any', 'invoice.read.own'];
@@ -18,6 +18,7 @@ interface Bubble {
   role: 'user' | 'assistant';
   /** What the model wrote (patients as [P1]); this is what goes back as history. */
   raw: string;
+  source?: AssistantReply['source'];
   cards: AssistantCard[];
   /** Cards already confirmed, by index. */
   done: Set<number>;
@@ -57,7 +58,7 @@ export function AssistantChat() {
     onSuccess: (res) => {
       setRefs(res.refs);
       setNames((n) => ({ ...n, ...res.names }));
-      setBubbles((b) => [...b, { id: nextId.current++, role: 'assistant', raw: res.reply, cards: res.actions, done: new Set() }]);
+      setBubbles((b) => [...b, { id: nextId.current++, role: 'assistant', raw: res.reply, source: res.source, cards: res.actions, done: new Set() }]);
     },
     onError: (err) => {
       setBubbles((b) => [...b, { id: nextId.current++, role: 'assistant', raw: getApiErrorMessage(err, t('uiAi.assistant.error')), cards: [], done: new Set() }]);
@@ -143,6 +144,9 @@ export function AssistantChat() {
                   ) : (
                     <>
                       <p className="whitespace-pre-wrap rounded-lg bg-surface-100 px-3 py-2 dark:bg-surface-800" data-testid="assistant-reply">
+                        {b.source === 'fallback' && (
+                          <span className="mb-1 block text-xs font-semibold">{t('uiAi.assistant.templateReply')}</span>
+                        )}
                         {fill(b.raw, names)}
                       </p>
                       {b.cards.map((card, i) => (

@@ -32,7 +32,7 @@ function setup(replies: Array<Record<string, unknown>>, configured = true) {
   for (const r of replies) {
     json.mockResolvedValueOnce({ data: r, source: 'llm', model: 'test-model' });
   }
-  const model = { configured, json };
+  const model = { configured, json, jsonOrText: json };
   const audit = { log: jest.fn() };
   const patients = {
     lookup: jest.fn().mockResolvedValue({
@@ -102,7 +102,7 @@ describe('AiChatService', () => {
     const t = setup([], false);
     const res = await t.service.chat(ask('xin chào'), undefined, desk);
     expect(res.source).toBe('fallback');
-    expect(res.reply).toContain('chưa được cấu hình');
+    expect(res.reply).toContain('AI chưa dùng được');
     expect(t.json).not.toHaveBeenCalled();
   });
 
@@ -216,7 +216,7 @@ describe('AiChatService', () => {
     t.json.mockRejectedValueOnce(new Error('gateway 500'));
     const res = await t.service.chat(ask('hi'), undefined, desk);
     expect(res.source).toBe('fallback');
-    expect(res.reply).toContain('không phản hồi');
+    expect(res.reply).toContain('AI chưa dùng được');
   });
 
   it('requires the last message to be the user’s', async () => {
@@ -336,6 +336,72 @@ describe('read-only lookup tools', () => {
     await t.service.chat(ask('doanh thu tháng này'), undefined, manager);
     expect(t.json.mock.calls[1][1]).toContain('"treatmentRevenue":{"total":125000000');
     expect(toolsFor(desk).map(x => x.name)).not.toContain('report_summary');
+  });
+});
+
+describe('without the AI model', () => {
+  it('still answers the common questions from the lookup tools, in plain templates', async () => {
+    const t = setup([], false);
+    t.plans.pendingTreatments.mockResolvedValue({
+      summary: {},
+      rows: [
+        {
+          patientId: PATIENT_ID,
+          patientName: 'Nguyễn Thị Lan',
+          procedures: ['Trám răng'],
+          dentistName: 'BS An',
+          waitingDays: 9,
+          value: 1_500_000,
+          nextAppointmentAt: null,
+        },
+      ],
+    });
+    const res = await t.service.chat(ask('Ai chưa đặt lịch điều trị?'), undefined, desk);
+    expect(res.source).toBe('fallback');
+    expect(res.reply).toContain('1 bệnh nhân đã đồng ý điều trị mà chưa đặt lịch');
+    expect(res.reply).toContain('[P1]');
+    expect(res.reply).toContain('Trám răng');
+    expect(res.names).toEqual({ P1: 'Nguyễn Thị Lan' });
+    expect(res.tools).toEqual(['pending_treatments']);
+    expect(t.json).not.toHaveBeenCalled();
+  });
+
+  it('understands text typed without diacritics, and "ngày mai"', async () => {
+    const t = setup([], false);
+    t.availability.loadDay.mockResolvedValue({
+      windows: [],
+      blocked: [],
+      closedAllDay: false,
+      closedReason: null,
+      clinicClosed: false,
+    });
+    const res = await t.service.chat(
+      ask('bac si nao co ca lam sang mai'),
+      undefined,
+      desk,
+      new Date('2026-11-08T03:00:00Z'),
+    );
+    expect(res.tools).toEqual(['dentist_hours']);
+    expect(t.availability.loadDay.mock.calls[0][1]).toBe('2026-11-09');
+    expect(res.reply).toContain('không có bác sĩ nào có ca làm');
+  });
+
+  it('falls back to the lookup when the model fails, and never answers outside the user’s tools', async () => {
+    const t = setup([]);
+    t.json.mockRejectedValue(new Error('gateway 403'));
+    t.appointments.getWaitingQueue.mockResolvedValue({ data: [] });
+    const ok = await t.service.chat(ask('ai đang chờ khám'), undefined, desk);
+    expect(ok.reply).toContain('không có bệnh nhân nào đang chờ');
+    const t2 = setup([], false);
+    const none = await t2.service.chat(ask('doanh thu tháng này'), undefined, desk); // desk cannot read revenue
+    expect(none.reply).toContain('AI chưa dùng được');
+    expect(t2.reports.dashboardKpis).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tool error readable', async () => {
+    const t = setup([], false);
+    const res = await t.service.chat(ask('hóa đơn nào còn nợ'), undefined, dentist);
+    expect(res.source).toBe('fallback');
   });
 });
 

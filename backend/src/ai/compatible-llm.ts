@@ -99,12 +99,38 @@ export function createCompatibleLlm(
   };
 }
 
-/** Models behind gateways often wrap JSON in ```json fences or add a sentence; take the object. */
+/**
+ * Models behind gateways often wrap JSON in ```json fences, add a sentence
+ * before or after it, or even write two objects. Take the first complete
+ * object that parses (braces inside strings are skipped).
+ */
 export function extractJsonObject(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('No JSON object in AI response');
-  return JSON.parse(candidate.slice(start, end + 1));
+  for (let start = candidate.indexOf('{'); start >= 0; start = candidate.indexOf('{', start + 1)) {
+    const end = matchingBrace(candidate, start);
+    if (end < 0) continue;
+    try {
+      return JSON.parse(candidate.slice(start, end + 1));
+    } catch {
+      // not JSON (for example "{ten}" in prose): try the next opening brace
+    }
+  }
+  throw new Error('No JSON object in AI response');
+}
+
+/** Index of the brace closing the one at `start`, or -1. */
+function matchingBrace(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return i;
+  }
+  return -1;
 }
