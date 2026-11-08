@@ -49,6 +49,7 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 
 - **Không thêm phần tử `fixed` ở góc phải dưới** (từng che nút Lưu của trang kế hoạch điều trị, E2E đỏ một vòng CI). Đặt nút vào header; khung nổi chỉ hiện khi người dùng mở.
 - **Sửa file lớn bằng script Python:** xem cấu trúc bằng `grep -n "^export\|as const\|^};"` trước, chèn theo số dòng; tìm chuỗi bằng `index()` đã từng chèn nhầm vào giữa dòng định nghĩa kiểu. `replace` không giới hạn số lần từng sinh biến không dùng làm `lint` đỏ: dùng `replace(..., 1)` hoặc `Edit` có ngữ cảnh.
+- **Test phụ thuộc giờ hiện tại sẽ đỏ vào một ngày nào đó** (08/11/2026, Chủ nhật: 8 test đặt lịch công khai hỏng, PR chỉ có tài liệu cũng đỏ). Test dùng "ngày mai 10:00" trùng đúng phút đầu tiên được đặt online khi chạy vào Chủ nhật. Dùng ngày làm việc cách ít nhất 3 ngày hoặc đồng hồ giả; khi CI đỏ ở PR chỉ-tài-liệu, chạy cùng test cục bộ trước (ngày cục bộ = ngày CI).
 - **Đổi chữ trên giao diện:** thêm khóa vào cả `vi` và `en` của đúng file `frontend/src/locales/*.ts`, rồi `node frontend/scripts/check-ui-locales.mjs`; sửa test E2E theo chữ mới.
 - **Hàm khởi tạo thêm tham số** thì test cũ gọi `new X(a, b)` hỏng: `tsc --noEmit` chỉ ra ngay, sửa `{} as any`.
 - **`Card` không chuyển `data-testid`:** bọc trong `div`.

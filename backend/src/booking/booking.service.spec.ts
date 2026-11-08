@@ -91,9 +91,14 @@ describe('BookingService public request security and validation', () => {
     service = new BookingService(prisma, appointments, patients, audit, email, availability);
   });
 
+  // A weekday at least three days ahead, 10:00 clinic time: far enough past the
+  // online lead time whatever day the suite runs on (a Sunday run once landed
+  // exactly on Monday's first bookable minute and every public-booking test failed).
   const futureSlot = () => {
-    const d = new Date(Date.now() + 24 * 60 * 60_000 + 8 * 60 * 60_000);
-    const date = new Date(d.getTime() + 7 * 60 * 60_000).toISOString().slice(0, 10);
+    const DAY = 24 * 60 * 60_000;
+    let local = Date.now() + 7 * 60 * 60_000 + 3 * DAY;
+    while ([0, 6].includes(new Date(local).getUTCDay())) local += DAY;
+    const date = new Date(local).toISOString().slice(0, 10);
     return { date, startAt: new Date(date + 'T10:00:00+07:00').toISOString() };
   };
 
