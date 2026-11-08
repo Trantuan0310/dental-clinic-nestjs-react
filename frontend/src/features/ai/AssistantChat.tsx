@@ -92,7 +92,7 @@ export function AssistantChat() {
     setNames({});
   };
 
-  const examples = [t('uiAi.assistant.example1'), t('uiAi.assistant.example2'), t('uiAi.assistant.example3')];
+  const examples = ['example4', 'example5', 'example1', 'example2', 'example3'].map((k) => t(`uiAi.assistant.${k}`));
 
   return (
     <>

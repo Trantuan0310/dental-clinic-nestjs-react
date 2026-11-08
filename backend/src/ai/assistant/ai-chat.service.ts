@@ -5,6 +5,7 @@ import { AvailabilityService } from '../../appointments/availability.service';
 import { PatientsService } from '../../patients/patients.service';
 import { BillingService } from '../../billing/billing.service';
 import { TreatmentPlansService } from '../../treatment-plans/treatment-plans.service';
+import { ReportsService } from '../../reports/reports.service';
 import { clinicDateOnly } from '../../common/date-range.util';
 import type { JwtPayload } from '../../common/guards/permissions.guard';
 import { AiModel, textField } from '../ai-model';
@@ -74,6 +75,7 @@ export class AiChatService {
     private readonly appointments: AppointmentsService,
     private readonly billing: BillingService,
     private readonly plans: TreatmentPlansService,
+    private readonly reports: ReportsService,
   ) {}
 
   async chat(
@@ -115,6 +117,7 @@ export class AiChatService {
         appointments: this.appointments,
         billing: this.billing,
         plans: this.plans,
+        reports: this.reports,
       },
       actor,
       refs,
