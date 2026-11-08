@@ -207,11 +207,18 @@ export class AvailabilityService {
         }),
         db.appointmentLinkRescheduleRequest.findMany({
           where: {
-            dentistId, status: 'PENDING', holdUntil: { gt: new Date() },
-            requestedStartAt: { lt: dayEnd }, requestedEndAt: { gt: dayStart },
+            dentistId,
+            status: 'PENDING',
+            holdUntil: { gt: new Date() },
+            requestedStartAt: { lt: dayEnd },
+            requestedEndAt: { gt: dayStart },
             appointment: { deletedAt: null, status: { in: ['SCHEDULED', 'CONFIRMED'] } },
           },
-          include: { appointment: { select: { dentistId: true, startAt: true, endAt: true } } },
+          include: {
+            appointment: {
+              select: { patientId: true, dentistId: true, startAt: true, endAt: true },
+            },
+          },
         }),
       ]);
     return buildDayCalendar({
@@ -222,12 +229,21 @@ export class AvailabilityService {
       timeOffs: timeOffs ?? [],
       bookings: [
         ...(bookings ?? []).map(finishedEarly),
-        ...(held ?? []).filter(h => h.dentistId === h.appointment.dentistId &&
-          h.originalStartAt.getTime() === h.appointment.startAt.getTime() &&
-          h.originalEndAt.getTime() === h.appointment.endAt.getTime())
-          .map(h => ({ id: h.appointmentId, startAt: h.requestedStartAt!,
-            endAt: h.requestedEndAt!, bufferBeforeMin: h.bufferBeforeMin,
-            bufferAfterMin: h.bufferAfterMin })),
+        ...(held ?? [])
+          .filter(
+            h =>
+              h.patientId === h.appointment.patientId &&
+              h.dentistId === h.appointment.dentistId &&
+              h.originalStartAt.getTime() === h.appointment.startAt.getTime() &&
+              h.originalEndAt.getTime() === h.appointment.endAt.getTime(),
+          )
+          .map(h => ({
+            id: h.appointmentId,
+            startAt: h.requestedStartAt!,
+            endAt: h.requestedEndAt!,
+            bufferBeforeMin: h.bufferBeforeMin,
+            bufferAfterMin: h.bufferAfterMin,
+          })),
       ],
       clinicClosures: closuresOnDay(clinicClosures ?? [], date),
     });

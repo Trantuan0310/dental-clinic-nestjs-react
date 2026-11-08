@@ -43,6 +43,7 @@ describe('BookingService public request security and validation', () => {
     // Slot holds have their own tests; keep them off everywhere else.
     process.env.BOOKING_HOLD_MINUTES = '0';
     prisma = {
+      clinicClosure: { findMany: jest.fn().mockResolvedValue([]) },
       dentistService: { findFirst: jest.fn() },
       patient: {
         findMany: jest.fn().mockResolvedValue([]),

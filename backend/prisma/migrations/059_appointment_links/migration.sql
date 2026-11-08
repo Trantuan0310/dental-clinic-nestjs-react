@@ -19,6 +19,7 @@ CREATE TYPE "AppointmentLinkRescheduleStatus" AS ENUM ('PENDING', 'APPROVED', 'C
 CREATE TABLE appointment_link_reschedule_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
   appointment_id UUID NOT NULL REFERENCES appointments(id) ON UPDATE CASCADE,
+  patient_id UUID NOT NULL,
   dentist_id UUID NOT NULL,
   original_start_at TIMESTAMPTZ NOT NULL,
   original_end_at TIMESTAMPTZ NOT NULL,
@@ -34,7 +35,7 @@ CREATE TABLE appointment_link_reschedule_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT appointment_link_requested_interval CHECK (
     (requested_start_at IS NULL AND requested_end_at IS NULL AND hold_until IS NULL)
-    OR (requested_start_at IS NOT NULL AND requested_end_at > requested_start_at)
+    OR (requested_start_at IS NOT NULL AND requested_end_at IS NOT NULL AND requested_end_at > requested_start_at)
   )
 );
 CREATE UNIQUE INDEX appointment_link_one_pending_request
