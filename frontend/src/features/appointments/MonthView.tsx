@@ -5,6 +5,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
+import { PatientLinkLabels } from './PatientLinkLabels';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { Appointment, AppointmentStatus, AppointmentType } from '@/types/appointment';
 import { formatTimeOnly, getWeekdayLabel } from '@/lib/format';
@@ -373,6 +374,7 @@ function DayAppointmentsList({
                     overdue={isOverdueNotArrived(apt, now)}
                   />
                 </div>
+                <PatientLinkLabels confirmedByPatient={apt.confirmedByPatient} rescheduleRequestedAt={apt.rescheduleRequestedAt} />
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500 dark:text-surface-400">
                   <span className="inline-flex items-center gap-1">
                     <Stethoscope className="h-3 w-3" />

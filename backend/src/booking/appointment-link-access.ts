@@ -16,7 +16,7 @@ export async function resolveAppointmentLink(tx: Prisma.TransactionClient, token
   const now = new Date();
   const appt = link?.appointment;
   if (!link || !appt || link.expiresAt <= now || appt.startAt <= now ||
-      appt.deletedAt || appt.patient.deletedAt ||
+      appt.deletedAt || appt.patient.deletedAt || appt.patientId !== link.patientId ||
       !['SCHEDULED', 'CONFIRMED'].includes(appt.status)) throw denied();
   await tx.appointmentLink.update({ where: { id: link.id }, data: { lastUsedAt: now } });
   const { patient: _patient, ...appointment } = appt;
@@ -30,7 +30,7 @@ export async function issueAppointmentLink(tx: Prisma.TransactionClient, appoint
       !['SCHEDULED', 'CONFIRMED'].includes(appt.status)) return null;
   const token = randomBytes(32).toString('base64url');
   await tx.appointmentLink.create({ data: {
-    appointmentId, tokenHash: appointmentLinkHash(token), expiresAt: appt.startAt,
+    appointmentId, patientId: appt.patientId, tokenHash: appointmentLinkHash(token), expiresAt: appt.startAt,
   } });
   return token;
 }

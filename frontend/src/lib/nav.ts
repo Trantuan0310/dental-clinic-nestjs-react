@@ -105,6 +105,12 @@ const NAV_GROUPS: NavGroupDef[] = [
         badge: 'pendingBookings',
       },
       {
+        to: '/appointment-links/reschedule-requests',
+        labelKey: 'RescheduleRequests',
+        icon: CalendarClock,
+        allPermissions: ['appointment.read', 'appointment.read.any'],
+      },
+      {
         to: '/recalls',
         labelKey: 'Recalls',
         icon: BellRing,

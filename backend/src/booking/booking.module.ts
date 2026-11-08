@@ -7,11 +7,14 @@ import { BookingService } from './booking.service';
 import { BookingCron } from './booking.cron';
 import { AppointmentNoticesService } from './appointment-notices.service';
 import { BookingRequestsController, PublicBookingController } from './booking.controller';
+import { AppointmentLinksService } from './appointment-links.service';
+import { AppointmentLinkRequestsController, PublicAppointmentLinksController } from './appointment-links.controller';
 
 @Module({
   imports: [PrismaModule, AuditModule, AppointmentsModule, PatientsModule],
-  controllers: [PublicBookingController, BookingRequestsController],
-  providers: [BookingService, BookingCron, AppointmentNoticesService],
+  controllers: [PublicBookingController, BookingRequestsController,
+    PublicAppointmentLinksController, AppointmentLinkRequestsController],
+  providers: [BookingService, BookingCron, AppointmentNoticesService, AppointmentLinksService],
   exports: [BookingService],
 })
 export class BookingModule {}

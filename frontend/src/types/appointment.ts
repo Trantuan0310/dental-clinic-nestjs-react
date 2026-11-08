@@ -53,6 +53,8 @@ export interface Appointment {
   endsAt: string;
   durationMinutes: number;
   status: AppointmentStatus;
+  confirmedByPatient?: boolean;
+  rescheduleRequestedAt?: string | null;
   source?: AppointmentSource;
   appointmentType?: AppointmentType;
   chiefComplaint?: string | null;

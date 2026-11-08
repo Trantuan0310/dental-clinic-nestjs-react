@@ -1,10 +1,16 @@
+map $request_uri $log_request {
+    default 1;
+    ~^/(lich-hen/|api/v1/public/appointment-links/) 0;
+}
 server {
     listen 80;
+    access_log /var/log/nginx/access.log combined if=$log_request;
     server_name ${DOMAIN};
     return 301 https://${DOMAIN}$request_uri;
 }
 server {
     listen 443 ssl;
+    access_log /var/log/nginx/access.log combined if=$log_request;
     server_name ${DOMAIN};
     ssl_certificate /etc/nginx/certs/fullchain.pem;
     ssl_certificate_key /etc/nginx/certs/privkey.pem;
@@ -40,6 +46,7 @@ server {
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache";
+        add_header Referrer-Policy "no-referrer" always;
     }
     location /assets/ {
         try_files $uri =404;

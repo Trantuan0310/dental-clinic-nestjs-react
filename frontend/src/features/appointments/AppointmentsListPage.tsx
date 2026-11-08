@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Loading';
 import { Pagination } from '@/components/ui/Pagination';
 import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
+import { PatientLinkLabels } from './PatientLinkLabels';
 import { PermissionGuard } from '@/components/PermissionGuard';
 import {
   LIST_ALL_LIMIT,
@@ -512,6 +513,7 @@ export default function AppointmentsListPage() {
                         status={r.status}
                         overdue={isOverdueNotArrived(r, now)}
                       />
+                      <PatientLinkLabels confirmedByPatient={r.confirmedByPatient} rescheduleRequestedAt={r.rescheduleRequestedAt} />
                     </td>
                     <td>
                       <button

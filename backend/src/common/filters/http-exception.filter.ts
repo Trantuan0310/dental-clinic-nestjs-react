@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { Prisma } from '@prisma/client';
+import { redactPatientLinkUrl } from '../redact-url';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -95,7 +96,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message,
       details,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: redactPatientLinkUrl(request.url),
     });
   }
 
