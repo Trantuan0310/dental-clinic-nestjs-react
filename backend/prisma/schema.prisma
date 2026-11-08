@@ -548,6 +548,7 @@ model Appointment {
 model AppointmentLink {
   id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   appointmentId String    @map("appointment_id") @db.Uuid
+  patientId     String    @map("patient_id") @db.Uuid
   tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
   expiresAt     DateTime  @map("expires_at") @db.Timestamptz()
   lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz()

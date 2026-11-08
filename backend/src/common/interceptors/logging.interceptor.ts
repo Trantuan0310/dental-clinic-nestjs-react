@@ -9,6 +9,7 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request, Response } from 'express';
+import { redactPatientLinkUrl } from '../redact-url';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -18,7 +19,8 @@ export class LoggingInterceptor implements NestInterceptor {
     const ctx = context.switchToHttp();
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
-    const { method, url } = request;
+    const { method } = request;
+    const url = redactPatientLinkUrl(request.url);
     const startTime = Date.now();
 
     return next.handle().pipe(

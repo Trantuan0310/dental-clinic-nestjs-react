@@ -41,6 +41,7 @@ describe('AppointmentNoticesService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $executeRaw: jest.fn().mockResolvedValue(1),
+      appointmentLink: { create: jest.fn().mockResolvedValue({}) },
     };
     email = { send: jest.fn().mockResolvedValue(true) };
     availability = { checkSlot: jest.fn().mockResolvedValue(null) };
@@ -215,7 +216,7 @@ describe('AppointmentNoticesService', () => {
 
     it('links an online-booked visit to its status page', async () => {
       prisma.appointment.findUnique.mockResolvedValue(
-        visit({ bookingRequest: { referenceCode: 'GS-ABC' } }),
+        visit({ status: 'CANCELLED', bookingRequest: { referenceCode: 'GS-ABC' } }),
       );
       await service.onCancelled({
         appointmentId: 'appt-1',

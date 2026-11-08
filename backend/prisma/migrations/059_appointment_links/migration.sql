@@ -7,6 +7,7 @@ ALTER TABLE appointments
 CREATE TABLE appointment_links (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
   appointment_id UUID NOT NULL REFERENCES appointments(id) ON UPDATE CASCADE,
+  patient_id UUID NOT NULL,
   token_hash VARCHAR(64) NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
   last_used_at TIMESTAMPTZ,
