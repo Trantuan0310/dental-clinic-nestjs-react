@@ -58,6 +58,7 @@ import {
 } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { clinicIso, clinicParts, clinicToday } from '@/lib/clinicTime';
+import { ReviewIntake } from '../booking/PatientIntake';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { MessageDraftModal } from '@/features/ai/MessageDraftModal';
@@ -173,6 +174,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
     (s) => s.hasPermission('appointment.read.own') && !s.hasPermission('appointment.read.any'),
   );
   // The front desk drafts a reminder / reply to send from Zalo (AI, never sent by the system).
+  const canReviewIntake = useAuthStore(s => s.hasAnyPermission(['patient.update', 'patient.medical_history.update']));
   const canDraftMessage = useAuthStore((s) => s.hasPermission('appointment.read.any'));
   const [showMessageDraft, setShowMessageDraft] = useState(false);
   const [actionModal, setActionModal] = useState<ActionKey | null>(null);
@@ -607,6 +609,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
           <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiScheduling.noAppointmentFound')}</p>
         ) : (
           <div className="space-y-5">
+            {canReviewIntake && <ReviewIntake appointmentId={appointment.id} />}
             {/* Header summary */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-surface-700 dark:bg-surface-800">
               <div className="flex items-start justify-between gap-3">

@@ -57,6 +57,7 @@ enum ActionAudit {
 }
 
 model User {
+  reviewedIntakes IntakeForm[]
   id                  String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   email               String     @db.VarChar(255)
   passwordHash        String     @map("password_hash")
@@ -308,6 +309,7 @@ enum IdentifierType {
 }
 
 model Patient {
+  intakeForms IntakeForm[]
   id                 String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   code               String    @db.VarChar(20)
   fullName           String    @map("full_name") @db.VarChar(200)
@@ -460,6 +462,7 @@ enum TimeOffType {
 }
 
 model Appointment {
+  intakeForm IntakeForm?
   id                     String            @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   patientId              String            @map("patient_id") @db.Uuid
   dentistId              String            @map("dentist_id") @db.Uuid
@@ -2048,4 +2051,24 @@ model BankTransaction {
   @@index([status, createdAt(sort: Desc)])
   @@index([invoiceId])
   @@map("bank_transactions")
+}
+
+enum IntakeStatus {
+  PENDING
+  APPROVED
+  DISCARDED
+}
+
+model IntakeForm {
+  appointmentId String @id @map("appointment_id") @db.Uuid
+  patientId String @map("patient_id") @db.Uuid
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  answers Json
+  status IntakeStatus @default(PENDING)
+  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz()
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz()
+  reviewedBy String? @map("reviewed_by") @db.Uuid
+  reviewer User? @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
+  @@map("intake_forms")
 }
