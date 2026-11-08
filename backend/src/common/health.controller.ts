@@ -24,6 +24,8 @@ export class HealthController {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      // Short commit of the running build (set by the deploy script); "unknown" in dev.
+      commit: process.env.GIT_SHA || 'unknown',
     };
   }
 }

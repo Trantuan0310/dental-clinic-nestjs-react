@@ -59,6 +59,8 @@ step "Checkout $REF"
 git fetch --prune origin
 git checkout --detach "$REF"
 echo "new commit: $(git log -1 --oneline)"
+# Passed to the backend container (docker-compose.prod.yml) so GET /health reports it.
+export GIT_SHA="$(git rev-parse --short HEAD)"
 
 step "Build"
 compose config --quiet
