@@ -2,6 +2,9 @@ import { BadRequestException } from '@nestjs/common';
 import { InvoiceStatus } from '@prisma/client';
 import type { JwtPayload } from '../../common/guards/permissions.guard';
 import { clinicDateOnly } from '../../common/date-range.util';
+import { clinicHhmm } from '../../appointments/domain/day-calendar';
+import type { ListAppointmentsQueryDto } from '../../appointments/dto/appointment.dto';
+import type { ReportsService } from '../../reports/reports.service';
 import type { AppointmentsService } from '../../appointments/appointments.service';
 import type { AvailabilityService } from '../../appointments/availability.service';
 import type { PatientsService } from '../../patients/patients.service';
@@ -22,6 +25,7 @@ export interface Services {
   appointments: AppointmentsService;
   billing: BillingService;
   plans: TreatmentPlansService;
+  reports: ReportsService;
 }
 
 /** Patients named in a conversation: ref → id (kept by the browser) and name (for display only). */
@@ -111,6 +115,46 @@ function yearOf(d: Date | string | null | undefined): number | null {
 }
 
 const money = (n: number) => Math.round(n);
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const PARTS = ['sáng', 'chiều', 'tối'] as const;
+type Part = (typeof PARTS)[number];
+
+/** "sáng" = before 12:00, "chiều" = 12:00 to 18:00, "tối" = from 18:00 (clinic time). */
+function partOf(args: Record<string, unknown>): Part | undefined {
+  const v = str(args, 'part', 10)?.toLowerCase();
+  return PARTS.find(p => p === v);
+}
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const PART_RANGE: Record<Part, [number, number]> = {
+  sáng: [0, 12 * 60],
+  chiều: [12 * 60, 18 * 60],
+  tối: [18 * 60, 24 * 60],
+};
+/** Does [from, to) in minutes of the day touch the part of the day? */
+const touches = (part: Part, from: number, to: number) =>
+  from < PART_RANGE[part][1] && to > PART_RANGE[part][0];
+
+function dateArg(args: Record<string, unknown>, key: string, fallback: string): string {
+  const v = str(args, key, 10);
+  if (!v) return fallback;
+  if (!DATE_RE.test(v)) throw new BadRequestException(`${key} phải dạng YYYY-MM-DD`);
+  return v;
+}
+
+async function dentistIdByName(name: string | undefined, ctx: ToolContext) {
+  if (!name) return undefined;
+  const want = name.toLowerCase();
+  const rows = await ctx.services.appointments.listDentistOptions('booking');
+  const hit = rows.filter(d => d.fullName.toLowerCase().includes(want));
+  if (hit.length === 0) throw new BadRequestException(`Không có bác sĩ nào tên "${name}"`);
+  if (hit.length > 1) {
+    throw new BadRequestException(
+      `Có nhiều bác sĩ khớp "${name}": ${hit.map(d => d.fullName).join(', ')}. Hãy hỏi người dùng chọn.`,
+    );
+  }
+  return hit[0].id;
+}
 
 export const TOOLS: Tool[] = [
   {
@@ -204,6 +248,156 @@ export const TOOLS: Tool[] = [
           outstanding: money(inv.outstandingAmount),
           issuedAt: inv.issuedAt ? new Date(inv.issuedAt).toISOString().slice(0, 10) : null,
         })),
+      };
+    },
+  },
+  {
+    name: 'appointments_on',
+    help: 'Danh sách lịch hẹn theo ngày. Tham số: {"date"?: "YYYY-MM-DD" (mặc định hôm nay), "toDate"?: ngày cuối (tối đa 14 ngày), "part"?: "sáng"|"chiều"|"tối", "dentist"?: tên bác sĩ, "status"?: SCHEDULED|CONFIRMED|CHECKED_IN|IN_PROGRESS|COMPLETED|CANCELLED|NO_SHOW, "patientRef"?: "P1"}. Trả về số lượng theo trạng thái và tối đa 25 lịch (giờ, ref bệnh nhân, bác sĩ, trạng thái, loại).',
+    anyOf: ['appointment.read.any', 'appointment.read.own'],
+    async run(args, ctx) {
+      const today = clinicDateOnly();
+      const from = dateArg(args, 'date', today);
+      const to = dateArg(args, 'toDate', from);
+      if (to < from || Date.parse(to) - Date.parse(from) > 14 * 86_400_000) {
+        throw new BadRequestException('Khoảng ngày không hợp lệ (tối đa 14 ngày)');
+      }
+      const patientRef = str(args, 'patientRef', 8);
+      const patientId = patientRef ? ctx.refs.idOf(patientRef) : undefined;
+      if (patientRef && !patientId) {
+        throw new BadRequestException('patientRef chưa có: hãy gọi find_patient trước');
+      }
+      const status = str(args, 'status', 12)?.toUpperCase();
+      const dentistId = await dentistIdByName(str(args, 'dentist'), ctx);
+      const part = partOf(args);
+      const res = await ctx.services.appointments.list(
+        {
+          from,
+          to,
+          pageSize: 50,
+          sort: 'asc',
+          ...(patientId ? { patientId } : {}),
+          ...(dentistId ? { dentistId } : {}),
+          ...(status ? { status: [status] } : {}),
+        } as unknown as ListAppointmentsQueryDto,
+        ctx.actor,
+      );
+      const rows = res.data.filter(a => {
+        if (!part) return true;
+        const m = toMin(clinicHhmm(a.startAt));
+        return touches(part, m, m + 1);
+      });
+      const byStatus: Record<string, number> = {};
+      for (const a of rows) byStatus[a.status] = (byStatus[a.status] ?? 0) + 1;
+      return {
+        from,
+        to,
+        part: part ?? null,
+        total: rows.length,
+        moreThanShown: res.pagination.hasMore,
+        byStatus,
+        appointments: rows.slice(0, 25).map(a => ({
+          date: clinicDateOnly(a.startAt),
+          time: clinicHhmm(a.startAt),
+          patient: ctx.refs.refFor(a.patient.id, a.patient.fullName),
+          dentist: a.dentist?.fullName ?? null,
+          status: a.status,
+          type: a.appointmentType,
+        })),
+      };
+    },
+  },
+  {
+    name: 'dentist_hours',
+    help: 'Ca làm việc của bác sĩ trong một ngày (ai có ca, giờ nào, ai nghỉ). Tham số: {"date"?: "YYYY-MM-DD" (mặc định hôm nay), "part"?: "sáng"|"chiều"|"tối", "dentist"?: tên bác sĩ}. Trả về từng bác sĩ với các khung giờ làm HH:mm-HH:mm và ghi chú nghỉ phép hoặc phòng khám đóng cửa.',
+    anyOf: ['appointment.read.any', 'appointment.create'],
+    async run(args, ctx) {
+      const date = dateArg(args, 'date', clinicDateOnly());
+      const part = partOf(args);
+      const want = str(args, 'dentist')?.toLowerCase();
+      const all = await ctx.services.appointments.listDentistOptions('booking');
+      const rows = all.filter(d => !want || d.fullName.toLowerCase().includes(want));
+      const cals = await Promise.all(
+        rows.map(async d => ({ d, cal: await ctx.services.availability.loadDay(d.id, date) })),
+      );
+      const dentists = cals.map(({ d, cal }) => {
+        const windows = cal.windows
+          .map(w => ({ from: clinicHhmm(w.start), to: clinicHhmm(w.end) }))
+          .filter(w => !part || touches(part, toMin(w.from), toMin(w.to) || 24 * 60));
+        const note = cal.clinicClosed
+          ? `Phòng khám đóng cửa${cal.closedReason ? `: ${cal.closedReason}` : ''}`
+          : cal.closedAllDay
+            ? `Nghỉ cả ngày${cal.closedReason ? `: ${cal.closedReason}` : ''}`
+            : cal.blocked.some(b => b.kind === 'TIME_OFF')
+              ? 'Có giờ nghỉ phép trong ngày'
+              : undefined;
+        return {
+          name: d.fullName,
+          working: windows.length > 0 && !cal.closedAllDay,
+          hours: windows.map(w => `${w.from}-${w.to}`),
+          note,
+        };
+      });
+      return {
+        date,
+        part: part ?? null,
+        working: dentists.filter(x => x.working).map(x => x.name),
+        dentists,
+      };
+    },
+  },
+  {
+    name: 'waiting_now',
+    help: 'Bệnh nhân đã check-in và đang chờ khám hôm nay. Tham số: {"dentist"?: tên bác sĩ}. Mỗi dòng: ref, giờ hẹn, số phút đã chờ.',
+    anyOf: ['appointment.read.any', 'appointment.read.own'],
+    async run(args, ctx) {
+      const dentistId = await dentistIdByName(str(args, 'dentist'), ctx);
+      const { data } = await ctx.services.appointments.getWaitingQueue(
+        dentistId,
+        undefined,
+        ctx.actor,
+      );
+      return {
+        waiting: data.length,
+        patients: data.slice(0, 15).map(r => ({
+          ref: ctx.refs.refFor(r.patient.id, r.patient.fullName),
+          bookedAt: clinicHhmm(r.appointmentStartAt),
+          waitingMinutes: r.waitingMinutes,
+        })),
+      };
+    },
+  },
+  {
+    name: 'report_summary',
+    help: 'Số liệu tổng của một khoảng ngày: số bệnh nhân, số lịch hẹn, doanh thu điều trị, đã thu, và so với kỳ trước. Tham số: {"from"?: "YYYY-MM-DD", "to"?: "YYYY-MM-DD"} (mặc định 30 ngày gần nhất). Chỉ có số tổng.',
+    anyOf: ['report.revenue.read'],
+    async run(args, ctx) {
+      const to = dateArg(args, 'to', clinicDateOnly());
+      const from = dateArg(
+        args,
+        'from',
+        clinicDateOnly(new Date(Date.parse(to) - 29 * 86_400_000)),
+      );
+      const k = await ctx.services.reports.dashboardKpis({ from, to });
+      return {
+        from,
+        to,
+        patients: {
+          total: k.patients.total,
+          new: k.patients.newCount,
+          vsPrevPercent: k.patients.pctChange,
+        },
+        appointments: {
+          total: k.appointments.total,
+          arrived: k.appointments.arrived,
+          cancelled: k.appointments.cancelled,
+          vsPrevPercent: k.appointments.pctChange,
+        },
+        treatmentRevenue: {
+          total: money(k.treatmentRevenue.total),
+          vsPrevPercent: k.treatmentRevenue.pctChange,
+        },
+        collected: { total: money(k.collected.total), vsPrevPercent: k.collected.pctChange },
       };
     },
   },

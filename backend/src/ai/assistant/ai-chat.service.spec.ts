@@ -16,6 +16,7 @@ const desk = {
     'invoice.read.any',
   ],
 };
+const manager = { sub: 'mgr-1', email: 'ql@example.invalid', permissions: ['report.revenue.read'] };
 const dentist = {
   sub: 'dentist-1',
   email: 'bs@example.invalid',
@@ -48,6 +49,7 @@ function setup(replies: Array<Record<string, unknown>>, configured = true) {
     }),
   };
   const availability = {
+    loadDay: jest.fn(),
     search: jest.fn().mockResolvedValue([
       {
         dentistId: DENTIST_ID,
@@ -57,9 +59,18 @@ function setup(replies: Array<Record<string, unknown>>, configured = true) {
       },
     ]),
   };
-  const appointments = { create: jest.fn().mockResolvedValue({ id: 'appt-1' }) };
+  const appointments = {
+    create: jest.fn().mockResolvedValue({ id: 'appt-1' }),
+    list: jest.fn().mockResolvedValue({ data: [], pagination: { hasMore: false } }),
+    listDentistOptions: jest.fn().mockResolvedValue([
+      { id: DENTIST_ID, fullName: 'BS. Nguyễn Văn An' },
+      { id: '33333333-3333-4333-8333-333333333333', fullName: 'BS. Lê Hoàng Cường' },
+    ]),
+    getWaitingQueue: jest.fn().mockResolvedValue({ data: [] }),
+  };
   const billing = { listInvoices: jest.fn() };
   const plans = { pendingTreatments: jest.fn() };
+  const reports = { dashboardKpis: jest.fn() };
   const service = new AiChatService(
     model as any,
     audit as any,
@@ -68,8 +79,20 @@ function setup(replies: Array<Record<string, unknown>>, configured = true) {
     appointments as any,
     billing as any,
     plans as any,
+    reports as any,
   );
-  return { service, model, json, audit, patients, availability, appointments, billing, plans };
+  return {
+    service,
+    model,
+    json,
+    audit,
+    patients,
+    availability,
+    appointments,
+    billing,
+    plans,
+    reports,
+  };
 }
 
 const ask = (text: string) => [{ role: 'user' as const, content: text }];
@@ -165,7 +188,11 @@ describe('AiChatService', () => {
   });
 
   it('hides tools the user has no permission for and rejects calling them', async () => {
-    expect(toolsFor(dentist).map(t => t.name)).toEqual(['unpaid_invoices']);
+    expect(toolsFor(dentist).map(t => t.name)).toEqual([
+      'unpaid_invoices',
+      'appointments_on',
+      'waiting_now',
+    ]);
     const t = setup([
       { tool: 'find_patient', args: { name: 'Lan' } },
       { reply: 'Không làm được.' },
@@ -211,6 +238,104 @@ describe('AiChatService', () => {
     expect(t.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'AI_ACTION_EXECUTED', targetId: 'appt-1' }),
     );
+  });
+});
+
+describe('read-only lookup tools', () => {
+  const at = (iso: string) => new Date(iso);
+
+  it('lists the morning appointments with refs only, never names', async () => {
+    const t = setup([
+      { tool: 'appointments_on', args: { part: 'sáng' } },
+      { reply: 'Sáng nay có [P1].' },
+    ]);
+    t.appointments.list.mockResolvedValue({
+      data: [
+        {
+          startAt: at('2026-11-08T02:00:00Z'),
+          status: 'CONFIRMED',
+          appointmentType: 'CONSULTATION',
+          patient: { id: PATIENT_ID, fullName: 'Nguyễn Thị Lan' },
+          dentist: { fullName: 'BS. An' },
+        },
+        {
+          startAt: at('2026-11-08T08:00:00Z'),
+          status: 'SCHEDULED',
+          appointmentType: 'FOLLOW_UP',
+          patient: { id: '44444444-4444-4444-8444-444444444444', fullName: 'Trần Bình' },
+          dentist: { fullName: 'BS. An' },
+        },
+      ],
+      pagination: { hasMore: false },
+    });
+    const res = await t.service.chat(ask('sáng nay có lịch hẹn nào'), undefined, desk);
+    const second = t.json.mock.calls[1][1] as string;
+    expect(second).toContain('"total":1'); // 09:00 clinic time is the morning, 15:00 is not
+    expect(second).toContain('"time":"09:00"');
+    expect(second).not.toContain('Nguyễn Thị Lan');
+    expect(res.names).toEqual({ P1: 'Nguyễn Thị Lan' });
+    const q = t.appointments.list.mock.calls[0][0];
+    expect(q.from).toBe(q.to);
+  });
+
+  it('asks which dentist when a name matches several, and rejects an unknown one', async () => {
+    const t = setup([
+      { tool: 'appointments_on', args: { dentist: 'bs.' } },
+      { tool: 'appointments_on', args: { dentist: 'Zed' } },
+      { reply: 'ok' },
+    ]);
+    await t.service.chat(ask('lịch'), undefined, desk);
+    expect(t.json.mock.calls[1][1]).toContain('Có nhiều bác sĩ khớp');
+    expect(t.json.mock.calls[2][1]).toContain('Không có bác sĩ nào tên');
+    expect(t.appointments.list).not.toHaveBeenCalled();
+  });
+
+  it('says who works this morning from the dentists’ working windows', async () => {
+    const t = setup([{ tool: 'dentist_hours', args: { part: 'sáng' } }, { reply: 'BS An.' }]);
+    t.availability.loadDay.mockImplementation(async (id: string) => ({
+      windows:
+        id === DENTIST_ID
+          ? [{ start: at('2026-11-08T01:00:00Z'), end: at('2026-11-08T05:00:00Z') }]
+          : [{ start: at('2026-11-08T07:00:00Z'), end: at('2026-11-08T11:00:00Z') }],
+      blocked: [],
+      closedAllDay: false,
+      closedReason: null,
+      clinicClosed: false,
+    }));
+    await t.service.chat(ask('bác sĩ nào làm sáng nay'), undefined, desk);
+    const second = t.json.mock.calls[1][1] as string;
+    expect(second).toContain('"working":["BS. Nguyễn Văn An"]');
+    expect(second).toContain('08:00-12:00');
+  });
+
+  it('reports who is waiting, by ref', async () => {
+    const t = setup([{ tool: 'waiting_now', args: {} }, { reply: '[P1] đang chờ.' }]);
+    t.appointments.getWaitingQueue.mockResolvedValue({
+      data: [
+        {
+          patient: { id: PATIENT_ID, fullName: 'Nguyễn Thị Lan' },
+          appointmentStartAt: at('2026-11-08T02:00:00Z'),
+          waitingMinutes: 12,
+        },
+      ],
+    });
+    await t.service.chat(ask('ai đang chờ'), undefined, desk);
+    const second = t.json.mock.calls[1][1] as string;
+    expect(second).toContain('"waitingMinutes":12');
+    expect(second).not.toContain('Nguyễn Thị Lan');
+  });
+
+  it('gives report totals only to someone allowed to read revenue', async () => {
+    const t = setup([{ tool: 'report_summary', args: {} }, { reply: 'Doanh thu ổn.' }]);
+    t.reports.dashboardKpis.mockResolvedValue({
+      patients: { total: 40, newCount: 5, pctChange: 10 },
+      appointments: { total: 50, arrived: 40, cancelled: 5, pctChange: 2 },
+      treatmentRevenue: { total: 125_000_000, pctChange: -3 },
+      collected: { total: 98_000_000, pctChange: 4 },
+    });
+    await t.service.chat(ask('doanh thu tháng này'), undefined, manager);
+    expect(t.json.mock.calls[1][1]).toContain('"treatmentRevenue":{"total":125000000');
+    expect(toolsFor(desk).map(x => x.name)).not.toContain('report_summary');
   });
 });
 

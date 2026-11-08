@@ -55,6 +55,7 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - **`Card` không chuyển `data-testid`:** bọc trong `div`.
 - **Hook sau `return` sớm** làm lint đỏ: đặt mọi hook ở đầu component.
 - **Prisma:** `prisma format` căn lại cột (chấp nhận); migration viết tay ở `backend/prisma/migrations/NNN_ten/migration.sql` (mới nhất 058).
+- **Cổng AI (xkiro):** các mô hình `anthropic/claude-*` mới (haiku 5.5, sonnet 5.5, opus…) trả 403 "chỉ nhận yêu cầu từ công cụ chính thức của Anthropic" khi ứng dụng gọi; dùng được: `anthropic/claude-sonnet-4.5`, `anthropic/claude-sonnet-4`, họ `google/gemini-*-flash`, `openai/gpt-*`. **Không vượt chốt chặn** (không giả danh công cụ chính thức). Chọn mô hình bằng cách chạy thử từ **trong container backend** bằng Node (đúng cách ứng dụng gọi), không chỉ `curl` ngoài. Dòng log "AI summary uses ... model" chỉ là cấu hình, **không** chứng tỏ AI chạy: phải thấy một lần gọi thành công (không có dòng `AI ... failed`, giao diện không hiện "Chưa dùng được AI").
 - **AI:** mô hình không được thấy tên/SĐT bệnh nhân (dùng mã ref `P1…` hoặc `{ten}` điền ở máy chủ); AI chỉ soạn nháp, không tự ghi; luôn có đường dự phòng khi chưa cấu hình hoặc lỗi.
 - **Dừng tiến trình:** `pkill -f "node dist/main"` từng giết cả shell (mã 144). Dùng `scripts/dev-local.sh stop`.
 - **Mock test kiểu regex thô** làm mất ba vòng chạy thử (câu hỏi thường khớp nhầm nhánh đặt lịch): làm mock theo trạng thái rõ ràng, thử một câu trước khi chạy cả kịch bản.

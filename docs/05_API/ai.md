@@ -161,7 +161,10 @@ Khung chat nổi ở góc màn hình (mọi vai trò có quyền xem bệnh nhâ
 ### Cách chạy
 
 - Vòng lặp tối đa 4 lần gọi công cụ, mỗi lượt mô hình trả một JSON: `{"tool","args"}` hoặc `{"reply"}`. Dùng chung cấu hình `AI_BASE_URL/AI_API_KEY/AI_MODEL` (hoặc Gemini); không cần tính năng gọi hàm riêng của nhà cung cấp.
-- Công cụ (mỗi cái bọc một service sẵn có, chạy với quyền của người dùng; công cụ không đủ quyền bị ẩn): `find_patient`, `free_slots`, `pending_treatments`, `unpaid_invoices`, `propose_appointment`.
+- Công cụ (mỗi cái bọc một service sẵn có, chạy với quyền của người dùng; công cụ không đủ quyền bị ẩn):
+  - tra cứu: `find_patient`, `free_slots` (giờ trống), `pending_treatments`, `unpaid_invoices`, `appointments_on` (lịch hẹn theo ngày, buổi sáng/chiều/tối, bác sĩ, trạng thái), `dentist_hours` (ca làm của bác sĩ), `waiting_now` (hàng chờ check-in), `report_summary` (số tổng, cần `report.revenue.read`);
+  - soạn việc: `propose_appointment` (chỉ ra thẻ xác nhận).
+  - Tất cả công cụ tra cứu chỉ đọc; bệnh nhân trong kết quả luôn là mã ref.
 - `propose_appointment` kiểm giờ còn trống rồi chỉ trả **thẻ xác nhận**. Lịch chỉ được tạo khi người dùng bấm nút; mọi quy tắc đặt lịch (BR-APPT) vẫn áp dụng như khi tự đặt.
 - Chưa cấu hình AI hoặc AI lỗi: trả thông báo, `source: "fallback"`, các chức năng khác không ảnh hưởng.
 
