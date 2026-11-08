@@ -564,6 +564,7 @@ enum AppointmentLinkRescheduleStatus {
 model AppointmentLinkRescheduleRequest {
   id               String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   appointmentId    String @map("appointment_id") @db.Uuid
+  patientId        String @map("patient_id") @db.Uuid
   dentistId        String @map("dentist_id") @db.Uuid
   originalStartAt  DateTime @map("original_start_at") @db.Timestamptz()
   originalEndAt    DateTime @map("original_end_at") @db.Timestamptz()

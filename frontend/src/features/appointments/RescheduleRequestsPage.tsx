@@ -28,7 +28,7 @@ type RequestRow = {
 
 export default function RescheduleRequestsPage() {
   const qc = useQueryClient();
-  const canApprove = useAuthStore((state) => state.hasPermission('appointment.reschedule'));
+  const canApprove = useAuthStore((state) => state.hasPermission('appointment.update'));
   const requests = useQuery({
     queryKey: ['appointment-links', 'reschedule-requests'],
     queryFn: async () => unwrap((await api.get('/appointment-links/reschedule-requests')).data) as RequestRow[],
@@ -56,7 +56,7 @@ export default function RescheduleRequestsPage() {
 }
 
 function RequestCard({ row, onApprove, busy, canApprove }: { row: RequestRow; onApprove: (startAt?: string) => void; busy: boolean; canApprove: boolean }) {
-  const [selected, setSelected] = useState(row.requestedStartAt ?? '');
+  const [selected, setSelected] = useState('');
   const noteOnly = !row.requestedStartAt;
   return (
     <Card className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">

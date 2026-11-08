@@ -69,6 +69,43 @@ describe('AvailabilityService slot grid', () => {
     expect(moving.busy).toEqual([]);
   });
 
+  it('blocks patient reschedule holds with buffers, excluding the owner and stale patient bindings', async () => {
+    day([['08:00', '12:00']]);
+    prisma.appointmentLinkRescheduleRequest.findMany.mockResolvedValue([
+      {
+        appointmentId: 'held-appointment',
+        patientId: 'patient',
+        dentistId: 'dentist-1',
+        originalStartAt: at('08:00'),
+        originalEndAt: at('08:30'),
+        requestedStartAt: at('10:00'),
+        requestedEndAt: at('10:30'),
+        bufferBeforeMin: 5,
+        bufferAfterMin: 10,
+        appointment: {
+          patientId: 'patient',
+          dentistId: 'dentist-1',
+          startAt: at('08:00'),
+          endAt: at('08:30'),
+        },
+      },
+    ]);
+    expect(await service.checkSlot('dentist-1', at('09:30'), at('10:00'))).toMatchObject({
+      kind: 'SLOT_CONFLICT',
+    });
+    expect(await service.checkSlot('dentist-1', at('10:30'), at('11:00'))).toMatchObject({
+      kind: 'SLOT_CONFLICT',
+    });
+    expect(
+      await service.checkSlot('dentist-1', at('10:00'), at('10:30'), {
+        excludeAppointmentId: 'held-appointment',
+      }),
+    ).toBeNull();
+    const rows = await prisma.appointmentLinkRescheduleRequest.findMany();
+    rows[0].appointment.patientId = 'reassigned';
+    expect(await service.checkSlot('dentist-1', at('10:00'), at('10:30'))).toBeNull();
+  });
+
   it('steps 15 minutes whatever the visit length: a 90-minute visit can start at 10:30', async () => {
     day([['08:00', '12:00']]);
     expect(await online()).toEqual([
