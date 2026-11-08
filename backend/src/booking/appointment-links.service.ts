@@ -482,7 +482,7 @@ export class AppointmentLinksService {
 
   private async view(tx: Prisma.TransactionClient, id: string, patientId: string) {
     const appt = await tx.appointment.findUniqueOrThrow({
-      where: { id },
+      where: { id, patientId },
       include: {
         dentist: { select: { fullName: true } },
         services: { select: { serviceName: true }, orderBy: { sortOrder: 'asc' } },
