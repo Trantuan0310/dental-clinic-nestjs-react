@@ -174,6 +174,18 @@ describe('Real HTTP and PostgreSQL regression', () => {
     await api('post', review + '/approve', 'reception').expect(201);
     const result = await api('get', '/patients/' + patientId, 'dentist').expect(200);
     expect(result.body.data.allergies).toEqual(['Penicillin', 'Latex']);
+    const followUp = await db.appointment.create({
+      data: { patientId, dentistId: users.dentist, ...slot(), status: 'SCHEDULED' },
+    });
+    const secondToken = await issueAppointmentLink(db, followUp.id);
+    await request(app.getHttpServer())
+      .post('/api/v1/public/appointment-links/' + secondToken + '/intake')
+      .send({ ...answers, allergies: ['Unverified'] }).expect(201);
+    const followUpReview = '/appointments/' + followUp.id + '/intake';
+    await api('post', followUpReview + '/discard', 'reception').expect(201);
+    await api('post', followUpReview + '/approve', 'reception').expect(409);
+    const unchanged = await api('get', '/patients/' + patientId, 'dentist').expect(200);
+    expect(unchanged.body.data.allergies).toEqual(['Penicillin', 'Latex']);
   });
   it('rejects invalid access tokens', async () => {
     await request(app.getHttpServer())
