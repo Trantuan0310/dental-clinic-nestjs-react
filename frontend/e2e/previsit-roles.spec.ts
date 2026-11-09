@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto';
-import { PrismaClient } from '../../backend/node_modules/@prisma/client';
+import { createRequire } from 'node:module';
 import { expect, getSharedContext, persistAuthState, test } from './fixtures';
 import { ACCOUNTS, loginAs } from './flow-helpers';
 
@@ -7,6 +7,8 @@ test('patient confirms and reports an allergy, reception approves, dentist sees 
   const url = process.env.DATABASE_URL && new URL(process.env.DATABASE_URL);
   test.skip(!url || !['localhost', '127.0.0.1'].includes(url.hostname) || url.pathname !== '/dental_e2e',
     'Requires the dedicated local dental_e2e fixture database');
+  const backendRequire = createRequire(new URL('../../backend/package.json', import.meta.url));
+  const { PrismaClient } = backendRequire('@prisma/client');
   const db = new PrismaClient();
   const guest = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const staff = await browser.newContext({ storageState: { cookies: [], origins: [] } });
