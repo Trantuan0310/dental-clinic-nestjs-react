@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Ip,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -64,8 +65,8 @@ export class PublicBookingController {
   @Post('requests')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreatePublicBookingRequestDto) {
-    return { data: await this.booking.createPublic(dto) };
+  async create(@Body() dto: CreatePublicBookingRequestDto, @Ip() ip?: string) {
+    return { data: await this.booking.createPublic(dto, ip) };
   }
   // A returning patient's details for pre-filling the form: phone + date of
   // birth in the body (never the URL). The answer is the same for "no such

@@ -135,6 +135,7 @@ export const vi = {
   mergeConfirm: 'Gộp hồ sơ',
   mergeDone: 'Đã gộp hồ sơ.',
   mergeError: 'Không thể gộp hồ sơ.',
+  consentLedger: 'Sổ đồng thuận', consentNoticeVersion: 'Thông báo phiên bản {{version}}', consentAttestation: 'Tôi xác nhận bệnh nhân đã được cung cấp thông báo này và đồng ý.', recordConsent: 'Ghi nhận đồng thuận', consentRecorded: 'Đã ghi nhận đồng thuận.', consentHistory: 'Lịch sử đồng thuận', noConsentRecords: 'Chưa có bản ghi đồng thuận.', noApprovedConsentNotice: 'Hiện không có thông báo đồng thuận đã được duyệt; không thể ghi nhận.', consentWithdrawn: 'Đã rút lại lúc {{date}}', withdrawConsent: 'Ghi nhận rút lại', consentWithdrawalRecorded: 'Đã ghi nhận rút lại đồng thuận.', consentError: 'Không thể tải hoặc lưu thông tin đồng thuận.', consentVersionAlreadyRecorded: 'Phiên bản thông báo này đã có trong lịch sử; không thể ghi nhận lần nữa.', consentStatusActive: 'Còn hiệu lực', consentStatusWithdrawn: 'Đã rút lại', previous: 'Trước', next: 'Sau',
 } as const;
 
 export const en: Record<keyof typeof vi, string> = {
@@ -251,4 +252,5 @@ export const en: Record<keyof typeof vi, string> = {
   mergeConfirm: 'Merge records',
   mergeDone: 'Records merged.',
   mergeError: 'Could not merge the records.',
+  consentLedger: 'Consent ledger', consentNoticeVersion: 'Notice version {{version}}', consentAttestation: 'I confirm the patient was given this notice and agreed.', recordConsent: 'Record consent', consentRecorded: 'Consent recorded.', consentHistory: 'Consent history', noConsentRecords: 'No consent records yet.', noApprovedConsentNotice: 'No approved consent notice is available; consent cannot be recorded.', consentWithdrawn: 'Withdrawn {{date}}', withdrawConsent: 'Record withdrawal', consentWithdrawalRecorded: 'Consent withdrawal recorded.', consentError: 'Unable to load or save consent information.', consentVersionAlreadyRecorded: 'This notice version is already in the history and cannot be recorded again.', consentStatusActive: 'Active', consentStatusWithdrawn: 'Withdrawn', previous: 'Previous', next: 'Next',
 };

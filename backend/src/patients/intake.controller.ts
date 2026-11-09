@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  Ip,
   Param,
   ParseUUIDPipe,
   Post,
@@ -21,8 +22,8 @@ export class PublicIntakeController {
   @Post(':token/intake')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Header('Cache-Control', 'no-store')
-  async submit(@Param('token') token: string, @Body() body: unknown) {
-    return { data: await this.intake.submit(token, body) };
+  async submit(@Param('token') token: string, @Body() body: unknown, @Ip() ip?: string) {
+    return { data: await this.intake.submit(token, body, ip) };
   }
 }
 

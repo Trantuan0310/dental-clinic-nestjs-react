@@ -90,7 +90,7 @@ const emptyReasonText = (
 };
 
 export default function PublicBookingPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
@@ -277,6 +277,8 @@ export default function PublicBookingPage() {
         "/public/booking/requests",
         {
           ...form,
+          consentLanguage: i18n.language.startsWith('en') ? 'en' : 'vi',
+          consentVersion: '1',
           // Fields hidden again (box unticked) are not sent.
           ...(showContact ? {} : { contactPersonName: "", contactPersonPhone: "" }),
           serviceId,

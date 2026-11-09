@@ -52,6 +52,7 @@ describe('BookingService public request security and validation', () => {
       },
       // patientsByPhone: ids of records whose stored phone normalizes to a match.
       $queryRaw: jest.fn().mockResolvedValue([]),
+      consentRecord: { createMany: jest.fn(), findUniqueOrThrow: jest.fn() },
       bookingRequest: {
         create: jest.fn(),
         update: jest.fn(),
@@ -152,6 +153,7 @@ describe('BookingService public request security and validation', () => {
     );
     expect(stored.accessTokenHash).not.toBe(result.accessToken);
     expect(prisma.bookingRequest.create).toHaveBeenCalledTimes(1);
+    expect(prisma.consentRecord.createMany).toHaveBeenCalledTimes(1);
   });
 
   it('rejects an invalid or wrong token without returning request details', async () => {

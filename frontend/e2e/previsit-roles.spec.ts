@@ -39,6 +39,7 @@ test('patient confirms and reports an allergy, reception approves, dentist sees 
     await page.getByLabel('Lý do khám').fill('Khám định kỳ');
     await page.getByRole('button', { name: 'Tiếp tục' }).click();
     await page.getByLabel('Dị ứng', { exact: true }).fill('Latex UAT');
+    await page.locator('form').getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Gửi phiếu' }).click();
     await expect(page.getByText(/Đã nhận phiếu khai/)).toBeVisible();
     const reception = await staff.newPage();

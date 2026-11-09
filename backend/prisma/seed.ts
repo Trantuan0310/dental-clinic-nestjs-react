@@ -404,6 +404,25 @@ const PERMISSIONS = [
     action: 'accept',
     description: 'Ghi nhận khách đồng ý kế hoạch điều trị và báo giá',
   },
+  // Consent ledger (migration 061); clean databases create roles after migrations.
+  {
+    code: 'consent.read',
+    resource: 'consent',
+    action: 'read',
+    description: 'Xem lịch sử đồng ý của bệnh nhân theo phạm vi hồ sơ',
+  },
+  {
+    code: 'consent.manage',
+    resource: 'consent',
+    action: 'manage',
+    description: 'Ghi nhận tại quầy và rút lại đồng ý của bệnh nhân',
+  },
+  {
+    code: 'consent.export',
+    resource: 'consent',
+    action: 'export',
+    description: 'Tra cứu và xuất sổ đồng ý toàn phòng khám',
+  },
   // Recall reminders (migration 054).
   {
     code: 'recall.read',
@@ -860,6 +879,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   // payroll concept), editing working schedules (manager + each dentist
   // own), starting an encounter (the dentist's step), approving shifts.
   receptionist: [
+    'consent.read',
+    'consent.manage',
     'patient.create',
     'patient.read',
     'patient.update',
@@ -903,6 +924,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'ai.summary.read',
   ],
   dentist: [
+    'consent.read',
     'patient.read',
     'treatment_plan.read',
     'treatment_plan.write',

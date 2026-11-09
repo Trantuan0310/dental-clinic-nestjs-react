@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui";
 import { bookingErrorMessage } from "./errorMessage";
+import { useConsentNotices } from "../patients/consentApi";
 
 const labels = {
   vi: {
@@ -26,6 +27,7 @@ const labels = {
     error: "Không thể xử lý phiếu khai. Vui lòng thử lại.",
     next: "Tiếp tục",
     back: "Quay lại",
+    unavailable: "Phiếu khai tạm thời chưa mở. Bạn có thể khai tại phòng khám.",
   },
   en: {
     title: "Pre-visit form",
@@ -47,6 +49,8 @@ const labels = {
     error: "Could not process this form. Please try again.",
     next: "Continue",
     back: "Back",
+    unavailable:
+      "The pre-visit form is temporarily unavailable. You can complete it at the clinic.",
   },
 };
 const lists = ["allergies", "chronicDiseases", "currentMedications"] as const;
@@ -65,6 +69,9 @@ const lines = (value: string) =>
 export function PatientIntake({ token }: { token: string }) {
   const t = useLabels();
   const [step, setStep] = useState(1);
+  const [acceptedVersion, setAcceptedVersion] = useState("");
+  const notices = useConsentNotices();
+  const notice = notices.data?.intake;
   const [f, set] = useState({
     reason: "",
     emergencyContact: "",
@@ -78,6 +85,8 @@ export function PatientIntake({ token }: { token: string }) {
         "/public/appointment-links/" + encodeURIComponent(token) + "/intake",
         {
           ...f,
+          consent: true,
+          consentVersion: acceptedVersion,
           allergies: lines(f.allergies),
           chronicDiseases: lines(f.chronicDiseases),
           currentMedications: lines(f.currentMedications),
@@ -87,42 +96,59 @@ export function PatientIntake({ token }: { token: string }) {
   function submit(e: FormEvent) {
     e.preventDefault();
     if (step === 1) setStep(2);
-    else send.mutate();
+    else if (notice && acceptedVersion === notice.version) send.mutate();
   }
   if (send.isSuccess) return <p role="status">{t.sent}</p>;
   return (
     <details className="rounded border p-4">
       <summary>{t.title}</summary>
-      <form onSubmit={submit} className="mt-3 space-y-3">
-        {step === 2 && <p>{t.note}</p>}
-        {(step === 1 ? (["reason", "emergencyContact"] as const) : lists).map(
-          (k) => (
-            <label key={k} className="block">
-              {t[k]}
-              <textarea
-                className="block w-full rounded border p-2"
-                value={f[k]}
-                required={k === "reason"}
-                maxLength={
-                  k === "reason" ? 500 : k === "emergencyContact" ? 200 : 2420
+      {!notice ? (
+        <p role="status">{notices.isLoading ? "…" : t.unavailable}</p>
+      ) : (
+        <form onSubmit={submit} className="mt-3 space-y-3">
+          {step === 2 && <p>{t.note}</p>}
+          {(step === 1 ? (["reason", "emergencyContact"] as const) : lists).map(
+            (k) => (
+              <label key={k} className="block">
+                {t[k]}
+                <textarea
+                  className="block w-full rounded border p-2"
+                  value={f[k]}
+                  required={k === "reason"}
+                  maxLength={
+                    k === "reason" ? 500 : k === "emergencyContact" ? 200 : 2420
+                  }
+                  onChange={(e) => set({ ...f, [k]: e.target.value })}
+                />
+              </label>
+            ),
+          )}
+          {send.isError && (
+            <p role="alert">{bookingErrorMessage(send.error, t.error)}</p>
+          )}
+          {step === 2 && (
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                required
+                checked={acceptedVersion === notice.version}
+                onChange={(e) =>
+                  setAcceptedVersion(e.target.checked ? notice.version : "")
                 }
-                onChange={(e) => set({ ...f, [k]: e.target.value })}
               />
+              <span>{notice.text}</span>
             </label>
-          ),
-        )}
-        {send.isError && (
-          <p role="alert">{bookingErrorMessage(send.error, t.error)}</p>
-        )}
-        {step === 2 && (
-          <Button type="button" variant="outline" onClick={() => setStep(1)}>
-            {t.back}
+          )}
+          {step === 2 && (
+            <Button type="button" variant="outline" onClick={() => setStep(1)}>
+              {t.back}
+            </Button>
+          )}
+          <Button type="submit" disabled={send.isPending}>
+            {step === 1 ? t.next : t.send}
           </Button>
-        )}
-        <Button type="submit" disabled={send.isPending}>
-          {step === 1 ? t.next : t.send}
-        </Button>
-      </form>
+        </form>
+      )}
     </details>
   );
 }

@@ -76,6 +76,7 @@ export const vi = {
   payrollPayslipsPdf: 'Tải phiếu lương (PDF)',
   payrollPayslipPdf: 'Tải phiếu lương PDF',
   payrollPdfError: 'Không tải được PDF phiếu lương',
+  consentAdminTitle: 'Sổ đồng thuận', consentAdminCount: '{{count}} bản ghi', consentSearch: 'Tìm theo mã bệnh nhân, mục đích, kênh…', consentNoRecords: 'Không có bản ghi phù hợp.', consentLoadError: 'Không thể tải sổ đồng thuận.', consentBookingReference: 'Yêu cầu đặt lịch {{id}}', consentExport: 'Xuất CSV', consentExporting: 'Đang xuất…', consentExportError: 'Không thể xuất sổ đồng thuận.', consentPageRange: '{{from}}–{{to}} / {{total}}', consentColPatient: 'Bệnh nhân / tham chiếu', consentColPurpose: 'Mục đích', consentColVersion: 'Phiên bản', consentColChannel: 'Kênh', consentColCreated: 'Thời gian', consentColStatus: 'Trạng thái',
 } as const;
 
 export const en = {
@@ -155,4 +156,5 @@ export const en = {
   payrollPayslipsPdf: 'Payslips (PDF)',
   payrollPayslipPdf: 'Download payslip PDF',
   payrollPdfError: 'Could not download the payslip PDF',
+  consentAdminTitle: 'Consent ledger', consentAdminCount: '{{count}} records', consentSearch: 'Search patient ID, purpose, or channel…', consentNoRecords: 'No matching records.', consentLoadError: 'Could not load the consent ledger.', consentBookingReference: 'Booking request {{id}}', consentExport: 'Export CSV', consentExporting: 'Exporting…', consentExportError: 'Could not export the consent ledger.', consentPageRange: '{{from}}–{{to}} of {{total}}', consentColPatient: 'Patient / reference', consentColPurpose: 'Purpose', consentColVersion: 'Version', consentColChannel: 'Channel', consentColCreated: 'Recorded', consentColStatus: 'Status',
 };

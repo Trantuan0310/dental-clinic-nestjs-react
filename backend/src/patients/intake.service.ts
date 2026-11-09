@@ -13,6 +13,7 @@ import { JwtPayload } from '../common/guards/permissions.guard';
 import { isRowScoped } from '../common/row-scope';
 import { mergeStringLists, readJsonStringArray } from './domain/patient-rules';
 import { PatientsService } from './patients.service';
+import { getConsentNotices, recordConsent } from '../consents/consent-record';
 
 const list = z.array(z.string().trim().min(1).max(120)).max(20);
 export const intakeSchema = z
@@ -39,18 +40,29 @@ export class IntakeService {
     private audit: AuditService,
   ) {}
 
-  async submit(token: string, body: unknown) {
-    const parsed = intakeSchema.safeParse(body);
+  async submit(token: string, body: unknown, ip?: string) {
+    const parsed = intakeSchema
+      .extend({ consent: z.literal(true), consentVersion: z.string().min(1).max(120) })
+      .safeParse(body);
     if (!parsed.success) throw new BadRequestException('Phiếu khai không hợp lệ');
+    const notice = getConsentNotices().intake;
+    const { consentVersion, consent: _consent, ...answers } = parsed.data;
+    if (notice.version !== consentVersion)
+      throw new ConflictException('Văn bản đồng ý đã thay đổi. Vui lòng tải lại phiếu.');
     return this.db.$transaction(async tx => {
       const appointment = await resolveAppointmentLink(tx, token);
       const result = await tx.intakeForm.createMany({
-        data: [
-          { appointmentId: appointment.id, patientId: appointment.patientId, answers: parsed.data },
-        ],
+        data: [{ appointmentId: appointment.id, patientId: appointment.patientId, answers }],
         skipDuplicates: true,
       });
       if (!result.count) throw new ConflictException('Đã nhận phiếu khai cho lịch này');
+      await recordConsent(tx, {
+        channel: 'INTAKE',
+        patientId: appointment.patientId,
+        appointmentId: appointment.id,
+        notice,
+        ip,
+      });
       return { status: 'PENDING' };
     });
   }
