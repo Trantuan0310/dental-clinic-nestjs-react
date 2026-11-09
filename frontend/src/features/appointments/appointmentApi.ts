@@ -297,6 +297,7 @@ function buildCreateBody(payload: CreateAppointmentPayload): Record<string, unkn
     appointmentType: payload.appointmentType?.toUpperCase(),
     source: payload.source?.toUpperCase(),
     serviceIds: payload.serviceIds?.length ? payload.serviceIds : undefined,
+    waitlistEntryId: payload.waitlistEntryId,
     durationOverrideReason: payload.durationOverrideReason?.trim() || undefined,
   };
 }

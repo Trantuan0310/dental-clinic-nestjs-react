@@ -33,7 +33,7 @@ export const MESSAGE_SYSTEM_PROMPT = [
 ].join('\n');
 
 export interface MessageFacts {
-  kind: 'appointment_reminder' | 'recall_reminder' | 'reply';
+  kind: 'appointment_reminder' | 'recall_reminder' | 'waitlist_invite' | 'reply';
   clinicName: string;
   clinicPhone?: string;
   clinicAddress?: string;
@@ -49,6 +49,7 @@ export interface MessageFacts {
 }
 
 const KIND_TASK: Record<MessageFacts['kind'], string> = {
+  waitlist_invite: 'Mời khách trong danh sách chờ liên hệ để chọn giờ trống. Lịch chưa được đặt.',
   appointment_reminder:
     'Nhắc khách lịch hẹn sắp tới, mời khách xác nhận hoặc báo trước nếu cần đổi giờ.',
   recall_reminder:

@@ -8,11 +8,12 @@ import { AvailabilityService } from './availability.service';
 import { AppointmentsCron } from './appointments.cron';
 import { DispatchController } from './dispatch.controller';
 import { DispatchService } from './dispatch.service';
+import { WaitlistController } from './waitlist';
 
 @Module({
   // Shift registrations live in PayrollModule only (/shifts/registrations).
   imports: [ScheduleModule.forRoot(), PrismaModule, AuditModule],
-  controllers: [AppointmentsController, DispatchController],
+  controllers: [AppointmentsController, DispatchController, WaitlistController],
   providers: [AppointmentsService, AvailabilityService, DispatchService, AppointmentsCron],
   exports: [AppointmentsService, AvailabilityService],
 })

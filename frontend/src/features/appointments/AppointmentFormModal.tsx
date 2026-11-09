@@ -47,6 +47,8 @@ interface AppointmentFormModalProps {
   defaultDate?: string;
   defaultDentistId?: string;
   defaultPatientId?: string;
+  waitlistEntryId?: string;
+  defaultServiceId?: string;
   defaultStartTime?: string;
   /** e.g. 'follow_up' when a dentist books the next visit from an encounter. */
   defaultType?: AppointmentType;
@@ -68,6 +70,8 @@ export function AppointmentFormModal({
   defaultDate,
   defaultDentistId,
   defaultPatientId,
+  waitlistEntryId,
+  defaultServiceId,
   defaultStartTime,
   defaultType,
 }: AppointmentFormModalProps) {
@@ -145,7 +149,7 @@ export function AppointmentFormModal({
     defaultType === 'follow_up' ? 'returning' : 'phone',
   );
   // ADR-0009 phase 5: services chosen for the visit, in click order.
-  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [serviceIds, setServiceIds] = useState<string[]>(defaultServiceId ? [defaultServiceId] : []);
   const [durationOverrideReason, setDurationOverrideReason] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
@@ -429,6 +433,7 @@ export function AppointmentFormModal({
       notify.success(t('uiScheduling.appointmentUpdated'));
       } else {
         const payload: CreateAppointmentPayload = {
+          waitlistEntryId,
           patientId,
           dentistId,
           startsAt,

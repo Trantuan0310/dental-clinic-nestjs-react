@@ -31,6 +31,7 @@ const TONES = {
 };
 
 export const BY_TYPE: Record<InboxType, Kind & { to: (n: InboxNotification, c: LinkContext) => string }> = {
+  waitlistOpening: { icon: CalendarClock, tone: TONES.teal, to: n => '/waitlist?opening='+encodeURIComponent(n.targetId ?? '') },
   bookingRequest: { icon: Inbox, tone: TONES.sky, to: () => '/booking-requests' },
   shiftRegistration: {
     icon: CalendarClock,

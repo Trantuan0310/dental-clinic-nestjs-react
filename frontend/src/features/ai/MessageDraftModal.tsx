@@ -8,7 +8,7 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { aiAssistApi, type MessageDraft, type MessageKind } from './aiAssistApi';
 import { AiDraftNotice } from './AiDraftNotice';
 
-export type MessageContext = { kind: 'appointment_reminder'; appointmentId: string } | { kind: 'recall_reminder'; recallId: string };
+export type MessageContext = { kind: 'appointment_reminder'; appointmentId: string } | { kind: 'recall_reminder'; recallId: string } | {kind:'waitlist_invite'; waitlistId:string};
 
 /** "0912 345 678" → "0912345678" for zalo.me / tel: links. */
 const digits = (phone: string) => phone.replace(/[^\d+]/g, '');
@@ -40,7 +40,7 @@ export function MessageDraftModal({ context, open, onClose }: { context: Message
       aiAssistApi.draftMessage({
         kind,
         // The patient comes from the reminder's record either way (phone, greeting).
-        ...(context.kind === 'appointment_reminder' ? { appointmentId: context.appointmentId } : { recallId: context.recallId }),
+        ...(context.kind === 'waitlist_invite' ? {waitlistId:context.waitlistId} : context.kind === 'appointment_reminder' ? { appointmentId: context.appointmentId } : { recallId: context.recallId }),
         ...(kind === 'reply' ? { customerMessage: customerMessage.trim() } : {}),
         ...(staffNote.trim() ? { staffNote: staffNote.trim() } : {}),
       }),
@@ -67,7 +67,7 @@ export function MessageDraftModal({ context, open, onClose }: { context: Message
       <div className="space-y-4">
         <Tabs value={kind} onValueChange={(v) => { setKind(v as MessageKind); setDraft(null); }}>
           <TabsList>
-            <TabsTrigger value={context.kind}>{t(`uiAi.message.${context.kind}`)}</TabsTrigger>
+            <TabsTrigger value={context.kind}>{context.kind === 'waitlist_invite' ? 'Tin mời đặt lịch' : t(`uiAi.message.${context.kind}`)}</TabsTrigger>
             <TabsTrigger value="reply">{t('uiAi.message.reply')}</TabsTrigger>
           </TabsList>
         </Tabs>

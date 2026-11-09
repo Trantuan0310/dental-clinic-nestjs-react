@@ -7,9 +7,12 @@ import {
   RecallStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { remainingSlot, waitlistMatch } from '../appointments/waitlist';
+import { AvailabilityService } from '../appointments/availability.service';
 import { clinicDateOnly, startOfClinicDay } from '../common/date-range.util';
 
 export type InboxType =
+  | 'waitlistOpening'
   | 'bookingRequest'
   | 'shiftRegistration'
   | 'draftInvoice'
@@ -43,7 +46,10 @@ const PAGE = 20;
 export class InboxService {
   private readonly logger = new Logger(InboxService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly availability: AvailabilityService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Reading
@@ -198,6 +204,48 @@ export class InboxService {
           dedupeKey: `draft-invoice:${inv.id}`,
         });
       }
+    }
+    const openings = await this.prisma.appointment.findMany({
+      where: {
+        deletedAt: null,
+        endAt: { gt: now },
+        OR: [
+          { status: 'CANCELLED', cancelledAt: { gte: since } },
+          { status: 'NO_SHOW', noShowAt: { gte: since } },
+        ],
+      },
+      select: {
+        id: true,
+        dentistId: true,
+        startAt: true,
+        endAt: true,
+        services: { select: { serviceId: true } },
+      },
+    });
+    for (const a of openings) {
+      const start = remainingSlot(a.startAt, a.endAt, now);
+      if (!start) continue;
+      const services = await this.availability.waitlistServices(
+        a.dentistId,
+        a.services.map(s => s.serviceId),
+        start,
+        a.endAt,
+      );
+      if (!services.length) continue;
+      const count = await this.prisma.waitlistEntry.count({
+        where: waitlistMatch(a.dentistId, services, start),
+      });
+      if (count)
+        sent += await this.send(
+          await this.recipients(['appointment.create', 'appointment.read.any', 'patient.update']),
+          {
+            type: 'waitlistOpening',
+            title: 'Có giờ trống cho danh sách chờ',
+            body: clinicDateTime(start) + ' · ' + count + ' người phù hợp',
+            targetId: a.id,
+            dedupeKey: 'waitlist:' + a.id + ':' + start.toISOString().slice(0, 10),
+          },
+        );
     }
     return sent;
   }

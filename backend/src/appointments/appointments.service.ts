@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   HttpStatus,
   Injectable,
@@ -18,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtPayload } from '../common/guards/permissions.guard';
 import { rowScope } from '../common/row-scope';
+import { waitlistMatch } from './waitlist';
 import {
   clinicDateOnly,
   startOfClinicDay,
@@ -345,6 +347,15 @@ export class AppointmentsService {
           updatedBy: actor.sub,
         },
       });
+
+      if (dto.waitlistEntryId) {
+        if (this.appointmentScope(actor) !== 'any') throw new ForbiddenException();
+        const matched = await tx.waitlistEntry.updateMany({
+          where: { ...waitlistMatch(dto.dentistId, dto.serviceIds ?? [], startAt), id: dto.waitlistEntryId, patientId: dto.patientId },
+          data: { status: 'BOOKED', appointmentId: created.id },
+        });
+        if (!matched.count) throw new ConflictException('Lịch không khớp yêu cầu chờ hoặc yêu cầu đã được xử lý.');
+      }
 
       await this.audit.log(
         {

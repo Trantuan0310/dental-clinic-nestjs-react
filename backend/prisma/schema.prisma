@@ -57,6 +57,7 @@ enum ActionAudit {
 }
 
 model User {
+  preferredWaitlist WaitlistEntry[]
   recordedConsents ConsentRecord[] @relation("ConsentActor")
   withdrawnConsents ConsentRecord[] @relation("ConsentWithdrawer")
   reviewedIntakes IntakeForm[]
@@ -311,6 +312,7 @@ enum IdentifierType {
 }
 
 model Patient {
+  waitlistEntries WaitlistEntry[]
   consentRecords ConsentRecord[]
   intakeForms IntakeForm[]
   id                 String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
@@ -465,6 +467,7 @@ enum TimeOffType {
 }
 
 model Appointment {
+  waitlistEntry WaitlistEntry?
   consentRecords ConsentRecord[]
   intakeForm IntakeForm?
   id                     String            @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
@@ -1570,6 +1573,7 @@ model ServiceCategory {
 }
 
 model Service {
+  waitlistEntries WaitlistEntry[]
   id                   String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   code                 String   @unique @db.VarChar(30)
   categoryId           String   @map("category_id") @db.Uuid
@@ -2084,6 +2088,26 @@ enum ConsentChannel {
   ONLINE
   INTAKE
   DESK
+}
+
+model WaitlistEntry {
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId String @map("patient_id") @db.Uuid
+  serviceId String @map("service_id") @db.Uuid
+  dentistId String? @map("dentist_id") @db.Uuid
+  fromDate DateTime @map("from_date") @db.Date
+  toDate DateTime @map("to_date") @db.Date
+  period String
+  note String?
+  status String @default("WAITING")
+  appointmentId String? @unique @map("appointment_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  patient Patient @relation(fields:[patientId],references:[id])
+  service Service @relation(fields:[serviceId],references:[id])
+  dentist User? @relation(fields:[dentistId],references:[id])
+  appointment Appointment? @relation(fields:[appointmentId],references:[id])
+  @@index([status, serviceId, fromDate, toDate],map:"waitlist_match_idx")
+  @@map("waitlist_entries")
 }
 
 model ConsentRecord {

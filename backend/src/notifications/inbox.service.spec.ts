@@ -5,6 +5,8 @@ const now = new Date('2026-10-28T03:00:00Z'); // 10:00 clinic time
 
 function make() {
   const prisma: any = {
+    appointment: { findMany: jest.fn().mockResolvedValue([]) },
+    waitlistEntry: { count: jest.fn().mockResolvedValue(0) },
     notification: {
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
@@ -20,10 +22,36 @@ function make() {
     inventoryItem: { count: jest.fn().mockResolvedValue(0), fields: { minStockLevel: 'f' } },
     encounter: { findMany: jest.fn().mockResolvedValue([]) },
   };
-  return { service: new InboxService(prisma), prisma };
+  return {
+    service: new InboxService(prisma, {
+      waitlistServices: jest.fn().mockResolvedValue(['svc']),
+    } as any),
+    prisma,
+  };
 }
 
 describe('InboxService', () => {
+  it('links reception to the released appointment when a waiting patient matches', async () => {
+    const { service, prisma } = make();
+    prisma.appointment.findMany.mockResolvedValue([
+      {
+        id: 'released',
+        dentistId: 'dentist',
+        startAt: new Date(+now + 3600000),
+        endAt: new Date(+now + 7200000),
+        services: [{ serviceId: 'svc' }],
+      },
+    ]);
+    prisma.waitlistEntry.count.mockResolvedValue(1);
+    await service.scanEvents(now);
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ type: 'waitlistOpening', targetId: 'released' }),
+        ]),
+      }),
+    );
+  });
   it("lists only the caller's notifications, unread filter and keyset page", async () => {
     const { service, prisma } = make();
     prisma.notification.findMany.mockResolvedValue(
