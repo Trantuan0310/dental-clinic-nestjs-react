@@ -12,6 +12,8 @@ test('opening a waitlist booking keeps the service and clinic time selected', as
     service: { id: 'svc', name: 'Dịch vụ UAT', isActive: true },
   }] } }));
   await page.goto('/waitlist');
+  await expect(page.getByRole('button', { name: 'Lưu yêu cầu' })).toHaveAttribute('type', 'submit');
+  await expect(page.getByRole('button', { name: 'Tìm người phù hợp' })).toHaveAttribute('type', 'submit');
   await page.getByRole('button', { name: 'Đặt lịch', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: /Dịch vụ UAT/ })).toBeChecked();
   await expect(page.locator('input[type=time]')).toHaveValue('09:30');

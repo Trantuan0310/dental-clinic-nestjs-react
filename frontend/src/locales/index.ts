@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { LOCALES, DEFAULT_LOCALE } from './config';
 import vi from './vi.json';
 import en from './en.json';
+import * as uiVisitTemplates from './uiVisitTemplates';
 import * as uiCommon from './uiCommon';
 import * as uiClinical from './uiClinical';
 import * as uiEntry from './uiEntry';
@@ -34,8 +35,8 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      vi: { translation: { ...vi, uiCommon: uiCommon.vi, uiClinical: uiClinical.vi, uiEntry: uiEntry.vi, uiOperations: uiOperations.vi, uiScheduling: uiScheduling.vi, uiWorkforce: uiWorkforce.vi, uiPlans: uiPlans.vi, uiRecalls: uiRecalls.vi, uiMessaging: uiMessaging.vi, uiNotifications: uiNotifications.vi, uiAi: uiAi.vi } },
-      en: { translation: { ...en, uiCommon: uiCommon.en, uiClinical: uiClinical.en, uiEntry: uiEntry.en, uiOperations: uiOperations.en, uiScheduling: uiScheduling.en, uiWorkforce: uiWorkforce.en, uiPlans: uiPlans.en, uiRecalls: uiRecalls.en, uiMessaging: uiMessaging.en, uiNotifications: uiNotifications.en, uiAi: uiAi.en } },
+      vi: { translation: { ...vi, uiVisitTemplates: uiVisitTemplates.vi, uiCommon: uiCommon.vi, uiClinical: uiClinical.vi, uiEntry: uiEntry.vi, uiOperations: uiOperations.vi, uiScheduling: uiScheduling.vi, uiWorkforce: uiWorkforce.vi, uiPlans: uiPlans.vi, uiRecalls: uiRecalls.vi, uiMessaging: uiMessaging.vi, uiNotifications: uiNotifications.vi, uiAi: uiAi.vi } },
+      en: { translation: { ...en, uiVisitTemplates: uiVisitTemplates.en, uiCommon: uiCommon.en, uiClinical: uiClinical.en, uiEntry: uiEntry.en, uiOperations: uiOperations.en, uiScheduling: uiScheduling.en, uiWorkforce: uiWorkforce.en, uiPlans: uiPlans.en, uiRecalls: uiRecalls.en, uiMessaging: uiMessaging.en, uiNotifications: uiNotifications.en, uiAi: uiAi.en } },
     },
     fallbackLng: DEFAULT_LOCALE,
     supportedLngs: LOCALES.map((l) => l.code),

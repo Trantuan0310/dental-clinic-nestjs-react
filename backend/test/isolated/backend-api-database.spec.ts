@@ -681,6 +681,47 @@ describe('Real HTTP and PostgreSQL regression', () => {
       process.env = saved;
     }
   });
+  it('previews a template, appends once on concurrent apply and deducts stock only on close', async () => {
+    const id = await fixtureEncounter();
+    const service = await db.service.create({ data: {
+      code: 'TEMPLATE-UAT', name: 'Template test', defaultDurationMin: 30, basePrice: 100000,
+      category: { create: { code: 'TEMPLATE-UAT', name: 'Template tests' } },
+    } });
+    const item = await db.inventoryItem.create({
+      data: { sku: 'TEMPLATE-UAT', name: 'Test item', unit: 'piece', quantityOnHand: 10 },
+    });
+    const templates = '/medical-records/visit-templates';
+    const encounter = '/medical-records/encounters/' + id;
+    const draft = {
+      name: 'Template UAT', serviceId: service.id,
+      soap: { subjective: 'Additional history', objective: 'UAT', assessment: 'Test', plan: 'Test' },
+      treatments: [{ serviceId: service.id, quantity: 1,
+        inventoryUsages: [{ inventoryItemId: item.id, quantity: 2, unit: 'piece' }] }],
+    };
+    await api('post', templates, 'reception').send(draft).expect(403);
+    const created = await api('post', templates, 'dentist').send(draft).expect(201);
+    const templateId = created.body.data.id;
+    const preview = encounter + '/visit-templates/' + templateId + '/preview';
+    const first = (await api('get', preview, 'dentist').expect(200)).body.data;
+    await api('put', templates + '/' + templateId, 'dentist').send({ ...draft, name: 'Updated UAT' }).expect(200);
+    const apply = (version: string) => api('post', encounter + '/visit-templates/apply', 'dentist')
+      .send({ templateId, version });
+    await apply(first.version).expect(409);
+    expect(await db.treatment.count({where:{encounterId:id}})).toBe(0);
+    const current = (await api('get', preview, 'dentist').expect(200)).body.data;
+    const responses = await Promise.all([apply(current.version).expect(200), apply(current.version).expect(200)]);
+    expect(responses.map(r => r.body.data.alreadyApplied).sort()).toEqual([false,true]);
+    const note = await db.clinicalNote.findUniqueOrThrow({where:{encounterId:id}});
+    expect(note.chiefComplaint).toBe('Đau răng\n\nAdditional history');
+    expect(await db.treatment.count({where:{encounterId:id}})).toBe(1);
+    const stock = async () => Number((await db.inventoryItem.findUniqueOrThrow({where:{id:item.id}})).quantityOnHand);
+    expect(await stock()).toBe(10);
+    await api('post', encounter + '/close', 'dentist').send({}).expect(200);
+    expect(await stock()).toBe(8);
+    await api('delete', templates + '/' + templateId).expect(204);
+    expect((await api('get', templates).expect(200)).body.data.map((r: {id:string}) => r.id)).not.toContain(templateId);
+  });
+
   it('rolls back all inventory changes when closing with insufficient stock', async () => {
     const id = await fixtureEncounter();
     const first = await db.inventoryItem.create({

@@ -1,3 +1,5 @@
+import { VisitTemplatesManager } from './VisitTemplatesManager';
+import { useAuthStore } from '@/stores/authStore';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderPlus, Pencil, Plus } from 'lucide-react';
@@ -266,6 +268,7 @@ function CategoryForm({
 }
 
 export default function ServicesPage() {
+  const canManageTemplates = useAuthStore(s => s.hasAnyPermission(['service.manage', 'clinical_note.write']));
   const { t } = useTranslation();
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<CatalogService | 'new' | null>(null);
@@ -358,6 +361,7 @@ export default function ServicesPage() {
           </PermissionGuard>
         }
       />
+      {canManageTemplates && <VisitTemplatesManager />}
       <Checkbox
         label={t('uiWorkforce.includeInactiveServices')}
         checked={showInactive}

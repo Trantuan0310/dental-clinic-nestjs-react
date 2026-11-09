@@ -1,4 +1,6 @@
-import { ForbiddenException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { VisitTemplateDto, ApplyVisitTemplateDto } from './dto/visit-template.dto';
+import { createHash } from 'node:crypto';
+import { BadRequestException, ConflictException, NotFoundException, ForbiddenException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, EncounterStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -213,6 +215,103 @@ export class MedicalRecordsService {
     });
     this.emitClinicalDataChanged(patientId);
     return result;
+  }
+
+  private assertTemplateManager(actor: JwtPayload) {
+    if (!actor.permissions.some(p => ['service.manage', 'clinical_note.write'].includes(p))) {
+      throw new ForbiddenException('Không có quyền quản lý mẫu khám');
+    }
+  }
+
+  async listVisitTemplates(actor: JwtPayload) {
+    this.assertTemplateManager(actor);
+    return this.prisma.visitTemplate.findMany({ where: { deletedAt: null }, orderBy: { name: 'asc' } });
+  }
+
+  async saveVisitTemplate(id: string | null, dto: VisitTemplateDto, actor: JwtPayload) {
+    this.assertTemplateManager(actor);
+    return this.prisma.$transaction(async tx => {
+      const ids = [...new Set([dto.serviceId, ...dto.treatments.map(t => t.serviceId)])];
+      const services = await tx.service.findMany({ where: { id: { in: ids }, isActive: true } });
+      if (services.length !== ids.length) throw new BadRequestException('Dịch vụ không tồn tại hoặc đã ngừng');
+      await this.assertUsableItems(tx, dto.treatments.flatMap(t => t.inventoryUsages));
+      const data = { name: dto.name, serviceId: dto.serviceId,
+        soap: dto.soap as unknown as Prisma.InputJsonValue,
+        treatments: dto.treatments as unknown as Prisma.InputJsonValue };
+      if (id && !await tx.visitTemplate.findFirst({ where: { id, deletedAt: null } })) {
+        throw new NotFoundException('Không tìm thấy mẫu khám');
+      }
+      const template = id ? await tx.visitTemplate.update({ where: { id }, data }) : await tx.visitTemplate.create({ data });
+      await this.audit.log({ action: id ? 'VISIT_TEMPLATE_UPDATED' : 'VISIT_TEMPLATE_CREATED', actorUserId: actor.sub, targetType: 'visit_template', targetId: template.id }, tx);
+      return template;
+    });
+  }
+
+  async deleteVisitTemplate(id: string, actor: JwtPayload) {
+    this.assertTemplateManager(actor);
+    return this.prisma.$transaction(async tx => {
+      const result = await tx.visitTemplate.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date() } });
+      if (!result.count) throw new NotFoundException('Không tìm thấy mẫu khám');
+      await this.audit.log({ action: 'VISIT_TEMPLATE_DELETED', actorUserId: actor.sub, targetType: 'visit_template', targetId: id }, tx);
+    });
+  }
+
+  private async resolveVisitTemplate(tx: Prisma.TransactionClient, encounterId: string, templateId: string, actor: JwtPayload) {
+    if (!['clinical_note.write', 'treatment.write'].every(p => actor.permissions.includes(p))) {
+      throw new ForbiddenException('Cần quyền ghi ghi chú và điều trị');
+    }
+    const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
+    if (!encounter) throw new EncounterNotFoundException(encounterId);
+    this.assertClinicalWriter(actor, encounter);
+    if (encounter.status !== EncounterStatus.IN_PROGRESS) throw new EncounterNotClosableException('Chỉ dùng mẫu cho phiên khám đang mở');
+    const template = await tx.visitTemplate.findFirst({ where: { id: templateId, deletedAt: null } });
+    if (!template) throw new NotFoundException('Không tìm thấy mẫu khám');
+    const anchor = await tx.service.findUnique({ where: { id: template.serviceId } });
+    if (!anchor?.isActive) throw new BadRequestException('Dịch vụ của mẫu đã ngừng');
+    const defaults = template.treatments as unknown as VisitTemplateDto['treatments'];
+    await this.assertUsableItems(tx, defaults.flatMap(t => t.inventoryUsages));
+    const treatments: CreateTreatmentDto[] = [];
+    for (const line of defaults) {
+      const service = await tx.service.findUnique({ where: { id: line.serviceId } });
+      const booked = await tx.appointmentService.findFirst({ where: { appointmentId: encounter.appointmentId, serviceId: line.serviceId }, select: { price: true } });
+      if (!service || (!service.isActive && !booked)) throw new BadRequestException('Dịch vụ điều trị đã ngừng');
+      const unitPrice = booked ? Number(booked.price) : await this.assignedPrice(tx, encounter.dentistId, service, encounter.startedAt);
+      if (!Number.isSafeInteger(unitPrice) || unitPrice < 0 || unitPrice > 9_999_999_999) throw new BadRequestException('Đơn giá vượt giới hạn điều trị');
+      treatments.push({ serviceId: service.id, procedure: service.name, unitPrice, quantity: line.quantity, inventoryUsages: line.inventoryUsages });
+    }
+    const applied = await tx.visitTemplateApplication.findUnique({ where: { encounterId_templateId: { encounterId, templateId } } });
+    const version = createHash('sha256').update(JSON.stringify([template.updatedAt, treatments])).digest('hex');
+    return { id: template.id, name: template.name, serviceId: template.serviceId, updatedAt: template.updatedAt, version,
+      soap: template.soap as unknown as VisitTemplateDto['soap'], treatments, alreadyApplied: !!applied };
+  }
+
+  async previewVisitTemplate(encounterId: string, templateId: string, actor: JwtPayload) {
+    return this.prisma.$transaction(tx => this.resolveVisitTemplate(tx, encounterId, templateId, actor));
+  }
+
+  async applyVisitTemplate(encounterId: string, dto: ApplyVisitTemplateDto, actor: JwtPayload) {
+    return this.withEditableEncounter(encounterId, actor, async tx => {
+      if (!['clinical_note.write', 'treatment.write'].every(p => actor.permissions.includes(p))) throw new ForbiddenException('Cần quyền ghi ghi chú và điều trị');
+      // The encounter lock serializes retries with each other and with close.
+      const previous = await tx.visitTemplateApplication.findUnique({ where: { encounterId_templateId: { encounterId, templateId: dto.templateId } } });
+      if (previous) return { alreadyApplied: true };
+      await tx.$queryRaw`SELECT id FROM visit_templates WHERE id = ${dto.templateId}::uuid FOR SHARE`;
+      const preview = await this.resolveVisitTemplate(tx, encounterId, dto.templateId, actor);
+      if (preview.version !== dto.version) throw new ConflictException('Mẫu hoặc giá điều trị đã thay đổi. Hãy xem trước lại.');
+      const note = await tx.clinicalNote.findUnique({ where: { encounterId } });
+      const sections: UpsertClinicalNoteDto = {};
+      for (const [field, content] of Object.entries({ chiefComplaint: preview.soap.subjective, notes: preview.soap.objective, diagnosis: preview.soap.assessment, treatmentPlan: preview.soap.plan })) {
+        if (content.trim()) {
+          const existing = note?.[field as ClinicalNoteField];
+          sections[field as ClinicalNoteField] = existing ? `${existing}\n\n${content}` : content;
+        }
+      }
+      await this.upsertClinicalNoteInTransaction(tx, encounterId, sections, actor);
+      for (const treatment of preview.treatments) await this.createTreatmentInTransaction(tx, encounterId, treatment, actor);
+      await tx.visitTemplateApplication.create({ data: { encounterId, templateId: dto.templateId, appliedBy: actor.sub } });
+      await this.audit.log({ action: 'VISIT_TEMPLATE_APPLIED', actorUserId: actor.sub, targetType: 'encounter', targetId: encounterId, metadata: { templateId: dto.templateId } }, tx);
+      return { alreadyApplied: false };
+    });
   }
 
   // ==========================================================================
@@ -1153,7 +1252,10 @@ export class MedicalRecordsService {
   // ==========================================================================
 
   async upsertClinicalNote(encounterId: string, dto: UpsertClinicalNoteDto, actor: JwtPayload) {
-    return this.withEditableEncounter(encounterId, actor, async tx => {
+    return this.withEditableEncounter(encounterId, actor, tx => this.upsertClinicalNoteInTransaction(tx, encounterId, dto, actor));
+  }
+
+  private async upsertClinicalNoteInTransaction(tx: Prisma.TransactionClient, encounterId: string, dto: UpsertClinicalNoteDto, actor: JwtPayload) {
       const encounter = await tx.encounter.findUnique({
         where: { id: encounterId },
       });
@@ -1246,7 +1348,6 @@ export class MedicalRecordsService {
       );
 
       return note;
-    });
   }
 
   async addAddendum(encounterId: string, dto: AddAddendumDto, actor: JwtPayload) {
@@ -1364,7 +1465,10 @@ export class MedicalRecordsService {
   }
 
   async createTreatment(encounterId: string, dto: CreateTreatmentDto, actor: JwtPayload) {
-    return this.withEditableEncounter(encounterId, actor, async tx => {
+    return this.withEditableEncounter(encounterId, actor, tx => this.createTreatmentInTransaction(tx, encounterId, dto, actor));
+  }
+
+  private async createTreatmentInTransaction(tx: Prisma.TransactionClient, encounterId: string, dto: CreateTreatmentDto, actor: JwtPayload) {
       const encounter = await tx.encounter.findUnique({ where: { id: encounterId } });
       if (!encounter) throw new EncounterNotFoundException(encounterId);
       if (this.isRowScopedDentist(actor) && encounter.dentistId !== actor.sub) {
@@ -1478,7 +1582,6 @@ export class MedicalRecordsService {
       );
 
       return treatment;
-    });
   }
 
   async updateTreatment(
