@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -112,7 +113,17 @@ export class CreatePublicBookingRequestDto {
   @IsBoolean({
     message: 'Cần đồng ý để phòng khám sử dụng thông tin nhằm xử lý yêu cầu đặt lịch',
   })
-  consent!: boolean;
+  // Keep implicit DTO conversion from coercing the string "false" to true.
+  consent!: unknown;
+
+  @IsOptional()
+  @IsIn(['vi', 'en'])
+  consentLanguage?: 'vi' | 'en';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  consentVersion?: string;
 }
 /**
  * The patient's answer to "Cần bổ sung thông tin". The public API never

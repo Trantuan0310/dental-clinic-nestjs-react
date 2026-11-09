@@ -161,9 +161,13 @@ describe('Real HTTP and PostgreSQL regression', () => {
     const token = await issueAppointmentLink(db, appointment.id);
     expect(token).toBeTruthy();
     const url = '/api/v1/public/appointment-links/' + token + '/intake';
-    const answers = { allergies: ['Latex'], currentMedications: [], chronicDiseases: [], reason: 'Exam', emergencyContact: '' };
+    const answers = { allergies: ['Latex'], currentMedications: [], chronicDiseases: [], reason: 'Exam', emergencyContact: '', consent: true, consentVersion: 'C3-v1' };
+    await request(app.getHttpServer()).post(url).send({ ...answers, consent: false }).expect(400);
+    await request(app.getHttpServer()).post(url).send({ ...answers, consentVersion: 'stale' }).expect(409);
     await request(app.getHttpServer()).post(url).send(answers).expect(201);
     await request(app.getHttpServer()).post(url).send(answers).expect(409);
+    const history = await api('get', '/patients/' + patientId + '/consents', 'reception').expect(200);
+    expect(history.body.data).toEqual([expect.objectContaining({ channel: 'INTAKE', version: 'C3-v1' })]);
     const review = '/appointments/' + appointment.id + '/intake';
     await api('get', review, 'other').expect(404);
     const pending = await api('get', review, 'reception').expect(200);
@@ -186,6 +190,25 @@ describe('Real HTTP and PostgreSQL regression', () => {
     await api('post', followUpReview + '/approve', 'reception').expect(409);
     const unchanged = await api('get', '/patients/' + patientId, 'dentist').expect(200);
     expect(unchanged.body.data.allergies).toEqual(['Penicillin', 'Latex']);
+  });
+
+  it('records desk consent once, restricts export, and preserves withdrawal history', async () => {
+    const p = await patient();
+    const path = '/patients/' + p + '/consents';
+    const notices = await request(app.getHttpServer()).get('/api/v1/public/consent-notices').expect(200);
+    const { purpose, version, text } = notices.body.data.desk;
+    await api('post', path, 'reception').send({ purpose, version });
+    await api('post', path, 'reception').send({ purpose, version });
+    const ledger = await api('get', path, 'reception').expect(200);
+    expect(ledger.body.data).toEqual([expect.objectContaining({ channel: 'DESK', purpose, version, text, withdrawnAt: null })]);
+    const id = ledger.body.data[0].id;
+    await api('post', path + '/' + id + '/withdraw', 'reception').send({});
+    const after = await api('get', path, 'reception').expect(200);
+    expect(after.body.data).toEqual([expect.objectContaining({ id, text, withdrawnAt: expect.any(String) })]);
+    await api('get', '/admin/consents/export', 'reception').expect(403);
+    const csv = await api('get', '/admin/consents/export').expect(200);
+    expect(csv.headers['content-type']).toMatch(/text\/csv/);
+    expect(csv.text).toContain(text);
   });
   it('rejects invalid access tokens', async () => {
     await request(app.getHttpServer())

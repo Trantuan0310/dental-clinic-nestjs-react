@@ -1,3 +1,4 @@
+import { getConsentNotices, recordConsent } from '../consents/consent-record';
 import {
   BadRequestException,
   ConflictException,
@@ -724,7 +725,11 @@ export class BookingService {
     return held;
   }
 
-  async createPublic(dto: CreatePublicBookingRequestDto) {
+  async createPublic(dto: CreatePublicBookingRequestDto, ip?: string) {
+    const notice = getConsentNotices(dto.consentLanguage).booking;
+    // Existing public clients display version 1 and send only the consent flag.
+    if ((dto.consentVersion ?? '1') !== notice.version)
+      throw new ConflictException('Văn bản đồng ý đã thay đổi. Vui lòng tải lại trang đặt lịch.');
     await this.loadClosures();
     const details = this.validateDetails(dto);
     const startAt = new Date(dto.startAt);
@@ -847,7 +852,7 @@ export class BookingService {
             ' này đã gửi nhiều yêu cầu đặt lịch trong hôm nay. Vui lòng thử lại vào ngày mai hoặc gọi phòng khám.',
         );
       }
-      return tx.bookingRequest.create({
+      const request = await tx.bookingRequest.create({
         data: {
           referenceCode: ref,
           accessTokenHash: this.hash(token),
@@ -860,6 +865,11 @@ export class BookingService {
         },
         select: { id: true, referenceCode: true, email: true, fullName: true },
       });
+      await recordConsent(tx, {
+        channel: 'ONLINE', bookingRequestId: request.id,
+        notice, ip,
+      });
+      return request;
     }, LOCKING_TX_OPTIONS);
     await this.audit.log({
       action: 'BOOKING_REQUEST_SUBMITTED',
@@ -2825,7 +2835,7 @@ export class BookingService {
   }
 
   private validateDetails(dto: CreatePublicBookingRequestDto) {
-    if (!dto.consent)
+    if (dto.consent !== true)
       throw new BadRequestException(
         'Cần đồng ý để phòng khám sử dụng thông tin nhằm xử lý yêu cầu đặt lịch',
       );

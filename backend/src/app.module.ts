@@ -29,6 +29,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { HealthController } from './common/health.controller';
 import { StaffModule } from './staff/staff.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { ConsentsModule } from './consents/consents.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { CatalogModule } from './catalog/catalog.module';
     AiModule,
     StaffModule,
     CatalogModule,
+    ConsentsModule,
   ],
   controllers: [HealthController],
   providers: [

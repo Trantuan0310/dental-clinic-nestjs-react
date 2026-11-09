@@ -277,6 +277,8 @@ export default function PublicBookingPage() {
         "/public/booking/requests",
         {
           ...form,
+          consentLanguage: i18n.language.startsWith('en') ? 'en' : 'vi',
+          consentVersion: '1',
           // Fields hidden again (box unticked) are not sent.
           ...(showContact ? {} : { contactPersonName: "", contactPersonPhone: "" }),
           serviceId,

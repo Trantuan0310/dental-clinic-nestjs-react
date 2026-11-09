@@ -163,6 +163,7 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     appointmentService: buildModel(),
     queueEntry: buildModel(),
     bookingRequest: buildModel(),
+    consentRecord: buildModel(),
 
     ...overrides,
   };

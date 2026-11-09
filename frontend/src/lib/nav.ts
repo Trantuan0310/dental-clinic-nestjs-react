@@ -281,6 +281,7 @@ const NAV_GROUPS: NavGroupDef[] = [
         icon: ClipboardList,
         permission: 'system.audit.read',
       },
+      { to: '/admin/consents', labelKey: 'ConsentLedger', icon: ClipboardList, permission: 'consent.export' },
       {
         to: '/admin/messages',
         labelKey: 'Messages',

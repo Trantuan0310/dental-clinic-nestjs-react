@@ -35,6 +35,7 @@ import { PermissionGuard } from '@/components/PermissionGuard';
 import { useTranslation } from 'react-i18next';
 import { MergePatientModal } from './MergePatientModal';
 import { PatientPlansCard } from '@/features/treatment-plans/PatientPlansCard';
+import { PatientConsentsTab } from './PatientConsentsTab';
 
 export default function PatientDetailPage() {
   const { t } = useTranslation();
@@ -52,6 +53,7 @@ export default function PatientDetailPage() {
     s.hasAnyPermission(['encounter.read.any', 'encounter.read.own']),
   );
   const canReadPlans = useAuthStore((s) => s.hasPermission('treatment_plan.read'));
+  const canReadConsents = useAuthStore((s) => s.hasPermission('consent.read'));
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -258,6 +260,7 @@ export default function PatientDetailPage() {
               <TabsTrigger value="encounters">{t('uiClinical.encounterHistory')}</TabsTrigger>
               {canReadPlans && <TabsTrigger value="plans">{t('uiPlans.plans')}</TabsTrigger>}
               <TabsTrigger value="invoices">{t('uiClinical.invoice')}</TabsTrigger>
+              {canReadConsents && <TabsTrigger value="consents">{t('uiClinical.consentLedger')}</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="overview">
@@ -459,6 +462,10 @@ export default function PatientDetailPage() {
                 )}
               </Card>
             </TabsContent>
+
+            {canReadConsents && <TabsContent value="consents">
+              {id && <PatientConsentsTab patientId={id} />}
+            </TabsContent>}
           </Tabs>
         </div>
       </div>
