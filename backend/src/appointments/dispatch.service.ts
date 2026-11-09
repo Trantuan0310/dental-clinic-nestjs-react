@@ -111,6 +111,35 @@ export class DispatchService {
       });
   }
 
+  async chairs(actor: JwtPayload) {
+    const scoped = this.appointments.appointmentScope(actor) === 'own';
+    const [queue, encounters, dentists] = await Promise.all([
+      this.list({}, actor),
+      this.prisma.encounter.findMany({
+        where: { status: 'IN_PROGRESS', ...(scoped && { dentistId: actor.sub }) },
+        select: { dentistId: true, startedAt: true, patient: { select: { fullName: true } }, dentist: { select: { fullName: true } } },
+        orderBy: { startedAt: 'asc' },
+      }),
+      this.prisma.user.findMany({
+        where: { deletedAt: null, status: 'ACTIVE', userRoles: { some: { role: { code: 'dentist' } } }, ...(scoped && { id: actor.sub }) },
+        select: { id: true, fullName: true },
+      }),
+    ]);
+    const names = new Map(dentists.map(d => [d.id, d.fullName]));
+    for (const e of encounters) names.set(e.dentistId, e.dentist.fullName);
+    for (const e of queue) names.set(e.dentistId, e.dentistName);
+    return Array.from(names, ([dentistId, name]) => {
+      const entries = queue.filter(e => e.dentistId === dentistId);
+      const waiting = entries.filter(e => e.status === 'WAITING');
+      const next = entries.find(e => e.status === 'CALLED') ?? waiting[0];
+      return {
+        dentistId, name, waiting: waiting.length,
+        current: encounters.filter(e => e.dentistId === dentistId).map(e => ({ name: e.patient.fullName, startedAt: e.startedAt })),
+        next: next ? { id: next.id, name: next.appointment.patient.fullName, minutes: next.waitingMinutes, called: next.status === 'CALLED' } : null,
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  }
+
   private present(
     r: EntryRow,
     dentist:
