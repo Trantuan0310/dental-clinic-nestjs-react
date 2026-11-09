@@ -199,7 +199,7 @@ export default function WaitlistPage() {
             />
           </label>
           <div>
-            <Button disabled={!form.patientId || save.isPending}>
+            <Button type="submit" disabled={!form.patientId || save.isPending}>
               Lưu yêu cầu
             </Button>
             {editing && (
@@ -252,7 +252,7 @@ export default function WaitlistPage() {
             value={time}
             onChange={(e) => setTime(e.target.value)}
           />
-          <Button>Tìm người phù hợp</Button>
+          <Button type="submit">Tìm người phù hợp</Button>
           <Button type="button" variant="outline" onClick={() => setParams({})}>
             Xem tất cả
           </Button>
