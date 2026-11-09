@@ -5,10 +5,13 @@ import { PatientsController } from './patients.controller';
 import { PatientsService } from './patients.service';
 import { PatientsProxyController } from './patients-proxy.controller';
 
+import { IntakeController, PublicIntakeController } from './intake.controller';
+import { IntakeService } from './intake.service';
+
 @Module({
   imports: [PrismaModule, AuditModule],
-  controllers: [PatientsController, PatientsProxyController],
-  providers: [PatientsService],
+  controllers: [IntakeController, PublicIntakeController, PatientsController, PatientsProxyController],
+  providers: [IntakeService, PatientsService],
   exports: [PatientsService],
 })
 export class PatientsModule {}

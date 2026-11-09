@@ -82,7 +82,7 @@ export class PatientsService {
   ) {}
 
   /** Allergies/history feed the cached AI summary — let it drop stale copies. */
-  private emitClinicalDataChanged(patientId: string): void {
+  emitClinicalDataChanged(patientId: string): void {
     const payload: PatientClinicalDataChangedEvent = { patientId };
     this.events.emit(PATIENT_CLINICAL_DATA_CHANGED_EVENT, payload);
   }
@@ -557,17 +557,18 @@ export class PatientsService {
    * in the chair today (dentistMayEditMedicalHistory), so a newly found
    * allergy is recorded during the visit; other fields stay front-desk work.
    */
-  async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload) {
-    const current = await this.prisma.patient.findFirst({
+  async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload, tx?: Prisma.TransactionClient) {
+    const db = tx ?? this.prisma;
+    const current = await db.patient.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, allergies: true, chronicDiseases: true, currentMedications: true },
     });
     if (!current) throw new PatientNotFoundException(id);
     if (this.isRowScopedDentist(actor)) {
-      if (!(await dentistCanReadPatient(this.prisma, id, actor.sub))) {
+      if (!(await dentistCanReadPatient(db, id, actor.sub))) {
         throw new PatientNotFoundException(id);
       }
-      if (!(await dentistMayEditMedicalHistory(this.prisma, id, actor.sub))) {
+      if (!(await dentistMayEditMedicalHistory(db, id, actor.sub))) {
         throw new ForbiddenException(
           'Bác sĩ chỉ sửa dị ứng/tiền sử khi đã khám bệnh nhân hoặc bệnh nhân đã check-in hôm nay',
         );
@@ -597,20 +598,20 @@ export class PatientsService {
     if (dto.expectedUpdatedAt !== undefined) {
       // Guarded write: a list edited elsewhere since the card loaded (e.g. an
       // allergy added at the front desk) must not be silently replaced.
-      const { count } = await this.prisma.patient.updateMany({
+      const { count } = await db.patient.updateMany({
         where: { id, updatedAt: sameInstant(dto.expectedUpdatedAt) },
         data: { ...data, updatedBy: actor.sub },
       });
       if (count === 0) throw new PatientVersionConflictException();
-      updated = await this.prisma.patient.findUniqueOrThrow({ where: { id }, select });
+      updated = await db.patient.findUniqueOrThrow({ where: { id }, select });
     } else {
-      updated = await this.prisma.patient.update({
+      updated = await db.patient.update({
         where: { id },
         data: { ...data, updatedBy: actor.sub },
         select,
       });
     }
-    await this.audit.log({
+    const auditEntry = {
       action: 'PATIENT_MEDICAL_HISTORY_UPDATED',
       actorUserId: actor.sub,
       actorEmail: actor.email,
@@ -620,8 +621,12 @@ export class PatientsService {
         fields: Object.keys(data),
         ...medicalAudit(medicalListChanges(current, data)),
       },
-    });
-    this.emitClinicalDataChanged(id);
+    };
+    if (tx) await this.audit.log(auditEntry, tx);
+    else {
+      await this.audit.log(auditEntry);
+      this.emitClinicalDataChanged(id);
+    }
     return {
       id: updated.id,
       allergies: readJsonStringArray(updated.allergies),

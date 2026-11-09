@@ -6,6 +6,7 @@ import { vi } from 'date-fns/locale';
 import { api, unwrap } from '@/lib/api';
 import { Button, Card, Input, Select, Textarea } from '@/components/ui';
 import { PublicTopBar } from '@/features/booking/PublicTopBar';
+import { PatientIntake } from '@/features/booking/PatientIntake';
 
 type PublicAppointment = {
   startAt: string;
@@ -79,6 +80,7 @@ export default function PublicAppointmentLinkPage() {
               {action.isPending ? <p className="mt-4" role="status">Đang gửi…</p> : null}
               {!cancelled && visit.status !== 'cancelled' && visit.status !== 'completed' && (
                 <div className="mt-6 space-y-5 border-t pt-5">
+                  <PatientIntake key={ma} token={ma} />
                   {visit.canConfirm && <Button onClick={() => action.mutate({ name: 'confirm' })}>Xác nhận lịch hẹn</Button>}
                   {visit.canReschedule && !visit.rescheduleRequest && <section className="space-y-3" aria-labelledby="reschedule-title">
                     <h2 id="reschedule-title" className="font-semibold">Xin dời lịch</h2>

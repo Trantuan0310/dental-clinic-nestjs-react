@@ -8,6 +8,7 @@ import { BillingService } from '../../src/billing/billing.service';
 import { JwtService } from '@nestjs/jwt';
 import { createTestApp } from '../helpers/create-test-app';
 import { clinicDateOnly } from '../../src/common/date-range.util';
+import { issueAppointmentLink } from '../../src/booking/appointment-link-access';
 
 describe('Real HTTP and PostgreSQL regression', () => {
   let app: INestApplication;
@@ -151,6 +152,40 @@ describe('Real HTTP and PostgreSQL regression', () => {
 
   it('rejects unauthenticated HTTP requests', async () => {
     await request(app.getHttpServer()).get('/api/v1/patients').expect(401);
+  });
+  it('keeps intake pending until reception approves, then exposes the merged history to the assigned dentist', async () => {
+    const patientId = await patient();
+    const appointment = await db.appointment.create({
+      data: { patientId, dentistId: users.dentist, ...slot(), status: 'SCHEDULED' },
+    });
+    const token = await issueAppointmentLink(db, appointment.id);
+    expect(token).toBeTruthy();
+    const url = '/api/v1/public/appointment-links/' + token + '/intake';
+    const answers = { allergies: ['Latex'], currentMedications: [], chronicDiseases: [], reason: 'Exam', emergencyContact: '' };
+    await request(app.getHttpServer()).post(url).send(answers).expect(201);
+    await request(app.getHttpServer()).post(url).send(answers).expect(409);
+    const review = '/appointments/' + appointment.id + '/intake';
+    await api('get', review, 'other').expect(404);
+    const pending = await api('get', review, 'reception').expect(200);
+    expect(pending.body.data.status).toBe('PENDING');
+    expect(pending.body.data.current.allergies ?? []).not.toContain('Latex');
+    await db.patient.update({ where: { id: patientId }, data: { allergies: ['Penicillin'] } });
+    await api('post', review + '/approve', 'reception').expect(201);
+    await api('post', review + '/approve', 'reception').expect(201);
+    const result = await api('get', '/patients/' + patientId, 'dentist').expect(200);
+    expect(result.body.data.allergies).toEqual(['Penicillin', 'Latex']);
+    const followUp = await db.appointment.create({
+      data: { patientId, dentistId: users.dentist, ...slot(), status: 'SCHEDULED' },
+    });
+    const secondToken = await issueAppointmentLink(db, followUp.id);
+    await request(app.getHttpServer())
+      .post('/api/v1/public/appointment-links/' + secondToken + '/intake')
+      .send({ ...answers, allergies: ['Unverified'] }).expect(201);
+    const followUpReview = '/appointments/' + followUp.id + '/intake';
+    await api('post', followUpReview + '/discard', 'reception').expect(201);
+    await api('post', followUpReview + '/approve', 'reception').expect(409);
+    const unchanged = await api('get', '/patients/' + patientId, 'dentist').expect(200);
+    expect(unchanged.body.data.allergies).toEqual(['Penicillin', 'Latex']);
   });
   it('rejects invalid access tokens', async () => {
     await request(app.getHttpServer())

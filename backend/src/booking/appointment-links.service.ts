@@ -46,6 +46,8 @@ const STAFF_INCLUDE = {
       endAt: true,
       status: true,
       confirmedByPatient: true,
+      patientId: true,
+      dentistId: true,
       patient: { select: { id: true, fullName: true, primaryPhone: true } },
       dentist: { select: { id: true, fullName: true } },
     },
@@ -269,9 +271,10 @@ export class AppointmentLinksService {
 
   async listRequests(actor: JwtPayload) {
     assertClinicWide(actor, 'appointment');
-    return this.prisma.appointmentLinkRescheduleRequest.findMany({
+    const requests = await this.prisma.appointmentLinkRescheduleRequest.findMany({
       where: {
         status: 'PENDING',
+        OR: [{ holdUntil: null }, { holdUntil: { gt: new Date() } }],
         appointment: {
           deletedAt: null,
           patient: { deletedAt: null },
@@ -282,6 +285,7 @@ export class AppointmentLinksService {
       include: STAFF_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
+    return requests.filter(row => this.sameVisit(row, row.appointment));
   }
 
   async approve(id: string, dto: ApproveAppointmentLinkRescheduleDto, actor: JwtPayload) {
@@ -466,7 +470,7 @@ export class AppointmentLinksService {
 
   private sameVisit(
     row: { patientId: string; dentistId: string; originalStartAt: Date; originalEndAt: Date },
-    appt: Appointment,
+    appt: Pick<Appointment, 'patientId' | 'dentistId' | 'startAt' | 'endAt'>,
   ) {
     return (
       row.patientId === appt.patientId &&
@@ -503,7 +507,8 @@ export class AppointmentLinksService {
       canReschedule: active && appt.rescheduleCount < 3,
       canCancel: active && new Date() <= this.cancelUntil(appt),
       cancelUntil: this.cancelUntil(appt),
-      rescheduleRequest: request
+      rescheduleRequest: request?.status === 'PENDING' && this.sameVisit(request, appt) &&
+        (!request.holdUntil || request.holdUntil > new Date())
         ? {
             id: request.id,
             status: request.status,
