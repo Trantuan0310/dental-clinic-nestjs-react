@@ -344,12 +344,12 @@ export function AppointmentFormModal({
       setChiefComplaint('');
       setNotes('');
     }
-    setServiceIds([]);
+    setServiceIds(defaultServiceId ? [defaultServiceId] : []);
     setDurationOverrideReason('');
     resetNewPatient();
     setPatientSearch('');
     setTab('info');
-  }, [open, appointment, defaultDate, defaultDentistId, defaultPatientId, defaultStartTime, defaultType, lockedDentistId]);
+  }, [open, appointment, defaultDate, defaultDentistId, defaultPatientId, defaultServiceId, defaultStartTime, defaultType, lockedDentistId]);
 
   const create = useCreateAppointment();
   const update = useUpdateAppointment(appointment?.id ?? '');
@@ -682,7 +682,7 @@ export function AppointmentFormModal({
                       disabled={!!lockedDentistId}
                       onChange={(e) => {
                         setDentistId(e.target.value);
-                        setServiceIds([]);
+                        setServiceIds(defaultServiceId ? [defaultServiceId] : []);
                       }}
                       options={(dentists ?? [])
                         .filter((d) => !lockedDentistId || d.id === lockedDentistId)
