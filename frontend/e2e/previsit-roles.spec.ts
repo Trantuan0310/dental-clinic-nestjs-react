@@ -18,7 +18,9 @@ test('patient confirms and reports an allergy, reception approves, dentist sees 
     const patient = await db.patient.create({ data: {
       code, fullName: code, dob: new Date('1995-01-15'), gender: 'MALE',
     } });
-    const doctor = await db.user.findUniqueOrThrow({ where: { email: ACCOUNTS.dentist.email } });
+    const doctor = await db.user.findFirstOrThrow({
+      where: { email: ACCOUNTS.dentist.email, deletedAt: null, status: 'ACTIVE' },
+    });
     const startAt = new Date(Date.now() + 7 * 86400000);
     const token = randomBytes(32).toString('base64url');
     const appointment = await db.appointment.create({ data: {
