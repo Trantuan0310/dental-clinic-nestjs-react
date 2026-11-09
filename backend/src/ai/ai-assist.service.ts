@@ -168,7 +168,15 @@ export class AiAssistService {
     }
     // The visit or recall the screen is about gives the greeting, the phone
     // and the facts, for its reminder and for a reply to that patient alike.
-    if (dto.appointmentId) {
+    if (dto.kind === 'waitlist_invite' || dto.waitlistId) {
+      if (!dto.waitlistId || !actor.permissions.includes('appointment.create') || rowScope(actor,'appointment') !== 'any' || rowScope(actor,'patient') !== 'any') throw new ForbiddenException();
+      const entry = await this.prisma.waitlistEntry.findFirst({where:{id:dto.waitlistId,status:'WAITING',patient:{deletedAt:null}},include:{patient:{select:{fullName:true,gender:true,primaryPhone:true}},service:{select:{name:true}}}});
+      if(!entry)throw new NotFoundException('Không còn yêu cầu chờ');
+      greeting=salutation(entry.patient.fullName,entry.patient.gender);
+      phone=entry.patient.primaryPhone;
+      facts.services=[entry.service.name];
+      targetType='waitlist'; targetId=entry.id;
+    } else if (dto.appointmentId) {
       const appt = await this.prisma.appointment.findFirst({
         where: { id: dto.appointmentId, deletedAt: null },
         select: {
@@ -340,6 +348,7 @@ function viDate(iso: string): string {
 
 /** The message without a model: the same facts in a fixed sentence. */
 export function fallbackMessage(f: MessageFacts): string {
+  if(f.kind === 'waitlist_invite')return `Chào {ten}, ${f.clinicName} mời {ten} liên hệ để sắp xếp giờ khám ${f.services?.join(', ') ?? ''} theo yêu cầu chờ. Xin vui lòng trả lời nếu {ten} muốn đặt lịch.`;
   const call = f.clinicPhone ? ` Cần hỗ trợ xin gọi ${f.clinicPhone}.` : '';
   if (f.kind === 'appointment_reminder') {
     const who = f.dentistName ? ` với ${f.dentistName}` : '';

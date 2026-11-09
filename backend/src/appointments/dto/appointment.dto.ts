@@ -34,6 +34,10 @@ import { IsAppointmentInstant, MAX_VISIT_MINUTES } from './is-appointment-instan
 import { ReasonText } from '../../common/validators/reason-text';
 
 export class CreateAppointmentDto {
+  @IsOptional()
+  @IsUUID()
+  waitlistEntryId?: string;
+
   @ApiProperty()
   @IsUUID()
   patientId!: string;

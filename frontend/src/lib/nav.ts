@@ -92,6 +92,12 @@ const NAV_GROUPS: NavGroupDef[] = [
         allPermissions: ['appointment.read', 'appointment.read.any'],
       },
       {
+        to: '/waitlist',
+        labelKey: 'Waitlist',
+        icon: ListOrdered,
+        allPermissions: ['appointment.read.any','appointment.create','patient.update'],
+      },
+      {
         to: '/dispatch',
         labelKey: 'Dispatch',
         icon: ListOrdered,

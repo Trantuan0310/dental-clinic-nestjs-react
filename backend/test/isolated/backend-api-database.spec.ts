@@ -1618,6 +1618,28 @@ describe('Real HTTP and PostgreSQL regression', () => {
       }
     });
 
+    it('matches a waiting patient by clinic half-day and books the request once', async () => {
+      const p = await patient();
+      const { body } = await api('post', '/waitlist').send({
+        patientId: p, serviceId: serviceA, dentistId: null,
+        fromDate: day, toDate: day, period: 'PM', note: '',
+      }).expect(201);
+      const id = body.data.id;
+      const match = (time: string) => api('get', '/waitlist').query({
+        serviceId: serviceA, dentistId: users.dentist, startAt: at(time),
+      }).expect(200);
+      expect((await match('09:00')).body.data.map((r: {id: string}) => r.id)).not.toContain(id);
+      expect((await match('14:00')).body.data.map((r: {id: string}) => r.id)).toContain(id);
+      const booking = { patientId: p, dentistId: users.dentist, serviceIds: [serviceA],
+        startAt: at('14:00'), source: 'PHONE', waitlistEntryId: id };
+      const booked = await api('post', '/appointments').send(booking).expect(201);
+      await api('post', '/appointments').send({ ...booking, startAt: at('15:00') }).expect(409);
+      expect(await db.appointment.count({where:{patientId:p}})).toBe(1);
+      expect(await db.waitlistEntry.findUnique({where:{id}})).toMatchObject({
+        status: 'BOOKED', appointmentId: booked.body.data.id,
+      });
+    });
+
     it('books services as one visit with snapshots and buffers', async () => {
       const res = await api('post', '/appointments')
         .send({

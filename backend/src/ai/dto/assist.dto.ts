@@ -26,13 +26,17 @@ export class NoteDraftDto {
   text!: string;
 }
 
-export const MESSAGE_KINDS = ['appointment_reminder', 'recall_reminder', 'reply'] as const;
+export const MESSAGE_KINDS = ['appointment_reminder', 'recall_reminder', 'waitlist_invite', 'reply'] as const;
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
 
 export class MessageDraftDto {
   @ApiProperty({ enum: MESSAGE_KINDS })
   @IsIn(MESSAGE_KINDS)
   kind!: MessageKind;
+
+  @IsOptional()
+  @IsUUID()
+  waitlistId?: string;
 
   @ApiPropertyOptional({ description: 'Bắt buộc khi kind = appointment_reminder' })
   @IsOptional()

@@ -5,6 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, type AuthEnvelope, unwrap } from '@/lib/api';
 
 export type InboxType =
+  | 'waitlistOpening'
   | 'bookingRequest'
   | 'shiftRegistration'
   | 'draftInvoice'

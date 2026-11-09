@@ -10,10 +10,11 @@ export interface NoteDraft {
   model?: string;
 }
 
-export type MessageKind = 'appointment_reminder' | 'recall_reminder' | 'reply';
+export type MessageKind = 'appointment_reminder' | 'recall_reminder' | 'waitlist_invite' | 'reply';
 
 export interface MessageDraftRequest {
   kind: MessageKind;
+  waitlistId?: string;
   appointmentId?: string;
   recallId?: string;
   customerMessage?: string;

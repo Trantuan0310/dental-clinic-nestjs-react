@@ -130,6 +130,7 @@ export interface AppointmentFilters {
  * sprint; the API call still succeeds.
  */
 export interface CreateAppointmentPayload {
+  waitlistEntryId?: string;
   patientId: string;
   dentistId: string;
   startsAt: string;
