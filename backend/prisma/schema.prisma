@@ -57,6 +57,7 @@ enum ActionAudit {
 }
 
 model User {
+  templateApplications VisitTemplateApplication[]
   preferredWaitlist WaitlistEntry[]
   recordedConsents ConsentRecord[] @relation("ConsentActor")
   withdrawnConsents ConsentRecord[] @relation("ConsentWithdrawer")
@@ -677,6 +678,7 @@ enum PatientType {
 }
 
 model Encounter {
+  templateApplications VisitTemplateApplication[]
   id                String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   appointmentId     String          @unique @map("appointment_id") @db.Uuid
   patientId         String          @map("patient_id") @db.Uuid
@@ -1573,6 +1575,7 @@ model ServiceCategory {
 }
 
 model Service {
+  visitTemplates VisitTemplate[]
   waitlistEntries WaitlistEntry[]
   id                   String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   code                 String   @unique @db.VarChar(30)
@@ -2137,4 +2140,31 @@ model ConsentRecord {
   @@index([appointmentId])
   @@index([createdAt(sort: Desc)])
   @@map("consent_records")
+}
+
+// A5: JSON contains validated SOAP and catalogue treatment/material defaults.
+model VisitTemplate {
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  name String @db.VarChar(200)
+  serviceId String @map("service_id") @db.Uuid
+  soap Json
+  treatments Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+  service Service @relation(fields: [serviceId], references: [id])
+  applications VisitTemplateApplication[]
+  @@index([serviceId])
+  @@map("visit_templates")
+}
+
+model VisitTemplateApplication {
+  encounterId String @map("encounter_id") @db.Uuid
+  templateId String @map("template_id") @db.Uuid
+  appliedBy String @map("applied_by") @db.Uuid
+  appliedAt DateTime @default(now()) @map("applied_at") @db.Timestamptz()
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+  template VisitTemplate @relation(fields: [templateId], references: [id])
+  actor User @relation(fields: [appliedBy], references: [id])
+  @@id([encounterId, templateId])
+  @@map("visit_template_applications")
 }

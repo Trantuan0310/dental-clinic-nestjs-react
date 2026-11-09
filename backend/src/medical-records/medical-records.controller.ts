@@ -1,3 +1,4 @@
+import { VisitTemplateDto, ApplyVisitTemplateDto } from './dto/visit-template.dto';
 import {
   Controller,
   Get,
@@ -43,6 +44,44 @@ import {
 export class MedicalRecordsController {
   constructor(private readonly mr: MedicalRecordsService) {}
 
+  @Get('visit-templates')
+  @RequirePermissions('service.manage', 'clinical_note.write')
+  async templates(@User() actor: JwtPayload) {
+    return { data: await this.mr.listVisitTemplates(actor) };
+  }
+
+  @Post('visit-templates')
+  @RequirePermissions('service.manage', 'clinical_note.write')
+  async createTemplate(@Body() dto: VisitTemplateDto, @User() actor: JwtPayload) {
+    return { data: await this.mr.saveVisitTemplate(null, dto, actor) };
+  }
+
+  @Put('visit-templates/:id')
+  @RequirePermissions('service.manage', 'clinical_note.write')
+  async updateTemplate(@Param('id', ParseUUIDPipe) id: string, @Body() dto: VisitTemplateDto, @User() actor: JwtPayload) {
+    return { data: await this.mr.saveVisitTemplate(id, dto, actor) };
+  }
+
+  @Delete('visit-templates/:id')
+  @RequirePermissions('service.manage', 'clinical_note.write')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteTemplate(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
+    await this.mr.deleteVisitTemplate(id, actor);
+  }
+
+  @Get('encounters/:id/visit-templates/:templateId/preview')
+  @RequirePermissions('clinical_note.write')
+  async previewTemplate(@Param('id', ParseUUIDPipe) id: string, @Param('templateId', ParseUUIDPipe) templateId: string, @User() actor: JwtPayload) {
+    return { data: await this.mr.previewVisitTemplate(id, templateId, actor) };
+  }
+
+  @Post('encounters/:id/visit-templates/apply')
+  @RequirePermissions('clinical_note.write')
+  @HttpCode(HttpStatus.OK)
+  async applyTemplate(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ApplyVisitTemplateDto, @User() actor: JwtPayload) {
+    return { data: await this.mr.applyVisitTemplate(id, dto, actor) };
+  }
+
   @Get('encounters')
   @RequirePermissions('encounter.read.any', 'encounter.read.own')
   @ApiOperation({ summary: 'List encounters (BR-MR-019 row-level for dentist)' })
@@ -80,7 +119,7 @@ export class MedicalRecordsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Close encounter: status → COMPLETED, lock clinical note, decrement inventory, appointment COMPLETED. Emits encounter.closed.',
+      'Close encounter: status â†’ COMPLETED, lock clinical note, decrement inventory, appointment COMPLETED. Emits encounter.closed.',
   })
   async close(
     @Param('id', ParseUUIDPipe) id: string,
@@ -98,7 +137,7 @@ export class MedicalRecordsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Cancel an IN_PROGRESS encounter (reason ≥ 10 chars); its appointment returns to CHECKED_IN',
+      'Cancel an IN_PROGRESS encounter (reason â‰¥ 10 chars); its appointment returns to CHECKED_IN',
   })
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,

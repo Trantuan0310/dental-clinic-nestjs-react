@@ -1,3 +1,4 @@
+import { UseVisitTemplate } from './UseVisitTemplate';
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -86,6 +87,7 @@ export default function EncounterDetailPage() {
   const [initialTreatmentTooth, setInitialTreatmentTooth] = useState<number | null>(null);
   const [detailToothFdi, setDetailToothFdi] = useState<number | null>(null);
   const canCloseEncounter = useAuthStore((s) => s.hasPermission('encounter.complete'));
+  const canUseTemplate = useAuthStore(s => s.hasPermission('clinical_note.write') && s.hasPermission('treatment.write'));
   const canEditChart = useAuthStore((s) => s.hasPermission('dental_chart.write'));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
   const canCancelEncounter = useAuthStore((s) => s.hasPermission('encounter.cancel'));
@@ -247,6 +249,7 @@ export default function EncounterDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {encounter.status === 'in_progress' && ownScope && canUseTemplate && <UseVisitTemplate encounterId={encounter.id} />}
           {canBook && (
             <Button variant="outline" onClick={() => setBooking(true)}>
               <CalendarPlus className="h-4 w-4" />
