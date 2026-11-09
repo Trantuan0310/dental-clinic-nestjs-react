@@ -1,5 +1,6 @@
 import { AppointmentNoticesService, isQuietHour } from './appointment-notices.service';
 import { formatVisitTime } from './clinic-time-format';
+import { appointmentLinkHash } from './appointment-link-access';
 
 describe('formatVisitTime', () => {
   it('reads the time at the clinic, with the weekday, whatever the server zone', () => {
@@ -41,6 +42,7 @@ describe('AppointmentNoticesService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $executeRaw: jest.fn().mockResolvedValue(1),
+      appointmentLink: { create: jest.fn().mockResolvedValue({}) },
     };
     email = { send: jest.fn().mockResolvedValue(true) };
     availability = { checkSlot: jest.fn().mockResolvedValue(null) };
@@ -215,7 +217,7 @@ describe('AppointmentNoticesService', () => {
 
     it('links an online-booked visit to its status page', async () => {
       prisma.appointment.findUnique.mockResolvedValue(
-        visit({ bookingRequest: { referenceCode: 'GS-ABC' } }),
+        visit({ status: 'CANCELLED', bookingRequest: { referenceCode: 'GS-ABC' } }),
       );
       await service.onCancelled({
         appointmentId: 'appt-1',
@@ -284,6 +286,22 @@ describe('AppointmentNoticesService', () => {
   });
 
   describe('day-ahead reminders', () => {
+    it('delivers a patient management link while storing only its hash and patient binding', async () => {
+      const row = visit({ patientId: 'p1' });
+      prisma.appointment.findMany.mockResolvedValue([row]);
+      prisma.appointment.findUnique.mockResolvedValue(row);
+      await service.sendDueReminders();
+      const body = email.send.mock.calls[0][0].text as string;
+      const raw = /\/lich-hen\/([A-Za-z0-9_-]{43})/.exec(body)![1];
+      const stored = prisma.appointmentLink.create.mock.calls[0][0].data;
+      expect(stored).toEqual({
+        appointmentId: row.id,
+        patientId: 'p1',
+        tokenHash: appointmentLinkHash(raw),
+        expiresAt: visitAt,
+      });
+      expect(JSON.stringify(prisma.appointmentLink.create.mock.calls)).not.toContain(raw);
+    });
     it('reminds upcoming visits with an email once, claiming each before sending', async () => {
       prisma.appointment.findMany.mockResolvedValue([visit(), visit({ id: 'appt-2' })]);
       // appt-2 was claimed by another run in between.

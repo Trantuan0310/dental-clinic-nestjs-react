@@ -112,6 +112,8 @@ export type PrismaAppointmentRow = {
   startAt: Date | string;
   endAt: Date | string;
   status: string;
+  confirmedByPatient?: boolean;
+  rescheduleRequestedAt?: Date | string | null;
   reason?: string | null;
   notes?: string | null;
   chiefComplaint?: string | null;
@@ -187,6 +189,8 @@ export function transformAppointment(raw: PrismaAppointmentRow): Appointment {
     // Appointment['status']/['source'] unions, and every comparison against
     // them (STATUS_DOT maps, "can check in" checks, etc.), are lower-case.
     status: raw.status.toLowerCase() as Appointment['status'],
+    confirmedByPatient: raw.confirmedByPatient ?? false,
+    rescheduleRequestedAt: toIso(raw.rescheduleRequestedAt),
     reason: raw.reason ?? null,
     notes: raw.notes ?? null,
     chiefComplaint: raw.chiefComplaint ?? null,

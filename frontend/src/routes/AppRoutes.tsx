@@ -13,6 +13,8 @@ const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage
 const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'));
 const PublicBookingPage = lazy(() => import('@/features/booking/PublicBookingPage'));
 const PublicBookingStatusPage = lazy(() => import('@/features/booking/PublicBookingStatusPage'));
+const PublicAppointmentLinkPage = lazy(() => import('@/features/appointments/PublicAppointmentLinkPage'));
+const RescheduleRequestsPage = lazy(() => import('@/features/appointments/RescheduleRequestsPage'));
 const LandingPage = lazy(() => import('@/features/landing/LandingPage'));
 const BookingRequestsPage = lazy(() => import('@/features/booking/BookingRequestsPage'));
 const DashboardPage = lazy(() => import('@/features/DashboardPage'));
@@ -152,6 +154,7 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
             <Route path="/booking" element={<PublicBookingPage />} />
             <Route path="/booking/status" element={<PublicBookingStatusPage />} />
+            <Route path="/lich-hen/:ma" element={<PublicAppointmentLinkPage />} />
             <Route path="/recall/unsubscribe" element={<RecallUnsubscribePage />} />
 
             <Route element={<StaffLayout />}>
@@ -289,6 +292,16 @@ const router = createBrowserRouter(createRoutesFromElements(
                   <ProtectedRoute permission="appointment.read">
                     <ErrorBoundary componentName="AppointmentsListPage">
                       <AppointmentsListPage />
+                    </ErrorBoundary>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="appointment-links/reschedule-requests"
+                element={
+                  <ProtectedRoute permission="appointment.read.any">
+                    <ErrorBoundary componentName="RescheduleRequestsPage">
+                      <RescheduleRequestsPage />
                     </ErrorBoundary>
                   </ProtectedRoute>
                 }

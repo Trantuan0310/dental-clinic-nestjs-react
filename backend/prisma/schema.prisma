@@ -472,6 +472,8 @@ model Appointment {
   source                 AppointmentSource @default(PHONE)
   appointmentType        AppointmentType   @default(CONSULTATION) @map("appointment_type")
   confirmedAt            DateTime?         @map("confirmed_at") @db.Timestamptz()
+  confirmedByPatient     Boolean           @default(false) @map("confirmed_by_patient")
+  rescheduleRequestedAt  DateTime?         @map("reschedule_requested_at") @db.Timestamptz()
   confirmedBy            String?           @map("confirmed_by") @db.Uuid
   checkedInAt            DateTime?         @map("checked_in_at") @db.Timestamptz()
   checkedInBy            String?           @map("checked_in_by") @db.Uuid
@@ -526,6 +528,8 @@ model Appointment {
   rescheduleLogs AppointmentRescheduleLog[]
   services       AppointmentService[]
   queueEntry     QueueEntry?
+  appointmentLinks AppointmentLink[]
+  rescheduleRequests AppointmentLinkRescheduleRequest[]
 
   // Active slot uniqueness is a partial index managed by migration 017.
   bookingRequest BookingRequest?
@@ -536,6 +540,50 @@ model Appointment {
   @@index([status, startAt])
   // Note: composite (status, startAt, dentistId) created in migration 010.
   @@map("appointments")
+}
+
+model AppointmentLink {
+  id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId String    @map("appointment_id") @db.Uuid
+  patientId     String    @map("patient_id") @db.Uuid
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz()
+  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz()
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  @@index([appointmentId])
+  @@map("appointment_links")
+}
+
+enum AppointmentLinkRescheduleStatus {
+  PENDING
+  APPROVED
+  CANCELLED
+}
+
+model AppointmentLinkRescheduleRequest {
+  id               String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId    String @map("appointment_id") @db.Uuid
+  patientId        String @map("patient_id") @db.Uuid
+  dentistId        String @map("dentist_id") @db.Uuid
+  originalStartAt  DateTime @map("original_start_at") @db.Timestamptz()
+  originalEndAt    DateTime @map("original_end_at") @db.Timestamptz()
+  requestedStartAt DateTime? @map("requested_start_at") @db.Timestamptz()
+  requestedEndAt   DateTime? @map("requested_end_at") @db.Timestamptz()
+  bufferBeforeMin  Int @default(0) @map("buffer_before_min") @db.SmallInt
+  bufferAfterMin   Int @default(0) @map("buffer_after_min") @db.SmallInt
+  note             String? @db.VarChar(1000)
+  status           AppointmentLinkRescheduleStatus @default(PENDING)
+  holdUntil        DateTime? @map("hold_until") @db.Timestamptz()
+  approvedBy       String? @map("approved_by") @db.Uuid
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz()
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  @@index([dentistId, holdUntil])
+  @@index([status, createdAt])
+  @@index([appointmentId])
+  // One pending request per appointment: partial unique index in migration 059.
+  @@map("appointment_link_reschedule_requests")
 }
 
 model WorkingSchedule {

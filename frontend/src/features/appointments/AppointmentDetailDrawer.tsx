@@ -22,6 +22,7 @@ import {
 import { Drawer } from '@/components/ui/Drawer';
 import { Button } from '@/components/ui/Button';
 import { AppointmentStatusBadge } from '@/components/ui/StatusBadge';
+import { PatientLinkLabels } from './PatientLinkLabels';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Textarea';
@@ -622,6 +623,7 @@ export function AppointmentDetailDrawer({ appointmentId, onClose, onEdit }: Appo
                 </div>
                 <AppointmentStatusBadge status={appointment.status} overdue={overdue} />
               </div>
+              <PatientLinkLabels confirmedByPatient={appointment.confirmedByPatient} rescheduleRequestedAt={appointment.rescheduleRequestedAt} />
               {overdue && (
                 <div
                   role="status"

@@ -114,6 +114,8 @@ export const createPrismaMock = (overrides: Record<string, any> = {}): PrismaMoc
     patientMergeLog: buildModel(),
     appointment: buildModel(),
     appointmentRescheduleLog: buildModel(),
+    appointmentLink: buildModel(),
+    appointmentLinkRescheduleRequest: buildModel(),
     encounter: buildModel(),
     encounterAudit: buildModel(),
     clinicalNote: buildModel(),

@@ -935,6 +935,7 @@ export class AppointmentsService {
           cancelledBy: actor.sub,
           cancelledReason: dto.reason,
           cancelledByClinic: byClinic,
+          rescheduleRequestedAt: null,
           updatedBy: actor.sub,
         },
       });
@@ -1353,8 +1354,9 @@ export class AppointmentsService {
     return { appointments: closed, failed, queueEntries: entries.count };
   }
 
-  async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload) {
-    const appt = await this.prisma.appointment.findUnique({
+  async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload,
+    txClient?: Prisma.TransactionClient) {
+    const appt = await (txClient ?? this.prisma).appointment.findUnique({
       where: { id: appointmentId },
       include: { services: { select: { serviceId: true }, orderBy: { sortOrder: 'asc' } } },
     });
@@ -1429,7 +1431,7 @@ export class AppointmentsService {
     }
     // Also when the dentist stays: one now on leave, suspended or locked out
     // takes no bookings (BR-STAFF-006).
-    await this.validateDentist(newDentistId);
+    await this.validateDentist(newDentistId, { db: txClient });
 
     // BR-APPT-030/031, as on create: a new dentist or day re-plans the visit
     // (that dentist must perform every booked service that day; their own
@@ -1439,7 +1441,7 @@ export class AppointmentsService {
     const replanned =
       serviceIds.length > 0 &&
       (newDentistId !== appt.dentistId || newDay !== clinicDateOnly(appt.startAt))
-        ? await this.planVisit(newDentistId, serviceIds, newDay, { activeServicesOnly: false })
+        ? await this.planVisit(newDentistId, serviceIds, newDay, { activeServicesOnly: false, db: txClient })
         : null;
     const minutesOf = (from: Date, to: Date) =>
       Math.round((to.getTime() - from.getTime()) / 60_000);
@@ -1476,7 +1478,7 @@ export class AppointmentsService {
     };
 
     // Single tx under advisory lock to serialize overlap checks (R2-7).
-    const result = await this.prisma.$transaction(async tx => {
+    const write = async (tx: Prisma.TransactionClient) => {
       await this.lockDentist(tx, newDentistId);
       await this.lockPatient(tx, appt.patientId);
       await this.ensureSlotAvailable(newDentistId, newStart, newEnd, actor, appt.id, tx, {
@@ -1493,7 +1495,9 @@ export class AppointmentsService {
           status: appt.status,
           rescheduleCount: appt.rescheduleCount,
           // The count does not move on a clinic move: the row's version does.
-          ...(byClinic ? { updatedAt: appt.updatedAt } : {}),
+          updatedAt: appt.updatedAt,
+          startAt: appt.startAt,
+          deletedAt: null,
         },
         data: {
           dentistId: newDentistId,
@@ -1506,6 +1510,8 @@ export class AppointmentsService {
           status: AppointmentStatus.SCHEDULED,
           confirmedAt: null,
           confirmedBy: null,
+          confirmedByPatient: false,
+          rescheduleRequestedAt: null,
           // The day-before reminder was for the old time (booking notices).
           reminderSentAt: null,
           updatedBy: actor.sub,
@@ -1544,7 +1550,9 @@ export class AppointmentsService {
       });
 
       return updated;
-    }, LOCKING_TX_OPTIONS);
+    };
+    const result = txClient ? await write(txClient) :
+      await this.prisma.$transaction(write, LOCKING_TX_OPTIONS);
 
     await this.audit.log({
       action: 'APPOINTMENT_RESCHEDULED',
@@ -1561,8 +1569,9 @@ export class AppointmentsService {
           ? { durationOverrideReason: result.durationOverrideReason }
           : {}),
       },
-    });
-    this.events.emit(APPOINTMENT_RESCHEDULED_EVENT, {
+    }, txClient);
+    // A caller supplying a transaction emits this only after its commit.
+    if (!txClient) this.events.emit(APPOINTMENT_RESCHEDULED_EVENT, {
       appointmentId,
       oldStartAt: appt.startAt,
       newStartAt: newStart,
@@ -3885,11 +3894,13 @@ export class AppointmentsService {
     dentistId: string,
     serviceIds: string[] | undefined,
     localDate: string,
-    { activeServicesOnly = true } = {},
+    { activeServicesOnly = true, db = this.prisma }: {
+      activeServicesOnly?: boolean; db?: Prisma.TransactionClient;
+    } = {},
   ): Promise<VisitPlan | null> {
     if (!serviceIds?.length) return null;
     const day = new Date(localDate);
-    const assignments = await this.prisma.dentistService.findMany({
+    const assignments = await db.dentistService.findMany({
       where: {
         dentistId,
         serviceId: { in: serviceIds },
@@ -3908,7 +3919,7 @@ export class AppointmentsService {
       // latest assignment to it still counts.
       const withdrawn = serviceIds.filter(id => !byService.has(id));
       if (withdrawn.length > 0) {
-        const past = await this.prisma.dentistService.findMany({
+        const past = await db.dentistService.findMany({
           where: { dentistId, serviceId: { in: withdrawn }, service: { isActive: false } },
           include: { service: true },
           orderBy: { effectiveFrom: 'desc' },

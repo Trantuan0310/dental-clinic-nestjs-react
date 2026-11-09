@@ -5,7 +5,7 @@ export interface AppointmentCancelledEvent {
   patientId: string;
   dentistId: string;
   cancelledAt: Date;
-  cancelledBy: string;
+  cancelledBy: string | null;
   reason?: string;
   /** Cancelled for the clinic's reasons (closed day, absent dentist). */
   byClinic?: boolean;

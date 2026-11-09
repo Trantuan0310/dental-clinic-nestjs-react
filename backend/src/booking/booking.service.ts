@@ -640,12 +640,14 @@ export class BookingService {
    * last list (none at first): the plain opening hours still apply.
    */
   private closures: { list: ClosedInterval[]; at: number } = { list: [], at: 0 };
-  private async loadClosures(): Promise<void> {
+  private async loadClosures(
+    db: Pick<Prisma.TransactionClient, 'clinicClosure'> = this.prisma,
+  ): Promise<void> {
     if (Date.now() - this.closures.at < 60_000) return;
     try {
       const today = clinicDateOnly();
       const rows =
-        (await this.prisma.clinicClosure.findMany({
+        (await db.clinicClosure.findMany({
           where: {
             deletedAt: null,
             endDate: { gte: new Date(addClinicDays(today, -7)) },
@@ -666,11 +668,12 @@ export class BookingService {
     return held.some(h => from < h.end && h.start < to);
   }
 
-  private async heldIntervals(
+  async heldIntervals(
     dentistId: string,
     date: string,
-    db: Pick<PrismaService, 'bookingRequest'> = this.prisma,
+    db: Prisma.TransactionClient = this.prisma,
   ): Promise<Array<{ start: number; end: number }>> {
+    await this.loadClosures(db);
     const holdMs = bookingHoldMinutes() * 60_000;
     if (holdMs <= 0) return [];
     const from = new Date(date + 'T00:00:00+07:00');
@@ -708,7 +711,9 @@ export class BookingService {
       // The occupancy the visit would really have (this dentist's length
       // for the service, its buffers), as confirming it would book.
       const plan = r.serviceId
-        ? await this.appointments.planVisit(dentistId, [r.serviceId], date).catch(() => null)
+        ? await this.appointments
+            .planVisit(dentistId, [r.serviceId], date, { db })
+            .catch(() => null)
         : null;
       const length = plan?.durationMin ?? r.service?.defaultDurationMin ?? 30;
       held.push({
@@ -765,6 +770,16 @@ export class BookingService {
       // an earlier insert is visible.
       if (bookingHoldMinutes() > 0) {
         await lockDentistCalendar(tx, dto.dentistId);
+        const problem = await this.availability.checkSlot(
+          dto.dentistId,
+          startAt,
+          new Date(startAt.getTime() + plan.durationMin * 60_000),
+          {
+            db: tx,
+            buffers: { beforeMin: plan.bufferBeforeMin, afterMin: plan.bufferAfterMin },
+          },
+        );
+        if (problem) throw new ConflictException(problem.message);
         const held = await this.heldIntervals(dto.dentistId, clinicDateOnly(startAt), tx);
         if (this.hitsHold(held, startAt.getTime(), plan)) {
           throw new ConflictException(
@@ -1336,6 +1351,7 @@ export class BookingService {
           0,
           1000,
         ),
+        rescheduleRequestedAt: null,
       },
     });
     if (!result.count) throw new ConflictException('Lịch hẹn đã thay đổi; hãy tải lại trạng thái.');

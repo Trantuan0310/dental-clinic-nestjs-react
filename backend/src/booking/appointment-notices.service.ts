@@ -23,6 +23,7 @@ import {
 import { CLINIC_UTC_OFFSET_MS } from '../common/date-range.util';
 import { AvailabilityService } from '../appointments/availability.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { issueAppointmentLink } from './appointment-link-access';
 
 /**
  * Reminders go out for visits starting in (now + REMINDER_LAST_CALL, now +
@@ -151,7 +152,7 @@ export class AppointmentNoticesService {
             '.',
           'Vui lòng đến trước giờ hẹn khoảng 10 phút.',
           clinicAddressLine(),
-          'Nếu cần dời hoặc hủy lịch, vui lòng gọi phòng khám.',
+          'Dùng liên kết bên dưới để xác nhận, xin dời, hủy lịch hoặc khai phiếu trước khi đến.',
         ]
           .filter(Boolean)
           .join(' '),
@@ -414,9 +415,7 @@ export class AppointmentNoticesService {
       'Vui lòng đến trước giờ hẹn khoảng 10 phút.',
       clinicAddressLine(),
       ref ? 'Mã đặt lịch: ' + ref + '.' : '',
-      ref
-        ? 'Nếu không đến được, bạn có thể báo hủy bằng đường link trong email xác nhận lịch hoặc gọi phòng khám để dời lịch.'
-        : 'Nếu không đến được, vui lòng gọi phòng khám để dời hoặc hủy lịch.',
+      'Dùng liên kết bên dưới để xác nhận, xin dời, hủy lịch hoặc khai phiếu trước khi đến.',
     ]
       .filter(Boolean)
       .join(' ');
@@ -476,7 +475,7 @@ export class AppointmentNoticesService {
   }
 
   private async send(
-    visit: { patient: { fullName: string; email: string | null } },
+    visit: { id: string; patient: { fullName: string; email: string | null } },
     subject: string,
     message: string,
     link?: string,
@@ -484,6 +483,8 @@ export class AppointmentNoticesService {
     const to = visit.patient.email;
     if (!to) return false;
     try {
+      const token = await issueAppointmentLink(this.prisma, visit.id);
+      if (token) link = publicAppUrl() + '/lich-hen/' + token;
       return await this.email.send({
         to,
         subject,
