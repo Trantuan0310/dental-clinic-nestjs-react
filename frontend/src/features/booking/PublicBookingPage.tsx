@@ -90,7 +90,7 @@ const emptyReasonText = (
 };
 
 export default function PublicBookingPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   // The landing page links each service to /booking?service=<id>.
   const [searchParams] = useSearchParams();
