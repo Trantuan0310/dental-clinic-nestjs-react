@@ -2048,6 +2048,10 @@ describe('Real HTTP and PostgreSQL regression', () => {
         }),
       ]);
       await as('doc', 'post', `/queue/${queue.body.data[0].id}/call`).expect(200);
+      const chairs = await as('doc', 'get', '/queue/chairs').expect(200);
+      expect(chairs.body.data).toEqual([expect.objectContaining({
+        next: expect.objectContaining({ id: queue.body.data[0].id, called: true }),
+      })]);
       const started = await as(
         'doc',
         'post',
@@ -2055,6 +2059,10 @@ describe('Real HTTP and PostgreSQL regression', () => {
       ).expect(200);
       const encounterId = started.body.data.encounter.id as string;
       expect((await as('doc', 'get', '/queue').expect(200)).body.data).toEqual([]);
+      const afterExam = await as('doc', 'get', '/queue/chairs').expect(200);
+      expect(afterExam.body.data[0]).toMatchObject({ next: null, current: expect.arrayContaining([
+        expect.objectContaining({ name: queue.body.data[0].appointment.patient.fullName, startedAt: expect.any(String) }),
+      ]) });
 
       // 6. Exam: a catalogue treatment, the note, close → draft invoice.
       await as('doc', 'post', `/medical-records/encounters/${encounterId}/treatments`)

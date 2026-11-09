@@ -40,6 +40,12 @@ export class DispatchController {
     return { data: await this.dispatch.list(q, actor) };
   }
 
+  @Get('chairs')
+  @RequirePermissions('queue.read')
+  async chairs(@User() actor: JwtPayload) {
+    return { data: await this.dispatch.chairs(actor) };
+  }
+
   @Post('reassign-day')
   @RequirePermissions('queue.manage')
   @HttpCode(HttpStatus.OK)

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
 import { AlertTriangle, ListOrdered, RefreshCw, Users } from 'lucide-react';
 import { Button, Card, DatePicker, EmptyState, Modal, Select, Textarea } from '@/components/ui';
@@ -13,6 +13,7 @@ import { formatDate } from '@/lib/format';
 import { useDentistOptions } from '@/features/appointments/appointmentApi';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { QueueList } from './QueueList';
+import { ChairBoard } from './ChairBoard';
 import {
   type QueueEntry,
   type ReassignDayResult,
@@ -30,6 +31,8 @@ export default function DispatchPage() {
   const { t } = useTranslation();
   const [dentistFilter, setDentistFilter] = useState('');
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [chairs, setChairs] = useState(false);
+  const qc = useQueryClient();
   // 'schedule': a dentist suspended or on leave still has a queue to hand over (A3-22).
   const { data: dentists = [] } = useDentistOptions('schedule');
   const today = clinicToday();
@@ -61,10 +64,11 @@ export default function DispatchPage() {
         description={t('uiOperations.dispatchDescription')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" aria-pressed={chairs} onClick={() => setChairs(!chairs)}>{chairs ? 'Hàng chờ' : 'Bảng ghế'}</Button>
             <Button
               variant="outline"
               leftIcon={<RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />}
-              onClick={() => void refetch()}
+              onClick={() => chairs ? void qc.invalidateQueries({queryKey: ['appointments', 'chairs']}) : void refetch()}
             >
               {t('uiEntry.dashboard.refresh')}
             </Button>
@@ -109,7 +113,7 @@ export default function DispatchPage() {
         ]}
       />
 
-      {isLoading ? (
+      {chairs ? <ChairBoard dentistId={dentistFilter} /> : isLoading ? (
         <PageLoader />
       ) : groups.length === 0 ? (
         <Card>
