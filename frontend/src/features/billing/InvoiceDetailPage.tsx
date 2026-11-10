@@ -429,7 +429,7 @@ export default function InvoiceDetailPage() {
 
           {/* Payment History */}
           {invoice.status === 'PAID' && (
-            <NextVisitCard patientId={invoice.patientId} dentistId={invoice.encounter?.dentistId} />
+            <NextVisitCard patientId={invoice.patientId} dentistId={invoice.encounter?.dentistId} encounterId={invoice.encounterId} />
           )}
 
           {canPay && invoice.outstandingAmount > 0 && canRecordPayment && (

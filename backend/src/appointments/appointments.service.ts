@@ -1963,6 +1963,18 @@ export class AppointmentsService {
     };
   }
 
+  async followUpDates(encounterId: string, patientId: string, actor: JwtPayload) {
+    const rows = await this.prisma.recall.findMany({
+      where: { patientId, sourceEncounterId: encounterId, patient: {deletedAt: null},
+        sourceEncounter: {status: 'COMPLETED', ...(this.appointmentScope(actor) === 'own' ? {dentistId: actor.sub} : {})},
+        status: {in: ['PENDING','POSTPONED']} },
+      select: {id:true, dueDate:true, postponedUntil:true, service:{select:{name:true}}},
+      orderBy: {dueDate:'asc'},
+    });
+    return rows.map(r=>({id:r.id, service:r.service.name, date:(r.postponedUntil ?? r.dueDate).toISOString().slice(0,10)}))
+      .filter(r=>r.date >= clinicDateOnly());
+  }
+
   async listToday(actor: JwtPayload) {
     const dayStart = startOfClinicDay(clinicDateOnly());
     const dayEnd = new Date(dayStart);

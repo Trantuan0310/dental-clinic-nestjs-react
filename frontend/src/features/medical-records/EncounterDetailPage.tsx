@@ -547,6 +547,7 @@ export default function EncounterDetailPage() {
             defaultPatientId={encounter.patientId}
             defaultDentistId={encounter.dentistId}
             defaultType="follow_up"
+            followUpEncounterId={encounter.status === 'completed' ? encounter.id : undefined}
           />
         </Suspense>
       )}

@@ -531,6 +531,7 @@ export default function AppointmentCalendarPage({ mine = false }: AppointmentCal
               setSelectedSlot(null);
             }}
             defaultDate={selectedSlot?.date}
+            followUpEncounterId={prefilledType === 'follow_up' ? searchParams.get('encounterId') ?? undefined : undefined}
             defaultStartTime={selectedSlot?.time}
             defaultDentistId={dentistId || undefined}
             defaultPatientId={prefilledPatientId}

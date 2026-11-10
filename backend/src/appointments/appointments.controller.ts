@@ -75,6 +75,13 @@ export class AppointmentsController {
   // Static sub-routes MUST be declared before the `:id` parameter route so
   // they are not swallowed by `ParseUUIDPipe` (every dynamic param causes a
   // UUID-format 400 otherwise).
+  @Get('follow-up/:encounterId/:patientId')
+  @RequirePermissions('appointment.create')
+  async followUpDates(@Param('encounterId', ParseUUIDPipe) encounterId: string,
+    @Param('patientId', ParseUUIDPipe) patientId: string, @User() actor: JwtPayload) {
+    return { data: await this.appointments.followUpDates(encounterId, patientId, actor) };
+  }
+
   @Get('today')
   @RequirePermissions('appointment.read.any', 'appointment.read.own')
   @ApiOperation({ summary: "Today's appointments" })

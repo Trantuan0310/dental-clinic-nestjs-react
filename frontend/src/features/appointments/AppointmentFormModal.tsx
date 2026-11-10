@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -45,6 +46,7 @@ interface AppointmentFormModalProps {
   onClose: () => void;
   appointment?: Appointment | null;
   defaultDate?: string;
+  followUpEncounterId?: string;
   defaultDentistId?: string;
   defaultPatientId?: string;
   waitlistEntryId?: string;
@@ -68,6 +70,7 @@ export function AppointmentFormModal({
   onClose,
   appointment,
   defaultDate,
+  followUpEncounterId,
   defaultDentistId,
   defaultPatientId,
   waitlistEntryId,
@@ -133,6 +136,13 @@ export function AppointmentFormModal({
     appointment?.dentistId ?? lockedDentistId ?? defaultDentistId ?? '',
   );
   const [date, setDate] = useState(initialDate);
+  const suggestions = useQuery({
+    queryKey: ['follow-up-dates', followUpEncounterId, patientId],
+    enabled: open && !!followUpEncounterId && !!patientId && patientId === defaultPatientId,
+    queryFn: async () => (await api.get<{data: {id:string;service:string;date:string}[]}>(
+      `/appointments/follow-up/${followUpEncounterId}/${patientId}`,
+    )).data.data,
+  });
   const [startTime, setStartTime] = useState(initialStart);
   const [duration, setDuration] = useState(
     String(appointment?.durationMinutes ?? 30),
@@ -695,6 +705,11 @@ export function AppointmentFormModal({
                   </div>
                 </div>
 
+                {!!suggestions.data?.length && <fieldset className="flex flex-wrap gap-2">
+                  <legend>Ngày tái khám gợi ý</legend>
+                  {suggestions.data.map(s => <Button key={s.id} type="button" variant="outline"
+                    onClick={() => setDate(s.date)}>{s.service} · {s.date.split('-').reverse().join('/')}</Button>)}
+                </fieldset>}
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <Input
                     type="date"
