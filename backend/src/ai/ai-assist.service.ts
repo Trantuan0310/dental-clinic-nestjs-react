@@ -168,7 +168,16 @@ export class AiAssistService {
     }
     // The visit or recall the screen is about gives the greeting, the phone
     // and the facts, for its reminder and for a reply to that patient alike.
-    if (dto.kind === 'waitlist_invite' || dto.waitlistId) {
+    if (dto.kind === 'plan_invite' || dto.planId) {
+      if (!dto.planId || !actor.permissions.includes('appointment.create') || !actor.permissions.includes('treatment_plan.read')) throw new ForbiddenException();
+      const plan = await this.prisma.treatmentPlan.findFirst({where:{id:dto.planId,status:{in:['ACCEPTED','IN_PROGRESS']},
+        patient:{deletedAt:null}, ...(rowScope(actor,'patient')==='any'?{}:{dentistId:actor.sub})},
+        select:{id:true,patient:{select:{fullName:true,gender:true,primaryPhone:true}}}});
+      if(!plan)throw new NotFoundException('Không tìm thấy kế hoạch điều trị');
+      greeting=salutation(plan.patient.fullName,plan.patient.gender);
+      phone=plan.patient.primaryPhone;
+      targetType='treatment_plan'; targetId=plan.id;
+    } else if (dto.kind === 'waitlist_invite' || dto.waitlistId) {
       if (!dto.waitlistId || !actor.permissions.includes('appointment.create') || rowScope(actor,'appointment') !== 'any' || rowScope(actor,'patient') !== 'any') throw new ForbiddenException();
       const entry = await this.prisma.waitlistEntry.findFirst({where:{id:dto.waitlistId,status:'WAITING',patient:{deletedAt:null}},include:{patient:{select:{fullName:true,gender:true,primaryPhone:true}},service:{select:{name:true}}}});
       if(!entry)throw new NotFoundException('Không còn yêu cầu chờ');
@@ -348,6 +357,7 @@ function viDate(iso: string): string {
 
 /** The message without a model: the same facts in a fixed sentence. */
 export function fallbackMessage(f: MessageFacts): string {
+  if(f.kind === 'plan_invite') return `Chào {ten}, ${f.clinicName} mời {ten} liên hệ để chọn thời gian phù hợp cho kế hoạch điều trị đã thống nhất.`;
   if(f.kind === 'waitlist_invite')return `Chào {ten}, ${f.clinicName} mời {ten} liên hệ để sắp xếp giờ khám ${f.services?.join(', ') ?? ''} theo yêu cầu chờ. Xin vui lòng trả lời nếu {ten} muốn đặt lịch.`;
   const call = f.clinicPhone ? ` Cần hỗ trợ xin gọi ${f.clinicPhone}.` : '';
   if (f.kind === 'appointment_reminder') {

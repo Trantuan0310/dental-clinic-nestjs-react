@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AppointmentStatus,
   Prisma,
@@ -16,6 +16,7 @@ import {
   AddTreatmentPlanItemsDto,
   CreateTreatmentPlanDto,
   TreatmentPlanItemDto,
+  RecordPlanContactDto,
   UpdateTreatmentPlanDto,
 } from './dto/treatment-plan.dto';
 import { syncPlanProgress, WORKABLE_PLAN_STATUSES } from './domain/plan-progress';
@@ -134,6 +135,7 @@ export class TreatmentPlansService {
             title: true,
             dentistId: true,
             acceptedAt: true,
+            contacts: {select:{id:true,channel:true,outcome:true,contactedAt:true}, orderBy:{contactedAt:'desc'}},
             createdAt: true,
             dentist: { select: { fullName: true } },
             patient: { select: { id: true, code: true, fullName: true, primaryPhone: true } },
@@ -175,7 +177,30 @@ export class TreatmentPlansService {
       next,
       now,
     );
-    return { summary: summarizePending(rows), rows };
+    const plans = new Map(items.map(({plan})=>[plan.id,plan]));
+    const byPatient = new Map<string, {id:string;title:string;contacts:typeof items[number]['plan']['contacts']}[]>();
+    for(const plan of plans.values()){
+      const list = byPatient.get(plan.patient.id) ?? [];
+      list.push({id:plan.id,title:plan.title,contacts:plan.contacts});
+      byPatient.set(plan.patient.id,list);
+    }
+    return { summary: summarizePending(rows), rows:rows.map(r=>({...r,plans:byPatient.get(r.patientId) ?? []})) };
+  }
+
+  async recordContact(id:string,dto:RecordPlanContactDto,actor:JwtPayload){
+    const scope = rowScope(actor,'patient');
+    if(!actor.permissions.includes('treatment_plan.read') || scope === 'none') throw new ForbiddenException();
+    const contactedAt=new Date(dto.contactedAt);
+    return this.prisma.$transaction(async tx=>{
+      await tx.$queryRaw`SELECT id FROM treatment_plans WHERE id = ${id}::uuid FOR UPDATE`;
+      const row=await tx.treatmentPlan.findFirst({where:{id,patient:{deletedAt:null},
+        ...(scope==='own'?{dentistId:actor.sub}:{})},select:{status:true,acceptedAt:true,createdAt:true}});
+      if(!row) throw new NotFoundException('Không tìm thấy kế hoạch');
+      if(!WORKABLE_PLAN_STATUSES.includes(row.status) || contactedAt > new Date() ||
+        contactedAt < (row.acceptedAt ?? row.createdAt)) throw new BadRequestException('Kiểm tra lại trạng thái kế hoạch và thời điểm liên hệ');
+      return tx.treatmentPlanContact.create({data:{planId:id,createdBy:actor.sub,
+        channel:dto.channel,outcome:dto.outcome,contactedAt}});
+    });
   }
 
   async get(id: string, actor: JwtPayload) {

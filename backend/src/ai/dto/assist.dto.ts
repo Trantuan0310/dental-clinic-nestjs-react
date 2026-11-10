@@ -26,7 +26,7 @@ export class NoteDraftDto {
   text!: string;
 }
 
-export const MESSAGE_KINDS = ['appointment_reminder', 'recall_reminder', 'waitlist_invite', 'reply'] as const;
+export const MESSAGE_KINDS = ['appointment_reminder', 'recall_reminder', 'waitlist_invite', 'plan_invite', 'reply'] as const;
 export type MessageKind = (typeof MESSAGE_KINDS)[number];
 
 export class MessageDraftDto {
@@ -37,6 +37,10 @@ export class MessageDraftDto {
   @IsOptional()
   @IsUUID()
   waitlistId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  planId?: string;
 
   @ApiPropertyOptional({ description: 'Bắt buộc khi kind = appointment_reminder' })
   @IsOptional()

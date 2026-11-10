@@ -6,6 +6,7 @@ import {
   IsArray,
   IsDateString,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -17,6 +18,12 @@ import {
 } from 'class-validator';
 
 const Trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
+
+export class RecordPlanContactDto {
+  @IsIn(['PHONE','SMS','ZALO','EMAIL','DESK']) channel!: string;
+  @IsIn(['REACHED','CALL_BACK','DECLINED','UNREACHABLE']) outcome!: string;
+  @IsDateString({ strict: true }) contactedAt!: string;
+}
 
 /** Highest price a plan line may quote (10 billion đồng). */
 export const MAX_PLAN_UNIT_PRICE = 10_000_000_000;

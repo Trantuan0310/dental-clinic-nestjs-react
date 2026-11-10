@@ -681,6 +681,24 @@ describe('Real HTTP and PostgreSQL regression', () => {
       process.env = saved;
     }
   });
+  it('keeps front-desk contact history separate for two plans of the same patient', async () => {
+    const p = await patient();
+    const create = (title:string) => db.treatmentPlan.create({data:{title,patientId:p,
+      dentistId:users.dentist,createdBy:users.dentist,status:'ACCEPTED',acceptedAt:new Date(),
+      items:{create:{procedure:'Test',quantity:1,unitPrice:1000}}}});
+    const [a,b]=await Promise.all([create('First plan'),create('Second plan')]);
+    const url='/treatment-plans/'+a.id+'/contacts';
+    const contact={channel:'PHONE',outcome:'CALL_BACK',contactedAt:new Date().toISOString()};
+    await api('post',url,'reception').send({...contact,channel:'invalid'}).expect(400);
+    await api('post',url,'reception').send(contact).expect(201);
+    const result=await api('get','/treatment-plans/pending','reception').expect(200);
+    const row=result.body.data.rows.find((r:{patientId:string})=>r.patientId===p);
+    expect(row.plans).toEqual(expect.arrayContaining([
+      expect.objectContaining({id:a.id,contacts:[expect.objectContaining(contact)]}),
+      expect.objectContaining({id:b.id,contacts:[]}),
+    ]));
+  });
+
   it('previews a template, appends once on concurrent apply and deducts stock only on close', async () => {
     const id = await fixtureEncounter();
     const service = await db.service.create({ data: {
