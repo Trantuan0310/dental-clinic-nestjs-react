@@ -78,16 +78,21 @@ export interface CapacityCell {
  * as utilisation of hours that were never offered.
  */
 export function capacityCells(calendars: DayCalendar[]): CapacityCell[] {
-  const grid = new Map<string, CapacityCell>();
+  return coverageCells(calendars).filter(c => c.availableMin > 0)
+    .map(({weekday,hour,availableMin,bookedMin})=>({weekday,hour,availableMin,bookedMin}));
+}
+
+export function coverageCells(calendars: DayCalendar[]) {
+  const grid = new Map<string, CapacityCell & {demandMin:number}>();
   for (const cal of calendars) {
-    if (cal.windows.length === 0) continue;
+    if (!cal.windows.length && !cal.bookings.length) continue;
     const open = subtract(
       merge(cal.windows.map(w => [w.start.getTime(), w.end.getTime()] as Span)),
       cal.blocked.map(b => [b.start.getTime(), b.end.getTime()] as Span),
     );
-    if (open.length === 0) continue;
+    const visits = cal.bookings.map(b => [b.start.getTime(), b.end.getTime()] as Span);
     const booked = intersect(
-      merge(cal.bookings.map(b => [b.start.getTime(), b.end.getTime()] as Span)),
+      merge(visits),
       open,
     );
     const weekday = new Date(`${cal.date}T00:00:00Z`).getUTCDay();
@@ -96,9 +101,11 @@ export function capacityCells(calendars: DayCalendar[]): CapacityCell[] {
       const from = dayStart + hour * HOUR;
       const to = from + HOUR;
       const availableMs = overlapMs(open, from, to);
-      if (availableMs === 0) continue;
+      const demandMs = overlapMs(visits, from, to);
+      if (availableMs === 0 && demandMs === 0) continue;
       const key = `${weekday}|${hour}`;
-      const cell = grid.get(key) ?? { weekday, hour, availableMin: 0, bookedMin: 0 };
+      const cell = grid.get(key) ?? { weekday, hour, availableMin: 0, bookedMin: 0, demandMin:0 };
+      cell.demandMin += demandMs / MIN;
       cell.availableMin += availableMs / MIN;
       cell.bookedMin += overlapMs(booked, from, to) / MIN;
       grid.set(key, cell);

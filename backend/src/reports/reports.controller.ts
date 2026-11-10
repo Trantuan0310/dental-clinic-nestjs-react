@@ -119,6 +119,12 @@ export class ReportsController {
     };
   }
 
+  @Get('shift-coverage')
+  @RequirePermissions('shift.approve')
+  async shiftCoverage(@Query() q: CapacityHeatmapQueryDto) {
+    return {data:await this.metrics.shiftCoverage(q)};
+  }
+
   @Get('capacity-heatmap')
   @RequirePermissions('appointment.read.any')
   @ApiOperation({ summary: 'Booked share of dentists open hours by weekday × hour' })

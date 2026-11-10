@@ -6,6 +6,7 @@ import { loadDayCalendars, type DayKey } from '../appointments/domain/day-calend
 import { ARRIVED_STATUSES, ReportsService } from './reports.service';
 import {
   capacityCells,
+  coverageCells,
   isLateCancel,
   patientFunnel,
   median,
@@ -58,11 +59,11 @@ export class PracticeMetricsService {
     private readonly reports: ReportsService,
   ) {}
 
-  async capacityHeatmap(query: {
+  private async capacityData(query: {
     from?: string;
     to?: string;
     dentistId?: string;
-  }): Promise<CapacityHeatmap> {
+  }) {
     const { fromDate, toDate } = this.reports.resolveRange(query.from, query.to);
     const dentists = await this.prisma.user.findMany({
       where: {
@@ -86,7 +87,17 @@ export class PracticeMetricsService {
     }
     const keys: DayKey[] = chosen.flatMap(d => dates.map(date => ({ dentistId: d.id, date })));
     const calendars = await loadDayCalendars(this.prisma, keys, { withBookings: true });
-    const cells = capacityCells([...calendars.values()]).map(c => ({
+    return {fromDate,toDate,dentists,calendars:[...calendars.values()]};
+  }
+
+  async shiftCoverage(query:{from?:string;to?:string;dentistId?:string}) {
+    const {dentists,calendars}=await this.capacityData(query);
+    return {dentists,cells:coverageCells(calendars)};
+  }
+
+  async capacityHeatmap(query:{from?:string;to?:string;dentistId?:string}):Promise<CapacityHeatmap> {
+    const {fromDate,toDate,dentists,calendars}=await this.capacityData(query);
+    const cells = capacityCells(calendars).map(c => ({
       ...c,
       utilization: Math.round((c.bookedMin / c.availableMin) * 1000) / 1000,
     }));
