@@ -23,6 +23,7 @@ import {
   CreateInventoryCategoryDto,
   CreateInventoryItemDto,
   ListInventoryQueryDto,
+  ReorderQueryDto,
   ListMovementsQueryDto,
   StockAdjustmentDto,
   StockInDto,
@@ -64,6 +65,12 @@ export class InventoryController {
   @ApiOperation({ summary: 'Low-stock report' })
   async lowStock() {
     return wrapAsPaginated(await this.inventory.lowStockReport());
+  }
+
+  @Get('reorder')
+  @RequirePermissions('inventory.read')
+  async reorder(@Query() q: ReorderQueryDto) {
+    return { data: await this.inventory.reorder(q.leadDays) };
   }
 
   @Get('items/:id')

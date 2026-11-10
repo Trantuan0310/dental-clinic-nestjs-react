@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { ReorderReport } from './ReorderReport';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -143,6 +144,7 @@ export default function InventoryListPage() {
         </PermissionGuard>
       </div>
 
+      <ReorderReport />
       <Card noPadding>
         <div className="p-3">
           <div className="flex flex-col gap-3 sm:flex-row">
