@@ -26,9 +26,11 @@ function daysAfter(date: string, days: number): string {
 export function NextVisitCard({
   patientId,
   dentistId,
+  encounterId,
 }: {
   patientId: string;
   dentistId?: string;
+  encounterId?: string;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -49,6 +51,7 @@ export function NextVisitCard({
   const book = () => {
     const params = new URLSearchParams({ patientId, type: 'follow_up' });
     if (dentistId) params.set('dentistId', dentistId);
+    if (encounterId) params.set('encounterId', encounterId);
     navigate(`/appointments?${params.toString()}`);
   };
 
