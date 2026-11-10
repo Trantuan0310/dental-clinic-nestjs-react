@@ -1,6 +1,7 @@
 import { buildDayCalendar } from '../appointments/domain/day-calendar';
 import {
   capacityCells,
+  coverageCells,
   median,
   patientFunnel,
   percent,
@@ -46,6 +47,10 @@ function day(
 const MONDAY = '2026-11-02';
 
 describe('capacityCells', () => {
+  it('retains uncovered demand when another dentist is free in the same hour', () => {
+    const cells=coverageCells([day(MONDAY,{hours:[],bookings:[['09:00','09:30']]}),day(MONDAY)]);
+    expect(cells.find(c=>c.hour===9)).toMatchObject({availableMin:60,bookedMin:0,demandMin:30});
+  });
   it('counts open minutes per clinic hour and the booked part of them', () => {
     const cells = capacityCells([day(MONDAY, { bookings: [['08:30', '09:15']] })]);
     const cell = (hour: number) => cells.find(c => c.hour === hour);

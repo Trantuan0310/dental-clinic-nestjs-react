@@ -2113,6 +2113,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
         })
         .expect(201);
       const appointmentId = booked.body.data.id as string;
+      const coverage = '/billing/reports/shift-coverage?from='+day+'&to='+day+'&dentistId='+acc.doc;
+      await as('doc','get',coverage).expect(403);
+      const report = await as('admin','get',coverage).expect(200);
+      expect(report.body.data.cells.find((c:{hour:number})=>c.hour===9)).toMatchObject({
+        availableMin:60, demandMin:20, bookedMin:20,
+      });
       // The same slot again is refused with its business code (issue #8).
       const clash = await as('desk', 'post', '/appointments')
         .send({

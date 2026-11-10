@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ShiftCoverage } from './ShiftCoverage';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Button, Card, EmptyState, Modal, Textarea, StatusBadge } from '@/components/ui';
@@ -89,6 +90,7 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
         )}
       </div>
 
+      <ShiftCoverage />
       <Card noPadding>
         {pendingRequests.length === 0 ? (
           <EmptyState
