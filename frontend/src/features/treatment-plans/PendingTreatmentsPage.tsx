@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PlanContacts } from './PlanContacts';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CalendarPlus, Phone } from 'lucide-react';
@@ -25,8 +26,11 @@ export default function PendingTreatmentsPage() {
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
   const [scope, setScope] = useState<Scope>('unscheduled');
   const { data, isLoading, error } = usePendingTreatments();
+  const [uncontacted,setUncontacted]=useState(false);
+  const visiblePlans = (row:PendingTreatment) => (row.plans ?? []).filter(plan =>
+    !uncontacted || !plan.contacts.some(c=>c.outcome !== 'UNREACHABLE'));
 
-  const rows = (data?.rows ?? []).filter((r) => (scope === 'unscheduled') === (r.nextAppointmentAt === null));
+  const rows = (data?.rows ?? []).filter((r) => (scope === 'unscheduled') === (r.nextAppointmentAt === null) && (!uncontacted || visiblePlans(r).length > 0));
   const summary = data?.summary;
 
   const book = (r: PendingTreatment) => {
@@ -53,6 +57,7 @@ export default function PendingTreatmentsPage() {
             <TabsTrigger value="booked">{t('uiPlans.pending.scope.booked')}</TabsTrigger>
           </TabsList>
         </Tabs>
+        <label className="m-2 inline-flex gap-2"><input type="checkbox" checked={uncontacted} onChange={e=>setUncontacted(e.target.checked)}/>Chưa liên hệ thành công</label>
       </Card>
 
       {error ? (
@@ -98,6 +103,7 @@ export default function PendingTreatmentsPage() {
                       </td>
                       <td className="px-3 py-2">
                         <p>{r.procedures.join(', ')}</p>
+                        {visiblePlans(r).map(plan=><PlanContacts key={plan.id} plan={plan} canRecord={canBook}/>)}
                         <p className="text-xs text-gray-500">
                           {r.lineCount > r.procedures.length
                             ? `${t('uiPlans.pending.moreLines', { count: r.lineCount - r.procedures.length })} · `

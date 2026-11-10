@@ -19,6 +19,7 @@ import { User } from '../common/decorators/user.decorator';
 import { TreatmentPlansService } from './treatment-plans.service';
 import {
   AcceptTreatmentPlanDto,
+  RecordPlanContactDto,
   AddTreatmentPlanItemsDto,
   CreateTreatmentPlanDto,
   TreatmentPlanPatientQueryDto,
@@ -45,6 +46,12 @@ export class TreatmentPlansController {
   @ApiOperation({ summary: 'Accepted treatment still to do, with the next appointment (if any)' })
   async pending(@User() actor: JwtPayload) {
     return { data: await this.plans.pendingTreatments(actor) };
+  }
+
+  @Post(':id/contacts')
+  @RequirePermissions('appointment.create')
+  async recordContact(@Param('id',ParseUUIDPipe) id:string,@Body() dto:RecordPlanContactDto,@User() actor:JwtPayload) {
+    return {data:await this.plans.recordContact(id,dto,actor)};
   }
 
   @Get('open-items')

@@ -1870,6 +1870,7 @@ enum TreatmentPlanItemStatus {
 }
 
 model TreatmentPlan {
+  contacts TreatmentPlanContact[]
   id                String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   patientId         String              @map("patient_id") @db.Uuid
   dentistId         String              @map("dentist_id") @db.Uuid
@@ -1898,6 +1899,18 @@ model TreatmentPlan {
   @@index([patientId, createdAt(sort: Desc)])
   @@index([dentistId, status])
   @@map("treatment_plans")
+}
+
+model TreatmentPlanContact {
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+  plan TreatmentPlan @relation(fields:[planId], references:[id])
+  channel String @db.VarChar(10)
+  outcome String @db.VarChar(16)
+  contactedAt DateTime @default(now()) @map("contacted_at") @db.Timestamptz()
+  createdBy String @map("created_by") @db.Uuid
+  @@index([planId, contactedAt])
+  @@map("treatment_plan_contacts")
 }
 
 model TreatmentPlanItem {

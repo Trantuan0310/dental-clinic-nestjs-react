@@ -681,6 +681,27 @@ describe('Real HTTP and PostgreSQL regression', () => {
       process.env = saved;
     }
   });
+  it('keeps front-desk contact history separate for two plans of the same patient', async () => {
+    const p = await patient();
+    const create = (title:string) => db.treatmentPlan.create({data:{title,patientId:p,
+      dentistId:users.dentist,createdBy:users.dentist,status:'ACCEPTED',acceptedAt:new Date(),
+      items:{create:{procedure:'Test',quantity:1,unitPrice:1000}}}});
+    const [a,b]=await Promise.all([create('First plan'),create('Second plan')]);
+    const url='/treatment-plans/'+a.id+'/contacts';
+    const draft=await api('post','/ai/drafts/message','reception').send({kind:'plan_invite',planId:a.id}).expect(200);
+    expect(draft.body.data.text.length).toBeGreaterThan(0);
+    expect(await db.treatmentPlanContact.count({where:{planId:a.id}})).toBe(0);
+    const contact={channel:'PHONE',outcome:'CALL_BACK',contactedAt:new Date().toISOString()};
+    await api('post',url,'reception').send({...contact,channel:'invalid'}).expect(400);
+    await api('post',url,'reception').send(contact).expect(201);
+    const result=await api('get','/treatment-plans/pending','reception').expect(200);
+    const row=result.body.data.rows.find((r:{patientId:string})=>r.patientId===p);
+    expect(row.plans).toEqual(expect.arrayContaining([
+      expect.objectContaining({id:a.id,contacts:[expect.objectContaining(contact)]}),
+      expect.objectContaining({id:b.id,contacts:[]}),
+    ]));
+  });
+
   it('previews a template, appends once on concurrent apply and deducts stock only on close', async () => {
     const id = await fixtureEncounter();
     const service = await db.service.create({ data: {
@@ -2041,6 +2062,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
       const service = await as('admin', 'post', '/services')
         .send({
           code: 'ACC_FILL',
+          recallIntervalMonths: 6,
           categoryId: category.body.data.id,
           name: 'Trám răng (nghiệm thu)',
           defaultDurationMin: 15,
@@ -2072,8 +2094,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
       const startAt = new Date(
         `${new Date(Date.now() + 3 * 86400000 + 7 * 3600000).toISOString().slice(0, 10)}T09:00:00+07:00`,
       );
+      const day = clinicDateOnly(startAt);
+      const waiting = await as('desk','post','/waitlist').send({patientId:p, serviceId,dentistId:acc.doc,
+        fromDate:day,toDate:day,period:'AM',note:''}).expect(201);
       const booked = await as('desk', 'post', '/appointments')
         .send({
+          waitlistEntryId:waiting.body.data.id,
           patientId: p,
           dentistId: acc.doc,
           startAt: startAt.toISOString(),
@@ -2128,6 +2154,12 @@ describe('Real HTTP and PostgreSQL regression', () => {
       ]) });
 
       // 6. Exam: a catalogue treatment, the note, close → draft invoice.
+      const template=await as('doc','post','/medical-records/visit-templates').send({
+        name:'Nghiệm thu',serviceId,soap:{subjective:'',objective:'Ghi chú UAT',assessment:'',plan:''},treatments:[],
+      }).expect(201);
+      const base='/medical-records/encounters/'+encounterId+'/visit-templates';
+      const preview=await as('doc','get',base+'/'+template.body.data.id+'/preview').expect(200);
+      await as('doc','post',base+'/apply').send({templateId:template.body.data.id,version:preview.body.data.version}).expect(200);
       await as('doc', 'post', `/medical-records/encounters/${encounterId}/treatments`)
         .send({
           serviceId,
@@ -2144,6 +2176,8 @@ describe('Real HTTP and PostgreSQL regression', () => {
         .expect(200);
       const invoice = await invoiceFor(encounterId);
       expect(Number(invoice.total)).toBe(400000);
+      const dates=await as('desk','get','/appointments/follow-up/'+encounterId+'/'+p).expect(200);
+      expect(dates.body.data).toEqual([expect.objectContaining({service:'Trám răng (nghiệm thu)',date:expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)})]);
 
       // 7. Billing: issue and pay in full.
       await as('admin', 'post', `/billing/invoices/${invoice.id}/issue`)

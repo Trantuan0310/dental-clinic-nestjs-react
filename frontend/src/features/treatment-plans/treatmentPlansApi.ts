@@ -103,6 +103,7 @@ export interface UpdatePlanInput {
 }
 
 export interface PendingTreatment {
+  plans: {id:string;title:string;contacts:{id:string;channel:string;outcome:string;contactedAt:string}[]}[];
   patientId: string;
   patientCode: string;
   patientName: string;
