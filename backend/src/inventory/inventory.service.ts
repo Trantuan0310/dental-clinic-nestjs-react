@@ -66,6 +66,29 @@ export class InventoryService {
     private readonly audit: AuditService,
   ) {}
 
+  async reorder(leadDays: number, now = new Date()) {
+    const since = (days: number) => new Date(now.getTime() - days * 86400000);
+    // A clinical return reverses an issue. Deliveries and stock-count adjustments are not usage.
+    return this.prisma.$queryRaw<Array<{id:string; sku:string; name:string; unit:string;
+      stock:number; daily30:number; daily90:number; daysLeft:number; suggested:number}>>`
+      WITH usage AS (
+        SELECT inventory_item_id,
+          GREATEST(0, -SUM(diff) FILTER (WHERE performed_at >= ${since(30)})) / 30 AS daily30,
+          GREATEST(0, -SUM(diff)) / 90 AS daily90
+        FROM stock_movements
+        WHERE performed_at BETWEEN ${since(90)} AND ${now}
+          AND (type = 'STOCK_OUT' OR (type = 'STOCK_IN' AND ref_type = 'ENCOUNTER'))
+        GROUP BY inventory_item_id
+      )
+      SELECT i.id, i.sku, i.name, i.unit, i.quantity_on_hand::float8 AS stock,
+        u.daily30::float8 AS "daily30", u.daily90::float8 AS "daily90",
+        (i.quantity_on_hand / NULLIF(u.daily30,0))::float8 AS "daysLeft",
+        (CEIL((u.daily30 * ${leadDays} - i.quantity_on_hand) * 10000) / 10000)::float8 AS suggested
+      FROM inventory_items i JOIN usage u ON u.inventory_item_id = i.id
+      WHERE i.deleted_at IS NULL AND i.status = 'ACTIVE' AND u.daily30 * ${leadDays} > i.quantity_on_hand
+      ORDER BY "daysLeft", i.sku`;
+  }
+
   // ==========================================================================
   // Items
   // ==========================================================================

@@ -22,6 +22,11 @@ const QTY_FORMAT = { maxDecimalPlaces: QUANTITY_DECIMALS };
 const QTY_FORMAT_MSG = { message: 'Số lượng tối đa 4 chữ số thập phân' };
 const QTY_MAX_MSG = { message: `Số lượng tối đa ${MAX_STOCK_QUANTITY.toLocaleString('vi-VN')}` };
 
+export class ReorderQueryDto {
+  @Type(() => Number) @IsInt() @Min(1) @Max(365)
+  leadDays = 14;
+}
+
 export class CreateInventoryCategoryDto {
   @ApiProperty()
   @IsString()

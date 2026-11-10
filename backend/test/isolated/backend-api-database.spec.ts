@@ -841,6 +841,11 @@ describe('Real HTTP and PostgreSQL regression', () => {
       Number((await db.inventoryItem.findUniqueOrThrow({ where: { id } })).quantityOnHand),
     ).toBe(4);
     // The opening stock of 5 is recorded as a receipt too, so the history
+      const reorder = await api('get','/inventory/reorder?leadDays=60').expect(200);
+      expect(reorder.body.data.find((r:{id:string})=>r.id===id)).toMatchObject({
+        stock:4,daily30:0.1,daysLeft:40,suggested:2,
+      });
+      await api('get','/inventory/reorder?leadDays=0').expect(400);
     // adds up to what is on hand: +5 +2 -3 = 4.
     const moves = await db.stockMovement.findMany({
       where: { inventoryItemId: id },
