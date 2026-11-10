@@ -37,7 +37,7 @@ export function PlanContacts({
       api.post('/treatment-plans/' + plan.id + '/contacts', {
         channel,
         outcome,
-        contactedAt: time ? new Date(time + ':00+07:00').toISOString() : new Date().toISOString(),
+        contactedAt: time ? new Date(time + ':00+07:00').toISOString() : undefined,
       }),
     onSuccess: () => {
       setTime('');

@@ -115,6 +115,7 @@ export class TreatmentPlansService {
    * plans; the front desk sees everyone's.
    */
   async pendingTreatments(actor: JwtPayload, now: Date = new Date()) {
+    if (rowScope(actor,'patient') === 'none') throw new ForbiddenException();
     const items = await this.prisma.treatmentPlanItem.findMany({
       where: {
         status: TreatmentPlanItemStatus.PLANNED,
@@ -190,7 +191,7 @@ export class TreatmentPlansService {
   async recordContact(id:string,dto:RecordPlanContactDto,actor:JwtPayload){
     const scope = rowScope(actor,'patient');
     if(!actor.permissions.includes('treatment_plan.read') || scope === 'none') throw new ForbiddenException();
-    const contactedAt=new Date(dto.contactedAt);
+    const contactedAt=dto.contactedAt ? new Date(dto.contactedAt) : new Date();
     return this.prisma.$transaction(async tx=>{
       await tx.$queryRaw`SELECT id FROM treatment_plans WHERE id = ${id}::uuid FOR UPDATE`;
       const row=await tx.treatmentPlan.findFirst({where:{id,patient:{deletedAt:null},

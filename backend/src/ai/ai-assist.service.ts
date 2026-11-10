@@ -169,9 +169,10 @@ export class AiAssistService {
     // The visit or recall the screen is about gives the greeting, the phone
     // and the facts, for its reminder and for a reply to that patient alike.
     if (dto.kind === 'plan_invite' || dto.planId) {
-      if (!dto.planId || !actor.permissions.includes('appointment.create') || !actor.permissions.includes('treatment_plan.read')) throw new ForbiddenException();
+      const scope = rowScope(actor, 'patient');
+      if (!dto.planId || scope === 'none' || !actor.permissions.includes('appointment.create') || !actor.permissions.includes('treatment_plan.read')) throw new ForbiddenException();
       const plan = await this.prisma.treatmentPlan.findFirst({where:{id:dto.planId,status:{in:['ACCEPTED','IN_PROGRESS']},
-        patient:{deletedAt:null}, ...(rowScope(actor,'patient')==='any'?{}:{dentistId:actor.sub})},
+        patient:{deletedAt:null}, ...(scope==='any'?{}:{dentistId:actor.sub})},
         select:{id:true,patient:{select:{fullName:true,gender:true,primaryPhone:true}}}});
       if(!plan)throw new NotFoundException('Không tìm thấy kế hoạch điều trị');
       greeting=salutation(plan.patient.fullName,plan.patient.gender);

@@ -22,7 +22,7 @@ const Trim = () => Transform(({ value }) => (typeof value === 'string' ? value.t
 export class RecordPlanContactDto {
   @IsIn(['PHONE','SMS','ZALO','EMAIL','DESK']) channel!: string;
   @IsIn(['REACHED','CALL_BACK','DECLINED','UNREACHABLE']) outcome!: string;
-  @IsDateString({ strict: true }) contactedAt!: string;
+  @IsOptional() @IsDateString({ strict: true }) contactedAt?: string;
 }
 
 /** Highest price a plan line may quote (10 billion đồng). */
