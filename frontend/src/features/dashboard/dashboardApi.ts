@@ -4,6 +4,7 @@
 // was a re-export of this file).
 
 import { api } from '@/lib/api';
+import type { DentistPanel, FinancialWaterfall, KpiThreshold, MonthlyAging } from './financialTypes';
 import type {
   AppointmentPoint,
   DashboardKpis,
@@ -30,6 +31,28 @@ function range(q: RangeQuery) {
 }
 
 export const dashboardApi = {
+  thresholds: async (): Promise<KpiThreshold[]> => {
+    const { data } = await api.get<{ data: KpiThreshold[] }>('/billing/reports/kpi-thresholds');
+    return data.data;
+  },
+  updateThresholds: async (thresholds: KpiThreshold[]): Promise<KpiThreshold[]> => {
+    const { data } = await api.put<{ data: KpiThreshold[] }>('/billing/reports/kpi-thresholds', {
+      thresholds: thresholds.map(({ key, target, okAt }) => ({ key, target, okAt })),
+    });
+    return data.data;
+  },
+  financialWaterfall: async (q: RangeQuery): Promise<FinancialWaterfall> => {
+    const { data } = await api.get<{ data: FinancialWaterfall }>('/billing/reports/financial-waterfall', range(q));
+    return data.data;
+  },
+  dentistPanels: async (q: RangeQuery): Promise<DentistPanel[]> => {
+    const { data } = await api.get<{ data: DentistPanel[] }>('/billing/reports/dentist-panels', range(q));
+    return data.data;
+  },
+  monthlyAging: async (q: RangeQuery): Promise<MonthlyAging[]> => {
+    const { data } = await api.get<{ data: MonthlyAging[] }>('/billing/reports/monthly-aging', range(q));
+    return data.data;
+  },
   kpis: async (q: RangeQuery): Promise<DashboardKpis> => {
     const { data } = await api.get<DashboardKpis>('/billing/reports/dashboard-kpis', range(q));
     return data;

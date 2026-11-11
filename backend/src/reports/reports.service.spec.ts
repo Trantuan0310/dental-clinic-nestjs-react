@@ -225,6 +225,9 @@ describe('ReportsService', () => {
       expect(r.totalDiscount).toBe(125_000);
       expect(r.totalCollected).toBe(1_100_000);
       expect(r.totalRefunded).toBe(400_000);
+      expect(
+        r.grossIssued - r.issuedDiscount - r.revenueRefunded - r.totalAdjusted - r.totalVoided,
+      ).toBe(r.totalInvoiced);
       expect(r.totalOutstanding).toBe(300_000);
       expect(r.invoiceCount).toBe(3);
       expect(r.byStatus.map(b => b.status)).toEqual(['PAID', 'PARTIAL']);

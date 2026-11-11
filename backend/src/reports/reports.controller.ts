@@ -1,4 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Put, Query, UseGuards } from '@nestjs/common';
+import { UpdateKpiThresholdsDto } from './dto/kpi-threshold.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard';
@@ -28,6 +29,36 @@ export class ReportsController {
     private readonly reports: ReportsService,
     private readonly metrics: PracticeMetricsService,
   ) {}
+
+  @Get('kpi-thresholds')
+  @RequirePermissions('report.revenue.read', 'role.upsert')
+  async thresholds() {
+    return { data: await this.metrics.thresholds() };
+  }
+
+  @Put('kpi-thresholds')
+  @RequirePermissions('role.upsert')
+  async updateThresholds(@Body() body: UpdateKpiThresholdsDto, @User() actor: JwtPayload) {
+    return { data: await this.metrics.updateThresholds(body.thresholds, actor.sub) };
+  }
+
+  @Get('financial-waterfall')
+  @RequirePermissions('report.revenue.read')
+  async financialWaterfall(@Query() q: DashboardRangeQueryDto) {
+    return { data: await this.reports.financialWaterfall(q) };
+  }
+
+  @Get('dentist-panels')
+  @RequirePermissions('report.revenue.read')
+  async dentistPanels(@Query() q: DashboardRangeQueryDto) {
+    return { data: await this.reports.dentistPanels(q) };
+  }
+
+  @Get('monthly-aging')
+  @RequirePermissions('report.outstanding.read')
+  async monthlyAging(@Query() q: DashboardRangeQueryDto) {
+    return { data: await this.reports.monthlyAging(q) };
+  }
 
   @Get('revenue')
   @RequirePermissions('report.revenue.read')
@@ -122,7 +153,7 @@ export class ReportsController {
   @Get('shift-coverage')
   @RequirePermissions('shift.approve')
   async shiftCoverage(@Query() q: CapacityHeatmapQueryDto) {
-    return {data:await this.metrics.shiftCoverage(q)};
+    return { data: await this.metrics.shiftCoverage(q) };
   }
 
   @Get('capacity-heatmap')

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Bell, Building2, Clock, Info } from 'lucide-react';
 import { Alert, Card } from '@/components/ui';
 import { clinic } from '@/config/clinic';
+import { KpiThresholdSettings } from './KpiThresholdSettings';
 
 /**
  * Read-only view of the clinic details the app actually uses. They are not
@@ -35,6 +36,7 @@ export default function SettingsPage() {
   const notConfigured = t('uiWorkforce.notConfiguredHidden');
   return (
     <div className="space-y-6">
+      <KpiThresholdSettings />
       <div>
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiWorkforce.clinicInfo')}</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
