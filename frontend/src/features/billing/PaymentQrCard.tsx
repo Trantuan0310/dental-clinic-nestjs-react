@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Copy, QrCode } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/format';
 import { billingApi } from './billingApi';
-
-const PAID_CHECK_MS = 8000;
 
 /** The payload drawn as a QR image; the library loads only when a code is shown. */
 function useQrImage(payload?: string): string | null {
@@ -33,30 +31,14 @@ function useQrImage(payload?: string): string | null {
 /**
  * VietQR for what the invoice still owes, so the front desk shows a code
  * instead of reading out the account, amount and note. Shown only when the
- * clinic has set its receiving account and the invoice is owed. The payment
- * itself is still recorded by hand once the bank confirms it.
+ * clinic has set its receiving account and the invoice is owed.
  */
-export function PaymentQrCard({ invoiceId, invoiceCode }: { invoiceId: string; invoiceCode: string }) {
+export function PaymentQrCard({ invoiceId, invoiceCode, balance }: { invoiceId: string; invoiceCode: string; balance: number }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  // Under ['invoice', id]: recording a payment refetches it with the new balance.
-  // While the code is on screen it asks again every few seconds: the bank may
-  // report the transfer (A6.3) and the invoice then settles with no one pressing anything.
   const { data } = useQuery({
-    queryKey: ['invoice', invoiceId, 'payment-qr'],
+    queryKey: ['invoice', invoiceId, 'payment-qr', balance],
     queryFn: () => billingApi.getPaymentQr(invoiceId),
-    refetchInterval: (query) => (query.state.data?.payable ? PAID_CHECK_MS : false),
   });
-  const wasPayable = useRef(false);
-  useEffect(() => {
-    const payable = !!(data?.configured && data.payable);
-    // Owed a moment ago, not now: paid. Refresh the invoice itself.
-    if (wasPayable.current && !payable) {
-      notify.success(t('uiOperations.paymentQrPaid'));
-      queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
-    }
-    wasPayable.current = payable;
-  }, [data, invoiceId, queryClient, t]);
   const image = useQrImage(data?.configured && data.payable ? data.payload : undefined);
   if (!data?.configured || !data.payable) return null;
 

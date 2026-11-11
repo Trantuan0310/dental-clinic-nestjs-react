@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import {
   ArrowLeft,
+  CheckCircle2,
   Printer,
   FileDown,
   Mail,
@@ -65,7 +66,21 @@ export default function InvoiceDetailPage() {
     queryKey: ['invoice', id],
     queryFn: () => billingApi.getInvoice(id!),
     enabled: !!id,
+    refetchInterval: ({ state }) =>
+      state.data?.status === 'ISSUED' || state.data?.status === 'PARTIAL' ? 8000 : false,
   });
+
+  const transfer = invoice?.payments?.find(
+    (p) => p.method === 'BANK_TRANSFER' && p.kind !== 'REFUND' && p.status !== 'VOIDED',
+  );
+  const seen = useRef<{ invoiceId: string; receipts: Set<string> }>();
+  useEffect(() => {
+    if (!invoice) return;
+    if (transfer && seen.current?.invoiceId === invoice.id && !seen.current.receipts.has(transfer.id)) {
+      notify.success(t('uiOperations.transferReceived', { amount: formatCurrency(transfer.amount), code: invoice.code }));
+    }
+    seen.current = { invoiceId: invoice.id, receipts: new Set(invoice.payments?.map((p) => p.id)) };
+  }, [invoice, transfer, t]);
 
   const [pdfLoading, setPdfLoading] = useState(false);
   const emailMutation = useMutation({
@@ -257,6 +272,16 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
+      {transfer && (invoice.status === 'PAID' || invoice.status === 'PARTIAL') && (
+        <div key={transfer.id} className="payment-confirmation flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100 print:hidden">
+          <CheckCircle2 className="h-7 w-7 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">{t('uiOperations.transferReceived', { amount: formatCurrency(transfer.amount), code: invoice.code })}</p>
+            <p className="text-sm">{t('uiOperations.transferBalance', { amount: formatCurrency(invoice.outstandingAmount) })}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-3">
@@ -433,7 +458,7 @@ export default function InvoiceDetailPage() {
           )}
 
           {canPay && invoice.outstandingAmount > 0 && canRecordPayment && (
-            <PaymentQrCard invoiceId={invoice.id} invoiceCode={invoice.code} />
+            <PaymentQrCard invoiceId={invoice.id} invoiceCode={invoice.code} balance={invoice.outstandingAmount} />
           )}
 
           <Card title={t('uiOperations.paymentHistory')}>
