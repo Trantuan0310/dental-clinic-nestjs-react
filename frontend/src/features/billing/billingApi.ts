@@ -192,11 +192,11 @@ export const billingApi = {
     return data;
   },
 
-  async listMissingInvoices(): Promise<EncounterMissingInvoice[]> {
-    const { data } = await api.get<{ data: EncounterMissingInvoice[] }>(
-      `${BASE}/reconciliation/missing-invoices`,
+  async listMissingInvoices(params: { page?: number; scope?: 'all' | 'free' | 'actionable'; summary?: boolean } = {}) {
+    const { data } = await api.get<{ data: EncounterMissingInvoice[]; pagination: import('@/types/billing').MissingInvoicePagination }>(
+      `${BASE}/reconciliation/missing-invoices`, { params: { page: params.page ?? 1, pageSize: 50, scope: params.scope ?? 'all', summary: params.summary } },
     );
-    return data.data;
+    return data;
   },
 
   // Reports

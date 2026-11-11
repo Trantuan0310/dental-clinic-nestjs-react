@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -240,8 +241,19 @@ export class BillingController {
   @Get('reconciliation/missing-invoices')
   @RequirePermissions('invoice.create', 'invoice.read.any')
   @ApiOperation({ summary: 'Completed encounters without a valid (non-voided) invoice' })
-  async missingInvoices() {
-    return wrapAsPaginated(await this.billing.listEncountersMissingInvoice());
+  async missingInvoices(
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '50',
+    @Query('summary') summary = 'false',
+    @Query('scope') scope = 'all',
+  ) {
+    const parsedPage = Number(page);
+    const parsedSize = Number(pageSize);
+    if (!Number.isInteger(parsedPage) || parsedPage < 1 || !Number.isInteger(parsedSize) || parsedSize < 1) {
+      throw new BadRequestException('page and pageSize must be positive integers');
+    }
+    if (!['all', 'free', 'actionable'].includes(scope)) throw new BadRequestException('scope must be all, free, or actionable');
+    return this.billing.listEncountersMissingInvoice(parsedPage, Math.min(parsedSize, 50), summary === 'true', scope as 'all' | 'free' | 'actionable');
   }
 
   @Get('invoices/:id/audits')
