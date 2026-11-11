@@ -1,4 +1,14 @@
 export const vi = {
+  missingInvoiceFilter: 'Lọc phiên thiếu hóa đơn',
+  missingInvoiceSummary: 'Cần xử lý: {{actionable}} · Miễn phí rõ ràng: {{free}}',
+  missingInvoiceActionable: 'Cần xử lý ({{count}})',
+  missingInvoiceFree: 'Miễn phí rõ ràng ({{count}})',
+  missingInvoiceAll: 'Tất cả ({{count}})',
+  missingInvoiceEmpty: 'Không có phiên trong bộ lọc này.',
+  missingInvoicePage: 'Trang {{page}} / {{pages}}',
+  loadingMissingInvoices: 'Đang tải danh sách phiên...',
+  previousPage: 'Trang trước',
+  nextPage: 'Trang tiếp',
   billingTitle: 'Hóa đơn',
   billingDescription: 'Danh sách hóa đơn của phòng khám',
   filteredTotal: 'Tổng theo bộ lọc',
@@ -154,6 +164,16 @@ export const vi = {
 } as const;
 
 export const en = {
+  missingInvoiceFilter: 'Filter encounters missing invoices',
+  missingInvoiceSummary: 'Action needed: {{actionable}} · Explicitly free: {{free}}',
+  missingInvoiceActionable: 'Action needed ({{count}})',
+  missingInvoiceFree: 'Explicitly free ({{count}})',
+  missingInvoiceAll: 'All ({{count}})',
+  missingInvoiceEmpty: 'No encounters in this filter.',
+  missingInvoicePage: 'Page {{page}} of {{pages}}',
+  loadingMissingInvoices: 'Loading encounters...',
+  previousPage: 'Previous page',
+  nextPage: 'Next page',
   billingTitle: 'Invoices',
   billingDescription: 'Clinic invoice list',
   filteredTotal: 'Filtered total', collected: 'Collected', outstanding: 'Outstanding',

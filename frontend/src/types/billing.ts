@@ -114,8 +114,12 @@ export interface CreateInvoicePayload {
   notes?: string;
 }
 
+/** Counts for bounded missing-invoice reconciliation pages. */
+export interface MissingInvoicePagination { page: number; pageSize: number; total: number; actionable: number; explicitlyFree: number; scope: 'all' | 'free' | 'actionable'; scopeTotal: number; hasPrevious: boolean; hasMore: boolean; }
+
 /** A closed encounter without a valid (non-voided) invoice. */
 export interface EncounterMissingInvoice {
+  explicitlyFree: boolean;
   encounterId: string;
   closedAt: string | null;
   patientId: string;
