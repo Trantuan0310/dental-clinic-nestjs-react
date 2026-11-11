@@ -61,3 +61,9 @@ export class CreateAppointmentActionDto {
   @MaxLength(200)
   reason?: string;
 }
+
+export class ConfirmAppointmentChangeDto {
+  @ApiProperty()
+  @IsUUID()
+  proposalId!: string;
+}

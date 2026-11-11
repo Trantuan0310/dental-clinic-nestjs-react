@@ -17,7 +17,7 @@ import { AiService } from './ai.service';
 import { AiAssistService } from './ai-assist.service';
 import { MessageDraftDto, NoteDraftDto, ReportCommentaryQueryDto } from './dto/assist.dto';
 import { AiChatService } from './assistant/ai-chat.service';
-import { ChatDto, CreateAppointmentActionDto } from './dto/chat.dto';
+import { ChatDto, CreateAppointmentActionDto, ConfirmAppointmentChangeDto } from './dto/chat.dto';
 import { Throttle } from '@nestjs/throttler';
 import { SummaryQuerySchema } from './dto/summary-query.dto';
 import type { AiPatientSummary } from './ai.types';
@@ -83,6 +83,7 @@ export class AiController {
   @RequirePermissions(
     'patient.read',
     'appointment.read.any',
+    'appointment.read.own',
     'treatment_plan.read',
     'invoice.read.any',
     'invoice.read.own',
@@ -92,6 +93,13 @@ export class AiController {
   })
   async assistantChat(@Body() dto: ChatDto, @User() actor: JwtPayload) {
     return { data: await this.chat.chat(dto.messages, dto.refs, actor) };
+  }
+
+  @Post('assistant/actions/confirm-change')
+  @HttpCode(200)
+  @RequirePermissions('appointment.cancel', 'appointment.update')
+  async confirmChange(@Body() dto: ConfirmAppointmentChangeDto, @User() actor: JwtPayload) {
+    return { data: await this.chat.confirmChange(dto.proposalId, actor) };
   }
 
   @Post('assistant/actions/create-appointment')

@@ -70,7 +70,14 @@ export class RefBook {
   }
 }
 
-export interface PendingAction {
+export type ChangeKind = "cancel_appointment" | "reschedule_appointment";
+export interface ChangeAction {
+  type: ChangeKind;
+  payload: { proposalId: string };
+  view: { patientRef: string; dentistName: string; startAt: string; endAt: string; reason: string | null; previousStartAt: string; previousEndAt: string; previousDentistName: string };
+}
+export type PendingAction = CreateAction | ChangeAction;
+export interface CreateAction {
   type: 'create_appointment';
   /** What the confirm button sends. */
   payload: { patientId: string; dentistId: string; startAt: string; reason?: string };
@@ -83,6 +90,7 @@ export interface ToolContext {
   actor: JwtPayload;
   refs: RefBook;
   actions: PendingAction[];
+  proposeChange?: (type: ChangeKind, args: Record<string, unknown>) => Promise<ChangeAction>;
 }
 
 export interface Tool {
@@ -156,7 +164,22 @@ async function dentistIdByName(name: string | undefined, ctx: ToolContext) {
   return hit[0].id;
 }
 
+const changeTools: Tool[] = (['cancel_appointment', 'reschedule_appointment'] as const).map(type => ({
+  name: `propose_${type}`,
+  help: `Soạn thẻ ${type === 'cancel_appointment' ? 'hủy' : 'dời'} lịch, CHƯA thực hiện. Cần appointmentId từ appointments_on, reason (5-500 ký tự); dời lịch cần date YYYY-MM-DD, time HH:mm, dentistId tùy chọn. Nếu nhiều lịch, hỏi người dùng chọn; chỉ thực hiện sau khi bấm xác nhận.`,
+  anyOf: [type === 'cancel_appointment' ? 'appointment.cancel' : 'appointment.update'],
+  async run(args, ctx) {
+    if (!ctx.proposeChange) throw new BadRequestException('Chưa có dịch vụ đề xuất');
+    const card = await ctx.proposeChange(type, args);
+    const appt = await ctx.services.appointments.getById(String(args.appointmentId), ctx.actor);
+    card.view.patientRef = ctx.refs.refFor(appt.patient.id, appt.patient.fullName);
+    ctx.actions.push(card);
+    return { status: 'waiting_for_user_confirmation', note: 'CHƯA thay đổi lịch; người dùng phải xác nhận trên thẻ.' };
+  },
+}));
+
 export const TOOLS: Tool[] = [
+  ...changeTools,
   {
     name: 'find_patient',
     help: 'Tìm bệnh nhân theo tên hoặc số điện thoại người dùng vừa nêu. Tham số: {"name"?: string, "phone"?: string}. Trả về tối đa 5 bệnh nhân, mỗi người là một mã ref (P1, P2…) kèm giới tính, năm sinh, lần khám gần nhất; KHÔNG có tên.',
@@ -297,6 +320,7 @@ export const TOOLS: Tool[] = [
         moreThanShown: res.pagination.hasMore,
         byStatus,
         appointments: rows.slice(0, 25).map(a => ({
+          appointmentId: a.id,
           date: clinicDateOnly(a.startAt),
           time: clinicHhmm(a.startAt),
           patient: ctx.refs.refFor(a.patient.id, a.patient.fullName),
