@@ -44,15 +44,16 @@ describe('missing invoice reconciliation pagination', () => {
   });
 
   it('uses null and empty reasons consistently and keeps voided/manual rows actionable', async () => {
-    count.mockResolvedValueOnce(4).mockResolvedValueOnce(1);
+    count.mockResolvedValueOnce(5).mockResolvedValueOnce(1);
     findMany.mockResolvedValue([
       encounter('void', [freeTreatment], [{ id: 'void-id', code: 'V1', voidReason: 'Fix' }]),
       encounter('manual', [{ ...freeTreatment, priceReason: 'override' }]),
-      encounter('override-reason', [{ ...freeTreatment, priceReason: 'manual override' }]),
+      encounter('override-reason', [{ ...freeTreatment, unitPrice: 100, listPrice: 100, priceReason: 'manual override' }]),
+      encounter('free', [freeTreatment]),
     ]);
     const result = await service.listEncountersMissingInvoice(1, 50, false, 'all');
-    expect(result.data.map(row => row.explicitlyFree)).toEqual([false, false, true]);
-    expect(result.pagination).toMatchObject({ total: 4, actionable: 3, explicitlyFree: 1, scopeTotal: 4 });
+    expect(result.data.map(row => row.explicitlyFree)).toEqual([false, false, false, true]);
+    expect(result.pagination).toMatchObject({ total: 5, actionable: 4, explicitlyFree: 1, scopeTotal: 5 });
     const countWhere = count.mock.calls[1][0].where.AND[1];
     expect(countWhere.invoices).toEqual({ none: {} });
     expect(countWhere.treatments.every.OR[1].priceReason).toBeNull();
