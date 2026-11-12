@@ -44,7 +44,13 @@ export interface ChatTurn {
   content: string;
 }
 
-export interface AssistantCard {
+export type AssistantCard = CreateAssistantCard | ChangeAssistantCard;
+export interface ChangeAssistantCard {
+  type: 'cancel_appointment' | 'reschedule_appointment';
+  payload: { proposalId: string };
+  view: { patientRef: string; dentistName: string; startAt: string; endAt: string; reason: string | null; previousStartAt: string; previousEndAt: string; previousDentistName: string };
+}
+export interface CreateAssistantCard {
   type: 'create_appointment';
   payload: { patientId: string; dentistId: string; startAt: string; reason?: string };
   view: { patientRef: string; dentistName: string; startAt: string; reason: string | null };
@@ -81,7 +87,11 @@ export const aiAssistApi = {
     const { data } = await api.post<{ data: AssistantReply }>('/ai/assistant/chat', { messages, refs });
     return unwrap(data);
   },
-  async confirmAppointment(payload: AssistantCard['payload']): Promise<{ id: string }> {
+  async confirmChange(proposalId: string): Promise<{ id: string }> {
+    const { data } = await api.post<{ data: { id: string } }>('/ai/assistant/actions/confirm-change', { proposalId });
+    return unwrap(data);
+  },
+  async confirmAppointment(payload: CreateAssistantCard['payload']): Promise<{ id: string }> {
     const { data } = await api.post<{ data: { id: string } }>('/ai/assistant/actions/create-appointment', payload);
     return unwrap(data);
   },

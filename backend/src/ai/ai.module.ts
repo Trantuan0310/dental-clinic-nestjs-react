@@ -1,3 +1,4 @@
+import { AssistantActionsService } from './assistant/assistant-actions.service';
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ReportsModule } from '../reports/reports.module';
@@ -21,6 +22,6 @@ import { TreatmentPlansModule } from '../treatment-plans/treatment-plans.module'
     TreatmentPlansModule,
   ],
   controllers: [AiController],
-  providers: [AiService, AiAssistService, AiChatService, AiModel],
+  providers: [AssistantActionsService, AiService, AiAssistService, AiChatService, AiModel],
 })
 export class AiModule {}

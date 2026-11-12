@@ -11,7 +11,7 @@ import { useAssistantStore } from '@/stores/assistantStore';
 import { aiAssistApi, type AssistantCard, type AssistantReply, type ChatTurn } from './aiAssistApi';
 
 /** Same permissions the endpoint accepts: the button only shows to those who can use it. */
-const CHAT_PERMISSIONS = ['patient.read', 'appointment.read.any', 'treatment_plan.read', 'invoice.read.any', 'invoice.read.own'];
+const CHAT_PERMISSIONS = ['patient.read', 'appointment.read.any', 'appointment.read.own', 'treatment_plan.read', 'invoice.read.any', 'invoice.read.own'];
 
 interface Bubble {
   id: number;
@@ -38,7 +38,9 @@ const fill = (text: string, names: Record<string, string>) =>
 export function AssistantChat() {
   const { t } = useTranslation();
   const allowed = useAuthStore((s) => s.hasAnyPermission(CHAT_PERMISSIONS));
-  const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
+  const permissions = useAuthStore((s) => s.user?.permissions);
+  const canConfirm = (card: AssistantCard) => !!permissions?.includes(card.type === 'create_appointment' ? 'appointment.create' : card.type === 'cancel_appointment' ? 'appointment.cancel' : 'appointment.update');
+  const actionKey = (card: AssistantCard, kind: 'title' | 'confirm' | 'done') => card.type === 'create_appointment' ? ({ title: 'cardTitle', confirm: 'confirm', done: 'booked' }[kind]) : `${card.type}.${kind}`;
   const qc = useQueryClient();
   const open = useAssistantStore((s) => s.open);
   const setOpen = useAssistantStore((s) => s.setOpen);
@@ -66,13 +68,14 @@ export function AssistantChat() {
   });
 
   const confirm = useMutation({
-    mutationFn: ({ card }: { card: AssistantCard; bubbleId: number; index: number }) => aiAssistApi.confirmAppointment(card.payload),
-    onSuccess: (_res, { bubbleId, index }) => {
+    mutationFn: ({ card }: { card: AssistantCard; bubbleId: number; index: number }) => card.type === 'create_appointment' ? aiAssistApi.confirmAppointment(card.payload) : aiAssistApi.confirmChange(card.payload.proposalId),
+    onSuccess: (_res, { card, bubbleId, index }) => {
       setBubbles((all) => all.map((b) => (b.id === bubbleId ? { ...b, done: new Set(b.done).add(index) } : b)));
       void qc.invalidateQueries({ queryKey: ['appointments'] });
-      notify.success(t('uiAi.assistant.booked'));
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      notify.success(t(`uiAi.assistant.${actionKey(card, 'done')}`));
     },
-    onError: (err) => notify.error(getApiErrorMessage(err, t('uiAi.assistant.bookError'))),
+    onError: (err, { card }) => notify.error(getApiErrorMessage(err, t(card.type === 'create_appointment' ? 'uiAi.assistant.bookError' : 'uiAi.assistant.changeError'))),
   });
 
   if (!allowed) return null;
@@ -153,19 +156,22 @@ export function AssistantChat() {
                         <div key={i} className="rounded-lg border border-primary-200 bg-primary-50 p-3 dark:border-primary-800 dark:bg-primary-950" data-testid="assistant-card">
                           <p className="flex items-center gap-1 font-medium">
                             <CalendarCheck className="h-4 w-4" aria-hidden="true" />
-                            {t('uiAi.assistant.cardTitle')}
+                            {t(`uiAi.assistant.${actionKey(card, 'title')}`)}
                           </p>
+                          {card.type === 'reschedule_appointment' && (
+                            <p className="mt-1 text-xs">{t('uiAi.assistant.previousTime')}: {formatDateTime(card.view.previousStartAt)} – {formatDateTime(card.view.previousEndAt)} · {card.view.previousDentistName}</p>
+                          )}
                           <dl className="mt-1 space-y-0.5 text-xs">
                             <div><dt className="inline text-surface-500">{t('uiAi.assistant.patient')}: </dt><dd className="inline">{fill(`[${card.view.patientRef}]`, names)}</dd></div>
                             <div><dt className="inline text-surface-500">{t('uiAi.assistant.dentist')}: </dt><dd className="inline">{card.view.dentistName}</dd></div>
-                            <div><dt className="inline text-surface-500">{t('uiAi.assistant.time')}: </dt><dd className="inline">{formatDateTime(card.view.startAt)}</dd></div>
+                            <div><dt className="inline text-surface-500">{t('uiAi.assistant.time')}: </dt><dd className="inline">{formatDateTime(card.view.startAt)}{card.type !== 'create_appointment' && ` – ${formatDateTime(card.view.endAt)}`}</dd></div>
                             {card.view.reason && <div><dt className="inline text-surface-500">{t('uiAi.assistant.reason')}: </dt><dd className="inline">{card.view.reason}</dd></div>}
                           </dl>
                           {b.done.has(i) ? (
-                            <p className="mt-2 text-xs font-medium text-success-700 dark:text-success-400">{t('uiAi.assistant.booked')}</p>
-                          ) : canBook ? (
-                            <Button size="sm" className="mt-2" isLoading={confirm.isPending && confirm.variables?.bubbleId === b.id && confirm.variables?.index === i} onClick={() => confirm.mutate({ card, bubbleId: b.id, index: i })}>
-                              {t('uiAi.assistant.confirm')}
+                            <p className="mt-2 text-xs font-medium text-success-700 dark:text-success-400">{t(`uiAi.assistant.${actionKey(card, 'done')}`)}</p>
+                          ) : canConfirm(card) ? (
+                            <Button size="sm" className="mt-2" isDisabled={confirm.isPending} isLoading={confirm.isPending && confirm.variables?.bubbleId === b.id && confirm.variables?.index === i} onClick={() => confirm.mutate({ card, bubbleId: b.id, index: i })}>
+                              {t(`uiAi.assistant.${actionKey(card, 'confirm')}`)}
                             </Button>
                           ) : null}
                         </div>

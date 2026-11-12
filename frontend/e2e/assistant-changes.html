@@ -1,0 +1,17 @@
+<!doctype html><html lang="vi"><head><meta charset="UTF-8"><title>Assistant card test</title></head><body><div id="root"></div><script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '/src/lib/queryClient';
+import { AssistantChat } from '/src/features/ai/AssistantChat';
+import { useAuthStore } from '/src/stores/authStore';
+import { useAssistantStore } from '/src/stores/assistantStore';
+import { AppToaster } from '/src/components/ui/Toast';
+import { i18n } from '/src/locales/index';
+import '/src/index.css';
+await i18n.changeLanguage('vi');
+useAuthStore.getState().setSession({ id: 'desk', email: 'desk@test.invalid', fullName: 'Desk', status: 'active', roles: [],
+  permissions: new URLSearchParams(location.search).has('readonly') ? ['appointment.read.own'] : ['appointment.read.any', 'appointment.cancel', 'appointment.update'] }, 'test-token');
+useAssistantStore.getState().setOpen(true);
+createRoot(document.getElementById('root')).render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(AssistantChat), React.createElement(AppToaster)));
+</script></body></html>
