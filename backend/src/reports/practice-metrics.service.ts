@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { AppointmentStatus, InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { clinicDateOnly, endOfClinicDay, startOfClinicDay } from '../common/date-range.util';
@@ -12,6 +12,7 @@ import {
   median,
   percent,
   scorecardMetric,
+  SCORECARD_TARGETS,
   waitMinutes,
   type CapacityCell,
   type Funnel,
@@ -59,11 +60,7 @@ export class PracticeMetricsService {
     private readonly reports: ReportsService,
   ) {}
 
-  private async capacityData(query: {
-    from?: string;
-    to?: string;
-    dentistId?: string;
-  }) {
+  private async capacityData(query: { from?: string; to?: string; dentistId?: string }) {
     const { fromDate, toDate } = this.reports.resolveRange(query.from, query.to);
     const dentists = await this.prisma.user.findMany({
       where: {
@@ -87,16 +84,20 @@ export class PracticeMetricsService {
     }
     const keys: DayKey[] = chosen.flatMap(d => dates.map(date => ({ dentistId: d.id, date })));
     const calendars = await loadDayCalendars(this.prisma, keys, { withBookings: true });
-    return {fromDate,toDate,dentists,calendars:[...calendars.values()]};
+    return { fromDate, toDate, dentists, calendars: [...calendars.values()] };
   }
 
-  async shiftCoverage(query:{from?:string;to?:string;dentistId?:string}) {
-    const {dentists,calendars}=await this.capacityData(query);
-    return {dentists,cells:coverageCells(calendars)};
+  async shiftCoverage(query: { from?: string; to?: string; dentistId?: string }) {
+    const { dentists, calendars } = await this.capacityData(query);
+    return { dentists, cells: coverageCells(calendars) };
   }
 
-  async capacityHeatmap(query:{from?:string;to?:string;dentistId?:string}):Promise<CapacityHeatmap> {
-    const {fromDate,toDate,dentists,calendars}=await this.capacityData(query);
+  async capacityHeatmap(query: {
+    from?: string;
+    to?: string;
+    dentistId?: string;
+  }): Promise<CapacityHeatmap> {
+    const { fromDate, toDate, dentists, calendars } = await this.capacityData(query);
     const cells = capacityCells(calendars).map(c => ({
       ...c,
       utilization: Math.round((c.bookedMin / c.availableMin) * 1000) / 1000,
@@ -117,6 +118,49 @@ export class PracticeMetricsService {
     };
   }
 
+  async thresholds() {
+    const rows = await this.prisma.kpiThreshold.findMany();
+    return Object.entries(SCORECARD_TARGETS).map(([key, defaults]) => {
+      const saved = rows.find(r => r.key === key);
+      return {
+        key: key as ScorecardMetric['key'],
+        ...defaults,
+        target: saved?.target ?? defaults.target,
+        okAt: saved?.okAt ?? defaults.okAt,
+      };
+    });
+  }
+
+  async updateThresholds(
+    rows: Array<{ key: ScorecardMetric['key']; target: number; okAt: number }>,
+    actorId: string,
+  ) {
+    if (rows.length !== 6 || new Set(rows.map(r => r.key)).size !== 6) {
+      throw new BadRequestException('Cần đủ sáu chỉ số, không trùng lặp.');
+    }
+    for (const row of rows) {
+      const defaults = SCORECARD_TARGETS[row.key];
+      const max = defaults?.unit === 'minutes' ? 480 : 100;
+      if (
+        !Object.prototype.hasOwnProperty.call(SCORECARD_TARGETS, row.key) ||
+        ![row.target, row.okAt].every(n => Number.isFinite(n) && n >= 0 && n <= max) ||
+        (defaults.direction === 'lower' ? row.target > row.okAt : row.target < row.okAt)
+      ) {
+        throw new BadRequestException('Ngưỡng KPI không hợp lệ.');
+      }
+    }
+    await this.prisma.$transaction(
+      rows.map(({ key, target, okAt }) =>
+        this.prisma.kpiThreshold.upsert({
+          where: { key },
+          create: { key, target, okAt, updatedBy: actorId },
+          update: { target, okAt, updatedBy: actorId },
+        }),
+      ),
+    );
+    return this.thresholds();
+  }
+
   async scorecard(query: { from?: string; to?: string }): Promise<Scorecard> {
     const { fromDate, toDate } = this.reports.resolveRange(query.from, query.to);
     const [noShow, rebook, acceptance, wait, lateCancel, collection] = await Promise.all([
@@ -127,10 +171,14 @@ export class PracticeMetricsService {
       this.lateCancelRate(fromDate, toDate),
       this.collectionRate(fromDate, toDate),
     ]);
+    const thresholds = await this.thresholds();
     return {
       from: clinicDateOnly(fromDate),
       to: clinicDateOnly(toDate),
-      metrics: [noShow, rebook, acceptance, wait, lateCancel, collection],
+      metrics: [noShow, rebook, acceptance, wait, lateCancel, collection].map(metric => ({
+        ...metric,
+        ...thresholds.find(t => t.key === metric.key),
+      })),
     };
   }
 

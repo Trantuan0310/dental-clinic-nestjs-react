@@ -15,6 +15,7 @@ import { DashboardHeader } from './dashboard/DashboardHeader';
 import { AiSummaryCard } from './dashboard/AiSummaryCard';
 import { CapacityHeatmapCard, ScorecardCard } from './dashboard/practiceCards';
 import { FunnelCard } from './dashboard/funnelCard';
+import { FinancialPanels } from './dashboard/FinancialPanels';
 import {
   AppointmentStatsCard,
   AppointmentsCard,
@@ -343,6 +344,7 @@ export default function DashboardPage() {
       )}
 
       {/* Row 6 — Finance summary + Outstanding debt */}
+      <FinancialPanels range={commonParams} />
       {(canSeeRevenue || canSeeOutstanding) && (
         <div className="grid gap-3 grid-cols-1 md:grid-cols-12">
           {canSeeRevenue && (

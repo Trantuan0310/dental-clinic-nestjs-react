@@ -6,6 +6,7 @@ const at = (iso: string) => new Date(iso);
 
 function setup() {
   const prisma = {
+    kpiThreshold: { findMany: jest.fn().mockResolvedValue([]) },
     appointment: { count: jest.fn(), findMany: jest.fn(), groupBy: jest.fn() },
     treatmentPlan: { count: jest.fn() },
     encounter: { findMany: jest.fn() },
@@ -57,9 +58,16 @@ describe('PracticeMetricsService.scorecard', () => {
     ]);
 
     jest.spyOn(reports, 'revenueAndCollected').mockResolvedValue({ revenue: 100, collected: 90 });
+    prisma.kpiThreshold.findMany.mockResolvedValue([{ key: 'noShowRate', target: 2, okAt: 4 }]);
     const card = await service.scorecard(RANGE);
     const by = Object.fromEntries(card.metrics.map(m => [m.key, m]));
-    expect(by.noShowRate).toMatchObject({ value: 5, numerator: 2, denominator: 40 });
+    expect(by.noShowRate).toMatchObject({
+      value: 5,
+      numerator: 2,
+      denominator: 40,
+      target: 2,
+      okAt: 4,
+    });
     expect(by.rebookRate).toMatchObject({ value: 50, numerator: 2, denominator: 4 });
     expect(by.planAcceptance).toMatchObject({ value: 75, numerator: 3, denominator: 4 });
     expect(by.medianWait).toMatchObject({ value: 20, unit: 'minutes' });

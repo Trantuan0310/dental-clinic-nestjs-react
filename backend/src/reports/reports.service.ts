@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { agingSnapshot, waterfallSteps } from './financial-math';
 import {
   AppointmentStatus,
   InvoiceStatus,
@@ -231,6 +232,145 @@ export class ReportsService {
   // Reports page
   // ==========================================================================
 
+  async financialWaterfall(query: { from?: string; to?: string }) {
+    const { fromDate, toDate } = this.resolveRange(query.from, query.to);
+    const [report, expenses, payrollPaid] = await Promise.all([
+      this.revenueReport({ from: clinicDateOnly(fromDate), to: clinicDateOnly(toDate) }),
+      this.expense.aggregateApproved(fromDate, toDate),
+      this.payrollPaidTotal(fromDate, toDate),
+    ]);
+    const remaining = report.totalCollected - expenses - payrollPaid;
+    return {
+      from: report.from,
+      to: report.to,
+      basis: {
+        revenue: 'issuedAt/refund paidAt/adjustedAt/voidedAt',
+        collected: 'paidAt',
+        expenses: 'expenseDate APPROVED/REIMBURSED',
+        payroll: 'period.paidAt PAID/LOCKED',
+      },
+      netRevenue: report.totalInvoiced,
+      netCollected: report.totalCollected,
+      remaining,
+      steps: waterfallSteps([
+        { key: 'gross', amount: report.grossIssued },
+        { key: 'discount', amount: -report.issuedDiscount },
+        { key: 'refund', amount: -report.revenueRefunded },
+        { key: 'adjustment', amount: -report.totalAdjusted },
+        { key: 'void', amount: -report.totalVoided },
+        { key: 'netRevenue', amount: report.totalInvoiced, total: true },
+        { key: 'collectionBridge', amount: report.totalCollected - report.totalInvoiced },
+        { key: 'collected', amount: report.totalCollected, total: true },
+        { key: 'expense', amount: -expenses },
+        { key: 'payroll', amount: -payrollPaid },
+        { key: 'remaining', amount: remaining, total: true },
+      ]),
+    };
+  }
+
+  async dentistPanels(query: { from?: string; to?: string }) {
+    const { fromDate, toDate } = this.resolveRange(query.from, query.to);
+    const [revenues, visits, plans, dentists] = await Promise.all([
+      this.revenueByDentist(query),
+      this.prisma.encounter.groupBy({
+        by: ['dentistId'],
+        where: {
+          status: { not: 'CANCELLED' },
+          startedAt: { gte: fromDate, lte: toDate },
+          appointment: { deletedAt: null },
+        },
+        _count: { _all: true },
+      }),
+      this.prisma.treatmentPlan.findMany({
+        where: { proposedAt: { gte: fromDate, lte: toDate } },
+        select: { dentistId: true, acceptedAt: true },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          deletedAt: null,
+          deactivatedAt: null,
+          userRoles: { some: { role: { code: 'dentist' } } },
+        },
+        select: { id: true, fullName: true },
+      }),
+    ]);
+    const ids = new Set([
+      ...dentists.map(d => d.id),
+      ...revenues.map(d => d.dentistId),
+      ...visits.map(d => d.dentistId),
+      ...plans.map(d => d.dentistId),
+    ]);
+    const names = await this.prisma.user.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, fullName: true },
+    });
+    return [...ids]
+      .map(id => {
+        const proposed = plans.filter(p => p.dentistId === id);
+        const accepted = proposed.filter(p => p.acceptedAt !== null).length;
+        return {
+          dentistId: id,
+          dentistName: names.find(d => d.id === id)?.fullName ?? 'Chưa rõ',
+          revenue: revenues.find(d => d.dentistId === id)?.revenue ?? 0,
+          visits: visits.find(d => d.dentistId === id)?._count._all ?? 0,
+          proposed: proposed.length,
+          accepted,
+          acceptancePct: proposed.length ? pct(accepted, proposed.length) : null,
+        };
+      })
+      .sort((a, b) => a.dentistName.localeCompare(b.dentistName));
+  }
+
+  async monthlyAging(query: { from?: string; to?: string }) {
+    const { fromDate, toDate } = this.resolveRange(query.from, query.to);
+    const last = new Date(Math.min(toDate.getTime(), Date.now()));
+    if (fromDate > last) return [];
+    // shortcut: reconstructs history in memory; use SQL aggregation when invoice history outgrows report memory.
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        deletedAt: null,
+        issuedAt: { not: null, lte: last },
+        OR: [
+          { status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIAL, InvoiceStatus.PAID] } },
+          { status: InvoiceStatus.VOIDED, voidedAt: { not: null } },
+        ],
+      },
+      select: {
+        issuedAt: true,
+        voidedAt: true,
+        total: true,
+        payments: {
+          where: {
+            kind: PaymentKind.PAYMENT,
+            paidAt: { lte: last },
+            OR: [
+              { status: 'COMPLETED', voidedAt: null },
+              { status: 'VOIDED', voidedAt: { not: null } },
+            ],
+          },
+          select: { amount: true, paidAt: true, voidedAt: true },
+        },
+        adjustments: {
+          where: { adjustedAt: { lte: last } },
+          select: { amount: true, adjustedAt: true },
+        },
+      },
+    });
+    const months = [];
+    let month = clinicDateOnly(fromDate).slice(0, 7);
+    while (month <= clinicDateOnly(last).slice(0, 7)) {
+      const next = new Date(`${month}-01T00:00:00Z`);
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      const nextMonth = next.toISOString().slice(0, 7);
+      const cutoff = new Date(
+        Math.min(startOfClinicDay(`${nextMonth}-01`).getTime() - 1, last.getTime()),
+      );
+      months.push({ month, asOf: cutoff.toISOString(), ...agingSnapshot(invoices, cutoff) });
+      month = nextMonth;
+    }
+    return months;
+  }
+
   /**
    * BR-BILL-008 revenue report. Revenue = issued invoices by issue date, less
    * refunds and voids by their own date; "Đã thu" = payments by payment date
@@ -427,6 +567,12 @@ export class ReportsService {
       totalInvoiced,
       totalCollected,
       totalRefunded,
+      grossIssued: invoices.reduce((sum, i) => sum + Number(i.subtotal ?? 0), 0),
+      issuedDiscount: invoices.reduce(
+        (sum, i) => sum + Number(i.subtotal ?? 0) - Number(i.total ?? 0),
+        0,
+      ),
+      revenueRefunded: revenueRefunds.reduce((sum, p) => sum - p.signed, 0),
       totalAdjusted,
       totalVoided,
       totalDiscount,
