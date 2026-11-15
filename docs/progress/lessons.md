@@ -81,3 +81,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - DB demo thử nghiệm: tạo DB mới phải chạy `01-extensions.sql`, `02-uuid-v7.sql`, `03-sequences.sql` trước `prisma migrate deploy`, rồi `seed.ts` (tạo admin) trước `seed-demo-clinic.ts`; `createdb` hỏi mật khẩu, dùng `psql .../postgres -c "create database ..."`.
 - Không chạy `npx prisma format` (định dạng lại cả schema) và giữ CRLF khi sửa file bằng Python (đọc/ghi dạng bytes): `docs/05_API/*.md` dùng CRLF. Xem `git diff --stat` trước khi commit.
 - E2E dùng chung một phiên lưu sẵn: nếu bộ test chạy lâu hơn hạn access token thì refresh xoay vòng làm các test sau mất phiên; giữ hạn token E2E dài hơn thời gian chạy (vì test lỗi hàng loạt trông như lỗi tính năng).
+- Khi chép XML từ file Word mẫu vào bản dựng: loại các phần đó khỏi mọi bước định dạng chung (bảng, ảnh, kiểu Normal), vì kiểu mặc định của báo cáo làm bìa tràn trang và khung bị co như ảnh.

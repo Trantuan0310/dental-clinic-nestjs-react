@@ -1,59 +1,107 @@
 ::: {custom-style="Tiêu đề phụ"}
-NHẬN XÉT CỦA GIẢNG VIÊN HƯỚNG DẪN
+NHẬN XÉT BÁO CÁO ĐỒ ÁN TỐT NGHIỆP
 :::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Thông tin"}
+Họ và tên sinh viên: Trần Tuấn Anh
 
-…………………………………………………………………………………………………………
+Mã số sinh viên: 22010130
 
-…………………………………………………………………………………………………………
+Lớp: K16-CNTT_2
 
-…………………………………………………………………………………………………………
+Ngành: Công nghệ thông tin
 
-…………………………………………………………………………………………………………
-
-…………………………………………………………………………………………………………
-
-…………………………………………………………………………………………………………
-
-…………………………………………………………………………………………………………
-
-::: {custom-style="Bìa trái"}
-Điểm: …………… (Bằng chữ: ……………………)
-
-Hà Nội, ngày …… tháng …… năm 2026
-
-Giảng viên hướng dẫn (Ký, ghi rõ họ tên)
+Giảng viên hướng dẫn: ……………………………
 :::
 
-[[NGAT]]
-
-::: {custom-style="Tiêu đề phụ"}
-NHẬN XÉT CỦA GIẢNG VIÊN PHẢN BIỆN
+::: {custom-style="Mục nhận xét"}
+1\. Nhận xét của giảng viên hướng dẫn
 :::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-…………………………………………………………………………………………………………
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-::: {custom-style="Bìa trái"}
-Điểm: …………… (Bằng chữ: ……………………)
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
 
-Hà Nội, ngày …… tháng …… năm 2026
+::: {custom-style="Mục nhận xét"}
+2\. Nhận xét của giảng viên phản biện
+:::
 
-Giảng viên phản biện (Ký, ghi rõ họ tên)
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Dòng chấm"}
+[[CHAM]]
+:::
+
+::: {custom-style="Mục nhận xét"}
+3\. Điểm đánh giá
+:::
+
+::: {custom-style="Thông tin"}
+Điểm số (theo thang điểm 10): ……………………
+
+Điểm chữ: ……………………………………………
 :::
 
 [[NGAT]]
@@ -74,17 +122,30 @@ Chất lượng được bảo đảm bằng khoảng 1.790 kiểm thử đơn v
 LỜI CAM ĐOAN
 :::
 
-Tôi xin cam đoan đồ án tốt nghiệp "Phát triển phần mềm quản lý phòng khám nha khoa" là kết quả thực hiện của bản thân dưới sự hướng dẫn của giảng viên hướng dẫn. Các nội dung, số liệu và kết quả trình bày trong đồ án là trung thực, được thu thập từ quá trình phân tích, thiết kế, cài đặt và kiểm thử hệ thống do tôi thực hiện. Mọi tài liệu tham khảo đều được trích dẫn đầy đủ theo quy định.
+::: {custom-style="Thông tin"}
+Họ và tên: Trần Tuấn Anh
 
-Tôi xin chịu hoàn toàn trách nhiệm về lời cam đoan này.
+Mã sinh viên: 22010130    Lớp: K16-CNTT_2
 
-::: {custom-style="Bìa trái"}
-Hà Nội, ngày …… tháng …… năm 2026
-
-Sinh viên thực hiện
-
-Trần Tuấn Anh
+Ngành: Công nghệ thông tin
 :::
+
+Tôi đã thực hiện đồ án tốt nghiệp với đề tài: "Phát triển phần mềm quản lý phòng khám nha khoa".
+
+Tôi xin cam đoan đây là đề tài nghiên cứu của riêng tôi và được sự hướng dẫn của: ……………………………
+
+Các nội dung nghiên cứu, kết quả trong đề tài này là trung thực và chưa được các tác giả khác công bố dưới bất kỳ hình thức nào. Mọi tài liệu tham khảo đều được trích dẫn đầy đủ. Nếu phát hiện có bất kỳ hình thức gian lận nào tôi xin hoàn toàn chịu trách nhiệm trước pháp luật.
+
+::: {custom-style="Ngày ký"}
+Hà Nội, ngày …… tháng …… năm 2026
+:::
+
+| GIẢNG VIÊN HƯỚNG DẪN | SINH VIÊN |
+|---|---|
+| (Ký, ghi rõ họ tên) | (Ký, ghi rõ họ tên) |
+|   |   |
+|   |   |
+|   | Trần Tuấn Anh |
 
 [[NGAT]]
 

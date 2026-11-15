@@ -24,6 +24,7 @@ import shutil
 import tempfile
 
 import docx
+from docx.oxml import parse_xml
 from docx.enum.section import WD_SECTION
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
@@ -118,10 +119,10 @@ def make_reference(path):
         s = style(d, name)
         set_font(s, size, bold=bold)
         para(s, C, before=0, after=6, line=1.3, indent=Cm(0))
-    s = style(d, 'Bìa trái')
+    s = style(d, 'Bìa trái')  # signature at the right of the page
     set_font(s, 13)
-    para(s, L, after=3, line=1.3, indent=Cm(0))
-    s.paragraph_format.left_indent = Cm(3)
+    para(s, C, after=3, line=1.3, indent=Cm(0))
+    s.paragraph_format.left_indent = Cm(8)
     s = style(d, 'Tiêu đề phụ')
     set_font(s, 14, bold=True)
     para(s, C, before=0, after=12, indent=Cm(0), keep=True)
@@ -149,6 +150,20 @@ def make_reference(path):
     s = style(d, 'Source Code')
     para(s, L, before=0, after=0, line=1.0, indent=Cm(0))
     s.font.size = Pt(10)
+    # Front pages laid out like the school's forms (QT.ĐT.19.M07/M08).
+    s = style(d, 'Thông tin')
+    set_font(s)
+    para(s, L, before=0, after=0, line=1.5, indent=Cm(0))
+    s = style(d, 'Mục nhận xét')
+    set_font(s, bold=True)
+    para(s, L, before=12, after=0, line=1.5, indent=Cm(0), keep=True)
+    s = style(d, 'Dòng chấm')  # a line of dots: one tab to a dotted right tab stop
+    set_font(s)
+    para(s, L, before=0, after=0, line=1.5, indent=Cm(0))
+    s.paragraph_format.tab_stops.add_tab_stop(Cm(15), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+    s = style(d, 'Ngày ký')
+    set_font(s, italic=True)
+    para(s, WD_ALIGN_PARAGRAPH.RIGHT, before=12, after=6, indent=Cm(0))
     # A caption stays on the page of its source line.
     style(d, 'hình').paragraph_format.keep_with_next = True
     # Entries of the table of contents and of the lists of figures and tables.
@@ -321,16 +336,70 @@ def fill_list(doc, p, code, items, pages):
     anchor.getparent().remove(anchor)
 
 
+COVER = set()  # elements of the cover pages: left exactly as bia.xml lays them out
+
+
+def cover(doc):
+    """[[BIA]] → the cover and the inner cover in the school's layout (form
+    QT.ĐT.19.M07): the cover is a framed table with the student's name and the
+    major on a vertical spine strip, the inner cover sits in a thick frame.
+    The layout lives in bia.xml (Word XML); LOGO stands for the logo image."""
+    p = next(p for p in doc.paragraphs if p.text.strip() == '[[BIA]]')
+    rid, _ = doc.part.get_or_add_image(os.path.join(HERE, 'hinh', 'logo-phenikaa.jpeg'))
+    xml = open(os.path.join(HERE, 'bia.xml')).read().replace('"LOGO"', f'"{rid}"')
+    parts = list(parse_xml(xml))  # python-docx element classes, so doc.tables works
+    for n, dp in enumerate(e for part in parts for e in part.iter(qn('wp:docPr'))):
+        dp.set('id', str(900001 + n))
+    for part in parts:
+        p._p.addprevious(part)
+        COVER.add(part)
+        # The form was laid out on single-spaced, left-aligned paragraphs; the
+        # report's Normal style (1.5 lines, justified, 6 pt after) must not leak in.
+        for q in part.iter(qn('w:p')):
+            ppr = q.find(qn('w:pPr'))
+            if ppr is None:
+                ppr = OxmlElement('w:pPr')
+                q.insert(0, ppr)
+            sp = ppr.find(qn('w:spacing'))
+            if sp is None:
+                sp = OxmlElement('w:spacing')
+                ppr.append(sp)
+            if sp.get(qn('w:line')) is None:
+                sp.set(qn('w:line'), '240')
+                sp.set(qn('w:lineRule'), 'auto')
+            for k in ('w:before', 'w:after'):
+                if sp.get(qn(k)) is None:
+                    sp.set(qn(k), '0')
+            if ppr.find(qn('w:ind')) is None:
+                ind = OxmlElement('w:ind')
+                ind.set(qn('w:firstLine'), '0')
+                ppr.append(ind)
+            if ppr.find(qn('w:jc')) is None:
+                jc = OxmlElement('w:jc')
+                jc.set(qn('w:val'), 'left')
+                ppr.append(jc)
+    # The inner cover starts on a new page.
+    frame = parts[1]
+    ppr = frame.find(qn('w:pPr'))
+    ppr.insert(0, OxmlElement('w:pageBreakBefore'))
+    p._p.getparent().remove(p._p)
+
+
 def finish(doc, pages=None):
     body = doc.element.body
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
     codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z \\t "Tiêu đề phụ,1" ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
              '[[BANG]]': ' TOC \\h \\z \\t "bảng,1" '}
     lists = entries(doc)
+    cover(doc)
     for p in list(doc.paragraphs):
-        t = p.text.strip()
+        t = (p.text or '').strip()
         if t in codes:
             fill_list(doc, p, codes[t], lists[t], (pages or {}).get(t))
+        elif t == '[[CHAM]]':
+            p.runs[0].text = '\t'
+            for r in p.runs[1:]:
+                r._r.getparent().remove(r._r)
         elif t == '[[NGAT]]':
             # Page break as "page break before" on the next paragraph: a
             # break paragraph at the foot of a full page would leave a blank page.
@@ -346,7 +415,7 @@ def finish(doc, pages=None):
             p._p.getparent().remove(p._p)
     # Images: centred, at most the text width.
     for p in doc.paragraphs:
-        if p._p.findall('.//' + qn('w:drawing')):
+        if p._p not in COVER and p._p.findall('.//' + qn('w:drawing')):
             p.style = doc.styles['Ảnh']
             for ext in p._p.iter(qn('wp:extent')):
                 cx, cy = int(ext.get('cx')), int(ext.get('cy'))
@@ -359,8 +428,48 @@ def finish(doc, pages=None):
                     for a in p._p.iter(qn('a:ext')):
                         a.set('cx', ncx)
                         a.set('cy', ncy)
+    # Signature block of LỜI CAM ĐOAN: a borderless two-column table.
+    for tbl in list(doc.tables):
+        if tbl.rows[0].cells[0].text.strip() == 'GIẢNG VIÊN HƯỚNG DẪN':
+            tblPr = tbl._tbl.tblPr
+            for old in tblPr.findall(qn('w:tblBorders')) + tblPr.findall(qn('w:tblStyle')):
+                tblPr.remove(old)
+            borders = OxmlElement('w:tblBorders')
+            for side in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+                b = OxmlElement(f'w:{side}')
+                b.set(qn('w:val'), 'nil')
+                borders.append(b)
+            tblPr.append(borders)
+            w = tblPr.find(qn('w:tblW'))
+            if w is None:
+                w = OxmlElement('w:tblW')
+                tblPr.append(w)
+            w.set(qn('w:type'), 'pct')
+            w.set(qn('w:w'), '5000')
+            for gc in tbl._tbl.tblGrid.findall(qn('w:gridCol')):
+                gc.set(qn('w:w'), '4250')
+            for row in tbl.rows:
+                for cell in row.cells:
+                    tcPr = cell._tc.get_or_add_tcPr()
+                    for old in tcPr.findall(qn('w:tcW')):
+                        tcPr.remove(old)
+                    tw = OxmlElement('w:tcW')
+                    tw.set(qn('w:w'), '4250')
+                    tw.set(qn('w:type'), 'dxa')
+                    tcPr.insert(0, tw)
+            for i, row in enumerate(tbl.rows):
+                for cell in row.cells:
+                    for cp in cell.paragraphs:
+                        cp.style = doc.styles['Bìa thường']
+                        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        for r in cp.runs:
+                            r.bold = i == 0 or cp.text == 'Trần Tuấn Anh'
+                            r.italic = i == 1
+            tbl._signature = True
     # Tables: full width, borders, 12 pt cells, header row repeated.
     for tbl in doc.tables:
+        if tbl._tbl in COVER or tbl.rows[0].cells[0].text.strip() == 'GIẢNG VIÊN HƯỚNG DẪN':
+            continue
         tbl.style = doc.styles['Table Grid'] if 'Table Grid' in [s.name for s in doc.styles] else tbl.style
         tblPr = tbl._tbl.tblPr
         borders = OxmlElement('w:tblBorders')
@@ -438,6 +547,9 @@ def build(pages=None):
         if p.text.strip() in ('[[HET_BIA]]', '[[HET_DAU]]', '[[HET_THAN]]'):
             for r in list(p.runs):
                 r._r.getparent().remove(r._r)
+            # An empty 1-pt line: after a full-page table it must not spill onto a page of its own.
+            p.paragraph_format.space_before = p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.line_spacing = Pt(1)
             sp = copy.deepcopy(final)
             for ref_el in sp.findall(qn('w:headerReference')) + sp.findall(qn('w:footerReference')):
                 sp.remove(ref_el)
