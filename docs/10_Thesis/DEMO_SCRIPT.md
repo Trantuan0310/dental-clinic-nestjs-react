@@ -24,6 +24,7 @@ Máy dựng cục bộ theo `clinic-setup.ts` rồi `seed-demo-clinic.ts`: quả
 | Cần có | Để demo | Cách làm |
 |---|---|---|
 | Dữ liệu 6 tháng | Dashboard, heatmap | `seed-demo-clinic.ts` (site đã nạp bản cũ: `DEMO_REPAIR=1` một lần) |
+| Sơ đồ răng có màu, mỗi răng có lịch sử | Phần 3.3 | Có sẵn khi seed mới; site đã nạp dữ liệu demo trước 15/11: chạy `bash scripts/demo-charts-vps.sh` một lần |
 | Vài lịch hẹn trong tuần demo, rải nhiều giờ và nhiều bác sĩ | Heatmap công suất có màu | Đặt tay 8-10 lịch hẹn |
 | 2-3 kế hoạch điều trị **đã đồng ý**, chưa có lịch; 1 kế hoạch đã có lịch hẹn | Trang Điều trị chờ đặt lịch | Hồ sơ bệnh nhân → Kế hoạch điều trị → Lập kế hoạch → Báo giá → Khách đồng ý |
 | 1 hóa đơn **Đã phát hành** còn nợ nhỏ (ví dụ 100.000 ₫) | Mã QR chuyển khoản | Đóng một phiên khám, phát hành hóa đơn |
@@ -110,9 +111,12 @@ Mở `http://localhost:5173` (hoặc địa chỉ site demo).
 - Sửa một chỗ (cho thấy bác sĩ kiểm soát) → **Thêm vào ghi chú**.
 - Nói: "AI không tự lưu gì. Bác sĩ đọc, sửa, rồi mới thêm. AI cũng chỉ được dùng đúng những gì bác sĩ gõ, **không thêm triệu chứng hay thuốc**."
 
-### 3.3. Điều trị, đơn thuốc, sơ đồ răng
-- Tab **Điều trị** → **+ Thêm điều trị**: răng 36, điều trị tủy, SL 1, giá 1.500.000.
-- Tab **Sơ đồ răng**: chạm răng 36 → "Đã điều trị tủy".
+### 3.3. Điều trị và sơ đồ răng (một màn hình), đơn thuốc
+- Tab **Điều trị & sơ đồ răng**: hai hàm vẽ dạng cung như nhìn từ mặt nhai, mỗi răng tô màu theo tình trạng.
+- Bấm **răng 36**: khung bên cạnh hiện tình trạng, điều trị trong phiên này và **các lần điều trị trước** của đúng răng đó (ngày, bác sĩ, mở lại phiên khám cũ).
+- Bấm **Thêm điều trị cho răng này** → form đã điền sẵn răng 36: điều trị tủy, SL 1, giá 1.500.000. Răng 36 có thêm chấm (có điều trị trong phiên).
+- Đổi tình trạng răng 36 thành "Đã trám" ngay ở khung bên cạnh (tự lưu, có hoàn tác).
+- Nói: "Bác sĩ không phải chuyển qua lại giữa danh sách điều trị và sơ đồ: chọn răng là thấy toàn bộ quá khứ của răng đó, lấy về trong **một** lần gọi API." 
 - (Nếu còn thời gian) tab **Đơn thuốc**: kê một thuốc; chọn thuốc trùng dị ứng Penicillin để cho thấy **cảnh báo bắt buộc**.
 - Nói: "Cảnh báo dị ứng chạy theo quy tắc cố định, **không giao cho AI**. Một lần AI sót là nguy hiểm cho bệnh nhân."
 
@@ -201,7 +205,7 @@ Invoke-RestMethod -Method Post -Uri 'https://<tên-miền>/api/v1/webhooks/bank/
 > "Hôm nay ta đi một vòng: bệnh nhân đặt lịch, bác sĩ khám với ghi chú do AI soạn nháp, hóa đơn thu bằng mã QR và tự ghi khi tiền về, rồi hẹn lần sau ngay tại quầy. Với quản lý, hệ thống cho biết giờ nào đang trống và phòng khám đang ở đâu so với mục tiêu. AI luôn chỉ là **người soạn nháp**: không tự lưu, không tự gửi, và những việc cần chắc chắn như cảnh báo dị ứng, tính giờ trống, tính tiền vẫn chạy theo quy tắc cố định."
 
 ### 6.2. Số liệu hệ thống
-> "Hệ thống có khoảng 300 API endpoint và 124 mã quyền, đã có 1.639 kiểm thử tự động ở backend, cùng bộ kiểm thử chạy trên PostgreSQL thật (108 kiểm thử) và 38 kịch bản kiểm thử giao diện chạy trong CI trước mỗi lần cập nhật."
+> "Hệ thống có khoảng 340 API endpoint và 133 mã quyền, đã có khoảng 1.780 kiểm thử tự động ở backend, cùng bộ kiểm thử API chạy trên PostgreSQL thật (khoảng 100 kiểm thử) và 121 kịch bản kiểm thử giao diện (Playwright) chạy trong CI trước mỗi lần cập nhật."
 
 (Số liệu chốt ngày 05/11/2026. **Chạy lại `npm test` trước buổi bảo vệ** và sửa nếu khác.)
 

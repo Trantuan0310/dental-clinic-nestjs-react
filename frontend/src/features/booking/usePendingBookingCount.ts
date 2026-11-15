@@ -11,7 +11,8 @@ export const PENDING_BOOKING_COUNT_KEY = ['booking-requests', 'pending-count'] a
 
 /**
  * Online booking requests waiting on the front desk (new, or the patient
- * accepted a proposed time). Polled every minute while the app is open.
+ * accepted a proposed time). Polled every minute while the tab is visible;
+ * a hidden tab catches up when it is shown again (refetch on focus).
  */
 export function usePendingBookingCount(): number | undefined {
   const canRead = useAuthStore((s) => !!s.user && s.hasPermission('booking_request.read'));
@@ -21,7 +22,6 @@ export function usePendingBookingCount(): number | undefined {
       (await api.get<{ data: { count: number } }>('/booking-requests/pending-count')).data.data.count,
     enabled: canRead,
     refetchInterval: 60_000,
-    refetchIntervalInBackground: true,
     staleTime: 30_000,
   });
   // undefined until the first answer, so the watcher can tell "not loaded
