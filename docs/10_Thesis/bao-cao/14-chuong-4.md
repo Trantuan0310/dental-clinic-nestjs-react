@@ -4,6 +4,8 @@ Chương này trình bày quá trình hiện thực thiết kế ở Chương 3 
 
 ## 4.1. Môi trường và công cụ phát triển
 
+Bảng 4.1 tóm tắt ngôn ngữ, khung phát triển và công cụ được dùng cho từng phần của hệ thống.
+
 ::: {custom-style="bảng"}
 Bảng 4.1. Môi trường và công cụ phát triển
 :::

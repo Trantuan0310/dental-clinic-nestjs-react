@@ -80,6 +80,8 @@ Yêu cầu chức năng được nhóm theo các phân hệ nêu trong phiếu g
 
 ### 2.3.1. Quản lý bệnh nhân
 
+Bảng 2.3 liệt kê các yêu cầu về hồ sơ bệnh nhân, từ tạo hồ sơ, gộp hồ sơ trùng đến việc bệnh nhân tự tra cứu lịch sử khám.
+
 ::: {custom-style="bảng"}
 Bảng 2.3. Yêu cầu chức năng phân hệ quản lý bệnh nhân
 :::
@@ -92,7 +94,13 @@ Bảng 2.3. Yêu cầu chức năng phân hệ quản lý bệnh nhân
 | BN-04 | Xem trên một màn hình: thông tin, lịch hẹn, các phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng ý điều trị. |
 | BN-05 | Gửi cho bệnh nhân đường dẫn bảo mật để tự tra cứu lịch sử khám. |
 
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::
+
 ### 2.3.2. Quản lý lịch hẹn và tiếp nhận
+
+Phân hệ lịch hẹn và tiếp nhận là nơi lễ tân thao tác nhiều nhất trong ngày; các yêu cầu được nêu ở Bảng 2.4.
 
 ::: {custom-style="bảng"}
 Bảng 2.4. Yêu cầu chức năng phân hệ lịch hẹn và tiếp nhận
@@ -109,7 +117,13 @@ Bảng 2.4. Yêu cầu chức năng phân hệ lịch hẹn và tiếp nhận
 | LH-07 | Danh sách chờ: ghi nhận khách muốn khám sớm hơn, gợi ý khi có giờ trống. |
 | LH-08 | Nhắc tái khám định kỳ (ví dụ 6 tháng cạo vôi) và theo dõi kết quả gọi nhắc. |
 
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::
+
 ### 2.3.3. Khám và điều trị
+
+Bảng 2.5 nêu các yêu cầu của bác sĩ trong phiên khám, trong đó yêu cầu cốt lõi là gắn mỗi điều trị với số răng trên sơ đồ.
 
 ::: {custom-style="bảng"}
 Bảng 2.5. Yêu cầu chức năng phân hệ khám và điều trị
@@ -126,7 +140,13 @@ Bảng 2.5. Yêu cầu chức năng phân hệ khám và điều trị
 | KB-07 | Đóng phiên khám: khóa hồ sơ, trừ vật tư, lập hóa đơn nháp; sau khi đóng chỉ được ghi bổ sung. |
 | KB-08 | Kế hoạch điều trị: lập danh sách thủ thuật theo răng kèm báo giá, ghi nhận khách đồng ý, theo dõi tiến độ, nhắc khách chưa đặt lịch. |
 
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::
+
 ### 2.3.4. Hóa đơn và thanh toán
+
+Các yêu cầu về hóa đơn và thanh toán, kể cả thanh toán chuyển khoản qua VietQR, được trình bày ở Bảng 2.6.
 
 ::: {custom-style="bảng"}
 Bảng 2.6. Yêu cầu chức năng phân hệ hóa đơn và thanh toán
@@ -139,7 +159,13 @@ Bảng 2.6. Yêu cầu chức năng phân hệ hóa đơn và thanh toán
 | TT-03 | Hiển thị mã VietQR trên hóa đơn; tự ghi nhận thanh toán khi ngân hàng báo tiền về; danh sách giao dịch chưa khớp để xử lý tay. |
 | TT-04 | Hoàn tiền, hủy hóa đơn, điều chỉnh giảm, có quyền riêng và lý do. |
 
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::
+
 ### 2.3.5. Nhân sự, kho, báo cáo và các chức năng hỗ trợ
+
+Bảng 2.7 gom các yêu cầu của những phân hệ phục vụ quản lý: nhân sự và lương, kho, báo cáo, trợ lý AI và quản trị hệ thống.
 
 ::: {custom-style="bảng"}
 Bảng 2.7. Yêu cầu chức năng các phân hệ quản lý
@@ -156,6 +182,10 @@ Bảng 2.7. Yêu cầu chức năng các phân hệ quản lý
 | BC-02 | Báo cáo doanh thu theo kỳ, theo bác sĩ, theo dịch vụ; tuổi nợ; công suất ghế theo giờ; hành trình bệnh nhân. |
 | AI-01 | Trợ lý AI: soạn nháp ghi chú khám, tin nhắn cho khách, nhận xét báo cáo; trợ lý dạng chat tra cứu và đề xuất đặt, hủy, dời lịch có xác nhận. |
 | QT-01 | Quản lý vai trò và quyền; xem nhật ký kiểm toán; cấu hình kênh nhắn tin và nội dung trang chủ. |
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::
 
 ## 2.4. Yêu cầu phi chức năng
 
@@ -231,6 +261,8 @@ Nguồn: Tác giả
 :::
 
 ### 2.5.4. Use case của quản trị viên
+
+Hình 2.5 trình bày các use case của quản trị viên: quản lý người dùng và phân quyền, dịch vụ và bảng giá, bác sĩ và lịch làm, lương, chi phí, vật tư; xem bảng điều khiển, báo cáo và nhật ký kiểm toán; hoàn tiền, hủy hóa đơn.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-5-use-case-quan-tri.png){width=12cm}

@@ -40,6 +40,8 @@ Các lần cập nhật sau chỉ cần chạy `bash scripts/deploy-vps.sh`: scr
 
 ### A.3. Các nhóm biến môi trường
 
+Bảng A.1 liệt kê các nhóm biến môi trường cần khai báo khi triển khai.
+
 ::: {custom-style="bảng"}
 Bảng A.1. Các nhóm biến môi trường của bản triển khai
 :::
@@ -103,6 +105,8 @@ Nguồn: Tác giả
 :::
 
 ## Phụ lục C. Danh sách kịch bản kiểm thử đầu cuối
+
+Các kịch bản kiểm thử đầu cuối được nhóm theo chức năng ở Bảng C.1.
 
 ::: {custom-style="bảng"}
 Bảng C.1. Các nhóm kịch bản kiểm thử đầu cuối

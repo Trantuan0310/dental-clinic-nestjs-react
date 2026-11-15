@@ -159,6 +159,8 @@ Hình 3.6. Biểu đồ trạng thái của lịch hẹn
 Nguồn: Tác giả
 :::
 
+Đặc tả chi tiết chức năng đặt lịch hẹn được trình bày ở Bảng 3.2.
+
 ::: {custom-style="bảng"}
 Bảng 3.2. Đặc tả chức năng Đặt lịch hẹn
 :::
@@ -195,6 +197,8 @@ Nguồn: Tác giả
 :::
 
 ### 3.3.3. Khám, điều trị và sơ đồ răng
+
+Bảng 3.3 đặc tả chức năng trung tâm của bác sĩ: khám và ghi điều trị theo răng.
 
 ::: {custom-style="bảng"}
 Bảng 3.3. Đặc tả chức năng Khám và ghi điều trị theo răng
@@ -272,6 +276,8 @@ Hình 3.11. Biểu đồ trạng thái của hóa đơn
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
+
+Bảng 3.4 đặc tả cách hệ thống tự ghi nhận khoản chuyển khoản; trình tự xử lý giữa khách, ngân hàng và hệ thống được thể hiện ở Hình 3.12.
 
 ::: {custom-style="bảng"}
 Bảng 3.4. Đặc tả chức năng Tự đối soát chuyển khoản
@@ -415,6 +421,8 @@ Nguồn: Tác giả
 Mỗi điểm cuối API khai báo các mã quyền cần có; `PermissionsGuard` so với danh sách quyền trong token trước khi vào controller. Lớp thứ hai nằm trong service: với người dùng chỉ có quyền "riêng" (ví dụ `encounter.read.own`), truy vấn được thêm điều kiện theo quan hệ bác sĩ – bệnh nhân (bác sĩ đã khám hoặc đang có lịch với bệnh nhân). Khi không thỏa, hệ thống trả lỗi "không tìm thấy" thay vì "không có quyền" để không tiết lộ sự tồn tại của bản ghi.
 
 ### 3.4.3. Đối chiếu với các rủi ro OWASP Top 10
+
+Bảng 3.7 đối chiếu thiết kế của hệ thống với các rủi ro trong danh sách OWASP Top 10 [@owasp]: với mỗi rủi ro, nêu biện pháp cụ thể đã áp dụng. Các biện pháp này được kiểm chứng bằng các ca kiểm thử bảo mật ở Chương 5.
 
 ::: {custom-style="bảng"}
 Bảng 3.7. Biện pháp phòng chống các rủi ro bảo mật phổ biến

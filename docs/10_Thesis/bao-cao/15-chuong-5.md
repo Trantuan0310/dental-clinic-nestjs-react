@@ -29,7 +29,7 @@ Tầng API trên PostgreSQL thật được đưa vào vì nhiều lỗi nghiêm
 
 ### 5.2.1. Các ca kiểm thử nghiệp vụ tiêu biểu
 
-Bảng 5.2 đến Bảng 5.5 trích các ca kiểm thử tiêu biểu theo nhóm chức năng. Cột "Tầng" cho biết ca được tự động hóa ở tầng nào: API là kiểm thử trên PostgreSQL thật, E2E là kiểm thử trên trình duyệt. Tất cả các ca dưới đây đều đạt ở lần chạy cuối cùng.
+Bảng 5.2 đến Bảng 5.5 trích các ca kiểm thử tiêu biểu theo nhóm chức năng. Mã ca kiểm thử có dạng KT-nhóm-số, trong đó nhóm trùng với nhóm yêu cầu chức năng ở Mục 2.3 (LH: lịch hẹn, KB: khám bệnh, TT: thanh toán) hoặc BM cho bảo mật. Cột "Tầng" cho biết ca được tự động hóa ở tầng nào: API là kiểm thử trên PostgreSQL thật, E2E là kiểm thử trên trình duyệt. Tất cả các ca dưới đây đều đạt ở lần chạy cuối cùng.
 
 ::: {custom-style="bảng"}
 Bảng 5.2. Ca kiểm thử nhóm lịch hẹn và tiếp nhận
@@ -37,15 +37,15 @@ Bảng 5.2. Ca kiểm thử nhóm lịch hẹn và tiếp nhận
 
 | Mã | Tình huống | Kết quả mong đợi | Tầng | Kết quả |
 |---|---|---|---|---|
-| LH-01 | Hai yêu cầu đặt lịch cùng bác sĩ, cùng giờ gửi đồng thời | Đúng một lịch được tạo, yêu cầu còn lại nhận lỗi trùng lịch (409) | API | Đạt |
-| LH-02 | Hủy lịch rồi đặt lại đúng khung giờ đó | Đặt được | API | Đạt |
-| LH-03 | Đặt lịch vào ngày bác sĩ nghỉ phép | Bị từ chối | API | Đạt |
-| LH-04 | Đặt lịch vắt qua giờ nghỉ trưa giữa hai ca | Bị từ chối; lịch nằm trọn trong một ca thì được | API | Đạt |
-| LH-05 | Check-in ngoài khung giờ cho phép | Bị từ chối, trừ khi có lý do ghi đè | API | Đạt |
-| LH-06 | Lọc lịch theo ngày ở thời điểm 0h–7h giờ Việt Nam | Lịch thuộc đúng ngày Việt Nam, không lệch sang ngày UTC | API | Đạt |
-| LH-07 | Khách đặt lịch trực tuyến, lễ tân duyệt yêu cầu | Lịch hẹn và hồ sơ bệnh nhân được tạo | E2E | Đạt |
-| LH-08 | Khách mở đường dẫn trong tin nhắc để xác nhận hoặc dời lịch | Trạng thái lịch cập nhật; đường dẫn đã dùng hoặc hết hạn bị từ chối | E2E | Đạt |
-| LH-09 | Lễ tân chuyển khách sang bác sĩ khác trên màn hình điều phối | Khách xuất hiện ở hàng chờ bác sĩ mới | E2E | Đạt |
+| KT-LH-01 | Hai yêu cầu đặt lịch cùng bác sĩ, cùng giờ gửi đồng thời | Đúng một lịch được tạo, yêu cầu còn lại nhận lỗi trùng lịch (409) | API | Đạt |
+| KT-LH-02 | Hủy lịch rồi đặt lại đúng khung giờ đó | Đặt được | API | Đạt |
+| KT-LH-03 | Đặt lịch vào ngày bác sĩ nghỉ phép | Bị từ chối | API | Đạt |
+| KT-LH-04 | Đặt lịch vắt qua giờ nghỉ trưa giữa hai ca | Bị từ chối; lịch nằm trọn trong một ca thì được | API | Đạt |
+| KT-LH-05 | Check-in ngoài khung giờ cho phép | Bị từ chối, trừ khi có lý do ghi đè | API | Đạt |
+| KT-LH-06 | Lọc lịch theo ngày ở thời điểm 0h–7h giờ Việt Nam | Lịch thuộc đúng ngày Việt Nam, không lệch sang ngày UTC | API | Đạt |
+| KT-LH-07 | Khách đặt lịch trực tuyến, lễ tân duyệt yêu cầu | Lịch hẹn và hồ sơ bệnh nhân được tạo | E2E | Đạt |
+| KT-LH-08 | Khách mở đường dẫn trong tin nhắc để xác nhận hoặc dời lịch | Trạng thái lịch cập nhật; đường dẫn đã dùng hoặc hết hạn bị từ chối | E2E | Đạt |
+| KT-LH-09 | Lễ tân chuyển khách sang bác sĩ khác trên màn hình điều phối | Khách xuất hiện ở hàng chờ bác sĩ mới | E2E | Đạt |
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
@@ -57,15 +57,15 @@ Bảng 5.3. Ca kiểm thử nhóm khám, điều trị và kho
 
 | Mã | Tình huống | Kết quả mong đợi | Tầng | Kết quả |
 |---|---|---|---|---|
-| KB-01 | Hai yêu cầu "bắt đầu khám" cho cùng một lịch gửi đồng thời | Chỉ một phiên khám được tạo, cả hai nhận cùng phiên | API | Đạt |
-| KB-02 | Đóng phiên khám | Ghi chú bị khóa, đúng một hóa đơn nháp được tạo | API | Đạt |
-| KB-03 | Đóng một phiên khám hai lần | Lần thứ hai bị từ chối | API | Đạt |
-| KB-04 | Sửa ghi chú sau khi đã đóng phiên | Bị từ chối; chỉ được thêm phụ lục trong 30 ngày | API | Đạt |
-| KB-05 | Đóng phiên khi vật tư trong kho không đủ | Toàn bộ thay đổi tồn kho được hoàn tác, phiên vẫn mở, trả danh sách vật tư thiếu | API | Đạt |
-| KB-06 | Hai lần trừ kho đồng thời cho cùng một vật tư | Tồn kho không bao giờ âm | API | Đạt |
-| KB-07 | Bác sĩ khác mở phiên khám không phải của mình | Bị từ chối | API | Đạt |
-| KB-08 | Bác sĩ có lịch với bệnh nhân nhưng không phải người khám | Được xem, không được sửa | API | Đạt |
-| KB-09 | Áp dụng mẫu khám nhanh hai lần đồng thời | Các dòng điều trị chỉ được thêm một lần | API | Đạt |
+| KT-KB-01 | Hai yêu cầu "bắt đầu khám" cho cùng một lịch gửi đồng thời | Chỉ một phiên khám được tạo, cả hai nhận cùng phiên | API | Đạt |
+| KT-KB-02 | Đóng phiên khám | Ghi chú bị khóa, đúng một hóa đơn nháp được tạo | API | Đạt |
+| KT-KB-03 | Đóng một phiên khám hai lần | Lần thứ hai bị từ chối | API | Đạt |
+| KT-KB-04 | Sửa ghi chú sau khi đã đóng phiên | Bị từ chối; chỉ được thêm phụ lục trong 30 ngày | API | Đạt |
+| KT-KB-05 | Đóng phiên khi vật tư trong kho không đủ | Toàn bộ thay đổi tồn kho được hoàn tác, phiên vẫn mở, trả danh sách vật tư thiếu | API | Đạt |
+| KT-KB-06 | Hai lần trừ kho đồng thời cho cùng một vật tư | Tồn kho không bao giờ âm | API | Đạt |
+| KT-KB-07 | Bác sĩ khác mở phiên khám không phải của mình | Bị từ chối | API | Đạt |
+| KT-KB-08 | Bác sĩ có lịch với bệnh nhân nhưng không phải người khám | Được xem, không được sửa | API | Đạt |
+| KT-KB-09 | Áp dụng mẫu khám nhanh hai lần đồng thời | Các dòng điều trị chỉ được thêm một lần | API | Đạt |
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
@@ -77,15 +77,15 @@ Bảng 5.4. Ca kiểm thử nhóm hóa đơn và thanh toán
 
 | Mã | Tình huống | Kết quả mong đợi | Tầng | Kết quả |
 |---|---|---|---|---|
-| TT-01 | Thu tiền khi hóa đơn còn ở trạng thái nháp | Bị từ chối | API | Đạt |
-| TT-02 | Thu số tiền lớn hơn số còn nợ | Bị từ chối, không có dòng thanh toán nào được ghi | API | Đạt |
-| TT-03 | Thu một phần rồi thu nốt | Trạng thái lần lượt là "một phần" và "đã thanh toán"; số dư khớp sổ thanh toán | API | Đạt |
-| TT-04 | Hai lễ tân cùng thu tiền một hóa đơn đồng thời | Không thu trùng, không có lỗi máy chủ | API | Đạt |
-| TT-05 | Sửa hóa đơn với số phiên bản cũ | Bị từ chối (kiểm soát đồng thời lạc quan) | API | Đạt |
-| TT-06 | Giảm giá có phần thập phân | Tổng tiền đúng đến đồng, lưu dạng số thập phân | API | Đạt |
-| TT-07 | Ngân hàng gửi cùng một giao dịch chuyển khoản nhiều lần | Khoản thanh toán chỉ được ghi một lần | API | Đạt |
-| TT-08 | Chuyển khoản có nội dung không chứa mã hóa đơn | Giao dịch vào danh sách cần xử lý, không tự ghi | Đơn vị | Đạt |
-| TT-09 | Bác sĩ xem hóa đơn của bệnh nhân không phải của mình | Bị từ chối | API | Đạt |
+| KT-TT-01 | Thu tiền khi hóa đơn còn ở trạng thái nháp | Bị từ chối | API | Đạt |
+| KT-TT-02 | Thu số tiền lớn hơn số còn nợ | Bị từ chối, không có dòng thanh toán nào được ghi | API | Đạt |
+| KT-TT-03 | Thu một phần rồi thu nốt | Trạng thái lần lượt là "một phần" và "đã thanh toán"; số dư khớp sổ thanh toán | API | Đạt |
+| KT-TT-04 | Hai lễ tân cùng thu tiền một hóa đơn đồng thời | Không thu trùng, không có lỗi máy chủ | API | Đạt |
+| KT-TT-05 | Sửa hóa đơn với số phiên bản cũ | Bị từ chối (kiểm soát đồng thời lạc quan) | API | Đạt |
+| KT-TT-06 | Giảm giá có phần thập phân | Tổng tiền đúng đến đồng, lưu dạng số thập phân | API | Đạt |
+| KT-TT-07 | Ngân hàng gửi cùng một giao dịch chuyển khoản nhiều lần | Khoản thanh toán chỉ được ghi một lần | API | Đạt |
+| KT-TT-08 | Chuyển khoản có nội dung không chứa mã hóa đơn | Giao dịch vào danh sách cần xử lý, không tự ghi | Đơn vị | Đạt |
+| KT-TT-09 | Bác sĩ xem hóa đơn của bệnh nhân không phải của mình | Bị từ chối | API | Đạt |
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
@@ -97,17 +97,17 @@ Bảng 5.5. Ca kiểm thử nhóm xác thực, phân quyền và bảo mật
 
 | Mã | Tình huống | Kết quả mong đợi | Tầng | Kết quả |
 |---|---|---|---|---|
-| BM-01 | Gọi API không có mã truy cập, mã sai chữ ký hoặc đã hết hạn | 401 | API | Đạt |
-| BM-02 | Đăng nhập sai mật khẩu quá 5 lần trong một phút | Bị chặn tạm thời (429) | API | Đạt |
-| BM-03 | Dùng lại mã làm mới đã được xoay vòng | Bị từ chối | API | Đạt |
-| BM-04 | Đăng xuất | Cookie làm mới bị thu hồi | API | Đạt |
-| BM-05 | Tài khoản đã bị xóa dùng mã truy cập còn hạn | Bị từ chối | API | Đạt |
-| BM-06 | Lễ tân gọi API bảng lương, ghi ghi chú lâm sàng | 403 | API | Đạt |
-| BM-07 | Bác sĩ đổi tham số `dentistId` để xem lịch của bác sĩ khác | Không mở rộng được phạm vi | API | Đạt |
-| BM-08 | Truyền mã không phải UUID, ngày sinh trong tương lai, số điện thoại sai định dạng | 400 với thông báo rõ ràng | API | Đạt |
-| BM-09 | Mở đường dẫn tra cứu lịch sử đã hết hạn hoặc bị thu hồi | Từ chối giống hệt đường dẫn sai, không lộ dữ liệu | Đơn vị | Đạt |
-| BM-10 | Xin đường dẫn tra cứu bằng số điện thoại không có trong hệ thống | Phản hồi giống hệt trường hợp có, để không dò được số điện thoại | Đơn vị | Đạt |
-| BM-11 | Lễ tân gửi đường dẫn tra cứu, bệnh nhân mở trên trình duyệt khác | Bệnh nhân xem được lịch sử của chính mình | E2E | Đạt |
+| KT-BM-01 | Gọi API không có mã truy cập, mã sai chữ ký hoặc đã hết hạn | 401 | API | Đạt |
+| KT-BM-02 | Đăng nhập sai mật khẩu quá 5 lần trong một phút | Bị chặn tạm thời (429) | API | Đạt |
+| KT-BM-03 | Dùng lại mã làm mới đã được xoay vòng | Bị từ chối | API | Đạt |
+| KT-BM-04 | Đăng xuất | Cookie làm mới bị thu hồi | API | Đạt |
+| KT-BM-05 | Tài khoản đã bị xóa dùng mã truy cập còn hạn | Bị từ chối | API | Đạt |
+| KT-BM-06 | Lễ tân gọi API bảng lương, ghi ghi chú lâm sàng | 403 | API | Đạt |
+| KT-BM-07 | Bác sĩ đổi tham số `dentistId` để xem lịch của bác sĩ khác | Không mở rộng được phạm vi | API | Đạt |
+| KT-BM-08 | Truyền mã không phải UUID, ngày sinh trong tương lai, số điện thoại sai định dạng | 400 với thông báo rõ ràng | API | Đạt |
+| KT-BM-09 | Mở đường dẫn tra cứu lịch sử đã hết hạn hoặc bị thu hồi | Từ chối giống hệt đường dẫn sai, không lộ dữ liệu | Đơn vị | Đạt |
+| KT-BM-10 | Xin đường dẫn tra cứu bằng số điện thoại không có trong hệ thống | Phản hồi giống hệt trường hợp có, để không dò được số điện thoại | Đơn vị | Đạt |
+| KT-BM-11 | Lễ tân gửi đường dẫn tra cứu, bệnh nhân mở trên trình duyệt khác | Bệnh nhân xem được lịch sử của chính mình | E2E | Đạt |
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
@@ -191,9 +191,9 @@ Bảng 5.8. Các điểm nổi bật của hệ thống và minh chứng
 | Điểm nổi bật | Vấn đề của phòng khám | Cách hệ thống giải quyết | Minh chứng |
 |---|---|---|---|
 | Lịch sử điều trị theo từng răng | Bác sĩ phải lật nhiều trang hồ sơ để biết một răng đã làm gì | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.9, Bảng 5.7 |
-| Không bao giờ đặt trùng lịch | Hai lễ tân cùng đặt một khung giờ, hoặc khách đặt trực tuyến trùng lúc lễ tân đặt | Khóa tư vấn của PostgreSQL theo bác sĩ và bệnh nhân, kiểm tra trùng ngay trong giao dịch | Mục 4.3.2, ca LH-01 |
-| Chuyển khoản tự ghi vào hóa đơn | Lễ tân phải mở ứng dụng ngân hàng dò từng khoản, dễ sót hoặc ghi nhầm | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.16–4.18, ca TT-07 |
-| Một lần đóng phiên khám, nhiều việc tự chạy | Sau khi khám phải lập hóa đơn, trừ kho, ghi công bác sĩ bằng tay | Đóng phiên khám trừ vật tư trong cùng giao dịch, rồi tự tạo hóa đơn nháp, ghi ca tính lương và cập nhật tóm tắt hồ sơ | Mục 4.3.3, ca KB-02, KB-05 |
+| Không bao giờ đặt trùng lịch | Hai lễ tân cùng đặt một khung giờ, hoặc khách đặt trực tuyến trùng lúc lễ tân đặt | Khóa tư vấn của PostgreSQL theo bác sĩ và bệnh nhân, kiểm tra trùng ngay trong giao dịch | Mục 4.3.2, ca KT-LH-01 |
+| Chuyển khoản tự ghi vào hóa đơn | Lễ tân phải mở ứng dụng ngân hàng dò từng khoản, dễ sót hoặc ghi nhầm | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.16–4.18, ca KT-TT-07 |
+| Một lần đóng phiên khám, nhiều việc tự chạy | Sau khi khám phải lập hóa đơn, trừ kho, ghi công bác sĩ bằng tay | Đóng phiên khám trừ vật tư trong cùng giao dịch, rồi tự tạo hóa đơn nháp, ghi ca tính lương và cập nhật tóm tắt hồ sơ | Mục 4.3.3, ca KT-KB-02, KT-KB-05 |
 | Bệnh nhân tự phục vụ, không cần tài khoản | Khách phải gọi điện để đặt, xác nhận, dời lịch hay hỏi lại đã điều trị gì | Đặt lịch trực tuyến; đường dẫn bảo mật có thời hạn để xác nhận, dời lịch và xem lịch sử khám trên điện thoại | Hình 4.2, 4.19–4.20 |
 | Dữ liệu sức khỏe được bảo vệ nhiều lớp | Hồ sơ sức khỏe là dữ liệu nhạy cảm theo Nghị định 13/2023 | Phân quyền theo vai trò với 133 mã quyền, bác sĩ chỉ thấy bệnh nhân của mình, nhật ký kiểm toán cả thao tác đọc | Bảng 2.9, Bảng 5.5, Hình 4.28 |
 | AI hữu ích nhưng có kiểm soát | AI có thể bịa thông tin, làm lộ dữ liệu hoặc tự ý thay đổi lịch | AI chỉ đọc qua công cụ trong phạm vi quyền, không nhận tên hay số điện thoại bệnh nhân, mọi thay đổi phải được người dùng bấm xác nhận, vẫn chạy ở chế độ dự phòng khi dịch vụ AI lỗi | Mục 3.3.11, Hình 4.29 |
@@ -212,6 +212,8 @@ Ba điểm sau được tác giả đánh giá là có giá trị nhất với m
 
 ## 5.5. Đối chiếu kết quả với mục tiêu đề tài
 
+Bảng 5.9 đối chiếu từng mục tiêu trong phiếu giao đề tài với kết quả đạt được và minh chứng tương ứng trong báo cáo.
+
 ::: {custom-style="bảng"}
 Bảng 5.9. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
 :::
@@ -219,7 +221,7 @@ Bảng 5.9. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 | Mục tiêu | Kết quả đạt được | Minh chứng | Mức độ |
 |---|---|---|---|
 | Quản lý toàn diện: hồ sơ bệnh nhân, lịch hẹn, điều trị, kho, thanh toán | 23 module nghiệp vụ, 339 API, 70 bảng dữ liệu | Bảng 3.1, Mục 4.5 | Đạt |
-| Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.5, LH-01 | Đạt |
+| Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.5, KT-LH-01 | Đạt |
 | Bác sĩ theo dõi lịch sử, kế hoạch điều trị, sơ đồ răng tập trung | Sơ đồ răng gắn với điều trị, lịch sử theo từng răng, kế hoạch điều trị có tiến độ | Hình 4.9–4.11, 4.14 | Đạt |
 | Báo cáo, thống kê: doanh thu, lượt khám, hiệu suất bác sĩ, tồn kho | Bảng điều khiển, sáu chỉ số vận hành có mục tiêu, báo cáo doanh thu theo bác sĩ và dịch vụ, cảnh báo tồn kho | Hình 4.21, 4.23–4.26 | Đạt |
 | Nhắc lịch tự động qua email, SMS, Zalo | Nhắc lịch theo kênh ưu tiên, thử lại tối đa 3 lần; email gửi qua SMTP; SMS và Zalo đã cài đặt nhưng chưa thử với nhà cung cấp thật | Mục 3.3.6 | Đạt một phần |
