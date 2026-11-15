@@ -127,3 +127,52 @@ Bảng C.1. Các nhóm kịch bản kiểm thử đầu cuối
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
+
+## Phụ lục D. Ma trận truy vết yêu cầu
+
+Bảng D.1 nối mỗi yêu cầu chức năng ở Mục 2.3 với phần thiết kế (Chương 3), giao diện đã hiện thực (Chương 4) và cách kiểm thử (Chương 5). Mã KT-… là các ca kiểm thử ở Bảng 5.2 đến Bảng 5.5; "E2E: tên" là tệp kịch bản kiểm thử đầu cuối ở Bảng C.1; "Đơn vị" là kiểm thử đơn vị của module tương ứng (Bảng 5.6).
+
+::: {custom-style="bảng"}
+Bảng D.1. Ma trận truy vết yêu cầu – thiết kế – giao diện – kiểm thử
+:::
+
+| Yêu cầu | Thiết kế | Giao diện | Kiểm thử |
+|---|---|---|---|
+| BN-01 Tạo, sửa hồ sơ | Hình 3.26 | Hình 4.8 | KT-BM-08; E2E: patient-create |
+| BN-02 Tìm kiếm, gợi ý trùng | Hình 3.26 | Hình 4.8 | Đơn vị (patients) |
+| BN-03 Gộp hồ sơ, xóa mềm | Hình 3.26 | – | Đơn vị (patients) |
+| BN-04 Xem hồ sơ trên một màn hình | – | Hình 4.8 | E2E: patient-funnel |
+| BN-05 Đường dẫn tra cứu lịch sử | Hình 3.20 | Hình 4.21, Hình 4.22 | KT-BM-09, KT-BM-10, KT-BM-11 |
+| LH-01 Đặt lịch không trùng | Bảng 3.2, Hình 3.7 | Hình 4.5 | KT-LH-01 đến KT-LH-04 |
+| LH-02 Xem lịch theo ngày, tuần | – | Hình 4.5 | KT-LH-06 |
+| LH-03 Dời, hủy, vắng mặt | Hình 3.6 | Hình 4.5 | KT-LH-02 |
+| LH-04 Đặt lịch trực tuyến | Hình 3.9 | Hình 4.2, Hình 4.6 | KT-LH-07 |
+| LH-05 Nhắc lịch, xác nhận qua liên kết | Hình 3.18 | – | KT-LH-08 |
+| LH-06 Check-in, hàng chờ | Hình 3.8 | Hình 4.3, Hình 4.4, Hình 4.9 | KT-LH-05, KT-LH-09 |
+| LH-07 Danh sách chờ | Bảng 3.1 | – | E2E: waitlist |
+| LH-08 Nhắc tái khám | Hình 3.19 | Hình 4.7 | Đơn vị (recalls) |
+| KB-01 Mở phiên khám | Hình 3.10, Hình 3.11 | Hình 4.9 | KT-KB-01 |
+| KB-02 Ghi chú lâm sàng | Hình 3.10 | Hình 4.10 | KT-KB-04, KT-KB-09 |
+| KB-03 Sơ đồ răng | Hình 3.10 | Hình 4.11, Hình 4.13 | E2E: dentist-view |
+| KB-04 Lịch sử theo răng | Hình 3.12 | Hình 4.11, Hình 4.12 | KT-KB-07, KT-KB-08; Đơn vị |
+| KB-05 Ghi điều trị | Bảng 3.3, Hình 3.12 | Hình 4.12 | Đơn vị (medical-records) |
+| KB-06 Kê đơn, cảnh báo dị ứng | Hình 3.10 | Hình 4.14 | Đơn vị (medical-records) |
+| KB-07 Đóng phiên khám | Hình 3.13 | Hình 4.15 | KT-KB-02, KT-KB-03, KT-KB-05, KT-KB-06 |
+| KB-08 Kế hoạch điều trị | Hình 3.14 | Hình 4.16, Hình 4.17 | E2E: flow-treatment-plan |
+| TT-01 Lập, phát hành hóa đơn | Hình 3.15 | Hình 4.18 | KT-TT-01, KT-TT-05, KT-TT-06 |
+| TT-02 Thanh toán nhiều lần | Hình 3.15 | Hình 4.19 | KT-TT-02, KT-TT-03, KT-TT-04 |
+| TT-03 VietQR, tự đối soát | Bảng 3.4, Hình 3.16, Hình 3.17 | Hình 4.18 đến Hình 4.20 | KT-TT-07, KT-TT-08 |
+| TT-04 Hoàn tiền, hủy hóa đơn | Hình 3.15, Hình 3.34 | – | Đơn vị (billing) |
+| NS-01 Nhân viên, bác sĩ, dịch vụ | Hình 3.28 | Hình 4.25, Hình 4.28 | E2E: staff, services |
+| NS-02 Lịch làm việc, đăng ký ca | Hình 3.22 | Hình 4.24, Hình 4.26 | E2E: flow-shift-registration |
+| NS-03 Tính lương theo kỳ | Hình 3.21 | Hình 4.27 | E2E: flow-payroll-period-cycle |
+| KH-01 Nhập, xuất, kiểm kê kho | Hình 3.23 | Hình 4.23 | KT-KB-05, KT-KB-06 |
+| KH-02 Cảnh báo, gợi ý nhập | Hình 3.23 | Hình 4.23 | E2E: reorder |
+| BC-01 Bảng điều khiển, chỉ số | Bảng 3.5, Hình 3.24 | Hình 4.30, Hình 4.31 | E2E: dashboard |
+| BC-02 Báo cáo doanh thu, công suất | Hình 3.24 | Hình 4.32, Hình 4.33 | E2E: dashboard-finance |
+| AI-01 Trợ lý AI có kiểm soát | Bảng 3.6, Hình 3.25 | Hình 4.39 | E2E: ai-assist, ai-assistant |
+| QT-01 Vai trò, quyền, nhật ký, cấu hình | Hình 3.33, Hình 3.34, Hình 3.31 | Hình 4.34 đến Hình 4.37 | KT-BM-06, KT-BM-07 |
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::

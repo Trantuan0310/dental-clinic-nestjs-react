@@ -119,6 +119,53 @@ Một truy vấn duy nhất thay cho cách cũ là tải danh sách phiên khám
 
 Ngân hàng có thể gửi lại cùng một giao dịch khi mạng chập chờn. Hệ thống chống ghi trùng ở hai tầng: bảng giao dịch ngân hàng có chỉ mục duy nhất theo (nhà cung cấp, mã giao dịch), và khoản thanh toán được ghi với khóa `request_key` tạo từ mã giao dịch, duy nhất theo hóa đơn. Khóa xác thực của webhook được so sánh theo thời gian hằng để không lộ thông tin qua thời gian phản hồi.
 
+### 4.3.6. Xếp thứ tự hàng chờ bằng hàm thuần
+
+Quy tắc xếp hàng chờ (Hình 3.8) được viết thành hàm thuần, không đọc cơ sở dữ liệu, nên kiểm thử được bằng bảng quyết định với đủ các tình huống: khách đến sớm, đúng giờ, trễ, vãng lai, cấp cứu, bị bỏ qua.
+
+```typescript
+export function dueAt(e: Orderable): number {
+  switch (e.priority) {
+    case QueuePriority.ON_TIME: return e.appointment.startAt.getTime();
+    case QueuePriority.LATE:    return e.checkedInAt.getTime() + LATE_PENALTY_MIN * 60_000;
+    case QueuePriority.WALK_IN: return e.checkedInAt.getTime() + WALK_IN_WAIT_CAP_MIN * 60_000;
+    default:                    return e.checkedInAt.getTime();
+  }
+}
+
+export function compareQueue(a: Orderable, b: Orderable): number {
+  return (
+    STATUS_RANK[a.status] - STATUS_RANK[b.status] ||          // đang gọi, đang chờ, bị bỏ qua
+    Number(a.priority !== QueuePriority.EMERGENCY) -
+      Number(b.priority !== QueuePriority.EMERGENCY) ||       // cấp cứu lên trước
+    dueAt(a) - dueAt(b) ||                                    // theo giờ đến lượt
+    a.checkedInAt.getTime() - b.checkedInAt.getTime()         // cùng lượt: ai đến trước
+  );
+}
+```
+
+### 4.3.7. Ẩn danh bệnh nhân khi làm việc với AI
+
+Trợ lý AI không bao giờ nhận họ tên hay mã định danh thật của bệnh nhân. Mỗi khi một công cụ tra cứu trả về bệnh nhân, máy chủ cấp cho bệnh nhân đó một mã tạm `P1`, `P2`… chỉ có ý nghĩa trong cuộc hội thoại; mô hình chỉ thấy mã tạm, còn tên được trình duyệt điền vào câu trả lời sau khi nhận về. Khi mô hình đề xuất đặt lịch cho `P1`, máy chủ đổi ngược mã tạm thành mã bệnh nhân thật; mã không có trong bảng bị từ chối.
+
+```typescript
+/** Mã tạm P1, P2… thay cho bệnh nhân trong một cuộc hội thoại với AI. */
+refFor(id: string, name: string): string {
+  let ref = this.byId.get(id);
+  if (!ref) {
+    ref = `P${this.next++}`;      // cấp mã mới lần đầu gặp bệnh nhân
+    this.byId.set(id, ref);
+    this.ids.set(ref, id);
+  }
+  this.names.set(ref, name);      // tên chỉ gửi cho trình duyệt, không gửi cho mô hình
+  return ref;
+}
+
+idOf(ref: string): string | undefined {
+  return this.ids.get(ref.trim().replace(/^\[|\]$/g, ''));   // "[P1]" → mã thật
+}
+```
+
 ## 4.4. Cài đặt phía giao diện
 
 - **Định tuyến và tải theo trang:** mỗi trang được tải lười (`React.lazy`), trình duyệt chỉ tải mã của trang đang mở. Các trang công khai (trang chủ, đặt lịch, tra cứu) và trang nội bộ dùng chung một ứng dụng, phân biệt bằng bộ bảo vệ tuyến đường theo quyền.

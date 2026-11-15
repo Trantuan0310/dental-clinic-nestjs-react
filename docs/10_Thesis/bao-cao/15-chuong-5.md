@@ -261,7 +261,7 @@ Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 Nguồn: Tác giả
 :::
 
-Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuyển khoản VietQR tự động và trợ lý AI có kiểm soát.
+Ở mức chi tiết hơn, Phụ lục D truy vết từng yêu cầu trong 34 yêu cầu chức năng của Mục 2.3 tới thiết kế, giao diện và ca kiểm thử tương ứng; mọi yêu cầu đều có ít nhất một hình thiết kế hoặc giao diện và ít nhất một cách kiểm thử. Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuyển khoản VietQR tự động và trợ lý AI có kiểm soát.
 
 ## 5.6. Hạn chế
 
