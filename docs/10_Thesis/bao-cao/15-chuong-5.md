@@ -201,11 +201,11 @@ Các biện pháp bảo mật được đối chiếu với danh sách rủi ro 
 - **Mật khẩu** được băm bằng Argon2 [@argon2]; mã làm mới được lưu dạng băm, xoay vòng mỗi lần dùng, phát hiện dùng lại.
 - **Khóa bí mật** không có trong mã nguồn; tệp cấu hình mẫu chỉ chứa tên biến.
 - **Dữ liệu gửi cho AI** được kiểm thử đơn vị để bảo đảm không chứa họ tên, số điện thoại, email của bệnh nhân; các công cụ của trợ lý AI chỉ trả về dữ liệu trong phạm vi quyền của người hỏi.
-- **Nhật ký kiểm toán** ghi lại các thao tác đọc hồ sơ lâm sàng và mọi thao tác ghi quan trọng, kiểm tra được ở Hình 4.35.
+- **Nhật ký kiểm toán** ghi lại các thao tác đọc hồ sơ lâm sàng và mọi thao tác ghi quan trọng, kiểm tra được ở Hình 4.39.
 
 ### 5.3.3. Khả năng sử dụng
 
-Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.22). Các nguyên tắc khả dụng của Nielsen [@nielsen] được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
+Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.26). Các nguyên tắc khả dụng của Nielsen [@nielsen] được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
 
 Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kịch bản một ngày làm việc của phòng khám. Việc đánh giá với người dùng thật tại phòng khám chưa được thực hiện và được nêu trong phần hạn chế.
 
@@ -219,14 +219,14 @@ Bảng 5.9. Các điểm nổi bật của hệ thống và minh chứng
 
 | Điểm nổi bật | Vấn đề của phòng khám | Cách hệ thống giải quyết | Minh chứng |
 |---|---|---|---|
-| Lịch sử điều trị theo từng răng | Bác sĩ phải lật nhiều trang hồ sơ để biết một răng đã làm gì | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.11, Bảng 5.8 |
+| Lịch sử điều trị theo từng răng | Bác sĩ phải lật nhiều trang hồ sơ để biết một răng đã làm gì | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.14, Bảng 5.8 |
 | Không bao giờ đặt trùng lịch | Hai lễ tân cùng đặt một khung giờ, hoặc khách đặt trực tuyến trùng lúc lễ tân đặt | Khóa tư vấn của PostgreSQL theo bác sĩ và bệnh nhân, kiểm tra trùng ngay trong giao dịch | Mục 4.3.2, ca KT-LH-01 |
-| Chuyển khoản tự ghi vào hóa đơn | Lễ tân phải mở ứng dụng ngân hàng dò từng khoản, dễ sót hoặc ghi nhầm | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.18–4.20, ca KT-TT-07 |
+| Chuyển khoản tự ghi vào hóa đơn | Lễ tân phải mở ứng dụng ngân hàng dò từng khoản, dễ sót hoặc ghi nhầm | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.21–4.23, ca KT-TT-07 |
 | Một lần đóng phiên khám, nhiều việc tự chạy | Sau khi khám phải lập hóa đơn, trừ kho, ghi công bác sĩ bằng tay | Đóng phiên khám trừ vật tư trong cùng giao dịch, rồi tự tạo hóa đơn nháp, ghi ca tính lương và cập nhật tóm tắt hồ sơ | Mục 4.3.3, ca KT-KB-02, KT-KB-05 |
-| Bệnh nhân tự phục vụ, không cần tài khoản | Khách phải gọi điện để đặt, xác nhận, dời lịch hay hỏi lại đã điều trị gì | Đặt lịch trực tuyến; đường dẫn bảo mật có thời hạn để xác nhận, dời lịch và xem lịch sử khám trên điện thoại | Hình 4.2, 4.21–4.22 |
-| Dữ liệu sức khỏe được bảo vệ nhiều lớp | Hồ sơ sức khỏe là dữ liệu nhạy cảm theo Nghị định 13/2023 | Phân quyền theo vai trò với 133 mã quyền, bác sĩ chỉ thấy bệnh nhân của mình, nhật ký kiểm toán cả thao tác đọc | Bảng 2.9, Bảng 5.5, Hình 4.35 |
-| AI hữu ích nhưng có kiểm soát | AI có thể bịa thông tin, làm lộ dữ liệu hoặc tự ý thay đổi lịch | AI chỉ đọc qua công cụ trong phạm vi quyền, không nhận tên hay số điện thoại bệnh nhân, mọi thay đổi phải được người dùng bấm xác nhận, vẫn chạy ở chế độ dự phòng khi dịch vụ AI lỗi | Mục 3.3.11, Hình 4.39 |
-| Chỉ số vận hành cho chủ phòng khám | Chủ phòng khám chỉ biết doanh thu, không biết vì sao tăng hay giảm | Sáu chỉ số vận hành so với mục tiêu, công suất ghế theo giờ, hành trình bệnh nhân, tuổi công nợ | Hình 4.30–4.32 |
+| Bệnh nhân tự phục vụ, không cần tài khoản | Khách phải gọi điện để đặt, xác nhận, dời lịch hay hỏi lại đã điều trị gì | Đặt lịch trực tuyến; đường dẫn bảo mật có thời hạn để xác nhận, dời lịch và xem lịch sử khám trên điện thoại | Hình 4.2, 4.25–4.26 |
+| Dữ liệu sức khỏe được bảo vệ nhiều lớp | Hồ sơ sức khỏe là dữ liệu nhạy cảm theo Nghị định 13/2023 | Phân quyền theo vai trò với 133 mã quyền, bác sĩ chỉ thấy bệnh nhân của mình, nhật ký kiểm toán cả thao tác đọc | Bảng 2.9, Bảng 5.5, Hình 4.39 |
+| AI hữu ích nhưng có kiểm soát | AI có thể bịa thông tin, làm lộ dữ liệu hoặc tự ý thay đổi lịch | AI chỉ đọc qua công cụ trong phạm vi quyền, không nhận tên hay số điện thoại bệnh nhân, mọi thay đổi phải được người dùng bấm xác nhận, vẫn chạy ở chế độ dự phòng khi dịch vụ AI lỗi | Mục 3.3.11, Hình 4.43 |
+| Chỉ số vận hành cho chủ phòng khám | Chủ phòng khám chỉ biết doanh thu, không biết vì sao tăng hay giảm | Sáu chỉ số vận hành so với mục tiêu, công suất ghế theo giờ, hành trình bệnh nhân, tuổi công nợ | Hình 4.34–4.36 |
 | Chất lượng được kiểm chứng liên tục | Phần mềm nhỏ thường hỏng khi sửa một chỗ | Khoảng 2.000 kiểm thử tự động ở ba tầng, chạy trong 10 bước trước mỗi lần cập nhật | Bảng 4.3, Bảng 5.1 |
 
 ::: {custom-style="nguồn"}
@@ -250,11 +250,11 @@ Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 | Mục tiêu | Kết quả đạt được | Minh chứng | Mức độ |
 |---|---|---|---|
 | Quản lý toàn diện: hồ sơ bệnh nhân, lịch hẹn, điều trị, kho, thanh toán | 23 module nghiệp vụ, 339 API, 70 bảng dữ liệu | Bảng 3.1, Mục 4.5 | Đạt |
-| Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.5, KT-LH-01 | Đạt |
-| Bác sĩ theo dõi lịch sử, kế hoạch điều trị, sơ đồ răng tập trung | Sơ đồ răng gắn với điều trị, lịch sử theo từng răng, kế hoạch điều trị có tiến độ | Hình 4.11–4.13, 4.16 | Đạt |
-| Báo cáo, thống kê: doanh thu, lượt khám, hiệu suất bác sĩ, tồn kho | Bảng điều khiển, sáu chỉ số vận hành có mục tiêu, báo cáo doanh thu theo bác sĩ và dịch vụ, cảnh báo tồn kho | Hình 4.23, 4.30–4.33 | Đạt |
+| Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.6, KT-LH-01 | Đạt |
+| Bác sĩ theo dõi lịch sử, kế hoạch điều trị, sơ đồ răng tập trung | Sơ đồ răng gắn với điều trị, lịch sử theo từng răng, kế hoạch điều trị có tiến độ | Hình 4.14–4.16, 4.19 | Đạt |
+| Báo cáo, thống kê: doanh thu, lượt khám, hiệu suất bác sĩ, tồn kho | Bảng điều khiển, sáu chỉ số vận hành có mục tiêu, báo cáo doanh thu theo bác sĩ và dịch vụ, cảnh báo tồn kho | Hình 4.27, 4.34–4.37 | Đạt |
 | Nhắc lịch tự động qua email, SMS, Zalo | Nhắc lịch theo kênh ưu tiên, thử lại tối đa 3 lần; email gửi qua SMTP; SMS và Zalo đã cài đặt nhưng chưa thử với nhà cung cấp thật | Mục 3.3.6 | Đạt một phần |
-| Bệnh nhân tra cứu lịch sử khám dễ dàng | Đường dẫn bảo mật, có thời hạn, không cần tài khoản | Hình 4.21–4.22 | Đạt |
+| Bệnh nhân tra cứu lịch sử khám dễ dàng | Đường dẫn bảo mật, có thời hạn, không cần tài khoản | Hình 4.25–4.26 | Đạt |
 | Hồ sơ X-quang | Chưa thực hiện | – | Chưa đạt |
 
 ::: {custom-style="nguồn"}
