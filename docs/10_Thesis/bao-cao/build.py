@@ -50,6 +50,10 @@ def set_font(style, size=13, bold=None, italic=None, color=True):
         rpr.append(fonts)
     for a in ('w:ascii', 'w:hAnsi', 'w:cs', 'w:eastAsia'):
         fonts.set(qn(a), FONT)
+    # Theme fonts (Heading styles of the pandoc reference) win over w:ascii.
+    for a in ('w:asciiTheme', 'w:hAnsiTheme', 'w:cstheme', 'w:eastAsiaTheme'):
+        if fonts.get(qn(a)) is not None:
+            del fonts.attrib[qn(a)]
 
 
 def para(style, align=None, before=0, after=6, line=1.5, indent=None, keep=False):
@@ -134,6 +138,9 @@ def make_reference(path):
             d.styles[name].font.size = Pt(10)
         except KeyError:
             pass
+    s = style(d, 'Source Code')
+    para(s, L, before=0, after=0, line=1.0, indent=Cm(0))
+    s.font.size = Pt(10)
     d.save(path)
 
 
@@ -306,6 +313,33 @@ def finish(doc):
             tblPr.append(w)
         w.set(qn('w:type'), 'pct')
         w.set(qn('w:w'), '5000')
+        # Column widths by content: longer text gets a wider column.
+        ncol = len(tbl.columns)
+        lens = [0] * ncol
+        for row in tbl.rows:
+            for j, cell in enumerate(row.cells[:ncol]):
+                lens[j] = max(lens[j], min(len(cell.text), 60))
+        words = [0] * ncol
+        for row in tbl.rows:
+            for j, cell in enumerate(row.cells[:ncol]):
+                words[j] = max([words[j]] + [len(w) for w in cell.text.split()])
+        floor = [min(130 * w + 250, 2600) for w in words]  # longest word fits on one line
+        weights = [max(l, 6) ** 0.8 for l in lens]
+        spare = max(8500 - sum(floor), 0)
+        total = sum(weights)
+        widths = [int(f + spare * x / total) for f, x in zip(floor, weights)]
+        grid = tbl._tbl.tblGrid
+        for j, gc in enumerate(grid.findall(qn('w:gridCol'))):
+            gc.set(qn('w:w'), str(widths[j]))
+        for row in tbl.rows:
+            for j, cell in enumerate(row.cells[:ncol]):
+                tcPr = cell._tc.get_or_add_tcPr()
+                for old in tcPr.findall(qn('w:tcW')):
+                    tcPr.remove(old)
+                tw = OxmlElement('w:tcW')
+                tw.set(qn('w:w'), str(widths[j]))
+                tw.set(qn('w:type'), 'dxa')
+                tcPr.insert(0, tw)
         for i, row in enumerate(tbl.rows):
             if i == 0:
                 trPr = row._tr.get_or_add_trPr()
