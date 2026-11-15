@@ -116,6 +116,8 @@ Hệ thống dùng kiến trúc ứng dụng một trang (React) gọi REST API 
 
 Chất lượng được bảo đảm bằng 1.788 kiểm thử đơn vị (bao phủ 76,6% số dòng mã service và controller), khoảng 100 kiểm thử API trên PostgreSQL thật và 122 kịch bản kiểm thử giao diện tự động, chạy trong 10 bước kiểm tra liên tục trước mỗi lần cập nhật. Hệ thống đã được triển khai bằng Docker trên máy chủ ảo và đáp ứng các mục tiêu trong phiếu giao đề tài, trừ phần lưu trữ phim X-quang được để lại làm hướng phát triển.
 
+**Từ khóa:** quản lý phòng khám nha khoa, sơ đồ răng FDI, đặt lịch trực tuyến, VietQR, phân quyền theo vai trò, mô hình ngôn ngữ lớn, NestJS, React, PostgreSQL.
+
 [[NGAT]]
 
 ::: {custom-style="Tiêu đề phụ"}

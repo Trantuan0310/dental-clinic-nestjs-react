@@ -73,7 +73,7 @@ So với một phần mềm quản lý phòng khám thông thường, GenSmile c
 
 ### 7.1. Ý nghĩa khoa học
 
-Đồ án trình bày một cách tiếp cận có hệ thống để xây dựng phần mềm quản lý y tế quy mô nhỏ: thiết kế dữ liệu hồ sơ nha khoa có lịch sử theo từng răng; kết hợp phân quyền theo vai trò với giới hạn theo dòng dữ liệu; thiết kế đường dẫn công khai an toàn cho bệnh nhân mà không cần tài khoản; và đưa mô hình ngôn ngữ lớn vào phần mềm nghiệp vụ theo nguyên tắc "AI đề xuất, con người quyết định", có cơ chế bảo vệ dữ liệu cá nhân và phương án dự phòng khi AI không hoạt động.
+Đồ án trình bày một cách tiếp cận có hệ thống để xây dựng phần mềm quản lý y tế quy mô nhỏ. Về dữ liệu, hồ sơ nha khoa được thiết kế để lưu lịch sử theo từng răng. Về bảo mật, phân quyền theo vai trò được kết hợp với giới hạn theo dòng dữ liệu, và bệnh nhân tra cứu qua đường dẫn công khai an toàn mà không cần tài khoản. Về AI, đồ án đưa mô hình ngôn ngữ lớn vào phần mềm nghiệp vụ theo nguyên tắc "AI đề xuất, con người quyết định", có cơ chế bảo vệ dữ liệu cá nhân và phương án dự phòng khi AI không hoạt động.
 
 ### 7.2. Ý nghĩa thực tiễn
 
