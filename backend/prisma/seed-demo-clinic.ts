@@ -20,6 +20,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { backfillStaffRecords } from './staff-backfill';
+import { DEMO_PATIENT_NOTE, DEMO_SUMMARY, seedDemoCharts } from './seed-demo-charts';
 
 const prisma = new PrismaClient();
 
@@ -28,7 +29,7 @@ const PATIENTS = Math.min(Math.max(Number(process.env.DEMO_PATIENTS ?? 500), 20)
 const FUTURE_DAYS = 21;
 const VN_OFFSET_MS = 7 * 3600_000;
 const DAY_MS = 86400_000;
-const NOTE = 'Dữ liệu mẫu (demo)';
+const NOTE = DEMO_PATIENT_NOTE;
 
 // ---------------------------------------------------------------- random
 let state = 0x2468ace;
@@ -708,7 +709,7 @@ async function main() {
             closedAt,
             chiefComplaint: appt.reason,
             diagnosis,
-            summary: 'Đã điều trị theo kế hoạch, hẹn tái khám nếu cần.',
+            summary: DEMO_SUMMARY,
             treatmentPlanText: 'Theo kế hoạch đã tư vấn với bệnh nhân.',
           },
         });
@@ -903,6 +904,7 @@ async function main() {
   }
   if (items.length) console.log(`✓ Nhập kho ${items.length} vật tư`);
 
+  console.log(`✓ ${await seedDemoCharts(prisma)} sơ đồ răng mẫu`);
   console.log(`\nXONG. Doanh thu mẫu đã phát hành: ${stats.revenue.toLocaleString('vi-VN')} đ`);
   console.log('Tài khoản nhân viên mẫu (nếu được tạo): mật khẩu Password123!');
 }
