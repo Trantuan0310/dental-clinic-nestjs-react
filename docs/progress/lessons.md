@@ -79,3 +79,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Backend `npm run lint` có `--fix`, tự định dạng lại hàng chục file không liên quan: chỉ chạy `npx eslint <file đã sửa>`, hoặc chạy xong thì `git checkout` các file ngoài phạm vi trước khi commit.
 - Tải ngôn ngữ bất đồng bộ: phải lưu lựa chọn ngôn ngữ ngay khi bấm (cacheUserLanguage), không đợi tải xong; E2E `locale persists across reload` bấm English rồi tải lại trang ngay.
 - DB demo thử nghiệm: tạo DB mới phải chạy `01-extensions.sql`, `02-uuid-v7.sql`, `03-sequences.sql` trước `prisma migrate deploy`, rồi `seed.ts` (tạo admin) trước `seed-demo-clinic.ts`; `createdb` hỏi mật khẩu, dùng `psql .../postgres -c "create database ..."`.
+- Không chạy `npx prisma format` (định dạng lại cả schema) và giữ CRLF khi sửa file bằng Python (đọc/ghi dạng bytes): `docs/05_API/*.md` dùng CRLF. Xem `git diff --stat` trước khi commit.

@@ -58,24 +58,24 @@ enum ActionAudit {
 
 model User {
   templateApplications VisitTemplateApplication[]
-  preferredWaitlist    WaitlistEntry[]
-  recordedConsents     ConsentRecord[]            @relation("ConsentActor")
-  withdrawnConsents    ConsentRecord[]            @relation("ConsentWithdrawer")
-  reviewedIntakes      IntakeForm[]
-  id                   String                     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  email                String                     @db.VarChar(255)
-  passwordHash         String                     @map("password_hash")
-  fullName             String                     @map("full_name") @db.VarChar(200)
-  status               UserStatus                 @default(ACTIVE)
-  failedLoginAttempts  Int                        @default(0) @map("failed_login_attempts")
-  lockedUntil          DateTime?                  @map("locked_until") @db.Timestamptz()
-  lastLoginAt          DateTime?                  @map("last_login_at") @db.Timestamptz()
-  deactivatedAt        DateTime?                  @map("deactivated_at") @db.Timestamptz()
-  createdAt            DateTime                   @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt            DateTime                   @updatedAt @map("updated_at") @db.Timestamptz()
-  createdBy            String?                    @map("created_by") @db.Uuid
-  updatedBy            String?                    @map("updated_by") @db.Uuid
-  deletedAt            DateTime?                  @map("deleted_at") @db.Timestamptz()
+  preferredWaitlist WaitlistEntry[]
+  recordedConsents ConsentRecord[] @relation("ConsentActor")
+  withdrawnConsents ConsentRecord[] @relation("ConsentWithdrawer")
+  reviewedIntakes IntakeForm[]
+  id                  String     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  email               String     @db.VarChar(255)
+  passwordHash        String     @map("password_hash")
+  fullName            String     @map("full_name") @db.VarChar(200)
+  status              UserStatus @default(ACTIVE)
+  failedLoginAttempts Int        @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?  @map("locked_until") @db.Timestamptz()
+  lastLoginAt         DateTime?  @map("last_login_at") @db.Timestamptz()
+  deactivatedAt       DateTime?  @map("deactivated_at") @db.Timestamptz()
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy           String?    @map("created_by") @db.Uuid
+  updatedBy           String?    @map("updated_by") @db.Uuid
+  deletedAt           DateTime?  @map("deleted_at") @db.Timestamptz()
 
   // Self-references
   creator User?  @relation("UserCreator", fields: [createdBy], references: [id])
@@ -313,33 +313,33 @@ enum IdentifierType {
 }
 
 model Patient {
-  waitlistEntries    WaitlistEntry[]
-  consentRecords     ConsentRecord[]
-  intakeForms        IntakeForm[]
-  id                 String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  code               String          @db.VarChar(20)
-  fullName           String          @map("full_name") @db.VarChar(200)
-  dob                DateTime        @db.Date
+  waitlistEntries WaitlistEntry[]
+  consentRecords ConsentRecord[]
+  intakeForms IntakeForm[]
+  id                 String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code               String    @db.VarChar(20)
+  fullName           String    @map("full_name") @db.VarChar(200)
+  dob                DateTime  @db.Date
   gender             Gender
-  primaryPhone       String?         @map("primary_phone") @db.VarChar(20)
-  email              String?         @db.VarChar(255)
+  primaryPhone       String?   @map("primary_phone") @db.VarChar(20)
+  email              String?   @db.VarChar(255)
   address            String?
-  occupation         String?         @db.VarChar(100)
-  allergies          Json            @default("[]") @db.JsonB
-  chronicDiseases    Json            @default("[]") @map("chronic_diseases") @db.JsonB
-  currentMedications Json            @default("[]") @map("current_medications") @db.JsonB
-  contactPersonName  String?         @map("contact_person_name") @db.VarChar(200)
-  contactPersonPhone String?         @map("contact_person_phone") @db.VarChar(20)
+  occupation         String?   @db.VarChar(100)
+  allergies          Json      @default("[]") @db.JsonB
+  chronicDiseases    Json      @default("[]") @map("chronic_diseases") @db.JsonB
+  currentMedications Json      @default("[]") @map("current_medications") @db.JsonB
+  contactPersonName  String?   @map("contact_person_name") @db.VarChar(200)
+  contactPersonPhone String?   @map("contact_person_phone") @db.VarChar(20)
   notes              String?
   // Migration 054: the patient asked (link in a recall email, or at the
   // desk) not to receive recall emails.
-  recallOptOutAt     DateTime?       @map("recall_opt_out_at") @db.Timestamptz()
-  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
-  createdBy          String?         @map("created_by") @db.Uuid
-  updatedBy          String?         @map("updated_by") @db.Uuid
-  deletedAt          DateTime?       @map("deleted_at") @db.Timestamptz()
-  deletedBy          String?         @map("deleted_by") @db.Uuid
+  recallOptOutAt     DateTime? @map("recall_opt_out_at") @db.Timestamptz()
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy          String?   @map("created_by") @db.Uuid
+  updatedBy          String?   @map("updated_by") @db.Uuid
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz()
+  deletedBy          String?   @map("deleted_by") @db.Uuid
 
   creator User? @relation("PatientCreator", fields: [createdBy], references: [id])
   updater User? @relation("PatientUpdater", fields: [updatedBy], references: [id])
@@ -356,7 +356,6 @@ model Patient {
   bookingRequests BookingRequest[]
   treatmentPlans  TreatmentPlan[]
   recalls         Recall[]
-  historyLinks    PatientHistoryLink[]
 
   @@unique([code])
   @@index([primaryPhone])
@@ -365,6 +364,7 @@ model Patient {
   // Note: GIN indexes on allergies/chronic_diseases/current_medications are
   // created via raw SQL in migration 010_perf_indexes (CONCURRENTLY).
   @@map("patients")
+  historyLinks       PatientHistoryLink[]
 }
 
 model PatientPhoneHistory {
@@ -469,9 +469,9 @@ enum TimeOffType {
 }
 
 model Appointment {
-  waitlistEntry          WaitlistEntry?
-  consentRecords         ConsentRecord[]
-  intakeForm             IntakeForm?
+  waitlistEntry WaitlistEntry?
+  consentRecords ConsentRecord[]
+  intakeForm IntakeForm?
   id                     String            @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   patientId              String            @map("patient_id") @db.Uuid
   dentistId              String            @map("dentist_id") @db.Uuid
@@ -536,11 +536,11 @@ model Appointment {
   checkedInByUser User?   @relation("AppointmentCheckedInBy", fields: [checkedInBy], references: [id])
   cancelledByUser User?   @relation("AppointmentCancelledBy", fields: [cancelledBy], references: [id])
 
-  encounter          Encounter?
-  rescheduleLogs     AppointmentRescheduleLog[]
-  services           AppointmentService[]
-  queueEntry         QueueEntry?
-  appointmentLinks   AppointmentLink[]
+  encounter      Encounter?
+  rescheduleLogs AppointmentRescheduleLog[]
+  services       AppointmentService[]
+  queueEntry     QueueEntry?
+  appointmentLinks AppointmentLink[]
   rescheduleRequests AppointmentLinkRescheduleRequest[]
 
   // Active slot uniqueness is a partial index managed by migration 017.
@@ -571,15 +571,14 @@ model PatientHistoryLink {
 }
 
 model AppointmentLink {
-  id            String      @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  appointmentId String      @map("appointment_id") @db.Uuid
-  patientId     String      @map("patient_id") @db.Uuid
-  tokenHash     String      @unique @map("token_hash") @db.VarChar(64)
-  expiresAt     DateTime    @map("expires_at") @db.Timestamptz()
-  lastUsedAt    DateTime?   @map("last_used_at") @db.Timestamptz()
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz()
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
-
+  id            String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId String    @map("appointment_id") @db.Uuid
+  patientId     String    @map("patient_id") @db.Uuid
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz()
+  lastUsedAt    DateTime? @map("last_used_at") @db.Timestamptz()
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
   @@index([appointmentId])
   @@map("appointment_links")
 }
@@ -591,24 +590,23 @@ enum AppointmentLinkRescheduleStatus {
 }
 
 model AppointmentLinkRescheduleRequest {
-  id               String                          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  appointmentId    String                          @map("appointment_id") @db.Uuid
-  patientId        String                          @map("patient_id") @db.Uuid
-  dentistId        String                          @map("dentist_id") @db.Uuid
-  originalStartAt  DateTime                        @map("original_start_at") @db.Timestamptz()
-  originalEndAt    DateTime                        @map("original_end_at") @db.Timestamptz()
-  requestedStartAt DateTime?                       @map("requested_start_at") @db.Timestamptz()
-  requestedEndAt   DateTime?                       @map("requested_end_at") @db.Timestamptz()
-  bufferBeforeMin  Int                             @default(0) @map("buffer_before_min") @db.SmallInt
-  bufferAfterMin   Int                             @default(0) @map("buffer_after_min") @db.SmallInt
-  note             String?                         @db.VarChar(1000)
+  id               String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId    String @map("appointment_id") @db.Uuid
+  patientId        String @map("patient_id") @db.Uuid
+  dentistId        String @map("dentist_id") @db.Uuid
+  originalStartAt  DateTime @map("original_start_at") @db.Timestamptz()
+  originalEndAt    DateTime @map("original_end_at") @db.Timestamptz()
+  requestedStartAt DateTime? @map("requested_start_at") @db.Timestamptz()
+  requestedEndAt   DateTime? @map("requested_end_at") @db.Timestamptz()
+  bufferBeforeMin  Int @default(0) @map("buffer_before_min") @db.SmallInt
+  bufferAfterMin   Int @default(0) @map("buffer_after_min") @db.SmallInt
+  note             String? @db.VarChar(1000)
   status           AppointmentLinkRescheduleStatus @default(PENDING)
-  holdUntil        DateTime?                       @map("hold_until") @db.Timestamptz()
-  approvedBy       String?                         @map("approved_by") @db.Uuid
-  approvedAt       DateTime?                       @map("approved_at") @db.Timestamptz()
-  createdAt        DateTime                        @default(now()) @map("created_at") @db.Timestamptz()
-  appointment      Appointment                     @relation(fields: [appointmentId], references: [id])
-
+  holdUntil        DateTime? @map("hold_until") @db.Timestamptz()
+  approvedBy       String? @map("approved_by") @db.Uuid
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz()
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
   @@index([dentistId, holdUntil])
   @@index([status, createdAt])
   @@index([appointmentId])
@@ -698,22 +696,22 @@ enum PatientType {
 
 model Encounter {
   templateApplications VisitTemplateApplication[]
-  id                   String                     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  appointmentId        String                     @unique @map("appointment_id") @db.Uuid
-  patientId            String                     @map("patient_id") @db.Uuid
-  dentistId            String                     @map("dentist_id") @db.Uuid
-  status               EncounterStatus            @default(IN_PROGRESS)
-  startedAt            DateTime                   @default(now()) @map("started_at") @db.Timestamptz()
-  closedAt             DateTime?                  @map("closed_at") @db.Timestamptz()
-  summary              String?
-  chiefComplaint       String?                    @map("chief_complaint")
-  diagnosis            String?
-  treatmentPlanText    String?                    @map("treatment_plan_text")
-  cancelledAt          DateTime?                  @map("cancelled_at") @db.Timestamptz()
-  cancelledBy          String?                    @map("cancelled_by") @db.Uuid
-  cancelledReason      String?                    @map("cancelled_reason")
-  createdAt            DateTime                   @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt            DateTime                   @updatedAt @map("updated_at") @db.Timestamptz()
+  id                String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  appointmentId     String          @unique @map("appointment_id") @db.Uuid
+  patientId         String          @map("patient_id") @db.Uuid
+  dentistId         String          @map("dentist_id") @db.Uuid
+  status            EncounterStatus @default(IN_PROGRESS)
+  startedAt         DateTime        @default(now()) @map("started_at") @db.Timestamptz()
+  closedAt          DateTime?       @map("closed_at") @db.Timestamptz()
+  summary           String?
+  chiefComplaint    String?         @map("chief_complaint")
+  diagnosis         String?
+  treatmentPlanText String?         @map("treatment_plan_text")
+  cancelledAt       DateTime?       @map("cancelled_at") @db.Timestamptz()
+  cancelledBy       String?         @map("cancelled_by") @db.Uuid
+  cancelledReason   String?         @map("cancelled_reason")
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
 
   appointment     Appointment              @relation(fields: [appointmentId], references: [id])
   patient         Patient                  @relation(fields: [patientId], references: [id])
@@ -1604,31 +1602,31 @@ model ServiceCategory {
 }
 
 model Service {
-  visitTemplates       VisitTemplate[]
-  waitlistEntries      WaitlistEntry[]
-  id                   String          @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  code                 String          @unique @db.VarChar(30)
-  categoryId           String          @map("category_id") @db.Uuid
-  name                 String          @db.VarChar(200)
+  visitTemplates VisitTemplate[]
+  waitlistEntries WaitlistEntry[]
+  id                   String   @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  code                 String   @unique @db.VarChar(30)
+  categoryId           String   @map("category_id") @db.Uuid
+  name                 String   @db.VarChar(200)
   description          String?
-  defaultDurationMin   Int             @map("default_duration_min") @db.SmallInt
-  bufferBeforeMin      Int             @default(0) @map("buffer_before_min") @db.SmallInt
-  bufferAfterMin       Int             @default(0) @map("buffer_after_min") @db.SmallInt
-  basePrice            Decimal         @default(0) @map("base_price") @db.Decimal(15, 0)
-  requiredSpecialty    String?         @map("required_specialty") @db.VarChar(30)
-  isActive             Boolean         @default(true) @map("is_active")
+  defaultDurationMin   Int      @map("default_duration_min") @db.SmallInt
+  bufferBeforeMin      Int      @default(0) @map("buffer_before_min") @db.SmallInt
+  bufferAfterMin       Int      @default(0) @map("buffer_after_min") @db.SmallInt
+  basePrice            Decimal  @default(0) @map("base_price") @db.Decimal(15, 0)
+  requiredSpecialty    String?  @map("required_specialty") @db.VarChar(30)
+  isActive             Boolean  @default(true) @map("is_active")
   // Migration 038: patients may request it online / it is on the public
   // price list / a price of 0 really means free (not "not set yet").
-  bookableOnline       Boolean         @default(true) @map("bookable_online")
-  showPublicPrice      Boolean         @default(true) @map("show_public_price")
-  isFree               Boolean         @default(false) @map("is_free")
+  bookableOnline       Boolean  @default(true) @map("bookable_online")
+  showPublicPrice      Boolean  @default(true) @map("show_public_price")
+  isFree               Boolean  @default(false) @map("is_free")
   // Migration 054: months after a visit with this service the patient is
   // due back (null = no recall).
-  recallIntervalMonths Int?            @map("recall_interval_months") @db.SmallInt
-  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
-  createdBy            String?         @map("created_by") @db.Uuid
-  updatedBy            String?         @map("updated_by") @db.Uuid
+  recallIntervalMonths Int?     @map("recall_interval_months") @db.SmallInt
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  createdBy            String?  @map("created_by") @db.Uuid
+  updatedBy            String?  @map("updated_by") @db.Uuid
 
   category            ServiceCategory      @relation(fields: [categoryId], references: [id])
   dentistServices     DentistService[]
@@ -1807,7 +1805,7 @@ enum BookingRequestStatus {
 }
 
 model BookingRequest {
-  consentRecords      ConsentRecord[]
+  consentRecords ConsentRecord[]
   id                  String               @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   referenceCode       String               @unique @map("reference_code") @db.VarChar(24)
   accessTokenHash     String               @map("access_token_hash") @db.Char(64)
@@ -1899,24 +1897,24 @@ enum TreatmentPlanItemStatus {
 }
 
 model TreatmentPlan {
-  contacts          TreatmentPlanContact[]
-  id                String                 @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  patientId         String                 @map("patient_id") @db.Uuid
-  dentistId         String                 @map("dentist_id") @db.Uuid
-  title             String                 @db.VarChar(200)
+  contacts TreatmentPlanContact[]
+  id                String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId         String              @map("patient_id") @db.Uuid
+  dentistId         String              @map("dentist_id") @db.Uuid
+  title             String              @db.VarChar(200)
   notes             String?
-  status            TreatmentPlanStatus    @default(DRAFT)
-  sourceEncounterId String?                @map("source_encounter_id") @db.Uuid
-  proposedAt        DateTime?              @map("proposed_at") @db.Timestamptz()
-  acceptedAt        DateTime?              @map("accepted_at") @db.Timestamptz()
-  acceptedBy        String?                @map("accepted_by") @db.Uuid
-  acceptanceNote    String?                @map("acceptance_note")
-  completedAt       DateTime?              @map("completed_at") @db.Timestamptz()
-  cancelledAt       DateTime?              @map("cancelled_at") @db.Timestamptz()
-  cancelReason      String?                @map("cancel_reason")
-  createdBy         String                 @map("created_by") @db.Uuid
-  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz()
+  status            TreatmentPlanStatus @default(DRAFT)
+  sourceEncounterId String?             @map("source_encounter_id") @db.Uuid
+  proposedAt        DateTime?           @map("proposed_at") @db.Timestamptz()
+  acceptedAt        DateTime?           @map("accepted_at") @db.Timestamptz()
+  acceptedBy        String?             @map("accepted_by") @db.Uuid
+  acceptanceNote    String?             @map("acceptance_note")
+  completedAt       DateTime?           @map("completed_at") @db.Timestamptz()
+  cancelledAt       DateTime?           @map("cancelled_at") @db.Timestamptz()
+  cancelReason      String?             @map("cancel_reason")
+  createdBy         String              @map("created_by") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz()
 
   patient         Patient             @relation(fields: [patientId], references: [id])
   dentist         User                @relation("TreatmentPlanDentist", fields: [dentistId], references: [id])
@@ -1931,14 +1929,13 @@ model TreatmentPlan {
 }
 
 model TreatmentPlanContact {
-  id          String        @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  planId      String        @map("plan_id") @db.Uuid
-  plan        TreatmentPlan @relation(fields: [planId], references: [id])
-  channel     String        @db.VarChar(10)
-  outcome     String        @db.VarChar(16)
-  contactedAt DateTime      @default(now()) @map("contacted_at") @db.Timestamptz()
-  createdBy   String        @map("created_by") @db.Uuid
-
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+  plan TreatmentPlan @relation(fields:[planId], references:[id])
+  channel String @db.VarChar(10)
+  outcome String @db.VarChar(16)
+  contactedAt DateTime @default(now()) @map("contacted_at") @db.Timestamptz()
+  createdBy String @map("created_by") @db.Uuid
   @@index([planId, contactedAt])
   @@map("treatment_plan_contacts")
 }
@@ -2117,17 +2114,16 @@ enum IntakeStatus {
 }
 
 model IntakeForm {
-  appointmentId String       @id @map("appointment_id") @db.Uuid
-  patientId     String       @map("patient_id") @db.Uuid
-  appointment   Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  answers       Json
-  status        IntakeStatus @default(PENDING)
-  submittedAt   DateTime     @default(now()) @map("submitted_at") @db.Timestamptz()
-  reviewedAt    DateTime?    @map("reviewed_at") @db.Timestamptz()
-  reviewedBy    String?      @map("reviewed_by") @db.Uuid
-  reviewer      User?        @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
-
+  appointmentId String @id @map("appointment_id") @db.Uuid
+  patientId String @map("patient_id") @db.Uuid
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  answers Json
+  status IntakeStatus @default(PENDING)
+  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz()
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz()
+  reviewedBy String? @map("reviewed_by") @db.Uuid
+  reviewer User? @relation(fields: [reviewedBy], references: [id], onDelete: SetNull)
   @@map("intake_forms")
 }
 
@@ -2138,47 +2134,46 @@ enum ConsentChannel {
 }
 
 model WaitlistEntry {
-  id            String       @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  patientId     String       @map("patient_id") @db.Uuid
-  serviceId     String       @map("service_id") @db.Uuid
-  dentistId     String?      @map("dentist_id") @db.Uuid
-  fromDate      DateTime     @map("from_date") @db.Date
-  toDate        DateTime     @map("to_date") @db.Date
-  period        String
-  note          String?
-  status        String       @default("WAITING")
-  appointmentId String?      @unique @map("appointment_id") @db.Uuid
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz()
-  patient       Patient      @relation(fields: [patientId], references: [id])
-  service       Service      @relation(fields: [serviceId], references: [id])
-  dentist       User?        @relation(fields: [dentistId], references: [id])
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
-
-  @@index([status, serviceId, fromDate, toDate], map: "waitlist_match_idx")
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId String @map("patient_id") @db.Uuid
+  serviceId String @map("service_id") @db.Uuid
+  dentistId String? @map("dentist_id") @db.Uuid
+  fromDate DateTime @map("from_date") @db.Date
+  toDate DateTime @map("to_date") @db.Date
+  period String
+  note String?
+  status String @default("WAITING")
+  appointmentId String? @unique @map("appointment_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  patient Patient @relation(fields:[patientId],references:[id])
+  service Service @relation(fields:[serviceId],references:[id])
+  dentist User? @relation(fields:[dentistId],references:[id])
+  appointment Appointment? @relation(fields:[appointmentId],references:[id])
+  @@index([status, serviceId, fromDate, toDate],map:"waitlist_match_idx")
   @@map("waitlist_entries")
 }
 
 model ConsentRecord {
-  id               String         @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  idempotencyKey   String         @unique @map("idempotency_key") @db.VarChar(64)
-  patientId        String?        @map("patient_id") @db.Uuid
-  bookingRequestId String?        @map("booking_request_id") @db.Uuid
-  appointmentId    String?        @map("appointment_id") @db.Uuid
-  purpose          String         @db.VarChar(100)
-  version          String         @db.VarChar(100)
-  text             String
-  channel          ConsentChannel
-  ipPrefix         String?        @map("ip_prefix") @db.VarChar(50)
-  actorId          String?        @map("actor_id") @db.Uuid
-  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz()
-  withdrawnAt      DateTime?      @map("withdrawn_at") @db.Timestamptz()
-  withdrawnBy      String?        @map("withdrawn_by") @db.Uuid
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  idempotencyKey String @unique @map("idempotency_key") @db.VarChar(64)
+  patientId String? @map("patient_id") @db.Uuid
+  bookingRequestId String? @map("booking_request_id") @db.Uuid
+  appointmentId String? @map("appointment_id") @db.Uuid
+  purpose String @db.VarChar(100)
+  version String @db.VarChar(100)
+  text String
+  channel ConsentChannel
+  ipPrefix String? @map("ip_prefix") @db.VarChar(50)
+  actorId String? @map("actor_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  withdrawnAt DateTime? @map("withdrawn_at") @db.Timestamptz()
+  withdrawnBy String? @map("withdrawn_by") @db.Uuid
 
-  patient        Patient?        @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: Restrict)
   bookingRequest BookingRequest? @relation(fields: [bookingRequestId], references: [id], onDelete: Restrict)
-  appointment    Appointment?    @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
-  actor          User?           @relation("ConsentActor", fields: [actorId], references: [id], onDelete: Restrict)
-  withdrawer     User?           @relation("ConsentWithdrawer", fields: [withdrawnBy], references: [id], onDelete: Restrict)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  actor User? @relation("ConsentActor", fields: [actorId], references: [id], onDelete: Restrict)
+  withdrawer User? @relation("ConsentWithdrawer", fields: [withdrawnBy], references: [id], onDelete: Restrict)
 
   @@index([patientId, createdAt(sort: Desc)])
   @@index([bookingRequestId])
@@ -2189,29 +2184,27 @@ model ConsentRecord {
 
 // A5: JSON contains validated SOAP and catalogue treatment/material defaults.
 model VisitTemplate {
-  id           String                     @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
-  name         String                     @db.VarChar(200)
-  serviceId    String                     @map("service_id") @db.Uuid
-  soap         Json
-  treatments   Json
-  updatedAt    DateTime                   @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt    DateTime?                  @map("deleted_at") @db.Timestamptz()
-  service      Service                    @relation(fields: [serviceId], references: [id])
+  id String @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  name String @db.VarChar(200)
+  serviceId String @map("service_id") @db.Uuid
+  soap Json
+  treatments Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
+  service Service @relation(fields: [serviceId], references: [id])
   applications VisitTemplateApplication[]
-
   @@index([serviceId])
   @@map("visit_templates")
 }
 
 model VisitTemplateApplication {
-  encounterId String        @map("encounter_id") @db.Uuid
-  templateId  String        @map("template_id") @db.Uuid
-  appliedBy   String        @map("applied_by") @db.Uuid
-  appliedAt   DateTime      @default(now()) @map("applied_at") @db.Timestamptz()
-  encounter   Encounter     @relation(fields: [encounterId], references: [id])
-  template    VisitTemplate @relation(fields: [templateId], references: [id])
-  actor       User          @relation(fields: [appliedBy], references: [id])
-
+  encounterId String @map("encounter_id") @db.Uuid
+  templateId String @map("template_id") @db.Uuid
+  appliedBy String @map("applied_by") @db.Uuid
+  appliedAt DateTime @default(now()) @map("applied_at") @db.Timestamptz()
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+  template VisitTemplate @relation(fields: [templateId], references: [id])
+  actor User @relation(fields: [appliedBy], references: [id])
   @@id([encounterId, templateId])
   @@map("visit_template_applications")
 }
