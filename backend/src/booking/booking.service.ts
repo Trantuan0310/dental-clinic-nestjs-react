@@ -866,8 +866,10 @@ export class BookingService {
         select: { id: true, referenceCode: true, email: true, fullName: true },
       });
       await recordConsent(tx, {
-        channel: 'ONLINE', bookingRequestId: request.id,
-        notice, ip,
+        channel: 'ONLINE',
+        bookingRequestId: request.id,
+        notice,
+        ip,
       });
       return request;
     }, LOCKING_TX_OPTIONS);

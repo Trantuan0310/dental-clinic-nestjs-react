@@ -50,8 +50,12 @@ export class TreatmentPlansController {
 
   @Post(':id/contacts')
   @RequirePermissions('appointment.create')
-  async recordContact(@Param('id',ParseUUIDPipe) id:string,@Body() dto:RecordPlanContactDto,@User() actor:JwtPayload) {
-    return {data:await this.plans.recordContact(id,dto,actor)};
+  async recordContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RecordPlanContactDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.plans.recordContact(id, dto, actor) };
   }
 
   @Get('open-items')

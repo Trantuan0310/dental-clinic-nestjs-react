@@ -20,8 +20,8 @@ import {
 const Trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
 
 export class RecordPlanContactDto {
-  @IsIn(['PHONE','SMS','ZALO','EMAIL','DESK']) channel!: string;
-  @IsIn(['REACHED','CALL_BACK','DECLINED','UNREACHABLE']) outcome!: string;
+  @IsIn(['PHONE', 'SMS', 'ZALO', 'EMAIL', 'DESK']) channel!: string;
+  @IsIn(['REACHED', 'CALL_BACK', 'DECLINED', 'UNREACHABLE']) outcome!: string;
   @IsOptional() @IsDateString({ strict: true }) contactedAt?: string;
 }
 

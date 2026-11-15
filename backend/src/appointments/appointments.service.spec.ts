@@ -1486,7 +1486,11 @@ describe('AppointmentsService', () => {
       );
       expect(prisma.appointment.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ id: 'appt-1', status: AppointmentStatus.SCHEDULED, rescheduleCount: 0 }),
+          where: expect.objectContaining({
+            id: 'appt-1',
+            status: AppointmentStatus.SCHEDULED,
+            rescheduleCount: 0,
+          }),
         }),
       );
       expect(prisma.appointmentRescheduleLog.create).not.toHaveBeenCalled();

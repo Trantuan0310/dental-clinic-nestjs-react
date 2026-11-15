@@ -41,7 +41,9 @@ export class EmailService {
           `[EMAIL_MOCK] Attachments: ${attachments.map(a => `${a.filename} (${a.content.length} bytes)`).join(', ')}`,
         );
       }
-      this.logger.log(`[EMAIL_MOCK] Body preview: ${redactPatientLinkUrl(html).substring(0, 200)}...`);
+      this.logger.log(
+        `[EMAIL_MOCK] Body preview: ${redactPatientLinkUrl(html).substring(0, 200)}...`,
+      );
       // In development the log IS the delivery; in production nobody reads
       // it, so report the email as not sent rather than pretend.
       return process.env.NODE_ENV !== 'production';

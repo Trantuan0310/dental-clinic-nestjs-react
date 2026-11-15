@@ -208,7 +208,10 @@ describe('Appointment links', () => {
   it('allows another request after approval or expiry of the previous hold', async () => {
     for (const state of [{ status: 'APPROVED' }, { status: 'PENDING', holdUntil: NOW }]) {
       appt.rescheduleRequests = [pending(state)];
-      expect(await service.get(token)).toMatchObject({ canReschedule: true, rescheduleRequest: null });
+      expect(await service.get(token)).toMatchObject({
+        canReschedule: true,
+        rescheduleRequest: null,
+      });
     }
   });
 

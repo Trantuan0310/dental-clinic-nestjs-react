@@ -8,7 +8,7 @@ export class AppointmentLinkRescheduleDto {
   startAt?: string;
 
   @IsOptional()
-  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MaxLength(1000)
   @Matches(/^[^\u0000]*$/)
@@ -17,7 +17,7 @@ export class AppointmentLinkRescheduleDto {
 
 export class AppointmentLinkCancelDto {
   @IsOptional()
-  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MaxLength(1000)
   @Matches(/^[^\u0000]*$/)

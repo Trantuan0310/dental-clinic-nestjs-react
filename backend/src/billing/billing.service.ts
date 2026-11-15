@@ -421,7 +421,12 @@ export class BillingService {
    * non-voided invoice. `voidedInvoice` tells the front desk to re-issue
    * rather than create.
    */
-  async listEncountersMissingInvoice(page = 1, pageSize = 50, summaryOnly = false, scope: 'all' | 'free' | 'actionable' = 'all') {
+  async listEncountersMissingInvoice(
+    page = 1,
+    pageSize = 50,
+    summaryOnly = false,
+    scope: 'all' | 'free' | 'actionable' = 'all',
+  ) {
     const baseWhere = {
       status: EncounterStatus.COMPLETED,
       treatments: { some: { deletedAt: null } },
@@ -431,55 +436,97 @@ export class BillingService {
       invoices: { none: {} },
       treatments: {
         some: { deletedAt: null },
-        every: { OR: [
-          { deletedAt: { not: null } },
-          { deletedAt: null, service: { isFree: true }, unitPrice: 0, listPrice: 0, quantity: { gt: 0 }, priceReason: null },
-        ] },
+        every: {
+          OR: [
+            { deletedAt: { not: null } },
+            {
+              deletedAt: null,
+              service: { isFree: true },
+              unitPrice: 0,
+              listPrice: 0,
+              quantity: { gt: 0 },
+              priceReason: null,
+            },
+          ],
+        },
       },
     };
-    const scopedWhere = scope === 'all' ? baseWhere : scope === 'free'
-      ? { AND: [baseWhere, explicitlyFreeWhere] }
-      : { AND: [baseWhere, { NOT: explicitlyFreeWhere }] };
+    const scopedWhere =
+      scope === 'all'
+        ? baseWhere
+        : scope === 'free'
+          ? { AND: [baseWhere, explicitlyFreeWhere] }
+          : { AND: [baseWhere, { NOT: explicitlyFreeWhere }] };
     const [total, explicitlyFree] = await this.prisma.$transaction([
       this.prisma.encounter.count({ where: baseWhere }),
       this.prisma.encounter.count({ where: { AND: [baseWhere, explicitlyFreeWhere] } }),
     ]);
-    const rows = summaryOnly ? [] : await this.prisma.encounter.findMany({
-      where: scopedWhere,
-      orderBy: [{ closedAt: 'desc' }, { id: 'desc' }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: {
-        treatments: { where: { deletedAt: null }, select: {
-          unitPrice: true, quantity: true, listPrice: true, priceReason: true,
-          service: { select: { isFree: true } },
-        } },
-        patient: { select: { id: true, code: true, fullName: true } },
-        dentist: { select: { id: true, fullName: true } },
-        invoices: { where: { status: InvoiceStatus.VOIDED }, orderBy: { createdAt: 'desc' }, take: 1,
-          select: { id: true, code: true, voidReason: true } },
-      },
-    });
+    const rows = summaryOnly
+      ? []
+      : await this.prisma.encounter.findMany({
+          where: scopedWhere,
+          orderBy: [{ closedAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          include: {
+            treatments: {
+              where: { deletedAt: null },
+              select: {
+                unitPrice: true,
+                quantity: true,
+                listPrice: true,
+                priceReason: true,
+                service: { select: { isFree: true } },
+              },
+            },
+            patient: { select: { id: true, code: true, fullName: true } },
+            dentist: { select: { id: true, fullName: true } },
+            invoices: {
+              where: { status: InvoiceStatus.VOIDED },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { id: true, code: true, voidReason: true },
+            },
+          },
+        });
     const actionable = total - explicitlyFree;
-    const scopeTotal = scope === 'free' ? explicitlyFree : scope === 'actionable' ? actionable : total;
+    const scopeTotal =
+      scope === 'free' ? explicitlyFree : scope === 'actionable' ? actionable : total;
     const pagination = {
-      page, pageSize, total, actionable, explicitlyFree, scope, scopeTotal,
+      page,
+      pageSize,
+      total,
+      actionable,
+      explicitlyFree,
+      scope,
+      scopeTotal,
       hasPrevious: page > 1,
       hasMore: page * pageSize < scopeTotal,
     };
-    const data = summaryOnly ? [] : rows.map(e => ({
-      explicitlyFree: e.invoices.length === 0 && e.treatments.length > 0 && e.treatments.every(t =>
-        t.service?.isFree === true && Number(t.unitPrice) === 0 && t.listPrice !== null &&
-        Number(t.listPrice) === 0 && t.quantity > 0 && t.priceReason === null),
-      encounterId: e.id,
-      closedAt: e.closedAt,
-      patientId: e.patient.id,
-      patientCode: e.patient.code,
-      patientName: e.patient.fullName,
-      dentistId: e.dentist.id,
-      dentistName: e.dentist.fullName,
-      voidedInvoice: e.invoices[0] ?? null,
-    }));
+    const data = summaryOnly
+      ? []
+      : rows.map(e => ({
+          explicitlyFree:
+            e.invoices.length === 0 &&
+            e.treatments.length > 0 &&
+            e.treatments.every(
+              t =>
+                t.service?.isFree === true &&
+                Number(t.unitPrice) === 0 &&
+                t.listPrice !== null &&
+                Number(t.listPrice) === 0 &&
+                t.quantity > 0 &&
+                t.priceReason === null,
+            ),
+          encounterId: e.id,
+          closedAt: e.closedAt,
+          patientId: e.patient.id,
+          patientCode: e.patient.code,
+          patientName: e.patient.fullName,
+          dentistId: e.dentist.id,
+          dentistName: e.dentist.fullName,
+          voidedInvoice: e.invoices[0] ?? null,
+        }));
     return { data, pagination };
   }
 

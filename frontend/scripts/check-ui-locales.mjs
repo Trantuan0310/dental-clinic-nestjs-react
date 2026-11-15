@@ -15,7 +15,9 @@ function flatten(value,prefix='',out={}) {
 const resources={};
 const issues=[];
 for(const name of modules) {
- const source=readFileSync(`src/locales/${name}.ts`,'utf8');
+ // English lives in locales/en/<name>.ts (loaded on demand); join it back for the check.
+ const enSource=readFileSync(`src/locales/en/${name}.ts`,'utf8').replace(/^import type .*$/gm,'');
+ const source=readFileSync(`src/locales/${name}.ts`,'utf8')+'\n'+enSource;
  const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
  const {vi,en}=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
  const a=flatten(vi),b=flatten(en);

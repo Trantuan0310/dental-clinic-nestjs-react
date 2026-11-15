@@ -3,19 +3,18 @@ import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { LOCALES, DEFAULT_LOCALE } from './config';
 import vi from './vi.json';
-import en from './en.json';
-import * as uiVisitTemplates from './uiVisitTemplates';
-import * as uiCommon from './uiCommon';
-import * as uiClinical from './uiClinical';
-import * as uiEntry from './uiEntry';
-import * as uiOperations from './uiOperations';
-import * as uiScheduling from './uiScheduling';
-import * as uiWorkforce from './uiWorkforce';
-import * as uiPlans from './uiPlans';
-import * as uiRecalls from './uiRecalls';
-import * as uiNotifications from './uiNotifications';
-import * as uiMessaging from './uiMessaging';
-import * as uiAi from './uiAi';
+import { vi as uiVisitTemplates } from './uiVisitTemplates';
+import { vi as uiCommon } from './uiCommon';
+import { vi as uiClinical } from './uiClinical';
+import { vi as uiEntry } from './uiEntry';
+import { vi as uiOperations } from './uiOperations';
+import { vi as uiScheduling } from './uiScheduling';
+import { vi as uiWorkforce } from './uiWorkforce';
+import { vi as uiPlans } from './uiPlans';
+import { vi as uiRecalls } from './uiRecalls';
+import { vi as uiNotifications } from './uiNotifications';
+import { vi as uiMessaging } from './uiMessaging';
+import { vi as uiAi } from './uiAi';
 
 /**
  * Initialize i18next once at app boot.
@@ -35,8 +34,7 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      vi: { translation: { ...vi, uiVisitTemplates: uiVisitTemplates.vi, uiCommon: uiCommon.vi, uiClinical: uiClinical.vi, uiEntry: uiEntry.vi, uiOperations: uiOperations.vi, uiScheduling: uiScheduling.vi, uiWorkforce: uiWorkforce.vi, uiPlans: uiPlans.vi, uiRecalls: uiRecalls.vi, uiMessaging: uiMessaging.vi, uiNotifications: uiNotifications.vi, uiAi: uiAi.vi } },
-      en: { translation: { ...en, uiVisitTemplates: uiVisitTemplates.en, uiCommon: uiCommon.en, uiClinical: uiClinical.en, uiEntry: uiEntry.en, uiOperations: uiOperations.en, uiScheduling: uiScheduling.en, uiWorkforce: uiWorkforce.en, uiPlans: uiPlans.en, uiRecalls: uiRecalls.en, uiMessaging: uiMessaging.en, uiNotifications: uiNotifications.en, uiAi: uiAi.en } },
+      vi: { translation: { ...vi, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce } },
     },
     fallbackLng: DEFAULT_LOCALE,
     supportedLngs: LOCALES.map((l) => l.code),
@@ -50,6 +48,8 @@ void i18n
       lookupLocalStorage: 'gensmile.i18n',
     },
     returnEmptyString: false,
+    // English is added on demand (loadLocale), Vietnamese ships with the app.
+    partialBundledLanguages: true,
   });
 
 // Keep <html lang="..."> attribute in sync with current locale — this is what
@@ -61,6 +61,19 @@ function syncHtmlLang(lng: string | undefined) {
   const supported = LOCALES.find((l) => l.code === code);
   document.documentElement.lang = supported?.code ?? DEFAULT_LOCALE;
   document.documentElement.dir = supported?.dir ?? 'ltr';
+}
+
+/** Fetch a non-default language's strings once; Vietnamese is always present. */
+export async function loadLocale(lng: string | undefined): Promise<void> {
+  const code = lng?.split('-')[0];
+  if (code !== 'en' || i18n.hasResourceBundle('en', 'translation')) return;
+  const { translation } = await import('./en/index');
+  i18n.addResourceBundle('en', 'translation', translation, true, true);
+}
+
+// A saved English choice: load it, then re-render in English.
+if (i18n.language?.startsWith('en')) {
+  void loadLocale(i18n.language).then(() => i18n.changeLanguage(i18n.language));
 }
 
 syncHtmlLang(i18n.language);

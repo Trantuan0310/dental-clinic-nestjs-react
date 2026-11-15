@@ -139,6 +139,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     mutationFn: (payload: CreateTreatmentPayload) => medicalRecordsApi.createTreatment(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
+      queryClient.invalidateQueries({ queryKey: ['patients', encounter.patientId, 'tooth-history'] });
       queryClient.invalidateQueries({ queryKey: planKeys.all });
       resetForm();
     },
@@ -152,6 +153,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
       medicalRecordsApi.updateTreatment(encounter.id, id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
+      queryClient.invalidateQueries({ queryKey: ['patients', encounter.patientId, 'tooth-history'] });
       setEditingTreatment(null);
       setInventoryUsages([]);
     },
@@ -164,6 +166,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
     mutationFn: (id: string) => medicalRecordsApi.deleteTreatment(encounter.id, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encounter', encounter.id] });
+      queryClient.invalidateQueries({ queryKey: ['patients', encounter.patientId, 'tooth-history'] });
       // The plan line it carried out is free again.
       queryClient.invalidateQueries({ queryKey: planKeys.all });
       setConfirmDelete(null);

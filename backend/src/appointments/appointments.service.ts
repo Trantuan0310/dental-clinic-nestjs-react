@@ -351,10 +351,15 @@ export class AppointmentsService {
       if (dto.waitlistEntryId) {
         if (this.appointmentScope(actor) !== 'any') throw new ForbiddenException();
         const matched = await tx.waitlistEntry.updateMany({
-          where: { ...waitlistMatch(dto.dentistId, dto.serviceIds ?? [], startAt), id: dto.waitlistEntryId, patientId: dto.patientId },
+          where: {
+            ...waitlistMatch(dto.dentistId, dto.serviceIds ?? [], startAt),
+            id: dto.waitlistEntryId,
+            patientId: dto.patientId,
+          },
           data: { status: 'BOOKED', appointmentId: created.id },
         });
-        if (!matched.count) throw new ConflictException('Lịch không khớp yêu cầu chờ hoặc yêu cầu đã được xử lý.');
+        if (!matched.count)
+          throw new ConflictException('Lịch không khớp yêu cầu chờ hoặc yêu cầu đã được xử lý.');
       }
 
       await this.audit.log(
@@ -1365,8 +1370,12 @@ export class AppointmentsService {
     return { appointments: closed, failed, queueEntries: entries.count };
   }
 
-  async reschedule(appointmentId: string, dto: RescheduleAppointmentDto, actor: JwtPayload,
-    txClient?: Prisma.TransactionClient) {
+  async reschedule(
+    appointmentId: string,
+    dto: RescheduleAppointmentDto,
+    actor: JwtPayload,
+    txClient?: Prisma.TransactionClient,
+  ) {
     const appt = await (txClient ?? this.prisma).appointment.findUnique({
       where: { id: appointmentId },
       include: { services: { select: { serviceId: true }, orderBy: { sortOrder: 'asc' } } },
@@ -1452,7 +1461,10 @@ export class AppointmentsService {
     const replanned =
       serviceIds.length > 0 &&
       (newDentistId !== appt.dentistId || newDay !== clinicDateOnly(appt.startAt))
-        ? await this.planVisit(newDentistId, serviceIds, newDay, { activeServicesOnly: false, db: txClient })
+        ? await this.planVisit(newDentistId, serviceIds, newDay, {
+            activeServicesOnly: false,
+            db: txClient,
+          })
         : null;
     const minutesOf = (from: Date, to: Date) =>
       Math.round((to.getTime() - from.getTime()) / 60_000);
@@ -1562,34 +1574,39 @@ export class AppointmentsService {
 
       return updated;
     };
-    const result = txClient ? await write(txClient) :
-      await this.prisma.$transaction(write, LOCKING_TX_OPTIONS);
+    const result = txClient
+      ? await write(txClient)
+      : await this.prisma.$transaction(write, LOCKING_TX_OPTIONS);
 
-    await this.audit.log({
-      action: 'APPOINTMENT_RESCHEDULED',
-      actorUserId: actor.sub,
-      actorEmail: actor.email,
-      targetType: 'appointment',
-      targetId: appointmentId,
-      metadata: {
-        oldStart: appt.startAt,
-        newStart,
-        rescheduleCount: result.rescheduleCount,
-        ...(byClinic ? { byClinic: true } : {}),
-        ...(result.durationOverrideReason
-          ? { durationOverrideReason: result.durationOverrideReason }
-          : {}),
+    await this.audit.log(
+      {
+        action: 'APPOINTMENT_RESCHEDULED',
+        actorUserId: actor.sub,
+        actorEmail: actor.email,
+        targetType: 'appointment',
+        targetId: appointmentId,
+        metadata: {
+          oldStart: appt.startAt,
+          newStart,
+          rescheduleCount: result.rescheduleCount,
+          ...(byClinic ? { byClinic: true } : {}),
+          ...(result.durationOverrideReason
+            ? { durationOverrideReason: result.durationOverrideReason }
+            : {}),
+        },
       },
-    }, txClient);
+      txClient,
+    );
     // A caller supplying a transaction emits this only after its commit.
-    if (!txClient) this.events.emit(APPOINTMENT_RESCHEDULED_EVENT, {
-      appointmentId,
-      oldStartAt: appt.startAt,
-      newStartAt: newStart,
-      oldDentistId: appt.dentistId,
-      newDentistId,
-      ...(byClinic ? { byClinic: true } : {}),
-    } satisfies AppointmentRescheduledEvent);
+    if (!txClient)
+      this.events.emit(APPOINTMENT_RESCHEDULED_EVENT, {
+        appointmentId,
+        oldStartAt: appt.startAt,
+        newStartAt: newStart,
+        oldDentistId: appt.dentistId,
+        newDentistId,
+        ...(byClinic ? { byClinic: true } : {}),
+      } satisfies AppointmentRescheduledEvent);
 
     return result;
   }
@@ -1965,14 +1982,31 @@ export class AppointmentsService {
 
   async followUpDates(encounterId: string, patientId: string, actor: JwtPayload) {
     const rows = await this.prisma.recall.findMany({
-      where: { patientId, sourceEncounterId: encounterId, patient: {deletedAt: null},
-        sourceEncounter: {status: 'COMPLETED', ...(this.appointmentScope(actor) === 'own' ? {dentistId: actor.sub} : {})},
-        status: {in: ['PENDING','POSTPONED']} },
-      select: {id:true, dueDate:true, postponedUntil:true, service:{select:{name:true}}},
-      orderBy: {dueDate:'asc'},
+      where: {
+        patientId,
+        sourceEncounterId: encounterId,
+        patient: { deletedAt: null },
+        sourceEncounter: {
+          status: 'COMPLETED',
+          ...(this.appointmentScope(actor) === 'own' ? { dentistId: actor.sub } : {}),
+        },
+        status: { in: ['PENDING', 'POSTPONED'] },
+      },
+      select: {
+        id: true,
+        dueDate: true,
+        postponedUntil: true,
+        service: { select: { name: true } },
+      },
+      orderBy: { dueDate: 'asc' },
     });
-    return rows.map(r=>({id:r.id, service:r.service.name, date:(r.postponedUntil ?? r.dueDate).toISOString().slice(0,10)}))
-      .filter(r=>r.date >= clinicDateOnly());
+    return rows
+      .map(r => ({
+        id: r.id,
+        service: r.service.name,
+        date: (r.postponedUntil ?? r.dueDate).toISOString().slice(0, 10),
+      }))
+      .filter(r => r.date >= clinicDateOnly());
   }
 
   async listToday(actor: JwtPayload) {
@@ -3917,8 +3951,12 @@ export class AppointmentsService {
     dentistId: string,
     serviceIds: string[] | undefined,
     localDate: string,
-    { activeServicesOnly = true, db = this.prisma }: {
-      activeServicesOnly?: boolean; db?: Prisma.TransactionClient;
+    {
+      activeServicesOnly = true,
+      db = this.prisma,
+    }: {
+      activeServicesOnly?: boolean;
+      db?: Prisma.TransactionClient;
     } = {},
   ): Promise<VisitPlan | null> {
     if (!serviceIds?.length) return null;

@@ -23,7 +23,10 @@ const QTY_FORMAT_MSG = { message: 'Số lượng tối đa 4 chữ số thập p
 const QTY_MAX_MSG = { message: `Số lượng tối đa ${MAX_STOCK_QUANTITY.toLocaleString('vi-VN')}` };
 
 export class ReorderQueryDto {
-  @Type(() => Number) @IsInt() @Min(1) @Max(365)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(365)
   leadDays = 14;
 }
 

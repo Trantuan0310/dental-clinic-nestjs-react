@@ -119,7 +119,9 @@ export class AiChatService {
       actor,
       refs,
       actions,
-      proposeChange: this.changes ? (type, args) => this.changes!.propose(type, args, actor) : undefined,
+      proposeChange: this.changes
+        ? (type, args) => this.changes!.propose(type, args, actor)
+        : undefined,
     };
     /** The answer without the model: keywords pick a lookup tool, a template writes the reply. */
     const plainAnswer = async (): Promise<ChatResult> => {
@@ -212,7 +214,7 @@ export class AiChatService {
   }
 
   async confirmChange(proposalId: string, actor: JwtPayload) {
-    if (!this.changes) throw new BadRequestException("Chưa có dịch vụ đề xuất");
+    if (!this.changes) throw new BadRequestException('Chưa có dịch vụ đề xuất');
     return this.changes.confirm(proposalId, actor);
   }
 

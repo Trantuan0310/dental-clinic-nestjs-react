@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { i18n, LOCALES } from '@/locales';
+import { i18n, loadLocale, LOCALES } from '@/locales';
 
 /**
  * Thin Zustand wrapper around i18next to expose the current locale to React.
@@ -35,7 +35,7 @@ export const useLocaleStore = create<LocaleState>((set) => {
       if (!LOCALES.some((l) => l.code === code)) return;
       // The languageChanged event updates this store only after i18next has
       // completed the change, keeping subscribers aligned with rendered text.
-      void i18n.changeLanguage(code);
+      void loadLocale(code).then(() => i18n.changeLanguage(code));
     },
   };
 });

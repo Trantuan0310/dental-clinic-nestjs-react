@@ -28,7 +28,7 @@ Claude không tự đọc được phần trăm hạn mức. Quy tắc áp dụn
 - Kiểm tra trước khi push:
   - backend: `npx tsc --noEmit`, `npm run lint`, `npm test`;
   - frontend: `npm run typecheck`, `npm run lint`, `npm run build`.
-- Test E2E (Playwright) cần PostgreSQL và backend đang chạy. Chữ trên giao diện nằm trong `frontend/src/locales/*.ts`: đổi chữ thì sửa test E2E tương ứng.
+- Test E2E (Playwright) cần PostgreSQL và backend đang chạy. Chữ trên giao diện nằm trong `frontend/src/locales/*.ts` (tiếng Anh ở `locales/en/`): đổi chữ thì sửa test E2E tương ứng.
 
 ## Rút kinh nghiệm (chi tiết ở `docs/progress/lessons.md`)
 

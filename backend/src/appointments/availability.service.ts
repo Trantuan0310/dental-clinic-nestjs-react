@@ -254,18 +254,32 @@ export class AvailabilityService {
     const date = clinicDateOnly(start);
     const day = new Date(date);
     const assignments = await this.prisma.dentistService.findMany({
-      where: {dentistId, serviceId: {in: ids}, service: {isActive:true},
-        effectiveFrom: {lte:day}, OR:[{effectiveTo:null},{effectiveTo:{gte:day}}]},
-      include: {service:true},
+      where: {
+        dentistId,
+        serviceId: { in: ids },
+        service: { isActive: true },
+        effectiveFrom: { lte: day },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
+      },
+      include: { service: true },
     });
     if (!assignments.length) return [];
-    const calendar = await this.loadDay(dentistId,date);
-    return assignments.filter(({durationMin,service}) => {
-      const end = new Date(+start + (durationMin ?? service.defaultDurationMin)*60000);
-      return (!openingEnd || end <= openingEnd) && !intervalProblem(calendar,{start,end},{
-        buffers:{beforeMin:service.bufferBeforeMin,afterMin:service.bufferAfterMin},
-      });
-    }).map(a=>a.serviceId);
+    const calendar = await this.loadDay(dentistId, date);
+    return assignments
+      .filter(({ durationMin, service }) => {
+        const end = new Date(+start + (durationMin ?? service.defaultDurationMin) * 60000);
+        return (
+          (!openingEnd || end <= openingEnd) &&
+          !intervalProblem(
+            calendar,
+            { start, end },
+            {
+              buffers: { beforeMin: service.bufferBeforeMin, afterMin: service.bufferAfterMin },
+            },
+          )
+        );
+      })
+      .map(a => a.serviceId);
   }
 
   async checkSlot(

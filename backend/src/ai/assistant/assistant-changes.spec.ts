@@ -19,18 +19,16 @@ describe('assistant change tool boundary', () => {
   it.each(['cancel_appointment', 'reschedule_appointment'] as const)(
     'shows a %s card without returning identity or confirming it',
     async type => {
-      const proposeChange = jest
-        .fn()
-        .mockResolvedValue({
-          type,
-          payload: { proposalId: 'proposal' },
-          view: {
-            patientRef: '',
-            dentistName: 'Dentist',
-            startAt: '2099-12-01T02:00:00Z',
-            reason: 'Patient requested',
-          },
-        });
+      const proposeChange = jest.fn().mockResolvedValue({
+        type,
+        payload: { proposalId: 'proposal' },
+        view: {
+          patientRef: '',
+          dentistName: 'Dentist',
+          startAt: '2099-12-01T02:00:00Z',
+          reason: 'Patient requested',
+        },
+      });
       const ctx = {
         actor,
         refs: new RefBook(),

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -6,7 +17,11 @@ import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
 import { User } from '../common/decorators/user.decorator';
 import { AppointmentLinksService } from './appointment-links.service';
-import { AppointmentLinkCancelDto, AppointmentLinkRescheduleDto, ApproveAppointmentLinkRescheduleDto } from './dto/appointment-link.dto';
+import {
+  AppointmentLinkCancelDto,
+  AppointmentLinkRescheduleDto,
+  ApproveAppointmentLinkRescheduleDto,
+} from './dto/appointment-link.dto';
 
 @ApiTags('Public appointment links')
 @Controller('public/appointment-links/:token')
@@ -68,8 +83,11 @@ export class AppointmentLinkRequestsController {
   @Post(':id/approve')
   @HttpCode(200)
   @RequirePermissions('appointment.update')
-  async approve(@Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ApproveAppointmentLinkRescheduleDto, @User() actor: JwtPayload) {
+  async approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveAppointmentLinkRescheduleDto,
+    @User() actor: JwtPayload,
+  ) {
     return { data: await this.links.approve(id, dto, actor) };
   }
 }
