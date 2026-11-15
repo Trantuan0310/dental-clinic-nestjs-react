@@ -128,7 +128,7 @@ def make_reference(path):
     para(s, C, before=0, after=12, indent=Cm(0), keep=True)
     s = style(d, 'Tài liệu')
     set_font(s)
-    para(s, J, after=6, indent=Cm(0))
+    para(s, L, after=6, indent=Cm(0))
     s.paragraph_format.left_indent = Cm(1)
     s.paragraph_format.first_line_indent = Cm(-1)
     s = style(d, 'Ảnh')

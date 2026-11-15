@@ -119,3 +119,4 @@
 - Chú thích hình/bảng chuyển sang in nghiêng cỡ 13 (theo QT.ĐT.19.M07).
 - Kiểm tra: không có nhóm tiểu mục nào chỉ có một tiểu mục; không có số thập phân dạng dấu chấm sai quy ước.
 - Build lại: 164 trang, Mở đầu = trang 1, Kết luận = 132.
+- Tài liệu tham khảo căn trái (hết giãn chữ ở dòng có URL); rút gọn kết luận Chương 1 để không còn trang chỉ có 2 dòng. Báo cáo 163 trang, Kết luận = 131.
