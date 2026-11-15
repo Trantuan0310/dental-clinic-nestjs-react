@@ -90,7 +90,7 @@ Thời gian chờ khóa được giới hạn 5 giây; quá thời gian, ngườ
 
 ### 4.3.3. Đóng phiên khám và sự kiện miền
 
-Đóng phiên khám là một giao dịch: với mỗi vật tư của mỗi điều trị, hệ thống giảm tồn kho bằng câu lệnh cập nhật có điều kiện "tồn kho hiện tại không nhỏ hơn số lượng cần trừ"; nếu không cập nhật được dòng nào nghĩa là không đủ hàng, toàn bộ giao dịch bị hủy và bác sĩ nhận danh sách vật tư thiếu. Khi giao dịch thành công, sự kiện `encounter.closed` được phát; module hóa đơn tạo hóa đơn nháp từ các dòng điều trị, module lương ghi ca khám, module AI làm mới bản tóm tắt hồ sơ. Các bộ lắng nghe được viết để không ném lỗi ra ngoài, nên một lỗi ở phần phụ không làm hỏng việc đóng phiên khám.
+Đóng phiên khám là một giao dịch: với mỗi vật tư của mỗi điều trị, hệ thống giảm tồn kho bằng câu lệnh cập nhật có điều kiện "tồn kho hiện tại không nhỏ hơn số lượng cần trừ"; nếu không cập nhật được dòng nào nghĩa là không đủ hàng, toàn bộ giao dịch bị hủy và bác sĩ nhận danh sách vật tư thiếu. Khi giao dịch thành công, sự kiện `encounter.closed` được phát; module hóa đơn tạo hóa đơn nháp từ các dòng điều trị, module lương ghi ca khám, module AI xóa bản tóm tắt hồ sơ cũ để tạo lại khi cần. Các bộ lắng nghe được viết để không ném lỗi ra ngoài, nên một lỗi ở phần phụ không làm hỏng việc đóng phiên khám.
 
 ### 4.3.4. Truy vấn lịch sử theo răng
 
@@ -327,7 +327,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.3. Bác sĩ: khám và điều trị theo răng
 
-Mục này minh họa một ca khám hoàn chỉnh. Bác sĩ mở "Hàng chờ của tôi" (Hình 4.12), thứ tự được sắp theo nguyên tắc cấp cứu trước, rồi theo giờ hẹn; khách đến trễ quá 15 phút được xếp sau. Bác sĩ bấm "Bắt đầu khám" với bệnh nhân Đặng Quang Hải.
+Mục này minh họa một ca khám hoàn chỉnh. Bác sĩ mở "Hàng chờ của tôi" (Hình 4.12), thứ tự được sắp theo quy tắc ở Mục 4.3.6: ca cấp cứu lên trước, sau đó theo giờ đến lượt, trong đó khách trễ quá 15 phút được xếp như thể đến muộn thêm 15 phút. Bác sĩ bấm "Bắt đầu khám" với bệnh nhân Đặng Quang Hải.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-hang-cho.png){width=15cm}
@@ -537,7 +537,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.7. Kho, nhân sự và danh mục
 
-Màn hình kho (Hình 4.27) liệt kê vật tư, tồn kho, mức tối thiểu và trạng thái; vật tư sắp hết được đánh dấu cùng gợi ý số lượng nhập. Màn hình nhân sự quản lý nhân viên, vai trò, mức lương; lịch làm việc cho phép đặt ca theo tuần, ngày nghỉ và duyệt đăng ký ca (Hình 4.28). Danh mục dịch vụ quản lý mã, tên, giá, thời lượng và bác sĩ được thực hiện từng dịch vụ.
+Màn hình kho (Hình 4.27) liệt kê vật tư, tồn kho, mức tối thiểu và trạng thái; vật tư sắp hết được đánh dấu cùng gợi ý số lượng nhập. Lịch làm việc (Hình 4.28) cho phép đặt ca theo tuần và ghi ngày nghỉ cho từng bác sĩ; đây là cơ sở để tính giờ trống khi đặt lịch.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-kho.png){width=15cm}

@@ -205,7 +205,7 @@ Các biện pháp bảo mật được đối chiếu với danh sách rủi ro 
 
 ### 5.3.3. Khả năng sử dụng
 
-Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.26). Các nguyên tắc khả dụng của Nielsen [@nielsen] được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
+Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.3, Hình 4.26). Các nguyên tắc khả dụng của Nielsen [@nielsen] được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
 
 Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kịch bản một ngày làm việc của phòng khám. Việc đánh giá với người dùng thật tại phòng khám chưa được thực hiện và được nêu trong phần hạn chế.
 
@@ -267,6 +267,7 @@ Nguồn: Tác giả
 
 - **Chưa có hồ sơ X-quang:** chưa lưu và xem được phim chụp, một phần quan trọng của hồ sơ nha khoa.
 - **Kênh SMS và Zalo chưa được thử với nhà cung cấp thật:** phần gửi tin đã cài đặt theo tài liệu của nhà cung cấp và được kiểm thử với bộ giả lập, nhưng cần tài khoản doanh nghiệp để chạy thật.
+- **Độ bao phủ kiểm thử chưa đều:** một số module như chi phí vận hành và các guard dùng chung có độ bao phủ kiểm thử đơn vị thấp (Bảng 5.6), mới được kiểm tra gián tiếp qua kiểm thử API.
 - **Chưa kiểm thử tải:** các số đo ở Bảng 5.7 là thời gian phản hồi với một người dùng; khả năng chịu tải khi nhiều người dùng cùng lúc mới được suy ra từ thiết kế, chưa đo.
 - **Chưa đánh giá với người dùng thật:** hệ thống mới được trình diễn trên dữ liệu mẫu, chưa vận hành tại một phòng khám.
 - **Phụ thuộc dịch vụ AI bên ngoài:** chất lượng trả lời của trợ lý phụ thuộc mô hình được cấu hình; khi dịch vụ AI lỗi, hệ thống chuyển sang chế độ dự phòng có khả năng hạn chế hơn.

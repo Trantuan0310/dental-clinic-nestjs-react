@@ -85,6 +85,8 @@ Ngoài phần Mở đầu, Kết luận, Tài liệu tham khảo và Phụ lục
 
 - **Chương 1. Cơ sở lý thuyết và công nghệ:** nghiệp vụ phòng khám nha khoa, tổng quan các phần mềm hiện có, kiến trúc và công nghệ sử dụng, các vấn đề bảo mật, thanh toán và ứng dụng AI.
 - **Chương 2. Khảo sát hiện trạng và phân tích yêu cầu:** quy trình tại phòng khám, các tác nhân, yêu cầu chức năng và phi chức năng, biểu đồ use case.
-- **Chương 3. Phân tích và thiết kế hệ thống:** kiến trúc tổng thể, thiết kế cơ sở dữ liệu, đặc tả và thiết kế các chức năng chính, thiết kế bảo mật và giao diện.
-- **Chương 4. Xây dựng và triển khai hệ thống:** môi trường phát triển, cài đặt backend và frontend, kết quả giao diện các chức năng, tích hợp AI và triển khai thực tế.
-- **Chương 5. Kiểm thử và đánh giá:** chiến lược và kết quả kiểm thử, đánh giá hiệu năng, đánh giá mức độ đáp ứng mục tiêu và các hạn chế.
+- **Chương 3. Phân tích và thiết kế hệ thống:** kiến trúc tổng thể và 23 module nghiệp vụ, thiết kế cơ sở dữ liệu, đặc tả các chức năng chính kèm 29 biểu đồ tuần tự, hoạt động và trạng thái (mỗi module có ít nhất một biểu đồ), thiết kế bảo mật và giao diện.
+- **Chương 4. Xây dựng và triển khai hệ thống:** môi trường phát triển, tổ chức mã nguồn, các điểm cài đặt quan trọng kèm đoạn mã, kết quả giao diện của từng chức năng chụp từ hệ thống chạy thật, quy trình tích hợp liên tục và triển khai.
+- **Chương 5. Kiểm thử và đánh giá:** chiến lược kiểm thử ba tầng, các ca kiểm thử tiêu biểu, số ca và độ bao phủ mã, hiệu năng, những điểm nổi bật, đối chiếu với mục tiêu đề tài và các hạn chế.
+
+Phần Phụ lục gồm hướng dẫn cài đặt và triển khai (A), danh sách API tiêu biểu (B), danh sách kịch bản kiểm thử đầu cuối (C) và ma trận truy vết từ yêu cầu tới thiết kế, giao diện và kiểm thử (D).
