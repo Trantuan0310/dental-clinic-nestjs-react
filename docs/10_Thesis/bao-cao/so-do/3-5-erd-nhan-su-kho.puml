@@ -1,0 +1,173 @@
+@startuml
+!include _kieu.iuml
+hide circle
+skinparam linetype ortho
+skinparam defaultFontSize 13
+title Nhóm nhân sự, lương và kho
+
+entity "users" as User {
+  * id : uuid <<PK>>
+  --
+  * email : varchar
+  * password_hash : varchar
+  * full_name : varchar
+  * status : enum
+  * failed_login_attempts : int
+}
+entity "roles" as Role {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * name : varchar
+  description : varchar
+  * is_system : bool
+  * created_at : timestamptz
+}
+entity "permissions" as Permission {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * resource : varchar
+  * action : varchar
+  description : varchar
+  * is_system : bool
+}
+entity "user_roles" as UserRole {
+  --
+  * user_id : uuid <<FK>>
+  * role_id : uuid <<FK>>
+  * assigned_at : timestamptz
+  assigned_by : uuid
+}
+entity "role_permissions" as RolePermission {
+  --
+  * role_id : uuid <<FK>>
+  * permission_id : uuid <<FK>>
+}
+entity "employees" as Employee {
+  * id : uuid <<PK>>
+  --
+  * code : varchar <<UQ>>
+  * full_name : varchar
+  dob : timestamptz
+  gender : enum
+  phone : varchar
+  user_id : uuid <<FK>>
+}
+entity "dentist_profiles" as DentistProfile {
+  * id : uuid <<PK>>
+  --
+  * employee_id : uuid <<FK>>
+  * user_id : uuid <<FK>>
+  license_number : varchar
+  license_issued_at : timestamptz
+  * specialties : varchar
+  * calendar_color : varchar
+  * default_slot_minutes : int
+}
+entity "shift_registrations" as ShiftRegistration {
+  * id : uuid <<PK>>
+  --
+  * dentist_id : uuid <<FK>>
+  * date : timestamptz
+  * start_time : varchar
+  * end_time : varchar
+  max_encounters : int
+  notes : varchar
+  approved_by_user_id : uuid <<FK>>
+  created_by_user_id : uuid <<FK>>
+}
+entity "payroll_periods" as PayrollPeriod {
+  * id : uuid <<PK>>
+  --
+  * period_start : timestamptz
+  * period_end : timestamptz
+  * payroll_cycle : enum
+  * status : enum
+  * config_snapshot : jsonb
+  opened_from_period_id : uuid <<FK>>
+  created_by_user_id : uuid <<FK>>
+  locked_by_user_id : uuid <<FK>>
+  approved_by_user_id : uuid <<FK>>
+  marked_paid_by_user_id : uuid <<FK>>
+}
+entity "payroll_line_items" as PayrollLineItem {
+  * id : uuid <<PK>>
+  --
+  * payroll_period_id : uuid <<FK>>
+  * dentist_id : uuid <<FK>>
+  * encounters_count : int
+  * total_revenue_vnd : decimal
+  * worked_shifts : int
+  * total_hours : decimal
+  * overtime_hours : decimal
+}
+entity "inventory_categories" as InventoryCategory {
+  * id : uuid <<PK>>
+  --
+  * name : varchar
+  description : varchar
+  parent_id : uuid <<FK>>
+  * created_at : timestamptz
+  deleted_at : timestamptz
+}
+entity "inventory_items" as InventoryItem {
+  * id : uuid <<PK>>
+  --
+  * sku : varchar
+  category_id : uuid <<FK>>
+  * name : varchar
+  description : varchar
+  * quantity_on_hand : decimal
+  * min_stock_level : decimal
+}
+entity "stock_movements" as StockMovement {
+  * id : uuid <<PK>>
+  --
+  * inventory_item_id : uuid <<FK>>
+  * type : enum
+  ref_type : enum
+  ref_id : uuid
+  * quantity_before : decimal
+  * quantity_after : decimal
+  performed_by : uuid <<FK>>
+}
+entity "audit_logs" as AuditLog {
+  * id : uuid <<PK>>
+  --
+  actor_user_id : uuid <<FK>>
+  actor_email_at_time : varchar
+  * action : varchar
+  target_type : varchar
+  target_id : uuid
+  metadata : jsonb
+}
+
+User |o--o{ User
+User |o--o{ User
+User ||--o{ UserRole
+Role ||--o{ UserRole
+Role ||--o{ RolePermission
+Permission ||--o{ RolePermission
+User |o--o{ Employee
+Employee ||--o| DentistProfile
+User ||--o| DentistProfile
+User ||--o{ ShiftRegistration
+User |o--o{ ShiftRegistration
+User |o--o{ ShiftRegistration
+User |o--o{ PayrollPeriod
+User |o--o{ PayrollPeriod
+User |o--o{ PayrollPeriod
+User |o--o{ PayrollPeriod
+PayrollPeriod |o--o{ PayrollPeriod
+PayrollPeriod ||--o{ PayrollLineItem
+User ||--o{ PayrollLineItem
+InventoryCategory |o--o{ InventoryCategory
+User |o--o{ InventoryCategory
+User |o--o{ InventoryCategory
+InventoryCategory |o--o{ InventoryItem
+User |o--o{ InventoryItem
+InventoryItem ||--o{ StockMovement
+User |o--o{ StockMovement
+User |o--o{ AuditLog
+@enduml

@@ -1,0 +1,20 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+[*] --> SCHEDULED : Đặt lịch
+SCHEDULED --> CONFIRMED : Khách / lễ tân xác nhận
+SCHEDULED --> CHECKED_IN : Check-in
+CONFIRMED --> CHECKED_IN : Check-in
+CHECKED_IN --> SCHEDULED : Hoàn tác check-in\n(trước khi khám)
+CHECKED_IN --> IN_PROGRESS : Bác sĩ mở phiên khám
+CHECKED_IN --> LEFT : Khách về trước khi khám
+IN_PROGRESS --> COMPLETED : Đóng phiên khám
+SCHEDULED --> CANCELLED : Hủy (có lý do)
+CONFIRMED --> CANCELLED : Hủy (có lý do)
+SCHEDULED --> NO_SHOW : Quá giờ không đến
+CONFIRMED --> NO_SHOW : Quá giờ không đến
+NO_SHOW --> SCHEDULED : Hoàn tác trong ngày
+COMPLETED --> [*]
+CANCELLED --> [*]
+LEFT --> [*]
+@enduml

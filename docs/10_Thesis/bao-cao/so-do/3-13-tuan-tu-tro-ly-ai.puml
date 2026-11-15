@@ -1,0 +1,25 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Lễ tân" as LT
+participant "Khung chat" as FE
+participant "AiChatService" as AI
+participant "Công cụ\n(find_patient, free_slots,\npropose_appointment…)" as TL
+participant "Cổng LLM" as LLM
+database "PostgreSQL" as DB
+LT -> FE : "Đặt lịch cho chị Lan sáng mai với BS An"
+FE -> AI : POST /ai/assistant/chat
+loop Tối đa 4 lần gọi công cụ
+  AI -> LLM : Hội thoại + kết quả công cụ\n(bệnh nhân chỉ là [P1], [P2])
+  LLM --> AI : {"tool": "...", "args": {...}} hoặc {"reply": "..."}
+  AI -> TL : Chạy công cụ với quyền của lễ tân
+  TL -> DB : Truy vấn
+  TL --> AI : Kết quả (đổi tên thành mã [Pn])
+end
+AI --> FE : Câu trả lời + thẻ xác nhận đặt lịch
+FE -> FE : Điền tên thật vào [P1] tại trình duyệt
+LT -> FE : Bấm "Xác nhận"
+FE -> AI : POST /ai/assistant/actions/create-appointment
+AI -> DB : Đặt lịch qua AppointmentsService\n(cùng quy tắc, quyền như thao tác tay)
+AI -> DB : Nhật ký AI_ACTION_EXECUTED
+@enduml

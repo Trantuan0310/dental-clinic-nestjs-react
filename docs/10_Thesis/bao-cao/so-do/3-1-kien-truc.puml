@@ -1,0 +1,26 @@
+@startuml
+!include _kieu.iuml
+skinparam componentStyle rectangle
+left to right direction
+actor "Nhân viên\n(trình duyệt)" as NV
+actor "Bệnh nhân\n(trình duyệt, điện thoại)" as BN
+node "Máy chủ ảo (Docker Compose)" {
+  component "Nginx\n(giao diện React đã đóng gói,\nproxy /api)" as WEB
+  component "Ứng dụng NestJS\n(REST API, 23 module nghiệp vụ,\ntác vụ định kỳ)" as API
+  database "PostgreSQL 16\n(70 bảng)" as DB
+  component "Migrate\n(chạy migration khi phát hành)" as MIG
+}
+cloud "Dịch vụ bên ngoài" {
+  component "Ngân hàng / SePay\n(webhook giao dịch)" as BANK
+  component "SMTP, eSMS,\nZalo ZNS" as MSG
+  component "Cổng LLM\n(OpenAI-compatible / Gemini)" as LLM
+}
+NV --> WEB : HTTPS
+BN --> WEB : HTTPS
+WEB --> API : HTTP /api/v1
+API --> DB : Prisma (SQL)
+MIG --> DB
+BANK --> API : POST /webhooks/bank/sepay
+API --> MSG : gửi email, SMS, Zalo
+API --> LLM : soạn nháp, gọi công cụ
+@enduml

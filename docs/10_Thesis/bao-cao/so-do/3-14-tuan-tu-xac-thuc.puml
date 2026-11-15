@@ -1,0 +1,21 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Người dùng" as U
+participant "React" as FE
+participant "AuthController" as AC
+participant "AuthService" as AS
+database "PostgreSQL" as DB
+U -> FE : Email, mật khẩu
+FE -> AC : POST /auth/login
+AC -> AS : Kiểm tra
+AS -> DB : Người dùng, quyền
+AS -> AS : Argon2 verify
+AS -> DB : Lưu băm của refresh token (7 ngày)
+AC --> FE : access token (15 phút) +\ncookie refresh (HttpOnly, SameSite=Strict)
+FE -> AC : Gọi API với Authorization: Bearer
+note right : JwtAuthGuard kiểm tra chữ ký,\nPermissionsGuard kiểm tra mã quyền
+FE -> AC : POST /auth/refresh (khi access hết hạn)
+AC -> AS : Đối chiếu băm, thu hồi token cũ,\ncấp cặp token mới
+AC --> FE : access token mới + cookie mới
+@enduml

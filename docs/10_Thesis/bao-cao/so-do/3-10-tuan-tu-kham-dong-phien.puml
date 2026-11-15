@@ -1,0 +1,26 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Bác sĩ" as BS
+participant "Màn hình phiên khám" as FE
+participant "MedicalRecordsService" as MR
+database "PostgreSQL" as DB
+participant "Bộ phát sự kiện" as EV
+participant "Billing listener" as BL
+participant "Payroll listener" as PL
+BS -> FE : Bắt đầu khám (lịch hẹn đã check-in)
+FE -> MR : POST /encounters/start
+MR -> DB : Encounter IN_PROGRESS, Appointment IN_PROGRESS
+BS -> FE : Chọn răng 36 trên sơ đồ
+FE -> MR : GET /patients/:id/teeth/36/history
+MR --> FE : Các lần điều trị trước của răng 36
+BS -> FE : Thêm điều trị, cập nhật sơ đồ răng, kê đơn
+FE -> MR : POST /encounters/:id/treatments,\nPOST /encounters/:id/dental-chart/snapshot (tự lưu)
+BS -> FE : Đóng phiên khám
+FE -> MR : POST /encounters/:id/close
+MR -> DB : Giao dịch: trừ tồn kho vật tư, ghi biến động kho,\nkhóa ghi chú, Encounter COMPLETED
+MR -> EV : encounter.closed
+EV -> BL : Lập hóa đơn nháp từ các dòng điều trị
+EV -> PL : Ghi ca khám vào bảng lương của bác sĩ
+MR --> FE : Đã đóng
+@enduml

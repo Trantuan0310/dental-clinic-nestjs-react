@@ -1,0 +1,15 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+[*] --> DRAFT : Bác sĩ lập kế hoạch
+DRAFT --> PROPOSED : Gửi báo giá
+PROPOSED --> ACCEPTED : Khách đồng ý
+ACCEPTED --> IN_PROGRESS : Bước đầu tiên được làm\n(khi đóng phiên khám)
+IN_PROGRESS --> COMPLETED : Mọi bước đã làm hoặc bỏ qua
+DRAFT --> CANCELLED
+PROPOSED --> CANCELLED
+ACCEPTED --> CANCELLED
+IN_PROGRESS --> CANCELLED
+COMPLETED --> [*]
+CANCELLED --> [*]
+@enduml

@@ -1,0 +1,12 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+[*] --> IN_PROGRESS : Bác sĩ mở từ lịch hẹn đã check-in
+IN_PROGRESS : ghi chú, sơ đồ răng,\nđiều trị, đơn thuốc
+IN_PROGRESS --> COMPLETED : Đóng phiên\n(trừ kho, lập hóa đơn nháp,\nghi ca khám cho bảng lương)
+IN_PROGRESS --> CANCELLED : Hủy phiên mở nhầm\n(chưa có điều trị)
+COMPLETED : hồ sơ khóa,\nchỉ ghi bổ sung
+COMPLETED --> IN_PROGRESS : Quản trị mở lại\n(hóa đơn còn nháp / đã hủy)
+CANCELLED --> IN_PROGRESS : Mở lại
+COMPLETED --> [*]
+@enduml

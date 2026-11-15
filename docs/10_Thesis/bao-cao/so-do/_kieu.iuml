@@ -1,0 +1,17 @@
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName "Liberation Serif"
+skinparam defaultFontSize 15
+skinparam dpi 220
+skinparam backgroundColor white
+skinparam packageStyle rectangle
+skinparam usecase {
+  BorderColor black
+  BackgroundColor white
+}
+skinparam rectangle {
+  BorderColor black
+}
+skinparam ArrowColor black
+skinparam ActorBorderColor black
+skinparam ActorBackgroundColor white

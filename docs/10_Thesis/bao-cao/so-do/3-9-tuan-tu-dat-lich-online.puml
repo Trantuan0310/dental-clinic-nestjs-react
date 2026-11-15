@@ -1,0 +1,27 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Bệnh nhân" as BN
+participant "Trang đặt lịch\n(React)" as FE
+participant "BookingController\n/ BookingService" as API
+database "PostgreSQL" as DB
+actor "Lễ tân" as LT
+participant "Dịch vụ email" as MAIL
+BN -> FE : Chọn dịch vụ, bác sĩ, ngày
+FE -> API : GET /public/booking/slots
+API -> DB : Lịch làm việc, lịch hẹn, ngày nghỉ
+API --> FE : Các khung giờ trống
+BN -> FE : Chọn giờ, nhập họ tên, SĐT
+FE -> API : POST /public/booking/requests (5 lần/phút)
+API -> DB : Tạo BookingRequest (PENDING_REVIEW)
+API --> FE : Mã tham chiếu để tra cứu
+LT -> API : Duyệt yêu cầu
+alt Giờ còn trống
+  API -> DB : Giao dịch: khóa lịch bác sĩ và bệnh nhân,\nkiểm tra trùng, tạo hồ sơ (nếu mới) và Appointment
+  API -> MAIL : Gửi xác nhận kèm liên kết lịch hẹn
+else Giờ đã kín
+  LT -> API : Đề xuất giờ khác (PROPOSED)
+  API -> MAIL : Gửi đề xuất cho bệnh nhân
+  BN -> API : Chấp nhận đề xuất (PATIENT_ACCEPTED)
+end
+@enduml
