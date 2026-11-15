@@ -121,3 +121,4 @@
 - Build lại: 164 trang, Mở đầu = trang 1, Kết luận = 132.
 - Tài liệu tham khảo căn trái (hết giãn chữ ở dòng có URL); rút gọn kết luận Chương 1 để không còn trang chỉ có 2 dòng. Báo cáo 163 trang, Kết luận = 131.
 - Thống nhất thuật ngữ "Sổ đồng ý"; giải thích tiền tố mã yêu cầu (BN, LH, KB, TT, NS, KH, BC, AI, QT) ở Mục 2.3 và danh mục viết tắt; kiểm tra mọi hình/bảng đều được nhắc trong văn bản.
+- Kết luận: nêu số kiểm thử cụ thể, ma trận truy vết; hạn chế đồng bộ với Mục 5.6.
