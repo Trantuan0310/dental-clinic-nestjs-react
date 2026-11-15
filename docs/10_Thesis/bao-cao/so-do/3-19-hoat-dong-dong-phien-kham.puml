@@ -1,0 +1,38 @@
+@startuml
+!include _kieu.iuml
+|Bác sĩ|
+start
+:Bấm "Đóng phiên khám";
+:Xem tóm tắt điều trị, đơn thuốc;
+:Xác nhận;
+|Hệ thống|
+:Bắt đầu giao dịch;
+while (Còn vật tư của điều trị chưa trừ?) is (còn)
+  :UPDATE tồn kho = tồn kho − số lượng\nWHERE tồn kho ≥ số lượng;
+  if (Cập nhật được?) then (có)
+    :Ghi biến động kho (trước, sau, người thực hiện);
+  else (không đủ hàng)
+    :Hủy toàn bộ giao dịch;
+    |Bác sĩ|
+    :Nhận danh sách vật tư thiếu,\nphiên khám vẫn mở;
+    stop
+  endif
+endwhile (hết)
+|Hệ thống|
+:Khóa ghi chú lâm sàng;\nphiên khám và lịch hẹn chuyển COMPLETED;
+:Kết thúc giao dịch;
+:Phát sự kiện encounter.closed;
+fork
+  :Module hóa đơn:\nlập hóa đơn nháp từ các điều trị;
+fork again
+  :Module lương:\nghi ca khám vào kỳ lương đang mở;
+fork again
+  :Module AI:\nxóa bản tóm tắt hồ sơ cũ để tạo lại;
+end fork
+note right
+  Lỗi ở một module lắng nghe
+  chỉ được ghi log, không làm
+  hỏng việc đóng phiên khám
+end note
+stop
+@enduml

@@ -1,0 +1,29 @@
+@startuml
+!include _kieu.iuml
+start
+:Tác vụ định kỳ chạy mỗi giờ;
+if (Giờ yên lặng 21:00–7:00?) then (có)
+  :Không gửi, chờ lần chạy sau;
+  stop
+endif
+:Lấy lịch hẹn đã đặt hoặc đã xác nhận, bắt đầu\nsau 30 phút và trong vòng 24 giờ tới,\nđặt trước giờ hẹn ít nhất 2 giờ, chưa nhắc;
+while (Còn lịch hẹn?) is (còn)
+  :Gửi email nhắc kèm liên kết\nxác nhận / dời / hủy lịch;
+  if (Bật kênh điện thoại\nvà khách có số điện thoại?) then (có)
+    if (Tin cùng khóa chống trùng\nđã gửi?) then (rồi)
+      :Bỏ qua;
+    else (chưa)
+      :Gửi qua Zalo ZNS;
+      if (Thành công?) then (không)
+        :Gửi qua SMS;
+      endif
+      :Ghi nhật ký tin nhắn\n(SENT hoặc FAILED);
+    endif
+  endif
+endwhile (hết)
+note right
+  Tin FAILED được thử lại ở các
+  lần chạy sau, tối đa 3 lần
+end note
+stop
+@enduml

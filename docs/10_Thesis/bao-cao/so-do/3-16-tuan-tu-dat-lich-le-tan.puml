@@ -1,0 +1,36 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Lễ tân A" as A
+actor "Lễ tân B" as B
+participant "Giao diện\n(React)" as FE
+participant "AppointmentsController\n+ PermissionsGuard" as C
+participant "AppointmentsService" as S
+database "PostgreSQL" as DB
+A -> FE : Chọn bệnh nhân, bác sĩ, dịch vụ, ngày
+FE -> C : GET /appointments/availability
+C -> S : Tính giờ trống
+S -> DB : Lịch làm việc, ngày nghỉ, lịch hẹn đã có
+S --> FE : Các khung giờ trống
+A -> FE : Chọn 9:00, bấm Lưu
+FE -> C : POST /appointments
+C -> C : Xác thực JWT, kiểm tra quyền\nappointment.create, kiểm tra DTO
+C -> S : create(dto)
+S -> DB : BEGIN
+S -> DB : pg_advisory_xact_lock(1, bác sĩ)\npg_advisory_xact_lock(2, bệnh nhân)
+note over B, DB : Cùng lúc, lễ tân B đặt cùng bác sĩ lúc 9:00:\ngiao dịch của B phải chờ khóa của A (tối đa 5 giây)
+S -> DB : Kiểm tra giờ làm, ngày nghỉ, lịch nghỉ toàn phòng khám,\ntrùng lịch bác sĩ, trùng lịch bệnh nhân
+S -> DB : INSERT appointment, appointment_services,\nappointment_history
+S -> DB : COMMIT (nhả khóa)
+S --> FE : 201, lịch hẹn mới
+FE --> A : Hiện lịch hẹn trên lịch
+B -> C : POST /appointments (cùng 9:00)
+C -> S : create(dto)
+S -> DB : Lấy được khóa sau khi A COMMIT
+S -> DB : Kiểm tra trùng: thấy lịch của A
+alt Trùng lịch
+  S --> B : 409 – khung giờ đã có lịch
+else Chờ khóa quá 5 giây
+  S --> B : 409 CALENDAR_BUSY – thử lại
+end
+@enduml

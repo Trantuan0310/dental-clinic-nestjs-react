@@ -1,0 +1,35 @@
+@startuml
+!include _kieu.iuml
+start
+:Ngân hàng (SePay) gọi\nPOST /webhooks/bank/sepay;
+if (Khóa API đúng?\n(so sánh thời gian hằng)) then (sai)
+  :Trả 401;
+  stop
+endif
+if (Là tiền vào tài khoản\ncủa phòng khám?) then (không)
+  :Bỏ qua;
+  stop
+endif
+if (Đã có giao dịch cùng mã\n(nhà cung cấp, mã giao dịch)?) then (có)
+  :Trả "trùng", không ghi gì thêm;
+  stop
+endif
+:Tách mã hóa đơn từ nội dung chuyển khoản\n(chấp nhận cả dạng viết liền, chữ thường);
+if (Có mã hóa đơn?) then (không)
+  :Cần xem xét: không có mã;
+elseif (Tìm thấy hóa đơn?) then (không)
+  :Cần xem xét: không thấy hóa đơn;
+elseif (Hóa đơn đã phát hành và còn nợ?) then (không)
+  :Cần xem xét: hóa đơn không cần thu;
+elseif (Số tiền ≤ số còn nợ?) then (không)
+  :Cần xem xét: số tiền vượt nợ;
+else (có)
+  :Ghi thanh toán chuyển khoản\nvới request_key = bank:sepay:<mã giao dịch>;
+  :Hóa đơn chuyển PARTIAL hoặc PAID;
+endif
+:Lưu giao dịch ngân hàng\n(RECORDED hoặc NEEDS_REVIEW kèm lý do);
+if (Cần xem xét?) then (có)
+  :Lễ tân đối chiếu, xử lý tay\n→ RESOLVED;
+endif
+stop
+@enduml

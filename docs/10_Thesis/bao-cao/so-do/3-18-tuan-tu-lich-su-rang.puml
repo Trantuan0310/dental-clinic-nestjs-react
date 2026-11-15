@@ -1,0 +1,31 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Bác sĩ" as BS
+participant "Sơ đồ răng\n(React, SVG)" as FE
+participant "PatientsProxyController\n+ PermissionsGuard" as C
+participant "Service hồ sơ khám" as S
+database "PostgreSQL" as DB
+BS -> FE : Bấm răng 37 trên sơ đồ
+FE -> C : GET /patients/:id/teeth/37/history
+C -> C : Kiểm tra quyền encounter.read.any\nhoặc encounter.read.own; số răng hợp lệ (FDI)
+C -> S : toothHistory(id, 37, người dùng)
+alt Chỉ có quyền .own
+  S -> DB : Bác sĩ đã khám hoặc đang có lịch\nvới bệnh nhân?
+  opt Không liên quan
+    S --> FE : 404 – không tìm thấy bệnh nhân
+  end
+end
+S -> DB : Một truy vấn: các phiên khám chưa hủy (tối đa 100),\nđiều trị có tooth_numbers chứa 37 (JSONB),\nmục sơ đồ của răng 37
+S -> DB : Ghi nhật ký kiểm toán (đọc lịch sử răng)
+S --> FE : Tình trạng, ghi chú, các lần điều trị\n(ngày, bác sĩ, thủ thuật)
+FE --> BS : Khung chi tiết bên cạnh sơ đồ
+BS -> FE : "Thêm điều trị cho răng này"
+FE --> BS : Hộp thoại mở sẵn răng 37
+BS -> FE : Chọn dịch vụ, vật tư, Lưu
+FE -> C : POST /encounters/:id/treatments\n(toothNumbers: [37])
+C -> S : Kiểm tra treatment.write, phiên còn mở,\nđúng bác sĩ khám; giá theo bảng giá
+S -> DB : INSERT treatment, treatment_inventory_usages
+S --> FE : 201
+FE -> FE : Làm mới lịch sử răng và danh sách điều trị
+@enduml
