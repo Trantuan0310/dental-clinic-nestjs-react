@@ -557,12 +557,7 @@ export class PatientsService {
    * in the chair today (dentistMayEditMedicalHistory), so a newly found
    * allergy is recorded during the visit; other fields stay front-desk work.
    */
-  async updateMedicalHistory(
-    id: string,
-    dto: UpdateMedicalHistoryDto,
-    actor: JwtPayload,
-    tx?: Prisma.TransactionClient,
-  ) {
+  async updateMedicalHistory(id: string, dto: UpdateMedicalHistoryDto, actor: JwtPayload, tx?: Prisma.TransactionClient) {
     const db = tx ?? this.prisma;
     const current = await db.patient.findFirst({
       where: { id, deletedAt: null },

@@ -10,12 +10,7 @@ import { IntakeService } from './intake.service';
 
 @Module({
   imports: [PrismaModule, AuditModule],
-  controllers: [
-    IntakeController,
-    PublicIntakeController,
-    PatientsController,
-    PatientsProxyController,
-  ],
+  controllers: [IntakeController, PublicIntakeController, PatientsController, PatientsProxyController],
   providers: [IntakeService, PatientsService],
   exports: [PatientsService],
 })

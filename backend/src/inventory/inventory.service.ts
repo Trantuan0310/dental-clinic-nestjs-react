@@ -69,19 +69,8 @@ export class InventoryService {
   async reorder(leadDays: number, now = new Date()) {
     const since = (days: number) => new Date(now.getTime() - days * 86400000);
     // A clinical return reverses an issue. Deliveries and stock-count adjustments are not usage.
-    return this.prisma.$queryRaw<
-      Array<{
-        id: string;
-        sku: string;
-        name: string;
-        unit: string;
-        stock: number;
-        daily30: number;
-        daily90: number;
-        daysLeft: number;
-        suggested: number;
-      }>
-    >`
+    return this.prisma.$queryRaw<Array<{id:string; sku:string; name:string; unit:string;
+      stock:number; daily30:number; daily90:number; daysLeft:number; suggested:number}>>`
       WITH usage AS (
         SELECT inventory_item_id,
           GREATEST(0, -SUM(diff) FILTER (WHERE performed_at >= ${since(30)})) / 30 AS daily30,

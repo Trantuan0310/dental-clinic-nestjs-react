@@ -186,18 +186,14 @@ describe('assistant durable confirmation', () => {
       t.availability as any,
     );
     await expect(restarted.confirm(p.payload.proposalId, actor)).rejects.toThrow();
-    await expect(
-      restarted.confirm(p.payload.proposalId, { ...actor, permissions: ['appointment.update'] }),
-    ).rejects.toThrow();
+    await expect(restarted.confirm(p.payload.proposalId, { ...actor, permissions: ['appointment.update'] })).rejects.toThrow();
     expect(t.appointments.cancel).toHaveBeenCalledTimes(1);
   });
   it('checks permission and expiry before acknowledging a completed proposal', async () => {
     const t = setup();
     const p = await t.service.propose('cancel_appointment', cancel, actor);
     await t.service.confirm(p.payload.proposalId, actor);
-    await expect(
-      t.service.confirm(p.payload.proposalId, { ...actor, permissions: ['appointment.update'] }),
-    ).rejects.toThrow();
+    await expect(t.service.confirm(p.payload.proposalId, { ...actor, permissions: ['appointment.update'] })).rejects.toThrow();
     t.records.get(p.payload.proposalId).occurredAt = new Date(0);
     await expect(t.service.confirm(p.payload.proposalId, actor)).rejects.toThrow();
     expect(t.appointments.cancel).toHaveBeenCalledTimes(1);

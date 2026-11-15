@@ -58,11 +58,7 @@ export class MedicalRecordsController {
 
   @Put('visit-templates/:id')
   @RequirePermissions('service.manage', 'clinical_note.write')
-  async updateTemplate(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: VisitTemplateDto,
-    @User() actor: JwtPayload,
-  ) {
+  async updateTemplate(@Param('id', ParseUUIDPipe) id: string, @Body() dto: VisitTemplateDto, @User() actor: JwtPayload) {
     return { data: await this.mr.saveVisitTemplate(id, dto, actor) };
   }
 
@@ -75,22 +71,14 @@ export class MedicalRecordsController {
 
   @Get('encounters/:id/visit-templates/:templateId/preview')
   @RequirePermissions('clinical_note.write')
-  async previewTemplate(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('templateId', ParseUUIDPipe) templateId: string,
-    @User() actor: JwtPayload,
-  ) {
+  async previewTemplate(@Param('id', ParseUUIDPipe) id: string, @Param('templateId', ParseUUIDPipe) templateId: string, @User() actor: JwtPayload) {
     return { data: await this.mr.previewVisitTemplate(id, templateId, actor) };
   }
 
   @Post('encounters/:id/visit-templates/apply')
   @RequirePermissions('clinical_note.write')
   @HttpCode(HttpStatus.OK)
-  async applyTemplate(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ApplyVisitTemplateDto,
-    @User() actor: JwtPayload,
-  ) {
+  async applyTemplate(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ApplyVisitTemplateDto, @User() actor: JwtPayload) {
     return { data: await this.mr.applyVisitTemplate(id, dto, actor) };
   }
 

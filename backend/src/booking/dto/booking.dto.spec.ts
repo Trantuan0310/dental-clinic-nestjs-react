@@ -24,13 +24,9 @@ const errorsFor = (extra: Record<string, unknown>) =>
 
 describe('CreatePublicBookingRequestDto', () => {
   it('rejects a text consent flag with production DTO conversion enabled', () => {
-    const dto = plainToInstance(
-      CreatePublicBookingRequestDto,
-      { ...base, consent: 'false' },
-      {
-        enableImplicitConversion: true,
-      },
-    );
+    const dto = plainToInstance(CreatePublicBookingRequestDto, { ...base, consent: 'false' }, {
+      enableImplicitConversion: true,
+    });
     expect(validateSync(dto).map(e => e.property)).toContain('consent');
   });
   it('accepts the optional fields left empty by the public form', () => {

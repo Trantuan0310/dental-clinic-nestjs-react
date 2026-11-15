@@ -117,21 +117,11 @@ export class DispatchService {
       this.list({}, actor),
       this.prisma.encounter.findMany({
         where: { status: 'IN_PROGRESS', ...(scoped && { dentistId: actor.sub }) },
-        select: {
-          dentistId: true,
-          startedAt: true,
-          patient: { select: { fullName: true } },
-          dentist: { select: { fullName: true } },
-        },
+        select: { dentistId: true, startedAt: true, patient: { select: { fullName: true } }, dentist: { select: { fullName: true } } },
         orderBy: { startedAt: 'asc' },
       }),
       this.prisma.user.findMany({
-        where: {
-          deletedAt: null,
-          status: 'ACTIVE',
-          userRoles: { some: { role: { code: 'dentist' } } },
-          ...(scoped && { id: actor.sub }),
-        },
+        where: { deletedAt: null, status: 'ACTIVE', userRoles: { some: { role: { code: 'dentist' } } }, ...(scoped && { id: actor.sub }) },
         select: { id: true, fullName: true },
       }),
     ]);
@@ -143,20 +133,9 @@ export class DispatchService {
       const waiting = entries.filter(e => e.status === 'WAITING');
       const next = entries.find(e => e.status === 'CALLED') ?? waiting[0];
       return {
-        dentistId,
-        name,
-        waiting: waiting.length,
-        current: encounters
-          .filter(e => e.dentistId === dentistId)
-          .map(e => ({ name: e.patient.fullName, startedAt: e.startedAt })),
-        next: next
-          ? {
-              id: next.id,
-              name: next.appointment.patient.fullName,
-              minutes: next.waitingMinutes,
-              called: next.status === 'CALLED',
-            }
-          : null,
+        dentistId, name, waiting: waiting.length,
+        current: encounters.filter(e => e.dentistId === dentistId).map(e => ({ name: e.patient.fullName, startedAt: e.startedAt })),
+        next: next ? { id: next.id, name: next.appointment.patient.fullName, minutes: next.waitingMinutes, called: next.status === 'CALLED' } : null,
       };
     }).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
   }

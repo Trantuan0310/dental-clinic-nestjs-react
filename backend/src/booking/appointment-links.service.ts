@@ -507,19 +507,17 @@ export class AppointmentLinksService {
       canReschedule: active && appt.rescheduleCount < 3,
       canCancel: active && new Date() <= this.cancelUntil(appt),
       cancelUntil: this.cancelUntil(appt),
-      rescheduleRequest:
-        request?.status === 'PENDING' &&
-        this.sameVisit(request, appt) &&
+      rescheduleRequest: request?.status === 'PENDING' && this.sameVisit(request, appt) &&
         (!request.holdUntil || request.holdUntil > new Date())
-          ? {
-              id: request.id,
-              status: request.status,
-              requestedStartAt: request.requestedStartAt,
-              requestedEndAt: request.requestedEndAt,
-              note: request.note,
-              holdUntil: request.holdUntil,
-            }
-          : null,
+        ? {
+            id: request.id,
+            status: request.status,
+            requestedStartAt: request.requestedStartAt,
+            requestedEndAt: request.requestedEndAt,
+            note: request.note,
+            holdUntil: request.holdUntil,
+          }
+        : null,
     };
   }
 }

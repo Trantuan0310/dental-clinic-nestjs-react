@@ -249,22 +249,11 @@ export class BillingController {
   ) {
     const parsedPage = Number(page);
     const parsedSize = Number(pageSize);
-    if (
-      !Number.isInteger(parsedPage) ||
-      parsedPage < 1 ||
-      !Number.isInteger(parsedSize) ||
-      parsedSize < 1
-    ) {
+    if (!Number.isInteger(parsedPage) || parsedPage < 1 || !Number.isInteger(parsedSize) || parsedSize < 1) {
       throw new BadRequestException('page and pageSize must be positive integers');
     }
-    if (!['all', 'free', 'actionable'].includes(scope))
-      throw new BadRequestException('scope must be all, free, or actionable');
-    return this.billing.listEncountersMissingInvoice(
-      parsedPage,
-      Math.min(parsedSize, 50),
-      summary === 'true',
-      scope as 'all' | 'free' | 'actionable',
-    );
+    if (!['all', 'free', 'actionable'].includes(scope)) throw new BadRequestException('scope must be all, free, or actionable');
+    return this.billing.listEncountersMissingInvoice(parsedPage, Math.min(parsedSize, 50), summary === 'true', scope as 'all' | 'free' | 'actionable');
   }
 
   @Get('invoices/:id/audits')

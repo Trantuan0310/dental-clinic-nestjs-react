@@ -49,8 +49,7 @@ export interface MessageFacts {
 }
 
 const KIND_TASK: Record<MessageFacts['kind'], string> = {
-  plan_invite:
-    'Mời khách liên hệ để sắp lịch cho kế hoạch điều trị đã đồng ý. Chưa có xác nhận đặt lịch.',
+  plan_invite: 'Mời khách liên hệ để sắp lịch cho kế hoạch điều trị đã đồng ý. Chưa có xác nhận đặt lịch.',
   waitlist_invite: 'Mời khách trong danh sách chờ liên hệ để chọn giờ trống. Lịch chưa được đặt.',
   appointment_reminder:
     'Nhắc khách lịch hẹn sắp tới, mời khách xác nhận hoặc báo trước nếu cần đổi giờ.',

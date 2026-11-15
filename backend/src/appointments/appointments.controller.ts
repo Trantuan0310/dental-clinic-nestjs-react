@@ -77,11 +77,8 @@ export class AppointmentsController {
   // UUID-format 400 otherwise).
   @Get('follow-up/:encounterId/:patientId')
   @RequirePermissions('appointment.create')
-  async followUpDates(
-    @Param('encounterId', ParseUUIDPipe) encounterId: string,
-    @Param('patientId', ParseUUIDPipe) patientId: string,
-    @User() actor: JwtPayload,
-  ) {
+  async followUpDates(@Param('encounterId', ParseUUIDPipe) encounterId: string,
+    @Param('patientId', ParseUUIDPipe) patientId: string, @User() actor: JwtPayload) {
     return { data: await this.appointments.followUpDates(encounterId, patientId, actor) };
   }
 

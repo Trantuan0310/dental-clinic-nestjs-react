@@ -161,31 +161,13 @@ describe('Real HTTP and PostgreSQL regression', () => {
     const token = await issueAppointmentLink(db, appointment.id);
     expect(token).toBeTruthy();
     const url = '/api/v1/public/appointment-links/' + token + '/intake';
-    const answers = {
-      allergies: ['Latex'],
-      currentMedications: [],
-      chronicDiseases: [],
-      reason: 'Exam',
-      emergencyContact: '',
-      consent: true,
-      consentVersion: 'C3-v1',
-    };
-    await request(app.getHttpServer())
-      .post(url)
-      .send({ ...answers, consent: false })
-      .expect(400);
-    await request(app.getHttpServer())
-      .post(url)
-      .send({ ...answers, consentVersion: 'stale' })
-      .expect(409);
+    const answers = { allergies: ['Latex'], currentMedications: [], chronicDiseases: [], reason: 'Exam', emergencyContact: '', consent: true, consentVersion: 'C3-v1' };
+    await request(app.getHttpServer()).post(url).send({ ...answers, consent: false }).expect(400);
+    await request(app.getHttpServer()).post(url).send({ ...answers, consentVersion: 'stale' }).expect(409);
     await request(app.getHttpServer()).post(url).send(answers).expect(201);
     await request(app.getHttpServer()).post(url).send(answers).expect(409);
-    const history = await api('get', '/patients/' + patientId + '/consents', 'reception').expect(
-      200,
-    );
-    expect(history.body.data).toEqual([
-      expect.objectContaining({ channel: 'INTAKE', version: 'C3-v1' }),
-    ]);
+    const history = await api('get', '/patients/' + patientId + '/consents', 'reception').expect(200);
+    expect(history.body.data).toEqual([expect.objectContaining({ channel: 'INTAKE', version: 'C3-v1' })]);
     const review = '/appointments/' + appointment.id + '/intake';
     await api('get', review, 'other').expect(404);
     const pending = await api('get', review, 'reception').expect(200);
@@ -202,8 +184,7 @@ describe('Real HTTP and PostgreSQL regression', () => {
     const secondToken = await issueAppointmentLink(db, followUp.id);
     await request(app.getHttpServer())
       .post('/api/v1/public/appointment-links/' + secondToken + '/intake')
-      .send({ ...answers, allergies: ['Unverified'] })
-      .expect(201);
+      .send({ ...answers, allergies: ['Unverified'] }).expect(201);
     const followUpReview = '/appointments/' + followUp.id + '/intake';
     await api('post', followUpReview + '/discard', 'reception').expect(201);
     await api('post', followUpReview + '/approve', 'reception').expect(409);
@@ -214,22 +195,16 @@ describe('Real HTTP and PostgreSQL regression', () => {
   it('records desk consent once, restricts export, and preserves withdrawal history', async () => {
     const p = await patient();
     const path = '/patients/' + p + '/consents';
-    const notices = await request(app.getHttpServer())
-      .get('/api/v1/public/consent-notices')
-      .expect(200);
+    const notices = await request(app.getHttpServer()).get('/api/v1/public/consent-notices').expect(200);
     const { purpose, version, text } = notices.body.data.desk;
     await api('post', path, 'reception').send({ purpose, version });
     await api('post', path, 'reception').send({ purpose, version });
     const ledger = await api('get', path, 'reception').expect(200);
-    expect(ledger.body.data).toEqual([
-      expect.objectContaining({ channel: 'DESK', purpose, version, text, withdrawnAt: null }),
-    ]);
+    expect(ledger.body.data).toEqual([expect.objectContaining({ channel: 'DESK', purpose, version, text, withdrawnAt: null })]);
     const id = ledger.body.data[0].id;
     await api('post', path + '/' + id + '/withdraw', 'reception').send({});
     const after = await api('get', path, 'reception').expect(200);
-    expect(after.body.data).toEqual([
-      expect.objectContaining({ id, text, withdrawnAt: expect.any(String) }),
-    ]);
+    expect(after.body.data).toEqual([expect.objectContaining({ id, text, withdrawnAt: expect.any(String) })]);
     await api('get', '/admin/consents/export', 'reception').expect(403);
     const csv = await api('get', '/admin/consents/export').expect(200);
     expect(csv.headers['content-type']).toMatch(/text\/csv/);
@@ -708,109 +683,64 @@ describe('Real HTTP and PostgreSQL regression', () => {
   });
   it('keeps front-desk contact history separate for two plans of the same patient', async () => {
     const p = await patient();
-    const create = (title: string) =>
-      db.treatmentPlan.create({
-        data: {
-          title,
-          patientId: p,
-          dentistId: users.dentist,
-          createdBy: users.dentist,
-          status: 'ACCEPTED',
-          acceptedAt: new Date(),
-          items: { create: { procedure: 'Test', quantity: 1, unitPrice: 1000 } },
-        },
-      });
-    const [a, b] = await Promise.all([create('First plan'), create('Second plan')]);
-    const url = '/treatment-plans/' + a.id + '/contacts';
-    const draft = await api('post', '/ai/drafts/message', 'reception')
-      .send({ kind: 'plan_invite', planId: a.id })
-      .expect(200);
+    const create = (title:string) => db.treatmentPlan.create({data:{title,patientId:p,
+      dentistId:users.dentist,createdBy:users.dentist,status:'ACCEPTED',acceptedAt:new Date(),
+      items:{create:{procedure:'Test',quantity:1,unitPrice:1000}}}});
+    const [a,b]=await Promise.all([create('First plan'),create('Second plan')]);
+    const url='/treatment-plans/'+a.id+'/contacts';
+    const draft=await api('post','/ai/drafts/message','reception').send({kind:'plan_invite',planId:a.id}).expect(200);
     expect(draft.body.data.text.length).toBeGreaterThan(0);
-    expect(await db.treatmentPlanContact.count({ where: { planId: a.id } })).toBe(0);
-    const contact = {
-      channel: 'PHONE',
-      outcome: 'CALL_BACK',
-      contactedAt: new Date().toISOString(),
-    };
-    await api('post', url, 'reception')
-      .send({ ...contact, channel: 'invalid' })
-      .expect(400);
-    await api('post', url, 'reception').send(contact).expect(201);
-    const result = await api('get', '/treatment-plans/pending', 'reception').expect(200);
-    const row = result.body.data.rows.find((r: { patientId: string }) => r.patientId === p);
-    expect(row.plans).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: a.id, contacts: [expect.objectContaining(contact)] }),
-        expect.objectContaining({ id: b.id, contacts: [] }),
-      ]),
-    );
+    expect(await db.treatmentPlanContact.count({where:{planId:a.id}})).toBe(0);
+    const contact={channel:'PHONE',outcome:'CALL_BACK',contactedAt:new Date().toISOString()};
+    await api('post',url,'reception').send({...contact,channel:'invalid'}).expect(400);
+    await api('post',url,'reception').send(contact).expect(201);
+    const result=await api('get','/treatment-plans/pending','reception').expect(200);
+    const row=result.body.data.rows.find((r:{patientId:string})=>r.patientId===p);
+    expect(row.plans).toEqual(expect.arrayContaining([
+      expect.objectContaining({id:a.id,contacts:[expect.objectContaining(contact)]}),
+      expect.objectContaining({id:b.id,contacts:[]}),
+    ]));
   });
 
   it('previews a template, appends once on concurrent apply and deducts stock only on close', async () => {
     const id = await fixtureEncounter();
-    const service = await db.service.create({
-      data: {
-        code: 'TEMPLATE-UAT',
-        name: 'Template test',
-        defaultDurationMin: 30,
-        basePrice: 100000,
-        category: { create: { code: 'TEMPLATE-UAT', name: 'Template tests' } },
-      },
-    });
+    const service = await db.service.create({ data: {
+      code: 'TEMPLATE-UAT', name: 'Template test', defaultDurationMin: 30, basePrice: 100000,
+      category: { create: { code: 'TEMPLATE-UAT', name: 'Template tests' } },
+    } });
     const item = await db.inventoryItem.create({
       data: { sku: 'TEMPLATE-UAT', name: 'Test item', unit: 'piece', quantityOnHand: 10 },
     });
     const templates = '/medical-records/visit-templates';
     const encounter = '/medical-records/encounters/' + id;
     const draft = {
-      name: 'Template UAT',
-      serviceId: service.id,
-      soap: {
-        subjective: 'Additional history',
-        objective: 'UAT',
-        assessment: 'Test',
-        plan: 'Test',
-      },
-      treatments: [
-        {
-          serviceId: service.id,
-          quantity: 1,
-          inventoryUsages: [{ inventoryItemId: item.id, quantity: 2, unit: 'piece' }],
-        },
-      ],
+      name: 'Template UAT', serviceId: service.id,
+      soap: { subjective: 'Additional history', objective: 'UAT', assessment: 'Test', plan: 'Test' },
+      treatments: [{ serviceId: service.id, quantity: 1,
+        inventoryUsages: [{ inventoryItemId: item.id, quantity: 2, unit: 'piece' }] }],
     };
     await api('post', templates, 'reception').send(draft).expect(403);
     const created = await api('post', templates, 'dentist').send(draft).expect(201);
     const templateId = created.body.data.id;
     const preview = encounter + '/visit-templates/' + templateId + '/preview';
     const first = (await api('get', preview, 'dentist').expect(200)).body.data;
-    await api('put', templates + '/' + templateId, 'dentist')
-      .send({ ...draft, name: 'Updated UAT' })
-      .expect(200);
-    const apply = (version: string) =>
-      api('post', encounter + '/visit-templates/apply', 'dentist').send({ templateId, version });
+    await api('put', templates + '/' + templateId, 'dentist').send({ ...draft, name: 'Updated UAT' }).expect(200);
+    const apply = (version: string) => api('post', encounter + '/visit-templates/apply', 'dentist')
+      .send({ templateId, version });
     await apply(first.version).expect(409);
-    expect(await db.treatment.count({ where: { encounterId: id } })).toBe(0);
+    expect(await db.treatment.count({where:{encounterId:id}})).toBe(0);
     const current = (await api('get', preview, 'dentist').expect(200)).body.data;
-    const responses = await Promise.all([
-      apply(current.version).expect(200),
-      apply(current.version).expect(200),
-    ]);
-    expect(responses.map(r => r.body.data.alreadyApplied).sort()).toEqual([false, true]);
-    const note = await db.clinicalNote.findUniqueOrThrow({ where: { encounterId: id } });
+    const responses = await Promise.all([apply(current.version).expect(200), apply(current.version).expect(200)]);
+    expect(responses.map(r => r.body.data.alreadyApplied).sort()).toEqual([false,true]);
+    const note = await db.clinicalNote.findUniqueOrThrow({where:{encounterId:id}});
     expect(note.chiefComplaint).toBe('Đau răng\n\nAdditional history');
-    expect(await db.treatment.count({ where: { encounterId: id } })).toBe(1);
-    const stock = async () =>
-      Number((await db.inventoryItem.findUniqueOrThrow({ where: { id: item.id } })).quantityOnHand);
+    expect(await db.treatment.count({where:{encounterId:id}})).toBe(1);
+    const stock = async () => Number((await db.inventoryItem.findUniqueOrThrow({where:{id:item.id}})).quantityOnHand);
     expect(await stock()).toBe(10);
-    await api('post', encounter + '/close', 'dentist')
-      .send({})
-      .expect(200);
+    await api('post', encounter + '/close', 'dentist').send({}).expect(200);
     expect(await stock()).toBe(8);
     await api('delete', templates + '/' + templateId).expect(204);
-    expect(
-      (await api('get', templates).expect(200)).body.data.map((r: { id: string }) => r.id),
-    ).not.toContain(templateId);
+    expect((await api('get', templates).expect(200)).body.data.map((r: {id:string}) => r.id)).not.toContain(templateId);
   });
 
   it('rolls back all inventory changes when closing with insufficient stock', async () => {
@@ -911,14 +841,11 @@ describe('Real HTTP and PostgreSQL regression', () => {
       Number((await db.inventoryItem.findUniqueOrThrow({ where: { id } })).quantityOnHand),
     ).toBe(4);
     // The opening stock of 5 is recorded as a receipt too, so the history
-    const reorder = await api('get', '/inventory/reorder?leadDays=60').expect(200);
-    expect(reorder.body.data.find((r: { id: string }) => r.id === id)).toMatchObject({
-      stock: 4,
-      daily30: 0.1,
-      daysLeft: 40,
-      suggested: 2,
-    });
-    await api('get', '/inventory/reorder?leadDays=0').expect(400);
+      const reorder = await api('get','/inventory/reorder?leadDays=60').expect(200);
+      expect(reorder.body.data.find((r:{id:string})=>r.id===id)).toMatchObject({
+        stock:4,daily30:0.1,daysLeft:40,suggested:2,
+      });
+      await api('get','/inventory/reorder?leadDays=0').expect(400);
     // adds up to what is on hand: +5 +2 -3 = 4.
     const moves = await db.stockMovement.findMany({
       where: { inventoryItemId: id },
@@ -1760,44 +1687,23 @@ describe('Real HTTP and PostgreSQL regression', () => {
 
     it('matches a waiting patient by clinic half-day and books the request once', async () => {
       const p = await patient();
-      const { body } = await api('post', '/waitlist')
-        .send({
-          patientId: p,
-          serviceId: serviceA,
-          dentistId: null,
-          fromDate: day,
-          toDate: day,
-          period: 'PM',
-          note: '',
-        })
-        .expect(201);
+      const { body } = await api('post', '/waitlist').send({
+        patientId: p, serviceId: serviceA, dentistId: null,
+        fromDate: day, toDate: day, period: 'PM', note: '',
+      }).expect(201);
       const id = body.data.id;
-      const match = (time: string) =>
-        api('get', '/waitlist')
-          .query({
-            serviceId: serviceA,
-            dentistId: users.dentist,
-            startAt: at(time),
-          })
-          .expect(200);
-      expect((await match('09:00')).body.data.map((r: { id: string }) => r.id)).not.toContain(id);
-      expect((await match('14:00')).body.data.map((r: { id: string }) => r.id)).toContain(id);
-      const booking = {
-        patientId: p,
-        dentistId: users.dentist,
-        serviceIds: [serviceA],
-        startAt: at('14:00'),
-        source: 'PHONE',
-        waitlistEntryId: id,
-      };
+      const match = (time: string) => api('get', '/waitlist').query({
+        serviceId: serviceA, dentistId: users.dentist, startAt: at(time),
+      }).expect(200);
+      expect((await match('09:00')).body.data.map((r: {id: string}) => r.id)).not.toContain(id);
+      expect((await match('14:00')).body.data.map((r: {id: string}) => r.id)).toContain(id);
+      const booking = { patientId: p, dentistId: users.dentist, serviceIds: [serviceA],
+        startAt: at('14:00'), source: 'PHONE', waitlistEntryId: id };
       const booked = await api('post', '/appointments').send(booking).expect(201);
-      await api('post', '/appointments')
-        .send({ ...booking, startAt: at('15:00') })
-        .expect(409);
-      expect(await db.appointment.count({ where: { patientId: p } })).toBe(1);
-      expect(await db.waitlistEntry.findUnique({ where: { id } })).toMatchObject({
-        status: 'BOOKED',
-        appointmentId: booked.body.data.id,
+      await api('post', '/appointments').send({ ...booking, startAt: at('15:00') }).expect(409);
+      expect(await db.appointment.count({where:{patientId:p}})).toBe(1);
+      expect(await db.waitlistEntry.findUnique({where:{id}})).toMatchObject({
+        status: 'BOOKED', appointmentId: booked.body.data.id,
       });
     });
 
@@ -2194,20 +2100,11 @@ describe('Real HTTP and PostgreSQL regression', () => {
         `${new Date(Date.now() + 3 * 86400000 + 7 * 3600000).toISOString().slice(0, 10)}T09:00:00+07:00`,
       );
       const day = clinicDateOnly(startAt);
-      const waiting = await as('desk', 'post', '/waitlist')
-        .send({
-          patientId: p,
-          serviceId,
-          dentistId: acc.doc,
-          fromDate: day,
-          toDate: day,
-          period: 'AM',
-          note: '',
-        })
-        .expect(201);
+      const waiting = await as('desk','post','/waitlist').send({patientId:p, serviceId,dentistId:acc.doc,
+        fromDate:day,toDate:day,period:'AM',note:''}).expect(201);
       const booked = await as('desk', 'post', '/appointments')
         .send({
-          waitlistEntryId: waiting.body.data.id,
+          waitlistEntryId:waiting.body.data.id,
           patientId: p,
           dentistId: acc.doc,
           startAt: startAt.toISOString(),
@@ -2216,14 +2113,11 @@ describe('Real HTTP and PostgreSQL regression', () => {
         })
         .expect(201);
       const appointmentId = booked.body.data.id as string;
-      const coverage =
-        '/billing/reports/shift-coverage?from=' + day + '&to=' + day + '&dentistId=' + acc.doc;
-      await as('doc', 'get', coverage).expect(403);
-      const report = await as('admin', 'get', coverage).expect(200);
-      expect(report.body.data.cells.find((c: { hour: number }) => c.hour === 9)).toMatchObject({
-        availableMin: 60,
-        demandMin: 20,
-        bookedMin: 20,
+      const coverage = '/billing/reports/shift-coverage?from='+day+'&to='+day+'&dentistId='+acc.doc;
+      await as('doc','get',coverage).expect(403);
+      const report = await as('admin','get',coverage).expect(200);
+      expect(report.body.data.cells.find((c:{hour:number})=>c.hour===9)).toMatchObject({
+        availableMin:60, demandMin:20, bookedMin:20,
       });
       // The same slot again is refused with its business code (issue #8).
       const clash = await as('desk', 'post', '/appointments')
@@ -2255,11 +2149,9 @@ describe('Real HTTP and PostgreSQL regression', () => {
       ]);
       await as('doc', 'post', `/queue/${queue.body.data[0].id}/call`).expect(200);
       const chairs = await as('doc', 'get', '/queue/chairs').expect(200);
-      expect(chairs.body.data).toEqual([
-        expect.objectContaining({
-          next: expect.objectContaining({ id: queue.body.data[0].id, called: true }),
-        }),
-      ]);
+      expect(chairs.body.data).toEqual([expect.objectContaining({
+        next: expect.objectContaining({ id: queue.body.data[0].id, called: true }),
+      })]);
       const started = await as(
         'doc',
         'post',
@@ -2268,34 +2160,17 @@ describe('Real HTTP and PostgreSQL regression', () => {
       const encounterId = started.body.data.encounter.id as string;
       expect((await as('doc', 'get', '/queue').expect(200)).body.data).toEqual([]);
       const afterExam = await as('doc', 'get', '/queue/chairs').expect(200);
-      expect(afterExam.body.data[0]).toMatchObject({
-        next: null,
-        current: expect.arrayContaining([
-          expect.objectContaining({
-            name: queue.body.data[0].appointment.patient.fullName,
-            startedAt: expect.any(String),
-          }),
-        ]),
-      });
+      expect(afterExam.body.data[0]).toMatchObject({ next: null, current: expect.arrayContaining([
+        expect.objectContaining({ name: queue.body.data[0].appointment.patient.fullName, startedAt: expect.any(String) }),
+      ]) });
 
       // 6. Exam: a catalogue treatment, the note, close → draft invoice.
-      const template = await as('doc', 'post', '/medical-records/visit-templates')
-        .send({
-          name: 'Nghiệm thu',
-          serviceId,
-          soap: { subjective: '', objective: 'Ghi chú UAT', assessment: '', plan: '' },
-          treatments: [],
-        })
-        .expect(201);
-      const base = '/medical-records/encounters/' + encounterId + '/visit-templates';
-      const preview = await as(
-        'doc',
-        'get',
-        base + '/' + template.body.data.id + '/preview',
-      ).expect(200);
-      await as('doc', 'post', base + '/apply')
-        .send({ templateId: template.body.data.id, version: preview.body.data.version })
-        .expect(200);
+      const template=await as('doc','post','/medical-records/visit-templates').send({
+        name:'Nghiệm thu',serviceId,soap:{subjective:'',objective:'Ghi chú UAT',assessment:'',plan:''},treatments:[],
+      }).expect(201);
+      const base='/medical-records/encounters/'+encounterId+'/visit-templates';
+      const preview=await as('doc','get',base+'/'+template.body.data.id+'/preview').expect(200);
+      await as('doc','post',base+'/apply').send({templateId:template.body.data.id,version:preview.body.data.version}).expect(200);
       await as('doc', 'post', `/medical-records/encounters/${encounterId}/treatments`)
         .send({
           serviceId,
@@ -2312,17 +2187,8 @@ describe('Real HTTP and PostgreSQL regression', () => {
         .expect(200);
       const invoice = await invoiceFor(encounterId);
       expect(Number(invoice.total)).toBe(400000);
-      const dates = await as(
-        'desk',
-        'get',
-        '/appointments/follow-up/' + encounterId + '/' + p,
-      ).expect(200);
-      expect(dates.body.data).toEqual([
-        expect.objectContaining({
-          service: 'Trám răng (nghiệm thu)',
-          date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-        }),
-      ]);
+      const dates=await as('desk','get','/appointments/follow-up/'+encounterId+'/'+p).expect(200);
+      expect(dates.body.data).toEqual([expect.objectContaining({service:'Trám răng (nghiệm thu)',date:expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)})]);
 
       // 7. Billing: issue and pay in full.
       await as('admin', 'post', `/billing/invoices/${invoice.id}/issue`)
