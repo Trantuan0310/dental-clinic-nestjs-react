@@ -82,6 +82,18 @@ Phía máy chủ cung cấp giao diện lập trình theo phong cách REST [@fie
 
 Bên trong máy chủ, mã nguồn được tổ chức theo kiến trúc phân lớp [@fowler_layer]: lớp điều khiển (controller) nhận yêu cầu HTTP và kiểm tra dữ liệu đầu vào; lớp dịch vụ (service) chứa quy tắc nghiệp vụ; lớp truy cập dữ liệu làm việc với cơ sở dữ liệu. Theo chiều ngang, hệ thống được chia thành các module theo miền nghiệp vụ (bệnh nhân, lịch hẹn, hồ sơ khám, thanh toán, kho…), mỗi module sở hữu dữ liệu và quy tắc của mình, giao tiếp với module khác qua dịch vụ được công bố. Cách chia theo miền nghiệp vụ này kế thừa tư tưởng của thiết kế hướng miền [@evans], giúp mỗi phần có thể được hiểu, kiểm thử và thay đổi độc lập. Toàn bộ các module chạy chung trong một tiến trình và một cơ sở dữ liệu (kiến trúc nguyên khối có module hóa), phù hợp với quy mô một phòng khám: đơn giản khi triển khai, giao dịch dữ liệu nhất quán, nhưng vẫn có ranh giới rõ ràng để tách ra sau này nếu cần.
 
+### 1.3.3. Mô hình hóa hệ thống bằng UML
+
+Đồ án dùng ngôn ngữ mô hình hóa thống nhất UML [@uml] để mô tả hệ thống trước và trong khi cài đặt, theo cách tiếp cận phân tích, thiết kế hướng đối tượng [@pressman]. Mỗi loại biểu đồ trả lời một câu hỏi khác nhau, nên được chọn theo đặc điểm của từng chức năng:
+
+- **Biểu đồ use case:** ai dùng hệ thống để làm gì; dùng ở Chương 2 để xác định phạm vi chức năng theo từng tác nhân.
+- **Biểu đồ hoạt động:** luồng xử lý có nhiều nhánh quyết định hoặc nhiều bên tham gia (chia làn); dùng cho quy trình tổng thể, tiếp nhận, đối soát chuyển khoản, nhắc lịch.
+- **Biểu đồ tuần tự:** các thành phần trao đổi thông điệp theo thứ tự thời gian; dùng khi cần thấy rõ giao diện, controller, service, cơ sở dữ liệu và dịch vụ ngoài phối hợp ra sao, ví dụ đặt lịch khi hai người cùng thao tác hay xác thực và làm mới token.
+- **Biểu đồ trạng thái:** vòng đời của một đối tượng và điều kiện của từng bước chuyển; dùng cho lịch hẹn, phiên khám, hóa đơn, kế hoạch điều trị, kỳ lương, nhắc tái khám.
+- **Sơ đồ thực thể liên kết:** các bảng dữ liệu và quan hệ giữa chúng.
+
+Các biểu đồ trong báo cáo được viết dưới dạng văn bản (PlantUML) và lưu cùng mã nguồn; sơ đồ thực thể liên kết được sinh tự động từ lược đồ cơ sở dữ liệu, nên luôn khớp với hệ thống thật.
+
 ## 1.4. Công nghệ phía máy chủ
 
 ### 1.4.1. Node.js và NestJS
@@ -99,6 +111,28 @@ Lựa chọn NestJS giúp toàn bộ hệ thống dùng một ngôn ngữ TypeSc
 PostgreSQL là hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở, hỗ trợ đầy đủ giao dịch ACID, ràng buộc toàn vẹn, chỉ mục nhiều loại và kiểu dữ liệu JSONB cho dữ liệu bán cấu trúc [@postgres]. Đồ án tận dụng các đặc điểm này: ràng buộc khóa ngoại và ràng buộc kiểm tra bảo đảm dữ liệu hợp lệ ngay ở tầng cơ sở dữ liệu; khóa tư vấn (advisory lock) theo bác sĩ và theo bệnh nhân bên trong giao dịch chống đặt trùng lịch khi hai lễ tân thao tác cùng lúc; JSONB lưu bản chụp sơ đồ răng của mỗi phiên khám và danh sách số răng của mỗi thủ thuật.
 
 Prisma là bộ công cụ ánh xạ đối tượng – quan hệ (ORM) cho TypeScript [@prisma]. Lược đồ dữ liệu được khai báo trong một tệp duy nhất, từ đó Prisma sinh ra lớp truy vấn có kiểu chặt chẽ: lỗi sai tên cột hay sai kiểu dữ liệu bị phát hiện ngay khi biên dịch. Thay đổi cấu trúc cơ sở dữ liệu được quản lý bằng các tệp migration đánh số tuần tự, chạy tự động khi phát hành phiên bản mới. Khóa chính dùng UUID phiên bản 7 [@uuidv7], vừa khó đoán vừa tăng dần theo thời gian nên thân thiện với chỉ mục.
+
+### 1.4.3. Giao dịch và xử lý đồng thời
+
+Phần mềm quản lý phòng khám có nhiều người cùng thao tác trên cùng dữ liệu: hai lễ tân cùng đặt lịch cho một bác sĩ, hai người cùng thu tiền một hóa đơn, ngân hàng gửi lại cùng một thông báo chuyển khoản. Giao dịch ACID bảo đảm một nhóm thao tác hoặc thành công trọn vẹn hoặc không có tác dụng gì, nhưng tự nó không ngăn được lỗi kiểu "kiểm tra rồi mới ghi": hai giao dịch cùng đọc thấy giờ còn trống, rồi cùng ghi [@kleppmann]. Mức cô lập mặc định của PostgreSQL (Read Committed) cho phép tình huống này [@postgres]. Bảng 1.2 tóm tắt các kỹ thuật được dùng để xử lý từng loại xung đột.
+
+::: {custom-style="bảng"}
+Bảng 1.2. Các kỹ thuật xử lý đồng thời và nơi áp dụng trong hệ thống
+:::
+
+| Kỹ thuật | Nguyên lý | Áp dụng trong hệ thống |
+|---|---|---|
+| Khóa tư vấn theo giao dịch | Ứng dụng tự đặt khóa theo một khóa số (ví dụ mã bác sĩ); giao dịch khác xin cùng khóa phải chờ đến khi giao dịch đầu kết thúc | Đặt, dời lịch hẹn (khóa theo bác sĩ và bệnh nhân), lịch nghỉ toàn phòng khám, tính lương |
+| Cập nhật có điều kiện | Câu lệnh UPDATE kèm điều kiện về giá trị hiện tại; số dòng bị ảnh hưởng cho biết thao tác có hợp lệ không | Trừ tồn kho (chỉ khi đủ hàng), chuyển trạng thái kỳ lương, đăng ký ca, lịch hẹn |
+| Kiểm soát đồng thời lạc quan | Mỗi bản ghi có số phiên bản; lần ghi mang số phiên bản cũ bị từ chối thay vì ghi đè | Sửa hóa đơn, đơn thuốc |
+| Khóa chống ghi lặp (idempotency key) | Mỗi yêu cầu mang một khóa duy nhất; yêu cầu lặp lại với cùng khóa không tạo bản ghi mới | Ghi nhận thanh toán, giao dịch ngân hàng, tin nhắn, bản ghi đồng ý |
+| Ràng buộc duy nhất | Cơ sở dữ liệu từ chối bản ghi thứ hai cùng giá trị khóa | Mỗi lịch hẹn một phiên khám, mỗi giao dịch ngân hàng một bản ghi |
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả tổng hợp từ [@kleppmann; @postgres]
+:::
+
+Điểm chung của các kỹ thuật trên là đặt quy tắc ở tầng cơ sở dữ liệu, nơi mọi yêu cầu đều phải đi qua, thay vì chỉ kiểm tra ở giao diện. Các tình huống đồng thời này được kiểm thử trên PostgreSQL thật ở Chương 5.
 
 ## 1.5. Công nghệ phía giao diện
 
@@ -162,4 +196,4 @@ Hệ thống được đóng gói thành các container Docker [@docker] gồm c
 
 ## 1.10. Kết luận chương
 
-Chương 1 đã trình bày đặc thù nghiệp vụ của phòng khám nha khoa (dữ liệu theo thời gian, theo vị trí răng và theo kế hoạch), hệ ký hiệu răng FDI và các yêu cầu pháp lý về hồ sơ và dữ liệu cá nhân. Qua so sánh các giải pháp hiện có, đồ án xác định khoảng trống cần giải quyết. Chương cũng giới thiệu kiến trúc SPA – REST, các công nghệ NestJS, PostgreSQL, Prisma, React được lựa chọn; cơ chế xác thực JWT, phân quyền theo vai trò kết hợp theo dòng dữ liệu, nhật ký kiểm toán; thanh toán VietQR, nhắn tin; cách tiếp cận có kiểm soát khi dùng mô hình ngôn ngữ lớn; và phương pháp kiểm thử, triển khai. Đây là cơ sở để Chương 2 khảo sát và phân tích yêu cầu của hệ thống.
+Chương 1 đã trình bày đặc thù nghiệp vụ của phòng khám nha khoa (dữ liệu theo thời gian, theo vị trí răng và theo kế hoạch), hệ ký hiệu răng FDI và các yêu cầu pháp lý về hồ sơ và dữ liệu cá nhân. Qua so sánh các giải pháp hiện có, đồ án xác định khoảng trống cần giải quyết. Chương cũng giới thiệu kiến trúc SPA – REST, các loại biểu đồ UML được dùng để mô hình hóa, các công nghệ NestJS, PostgreSQL, Prisma, React được lựa chọn và các kỹ thuật xử lý đồng thời trong cơ sở dữ liệu; cơ chế xác thực JWT, phân quyền theo vai trò kết hợp theo dòng dữ liệu, nhật ký kiểm toán; thanh toán VietQR, nhắn tin; cách tiếp cận có kiểm soát khi dùng mô hình ngôn ngữ lớn; và phương pháp kiểm thử, triển khai. Đây là cơ sở để Chương 2 khảo sát và phân tích yêu cầu của hệ thống.
