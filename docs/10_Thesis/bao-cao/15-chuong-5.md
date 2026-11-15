@@ -180,10 +180,40 @@ Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) 
 
 Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kịch bản một ngày làm việc của phòng khám. Việc đánh giá với người dùng thật tại phòng khám chưa được thực hiện và được nêu trong phần hạn chế.
 
-## 5.4. Đối chiếu kết quả với mục tiêu đề tài
+## 5.4. Những điểm nổi bật của hệ thống
+
+Phần này tổng hợp những điểm làm GenSmile khác với một phần mềm quản lý thông thường. Mỗi điểm đều gắn với một vấn đề cụ thể của phòng khám và có minh chứng kiểm chứng được trong báo cáo (Bảng 5.8).
 
 ::: {custom-style="bảng"}
-Bảng 5.8. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
+Bảng 5.8. Các điểm nổi bật của hệ thống và minh chứng
+:::
+
+| Điểm nổi bật | Vấn đề của phòng khám | Cách hệ thống giải quyết | Minh chứng |
+|---|---|---|---|
+| Lịch sử điều trị theo từng răng | Bác sĩ phải lật nhiều trang hồ sơ để biết một răng đã làm gì | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.9, Bảng 5.7 |
+| Không bao giờ đặt trùng lịch | Hai lễ tân cùng đặt một khung giờ, hoặc khách đặt trực tuyến trùng lúc lễ tân đặt | Khóa tư vấn của PostgreSQL theo bác sĩ và bệnh nhân, kiểm tra trùng ngay trong giao dịch | Mục 4.3.2, ca LH-01 |
+| Chuyển khoản tự ghi vào hóa đơn | Lễ tân phải mở ứng dụng ngân hàng dò từng khoản, dễ sót hoặc ghi nhầm | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.16–4.18, ca TT-07 |
+| Một lần đóng phiên khám, nhiều việc tự chạy | Sau khi khám phải lập hóa đơn, trừ kho, ghi công bác sĩ bằng tay | Đóng phiên khám trừ vật tư trong cùng giao dịch, rồi tự tạo hóa đơn nháp, ghi ca tính lương và cập nhật tóm tắt hồ sơ | Mục 4.3.3, ca KB-02, KB-05 |
+| Bệnh nhân tự phục vụ, không cần tài khoản | Khách phải gọi điện để đặt, xác nhận, dời lịch hay hỏi lại đã điều trị gì | Đặt lịch trực tuyến; đường dẫn bảo mật có thời hạn để xác nhận, dời lịch và xem lịch sử khám trên điện thoại | Hình 4.2, 4.19–4.20 |
+| Dữ liệu sức khỏe được bảo vệ nhiều lớp | Hồ sơ sức khỏe là dữ liệu nhạy cảm theo Nghị định 13/2023 | Phân quyền theo vai trò với 133 mã quyền, bác sĩ chỉ thấy bệnh nhân của mình, nhật ký kiểm toán cả thao tác đọc | Bảng 2.9, Bảng 5.5, Hình 4.28 |
+| AI hữu ích nhưng có kiểm soát | AI có thể bịa thông tin, làm lộ dữ liệu hoặc tự ý thay đổi lịch | AI chỉ đọc qua công cụ trong phạm vi quyền, không nhận tên hay số điện thoại bệnh nhân, mọi thay đổi phải được người dùng bấm xác nhận, vẫn chạy ở chế độ dự phòng khi dịch vụ AI lỗi | Mục 3.3.11, Hình 4.29 |
+| Chỉ số vận hành cho chủ phòng khám | Chủ phòng khám chỉ biết doanh thu, không biết vì sao tăng hay giảm | Sáu chỉ số vận hành so với mục tiêu, công suất ghế theo giờ, hành trình bệnh nhân, tuổi công nợ | Hình 4.23–4.25 |
+| Chất lượng được kiểm chứng liên tục | Phần mềm nhỏ thường hỏng khi sửa một chỗ | Khoảng 2.000 kiểm thử tự động ở ba tầng, chạy trong 10 bước trước mỗi lần cập nhật | Bảng 4.3, Bảng 5.1 |
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả
+:::
+
+Ba điểm sau được tác giả đánh giá là có giá trị nhất với một phòng khám nhỏ:
+
+- **Gắn điều trị với sơ đồ răng.** Phần lớn phần mềm quản lý phòng khám tổng quát chỉ lưu danh sách thủ thuật theo lần khám. GenSmile lưu số răng cho từng điều trị và một bản sơ đồ răng cho mỗi phiên khám, nhờ đó trả lời ngay được câu hỏi quen thuộc nhất của bác sĩ nha khoa: "răng này đã làm gì, khi nào, ai làm".
+- **Đối soát chuyển khoản tự động.** Chuyển khoản qua mã QR là hình thức thanh toán phổ biến nhất ở Việt Nam hiện nay. Việc hóa đơn tự nhận tiền về, không ghi trùng khi ngân hàng gửi lại và không đoán bừa khi nội dung chuyển khoản sai giúp lễ tân bỏ hẳn bước dò sao kê cuối ngày.
+- **Đúng ngay cả khi nhiều người thao tác cùng lúc.** Đặt lịch, thu tiền, trừ kho và bắt đầu khám đều được kiểm thử với yêu cầu đồng thời trên PostgreSQL thật (Bảng 5.2–5.4). Đây là loại lỗi khó phát hiện khi chạy thử một người nhưng gây hậu quả lớn khi vận hành thật.
+
+## 5.5. Đối chiếu kết quả với mục tiêu đề tài
+
+::: {custom-style="bảng"}
+Bảng 5.9. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
 :::
 
 | Mục tiêu | Kết quả đạt được | Minh chứng | Mức độ |
@@ -202,7 +232,7 @@ Nguồn: Tác giả
 
 Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuyển khoản VietQR tự động và trợ lý AI có kiểm soát.
 
-## 5.5. Hạn chế
+## 5.6. Hạn chế
 
 - **Chưa có hồ sơ X-quang:** chưa lưu và xem được phim chụp, một phần quan trọng của hồ sơ nha khoa.
 - **Kênh SMS và Zalo chưa được thử với nhà cung cấp thật:** phần gửi tin đã cài đặt theo tài liệu của nhà cung cấp và được kiểm thử với bộ giả lập, nhưng cần tài khoản doanh nghiệp để chạy thật.
@@ -211,6 +241,6 @@ Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuy�
 - **Phụ thuộc dịch vụ AI bên ngoài:** chất lượng trả lời của trợ lý phụ thuộc mô hình được cấu hình; khi dịch vụ AI lỗi, hệ thống chuyển sang chế độ dự phòng có khả năng hạn chế hơn.
 - **Một phòng khám, không có ứng dụng di động riêng:** chưa hỗ trợ nhiều chi nhánh; bệnh nhân dùng trình duyệt trên điện thoại.
 
-## 5.6. Kết luận chương
+## 5.7. Kết luận chương
 
-Hệ thống được kiểm thử ở ba tầng với khoảng 2.000 ca tự động, chạy lại trước mỗi lần cập nhật. Các tình huống khó nhất của phần mềm quản lý (yêu cầu đồng thời, thanh toán trùng, phân quyền theo dòng dữ liệu, múi giờ) đều được kiểm thử trên PostgreSQL thật và đạt. Thời gian phản hồi các API thường dùng dưới 20 ms. Đối chiếu với phiếu giao đề tài, hệ thống đạt các mục tiêu chính, trừ phần X-quang và việc chạy thật kênh SMS, Zalo.
+Hệ thống được kiểm thử ở ba tầng với khoảng 2.000 ca tự động, chạy lại trước mỗi lần cập nhật. Các tình huống khó nhất của phần mềm quản lý (yêu cầu đồng thời, thanh toán trùng, phân quyền theo dòng dữ liệu, múi giờ) đều được kiểm thử trên PostgreSQL thật và đạt. Thời gian phản hồi các API thường dùng dưới 20 ms. Hệ thống có các điểm nổi bật rõ ràng: lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu, đối soát chuyển khoản tự động, bệnh nhân tự phục vụ không cần tài khoản và AI có kiểm soát. Đối chiếu với phiếu giao đề tài, hệ thống đạt các mục tiêu chính, trừ phần X-quang và việc chạy thật kênh SMS, Zalo.

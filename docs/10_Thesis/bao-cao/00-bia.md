@@ -40,7 +40,7 @@ Giảng viên hướng dẫn: ……………………………………
 Hà Nội – Năm 2026
 :::
 
-[[HET_BIA]]
+[[NGAT]]
 
 ::: {custom-style="Bìa"}
 BỘ GIÁO DỤC VÀ ĐÀO TẠO
@@ -88,4 +88,4 @@ Khoa: ……………………………………
 Hà Nội – Năm 2026
 :::
 
-[[NGAT]]
+[[HET_BIA]]

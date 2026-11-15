@@ -58,17 +58,28 @@ Ngoài ra, đồ án bổ sung một số chức năng làm tăng giá trị th�
 - **Phương pháp phát triển lặp:** chia hệ thống thành các module nghiệp vụ, phát triển và phát hành từng phần nhỏ; mỗi thay đổi đi qua kiểm thử tự động và quy trình tích hợp liên tục trước khi đưa vào nhánh chính [@fowler_ci].
 - **Phương pháp thực nghiệm và đánh giá:** kiểm thử đơn vị, kiểm thử API trên cơ sở dữ liệu thật, kiểm thử giao diện đầu cuối; đo các chỉ số hiệu năng trước và sau tối ưu; đối chiếu kết quả với từng mục tiêu trong phiếu giao đề tài.
 
-## 6. Ý nghĩa khoa học và thực tiễn
+## 6. Những điểm nổi bật của đề tài
 
-### 6.1. Ý nghĩa khoa học
+So với một phần mềm quản lý phòng khám thông thường, GenSmile có các điểm nổi bật sau:
+
+- **Hồ sơ nha khoa theo từng răng:** sơ đồ hai cung răng theo hệ FDI gắn trực tiếp với điều trị; bấm vào một răng là thấy toàn bộ lịch sử điều trị của răng đó.
+- **Lịch hẹn không bao giờ trùng:** việc chống trùng được bảo đảm ở mức cơ sở dữ liệu, kể cả khi lễ tân và khách đặt trực tuyến cùng lúc.
+- **Thanh toán VietQR tự đối soát:** khách quét mã, tiền về là hóa đơn tự cập nhật, không cần lễ tân dò sao kê.
+- **Bệnh nhân tự phục vụ không cần tài khoản:** đặt lịch, xác nhận, dời lịch và xem lịch sử khám qua đường dẫn bảo mật trên điện thoại.
+- **AI có kiểm soát:** trợ lý AI giúp tra cứu, soạn nháp, nhận xét báo cáo nhưng không nhìn thấy thông tin định danh bệnh nhân và không tự thay đổi dữ liệu khi người dùng chưa xác nhận.
+- **Chất lượng kiểm chứng được:** khoảng 2.000 kiểm thử tự động chạy trước mỗi lần cập nhật; hệ thống đã được triển khai thật trên máy chủ.
+
+## 7. Ý nghĩa khoa học và thực tiễn
+
+### 7.1. Ý nghĩa khoa học
 
 Đồ án trình bày một cách tiếp cận có hệ thống để xây dựng phần mềm quản lý y tế quy mô nhỏ: thiết kế dữ liệu hồ sơ nha khoa có lịch sử theo từng răng; kết hợp phân quyền theo vai trò với giới hạn theo dòng dữ liệu; thiết kế đường dẫn công khai an toàn cho bệnh nhân mà không cần tài khoản; và đưa mô hình ngôn ngữ lớn vào phần mềm nghiệp vụ theo nguyên tắc "AI đề xuất, con người quyết định", có cơ chế bảo vệ dữ liệu cá nhân và phương án dự phòng khi AI không hoạt động.
 
-### 6.2. Ý nghĩa thực tiễn
+### 7.2. Ý nghĩa thực tiễn
 
 Hệ thống có thể dùng ngay cho một phòng khám nha khoa: giảm việc ghi chép trùng lặp, hạn chế đặt trùng lịch, tự nhắc khách, giúp bác sĩ xem nhanh lịch sử từng răng, giúp lễ tân thu tiền và theo dõi công nợ chính xác, và cung cấp cho chủ phòng khám các chỉ số vận hành để ra quyết định. Bệnh nhân được đặt lịch, xác nhận lịch và tra cứu lịch sử khám của mình mà không phải gọi điện.
 
-## 7. Bố cục đồ án
+## 8. Bố cục đồ án
 
 Ngoài phần Mở đầu, Kết luận, Tài liệu tham khảo và Phụ lục, đồ án gồm năm chương:
 

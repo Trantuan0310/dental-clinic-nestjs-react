@@ -9,6 +9,8 @@
 - **Về kỹ thuật:** chống đặt trùng lịch bằng khóa tư vấn của cơ sở dữ liệu; thanh toán và webhook ngân hàng không ghi trùng; phân quyền hai lớp (theo vai trò với 133 mã quyền và theo dòng dữ liệu); nhật ký kiểm toán; đối soát chuyển khoản VietQR tự động; trợ lý AI có kiểm soát, không gửi thông tin định danh bệnh nhân cho mô hình và vẫn hoạt động khi dịch vụ AI lỗi.
 - **Về chất lượng:** khoảng 2.000 kiểm thử tự động ở ba tầng, chạy trong 10 bước kiểm tra trước mỗi lần cập nhật; hệ thống đã được đóng gói bằng Docker và triển khai trên máy chủ ảo.
 
+Điểm nổi bật nhất của hệ thống là đưa được các đặc thù của nha khoa và của thị trường Việt Nam vào phần mềm: lịch sử điều trị theo từng răng ngay trên sơ đồ hai cung răng, thanh toán VietQR tự đối soát, nhắc lịch qua Zalo, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản; đồng thời bảo đảm tính đúng đắn khi nhiều người thao tác cùng lúc và bảo vệ dữ liệu sức khỏe theo quy định hiện hành.
+
 Qua đồ án, em đã vận dụng và hiểu sâu hơn quy trình phát triển phần mềm hoàn chỉnh: từ phân tích nghiệp vụ một lĩnh vực chuyên môn, thiết kế dữ liệu, xử lý các vấn đề đồng thời và bảo mật, đến kiểm thử tự động, tích hợp liên tục và vận hành một hệ thống thật.
 
 ## 2. Hạn chế

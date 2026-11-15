@@ -4,10 +4,15 @@
 
 Formatting follows the Phenikaa ĐAKLTN rules: Times New Roman 13, line spacing
 1.5, margins top/bottom/right 2.5 cm and left 3.5 cm, A4, page number centred
-at the top (lower-case Roman for the front matter and the back matter, Arabic
-from MỞ ĐẦU to KẾT LUẬN). Figure, table and source lines use the paragraph
-styles "hình", "bảng" and "nguồn"; the lists of figures and tables are Word
-TOC fields built from those styles (Word asks to update fields on open).
+at the top, Arabic numerals throughout (the cover pages count but show no
+number). Figure, table and source lines use the paragraph styles "hình", "bảng"
+and "nguồn".
+
+The table of contents and the lists of figures and tables are Word TOC fields
+whose results are filled in already: the script builds once, renders a PDF with
+LibreOffice, finds the page of every heading and caption, and builds again with
+those page numbers (twice more if the numbers moved). Word can still refresh
+them with F9.
 """
 import copy
 import os
@@ -15,10 +20,13 @@ import re
 import subprocess
 import sys
 
+import shutil
+import tempfile
+
 import docx
 from docx.enum.section import WD_SECTION
 from docx.enum.style import WD_STYLE_TYPE
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
@@ -141,6 +149,17 @@ def make_reference(path):
     s = style(d, 'Source Code')
     para(s, L, before=0, after=0, line=1.0, indent=Cm(0))
     s.font.size = Pt(10)
+    # A caption stays on the page of its source line.
+    style(d, 'hình').paragraph_format.keep_with_next = True
+    # Entries of the table of contents and of the lists of figures and tables.
+    for name, left, bold in (('Mục lục 1', 0, True), ('Mục lục 2', 0.6, False), ('Mục lục 3', 1.2, False),
+                             ('Danh mục', 0, False)):
+        s = style(d, name)
+        set_font(s, 13, bold=bold, italic=False)
+        para(s, L, before=0, after=3, line=1.3, indent=Cm(0))
+        s.paragraph_format.left_indent = Cm(left)
+        s.paragraph_format.right_indent = Cm(0.8)
+        s.paragraph_format.tab_stops.add_tab_stop(Cm(15), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
     d.save(path)
 
 
@@ -253,18 +272,65 @@ def pandoc(files, out, ref):
                     '--reference-doc', ref, '--resource-path', HERE, '-o', out, *srcs], check=True)
 
 
-def finish(doc):
+def entries(doc):
+    """What the table of contents and the two lists show, in document order."""
+    toc, figs, tabs, after_toc = [], [], [], False
+    for p in doc.paragraphs:
+        name, text = p.style.name, ' '.join(p.text.split())
+        if text == '[[TOC]]':
+            after_toc = True
+        elif name == 'Tiêu đề phụ' and after_toc and text != 'MỤC LỤC':
+            toc.append((1, text))
+        elif name in ('Heading 1', 'Heading 2', 'Heading 3') and text:
+            toc.append((int(name[-1]), text))
+        elif name == 'hình' and text:
+            figs.append((0, text))
+        elif name == 'bảng' and text:
+            tabs.append((0, text))
+    return {'[[TOC]]': toc, '[[HINH]]': figs, '[[BANG]]': tabs}
+
+
+def fill_list(doc, p, code, items, pages):
+    """Replace the marker paragraph by a TOC field whose result is the entries."""
+    def run(tag, **attrs):
+        r = OxmlElement('w:r')
+        el = OxmlElement(tag)
+        for k, v in attrs.items():
+            el.set(qn(k), v)
+        if tag == 'w:instrText':
+            el.set(qn('xml:space'), 'preserve')
+            el.text = code
+        r.append(el)
+        return r
+    anchor = p._p
+    made = []
+    for i, (level, text) in enumerate(items):
+        q = OxmlElement('w:p')
+        anchor.addprevious(q)
+        para_ = docx.text.paragraph.Paragraph(q, p._parent)
+        para_.style = doc.styles['Danh mục' if level == 0 else f'Mục lục {level}']
+        if i == 0:
+            q.append(run('w:fldChar', **{'w:fldCharType': 'begin'}))
+            q.append(run('w:instrText'))
+            q.append(run('w:fldChar', **{'w:fldCharType': 'separate'}))
+        para_.add_run(text)
+        para_.add_run('\t' + str(pages[i] if pages else 0))
+        made.append(q)
+    if made:
+        made[-1].append(run('w:fldChar', **{'w:fldCharType': 'end'}))
+    anchor.getparent().remove(anchor)
+
+
+def finish(doc, pages=None):
     body = doc.element.body
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
-    codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z \\u ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
+    codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z \\t "Tiêu đề phụ,1" ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
              '[[BANG]]': ' TOC \\h \\z \\t "bảng,1" '}
+    lists = entries(doc)
     for p in list(doc.paragraphs):
         t = p.text.strip()
         if t in codes:
-            for r in list(p.runs):
-                r._r.getparent().remove(r._r)
-            p.style = doc.styles['Normal']
-            field(p, codes[t])
+            fill_list(doc, p, codes[t], lists[t], (pages or {}).get(t))
         elif t == '[[NGAT]]':
             # Page break as "page break before" on the next paragraph: a
             # break paragraph at the foot of a full page would leave a blank page.
@@ -351,13 +417,13 @@ def finish(doc):
                     if i == 0:
                         for r in cp.runs:
                             r.bold = True
-    settings = doc.settings.element
-    upd = OxmlElement('w:updateFields')
-    upd.set(qn('w:val'), 'true')
-    settings.append(upd)
+            # A row is never split across two pages.
+            trPr = row._tr.get_or_add_trPr()
+            trPr.append(OxmlElement('w:cantSplit'))
+    return lists
 
 
-def main():
+def build(pages=None):
     os.makedirs(OUT, exist_ok=True)
     ref = os.path.join(OUT, 'reference.docx')
     make_reference(ref)
@@ -381,17 +447,75 @@ def main():
     for sec in secs:
         geometry(sec)
         sec.start_type = WD_SECTION.NEW_PAGE
-    # Cover: no number. Front matter i, ii… (cover counts as i). Body 1, 2…
-    # from MỞ ĐẦU to KẾT LUẬN. Back matter continues in Roman numerals.
+    # Arabic numerals all the way: the cover pages count but show no number.
     secs[0].header.is_linked_to_previous = False
-    page_header(secs[1], fmt='lowerRoman', start=2)
-    page_header(secs[2], fmt='decimal', start=1)
-    page_header(secs[3], fmt='lowerRoman', start=None)
-    finish(doc)
+    page_header(secs[1], fmt='decimal')
+    page_header(secs[2], fmt='decimal')
+    page_header(secs[3], fmt='decimal')
+    lists = finish(doc, pages)
     out = os.path.join(OUT, 'BaoCao_DATN_TranTuanAnh.docx')
     doc.save(out)
     os.remove(tmp)
+    return out, lists
+
+
+def render(path):
+    """PDF of the .docx through LibreOffice; returns the text of each page."""
+    tmp = tempfile.mkdtemp()
+    subprocess.run(['soffice', '--headless', '--convert-to', 'pdf', '--outdir', tmp, path],
+                   check=True, capture_output=True, timeout=600)
+    pdf = os.path.join(tmp, os.path.basename(path)[:-5] + '.pdf')
+    shutil.copy(pdf, os.path.join(OUT, os.path.basename(pdf)))
+    n = int(re.search(r'Pages:\s+(\d+)', subprocess.run(['pdfinfo', pdf], capture_output=True, text=True).stdout).group(1))
+    texts = [subprocess.run(['pdftotext', '-layout', '-f', str(i), '-l', str(i), pdf, '-'],
+                            capture_output=True, text=True).stdout for i in range(1, n + 1)]
+    shutil.rmtree(tmp)
+    return texts
+
+
+def norm(t):
+    return ' '.join(t.split())
+
+
+def locate(texts, lists):
+    """Page (1-based, the number printed on it) of every entry, searched in order."""
+    pages_lines = [[norm(l) for l in t.splitlines() if norm(l)] for t in texts]
+
+    def on(lines, want):
+        for j, l in enumerate(lines):
+            if '....' in l or '…' in l:
+                continue  # a line of the table of contents or of a list
+            joined = l if j + 1 == len(lines) else l + ' ' + lines[j + 1]
+            if l.startswith(want) or (len(l) >= 12 and want.startswith(l) and joined.startswith(want)):
+                return True
+        return False
+
+    found = {}
+    for key, items in lists.items():
+        k, out = 0, []
+        for _, text in items:
+            want = norm(text)[:40]
+            while k < len(pages_lines) and not on(pages_lines[k], want):
+                k += 1
+            if k == len(pages_lines):
+                raise SystemExit(f'Không thấy trang của: {text}')
+            out.append(k + 1)
+        found[key] = out
+    return found
+
+
+def main():
+    out, lists = build()
+    pages = None
+    for _ in range(3):
+        new = locate(render(out), lists)
+        if new == pages:
+            break
+        pages = new
+        out, lists = build(pages)
     print(out)
+    print('Trang: ' + ', '.join(f'{t} → {n}' for t, n in zip(
+        [x[1] for x in lists['[[TOC]]'] if x[0] == 1], [n for (lv, _), n in zip(lists['[[TOC]]'], pages['[[TOC]]']) if lv == 1])))
 
 
 if __name__ == '__main__':
