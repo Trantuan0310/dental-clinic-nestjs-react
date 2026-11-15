@@ -109,7 +109,7 @@ def make_reference(path):
         s.paragraph_format.first_line_indent = Cm(0)
     for name in ('hình', 'bảng'):
         s = style(d, name)
-        set_font(s, bold=False, italic=False)
+        set_font(s, bold=False, italic=True)
         para(s, C, before=3, after=6, indent=Cm(0))
     para(style(d, 'bảng'), C, before=6, after=3, indent=Cm(0), keep=True)
     s = style(d, 'nguồn')

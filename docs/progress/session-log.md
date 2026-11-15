@@ -114,3 +114,8 @@
 - Lấp ô trống cột Giao diện của ma trận truy vết: chụp thêm trang lịch hẹn của bệnh nhân từ đường dẫn riêng (điện thoại), danh sách chờ, hộp thoại gộp hồ sơ, hộp thoại hoàn tiền (dữ liệu mẫu: 4 mục danh sách chờ qua API, 1 appointment_link chèn SQL với token tự sinh). Chương 4 còn 43 hình; Phụ lục D chỉ còn 2 ô "–" (BN-04, LH-02 ở cột Thiết kế). Thấy lỗi nhỏ giao diện: breadcrumb trang danh sách chờ hiện "Waitlist" (chưa dịch). 162 trang.
 - Soát lời văn Chương 4–5: bỏ đoạn trùng ở 4.5.7, mô tả hàng chờ ở 4.5.3 theo đúng quy tắc 4.3.6, cách nói về bản tóm tắt AI khi đóng phiên; Chương 5 nhắc Hình 4.3, thêm hạn chế "độ bao phủ chưa đều". Mở đầu §8 Bố cục viết lại cho khớp (29 biểu đồ, đoạn mã, độ bao phủ, Phụ lục A–D).
 - Chương 1 thêm 1.3.3 "Mô hình hóa hệ thống bằng UML" (khi nào dùng từng loại biểu đồ; PlantUML, ERD sinh tự động) và 1.4.3 "Giao dịch và xử lý đồng thời" với Bảng 1.2 (khóa tư vấn, cập nhật có điều kiện, kiểm soát lạc quan, khóa chống ghi lặp, ràng buộc duy nhất → nơi áp dụng). Trích dẫn thêm Kleppmann, Pressman (trước đó khai báo mà chưa dùng). Kết luận chương 1 cập nhật.
+
+## 2026-11-15 — Báo cáo: đối chiếu quy định trình bày mẫu Phenikaa
+- Chú thích hình/bảng chuyển sang in nghiêng cỡ 13 (theo QT.ĐT.19.M07).
+- Kiểm tra: không có nhóm tiểu mục nào chỉ có một tiểu mục; không có số thập phân dạng dấu chấm sai quy ước.
+- Build lại: 164 trang, Mở đầu = trang 1, Kết luận = 132.
