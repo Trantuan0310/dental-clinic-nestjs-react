@@ -12,7 +12,7 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 
 | Tầng | Công cụ | Số lượng | Phạm vi kiểm tra |
 |---|---|---|---|
-| Đơn vị (máy chủ) | Jest [@jest] | khoảng 1.790 ca, 86 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
+| Đơn vị (máy chủ) | Jest [@jest] | 1.788 ca, 89 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
 | API trên PostgreSQL thật | Jest + Supertest | khoảng 100 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
 | Đầu cuối (E2E) | Playwright [@playwright] | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
@@ -125,14 +125,43 @@ Ngoài các ca riêng lẻ, một số kịch bản E2E đi trọn một luồng
 
 Bộ E2E cũng kiểm tra chuyển đổi ngôn ngữ Việt – Anh và các yêu cầu tiếp cận cơ bản: có liên kết "chuyển tới nội dung chính" dùng được bằng bàn phím, các vùng trang có nhãn, hộp thoại giữ tiêu điểm bàn phím.
 
+### 5.2.3. Số ca kiểm thử và độ bao phủ mã
+
+Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest: 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy khoảng 42 giây. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 75,0% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.6 thống kê theo module.
+
+::: {custom-style="bảng"}
+Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
+:::
+
+| Module | Nội dung chính | Số ca | Dòng (%) | Nhánh (%) |
+|---|---|---|---|---|
+| appointments | Lịch hẹn, giờ trống, hàng chờ | 344 | 82,0 | 71,4 |
+| booking | Đặt lịch trực tuyến, liên kết cho bệnh nhân | 245 | 84,0 | 77,8 |
+| medical-records | Phiên khám, điều trị, sơ đồ răng | 197 | 73,6 | 72,2 |
+| payroll | Kỳ lương, đăng ký ca | 197 | 71,5 | 60,9 |
+| billing | Hóa đơn, thanh toán, webhook ngân hàng | 118 | 86,9 | 74,7 |
+| patients | Hồ sơ bệnh nhân, gộp hồ sơ | 84 | 70,5 | 67,7 |
+| ai | Trợ lý AI, soạn nháp | 80 | 88,3 | 76,9 |
+| reports | Báo cáo, chỉ số vận hành | 58 | 85,2 | 73,6 |
+| staff | Nhân viên, hồ sơ bác sĩ | 47 | 74,8 | 62,3 |
+| auth, users, roles | Xác thực, người dùng, phân quyền | 93 | 70,7 | 60,8 |
+| Các module còn lại | Danh mục, kho, kế hoạch, chi phí, đồng ý, nhắc tái khám, thông báo, tin nhắn, kiểm toán, ảnh… | 325 | 63,8 | 62,8 |
+| **Tổng** | | **1.788** | **76,6** | **70,0** |
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chạy `npx jest --coverage` trên mã nguồn ngày 15/11/2026
+:::
+
+Số ca kiểm thử tập trung ở những module có nhiều quy tắc và rủi ro nhất: lịch hẹn và đặt lịch (gần một phần ba tổng số ca), khám bệnh, lương và thanh toán. Một số module có độ bao phủ thấp hơn, như chi phí vận hành (36,7% số dòng) và các guard dùng chung trong `common/` (29,3%); phần lớn đường đi của các guard này được kiểm tra gián tiếp qua kiểm thử API trên PostgreSQL thật (Bảng 5.5), nhưng đây vẫn là điểm cần bổ sung kiểm thử đơn vị.
+
 ## 5.3. Kiểm thử phi chức năng
 
 ### 5.3.1. Hiệu năng
 
-Thời gian phản hồi của một số API thường dùng được đo trên máy chạy thử với bộ dữ liệu mẫu 6 tháng (500 bệnh nhân, khoảng 2.400 hóa đơn), mỗi API gọi liên tiếp 50 lần (Bảng 5.6). Kết quả cho thấy các thao tác hằng ngày phản hồi dưới 20 ms ở phía máy chủ; API tổng hợp chỉ số cho bảng điều khiển, vốn tính trên toàn bộ dữ liệu 30 ngày, phản hồi dưới 60 ms.
+Thời gian phản hồi của một số API thường dùng được đo trên máy chạy thử với bộ dữ liệu mẫu 6 tháng (500 bệnh nhân, khoảng 2.400 hóa đơn), mỗi API gọi liên tiếp 50 lần (Bảng 5.7). Kết quả cho thấy các thao tác hằng ngày phản hồi dưới 20 ms ở phía máy chủ; API tổng hợp chỉ số cho bảng điều khiển, vốn tính trên toàn bộ dữ liệu 30 ngày, phản hồi dưới 60 ms.
 
 ::: {custom-style="bảng"}
-Bảng 5.6. Thời gian phản hồi của một số API (50 lần gọi)
+Bảng 5.7. Thời gian phản hồi của một số API (50 lần gọi)
 :::
 
 | API | Trung vị (ms) | Phân vị 95 (ms) |
@@ -147,10 +176,10 @@ Bảng 5.6. Thời gian phản hồi của một số API (50 lần gọi)
 Nguồn: Tác giả, đo trên máy chạy thử
 :::
 
-Hai tối ưu đáng kể được thực hiện trong quá trình phát triển, có đo trước và sau (Bảng 5.7).
+Hai tối ưu đáng kể được thực hiện trong quá trình phát triển, có đo trước và sau (Bảng 5.8).
 
 ::: {custom-style="bảng"}
-Bảng 5.7. Kết quả tối ưu hiệu năng
+Bảng 5.8. Kết quả tối ưu hiệu năng
 :::
 
 | Hạng mục | Trước | Sau |
@@ -182,15 +211,15 @@ Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kị
 
 ## 5.4. Những điểm nổi bật của hệ thống
 
-Phần này tổng hợp những điểm làm GenSmile khác với một phần mềm quản lý thông thường. Mỗi điểm đều gắn với một vấn đề cụ thể của phòng khám và có minh chứng kiểm chứng được trong báo cáo (Bảng 5.8).
+Phần này tổng hợp những điểm làm GenSmile khác với một phần mềm quản lý thông thường. Mỗi điểm đều gắn với một vấn đề cụ thể của phòng khám và có minh chứng kiểm chứng được trong báo cáo (Bảng 5.9).
 
 ::: {custom-style="bảng"}
-Bảng 5.8. Các điểm nổi bật của hệ thống và minh chứng
+Bảng 5.9. Các điểm nổi bật của hệ thống và minh chứng
 :::
 
 | Điểm nổi bật | Vấn đề của phòng khám | Cách hệ thống giải quyết | Minh chứng |
 |---|---|---|---|
-| Lịch sử điều trị theo từng răng | Bác sĩ phải lật nhiều trang hồ sơ để biết một răng đã làm gì | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.11, Bảng 5.7 |
+| Lịch sử điều trị theo từng răng | Bác sĩ phải lật nhiều trang hồ sơ để biết một răng đã làm gì | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.11, Bảng 5.8 |
 | Không bao giờ đặt trùng lịch | Hai lễ tân cùng đặt một khung giờ, hoặc khách đặt trực tuyến trùng lúc lễ tân đặt | Khóa tư vấn của PostgreSQL theo bác sĩ và bệnh nhân, kiểm tra trùng ngay trong giao dịch | Mục 4.3.2, ca KT-LH-01 |
 | Chuyển khoản tự ghi vào hóa đơn | Lễ tân phải mở ứng dụng ngân hàng dò từng khoản, dễ sót hoặc ghi nhầm | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.18–4.20, ca KT-TT-07 |
 | Một lần đóng phiên khám, nhiều việc tự chạy | Sau khi khám phải lập hóa đơn, trừ kho, ghi công bác sĩ bằng tay | Đóng phiên khám trừ vật tư trong cùng giao dịch, rồi tự tạo hóa đơn nháp, ghi ca tính lương và cập nhật tóm tắt hồ sơ | Mục 4.3.3, ca KT-KB-02, KT-KB-05 |
@@ -212,10 +241,10 @@ Ba điểm sau được tác giả đánh giá là có giá trị nhất với m
 
 ## 5.5. Đối chiếu kết quả với mục tiêu đề tài
 
-Bảng 5.9 đối chiếu từng mục tiêu trong phiếu giao đề tài với kết quả đạt được và minh chứng tương ứng trong báo cáo.
+Bảng 5.10 đối chiếu từng mục tiêu trong phiếu giao đề tài với kết quả đạt được và minh chứng tương ứng trong báo cáo.
 
 ::: {custom-style="bảng"}
-Bảng 5.9. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
+Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
 :::
 
 | Mục tiêu | Kết quả đạt được | Minh chứng | Mức độ |
@@ -238,7 +267,7 @@ Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuy�
 
 - **Chưa có hồ sơ X-quang:** chưa lưu và xem được phim chụp, một phần quan trọng của hồ sơ nha khoa.
 - **Kênh SMS và Zalo chưa được thử với nhà cung cấp thật:** phần gửi tin đã cài đặt theo tài liệu của nhà cung cấp và được kiểm thử với bộ giả lập, nhưng cần tài khoản doanh nghiệp để chạy thật.
-- **Chưa kiểm thử tải:** các số đo ở Bảng 5.6 là thời gian phản hồi với một người dùng; khả năng chịu tải khi nhiều người dùng cùng lúc mới được suy ra từ thiết kế, chưa đo.
+- **Chưa kiểm thử tải:** các số đo ở Bảng 5.7 là thời gian phản hồi với một người dùng; khả năng chịu tải khi nhiều người dùng cùng lúc mới được suy ra từ thiết kế, chưa đo.
 - **Chưa đánh giá với người dùng thật:** hệ thống mới được trình diễn trên dữ liệu mẫu, chưa vận hành tại một phòng khám.
 - **Phụ thuộc dịch vụ AI bên ngoài:** chất lượng trả lời của trợ lý phụ thuộc mô hình được cấu hình; khi dịch vụ AI lỗi, hệ thống chuyển sang chế độ dự phòng có khả năng hạn chế hơn.
 - **Một phòng khám, không có ứng dụng di động riêng:** chưa hỗ trợ nhiều chi nhánh; bệnh nhân dùng trình duyệt trên điện thoại.
