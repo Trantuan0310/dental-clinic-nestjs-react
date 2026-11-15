@@ -35,6 +35,9 @@ export const useLocaleStore = create<LocaleState>((set) => {
       if (!LOCALES.some((l) => l.code === code)) return;
       // The languageChanged event updates this store only after i18next has
       // completed the change, keeping subscribers aligned with rendered text.
+      // Save the choice now: English strings load asynchronously, and a reload
+      // before they arrive must still come back in the chosen language.
+      i18n.services.languageDetector?.cacheUserLanguage?.(code);
       void loadLocale(code).then(() => i18n.changeLanguage(code));
     },
   };

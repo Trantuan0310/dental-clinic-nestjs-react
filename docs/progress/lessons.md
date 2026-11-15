@@ -77,3 +77,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Dữ liệu demo `guidedemo` không có điều trị gắn số răng: muốn thử lịch sử theo răng phải tự gán `tooth_numbers` (jsonb) cho vài dòng `treatments` trước.
 - Thêm chữ giao diện: tiếng Việt ở `frontend/src/locales/<module>.ts`, tiếng Anh ở `frontend/src/locales/en/<module>.ts` (tải khi chọn English).
 - Backend `npm run lint` có `--fix`, tự định dạng lại hàng chục file không liên quan: chỉ chạy `npx eslint <file đã sửa>`, hoặc chạy xong thì `git checkout` các file ngoài phạm vi trước khi commit.
+- Tải ngôn ngữ bất đồng bộ: phải lưu lựa chọn ngôn ngữ ngay khi bấm (cacheUserLanguage), không đợi tải xong; E2E `locale persists across reload` bấm English rồi tải lại trang ngay.
