@@ -16,6 +16,7 @@ import {
   Merge,
 } from 'lucide-react';
 import { patientsApi } from '@/features/patients/imperativeApi';
+import { HistoryLinkButton } from '@/features/patient-history/HistoryLinkButton';
 import { appointmentsApi } from '@/features/appointments/imperativeApi';
 import { billingApi } from '@/features/billing/billingApi';
 import {
@@ -139,6 +140,9 @@ export default function PatientDetailPage() {
               <Merge className="h-4 w-4" />
               {t('uiClinical.mergeAction')}
             </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="patient.read">
+            <HistoryLinkButton patientId={id!} />
           </PermissionGuard>
           <PermissionGuard permission="appointment.create">
             <Button onClick={() => navigate(`/appointments?patientId=${id}`)}>

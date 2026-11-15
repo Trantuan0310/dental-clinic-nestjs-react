@@ -30,6 +30,7 @@ import { HealthController } from './common/health.controller';
 import { StaffModule } from './staff/staff.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ConsentsModule } from './consents/consents.module';
+import { PatientHistoryModule } from './patient-history/patient-history.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { ConsentsModule } from './consents/consents.module';
     RecallsModule,
     NotificationsModule,
     MessagingModule,
+    PatientHistoryModule,
     BillingModule,
     ReportsModule,
     InventoryModule,
