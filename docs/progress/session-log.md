@@ -102,3 +102,5 @@
 - Số trang theo lựa chọn của người dùng: Mở đầu = trang 1 (Ả Rập), phần đầu không in số, Tài liệu tham khảo/Phụ lục đánh tiếp; mục lục lấy số in trên đầu trang. Thân 101 trang.
 - So sánh thêm SimlyDent (tên đúng trên simlydent.vn) vào Bảng 1.1 và §1.2, chỉ theo thông tin nhà cung cấp công bố (ô "không thấy công bố" ghi rõ nghĩa). Trích dẫn [simlydent], [simlydent_gia].
 - Ảnh trợ lý AI thật: mạng môi trường chặn gensmile.online; đã tạo môi trường riêng `dental-clinic-nestjs-react` (cho phép gensmile.online, simplydent.vn) và giao phiên phụ chụp ảnh, đẩy lên nhánh `claude/anh-tro-ly-ai`.
+- Danh mục từ viết tắt lập lại theo các từ thật sự dùng trong báo cáo (thêm ACID, CSS, DICOM, HTML, HTTPS, ISO/IEC, JSON, JSONB, KT, OA, OWASP, QR, SHA, SMTP, SVG, UTC; bỏ CRUD, CSDL, ERD, VPS, CI/CD không dùng). Danh mục thuật ngữ thêm check-in, khóa tư vấn, sự kiện miền, xóa mềm, gọi công cụ, chế độ dự phòng, mã làm mới, container; sửa định nghĩa nhật ký kiểm toán cho đúng (ứng dụng chỉ ghi thêm). 128 trang.
+- Phiên phụ chụp ảnh AI (session_01Lhvjxz4BQ2UiahXRXiDdgV) dừng ở bước cần duyệt, chưa đẩy ảnh; người dùng cần mở phiên đó để duyệt.

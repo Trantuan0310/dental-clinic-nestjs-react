@@ -201,28 +201,40 @@ DANH MỤC TỪ VIẾT TẮT
 
 | Từ viết tắt | Tiếng Anh | Nghĩa tiếng Việt |
 |---|---|---|
+| ACID | Atomicity, Consistency, Isolation, Durability | Bốn tính chất của giao dịch cơ sở dữ liệu |
 | AI | Artificial Intelligence | Trí tuệ nhân tạo |
 | API | Application Programming Interface | Giao diện lập trình ứng dụng |
-| CI/CD | Continuous Integration / Continuous Delivery | Tích hợp và chuyển giao liên tục |
-| CSDL | – | Cơ sở dữ liệu |
-| CRUD | Create, Read, Update, Delete | Tạo, đọc, sửa, xóa |
+| CI | Continuous Integration | Tích hợp liên tục |
+| CSS | Cascading Style Sheets | Ngôn ngữ định kiểu trang web |
+| DICOM | Digital Imaging and Communications in Medicine | Chuẩn lưu trữ, truyền ảnh y tế |
 | DTO | Data Transfer Object | Đối tượng truyền dữ liệu |
 | E2E | End-to-End | Kiểm thử đầu cuối |
-| ERD | Entity Relationship Diagram | Sơ đồ thực thể liên kết |
 | FDI | Fédération Dentaire Internationale | Liên đoàn Nha khoa Thế giới (hệ đánh số răng) |
+| HTML | HyperText Markup Language | Ngôn ngữ đánh dấu siêu văn bản |
 | HTTP | Hypertext Transfer Protocol | Giao thức truyền siêu văn bản |
+| HTTPS | HTTP Secure | HTTP có mã hóa |
+| ISO/IEC | International Organization for Standardization / International Electrotechnical Commission | Tổ chức Tiêu chuẩn hóa Quốc tế / Ủy ban Kỹ thuật Điện Quốc tế |
+| JSON | JavaScript Object Notation | Định dạng dữ liệu dạng văn bản |
+| JSONB | JSON Binary | Kiểu dữ liệu JSON lưu dạng nhị phân của PostgreSQL |
 | JWT | JSON Web Token | Mã thông báo JSON |
 | KPI | Key Performance Indicator | Chỉ số hiệu suất chính |
+| KT | – | Mã ca kiểm thử (Chương 5) |
 | LLM | Large Language Model | Mô hình ngôn ngữ lớn |
+| OA | Official Account | Tài khoản chính thức (của doanh nghiệp trên Zalo) |
 | ORM | Object-Relational Mapping | Ánh xạ đối tượng – quan hệ |
+| OWASP | Open Worldwide Application Security Project | Dự án mở về bảo mật ứng dụng |
+| QR | Quick Response (code) | Mã vạch hai chiều |
 | RBAC | Role-Based Access Control | Kiểm soát truy cập theo vai trò |
 | REST | Representational State Transfer | Kiểu kiến trúc API dựa trên tài nguyên |
-| SMS | Short Message Service | Tin nhắn ngắn |
-| SPA | Single-Page Application | Ứng dụng web một trang |
 | SĐT | – | Số điện thoại |
+| SHA | Secure Hash Algorithm | Thuật toán băm an toàn |
+| SMS | Short Message Service | Tin nhắn ngắn |
+| SMTP | Simple Mail Transfer Protocol | Giao thức gửi thư điện tử |
+| SPA | Single-Page Application | Ứng dụng web một trang |
+| SVG | Scalable Vector Graphics | Định dạng ảnh véc-tơ |
 | UML | Unified Modeling Language | Ngôn ngữ mô hình hóa thống nhất |
+| UTC | Coordinated Universal Time | Giờ phối hợp quốc tế |
 | UUID | Universally Unique Identifier | Định danh duy nhất toàn cục |
-| VPS | Virtual Private Server | Máy chủ ảo riêng |
 | ZNS | Zalo Notification Service | Dịch vụ tin nhắn thông báo của Zalo |
 
 [[NGAT]]
@@ -240,8 +252,16 @@ DANH MỤC THUẬT NGỮ
 | Nhắc tái khám (recall) | Lời nhắc định kỳ gửi cho bệnh nhân đến hạn kiểm tra lại (ví dụ 6 tháng cạo vôi). |
 | Đối soát (reconciliation) | Khớp một giao dịch chuyển khoản ngân hàng với hóa đơn tương ứng. |
 | Webhook | Lời gọi HTTP mà một hệ thống ngoài (ví dụ ngân hàng) gửi tới hệ thống khi có sự kiện. |
-| Nhật ký kiểm toán (audit log) | Bản ghi không sửa được về việc ai đã làm gì, lúc nào, trên dữ liệu nào. |
+| Nhật ký kiểm toán (audit log) | Bản ghi về việc ai đã làm gì, lúc nào, trên dữ liệu nào; ứng dụng chỉ ghi thêm, không có chức năng sửa hay xóa. |
 | Phạm vi theo dòng (row-level scope) | Giới hạn dữ liệu một người được thấy trong cùng một loại bản ghi, ví dụ bác sĩ chỉ thấy bệnh nhân mình điều trị. |
 | Migration | Một bước thay đổi cấu trúc cơ sở dữ liệu có đánh số, chạy tuần tự khi cập nhật hệ thống. |
+| Check-in | Ghi nhận bệnh nhân đã đến phòng khám, đưa vào hàng chờ. |
+| Khóa tư vấn (advisory lock) | Khóa do ứng dụng tự đặt tên trong PostgreSQL; dùng để hai giao dịch đặt lịch cho cùng bác sĩ không chạy chồng lên nhau. |
+| Sự kiện miền (domain event) | Thông báo trong ứng dụng khi một việc nghiệp vụ xảy ra (ví dụ đóng phiên khám), để các module khác tự xử lý phần của mình. |
+| Xóa mềm (soft delete) | Đánh dấu bản ghi đã xóa thay vì xóa hẳn, để giữ lịch sử và khôi phục được. |
+| Gọi công cụ (tool calling) | Cách mô hình ngôn ngữ lớn yêu cầu ứng dụng chạy một hàm tra cứu có sẵn rồi dùng kết quả để trả lời. |
+| Chế độ dự phòng (fallback) | Cách hệ thống tiếp tục hoạt động bằng mẫu soạn sẵn hoặc tra cứu theo từ khóa khi dịch vụ AI không dùng được. |
+| Mã làm mới (refresh token) | Mã dài hạn trong cookie, dùng để xin mã truy cập mới mà không phải đăng nhập lại. |
+| Container | Gói phần mềm chạy độc lập kèm toàn bộ môi trường cần thiết, khởi chạy bằng Docker. |
 
 [[HET_DAU]]
