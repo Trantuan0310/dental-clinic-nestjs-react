@@ -1,0 +1,26 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+PENDING : Chờ gọi
+PENDING : (không liên lạc được thì
+PENDING : ghi lần gọi, vẫn chờ)
+POSTPONED : Hẹn gọi lại
+BOOKED : Đã đặt lịch
+DISMISSED : Bỏ qua
+DONE : Đã tái khám
+[*] -down-> PENDING : Đóng phiên khám có dịch vụ có chu kỳ nhắc\n(ví dụ cạo vôi 6 tháng):\nngày đến hạn = ngày khám + chu kỳ
+PENDING -right-> POSTPONED : Khách hẹn dịp khác\n[ngày ở tương lai]
+POSTPONED -down-> PENDING : Đến ngày hẹn lại
+PENDING -down-> BOOKED : Gọi được,\nkhách đặt lịch
+PENDING -left-> DISMISSED : Khách không muốn\ntái khám (có lý do)
+BOOKED -down-> DONE : Lần khám mới cùng\ndịch vụ được đóng
+DISMISSED -down-> [*]
+DONE -down-> [*]
+note as N1
+  Mỗi sáng hệ thống gửi một email cho khách
+  đang chờ gọi đã đến hạn, kèm liên kết đặt lịch
+  và liên kết ngừng nhận thư.
+  Lần nhắc cũng được đóng (DONE) khi khách
+  tự đến khám cùng dịch vụ mà không qua gọi nhắc.
+end note
+@enduml

@@ -1,0 +1,28 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Người dùng" as U
+participant "Service nghiệp vụ\n(ví dụ BillingService)" as S
+participant "AuditService" as A
+database "PostgreSQL" as DB
+actor "Quản trị viên" as QT
+participant "AuditController" as AC
+U -> S : Hủy hóa đơn (có lý do)
+S -> DB : BEGIN
+S -> DB : Cập nhật hóa đơn
+S -> A : log(tx, hành động, đối tượng, trước, sau,\nngười thực hiện, IP, trình duyệt)
+A -> DB : INSERT audit_logs (trong cùng giao dịch)
+S -> DB : COMMIT
+note right of DB
+  Thay đổi và dòng nhật ký cùng thành công
+  hoặc cùng bị hủy: không có thay đổi
+  nào mà không có nhật ký
+end note
+QT -> AC : GET /audit-logs?người thực hiện=…&hành động=…&từ ngày=…
+AC -> AC : Kiểm tra quyền system.audit.read
+AC -> DB : Truy vấn có lọc, phân trang
+AC --> QT : Danh sách và chi tiết trước/sau
+note over QT, AC
+  Ứng dụng không có API sửa hay xóa nhật ký
+end note
+@enduml

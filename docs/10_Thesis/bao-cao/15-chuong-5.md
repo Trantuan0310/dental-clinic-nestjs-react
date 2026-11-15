@@ -167,7 +167,7 @@ Gói mã giảm nhờ tách bản tiếng Anh thành gói riêng và tải lư�
 
 ### 5.3.2. Bảo mật
 
-Các biện pháp bảo mật được đối chiếu với danh sách rủi ro OWASP Top 10 [@owasp] ở Bảng 3.7 và được kiểm thử tự động ở Bảng 5.5. Ngoài ra:
+Các biện pháp bảo mật được đối chiếu với danh sách rủi ro OWASP Top 10 [@owasp] ở Bảng 3.8 và được kiểm thử tự động ở Bảng 5.5. Ngoài ra:
 
 - **Mật khẩu** được băm bằng Argon2 [@argon2]; mã làm mới được lưu dạng băm, xoay vòng mỗi lần dùng, phát hiện dùng lại.
 - **Khóa bí mật** không có trong mã nguồn; tệp cấu hình mẫu chỉ chứa tên biến.

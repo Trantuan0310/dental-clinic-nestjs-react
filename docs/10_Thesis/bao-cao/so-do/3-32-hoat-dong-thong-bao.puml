@@ -1,0 +1,23 @@
+@startuml
+!include _kieu.iuml
+start
+fork
+  :Mỗi 2 phút: quét sự kiện mới;
+  :Yêu cầu đặt lịch trực tuyến,\nđăng ký ca chờ duyệt,\nhóa đơn nháp của phiên khám đã đóng;
+fork again
+  :7:31 sáng mỗi ngày: bản tin;
+  :Nhắc tái khám cần gọi,\nvật tư dưới mức tối thiểu,\nphiên khám còn mở từ hôm trước;
+fork again
+  :3:17 sáng: dọn dẹp;
+  :Xóa thông báo cũ hơn 90 ngày;
+  stop
+end fork
+:Xác định người nhận theo quyền\n(ví dụ chỉ người có quyền duyệt ca\nnhận thông báo đăng ký ca);
+if (Đã có thông báo cùng khóa chống trùng?) then (có)
+  :Bỏ qua;
+else (chưa)
+  :Tạo thông báo cho từng người nhận;
+endif
+:Giao diện hiển thị số chưa đọc trên chuông,\nngười dùng đánh dấu đã đọc từng cái hoặc tất cả;
+stop
+@enduml

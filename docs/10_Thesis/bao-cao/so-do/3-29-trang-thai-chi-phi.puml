@@ -1,0 +1,20 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+DRAFT : Nháp
+DRAFT : sửa, xóa được
+APPROVED : Đã duyệt
+REJECTED : Bị từ chối
+REIMBURSED : Đã hoàn ứng
+[*] -down-> DRAFT : Tạo phiếu chi phí\n(loại: vận hành / đầu tư / khác,\nmã phiếu tự sinh)
+DRAFT -down-> APPROVED : Quản lý duyệt
+DRAFT -right-> REJECTED : Từ chối (có lý do)
+APPROVED -down-> REIMBURSED : Ghi nhận đã hoàn ứng
+REJECTED -down-> [*]
+REIMBURSED -down-> [*]
+note right of APPROVED
+  Phiếu đã duyệt hoặc đã hoàn ứng
+  không xóa được; mọi bước chuyển
+  được ghi nhật ký kiểm toán
+end note
+@enduml

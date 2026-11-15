@@ -1,0 +1,23 @@
+@startuml
+!include _kieu.iuml
+start
+switch (Thao tác kho?)
+case (Nhập kho)
+  :Nhập số lượng, đơn giá, nhà cung cấp;
+  :Tồn kho tăng;
+case (Xuất kho thủ công)
+  :Nhập số lượng, lý do;
+  :UPDATE tồn kho WHERE tồn kho ≥ số lượng;
+case (Kiểm kê)
+  :Nhập số đếm thực tế, lý do chênh lệch;
+  :Tồn kho = số đếm;
+case (Đóng phiên khám)
+  :Trừ vật tư của các điều trị\n(trong giao dịch đóng phiên);
+endswitch
+:Ghi biến động kho:\nloại, số lượng trước và sau,\nnguồn (phiên khám / thủ công / kiểm kê),\nngười thực hiện;
+if (Tồn kho vừa xuống dưới\nmức tối thiểu?) then (có)
+  :Ghi cảnh báo, đưa vào\nbản tin buổi sáng của quản lý;
+endif
+:Màn hình gợi ý nhập hàng:\nmức dùng bình quân/ngày (30 ngày) × số ngày chờ hàng\n− tồn kho hiện tại = số lượng nên nhập;
+stop
+@enduml

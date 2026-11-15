@@ -1,0 +1,31 @@
+@startuml
+!include _kieu.iuml
+autonumber
+actor "Quản trị viên" as QT
+participant "Giao diện\nQuản lý vai trò" as FE
+participant "RolesController\n+ PermissionsGuard" as C
+participant "RolesService" as S
+participant "Kiểm tra leo thang quyền\n(assertActorHolds)" as E
+database "PostgreSQL" as DB
+QT -> FE : Tích chọn các quyền cho vai trò "Lễ tân"
+FE -> C : PATCH /roles/:id (danh sách mã quyền)
+C -> C : Kiểm tra quyền role.upsert
+C -> S : upsert(vai trò, mã quyền, người thực hiện)
+S -> E : Người thực hiện có giữ đủ\ncác quyền định cấp không?
+E -> DB : Quyền của các vai trò\nmà người thực hiện đang có
+alt Có quyền mà người thực hiện không giữ
+  E --> FE : 403 PERMISSION_ESCALATION
+  FE --> QT : Báo không thể cấp quyền mình không có
+else Hợp lệ
+  S -> DB : Giao dịch: cập nhật role_permissions
+  S -> DB : Ghi nhật ký kiểm toán (trước, sau)
+  S --> FE : 200
+  FE --> QT : Đã lưu
+end
+note over QT, DB
+  Gán vai trò cho người dùng khác cũng qua cùng bước kiểm tra:
+  không thể gán quyền mình không có, không thể sửa vai trò
+  của người đang giữ quyền cao hơn mình.
+  Quyền mới có hiệu lực ở mã truy cập kế tiếp (tối đa 15 phút).
+end note
+@enduml

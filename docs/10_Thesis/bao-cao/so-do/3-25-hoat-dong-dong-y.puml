@@ -1,0 +1,29 @@
+@startuml
+!include _kieu.iuml
+start
+split
+  :Khách tích đồng ý\nkhi đặt lịch trực tuyến;
+  :Kênh ONLINE;
+split again
+  :Khách tích đồng ý\ntrên phiếu khai trước khi khám;
+  :Kênh INTAKE;
+split again
+  :Lễ tân ghi nhận khách đồng ý\ntại quầy;
+  :Kênh DESK;
+end split
+:Lưu bản ghi đồng ý: mục đích, phiên bản và\nnguyên văn nội dung đã đồng ý, kênh, thời điểm,\nngười ghi, tiền tố địa chỉ IP;
+note right
+  Khóa idempotency duy nhất:
+  bấm gửi hai lần vẫn chỉ
+  có một bản ghi
+end note
+:Hiển thị trong "Sổ đồng ý" của hồ sơ bệnh nhân;
+if (Bệnh nhân rút lại đồng ý?) then (có)
+  :Ghi thời điểm và người ghi nhận rút lại;
+  :Giữ nguyên bản ghi cũ để còn lịch sử;
+endif
+if (Cần xuất sổ đồng ý?) then (có)
+  :Chỉ người có quyền consent.export mới được xuất;
+endif
+stop
+@enduml

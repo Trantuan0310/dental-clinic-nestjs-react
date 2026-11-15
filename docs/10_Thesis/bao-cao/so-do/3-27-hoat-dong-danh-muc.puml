@@ -1,0 +1,25 @@
+@startuml
+!include _kieu.iuml
+|Quản trị viên|
+start
+:Tạo dịch vụ: mã, tên, nhóm, giá, thời lượng,\nchuyên môn yêu cầu, chu kỳ nhắc tái khám;
+|Hệ thống|
+:Kiểm tra mã không trùng, ghi nhật ký;
+|Quản trị viên|
+:Phân công bác sĩ được làm dịch vụ\n(từ ngày, đến ngày);
+|Hệ thống|
+if (Bác sĩ đang hành nghề,\ncó chuyên môn yêu cầu,\nkhông trùng khoảng phân công cũ?) then (có)
+  :Lưu phân công;
+else (không)
+  :Từ chối, nêu lý do;
+  stop
+endif
+:Dịch vụ xuất hiện khi đặt lịch\nvới đúng bác sĩ được phân công;
+|Quản trị viên|
+if (Ngừng dịch vụ?) then (có)
+  |Hệ thống|
+  :Hiển thị ảnh hưởng: lịch hẹn sắp tới,\nyêu cầu đặt lịch đang chờ, số bác sĩ được phân công;
+  :Ngừng dịch vụ, kết thúc các phân công,\nlưu kế hoạch khôi phục;
+endif
+stop
+@enduml
