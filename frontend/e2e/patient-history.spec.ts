@@ -22,8 +22,11 @@ test('staff issues a history link and the patient opens it', async ({ page, brow
   const url = await dialog.getByLabel('Đường dẫn').inputValue();
   expect(url).toMatch(/\/lich-su\/[A-Za-z0-9_-]{43}$/);
 
-  // A fresh browser: no staff session.
-  const visitor = await browser.newContext();
+  // A fresh browser with no staff session. The empty storageState matters:
+  // a bare newContext() inherits the saved admin session, and the public page
+  // loading would rotate its refresh cookie, which revokes the shared session
+  // every later test runs on.
+  const visitor = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const pub = await visitor.newPage();
   try {
     await pub.goto(new URL(url).pathname);

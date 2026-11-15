@@ -74,10 +74,6 @@ jobs:
       # The suite makes more than the default 100 requests a minute (login
       # keeps its own 5/min limit).
       THROTTLE_LIMIT: '10000'
-      # Every test starts from the same saved admin session. Past the default
-      # 15-minute access token, each test refreshes with the same saved
-      # refresh cookie; the second one counts as reuse and revokes the session.
-      JWT_ACCESS_TTL: 2h
       CORS_ORIGIN: http://localhost:5173
       EMAIL_MOCK: 'true'
       REDIS_URL: ''
