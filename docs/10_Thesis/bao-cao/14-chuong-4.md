@@ -196,14 +196,40 @@ Hình 4.5. Lịch hẹn theo ngày, chia cột theo bác sĩ
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Hồ sơ bệnh nhân (Hình 4.6) gom trên một trang thông tin cá nhân, tiền sử, dị ứng và các thẻ lịch hẹn, phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng ý điều trị.
+Yêu cầu khách gửi từ trang đặt lịch trực tuyến được gom ở màn hình "Yêu cầu đặt lịch" (Hình 4.6), kèm số đếm theo từng trạng thái xử lý; lễ tân mở từng yêu cầu để duyệt, đề xuất giờ khác hoặc ghi nhận đã gọi điện. Màn hình "Nhắc tái khám" (Hình 4.7) liệt kê khách đến hạn trong khoảng ngày chọn, kèm dịch vụ, lần khám trước, trạng thái email nhắc; lễ tân bấm "Ghi kết quả gọi", đặt lịch ngay, hoặc nhờ AI soạn tin nhắn cho khách.
+
+::: {custom-style="Ảnh"}
+![](hinh/4-lt-yeu-cau-dat-lich.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.6. Danh sách yêu cầu đặt lịch trực tuyến chờ lễ tân xử lý
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+::: {custom-style="Ảnh"}
+![](hinh/4-lt-nhac-tai-kham.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.7. Danh sách khách đến hạn nhắc tái khám
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+Hồ sơ bệnh nhân (Hình 4.8) gom trên một trang thông tin cá nhân, tiền sử, dị ứng và các thẻ lịch hẹn, phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng ý điều trị.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-ho-so-benh-nhan.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.6. Trang hồ sơ bệnh nhân
+Hình 4.8. Trang hồ sơ bệnh nhân
 :::
 
 ::: {custom-style="nguồn"}
@@ -212,84 +238,84 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.3. Bác sĩ: khám và điều trị theo răng
 
-Mục này minh họa một ca khám hoàn chỉnh. Bác sĩ mở "Hàng chờ của tôi" (Hình 4.7), thứ tự được sắp theo nguyên tắc cấp cứu trước, rồi theo giờ hẹn; khách đến trễ quá 15 phút được xếp sau. Bác sĩ bấm "Bắt đầu khám" với bệnh nhân Đặng Quang Hải.
+Mục này minh họa một ca khám hoàn chỉnh. Bác sĩ mở "Hàng chờ của tôi" (Hình 4.9), thứ tự được sắp theo nguyên tắc cấp cứu trước, rồi theo giờ hẹn; khách đến trễ quá 15 phút được xếp sau. Bác sĩ bấm "Bắt đầu khám" với bệnh nhân Đặng Quang Hải.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-hang-cho.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.7. Hàng chờ của bác sĩ
+Hình 4.9. Hàng chờ của bác sĩ
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Trong tab "Ghi chú" (Hình 4.8), bác sĩ ghi lý do khám và chẩn đoán. Có thể dùng mẫu khám nhanh cho các ca thường gặp, hoặc nhập ghi nhanh để AI soạn nháp ghi chú có cấu trúc rồi bác sĩ duyệt.
+Trong tab "Ghi chú" (Hình 4.10), bác sĩ ghi lý do khám và chẩn đoán. Có thể dùng mẫu khám nhanh cho các ca thường gặp, hoặc nhập ghi nhanh để AI soạn nháp ghi chú có cấu trúc rồi bác sĩ duyệt.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-ghi-chu.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.8. Ghi chú lâm sàng của phiên khám
+Hình 4.10. Ghi chú lâm sàng của phiên khám
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Tab "Điều trị & sơ đồ răng" (Hình 4.9) là màn hình chính của bác sĩ. Sơ đồ hai cung răng hiển thị tình trạng hiện tại: răng 12, 16, 37, 46, 48 đã hàn (xanh), răng 38 đã nhổ (nét đứt). Bác sĩ bấm răng 37: khung bên phải hiện tình trạng, ghi chú và hai lần điều trị trước của răng này (ngày, bác sĩ thực hiện, có liên kết mở lại phiên khám cũ). Toàn bộ thông tin này được lấy trong một yêu cầu.
+Tab "Điều trị & sơ đồ răng" (Hình 4.11) là màn hình chính của bác sĩ. Sơ đồ hai cung răng hiển thị tình trạng hiện tại: răng 12, 16, 37, 46, 48 đã hàn (xanh), răng 38 đã nhổ (nét đứt). Bác sĩ bấm răng 37: khung bên phải hiện tình trạng, ghi chú và hai lần điều trị trước của răng này (ngày, bác sĩ thực hiện, có liên kết mở lại phiên khám cũ). Toàn bộ thông tin này được lấy trong một yêu cầu.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-lich-su-rang.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.9. Chọn răng 37 trên sơ đồ để xem lịch sử điều trị
+Hình 4.11. Chọn răng 37 trên sơ đồ để xem lịch sử điều trị
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Bác sĩ chọn răng 36 (sâu ngà), bấm "Thêm điều trị cho răng này": hộp thoại mở sẵn số răng 36; bác sĩ chọn dịch vụ "Trám răng composite" từ danh mục, đơn giá tự lấy theo bảng giá; có thể khai báo vật tư sử dụng để trừ kho (Hình 4.10).
+Bác sĩ chọn răng 36 (sâu ngà), bấm "Thêm điều trị cho răng này": hộp thoại mở sẵn số răng 36; bác sĩ chọn dịch vụ "Trám răng composite" từ danh mục, đơn giá tự lấy theo bảng giá; có thể khai báo vật tư sử dụng để trừ kho (Hình 4.12).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-them-dieu-tri.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.10. Thêm điều trị cho răng 36 từ danh mục dịch vụ
+Hình 4.12. Thêm điều trị cho răng 36 từ danh mục dịch vụ
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Sau khi trám, bác sĩ đổi tình trạng răng 36 thành "Đã hàn" ngay trong khung bên cạnh; sơ đồ cập nhật màu và đánh dấu chấm cho răng có điều trị trong phiên này; danh sách điều trị phía dưới hiện dòng mới cùng tổng tiền (Hình 4.11).
+Sau khi trám, bác sĩ đổi tình trạng răng 36 thành "Đã hàn" ngay trong khung bên cạnh; sơ đồ cập nhật màu và đánh dấu chấm cho răng có điều trị trong phiên này; danh sách điều trị phía dưới hiện dòng mới cùng tổng tiền (Hình 4.13).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-sau-dieu-tri.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.11. Sơ đồ răng và danh sách điều trị sau khi trám răng 36
+Hình 4.13. Sơ đồ răng và danh sách điều trị sau khi trám răng 36
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Bác sĩ kê đơn thuốc (Hình 4.12); nếu thuốc trùng tiền sử dị ứng, hệ thống hiện cảnh báo bắt buộc. Cuối cùng, bác sĩ đóng phiên khám (Hình 4.13): màn hình tóm tắt nhắc lại các điều trị, đơn thuốc và yêu cầu xác nhận trước khi khóa hồ sơ.
+Bác sĩ kê đơn thuốc (Hình 4.14); nếu thuốc trùng tiền sử dị ứng, hệ thống hiện cảnh báo bắt buộc. Cuối cùng, bác sĩ đóng phiên khám (Hình 4.15): màn hình tóm tắt nhắc lại các điều trị, đơn thuốc và yêu cầu xác nhận trước khi khóa hồ sơ.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-don-thuoc.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.12. Kê đơn thuốc
+Hình 4.14. Kê đơn thuốc
 :::
 
 ::: {custom-style="nguồn"}
@@ -301,7 +327,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.13. Xác nhận đóng phiên khám
+Hình 4.15. Xác nhận đóng phiên khám
 :::
 
 ::: {custom-style="nguồn"}
@@ -310,14 +336,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.4. Kế hoạch điều trị
 
-Bác sĩ lập kế hoạch gồm các dòng thủ thuật theo răng, có báo giá; khi bệnh nhân đồng ý, kế hoạch hiển thị tiến độ từng dòng (Hình 4.14). Các kế hoạch đã đồng ý mà khách chưa đặt lịch được gom vào màn hình "Điều trị chờ đặt lịch" để lễ tân gọi mời (Hình 4.15).
+Bác sĩ lập kế hoạch gồm các dòng thủ thuật theo răng, có báo giá; khi bệnh nhân đồng ý, kế hoạch hiển thị tiến độ từng dòng (Hình 4.16). Các kế hoạch đã đồng ý mà khách chưa đặt lịch được gom vào màn hình "Điều trị chờ đặt lịch" để lễ tân gọi mời (Hình 4.17).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-ke-hoach.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.14. Chi tiết kế hoạch điều trị
+Hình 4.16. Chi tiết kế hoạch điều trị
 :::
 
 ::: {custom-style="nguồn"}
@@ -329,7 +355,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.15. Danh sách điều trị chờ đặt lịch
+Hình 4.17. Danh sách điều trị chờ đặt lịch
 :::
 
 ::: {custom-style="nguồn"}
@@ -338,14 +364,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.5. Hóa đơn và thanh toán VietQR
 
-Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động. Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn (Hình 4.16). Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền về, hóa đơn tự chuyển sang "Thanh toán một phần" và hiển thị thông báo đã nhận chuyển khoản, không cần lễ tân thao tác (Hình 4.17). Trong lần thử, ngân hàng gửi lại cùng giao dịch lần thứ hai, hệ thống trả kết quả "trùng" và không ghi thêm.
+Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động. Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn (Hình 4.18). Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền về, hóa đơn tự chuyển sang "Thanh toán một phần" và hiển thị thông báo đã nhận chuyển khoản, không cần lễ tân thao tác (Hình 4.19). Trong lần thử, ngân hàng gửi lại cùng giao dịch lần thứ hai, hệ thống trả kết quả "trùng" và không ghi thêm.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-hoa-don-qr.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.16. Hóa đơn đã phát hành kèm mã VietQR
+Hình 4.18. Hóa đơn đã phát hành kèm mã VietQR
 :::
 
 ::: {custom-style="nguồn"}
@@ -357,21 +383,21 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.17. Hóa đơn tự ghi nhận khoản chuyển khoản từ ngân hàng
+Hình 4.19. Hóa đơn tự ghi nhận khoản chuyển khoản từ ngân hàng
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Một khoản chuyển khoản khác có nội dung "chuyen tien kham rang" không chứa mã hóa đơn nên không tự ghi được; giao dịch xuất hiện trong màn hình "Chuyển khoản cần xử lý" kèm lý do để lễ tân đối chiếu và xử lý tay (Hình 4.18).
+Một khoản chuyển khoản khác có nội dung "chuyen tien kham rang" không chứa mã hóa đơn nên không tự ghi được; giao dịch xuất hiện trong màn hình "Chuyển khoản cần xử lý" kèm lý do để lễ tân đối chiếu và xử lý tay (Hình 4.20).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-chuyen-khoan.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.18. Danh sách chuyển khoản cần xử lý
+Hình 4.20. Danh sách chuyển khoản cần xử lý
 :::
 
 ::: {custom-style="nguồn"}
@@ -380,14 +406,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.6. Bệnh nhân tra cứu lịch sử khám
 
-Tại hồ sơ bệnh nhân, lễ tân bấm "Gửi link tra cứu lịch sử": hệ thống gửi đường dẫn tới email và số điện thoại trong hồ sơ, đồng thời hiện đường dẫn để sao chép khi cần gửi qua kênh khác (Hình 4.19). Bệnh nhân cũng có thể tự xin đường dẫn ở trang "Tra cứu lịch sử khám" bằng số điện thoại (Hình 4.20, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.20, phải).
+Tại hồ sơ bệnh nhân, lễ tân bấm "Gửi link tra cứu lịch sử": hệ thống gửi đường dẫn tới email và số điện thoại trong hồ sơ, đồng thời hiện đường dẫn để sao chép khi cần gửi qua kênh khác (Hình 4.21). Bệnh nhân cũng có thể tự xin đường dẫn ở trang "Tra cứu lịch sử khám" bằng số điện thoại (Hình 4.22, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.22, phải).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-gui-link-lich-su.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.19. Lễ tân gửi đường dẫn tra cứu lịch sử cho bệnh nhân
+Hình 4.21. Lễ tân gửi đường dẫn tra cứu lịch sử cho bệnh nhân
 :::
 
 ::: {custom-style="nguồn"}
@@ -399,7 +425,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.20. Trang xin đường dẫn (trái) và trang lịch sử khám trên điện thoại (phải)
+Hình 4.22. Trang xin đường dẫn (trái) và trang lịch sử khám trên điện thoại (phải)
 :::
 
 ::: {custom-style="nguồn"}
@@ -408,14 +434,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.7. Kho, nhân sự và danh mục
 
-Màn hình kho (Hình 4.21) liệt kê vật tư, tồn kho, mức tối thiểu và trạng thái; vật tư sắp hết được đánh dấu cùng gợi ý số lượng nhập. Màn hình nhân sự quản lý nhân viên, vai trò, mức lương; lịch làm việc cho phép đặt ca theo tuần, ngày nghỉ và duyệt đăng ký ca (Hình 4.22). Danh mục dịch vụ quản lý mã, tên, giá, thời lượng và bác sĩ được thực hiện từng dịch vụ.
+Màn hình kho (Hình 4.23) liệt kê vật tư, tồn kho, mức tối thiểu và trạng thái; vật tư sắp hết được đánh dấu cùng gợi ý số lượng nhập. Màn hình nhân sự quản lý nhân viên, vai trò, mức lương; lịch làm việc cho phép đặt ca theo tuần, ngày nghỉ và duyệt đăng ký ca (Hình 4.24). Danh mục dịch vụ quản lý mã, tên, giá, thời lượng và bác sĩ được thực hiện từng dịch vụ.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-kho.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.21. Quản lý vật tư và tồn kho
+Hình 4.23. Quản lý vật tư và tồn kho
 :::
 
 ::: {custom-style="nguồn"}
@@ -427,7 +453,73 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.22. Lịch làm việc của bác sĩ
+Hình 4.24. Lịch làm việc của bác sĩ
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+Màn hình nhân sự (Hình 4.25) quản lý hồ sơ nhân viên tách khỏi tài khoản đăng nhập: mã nhân viên, loại (quản lý, bác sĩ, lễ tân), tài khoản liên kết và trạng thái làm việc. Đăng ký ca thêm của bác sĩ được quản trị viên duyệt hoặc từ chối ở Hình 4.26; phần "Phủ ca so với lịch đặt" cho biết khung giờ nào đã có khách đặt mà chưa có bác sĩ.
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-nhan-vien.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.25. Danh sách nhân sự
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-duyet-ca.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.26. Duyệt đăng ký ca làm việc của bác sĩ
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+Chi tiết một kỳ lương (Hình 4.27) hiển thị tổng lương, thực nhận, thuế thu nhập cá nhân, bảo hiểm xã hội và bảng lương từng bác sĩ: số phiên khám, giờ làm, giờ làm thêm, tổng lương, các khoản khấu trừ; quản trị viên tính lại, duyệt kỳ lương, xuất phiếu lương PDF và thêm điều chỉnh cho từng người.
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-ky-luong.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.27. Chi tiết kỳ lương tháng 10/2026 đang rà soát
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+Danh mục dịch vụ (Hình 4.28) được nhóm theo loại, mỗi dịch vụ có mã, thời lượng, thời gian chuẩn bị, giá và số bác sĩ được phân công; cùng trang có các mẫu khám nhanh. Chi phí vận hành (Hình 4.29) hiển thị tổng chi, phần đã duyệt và danh sách phiếu với trạng thái từng phiếu.
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-dich-vu.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.28. Danh mục dịch vụ và bảng giá
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-chi-phi.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.29. Quản lý chi phí vận hành
 :::
 
 ::: {custom-style="nguồn"}
@@ -436,14 +528,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.8. Bảng điều khiển và báo cáo cho quản lý
 
-Bảng điều khiển (Hình 4.23) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số lịch hẹn, doanh thu, thực thu, công nợ có so sánh với kỳ trước. Phần dưới (Hình 4.24) là sáu chỉ số vận hành dạng biểu đồ thanh so với mục tiêu và bản đồ nhiệt công suất ghế theo giờ trong tuần; tiếp theo là phễu hành trình bệnh nhân và các biểu đồ tài chính (Hình 4.25). Trang báo cáo (Hình 4.26) cho phép xem doanh thu theo khoảng ngày, theo bác sĩ, theo dịch vụ, xuất tệp và nhờ AI viết nhận xét.
+Bảng điều khiển (Hình 4.30) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số lịch hẹn, doanh thu, thực thu, công nợ có so sánh với kỳ trước. Phần dưới (Hình 4.31) là sáu chỉ số vận hành dạng biểu đồ thanh so với mục tiêu và bản đồ nhiệt công suất ghế theo giờ trong tuần; tiếp theo là phễu hành trình bệnh nhân và các biểu đồ tài chính (Hình 4.32). Trang báo cáo (Hình 4.33) cho phép xem doanh thu theo khoảng ngày, theo bác sĩ, theo dịch vụ, xuất tệp và nhờ AI viết nhận xét.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-dashboard.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.23. Bảng điều khiển của quản lý (kỳ 30 ngày)
+Hình 4.30. Bảng điều khiển của quản lý (kỳ 30 ngày)
 :::
 
 ::: {custom-style="nguồn"}
@@ -455,7 +547,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.24. Chỉ số vận hành so với mục tiêu và công suất ghế theo giờ
+Hình 4.31. Chỉ số vận hành so với mục tiêu và công suất ghế theo giờ
 :::
 
 ::: {custom-style="nguồn"}
@@ -467,7 +559,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.25. Hành trình bệnh nhân và các biểu đồ tài chính
+Hình 4.32. Hành trình bệnh nhân và các biểu đồ tài chính
 :::
 
 ::: {custom-style="nguồn"}
@@ -479,23 +571,23 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.26. Báo cáo doanh thu
+Hình 4.33. Báo cáo doanh thu
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-### 4.5.9. Phân quyền và nhật ký kiểm toán
+### 4.5.9. Người dùng, phân quyền, nhật ký và thông báo
 
-Quản trị viên quản lý vai trò và tích chọn từng quyền cho vai trò (Hình 4.27). Nhật ký kiểm toán (Hình 4.28) cho phép lọc theo người thực hiện, loại hành động, khoảng thời gian và xem chi tiết từng thay đổi.
+Quản trị viên quản lý vai trò và tích chọn từng quyền cho vai trò (Hình 4.34). Nhật ký kiểm toán (Hình 4.35) cho phép lọc theo người thực hiện, loại hành động, khoảng thời gian và xem chi tiết từng thay đổi.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-phan-quyen.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.27. Quản lý vai trò và quyền
+Hình 4.34. Quản lý vai trò và quyền
 :::
 
 ::: {custom-style="nguồn"}
@@ -507,7 +599,45 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.28. Nhật ký kiểm toán
+Hình 4.35. Nhật ký kiểm toán
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+Màn hình người dùng (Hình 4.36) quản lý tài khoản đăng nhập, vai trò, trạng thái và lần đăng nhập gần nhất; quản trị viên có thể sửa thông tin, gửi đường dẫn đặt mật khẩu, cấp mật khẩu tạm, vô hiệu hóa hoặc kích hoạt lại tài khoản. Sổ đồng thuận (Hình 4.37) liệt kê mọi bản ghi đồng ý của bệnh nhân với mục đích, phiên bản văn bản, kênh ghi nhận và trạng thái còn hiệu lực hay đã rút lại; chỉ người có quyền riêng mới xuất được tệp CSV. Trang thông báo (Hình 4.38) lưu lịch sử thông báo của người dùng trong 90 ngày, ví dụ các hóa đơn nháp cần phát hành sau khi bác sĩ đóng phiên khám.
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-nguoi-dung.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.36. Quản lý người dùng
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-so-dong-y.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.37. Sổ đồng thuận của bệnh nhân
+:::
+
+::: {custom-style="nguồn"}
+Nguồn: Tác giả, chụp từ hệ thống GenSmile
+:::
+
+::: {custom-style="Ảnh"}
+![](hinh/4-ql-thong-bao.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 4.38. Trang thông báo trong ứng dụng
 :::
 
 ::: {custom-style="nguồn"}
@@ -516,14 +646,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.10. Trợ lý AI
 
-Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung chat bên phải (Hình 4.29). Hình được chụp ở chế độ dự phòng, khi chưa cấu hình dịch vụ AI: trợ lý vẫn nhận ra ý định của câu hỏi theo từ khóa, gọi đúng công cụ tra cứu, trả lời từ dữ liệu thật và ghi rõ "Trả lời theo mẫu". Khi có dịch vụ AI, câu trả lời được viết tự nhiên và trợ lý có thể đề xuất đặt, hủy, dời lịch dưới dạng thẻ xác nhận. Dòng chú thích dưới ô nhập nhắc người dùng rằng tên bệnh nhân không được gửi cho AI.
+Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung chat bên phải (Hình 4.39). Hình được chụp ở chế độ dự phòng, khi chưa cấu hình dịch vụ AI: trợ lý vẫn nhận ra ý định của câu hỏi theo từ khóa, gọi đúng công cụ tra cứu, trả lời từ dữ liệu thật và ghi rõ "Trả lời theo mẫu". Khi có dịch vụ AI, câu trả lời được viết tự nhiên và trợ lý có thể đề xuất đặt, hủy, dời lịch dưới dạng thẻ xác nhận. Dòng chú thích dưới ô nhập nhắc người dùng rằng tên bệnh nhân không được gửi cho AI.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-tro-ly-ai.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.29. Trợ lý AI ở chế độ dự phòng
+Hình 4.39. Trợ lý AI ở chế độ dự phòng
 :::
 
 ::: {custom-style="nguồn"}
