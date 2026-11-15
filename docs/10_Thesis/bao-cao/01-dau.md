@@ -11,7 +11,7 @@ Lớp: K16-CNTT_2
 
 Ngành: Công nghệ thông tin
 
-Giảng viên hướng dẫn: ……………………………
+Giảng viên hướng dẫn: TS. Mai Thúy Nga
 :::
 
 ::: {custom-style="Mục nhận xét"}
@@ -132,7 +132,7 @@ Ngành: Công nghệ thông tin
 
 Tôi đã thực hiện đồ án tốt nghiệp với đề tài: "Phát triển phần mềm quản lý phòng khám nha khoa".
 
-Tôi xin cam đoan đây là đề tài nghiên cứu của riêng tôi và được sự hướng dẫn của: ……………………………
+Tôi xin cam đoan đây là đề tài nghiên cứu của riêng tôi và được sự hướng dẫn của: TS. Mai Thúy Nga.
 
 Các nội dung nghiên cứu, kết quả trong đề tài này là trung thực và chưa được các tác giả khác công bố dưới bất kỳ hình thức nào. Mọi tài liệu tham khảo đều được trích dẫn đầy đủ. Nếu phát hiện có bất kỳ hình thức gian lận nào tôi xin hoàn toàn chịu trách nhiệm trước pháp luật.
 
@@ -153,9 +153,11 @@ Hà Nội, ngày …… tháng …… năm 2026
 LỜI CẢM ƠN
 :::
 
-Trước hết, em xin gửi lời cảm ơn chân thành đến giảng viên hướng dẫn ……………………, người đã định hướng, góp ý và theo sát em trong suốt quá trình thực hiện đồ án.
+Trước hết, em xin gửi lời cảm ơn chân thành và sâu sắc đến TS. Mai Thúy Nga, giảng viên hướng dẫn, người đã định hướng đề tài, góp ý tận tình và theo sát em trong suốt quá trình thực hiện đồ án.
 
-Em xin cảm ơn các thầy cô Khoa ……………………, Trường Đại học Phenikaa đã truyền đạt kiến thức nền tảng trong những năm học vừa qua, giúp em có đủ hành trang để hoàn thành đề tài.
+Em xin cảm ơn các thầy cô Khoa Hệ thống thông tin, Trường Đại học Công nghệ Thông tin, Đại học Phenikaa đã truyền đạt kiến thức nền tảng trong những năm học vừa qua, giúp em có đủ hành trang để hoàn thành đề tài.
+
+Em xin gửi lời cảm ơn đến Nha khoa An Việt, đặc biệt là bác sĩ Nguyễn Văn Việt, đã dành thời gian chia sẻ quy trình làm việc thực tế của phòng khám và góp ý cho các chức năng của hệ thống. Những trao đổi này giúp đồ án bám sát nhu cầu của một phòng khám nha khoa thật.
 
 Em cũng xin cảm ơn gia đình và bạn bè đã luôn động viên, hỗ trợ em trong thời gian học tập và thực hiện đồ án.
 

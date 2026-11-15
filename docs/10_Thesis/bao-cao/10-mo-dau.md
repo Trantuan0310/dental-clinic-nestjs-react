@@ -53,7 +53,7 @@ Ngoài ra, đồ án bổ sung một số chức năng làm tăng giá trị th�
 
 ## 5. Phương pháp nghiên cứu
 
-- **Phương pháp khảo sát và phân tích tài liệu:** tìm hiểu quy trình vận hành của phòng khám nha khoa, các văn bản pháp lý liên quan [@tt46; @nd13] và các phần mềm quản lý nha khoa hiện có [@opendental; @dentrix] để xác định yêu cầu và khoảng trống cần giải quyết.
+- **Phương pháp khảo sát và phân tích tài liệu:** tìm hiểu quy trình vận hành thực tế tại Nha khoa An Việt qua trao đổi với bác sĩ Nguyễn Văn Việt, các văn bản pháp lý liên quan [@tt46; @nd13] và các phần mềm quản lý nha khoa hiện có [@opendental; @dentrix] để xác định yêu cầu và khoảng trống cần giải quyết.
 - **Phương pháp phân tích, thiết kế hướng đối tượng:** mô hình hóa yêu cầu bằng biểu đồ use case, mô hình hóa dữ liệu bằng sơ đồ thực thể liên kết, mô tả hành vi bằng biểu đồ tuần tự và biểu đồ trạng thái theo chuẩn UML [@uml].
 - **Phương pháp phát triển lặp:** chia hệ thống thành các module nghiệp vụ, phát triển và phát hành từng phần nhỏ; mỗi thay đổi đi qua kiểm thử tự động và quy trình tích hợp liên tục trước khi đưa vào nhánh chính [@fowler_ci].
 - **Phương pháp thực nghiệm và đánh giá:** kiểm thử đơn vị, kiểm thử API trên cơ sở dữ liệu thật, kiểm thử giao diện đầu cuối; đo các chỉ số hiệu năng trước và sau tối ưu; đối chiếu kết quả với từng mục tiêu trong phiếu giao đề tài.

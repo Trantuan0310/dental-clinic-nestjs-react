@@ -6,7 +6,7 @@ Chương này khảo sát cách một phòng khám nha khoa vận hành hằng n
 
 ### 2.1.1. Một ngày làm việc điển hình
 
-Đối tượng khảo sát là một phòng khám nha khoa tư nhân quy mô vừa: bốn bác sĩ làm theo ca, hai lễ tân kiêm thu ngân, một chủ phòng khám kiêm quản lý. Một ngày làm việc diễn ra như sau:
+Khảo sát được thực hiện tại Nha khoa An Việt, qua trao đổi với bác sĩ Nguyễn Văn Việt về quy trình làm việc hằng ngày, các khó khăn trong quản lý và mong muốn đối với phần mềm. Từ kết quả khảo sát, hệ thống được thiết kế cho mô hình phòng khám nha khoa tư nhân quy mô vừa: nhiều bác sĩ làm theo ca, lễ tân kiêm thu ngân, chủ phòng khám kiêm quản lý. Một ngày làm việc diễn ra như sau:
 
 - **Đầu ngày:** lễ tân xem danh sách lịch hẹn trong ngày, gọi nhắc những khách chưa xác nhận, sắp xếp ghế cho từng bác sĩ theo ca.
 - **Trong ngày:** khách đến được lễ tân tìm hồ sơ (hoặc tạo hồ sơ mới), đánh dấu đã đến và xếp vào hàng chờ. Bác sĩ gọi khách vào ghế, khám, ghi lại tình trạng răng và các thủ thuật đã làm, kê đơn nếu cần, lập kế hoạch điều trị cho các ca nhiều bước. Vật tư được lấy từ kho theo từng ca.
@@ -49,7 +49,7 @@ Bảng 2.1. Các vấn đề của cách quản lý thủ công và hướng gi�
 | Bảo mật | Ai cũng xem được mọi hồ sơ; không biết ai đã sửa gì | Phân quyền theo vai trò và theo dòng dữ liệu, nhật ký kiểm toán |
 
 ::: {custom-style="nguồn"}
-Nguồn: Tác giả khảo sát và tổng hợp
+Nguồn: Tác giả khảo sát tại Nha khoa An Việt và tổng hợp
 :::
 
 ## 2.2. Các tác nhân của hệ thống
