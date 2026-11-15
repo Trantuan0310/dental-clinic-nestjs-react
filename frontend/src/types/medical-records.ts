@@ -595,3 +595,14 @@ export interface UpdateDentalChartPayload {
 export type Treatment = TreatmentLine;
 export type TreatmentLineShape = TreatmentLine;
 export { TOOTH_STATUS_LABEL as DEFAULT_TOOTH_STATUS_LABEL };
+
+/** Fill and outline of a crown by status (SVG needs fill-/stroke- classes). */
+export const TOOTH_STATUS_FILL: Record<ToothStatus, string> = {
+  healthy: 'fill-white stroke-gray-400 dark:fill-surface-900 dark:stroke-surface-500',
+  cavity: 'fill-amber-200 stroke-amber-500',
+  filled: 'fill-blue-200 stroke-blue-500',
+  crowned: 'fill-indigo-200 stroke-indigo-500',
+  missing: 'fill-gray-100 stroke-gray-300 [stroke-dasharray:3_3] dark:fill-surface-800 dark:stroke-surface-600',
+  implant: 'fill-purple-200 stroke-purple-500',
+  extraction_needed: 'fill-red-200 stroke-red-500',
+};

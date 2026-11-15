@@ -10,7 +10,6 @@ import {
   CheckCircle,
   FileText,
   Pill,
-  BarChart3,
   ListChecks,
   CalendarPlus,
   AlertTriangle,
@@ -83,12 +82,13 @@ export default function EncounterDetailPage() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<string>('notes');
-  const [focusTooth, setFocusTooth] = useState<number | null>(null);
+  const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [initialTreatmentTooth, setInitialTreatmentTooth] = useState<number | null>(null);
   const [detailToothFdi, setDetailToothFdi] = useState<number | null>(null);
   const canCloseEncounter = useAuthStore((s) => s.hasPermission('encounter.complete'));
   const canUseTemplate = useAuthStore(s => s.hasPermission('clinical_note.write') && s.hasPermission('treatment.write'));
   const canEditChart = useAuthStore((s) => s.hasPermission('dental_chart.write'));
+  const canWriteTreatment = useAuthStore((s) => s.hasPermission('treatment.write'));
   const canBook = useAuthStore((s) => s.hasPermission('appointment.create'));
   const canCancelEncounter = useAuthStore((s) => s.hasPermission('encounter.cancel'));
   const canReopenEncounter = useAuthStore((s) => s.hasPermission('encounter.reopen'));
@@ -187,6 +187,15 @@ export default function EncounterDetailPage() {
     if (initialTreatmentTooth === null) return;
     setActiveTab('treatments');
   }, [initialTreatmentTooth]);
+
+  /** Show a tooth on the chart, with its history next to it. */
+  const selectTooth = (tooth: number) => {
+    setSelectedTooth(tooth);
+    setActiveTab('treatments');
+    requestAnimationFrame(() =>
+      document.getElementById('encounter-panel-treatments')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
 
   if (isLoading) {
     return (
@@ -432,9 +441,8 @@ export default function EncounterDetailPage() {
             }}>
             {[
               { id: 'notes', label: t('uiClinical.clinicalNotes'), icon: FileText },
-              { id: 'treatments', label: t('uiClinical.treatments'), icon: ListChecks },
+              { id: 'treatments', label: t('uiClinical.treatmentsAndChart'), icon: ListChecks },
               { id: 'prescriptions', label: t('uiClinical.prescriptions'), icon: Pill },
-              { id: 'chart', label: t('uiClinical.toothChart'), icon: BarChart3 },
               ...(isEditable ? [{ id: 'summary', label: t('uiClinical.summary'), icon: ListChecks }] : []),
             ].map(({ id: tabId, label, icon: Icon }) => {
               const active = activeTab === tabId;
@@ -471,34 +479,35 @@ export default function EncounterDetailPage() {
 
           <div role="tabpanel" id="encounter-panel-treatments" aria-labelledby="encounter-tab-treatments" tabIndex={0} hidden={activeTab !== 'treatments'}>
             <Suspense fallback={TabFallback}>
-              <TreatmentsTab
+              <DentalChartPanel
                 encounter={encounter}
-                initialToothNumber={initialTreatmentTooth}
-                onClearInitialTooth={() => setInitialTreatmentTooth(null)}
-                onViewToothDetail={(fdi) => {
-                  setDetailToothFdi(fdi);
-                  setActiveTab('treatments');
-                }}
+                isLocked={encounter.status !== 'in_progress' || !canEditChart || !ownScope}
+                selectedTooth={selectedTooth}
+                onSelectTooth={setSelectedTooth}
+                onAddTreatment={
+                  encounter.status === 'in_progress' && canWriteTreatment && ownScope
+                    ? (tooth) => setInitialTreatmentTooth(tooth)
+                    : undefined
+                }
+                onViewToothDetail={(fdi) => setDetailToothFdi(fdi)}
               />
+              <div className="mt-6 border-t border-gray-100 pt-5 dark:border-surface-700">
+                <h3 className="mb-3 text-base font-semibold text-gray-900 dark:text-surface-100">
+                  {t('uiClinical.treatmentsThisVisit')}
+                </h3>
+                <TreatmentsTab
+                  encounter={encounter}
+                  initialToothNumber={initialTreatmentTooth}
+                  onClearInitialTooth={() => setInitialTreatmentTooth(null)}
+                  onViewToothDetail={selectTooth}
+                />
+              </div>
             </Suspense>
           </div>
 
           <div role="tabpanel" id="encounter-panel-prescriptions" aria-labelledby="encounter-tab-prescriptions" tabIndex={0} hidden={activeTab !== 'prescriptions'}>
             <Suspense fallback={TabFallback}>
               <PrescriptionsTab encounter={encounter} />
-            </Suspense>
-          </div>
-
-          <div role="tabpanel" id="encounter-panel-chart" aria-labelledby="encounter-tab-chart" tabIndex={0} hidden={activeTab !== 'chart'}>
-            <Suspense fallback={TabFallback}>
-              <DentalChartPanel
-                encounter={encounter}
-                isLocked={encounter.status !== 'in_progress' || !canEditChart || !ownScope}
-                highlightToothNumbers={treatmentToothNumbers}
-                focusToothNumber={focusTooth}
-                onSwitchToTreatmentTab={(tooth) => setInitialTreatmentTooth(tooth)}
-                onViewToothDetail={(fdi) => setDetailToothFdi(fdi)}
-              />
             </Suspense>
           </div>
 
@@ -517,7 +526,7 @@ export default function EncounterDetailPage() {
       </Card>
 
       {/* Quick-jump from treatments list back to chart */}
-      {treatmentToothNumbers.length > 0 && activeTab !== 'chart' && (
+      {treatmentToothNumbers.length > 0 && activeTab !== 'treatments' && (
         <Card noPadding className="p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium text-gray-700 dark:text-surface-200">{t('uiClinical.treatedTeeth')}</span>
@@ -525,10 +534,7 @@ export default function EncounterDetailPage() {
               <button
                 key={n}
                 type="button"
-                onClick={() => {
-                  setFocusTooth(n);
-                  setActiveTab('chart');
-                }}
+                onClick={() => selectTooth(n)}
                 className="rounded-full border border-brand-200 bg-brand-50 px-3 py-0.5 text-xs font-mono text-brand-700 hover:bg-brand-100"
               >
                 {n}

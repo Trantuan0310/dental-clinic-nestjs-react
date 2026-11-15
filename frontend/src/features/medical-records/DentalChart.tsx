@@ -1,192 +1,156 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/cn';
 import {
+  ARCH_LOWER,
+  ARCH_PRIMARY_LOWER,
+  ARCH_PRIMARY_UPPER,
+  ARCH_UPPER,
+  ARCH_VIEW_H as VIEW_H,
+  ARCH_VIEW_W as VIEW_W,
+  crownPath,
+  groovePath,
+  placeArch,
+  type PlacedTooth,
+} from '@/lib/toothArch';
+import {
   ADULT_TEETH,
   PRIMARY_TEETH,
+  TOOTH_STATUS_FILL,
   TOOTH_STATUS_LABEL,
-  TOOTH_STATUSES,
-  toothStatusColor,
   type DentalChartPatientType,
   type ToothDescriptor,
   type ToothEntry,
   type ToothStatus,
 } from '@/types/medical-records';
 
-export interface DentalChartHandle {
-  focusTooth: (fdi: string) => void;
-}
-
 interface DentalChartProps {
   teeth: Record<string, ToothEntry>;
-  onToothClick?: (tooth: ToothDescriptor) => void;
-  readOnly?: boolean;
-  highlightToothNumbers?: number[];
-  size?: 'sm' | 'md' | 'lg';
-  /**
-   * When provided, only the FDIs in this set will render at full opacity; the rest will be dimmed.
-   * Used together with the search box to spotlight a single tooth.
-   */
-  dimFdis?: Set<string>;
-  /**
-   * Teeth whose current status is not in this set will render dimmed.
-   * Used by the status filter toolbar.
-   */
+  /** The tooth whose details are shown next to the chart. */
+  selected?: number | null;
+  onSelect?: (tooth: ToothDescriptor) => void;
+  /** Teeth with a treatment in the open encounter: marked with a dot. */
+  marked?: Set<number>;
+  /** Teeth whose status is not in this set are drawn faded. */
   filterEnabled?: Set<ToothStatus>;
-  registerToothRef?: (fdi: string, el: HTMLButtonElement | null) => void;
-  onSearchSubmit?: (fdi: string) => void;
-  /** CHILD renders a mixed-dentition chart (primary 51–85 + permanent rows). */
+  /** CHILD draws the primary teeth (51–85) as a second arch inside. */
   patientType?: DentalChartPatientType;
 }
 
-const SIZE: Record<NonNullable<DentalChartProps['size']>, { cell: string; label: string }> = {
-  sm: { cell: 'h-9 w-9 text-xs', label: 'text-[10px]' },
-  md: { cell: 'h-11 w-11 text-sm', label: 'text-[11px]' },
-  lg: { cell: 'h-14 w-14 text-base', label: 'text-xs' },
-};
+const DESCRIPTORS = new Map<number, ToothDescriptor>(
+  [...ADULT_TEETH, ...PRIMARY_TEETH].map((tooth) => [tooth.number, tooth]),
+);
 
-export const DentalChart = forwardRef<DentalChartHandle, DentalChartProps>(function DentalChart(
-  {
-    teeth,
-    onToothClick,
-    readOnly,
-    highlightToothNumbers,
-    size = 'md',
-    dimFdis,
-    filterEnabled,
-    registerToothRef,
-    patientType = 'ADULT',
-  },
-  ref,
-) {
+/**
+ * The dental chart as two arches seen from the biting surface (same drawing
+ * as the landing page), each crown filled by its status. Every tooth is a
+ * button; pressing one selects it.
+ */
+export function DentalChart({ teeth, selected, onSelect, marked, filterEnabled, patientType = 'ADULT' }: DentalChartProps) {
   const { t } = useTranslation();
-  const upper = useMemo(() => ADULT_TEETH.filter((tooth) => tooth.arch === 'upper'), []);
-  const lower = useMemo(() => ADULT_TEETH.filter((tooth) => tooth.arch === 'lower'), []);
   const isChild = patientType === 'CHILD';
+  const permanent = useMemo(() => [...placeArch(ARCH_UPPER, true), ...placeArch(ARCH_LOWER, false)], []);
   // Mixed dentition lasts past the CHILD band (~13 y): an ADULT chart still
   // shows the primary teeth already recorded, so they are not lost.
-  const primaryUpper = useMemo(
-    () => PRIMARY_TEETH.filter((tooth) => tooth.arch === 'upper' && (isChild || !!teeth[String(tooth.number)])),
+  const primary = useMemo(
+    () =>
+      [...placeArch(ARCH_PRIMARY_UPPER, true, true), ...placeArch(ARCH_PRIMARY_LOWER, false, true)].filter(
+        (p) => isChild || !!teeth[String(p.code)],
+      ),
     [isChild, teeth],
   );
-  const primaryLower = useMemo(
-    () => PRIMARY_TEETH.filter((tooth) => tooth.arch === 'lower' && (isChild || !!teeth[String(tooth.number)])),
-    [isChild, teeth],
-  );
-  const showPrimaryUpper = primaryUpper.length > 0;
-  const showPrimaryLower = primaryLower.length > 0;
-  const highlightSet = useMemo(() => new Set(highlightToothNumbers ?? []), [highlightToothNumbers]);
-  const dim = SIZE[size];
-  const internalRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const hasPrimary = primary.length > 0;
 
-  useImperativeHandle(ref, () => ({
-    focusTooth: (fdi: string) => {
-      const el = internalRefs.current[fdi];
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-        el.focus();
-      }
-    },
-  }));
-
-  const handleRef = (fdi: string) => (el: HTMLButtonElement | null) => {
-    internalRefs.current[fdi] = el;
-    registerToothRef?.(fdi, el);
-  };
-
-  const renderCell = (tooth: ToothDescriptor) => {
-    const entry = teeth[String(tooth.number)];
+  const renderTooth = (p: PlacedTooth, inner: boolean) => {
+    const tooth = DESCRIPTORS.get(p.code);
+    if (!tooth) return null;
+    const entry = teeth[String(p.code)];
     const status: ToothStatus = entry?.status ?? 'healthy';
-    const palette = toothStatusColor(status);
-    const selected = highlightSet.has(tooth.number);
-    const fdi = String(tooth.number);
-    const isFilteredOut = filterEnabled && !filterEnabled.has(status);
-    const isDimmed = (dimFdis && !dimFdis.has(fdi)) || isFilteredOut;
+    const on = p.code === selected;
+    const faded = filterEnabled && !filterEnabled.has(status);
+    // Permanent teeth are numbered on the cheek side, primary ones on the tongue side.
+    const side = inner ? -1 : 1;
+    const lx = p.x + side * p.nx * (p.d / 2 + 11);
+    const ly = p.y + side * p.ny * (p.d / 2 + 11) + 3.5;
     return (
-      <button
-        ref={handleRef(fdi)}
-        type="button"
-        key={tooth.number}
-        disabled={readOnly || !onToothClick}
-        onClick={() => onToothClick?.(tooth)}
-        data-fdi={fdi}
-        data-status={status}
-        data-highlighted={selected || undefined}
-        className={cn(
-          'flex shrink-0 flex-col items-center justify-center rounded-md border transition-all',
-          dim.cell,
-          palette.bg,
-          palette.text,
-          palette.border,
-          selected && 'ring-2 ring-primary-500 ring-offset-1 z-10',
-          isDimmed && 'opacity-30 saturate-50',
-          !readOnly && onToothClick && 'cursor-pointer hover:scale-105 hover:shadow',
-          readOnly && 'cursor-default',
-        )}
-        title={`${tooth.name} — ${TOOTH_STATUS_LABEL[status]}${entry?.notes ? ` (${entry.notes})` : ''}`}
-        aria-label={`${tooth.name}, ${TOOTH_STATUS_LABEL[status]}`}
-      >
-        <span className="font-mono font-semibold leading-none">{tooth.fdi}</span>
-      </button>
+      <g key={p.code} className={cn(faded && 'opacity-25')}>
+        <g transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${p.angle.toFixed(1)})`}>
+          <path
+            d={crownPath(p.kind, p.w, p.d, p.buccal)}
+            role="button"
+            tabIndex={0}
+            aria-pressed={on}
+            aria-label={`${tooth.name}, ${TOOTH_STATUS_LABEL[status]}`}
+            data-fdi={p.code}
+            data-status={status}
+            onClick={() => onSelect?.(tooth)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect?.(tooth);
+              }
+            }}
+            className={cn(
+              'cursor-pointer outline-none transition-[stroke-width,filter] hover:brightness-95 focus-visible:stroke-[2.5]',
+              TOOTH_STATUS_FILL[status],
+              on ? '!stroke-brand-600 stroke-[3] [stroke-dasharray:none]' : 'stroke-1',
+            )}
+          >
+            <title>{`${tooth.name} — ${TOOTH_STATUS_LABEL[status]}${entry?.notes ? ` (${entry.notes})` : ''}`}</title>
+          </path>
+          {status !== 'missing' && (
+            <path
+              d={groovePath(p.kind, p.w, p.d, p.buccal)}
+              fill="none"
+              strokeLinecap="round"
+              className="pointer-events-none stroke-gray-400/60 stroke-[0.8]"
+              aria-hidden
+            />
+          )}
+          {marked?.has(p.code) && <circle r={3} className="pointer-events-none fill-brand-600" aria-hidden />}
+        </g>
+        <text
+          x={lx.toFixed(1)}
+          y={ly.toFixed(1)}
+          textAnchor="middle"
+          aria-hidden
+          className={cn(
+            'pointer-events-none font-mono',
+            inner ? 'text-[9px]' : 'text-[10px]',
+            on ? 'fill-brand-700 font-bold dark:fill-brand-300' : 'fill-gray-500 dark:fill-surface-400',
+          )}
+        >
+          {p.code}
+        </text>
+      </g>
     );
   };
 
-  const renderArch = (arch: ToothDescriptor[]) => (
-    <div className="flex w-max min-w-full justify-center gap-1.5">
-      {arch.map((tooth) => renderCell(tooth))}
-    </div>
-  );
-
-  const renderSubLabel = (text: string) => (
-    <div className="my-1 text-center text-[10px] uppercase tracking-wider text-gray-400">{text}</div>
-  );
-
+  const jawLabelY = hasPrimary ? 238 : 170;
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4">
-      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
-        <span className="font-semibold text-gray-700">{t('uiClinical.chartLegend')}</span>
-        {TOOTH_STATUSES.map((s) => {
-          const palette = toothStatusColor(s);
-          return (
-            <span key={s} className="inline-flex items-center gap-1.5">
-              <span className={cn('inline-block h-4 w-4 rounded border', palette.bg, palette.border)} />
-              <span>{TOOTH_STATUS_LABEL[s]}</span>
-            </span>
-          );
-        })}
-      </div>
-
-      <div className="overflow-x-auto">
-        <div className="min-w-max">
-          <div>
-            <div className={cn('mb-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
-              {t('uiClinical.upperJaw')}
-            </div>
-            {showPrimaryUpper && renderSubLabel(t('uiClinical.permanentTeeth'))}
-            {renderArch(upper)}
-            {showPrimaryUpper && renderSubLabel(t('uiClinical.primaryTeeth'))}
-            {showPrimaryUpper && renderArch(primaryUpper)}
-          </div>
-
-          <div className="mx-auto my-1 h-px w-3/4 bg-gray-300" aria-hidden="true" />
-
-          <div>
-            {showPrimaryLower && renderArch(primaryLower)}
-            {showPrimaryLower && renderSubLabel(t('uiClinical.primaryTeeth'))}
-            {renderArch(lower)}
-            {showPrimaryLower && renderSubLabel(t('uiClinical.permanentTeeth'))}
-            <div className={cn('mt-1 text-center text-xs font-semibold uppercase tracking-wider text-gray-500', dim.label)}>
-              {t('uiClinical.lowerJaw')}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {!readOnly && (
-        <p className="mt-1 text-center text-[11px] text-gray-400">
-          {t('uiClinical.toothTapInstructions', { count: TOOTH_STATUSES.length })}
-        </p>
-      )}
-    </div>
+    <svg
+      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      className="mx-auto block h-auto w-full max-w-[520px]"
+      role="group"
+      aria-label={t('uiClinical.toothChart')}
+    >
+      {/* Midline and occlusal plane split the mouth into the four FDI quadrants. */}
+      <g className="stroke-gray-300 dark:stroke-surface-600" strokeWidth={1} strokeDasharray="3 4" aria-hidden>
+        <line x1={VIEW_W / 2} y1={12} x2={VIEW_W / 2} y2={VIEW_H - 12} />
+        <line x1={40} y1={VIEW_H / 2} x2={VIEW_W - 40} y2={VIEW_H / 2} />
+      </g>
+      <g className="fill-gray-500 dark:fill-surface-400" aria-hidden>
+        <text x={VIEW_W / 2} y={jawLabelY} textAnchor="middle" className="text-[11px] uppercase tracking-wider">
+          {t('uiClinical.upperJaw')}
+        </text>
+        <text x={VIEW_W / 2} y={VIEW_H - jawLabelY + 8} textAnchor="middle" className="text-[11px] uppercase tracking-wider">
+          {t('uiClinical.lowerJaw')}
+        </text>
+        <text x={14} y={VIEW_H / 2 - 6} className="text-[10px]">{t('uiEntry.landing.patientRight')}</text>
+        <text x={VIEW_W - 14} y={VIEW_H / 2 - 6} textAnchor="end" className="text-[10px]">{t('uiEntry.landing.patientLeft')}</text>
+      </g>
+      {permanent.map((p) => renderTooth(p, false))}
+      {primary.map((p) => renderTooth(p, true))}
+    </svg>
   );
-});
+}

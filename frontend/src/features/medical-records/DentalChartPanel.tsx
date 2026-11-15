@@ -4,18 +4,13 @@ import {
   Camera,
   Eraser,
   Filter,
-  Info,
   Redo2,
   RotateCcw,
   Save,
-  Search,
-  Stethoscope,
   Undo2,
   Wand2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -24,17 +19,18 @@ import { cn } from '@/lib/cn';
 import { formatDateTime } from '@/lib/format';
 import { getApiErrorMessage } from '@/lib/errors';
 import { DentalChart } from './DentalChart';
+import { ToothPanel } from './ToothPanel';
 import {
   useDentalChart,
   useSaveDentalChart,
 } from './medicalRecordsApi';
 import {
   TOOTH_STATUSES,
+  TOOTH_STATUS_FILL,
   baseTeethFor,
   chartTeethFor,
   dentalChartPatientTypeForDob,
   snapshotToWire,
-  toothStatusColor,
   wireToSnapshotMap,
   type DentalChartPatientType,
   type DentalChartSnapshot,
@@ -55,15 +51,12 @@ import {
 interface DentalChartPanelProps {
   encounter: Encounter;
   isLocked: boolean;
-  highlightToothNumbers?: number[];
-  focusToothNumber?: number | null;
-  onSwitchToTreatmentTab?: (toothNumber: number) => void;
-  /**
-   * Optional override of patient id (default: encounter.patientId).
-   * Used to fetch the full tooth history across encounters.
-   */
-  patientId?: string;
-  /** Callback when user wants to open the full tooth history drawer. */
+  /** The tooth shown in the side panel; owned by the page so other parts can pick one. */
+  selectedTooth: number | null;
+  onSelectTooth: (toothNumber: number | null) => void;
+  /** Present when the user may add a treatment to the open encounter. */
+  onAddTreatment?: (toothNumber: number) => void;
+  /** Opens the full tooth record (status changes, plan). */
   onViewToothDetail?: (toothNumber: number) => void;
 }
 
@@ -85,17 +78,16 @@ type BulkScope = 'quadrant' | 'arch' | 'remaining';
 export function DentalChartPanel({
   encounter,
   isLocked,
-  highlightToothNumbers,
-  focusToothNumber,
-  onSwitchToTreatmentTab,
-  patientId: _patientId,
+  selectedTooth,
+  onSelectTooth,
+  onAddTreatment,
   onViewToothDetail,
 }: DentalChartPanelProps) {
   const { t } = useTranslation();
   const options = toothOptions(t);
   const isMounted = useIsMounted();
   // Backend exposes the latest snapshot per-patient, not per-encounter.
-  const patientId = _patientId ?? encounter.patientId;
+  const patientId = encounter.patientId;
   const { data: snapshot, isLoading } = useDentalChart(patientId);
   const save = useSaveDentalChart(encounter.id);
   // BR-MR-012: backend rejects a snapshot whose patientType does not match
@@ -107,8 +99,6 @@ export function DentalChartPanel({
   const history = useHistory<Record<string, ToothEntry>>(emptyTeeth);
   const lastSavedHash = useRef<string>(hashTeethMap(emptyTeeth));
 
-  const [editingTooth, setEditingTooth] = useState<ToothDescriptor | null>(null);
-  const [popoverTooth, setPopoverTooth] = useState<ToothDescriptor | null>(null);
   const [enabledStatuses, setEnabledStatuses] = useState<Set<ToothStatus>>(
     () => new Set(TOOTH_STATUSES),
   );
@@ -116,8 +106,6 @@ export function DentalChartPanel({
   const [bulkScope, setBulkScope] = useState<BulkScope>('quadrant');
   const [bulkQuadrant, setBulkQuadrant] = useState<ToothQuadrant>('Q1');
   const [bulkStatus, setBulkStatus] = useState<ToothStatus>('healthy');
-  const [search, setSearch] = useState('');
-  const toothRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // ----- Bootstrap from server snapshot -----
   useEffect(() => {
@@ -145,11 +133,6 @@ export function DentalChartPanel({
   }, [encounter.treatments]);
 
   const treatmentHighlight = useMemo(() => new Set(treatmentsByTooth.keys()), [treatmentsByTooth]);
-  const mergedHighlight = useMemo(() => {
-    const merged = new Set(treatmentHighlight);
-    (highlightToothNumbers ?? []).forEach((n) => merged.add(n));
-    return merged;
-  }, [treatmentHighlight, highlightToothNumbers]);
 
   // ----- Auto save (debounced) -----
   useDebouncedEffect(
@@ -175,39 +158,7 @@ export function DentalChartPanel({
     1500,
   );
 
-  // ----- Focus a specific tooth when caller requests -----
-  useEffect(() => {
-    if (!focusToothNumber) return;
-    const target = toothRefs.current[String(focusToothNumber)];
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-      target.focus();
-    }
-  }, [focusToothNumber]);
-
   // ----- Handlers -----
-  const handleToothClick = useCallback(
-    (t: ToothDescriptor) => {
-      if (isLocked) return;
-      const treatmentsForTooth = treatmentsByTooth.get(t.number) ?? [];
-      const currentStatus = history.state[String(t.number)]?.status ?? 'healthy';
-
-      // Priority 1: răng có treatment trong encounter hiện tại → popover (giữ UX đã có)
-      if (treatmentsForTooth.length > 0) {
-        setPopoverTooth(t);
-        return;
-      }
-      // Priority 2: răng đã ghi nhận vấn đề (status ≠ healthy) → mở drawer lịch sử ở page-level
-      if (currentStatus !== 'healthy') {
-        onViewToothDetail?.(t.number);
-        return;
-      }
-      // Priority 3: răng khỏe → modal chỉnh status như cũ
-      setEditingTooth(t);
-    },
-    [isLocked, treatmentsByTooth, history.state, onViewToothDetail],
-  );
-
   const setEntry = useCallback(
     (number: number, next: ToothEntry) => {
       const current = history.state[String(number)] ?? { status: 'healthy' as ToothStatus, notes: '' };
@@ -272,45 +223,36 @@ export function DentalChartPanel({
     return counts;
   }, [teeth]);
 
-  const filteredFdis = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return null;
-    return chartTeethFor(patientType)
-      .filter((t) => String(t.number).includes(q) || t.name.toLowerCase().includes(q))
-      .map((t) => String(t.number));
-  }, [search, patientType]);
+  const selected = selectedTooth ? chartTeethFor(patientType).find((tooth) => tooth.number === selectedTooth) ?? null : null;
 
   return (
-    <div className="space-y-5" data-testid="dental-chart-panel">
-      <Card
-        title={
-          <span className="flex items-center gap-2">
+    <div className="space-y-4" data-testid="dental-chart-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold text-gray-900 dark:text-surface-100">
             {t('uiClinical.toothChart')}
             {patientType === 'CHILD' && (
               <span className="rounded bg-sky-50 px-2 py-0.5 text-xs font-normal text-sky-700">
                 {t('uiClinical.childDentition')}
               </span>
             )}
-          </span>
-        }
-        description={
-          <>{t('uiClinical.chartInstructions')}</>
-        }
-        actions={
+          </h3>
+          <p className="mt-0.5 max-w-prose text-xs text-gray-500 dark:text-surface-400">
+            {t(isLocked ? 'uiClinical.chartInstructionsReadOnly' : 'uiClinical.chartInstructionsArch')}
+          </p>
+        </div>
+        {!isLocked && (
           <div className="flex flex-wrap items-center gap-2">
-            {snapshot?.snapshotAt && (
-              <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                <Camera className="h-3.5 w-3.5" />
-                Snapshot: {formatDateTime(snapshot.snapshotAt)}
-              </span>
-            )}
-            <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white p-0.5">
+            <span className="text-xs text-gray-500 dark:text-surface-400" aria-live="polite">
+              {save.isPending ? t('uiClinical.saving') : dirty ? t('uiClinical.saveIn') : t('uiClinical.synced')}
+            </span>
+            <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white p-0.5 dark:border-surface-700 dark:bg-surface-900">
               <Tooltip label={t('uiClinical.undoShortcut')}>
                 <button
                   type="button"
-                  disabled={!history.canUndo || isLocked}
+                  disabled={!history.canUndo}
                   onClick={history.undo}
-                  className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-300 dark:hover:bg-surface-800"
                   aria-label={t('uiClinical.undo')}
                 >
                   <Undo2 className="h-4 w-4" />
@@ -319,9 +261,9 @@ export function DentalChartPanel({
               <Tooltip label={t('uiClinical.redoShortcut')}>
                 <button
                   type="button"
-                  disabled={!history.canRedo || isLocked}
+                  disabled={!history.canRedo}
                   onClick={history.redo}
-                  className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded p-1.5 text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-300 dark:hover:bg-surface-800"
                   aria-label={t('uiClinical.redo')}
                 >
                   <Redo2 className="h-4 w-4" />
@@ -329,155 +271,89 @@ export function DentalChartPanel({
               </Tooltip>
             </div>
             <Tooltip label={t('uiClinical.bulkToothStatus')}>
-              <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} disabled={isLocked} leftIcon={<Wand2 className="h-4 w-4" />}>
+              <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)} leftIcon={<Wand2 className="h-4 w-4" />}>
                 {t('uiClinical.bulkShort')}
               </Button>
             </Tooltip>
             <Tooltip label={t('uiClinical.resetTeeth')}>
-              <Button variant="outline" size="sm" onClick={handleReset} disabled={isLocked} leftIcon={<Eraser className="h-4 w-4" />}>
+              <Button variant="outline" size="sm" onClick={handleReset} leftIcon={<Eraser className="h-4 w-4" />}>
                 {t('uiClinical.resetShort')}
               </Button>
             </Tooltip>
-            <Button
-              size="sm"
-              onClick={handleManualSave}
-              disabled={!dirty || isLocked}
-              isLoading={save.isPending}
-              leftIcon={<Save className="h-4 w-4" />}
-            >
+            <Button size="sm" onClick={handleManualSave} disabled={!dirty} isLoading={save.isPending} leftIcon={<Save className="h-4 w-4" />}>
               {t('uiClinical.saveNow')}
             </Button>
           </div>
-        }
-      >
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <div className="relative min-w-0 w-full sm:max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-surface-400" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                aria-label={t('uiClinical.toothFind')}
-                placeholder={t('uiClinical.toothFindExample')}
-                className="pl-8"
-              />
-            </div>
-            <span className="text-xs text-gray-500">{t('uiClinical.toothSearchHelp')}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Filter className="h-4 w-4 text-gray-400 dark:text-surface-400" />
-            <span className="text-xs text-gray-500">{t('uiClinical.filterByStatus')}</span>
-            {TOOTH_STATUSES.map((s) => {
-              const enabled = enabledStatuses.has(s);
-              const palette = toothStatusColor(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => {
-                    setEnabledStatuses((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(s)) next.delete(s);
-                      else next.add(s);
-                      return next;
-                    });
-                  }}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
-                    enabled ? `${palette.bg} ${palette.text} ${palette.border}` : 'bg-gray-50 text-gray-400 border-gray-200',
-                  )}
-                  aria-pressed={enabled}
-                >
-                  <span className={cn('h-2 w-2 rounded-full', enabled ? palette.bg : 'bg-gray-300')} />
-                  {t(`uiClinical.${toothStatusTranslationKey[s]}`)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-500">{t('uiClinical.chartLoading')}</p>
-        ) : (
-          <DentalChart
-            teeth={teeth}
-            onToothClick={handleToothClick}
-            readOnly={isLocked}
-            patientType={patientType}
-            highlightToothNumbers={Array.from(mergedHighlight)}
-            dimFdis={filteredFdis ? new Set(filteredFdis) : undefined}
-            filterEnabled={enabledStatuses}
-            registerToothRef={(fdi, el) => {
-              toothRefs.current[fdi] = el;
-            }}
-            onSearchSubmit={(fdi) => {
-              const el = toothRefs.current[fdi];
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-                el.focus();
-              }
-            }}
-            size="md"
-          />
         )}
-
-        {search && filteredFdis && filteredFdis.length === 0 && (
-          <p className="mt-2 text-xs text-amber-600">{t('uiClinical.noMatchingTooth', { query: `“${search}”` })}</p>
-        )}
-      </Card>
-
-      <div className="grid gap-3 md:grid-cols-7">
-        {options.map((opt) => (
-          <div
-            key={opt.value}
-            className={cn(
-              'rounded-md border bg-white px-3 py-2 text-center transition',
-              enabledStatuses.has(opt.value) ? 'border-gray-200' : 'border-dashed border-gray-200 opacity-50',
-            )}
-          >
-            <div className="text-xs text-gray-500">{opt.label}</div>
-            <div className="text-lg font-semibold text-gray-900">{summary[opt.value] ?? 0}</div>
-          </div>
-        ))}
       </div>
 
-      <div className="flex flex-wrap items-start gap-3 rounded-md border border-gray-100 bg-gray-50/60 px-3 py-2 text-xs text-gray-600">
-        <Info className="mt-0.5 h-4 w-4 text-gray-500 dark:text-surface-400" />
-        <div className="flex-1 space-y-1">
-          <p>
-            {t('uiClinical.toothTreatmentHighlight', { count: treatmentHighlight.size })}
-          </p>
-          <p>
-            {t('uiClinical.autoSave')}: <strong>{save.isPending ? t('uiClinical.saving') : dirty ? t('uiClinical.saveIn') : t('uiClinical.synced')}</strong>.
-          </p>
-        </div>
+      {/* Legend, counts and filter in one row: press a status to fade the others. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Filter className="h-4 w-4 text-gray-400 dark:text-surface-400" aria-hidden />
+        {TOOTH_STATUSES.map((s) => {
+          const enabled = enabledStatuses.has(s);
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setEnabledStatuses((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(s)) next.delete(s);
+                  else next.add(s);
+                  return next;
+                });
+              }}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-700 transition dark:border-surface-700 dark:bg-surface-900 dark:text-surface-200',
+                !enabled && 'opacity-40',
+              )}
+              aria-pressed={enabled}
+            >
+              <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+                <rect x="1" y="1" width="10" height="10" rx="3" className={cn('stroke-1', TOOTH_STATUS_FILL[s])} />
+              </svg>
+              {t(`uiClinical.${toothStatusTranslationKey[s]}`)}
+              <span className="font-semibold tabular-nums">{summary[s] ?? 0}</span>
+            </button>
+          );
+        })}
+        {snapshot?.snapshotAt && (
+          <span className="ml-auto inline-flex items-center gap-1 text-xs text-gray-500 dark:text-surface-400">
+            <Camera className="h-3.5 w-3.5" aria-hidden />
+            {formatDateTime(snapshot.snapshotAt)}
+          </span>
+        )}
       </div>
 
-      {editingTooth && (
-        <ToothStatusModal
-          tooth={editingTooth}
-          entry={teeth[String(editingTooth.number)] ?? { status: 'healthy', notes: '' }}
-          onChange={(next) => setEntry(editingTooth.number, next)}
-          onClose={() => setEditingTooth(null)}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
+        <div className="rounded-lg border border-gray-200 bg-white p-2 dark:border-surface-700 dark:bg-surface-900">
+          {isLoading ? (
+            <p className="py-10 text-center text-sm text-gray-500">{t('uiClinical.chartLoading')}</p>
+          ) : (
+            <DentalChart
+              teeth={teeth}
+              selected={selectedTooth}
+              onSelect={(tooth) => onSelectTooth(tooth.number === selectedTooth ? null : tooth.number)}
+              marked={treatmentHighlight}
+              filterEnabled={enabledStatuses}
+              patientType={patientType}
+            />
+          )}
+        </div>
+        <ToothPanel
+          tooth={selected}
+          entry={(selected && teeth[String(selected.number)]) || { status: 'healthy', notes: '' }}
+          statusOptions={options}
+          locked={isLocked}
+          onChangeEntry={(next) => selected && setEntry(selected.number, next)}
+          currentLines={selected ? treatmentsByTooth.get(selected.number) ?? [] : []}
+          patientId={patientId}
+          encounterId={encounter.id}
+          onAddTreatment={selected && onAddTreatment ? () => onAddTreatment(selected.number) : undefined}
+          onOpenFullRecord={selected && onViewToothDetail ? () => onViewToothDetail(selected.number) : undefined}
         />
-      )}
-
-      {popoverTooth && (
-        <ToothTreatmentPopover
-          tooth={popoverTooth}
-          treatments={treatmentsByTooth.get(popoverTooth.number) ?? []}
-          onClose={() => setPopoverTooth(null)}
-          onAddTreatment={() => {
-            setPopoverTooth(null);
-            onSwitchToTreatmentTab?.(popoverTooth.number);
-          }}
-          onEditStatus={() => {
-            const t = popoverTooth;
-            setPopoverTooth(null);
-            setEditingTooth(t);
-          }}
-        />
-      )}
+      </div>
 
       <BulkActionModal
         open={bulkOpen}
@@ -542,136 +418,6 @@ function pickTeethForBulk(
     }
   }
   return result;
-}
-
-// ---------- Modal: chỉnh sửa răng ----------
-
-interface ToothStatusModalProps {
-  tooth: ToothDescriptor;
-  entry: ToothEntry;
-  onChange: (next: ToothEntry) => void;
-  onClose: () => void;
-}
-
-function ToothStatusModal({ tooth, entry, onChange, onClose }: ToothStatusModalProps) {
-  const { t } = useTranslation();
-  const options = toothOptions(t);
-  const [status, setStatus] = useState<ToothStatus>(entry.status);
-  const [notes, setNotes] = useState<string>(entry.notes ?? '');
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      size="md"
-      title={t('uiClinical.toothPosition', { number: tooth.number, arch: t(tooth.arch === 'upper' ? 'uiClinical.upperJaw' : 'uiClinical.lowerJaw'), side: t(tooth.side === 'right' ? 'uiClinical.rightSide' : 'uiClinical.leftSide') })}
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            {t('uiClinical.cancel')}
-          </Button>
-          <Button
-            onClick={() => {
-              onChange({ status, notes });
-              onClose();
-            }}
-          >
-            {t('uiClinical.save')}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <Select
-          label={t('uiClinical.toothStatus')}
-          value={status}
-          onChange={(e) => setStatus(e.target.value as ToothStatus)}
-          options={options}
-        />
-        <Input
-          label={t('uiClinical.toothNotes')}
-          placeholder={t('uiClinical.toothNoteExample')}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          hint={t('uiClinical.toothNoteHint')}
-          maxLength={200}
-        />
-        {status === 'missing' && (
-          <p className="text-xs text-gray-500">
-            {t('uiClinical.missingToothRule')}
-          </p>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-// ---------- Popover: răng đã có treatment lines ----------
-
-interface ToothTreatmentPopoverProps {
-  tooth: ToothDescriptor;
-  treatments: TreatmentLine[];
-  onClose: () => void;
-  onAddTreatment: () => void;
-  onEditStatus: () => void;
-  onViewDetail?: () => void;
-}
-
-function ToothTreatmentPopover({
-  tooth,
-  treatments,
-  onClose,
-  onAddTreatment,
-  onEditStatus,
-  onViewDetail,
-}: ToothTreatmentPopoverProps) {
-  const { t } = useTranslation();
-  const toothLabel = t('uiClinical.toothPosition', { number: tooth.number, arch: t(tooth.arch === 'upper' ? 'uiClinical.upperJaw' : 'uiClinical.lowerJaw'), side: t(tooth.side === 'right' ? 'uiClinical.rightSide' : 'uiClinical.leftSide') });
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      size="md"
-      title={
-        <span className="flex items-center gap-2">
-          <Stethoscope className="h-4 w-4 text-primary-600" /> {toothLabel}
-        </span>
-      }
-      footer={
-        <div className="flex flex-wrap justify-end gap-2">
-          {onViewDetail && (
-            <Button variant="outline" onClick={onViewDetail}>
-              {t('uiClinical.viewToothHistory')}
-            </Button>
-          )}
-          <Button variant="outline" onClick={onEditStatus}>
-            {t('uiClinical.editToothStatus')}
-          </Button>
-          <Button leftIcon={<Wand2 className="h-4 w-4" />} onClick={onAddTreatment}>
-            {t('uiClinical.addTreatmentToTooth')}
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-2">
-        <p className="text-sm text-gray-600">
-          {t('uiClinical.toothTreatmentLines', { count: treatments.length })}
-        </p>
-        <ul className="divide-y divide-gray-100 rounded-md border border-gray-200 bg-gray-50/60">
-          {treatments.map((line) => (
-            <li key={line.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-gray-900">{line.treatmentName}</p>
-                <p className="text-xs text-gray-500">{t('uiClinical.code')}: {line.treatmentCode}</p>
-              </div>
-              <span className="font-mono text-xs text-gray-700">× {line.quantity}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Modal>
-  );
 }
 
 // ---------- Bulk modal ----------
