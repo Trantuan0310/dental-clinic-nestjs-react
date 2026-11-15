@@ -114,7 +114,7 @@ test.describe('Dentist UI regressions', () => {
     await page.emulateMedia({ media: 'screen' });
     await page.reload();
     await expect(page.getByRole('button', { name: /đóng encounter/i })).toHaveCount(0);
-    await page.getByRole('tab', { name: 'Điều trị', exact: true }).click();
+    await page.getByRole('tab', { name: 'Điều trị & sơ đồ răng', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Thêm điều trị', exact: true })).toHaveCount(0);
   });
 });

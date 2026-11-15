@@ -4,6 +4,8 @@ import {
   Param,
   UseGuards,
   ParseUUIDPipe,
+  ParseIntPipe,
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -115,6 +117,113 @@ export class PatientsProxyController {
     // branch above and the frontend's EncounterListItem type, which
     // declares dentistName as a required top-level field.
     return { data: rows.map(e => ({ ...e, dentistName: e.dentist.fullName })) };
+  }
+
+  @Get('teeth/:fdi/history')
+  @RequirePermissions('encounter.read.any', 'encounter.read.own')
+  @ApiOperation({
+    summary:
+      "Proxy — one tooth across the patient's encounters (treatments, chart entry, plan) in one call",
+  })
+  async toothHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fdi', ParseIntPipe) fdi: number,
+    @User() actor: JwtPayload,
+  ) {
+    // FDI: permanent 11–48, primary 51–85; position 1–8 (primary 1–5).
+    const quadrant = Math.floor(fdi / 10);
+    const position = fdi % 10;
+    if (quadrant < 1 || quadrant > 8 || position < 1 || position > (quadrant > 4 ? 5 : 8)) {
+      throw new BadRequestException('Số răng không hợp lệ (FDI)');
+    }
+    const patient = await this.prisma.patient.findUnique({ where: { id } });
+    if (!patient || patient.deletedAt) {
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
+    }
+    // Same scope as the encounter history above.
+    if (
+      !actor.permissions.includes('encounter.read.any') &&
+      !(await dentistCanReadPatient(this.prisma, id, actor.sub))
+    ) {
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
+    }
+
+    const rows = await this.prisma.encounter.findMany({
+      where: { patientId: id, status: { not: 'CANCELLED' } },
+      orderBy: { startedAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        status: true,
+        startedAt: true,
+        closedAt: true,
+        chiefComplaint: true,
+        diagnosis: true,
+        treatmentPlanText: true,
+        dentist: { select: { fullName: true } },
+        clinicalNote: { select: { treatmentPlan: true, diagnosis: true, chiefComplaint: true } },
+        dentalChart: { select: { teeth: true } },
+        treatments: {
+          // tooth_numbers is a JSON array of numbers.
+          where: { deletedAt: null, toothNumbers: { array_contains: [fdi] } },
+          orderBy: { sequence: 'asc' },
+          select: {
+            id: true,
+            encounterId: true,
+            procedure: true,
+            description: true,
+            unitPrice: true,
+            quantity: true,
+            createdAt: true,
+            service: { select: { code: true } },
+          },
+        },
+      },
+    });
+
+    await this.audit.log({
+      action: 'proxy.medical_records.read',
+      actorUserId: actor.sub,
+      targetType: 'patient',
+      targetId: id,
+      metadata: { kind: 'tooth-history', fdi, count: rows.length },
+    });
+
+    const key = String(fdi);
+    return {
+      data: rows.map(e => {
+        const teeth = e.dentalChart?.teeth;
+        const entry =
+          teeth && typeof teeth === 'object' && !Array.isArray(teeth)
+            ? ((teeth as Record<string, unknown>)[key] ?? null)
+            : Array.isArray(teeth)
+              ? ((teeth as Array<{ number?: unknown }>).find(t => String(t?.number) === key) ??
+                null)
+              : null;
+        return {
+          id: e.id,
+          status: String(e.status).toLowerCase(),
+          startedAt: e.startedAt,
+          closedAt: e.closedAt,
+          dentistName: e.dentist.fullName,
+          treatmentPlan: e.clinicalNote?.treatmentPlan ?? e.treatmentPlanText ?? null,
+          diagnosis: e.diagnosis ?? e.clinicalNote?.diagnosis ?? null,
+          chiefComplaint: e.chiefComplaint ?? e.clinicalNote?.chiefComplaint ?? null,
+          toothChart: entry,
+          treatments: e.treatments.map(t => ({
+            id: t.id,
+            encounterId: t.encounterId,
+            toothNumber: fdi,
+            treatmentName: t.procedure,
+            treatmentCode: t.service?.code ?? '',
+            description: t.description,
+            priceCents: Number(t.unitPrice),
+            quantity: t.quantity,
+            createdAt: t.createdAt,
+          })),
+        };
+      }),
+    };
   }
 
   @Get('dental-chart')

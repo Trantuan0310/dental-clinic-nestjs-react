@@ -91,4 +91,64 @@ describe('PatientsProxyController — dentist read scope', () => {
     );
     expect(db.invoice.findMany).not.toHaveBeenCalled();
   });
+
+  describe('toothHistory', () => {
+    it('reads one tooth in one query: only its treatments, only its chart entry', async () => {
+      db.encounter.count.mockResolvedValue(1);
+      db.encounter.findMany.mockResolvedValue([
+        {
+          id: 'e1',
+          status: 'COMPLETED',
+          startedAt: new Date('2026-06-01'),
+          closedAt: new Date('2026-06-01'),
+          chiefComplaint: null,
+          diagnosis: null,
+          dentist: { fullName: 'BS A' },
+          clinicalNote: null,
+          dentalChart: {
+            teeth: { '36': { status: 'filled', notes: 'trám' }, '11': { status: 'healthy' } },
+          },
+          treatments: [
+            {
+              id: 't1',
+              encounterId: 'e1',
+              procedure: 'Trám',
+              description: null,
+              unitPrice: '600000',
+              quantity: 1,
+              createdAt: new Date(),
+              service: { code: 'FILL' },
+            },
+          ],
+        },
+      ]);
+      const res = await controller.toothHistory('p', 36, dentist);
+      const where = db.encounter.findMany.mock.calls[0][0];
+      expect(where.where).toEqual({ patientId: 'p', status: { not: 'CANCELLED' } });
+      expect(where.select.treatments.where.toothNumbers).toEqual({ array_contains: [36] });
+      expect(res.data[0].toothChart).toEqual({ status: 'filled', notes: 'trám' });
+      expect(res.data[0].treatments[0]).toMatchObject({
+        treatmentName: 'Trám',
+        priceCents: 600000,
+        toothNumber: 36,
+        treatmentCode: 'FILL',
+      });
+      expect(res.data[0].status).toBe('completed');
+    });
+
+    it('refuses a number that is not an FDI tooth', async () => {
+      await expect(controller.toothHistory('p', 19, dentist)).rejects.toThrow('FDI');
+      await expect(controller.toothHistory('p', 56, dentist)).rejects.toThrow('FDI');
+      expect(db.encounter.findMany).not.toHaveBeenCalled();
+    });
+
+    it('answers an unrelated dentist as for a missing patient', async () => {
+      db.encounter.count.mockResolvedValue(0);
+      db.appointment.count.mockResolvedValue(0);
+      await expect(controller.toothHistory('p', 36, dentist)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(db.encounter.findMany).not.toHaveBeenCalled();
+    });
+  });
 });

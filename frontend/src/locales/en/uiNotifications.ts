@@ -1,0 +1,33 @@
+import type { vi } from '../uiNotifications';
+
+export const en: typeof vi = {
+  unread: 'Unread',
+  tabInbox: 'Notifications',
+  tabPending: 'To do',
+  markAllRead: 'Mark all as read',
+  viewAll: 'View all notifications',
+  inboxEmptyTitle: 'No notifications yet',
+  inboxEmptyHint: 'New ones (online bookings, shifts to approve, draft invoices…) will show here.',
+  historyTitle: 'Notifications',
+  historyDescription: 'Your notifications from the last 90 days',
+  filterAll: 'All',
+  filterUnread: 'Unread ({{count}})',
+  noUnread: "You're all caught up",
+  loadMore: 'Load more',
+  title: 'Notifications',
+  subtitle: 'Waiting on you',
+  open: 'Open notifications',
+  openWithCount: 'Notifications: {{count}} items waiting',
+  emptyTitle: 'Nothing waiting',
+  emptyHint: 'All caught up. The list refreshes every minute.',
+  loadError: 'Could not load notifications',
+  items: {
+    bookingRequests: { title: 'Online booking requests', hint: 'To confirm, propose another time or decline' },
+    shiftApprovals: { title: 'Shift registrations to approve', hint: 'Upcoming shifts dentists signed up for' },
+    recallsDue: { title: 'Patients to call for a recall', hint: 'Due today or call-back date reached' },
+    draftInvoices: { title: 'Draft invoices not issued', hint: 'Closed visits not billed yet' },
+    staleEncounters: { title: 'Encounters still open', hint: 'Opened on an earlier day; close or cancel them' },
+    lowStock: { title: 'Low-stock items', hint: 'At or below their minimum level' },
+    bankReview: { title: 'Bank transfers to check', hint: 'Money arrived but could not be applied to an invoice automatically' },
+  },
+};

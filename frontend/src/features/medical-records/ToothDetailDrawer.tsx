@@ -51,7 +51,6 @@ export function ToothDetailDrawer({
   const history = useToothHistory({
     patientId,
     fdi: fdi ?? 0,
-    pageSize: 50,
   });
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'plan'>('overview');
 
