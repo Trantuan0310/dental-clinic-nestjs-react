@@ -1,0 +1,19 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+[*] --> DRAFT : Lập từ phiên khám
+DRAFT --> ISSUED : Phát hành
+DRAFT --> VOIDED : Hủy hóa đơn nháp
+ISSUED --> PARTIAL : Thu một phần
+ISSUED --> PAID : Thu đủ
+PARTIAL --> PAID : Thu phần còn lại
+ISSUED --> VOIDED : Hủy (chưa thu tiền)
+PAID --> PAID : Hoàn tiền / điều chỉnh\n(ghi nhận riêng, có lý do)
+PAID --> [*]
+VOIDED --> [*]
+note right of ISSUED
+  Thanh toán đến từ: tiền mặt,
+  chuyển khoản nhập tay,
+  hoặc webhook ngân hàng (tự đối soát)
+end note
+@enduml

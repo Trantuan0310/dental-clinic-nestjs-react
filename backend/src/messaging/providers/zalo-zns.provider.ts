@@ -12,6 +12,7 @@ const ZNS_URL = 'https://business.openapi.zalo.me/message/template';
 const TEMPLATE_ENV: Record<MessageTemplate, string> = {
   VISIT_REMINDER: 'ZALO_ZNS_TEMPLATE_VISIT_REMINDER',
   RECALL_REMINDER: 'ZALO_ZNS_TEMPLATE_RECALL_REMINDER',
+  HISTORY_LINK: 'ZALO_ZNS_TEMPLATE_HISTORY_LINK',
   TEST: 'ZALO_ZNS_TEMPLATE_VISIT_REMINDER',
 };
 

@@ -1,0 +1,173 @@
+@startuml
+!include _kieu.iuml
+hide circle
+skinparam linetype ortho
+skinparam defaultFontSize 13
+title Nhóm bệnh nhân, lịch hẹn và tiếp nhận
+
+entity "patients" as Patient {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * full_name : varchar
+  * dob : timestamptz
+  * gender : enum
+  primary_phone : varchar
+}
+entity "appointments" as Appointment {
+  * id : uuid <<PK>>
+  --
+  * patient_id : uuid <<FK>>
+  * dentist_id : uuid <<FK>>
+  * start_at : timestamptz
+  * end_at : timestamptz
+  * status : enum
+  reason : varchar
+  chief_complaint : varchar
+  confirmed_by : uuid <<FK>>
+  checked_in_by : uuid <<FK>>
+  cancelled_by : uuid <<FK>>
+}
+entity "appointment_services" as AppointmentService {
+  * id : uuid <<PK>>
+  --
+  * appointment_id : uuid <<FK>>
+  * service_id : uuid <<FK>>
+  * service_code : varchar
+  * service_name : varchar
+  * price : decimal
+  * duration_min : int
+  * buffer_before_min : int
+}
+entity "services" as Service {
+  * id : uuid <<PK>>
+  --
+  * code : varchar <<UQ>>
+  * category_id : uuid <<FK>>
+  * name : varchar
+  description : varchar
+  * default_duration_min : int
+  * buffer_before_min : int
+}
+entity "booking_requests" as BookingRequest {
+  * id : uuid <<PK>>
+  --
+  * reference_code : varchar <<UQ>>
+  * access_token_hash : varchar
+  * full_name : varchar
+  * dob : timestamptz
+  * gender : enum
+  * service_id : uuid <<FK>>
+  * preferred_dentist_id : uuid <<FK>>
+  proposed_dentist_id : uuid <<FK>>
+  patient_id : uuid <<FK>>
+  appointment_id : uuid <<FK>>
+  handled_by : uuid <<FK>>
+}
+entity "queue_entries" as QueueEntry {
+  * id : uuid <<PK>>
+  --
+  * appointment_id : uuid <<FK>>
+  * dentist_id : uuid
+  * queue_date : timestamptz
+  * status : enum
+  * priority : enum
+  * checked_in_at : timestamptz
+}
+entity "working_schedules" as WorkingSchedule {
+  * id : uuid <<PK>>
+  --
+  * dentist_id : uuid <<FK>>
+  * day_of_week : int
+  * start_time : timestamptz
+  * end_time : timestamptz
+  * slot_duration_min : int
+  * valid_from : timestamptz
+}
+entity "appointment_links" as AppointmentLink {
+  * id : uuid <<PK>>
+  --
+  * appointment_id : uuid <<FK>>
+  * patient_id : uuid
+  * token_hash : varchar <<UQ>>
+  * expires_at : timestamptz
+  last_used_at : timestamptz
+  * created_at : timestamptz
+}
+entity "patient_history_links" as PatientHistoryLink {
+  * id : uuid <<PK>>
+  --
+  * patient_id : uuid <<FK>>
+  * token_hash : varchar <<UQ>>
+  * expires_at : timestamptz
+  last_used_at : timestamptz
+  * created_at : timestamptz
+}
+entity "waitlist_entries" as WaitlistEntry {
+  * id : uuid <<PK>>
+  --
+  * patient_id : uuid <<FK>>
+  * service_id : uuid <<FK>>
+  dentist_id : uuid <<FK>>
+  * from_date : timestamptz
+  * to_date : timestamptz
+  * period : varchar
+  note : varchar
+  * status : varchar
+  appointment_id : uuid <<FK>>
+}
+entity "recalls" as Recall {
+  * id : uuid <<PK>>
+  --
+  * patient_id : uuid <<FK>>
+  * service_id : uuid <<FK>>
+  source_encounter_id : uuid <<FK>>
+  * due_date : timestamptz
+  * status : enum
+  postponed_until : timestamptz
+  emailed_at : timestamptz
+  email_token_hash : varchar <<UQ>>
+  last_contact_by : uuid <<FK>>
+  resolved_by_encounter_id : uuid <<FK>>
+}
+entity "users" as User {
+  * id : uuid <<PK>>
+  --
+  * email : varchar
+  * password_hash : varchar
+  * full_name : varchar
+  * status : enum
+  * failed_login_attempts : int
+}
+
+User |o--o{ Patient
+User |o--o{ Patient
+Patient ||--o{ Appointment
+User ||--o{ Appointment
+User |o--o{ Appointment
+User |o--o{ Appointment
+User |o--o{ Appointment
+User |o--o{ Appointment
+User |o--o{ Appointment
+Appointment ||--o{ AppointmentService
+Service ||--o{ AppointmentService
+Service ||--o{ BookingRequest
+User ||--o{ BookingRequest
+User |o--o{ BookingRequest
+Patient |o--o{ BookingRequest
+Appointment |o--o| BookingRequest
+User |o--o{ BookingRequest
+Appointment ||--o| QueueEntry
+User ||--o{ WorkingSchedule
+Appointment ||--o{ AppointmentLink
+Patient ||--o{ PatientHistoryLink
+Patient ||--o{ WaitlistEntry
+Service ||--o{ WaitlistEntry
+User |o--o{ WaitlistEntry
+Appointment |o--o| WaitlistEntry
+Patient ||--o{ Recall
+Service ||--o{ Recall
+User |o--o{ Recall
+User |o--o{ User
+User |o--o{ User
+@enduml

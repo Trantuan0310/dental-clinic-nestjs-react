@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
-const modules=['uiCommon','uiClinical','uiEntry','uiOperations','uiScheduling','uiWorkforce','uiPlans','uiRecalls','uiMessaging','uiNotifications','uiAi'];
+const modules=['uiCommon','uiClinical','uiEntry','uiOperations','uiScheduling','uiWorkforce','uiPlans','uiRecalls','uiMessaging','uiNotifications','uiAi','uiPatientHistory'];
 function flatten(value,prefix='',out={}) {
  for(const [key,item] of Object.entries(value)) {
   const path=prefix?`${prefix}.${key}`:key;

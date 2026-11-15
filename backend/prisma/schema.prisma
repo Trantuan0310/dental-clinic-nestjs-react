@@ -364,6 +364,7 @@ model Patient {
   // Note: GIN indexes on allergies/chronic_diseases/current_medications are
   // created via raw SQL in migration 010_perf_indexes (CONCURRENTLY).
   @@map("patients")
+  historyLinks       PatientHistoryLink[]
 }
 
 model PatientPhoneHistory {
@@ -551,6 +552,22 @@ model Appointment {
   @@index([status, startAt])
   // Note: composite (status, startAt, dentistId) created in migration 010.
   @@map("appointments")
+}
+
+/// A link a patient opens to read their own visit history (066). Token hash only.
+model PatientHistoryLink {
+  id         String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  patientId  String    @map("patient_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz()
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz()
+  createdBy  String?   @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("patient_history_links")
 }
 
 model AppointmentLink {

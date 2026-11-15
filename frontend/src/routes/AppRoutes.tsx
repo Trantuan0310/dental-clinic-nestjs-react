@@ -15,6 +15,8 @@ const PublicBookingPage = lazy(() => import('@/features/booking/PublicBookingPag
 const PublicBookingStatusPage = lazy(() => import('@/features/booking/PublicBookingStatusPage'));
 const PublicAppointmentLinkPage = lazy(() => import('@/features/appointments/PublicAppointmentLinkPage'));
 const RescheduleRequestsPage = lazy(() => import('@/features/appointments/RescheduleRequestsPage'));
+const PublicHistoryRequestPage = lazy(() => import('@/features/patient-history/PublicHistoryRequestPage'));
+const PublicHistoryPage = lazy(() => import('@/features/patient-history/PublicHistoryPage'));
 const LandingPage = lazy(() => import('@/features/landing/LandingPage'));
 const BookingRequestsPage = lazy(() => import('@/features/booking/BookingRequestsPage'));
 const DashboardPage = lazy(() => import('@/features/DashboardPage'));
@@ -157,6 +159,8 @@ const router = createBrowserRouter(createRoutesFromElements(
             <Route path="/booking" element={<PublicBookingPage />} />
             <Route path="/booking/status" element={<PublicBookingStatusPage />} />
             <Route path="/lich-hen/:ma" element={<PublicAppointmentLinkPage />} />
+            <Route path="/tra-cuu-lich-su" element={<PublicHistoryRequestPage />} />
+            <Route path="/lich-su/:ma" element={<PublicHistoryPage />} />
             <Route path="/recall/unsubscribe" element={<RecallUnsubscribePage />} />
 
             <Route element={<StaffLayout />}>

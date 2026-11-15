@@ -1,6 +1,6 @@
 import { MessageChannel } from '@prisma/client';
 
-export type MessageTemplate = 'VISIT_REMINDER' | 'RECALL_REMINDER' | 'TEST';
+export type MessageTemplate = 'VISIT_REMINDER' | 'RECALL_REMINDER' | 'HISTORY_LINK' | 'TEST';
 
 export interface PhoneMessage {
   /** 0xxxxxxxxx */

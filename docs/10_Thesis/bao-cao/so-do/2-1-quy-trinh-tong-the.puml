@@ -1,0 +1,35 @@
+@startuml
+!include _kieu.iuml
+|Bệnh nhân|
+start
+:Đặt lịch trực tuyến\nhoặc gọi điện;
+|Lễ tân|
+:Duyệt yêu cầu,\ntạo lịch hẹn;
+|Hệ thống|
+:Gửi nhắc lịch\n(email / SMS / Zalo);
+|Bệnh nhân|
+:Xác nhận / dời lịch\nqua liên kết;
+:Đến phòng khám;
+|Lễ tân|
+:Check-in,\nxếp vào hàng chờ;
+|Bác sĩ|
+:Gọi bệnh nhân,\nmở phiên khám;
+:Khám, ghi chú lâm sàng,\ncập nhật sơ đồ răng;
+:Ghi điều trị, kê đơn,\nlập kế hoạch điều trị;
+:Đóng phiên khám;
+|Hệ thống|
+:Trừ vật tư theo điều trị,\nlập hóa đơn nháp;
+|Lễ tân|
+:Phát hành hóa đơn;
+if (Hình thức thanh toán?) then (Tiền mặt)
+  :Ghi nhận thanh toán;
+else (Chuyển khoản)
+  |Hệ thống|
+  :Nhận webhook ngân hàng,\ntự đối soát hóa đơn;
+endif
+|Lễ tân|
+:Hẹn tái khám;
+|Hệ thống|
+:Cập nhật báo cáo,\nlên lịch nhắc tái khám;
+stop
+@enduml

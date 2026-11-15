@@ -4,6 +4,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { LOCALES, DEFAULT_LOCALE } from './config';
 import vi from './vi.json';
 import { vi as uiVisitTemplates } from './uiVisitTemplates';
+import { vi as uiPatientHistory } from './uiPatientHistory';
 import { vi as uiCommon } from './uiCommon';
 import { vi as uiClinical } from './uiClinical';
 import { vi as uiEntry } from './uiEntry';
@@ -34,7 +35,7 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      vi: { translation: { ...vi, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce } },
+      vi: { translation: { ...vi, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce, uiPatientHistory } },
     },
     fallbackLng: DEFAULT_LOCALE,
     supportedLngs: LOCALES.map((l) => l.code),

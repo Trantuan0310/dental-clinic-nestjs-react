@@ -1,0 +1,111 @@
+@startuml
+!include _kieu.iuml
+hide circle
+skinparam linetype ortho
+skinparam defaultFontSize 13
+title Nhóm hóa đơn và thanh toán
+
+entity "patients" as Patient {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * full_name : varchar
+  * dob : timestamptz
+  * gender : enum
+  primary_phone : varchar
+}
+entity "encounters" as Encounter {
+  * id : uuid <<PK>>
+  --
+  * appointment_id : uuid <<FK>>
+  * patient_id : uuid <<FK>>
+  * dentist_id : uuid <<FK>>
+  * status : enum
+  * started_at : timestamptz
+  closed_at : timestamptz
+  summary : varchar
+  chief_complaint : varchar
+}
+entity "invoices" as Invoice {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * encounter_id : uuid <<FK>>
+  * patient_id : uuid <<FK>>
+  * status : enum
+  * subtotal : decimal
+  discount_type : enum
+  discount_value : decimal
+  issued_by : uuid <<FK>>
+  voided_by : uuid <<FK>>
+  replaces_invoice_id : uuid <<FK>>
+}
+entity "invoice_items" as InvoiceItem {
+  * id : uuid <<PK>>
+  --
+  * invoice_id : uuid <<FK>>
+  treatment_id : uuid <<FK>>
+  * sequence : int
+  * description : varchar
+  * quantity : decimal
+  * unit_price : decimal
+  * line_total : decimal
+}
+entity "payments" as Payment {
+  * id : uuid <<PK>>
+  --
+  * invoice_id : uuid <<FK>>
+  * amount : decimal
+  * method : enum
+  * kind : enum
+  * status : enum
+  * paid_at : timestamptz
+  * received_by : uuid <<FK>>
+  voided_by : uuid <<FK>>
+}
+entity "invoice_adjustments" as InvoiceAdjustment {
+  * id : uuid <<PK>>
+  --
+  * invoice_id : uuid <<FK>>
+  * amount : decimal
+  * reason : varchar
+  * adjusted_at : timestamptz
+  * adjusted_by : uuid <<FK>>
+}
+entity "bank_transactions" as BankTransaction {
+  * id : uuid <<PK>>
+  --
+  * provider : varchar
+  * external_id : varchar
+  reference_code : varchar
+  * account_no : varchar
+  * amount : decimal
+  invoice_id : uuid <<FK>>
+  payment_id : uuid <<FK>>
+  resolved_by : uuid <<FK>>
+}
+entity "treatments" as Treatment {
+  * id : uuid <<PK>>
+  --
+  * encounter_id : uuid <<FK>>
+  tooth_numbers : jsonb
+  * procedure : varchar
+  description : varchar
+  * unit_price : decimal
+  * quantity : int
+  service_id : uuid <<FK>>
+  plan_item_id : uuid <<FK>>
+}
+
+Patient ||--o{ Encounter
+Encounter ||--o{ Invoice
+Invoice |o--o| Invoice
+Patient ||--o{ Invoice
+Invoice ||--o{ InvoiceItem
+Treatment |o--o{ InvoiceItem
+Invoice ||--o{ Payment
+Invoice ||--o{ InvoiceAdjustment
+Invoice |o--o{ BankTransaction
+Payment |o--o{ BankTransaction
+Encounter ||--o{ Treatment
+@enduml

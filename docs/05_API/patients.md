@@ -516,6 +516,20 @@ Tương tự 1.9 — cross-module helper. Xem API Billing §5.
 
 ---
 
+## 7. Lịch sử một răng và tra cứu lịch sử khám của bệnh nhân
+
+### 7.1. `GET /patients/:id/teeth/:fdi/history`
+Quyền `encounter.read.any` hoặc `encounter.read.own` (cùng phạm vi bác sĩ như danh sách phiên khám). Trả về các phiên khám không bị hủy của bệnh nhân (tối đa 100), mỗi phiên chỉ gồm điều trị có số răng `fdi` và mục sơ đồ răng của răng đó. `fdi` sai chuẩn FDI → 400. Ghi audit `proxy.medical_records.read` (kind `tooth-history`).
+
+### 7.2. `POST /patients/:id/history-link` (nhân viên)
+Quyền `patient.read`. Tạo đường dẫn `/lich-su/<token>` hiệu lực 7 ngày, gửi tới email và SĐT (SMS/Zalo nếu bật) trong hồ sơ. Trả `{ url, expiresAt, sentTo[] }` (`sentTo` đã che: `090****567`, `a***@example.com`). CSDL chỉ lưu SHA-256 của token (`patient_history_links`). Audit `PATIENT_HISTORY_LINK_ISSUED`.
+
+### 7.3. `POST /public/patient-history/request` (công khai)
+Body `{ phone }`, giới hạn 3 lần/phút. Nếu số là SĐT của chính bệnh nhân (hoặc SĐT người giám hộ của trẻ chưa có SĐT riêng), đường dẫn được gửi tới email/SĐT trong hồ sơ. Luôn trả cùng một câu, kể cả khi số không có trong hệ thống, để không dò được ai là bệnh nhân. Không bao giờ trả đường dẫn qua API này.
+
+### 7.4. `GET /public/patient-history/:token` (công khai)
+Giới hạn 20 lần/phút, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Token sai, không tồn tại hoặc hết hạn → cùng một lỗi 404. Trả về: phiên khám đã hoàn thành (ngày, bác sĩ, lý do khám, chẩn đoán, điều trị + số răng, đơn thuốc), kế hoạch điều trị đã đồng ý (tiến độ), lịch hẹn sắp tới, hóa đơn đã phát hành (tổng, đã trả, còn nợ). Không trả ghi chú nội bộ, id bản ghi hay thông tin liên lạc. Audit `PATIENT_HISTORY_VIEWED`.
+
 ## Related
 
 - [api-conventions.md](./api-conventions.md) — quy ước chung

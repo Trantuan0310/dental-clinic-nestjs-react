@@ -196,6 +196,9 @@ function SiteHeader() {
           <Link to="/booking/status" className="block rounded-md px-2 py-2.5 font-medium text-gray-700 dark:text-surface-200 hover:bg-brand-50">
             {t('uiEntry.landing.lookup')}
           </Link>
+          <Link to="/tra-cuu-lich-su" className="block rounded-md px-2 py-2.5 font-medium text-gray-700 dark:text-surface-200 hover:bg-brand-50">
+            {t('uiEntry.landing.historyLookup')}
+          </Link>
         </nav>
       )}
     </header>
@@ -733,6 +736,9 @@ function SiteFooter() {
           <div className="flex gap-5">
             <Link to="/booking/status" className="hover:text-white hover:underline">
               {t('uiEntry.landing.lookup')}
+            </Link>
+            <Link to="/tra-cuu-lich-su" className="hover:text-white hover:underline">
+              {t('uiEntry.landing.historyLookup')}
             </Link>
             <Link to="/login" className="hover:text-white hover:underline">
               {t('uiEntry.landing.staffLogin')}
