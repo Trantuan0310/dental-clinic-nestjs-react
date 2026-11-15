@@ -709,7 +709,7 @@ Hình 4.39. Nhật ký kiểm toán
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Màn hình người dùng (Hình 4.40) quản lý tài khoản đăng nhập, vai trò, trạng thái và lần đăng nhập gần nhất; quản trị viên có thể sửa thông tin, gửi đường dẫn đặt mật khẩu, cấp mật khẩu tạm, vô hiệu hóa hoặc kích hoạt lại tài khoản. Sổ đồng thuận (Hình 4.41) liệt kê mọi bản ghi đồng ý của bệnh nhân với mục đích, phiên bản văn bản, kênh ghi nhận và trạng thái còn hiệu lực hay đã rút lại; chỉ người có quyền riêng mới xuất được tệp CSV. Trang thông báo (Hình 4.42) lưu lịch sử thông báo của người dùng trong 90 ngày, ví dụ các hóa đơn nháp cần phát hành sau khi bác sĩ đóng phiên khám.
+Màn hình người dùng (Hình 4.40) quản lý tài khoản đăng nhập, vai trò, trạng thái và lần đăng nhập gần nhất; quản trị viên có thể sửa thông tin, gửi đường dẫn đặt mật khẩu, cấp mật khẩu tạm, vô hiệu hóa hoặc kích hoạt lại tài khoản. Sổ đồng ý (Hình 4.41) liệt kê mọi bản ghi đồng ý của bệnh nhân với mục đích, phiên bản văn bản, kênh ghi nhận và trạng thái còn hiệu lực hay đã rút lại; chỉ người có quyền riêng mới xuất được tệp CSV. Trang thông báo (Hình 4.42) lưu lịch sử thông báo của người dùng trong 90 ngày, ví dụ các hóa đơn nháp cần phát hành sau khi bác sĩ đóng phiên khám.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-nguoi-dung.png){width=15cm}
@@ -728,7 +728,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.41. Sổ đồng thuận của bệnh nhân
+Hình 4.41. Sổ đồng ý của bệnh nhân
 :::
 
 ::: {custom-style="nguồn"}

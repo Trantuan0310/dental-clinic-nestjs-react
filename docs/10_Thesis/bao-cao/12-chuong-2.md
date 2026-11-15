@@ -76,7 +76,7 @@ Nguồn: Tác giả
 
 ## 2.3. Yêu cầu chức năng
 
-Yêu cầu chức năng được nhóm theo các phân hệ nêu trong phiếu giao đề tài. Mỗi yêu cầu được đánh mã để đối chiếu khi kiểm thử ở Chương 5.
+Yêu cầu chức năng được nhóm theo các phân hệ nêu trong phiếu giao đề tài. Mỗi yêu cầu được đánh mã dạng nhóm-số để đối chiếu khi kiểm thử ở Chương 5, với các nhóm: BN (bệnh nhân), LH (lịch hẹn và tiếp nhận), KB (khám bệnh), TT (thanh toán), NS (nhân sự), KH (kho và danh mục), BC (báo cáo), AI (trợ lý AI) và QT (quản trị).
 
 ### 2.3.1. Quản lý bệnh nhân
 

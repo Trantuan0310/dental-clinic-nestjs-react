@@ -220,7 +220,7 @@ DANH MỤC TỪ VIẾT TẮT
 | JSONB | JSON Binary | Kiểu dữ liệu JSON lưu dạng nhị phân của PostgreSQL |
 | JWT | JSON Web Token | Mã thông báo JSON |
 | KPI | Key Performance Indicator | Chỉ số hiệu suất chính |
-| KT | – | Mã ca kiểm thử (Chương 5) |
+| KT | – | Mã ca kiểm thử (Chương 5); mã yêu cầu chức năng (BN, LH, KB, TT…) giải thích ở Mục 2.3 |
 | LLM | Large Language Model | Mô hình ngôn ngữ lớn |
 | OA | Official Account | Tài khoản chính thức (của doanh nghiệp trên Zalo) |
 | ORM | Object-Relational Mapping | Ánh xạ đối tượng – quan hệ |
