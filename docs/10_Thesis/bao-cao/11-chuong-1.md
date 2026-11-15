@@ -41,32 +41,34 @@ Thông tư 46/2018/TT-BYT của Bộ Y tế quy định về hồ sơ bệnh án
 
 ## 1.2. Tổng quan các phần mềm quản lý phòng khám nha khoa
 
-Thị trường có hai nhóm giải pháp chính. Nhóm thứ nhất là các phần mềm quản lý nha khoa nước ngoài lâu năm như Open Dental [@opendental] (mã nguồn mở) và Dentrix [@dentrix] (thương mại). Các phần mềm này có đầy đủ chức năng từ lịch hẹn, sơ đồ răng đến bảo hiểm và báo cáo, nhưng được thiết kế theo quy trình và hệ thống thanh toán, bảo hiểm của Bắc Mỹ, giao diện tiếng Anh, chủ yếu cài đặt trên máy tính để bàn của phòng khám. Nhóm thứ hai là các giải pháp trong nước, phổ biến ở dạng phần mềm quản lý phòng khám đa khoa có tùy biến cho nha khoa hoặc các công cụ tổng hợp từ bảng tính, phần mềm bán hàng và ứng dụng nhắn tin. Nhóm này phù hợp ngôn ngữ và thói quen, nhưng thường thiếu mô hình dữ liệu theo răng, thiếu phân quyền chi tiết và ít hỗ trợ đối soát thanh toán tự động.
+Thị trường có hai nhóm giải pháp chính. Nhóm thứ nhất là các phần mềm quản lý nha khoa nước ngoài lâu năm như Open Dental [@opendental] (mã nguồn mở) và Dentrix [@dentrix] (thương mại). Các phần mềm này có đầy đủ chức năng từ lịch hẹn, sơ đồ răng đến bảo hiểm và báo cáo, nhưng được thiết kế theo quy trình và hệ thống thanh toán, bảo hiểm của Bắc Mỹ, giao diện tiếng Anh, chủ yếu cài đặt trên máy tính để bàn của phòng khám. Nhóm thứ hai là các phần mềm trong nước chạy trên nền tảng đám mây, tiêu biểu là SimlyDent [@simlydent]. Theo thông tin nhà cung cấp công bố, SimlyDent có lịch hẹn, sơ đồ răng tương tác cho 32 răng vĩnh viễn và 20 răng sữa, hồ sơ bệnh án điện tử, thu chi, kho vật tư tự xuất theo điều trị, báo cáo, nhắc lịch qua Zalo OA, SMS, email và hỗ trợ chuỗi nhiều chi nhánh; đặt lịch trực tuyến và điểm danh bằng mã QR là tính năng mua thêm ở một số gói [@simlydent_gia]. Nhóm này phù hợp ngôn ngữ, quy trình và kênh liên lạc ở Việt Nam. Tuy nhiên, các trang giới thiệu không đề cập tới việc tự đối soát chuyển khoản theo hóa đơn, giới hạn dữ liệu theo từng bác sĩ hay trợ lý AI. Ngoài ra còn nhiều phòng khám nhỏ vẫn quản lý bằng sổ sách, bảng tính và ứng dụng nhắn tin.
 
-Bảng 1.1 so sánh các tiêu chí quan trọng giữa cách quản lý thủ công, phần mềm nước ngoài và hệ thống GenSmile của đồ án.
+Bảng 1.1 so sánh các tiêu chí quan trọng giữa cách quản lý thủ công, phần mềm nước ngoài, phần mềm trong nước và hệ thống GenSmile của đồ án. Với SimlyDent, bảng chỉ ghi những gì nhà cung cấp công bố trên trang giới thiệu; "không thấy công bố" nghĩa là trang giới thiệu không nhắc tới, không khẳng định phần mềm không có.
 
 ::: {custom-style="bảng"}
 Bảng 1.1. So sánh các cách quản lý phòng khám nha khoa
 :::
 
-| Tiêu chí | Sổ sách, bảng tính, Zalo | Phần mềm nước ngoài (Open Dental, Dentrix) | GenSmile (đồ án) |
-|---|---|---|---|
-| Lịch hẹn nhiều bác sĩ, chống trùng giờ | Thủ công | Có | Có, kiểm tra ở máy chủ |
-| Bệnh nhân tự đặt lịch trực tuyến | Không | Tùy gói, thêm phí | Có |
-| Sơ đồ răng, lịch sử theo từng răng | Không | Có | Có |
-| Kế hoạch điều trị, báo giá | Thủ công | Có | Có |
-| Thanh toán chuyển khoản QR, tự đối soát | Không | Không phù hợp Việt Nam | Có (VietQR, webhook) |
-| Nhắc lịch qua Zalo/SMS tiếng Việt | Thủ công | Không | Có |
-| Phân quyền theo vai trò và theo dòng dữ liệu | Không | Theo vai trò | Có cả hai |
-| Nhật ký kiểm toán | Không | Có | Có |
-| Truy cập qua trình duyệt, điện thoại | Một phần | Chủ yếu máy bàn | Có |
-| Trợ lý AI có kiểm soát | Không | Không | Có |
+| Tiêu chí | Sổ sách, bảng tính, Zalo | Phần mềm nước ngoài (Open Dental, Dentrix) | Phần mềm trong nước (SimlyDent) | GenSmile (đồ án) |
+|---|---|---|---|---|
+| Lịch hẹn nhiều bác sĩ, chống trùng giờ | Thủ công | Có | Có | Có, khóa ở cơ sở dữ liệu |
+| Bệnh nhân tự đặt lịch trực tuyến | Không | Tùy gói, thêm phí | Mua thêm ở một số gói | Có |
+| Sơ đồ răng, lịch sử theo từng răng | Không | Có | Có sơ đồ răng | Có, xem lịch sử ngay trên răng |
+| Kế hoạch điều trị, báo giá | Thủ công | Có | Có | Có |
+| Thanh toán chuyển khoản QR, tự đối soát | Không | Không phù hợp Việt Nam | Không thấy công bố | Có (VietQR, webhook) |
+| Nhắc lịch qua Zalo/SMS tiếng Việt | Thủ công | Không | Có | Có |
+| Phân quyền theo vai trò và theo dòng dữ liệu | Không | Theo vai trò | Phân quyền nhân sự | Có cả hai |
+| Nhật ký kiểm toán | Không | Có | Không thấy công bố | Có |
+| Bệnh nhân tự tra cứu lịch sử khám | Không | Qua cổng bệnh nhân | Không thấy công bố | Có, đường dẫn bảo mật |
+| Nhiều chi nhánh | Không | Có | Có | Chưa hỗ trợ |
+| Truy cập qua trình duyệt, điện thoại | Một phần | Chủ yếu máy bàn | Có (đám mây) | Có |
+| Trợ lý AI có kiểm soát | Không | Không | Không thấy công bố | Có |
 
 ::: {custom-style="nguồn"}
-Nguồn: Tác giả tổng hợp từ [@opendental; @dentrix] và khảo sát thực tế
+Nguồn: Tác giả tổng hợp từ [@opendental; @dentrix; @simlydent; @simlydent_gia] và khảo sát thực tế
 :::
 
-Từ so sánh trên, khoảng trống mà đồ án hướng tới là một hệ thống chạy trên trình duyệt, tiếng Việt, mô hình dữ liệu theo răng, phân quyền chặt chẽ và tích hợp sẵn các kênh thanh toán, liên lạc phổ biến ở Việt Nam.
+Từ so sánh trên, phần mềm trong nước như SimlyDent đã đáp ứng tốt nhu cầu vận hành cơ bản và có lợi thế về chuỗi nhiều chi nhánh. Khoảng trống mà đồ án hướng tới nằm ở các điểm chưa thấy được công bố: tự đối soát chuyển khoản VietQR theo từng hóa đơn, giới hạn dữ liệu theo từng bác sĩ cùng nhật ký kiểm toán phục vụ yêu cầu bảo vệ dữ liệu sức khỏe, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản, và trợ lý AI có kiểm soát.
 
 ## 1.3. Kiến trúc ứng dụng web
 

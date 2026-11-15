@@ -7,6 +7,8 @@ REFS = {
     'nd13': 'Chính phủ, Nghị định số 13/2023/NĐ-CP ngày 17/4/2023 về bảo vệ dữ liệu cá nhân, 2023.',
     'iso3950': 'International Organization for Standardization, *ISO 3950:2016 Dentistry — Designation system for teeth and areas of the oral cavity*. Geneva: ISO, 2016.',
     'opendental': 'Open Dental Software, "Open Dental Software Manual," 2024. [Trực tuyến]. Địa chỉ: https://www.opendental.com/manual/ [Truy cập 15/11/2026].',
+    'simlydent': 'SimlyDent, "Tính năng phần mềm quản lý nha khoa SimlyDent," 2026. [Trực tuyến]. Địa chỉ: https://simlydent.vn/feature [Truy cập 15/11/2026].',
+    'simlydent_gia': 'SimlyDent, "Bảng giá phần mềm quản lý nha khoa SimlyDent," 2026. [Trực tuyến]. Địa chỉ: https://simlydent.vn/price [Truy cập 15/11/2026].',
     'dentrix': 'Henry Schein One, "Dentrix practice management software," 2024. [Trực tuyến]. Địa chỉ: https://www.dentrix.com [Truy cập 15/11/2026].',
     'sommerville': 'I. Sommerville, *Software Engineering*, 10th ed. Boston: Pearson, 2016.',
     'pressman': 'R. S. Pressman and B. R. Maxim, *Software Engineering: A Practitioner\'s Approach*, 9th ed. New York: McGraw-Hill, 2020.',

@@ -294,8 +294,6 @@ def entries(doc):
         name, text = p.style.name, ' '.join(p.text.split())
         if text == '[[TOC]]':
             after_toc = True
-        elif name == 'Tiêu đề phụ' and after_toc and text != 'MỤC LỤC':
-            toc.append((1, text))
         elif name in ('Heading 1', 'Heading 2', 'Heading 3') and text:
             toc.append((int(name[-1]), text))
         elif name == 'hình' and text:
@@ -388,7 +386,7 @@ def cover(doc):
 def finish(doc, pages=None):
     body = doc.element.body
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
-    codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z \\t "Tiêu đề phụ,1" ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
+    codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
              '[[BANG]]': ' TOC \\h \\z \\t "bảng,1" '}
     lists = entries(doc)
     cover(doc)
@@ -559,10 +557,12 @@ def build(pages=None):
     for sec in secs:
         geometry(sec)
         sec.start_type = WD_SECTION.NEW_PAGE
-    # Arabic numerals all the way: the cover pages count but show no number.
+    # Arabic numerals only. MỞ ĐẦU is page 1; the cover and the front matter
+    # show no number (Arabic numbers there would repeat the body's 1, 2…);
+    # the reference list and the appendices continue the body's numbering.
     secs[0].header.is_linked_to_previous = False
-    page_header(secs[1], fmt='decimal')
-    page_header(secs[2], fmt='decimal')
+    secs[1].header.is_linked_to_previous = False
+    page_header(secs[2], fmt='decimal', start=1)
     page_header(secs[3], fmt='decimal')
     lists = finish(doc, pages)
     out = os.path.join(OUT, 'BaoCao_DATN_TranTuanAnh.docx')
@@ -590,8 +590,10 @@ def norm(t):
 
 
 def locate(texts, lists):
-    """Page (1-based, the number printed on it) of every entry, searched in order."""
+    """The number printed on the page of every entry, searched in document order."""
     pages_lines = [[norm(l) for l in t.splitlines() if norm(l)] for t in texts]
+    # The number printed in the page header (first line), not the PDF page index.
+    printed = [int(l[0]) if l and l[0].isdigit() else 0 for l in pages_lines]
 
     def on(lines, want):
         for j, l in enumerate(lines):
@@ -611,7 +613,7 @@ def locate(texts, lists):
                 k += 1
             if k == len(pages_lines):
                 raise SystemExit(f'Không thấy trang của: {text}')
-            out.append(k + 1)
+            out.append(printed[k])
         found[key] = out
     return found
 

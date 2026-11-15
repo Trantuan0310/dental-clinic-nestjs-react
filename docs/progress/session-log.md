@@ -99,3 +99,6 @@
 ## 15/11/2026 — PR #117 merge `fa601c0`, người dùng đã deploy; rà soát báo cáo
 - Rà soát tự động: mọi tham chiếu Hình/Bảng đều trỏ đúng; thêm câu dẫn cho 14 hình/bảng chưa được nhắc trong lời văn (Bảng 2.3–2.7, Hình 2.5, Bảng 3.2–3.4, 3.7, Hình 3.12, Bảng 4.1, 5.9, A.1, C.1); thêm dòng "Nguồn" còn thiếu cho Bảng 2.3–2.7. Số liệu đối chiếu lại với mã: 339 API, 70 bảng, 43 enum, 52 migration, 133 mã quyền, 122 E2E — khớp.
 - Mã ca kiểm thử Chương 5 đổi thành KT-LH-01… để không trùng mã yêu cầu LH-01… ở Chương 2. Sửa "kế toán" → "lễ tân" (Chương 1). 125 trang.
+- Số trang theo lựa chọn của người dùng: Mở đầu = trang 1 (Ả Rập), phần đầu không in số, Tài liệu tham khảo/Phụ lục đánh tiếp; mục lục lấy số in trên đầu trang. Thân 101 trang.
+- So sánh thêm SimlyDent (tên đúng trên simlydent.vn) vào Bảng 1.1 và §1.2, chỉ theo thông tin nhà cung cấp công bố (ô "không thấy công bố" ghi rõ nghĩa). Trích dẫn [simlydent], [simlydent_gia].
+- Ảnh trợ lý AI thật: mạng môi trường chặn gensmile.online; đã tạo môi trường riêng `dental-clinic-nestjs-react` (cho phép gensmile.online, simplydent.vn) và giao phiên phụ chụp ảnh, đẩy lên nhánh `claude/anh-tro-ly-ai`.
