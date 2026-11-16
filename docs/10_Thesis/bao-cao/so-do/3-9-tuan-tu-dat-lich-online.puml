@@ -23,6 +23,15 @@ alt Giờ còn trống
 else Giờ đã kín
   LT -> API : Đề xuất giờ khác (PROPOSED)
   API -> MAIL : Gửi đề xuất cho bệnh nhân
-  BN -> API : Chấp nhận đề xuất (PATIENT_ACCEPTED)
+  alt Khách đồng ý (giờ vẫn còn dùng được)
+    BN -> API : POST .../accept-proposal (PATIENT_ACCEPTED)
+    API -> LT : Thông báo "khách đã đồng ý giờ mới"
+    LT -> API : Xác nhận
+    API -> DB : Giao dịch: khóa lịch, kiểm tra trùng,\ntạo Appointment, yêu cầu CONFIRMED
+  else Khách từ chối, kèm lời nhắn
+    BN -> API : POST .../decline-proposal
+    API -> DB : Yêu cầu quay về PENDING_REVIEW
+  end
 end
+note over API, DB : Yêu cầu không được xử lý kịp sẽ tự hết hạn (EXPIRED)
 @enduml

@@ -145,3 +145,4 @@
 - Hình 3.21 nhắc lịch vẽ lại: hai tác vụ độc lập email (đầu giờ, reminderSentAt) và Zalo/SMS (phút 20, dedupeKey, thử lại 3 lần); nhắc tái khám 9:15 hằng ngày; cập nhật đoạn 3.3.6.
 - Đối chiếu biểu đồ: kho (sửa phiếu nhập: số lượng, lý do, chứng từ; không có đơn giá/nhà cung cấp), gộp hồ sơ (khớp), đồng thuận (thêm kiểm tra phiên bản thông báo cho cả 3 kênh, đổi tên Sổ đồng thuận).
 - Đối chiếu biểu đồ: danh mục (thêm ràng buộc 5 phút, giá/miễn phí, ngày phân công không ở quá khứ), thông báo (thêm loại giờ trống danh sách chờ), ảnh trang chủ khớp. Đã soát hết biểu đồ hoạt động/trạng thái Chương 3.
+- Soát biểu đồ tuần tự: đặt lịch trực tuyến (thêm nhánh khách đồng ý → lễ tân xác nhận → CONFIRMED, khách từ chối → PENDING_REVIEW, hết hạn); tra cứu lịch sử, trợ lý AI (4 bước, 9 công cụ) khớp.

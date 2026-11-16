@@ -252,7 +252,7 @@ Nguồn: Tác giả
 
 ### 3.3.2. Đặt lịch trực tuyến
 
-Bệnh nhân đặt lịch không cần tài khoản (Hình 3.12). Yêu cầu đặt lịch không trở thành lịch hẹn ngay mà chờ lễ tân duyệt, để phòng khám kiểm soát được những lịch phức tạp và tránh lịch giả; lễ tân có thể đề xuất giờ khác, khách chấp nhận qua trang tra cứu.
+Bệnh nhân đặt lịch không cần tài khoản (Hình 3.12). Yêu cầu đặt lịch không trở thành lịch hẹn ngay mà chờ lễ tân duyệt, để phòng khám kiểm soát được những lịch phức tạp và tránh lịch giả; lễ tân có thể đề xuất giờ khác. Khách đồng ý hoặc từ chối (kèm lời nhắn) qua trang tra cứu; khi khách đồng ý, hệ thống kiểm tra lại giờ đó còn dùng được rồi báo lễ tân xác nhận lần cuối để tạo lịch hẹn, còn khi khách từ chối, yêu cầu quay về chờ duyệt. Yêu cầu không được xử lý kịp sẽ tự hết hạn.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-9-tuan-tu-dat-lich-online.png){width=15cm}
