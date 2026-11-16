@@ -269,4 +269,6 @@ Nguồn: Tác giả
 
 ## 5.7. Kết luận chương
 
-Hệ thống được kiểm thử ở ba tầng với khoảng 2.000 ca tự động, chạy lại trước mỗi lần cập nhật. Các tình huống khó nhất của phần mềm quản lý (yêu cầu đồng thời, thanh toán trùng, phân quyền theo dòng dữ liệu, múi giờ) đều được kiểm thử trên PostgreSQL thật và đạt. Thời gian phản hồi các API thường dùng dưới 20 ms. Hệ thống có các điểm nổi bật rõ ràng: lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu, đối soát chuyển khoản tự động, bệnh nhân tự phục vụ không cần tài khoản và AI có kiểm soát. Đối chiếu với phiếu giao đề tài, hệ thống đạt các mục tiêu chính, trừ phần X-quang và việc chạy thật kênh SMS.
+Hệ thống được kiểm thử ở ba tầng với khoảng 2.000 ca tự động, chạy lại trước mỗi lần cập nhật. Các tình huống khó nhất của phần mềm quản lý (yêu cầu đồng thời, thanh toán trùng, phân quyền theo dòng dữ liệu, múi giờ) đều được kiểm thử trên PostgreSQL thật và đạt. Thời gian phản hồi các API thường dùng dưới 20 ms.
+
+Hệ thống có các điểm nổi bật rõ ràng: lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu, đối soát chuyển khoản tự động, bệnh nhân tự phục vụ không cần tài khoản và AI có kiểm soát. Đối chiếu với phiếu giao đề tài, hệ thống đạt các mục tiêu chính, trừ phần X-quang và việc chạy thật kênh SMS.

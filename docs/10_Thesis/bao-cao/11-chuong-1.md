@@ -89,9 +89,9 @@ Bên trong máy chủ, mã nguồn được tổ chức theo kiến trúc phân 
 Đồ án dùng ngôn ngữ mô hình hóa thống nhất UML [@uml] để mô tả hệ thống trước và trong khi cài đặt, theo cách tiếp cận phân tích, thiết kế hướng đối tượng [@pressman]. Mỗi loại biểu đồ trả lời một câu hỏi khác nhau, nên được chọn theo đặc điểm của từng chức năng:
 
 - **Biểu đồ use case:** ai dùng hệ thống để làm gì; dùng ở Chương 2 để xác định phạm vi chức năng theo từng tác nhân.
-- **Biểu đồ hoạt động:** luồng xử lý có nhiều nhánh quyết định hoặc nhiều bên tham gia (chia làn); dùng cho quy trình tổng thể, tiếp nhận, đối soát chuyển khoản, nhắc lịch.
+- **Biểu đồ hoạt động:** luồng xử lý có nhiều nhánh quyết định hoặc nhiều bên tham gia (chia làn); dùng cho quy trình tổng thể, tiếp nhận và hàng chờ, nhắc lịch tự động.
 - **Biểu đồ tuần tự:** các thành phần trao đổi thông điệp theo thứ tự thời gian; dùng khi cần thấy rõ giao diện, controller, service, cơ sở dữ liệu và dịch vụ ngoài phối hợp ra sao, ví dụ đặt lịch khi hai người cùng thao tác hay xác thực và làm mới token.
-- **Biểu đồ trạng thái:** vòng đời của một đối tượng và điều kiện của từng bước chuyển; dùng cho lịch hẹn, phiên khám, hóa đơn, kế hoạch điều trị, kỳ lương, nhắc tái khám.
+- **Biểu đồ trạng thái:** vòng đời của một đối tượng và điều kiện của từng bước chuyển; dùng cho lịch hẹn và hóa đơn.
 - **Sơ đồ thực thể liên kết:** các bảng dữ liệu và quan hệ giữa chúng.
 
 Các biểu đồ trong báo cáo được viết dưới dạng văn bản (PlantUML) và lưu cùng mã nguồn; sơ đồ thực thể liên kết được sinh tự động từ lược đồ cơ sở dữ liệu, nên luôn khớp với hệ thống thật.

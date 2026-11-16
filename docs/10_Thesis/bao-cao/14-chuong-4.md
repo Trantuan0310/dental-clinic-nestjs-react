@@ -1,6 +1,6 @@
 # CHƯƠNG 4. XÂY DỰNG VÀ TRIỂN KHAI HỆ THỐNG
 
-Chương này trình bày quá trình hiện thực thiết kế ở Chương 3 thành phần mềm: môi trường phát triển, tổ chức mã nguồn, các điểm cài đặt quan trọng ở máy chủ và giao diện, kết quả giao diện của từng chức năng và cách hệ thống được triển khai, cập nhật.
+Chương này trình bày quá trình hiện thực thiết kế ở Chương 3 thành phần mềm: môi trường phát triển, tổ chức mã nguồn, các điểm cài đặt quan trọng ở máy chủ và giao diện, giao diện các chức năng tiêu biểu và cách hệ thống được triển khai, cập nhật.
 
 ## 4.1. Môi trường và công cụ phát triển
 

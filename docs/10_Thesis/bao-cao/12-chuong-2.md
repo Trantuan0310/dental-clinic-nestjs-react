@@ -316,4 +316,6 @@ Nguồn: Tác giả tổng hợp từ cấu hình phân quyền của hệ thố
 
 ## 2.7. Kết luận chương
 
-Chương 2 đã khảo sát quy trình làm việc của phòng khám, chỉ ra các vấn đề của cách quản lý thủ công và hướng giải quyết. Hệ thống có bốn tác nhân người dùng và ba hệ thống bên ngoài. Yêu cầu chức năng được phân tích thành các nhóm bệnh nhân, lịch hẹn và tiếp nhận, khám và điều trị, thanh toán, nhân sự, kho, báo cáo, AI và quản trị, kèm các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Các biểu đồ use case và ma trận quyền là cơ sở để Chương 3 thiết kế kiến trúc, dữ liệu và từng chức năng của hệ thống.
+Chương 2 đã khảo sát quy trình làm việc của phòng khám, chỉ ra các vấn đề của cách quản lý thủ công và hướng giải quyết. Hệ thống có bốn tác nhân người dùng và ba hệ thống bên ngoài.
+
+Yêu cầu chức năng được phân tích thành các nhóm bệnh nhân, lịch hẹn và tiếp nhận, khám và điều trị, thanh toán, nhân sự, kho, báo cáo, AI và quản trị, kèm các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Các biểu đồ use case và ma trận quyền là cơ sở để Chương 3 thiết kế kiến trúc, dữ liệu và từng chức năng của hệ thống.

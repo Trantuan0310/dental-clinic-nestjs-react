@@ -1,6 +1,6 @@
 # CHƯƠNG 3. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG
 
-Chương này trình bày thiết kế của hệ thống GenSmile dựa trên các yêu cầu ở Chương 2: kiến trúc tổng thể và cách chia module, thiết kế cơ sở dữ liệu, đặc tả và thiết kế các chức năng chính bằng biểu đồ tuần tự và biểu đồ trạng thái, thiết kế bảo mật và thiết kế giao diện.
+Chương này trình bày thiết kế của hệ thống GenSmile dựa trên các yêu cầu ở Chương 2: kiến trúc tổng thể và cách chia module, thiết kế cơ sở dữ liệu, đặc tả và thiết kế các chức năng chính bằng biểu đồ tuần tự, hoạt động và trạng thái, thiết kế bảo mật và thiết kế giao diện.
 
 ## 3.1. Kiến trúc tổng thể
 
@@ -145,7 +145,7 @@ Nhóm nhân sự, lương và kho: thông tin nhân sự (`employees`, `dentist_
 
 ## 3.3. Đặc tả và thiết kế các chức năng chính
 
-Mục này đặc tả các chức năng tiêu biểu theo mẫu: tên chức năng, tác nhân, tiền điều kiện, luồng chính, luồng thay thế và ngoại lệ, hậu điều kiện. Mỗi chức năng được minh họa bằng biểu đồ phù hợp: biểu đồ tuần tự cho trao đổi giữa các thành phần, biểu đồ hoạt động cho các luồng có nhiều nhánh quyết định, biểu đồ trạng thái cho vòng đời của đối tượng.
+Mục này đặc tả các chức năng tiêu biểu theo mẫu: tên chức năng, tác nhân, tiền điều kiện, luồng chính, luồng thay thế và ngoại lệ, hậu điều kiện. Các chức năng chính được minh họa bằng biểu đồ phù hợp: biểu đồ tuần tự cho trao đổi giữa các thành phần, biểu đồ hoạt động cho các luồng có nhiều nhánh quyết định, biểu đồ trạng thái cho vòng đời của đối tượng.
 
 ### 3.3.1. Quản lý lịch hẹn và trạng thái lịch hẹn
 
