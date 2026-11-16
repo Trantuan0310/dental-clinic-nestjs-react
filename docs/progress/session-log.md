@@ -136,3 +136,4 @@
 - Sửa lỗi giao diện: breadcrumb thiếu nhãn cho /waitlist, /appointment-links/reschedule-requests, /payroll/periods, /admin/consents (useBreadcrumbs.ts + locales vi/en); typecheck, eslint sạch. Chụp lại Hình 4.9 (breadcrumb "Danh sách chờ").
 - Báo cáo: đổi "Sổ đồng ý" về "Sổ đồng thuận" cho khớp tên trên giao diện (sửa lại lần thống nhất thuật ngữ trước).
 - Đối chiếu chữ giao diện trích trong báo cáo với locales: tất cả khớp; sửa thông báo khóa lịch thành nguyên văn 'Đang có thao tác khác trên lịch này, vui lòng thử lại' (409 CALENDAR_BUSY).
+- Đối chiếu 5 khối mã Chương 4 với nguồn: đều khớp (bỏ qua chú thích); thêm câu ở đầu 4.3 nói rõ mã được trích rút gọn, đánh dấu chỗ lược trong truy vấn lịch sử răng.

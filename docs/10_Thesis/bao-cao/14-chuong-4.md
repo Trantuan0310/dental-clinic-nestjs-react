@@ -53,6 +53,8 @@ Nguồn: Tác giả
 
 ## 4.3. Cài đặt phía máy chủ
 
+Các đoạn mã trong mục này được trích từ mã nguồn của hệ thống và rút gọn để dễ đọc: lược bớt một số trường, phần xử lý lỗi và ghi nhật ký không liên quan, các chỗ lược được đánh dấu bằng chú thích; ghi chú tiếng Việt sau dấu `//` là của tác giả.
+
 ### 4.3.1. Khai báo API và phân quyền
 
 Mỗi điểm cuối API khai báo rõ mã quyền cần có. Đoạn mã sau là API lịch sử một răng: `JwtAuthGuard` xác thực mã truy cập, `PermissionsGuard` kiểm tra người dùng có ít nhất một trong hai quyền đọc hồ sơ khám, `ParseIntPipe` bảo đảm số răng là số nguyên trước khi vào hàm xử lý.
@@ -107,7 +109,7 @@ const rows = await this.prisma.encounter.findMany({
     dentalChart: { select: { teeth: true } },
     treatments: {
       where: { deletedAt: null, toothNumbers: { array_contains: [fdi] } },
-      select: { procedure: true, unitPrice: true, quantity: true, createdAt: true },
+      select: { procedure: true, unitPrice: true, quantity: true, createdAt: true /* … */ },
     },
   },
 });
