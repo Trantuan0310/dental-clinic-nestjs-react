@@ -1,7 +1,7 @@
 @startuml
 !include _kieu.iuml
 start
-:Mỗi kênh có tác vụ riêng chạy theo quy trình này\n(email: đầu mỗi giờ; Zalo / SMS: phút 20 mỗi giờ);
+:Mỗi kênh có tác vụ riêng chạy theo quy trình này\n(email: đầu mỗi giờ; SMS: phút 20 mỗi giờ);
 note right
   Hai tác vụ độc lập:
   một kênh lỗi không chặn kênh kia
@@ -13,22 +13,19 @@ endif
 :Lấy lịch hẹn đã đặt hoặc đã xác nhận, bắt đầu sau 30 phút\nvà trong vòng 24 giờ tới, có email / số điện thoại;
 :Bỏ lịch được đặt quá sát giờ\n(đặt trước giờ hẹn dưới 2 giờ);
 while (Còn lịch hẹn?) is (còn)
-  if (Đã nhắc qua kênh này?\n(email: dấu thời gian trên lịch hẹn;\nđiện thoại: khóa chống trùng)) then (rồi)
+  if (Đã nhắc qua kênh này?\n(email: dấu thời gian trên lịch hẹn;\nSMS: khóa chống trùng)) then (rồi)
     :Bỏ qua;
   else (chưa)
     if (Kênh email?) then (có)
       :Gửi email kèm liên kết\nxác nhận / dời / hủy lịch;
     else (không)
-      :Gửi qua Zalo ZNS;
-      if (Thành công?) then (không)
-        :Gửi qua SMS;
-      endif
+      :Gửi SMS kèm liên kết;
     endif
     :Ghi kết quả gửi (thành công / lỗi);
   endif
 endwhile (hết)
 note right
-  Tin điện thoại bị lỗi được thử lại
+  Tin SMS bị lỗi được thử lại
   ở các lần chạy sau, tối đa 3 lần
 end note
 stop

@@ -2,7 +2,7 @@
 !include _kieu.iuml
 left to right direction
 actor "Bệnh nhân" as BN
-actor "Zalo ZNS / SMS / Email" as MS
+actor "Nhà cung cấp SMS / Email" as MS
 usecase "Xem thông tin phòng khám,\nbảng giá" as a
 usecase "Đặt lịch trực tuyến" as b
 usecase "Chọn dịch vụ, bác sĩ,\ngiờ trống" as b2

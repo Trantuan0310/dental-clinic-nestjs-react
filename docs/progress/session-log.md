@@ -168,3 +168,4 @@
 - build.py: bước `short_tails` (pdftotext -bbox-layout, nhận đoạn ≥2 dòng có dòng cuối ≤2 từ) + `tighten` (w:spacing −12, lần hai −14 twips).
 - Đợt 2: bỏ ERD nhóm điều trị–kế hoạch và nhân sự–kho (mô tả bằng lời), bỏ 4 ảnh Ch.4 (điều phối, đóng phiên, kỳ lương, chỉ số), use case 10 cm; gọn 1.2, 3.3.12, 3.5; Bảng 2.9 bỏ cột mã quyền. Kết quả: 120 trang (Mở đầu tr.1, Ch1 6, Ch2 18, Ch3 32, Ch4 65, Ch5 81, KL 93, TLTK 95, PL 99); Ch3 18 hình, Ch4 12 ảnh. Bước co chữ kéo được 10 đoạn; còn vài dòng cuối ngắn trong bảng/tài liệu tham khảo (không áp dụng).
 - Người dùng xác nhận tên đề tài "Phát triển phần mềm quản lý phòng khám nha khoa" đúng theo quyết định.
+- Bỏ toàn bộ nội dung Zalo/ZNS khỏi báo cáo theo yêu cầu (Tóm tắt, viết tắt OA/ZNS, Mở đầu, 1.2, 1.7, Bảng 1.1, 2.1, 2.2, 3.1, Bảng 3.1, 3.3.6, Ch5, KL, Phụ lục) và 5 sơ đồ (2.1, 2.6, 3.1, tra cứu lịch sử, nhắc lịch); tài liệu [zns] tự rơi khỏi danh mục. Mã nguồn vẫn còn kênh Zalo.

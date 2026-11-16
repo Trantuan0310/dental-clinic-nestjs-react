@@ -21,7 +21,7 @@ npm install
 npm run dev                   # giao diện tại http://localhost:5173
 ```
 
-Khi chưa cấu hình dịch vụ AI, trợ lý AI chạy ở chế độ dự phòng; khi chưa cấu hình SMS, Zalo, tin nhắn được ghi ra nhật ký thay vì gửi thật.
+Khi chưa cấu hình dịch vụ AI, trợ lý AI chạy ở chế độ dự phòng; khi chưa cấu hình SMS, tin nhắn được ghi ra nhật ký thay vì gửi thật.
 
 ### A.2. Triển khai lên máy chủ ảo
 

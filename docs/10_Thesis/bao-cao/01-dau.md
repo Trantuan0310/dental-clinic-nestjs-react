@@ -110,7 +110,7 @@ Giảng viên hướng dẫn: TS. Mai Thúy Nga
 TÓM TẮT ĐỒ ÁN
 :::
 
-Đồ án xây dựng GenSmile, một ứng dụng web quản lý toàn bộ hoạt động của một phòng khám nha khoa nhiều bác sĩ: hồ sơ bệnh nhân, lịch hẹn và đặt lịch trực tuyến, tiếp nhận và hàng chờ, phiên khám với sơ đồ răng và lịch sử điều trị theo từng răng, kế hoạch điều trị và báo giá, hóa đơn và thanh toán (kể cả chuyển khoản VietQR được đối soát tự động), nhân sự, ca làm việc và tính lương, kho vật tư, nhắc lịch qua email/SMS/Zalo, bảng điều khiển và báo cáo cho quản lý. Bệnh nhân có thể tự đặt lịch, xác nhận hoặc dời lịch và tra cứu lịch sử khám qua đường dẫn bảo mật mà không cần tài khoản. Điểm nổi bật của hệ thống là lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu và đối soát chuyển khoản tự động.
+Đồ án xây dựng GenSmile, một ứng dụng web quản lý toàn bộ hoạt động của một phòng khám nha khoa nhiều bác sĩ: hồ sơ bệnh nhân, lịch hẹn và đặt lịch trực tuyến, tiếp nhận và hàng chờ, phiên khám với sơ đồ răng và lịch sử điều trị theo từng răng, kế hoạch điều trị và báo giá, hóa đơn và thanh toán (kể cả chuyển khoản VietQR được đối soát tự động), nhân sự, ca làm việc và tính lương, kho vật tư, nhắc lịch qua email và SMS, bảng điều khiển và báo cáo cho quản lý. Bệnh nhân có thể tự đặt lịch, xác nhận hoặc dời lịch và tra cứu lịch sử khám qua đường dẫn bảo mật mà không cần tài khoản. Điểm nổi bật của hệ thống là lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu và đối soát chuyển khoản tự động.
 
 Hệ thống dùng kiến trúc ứng dụng một trang (React) gọi REST API (NestJS) trên cơ sở dữ liệu PostgreSQL, gồm 23 module nghiệp vụ, khoảng 340 điểm cuối API và 70 bảng dữ liệu. Phân quyền theo vai trò với 133 mã quyền, kết hợp giới hạn theo từng dòng dữ liệu (bác sĩ chỉ thấy bệnh nhân của mình) và nhật ký kiểm toán cho mọi thao tác nhạy cảm. Đồ án tích hợp mô hình ngôn ngữ lớn ở dạng có kiểm soát: AI chỉ soạn nháp và đề xuất, người dùng duyệt mới thực hiện, mô hình không nhìn thấy tên hay số điện thoại bệnh nhân.
 
@@ -224,7 +224,6 @@ DANH MỤC TỪ VIẾT TẮT
 | KPI | Key Performance Indicator | Chỉ số hiệu suất chính |
 | KT | – | Mã ca kiểm thử (Chương 5); mã yêu cầu chức năng (BN, LH, KB, TT…) giải thích ở Mục 2.3 |
 | LLM | Large Language Model | Mô hình ngôn ngữ lớn |
-| OA | Official Account | Tài khoản chính thức (của doanh nghiệp trên Zalo) |
 | ORM | Object-Relational Mapping | Ánh xạ đối tượng – quan hệ |
 | OWASP | Open Worldwide Application Security Project | Dự án mở về bảo mật ứng dụng |
 | QR | Quick Response (code) | Mã vạch hai chiều |
@@ -239,7 +238,6 @@ DANH MỤC TỪ VIẾT TẮT
 | UML | Unified Modeling Language | Ngôn ngữ mô hình hóa thống nhất |
 | UTC | Coordinated Universal Time | Giờ phối hợp quốc tế |
 | UUID | Universally Unique Identifier | Định danh duy nhất toàn cục |
-| ZNS | Zalo Notification Service | Dịch vụ tin nhắn thông báo của Zalo |
 
 [[NGAT]]
 

@@ -6,7 +6,7 @@ actor "Bệnh nhân" as BN
 participant "Trang /tra-cuu-lich-su" as FE
 participant "PatientHistoryService" as SV
 database "PostgreSQL" as DB
-participant "Email / SMS / Zalo" as MS
+participant "Email / SMS" as MS
 BN -> FE : Nhập số điện thoại
 FE -> SV : POST /public/patient-history/request (3 lần/phút)
 SV -> DB : Tìm bệnh nhân có đúng SĐT này\n(SĐT người giám hộ chỉ với trẻ em)

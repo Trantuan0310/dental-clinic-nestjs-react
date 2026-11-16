@@ -43,7 +43,7 @@ Thông tư 46/2018/TT-BYT của Bộ Y tế quy định về hồ sơ bệnh án
 
 Thị trường có hai nhóm giải pháp chính. Nhóm thứ nhất là các phần mềm nước ngoài lâu năm như Open Dental [@opendental] (mã nguồn mở) và Dentrix [@dentrix] (thương mại): đầy đủ chức năng từ lịch hẹn, sơ đồ răng đến bảo hiểm và báo cáo, nhưng được thiết kế theo quy trình, thanh toán và bảo hiểm của Bắc Mỹ, giao diện tiếng Anh, chủ yếu cài trên máy tính để bàn.
 
-Nhóm thứ hai là các phần mềm trong nước chạy trên nền tảng đám mây, tiêu biểu là SimlyDent [@simlydent]. Theo nhà cung cấp công bố, SimlyDent có lịch hẹn, sơ đồ răng tương tác, hồ sơ bệnh án điện tử, thu chi, kho vật tư, nhắc lịch qua Zalo OA, SMS, email và hỗ trợ nhiều chi nhánh; đặt lịch trực tuyến là tính năng mua thêm ở một số gói [@simlydent_gia]. Các trang giới thiệu không đề cập tới việc tự đối soát chuyển khoản theo hóa đơn, giới hạn dữ liệu theo từng bác sĩ hay trợ lý AI. Ngoài ra, nhiều phòng khám nhỏ vẫn quản lý bằng sổ sách, bảng tính và ứng dụng nhắn tin.
+Nhóm thứ hai là các phần mềm trong nước chạy trên nền tảng đám mây, tiêu biểu là SimlyDent [@simlydent]. Theo nhà cung cấp công bố, SimlyDent có lịch hẹn, sơ đồ răng tương tác, hồ sơ bệnh án điện tử, thu chi, kho vật tư, nhắc lịch qua SMS, email và hỗ trợ nhiều chi nhánh; đặt lịch trực tuyến là tính năng mua thêm ở một số gói [@simlydent_gia]. Các trang giới thiệu không đề cập tới việc tự đối soát chuyển khoản theo hóa đơn, giới hạn dữ liệu theo từng bác sĩ hay trợ lý AI. Ngoài ra, nhiều phòng khám nhỏ vẫn quản lý bằng sổ sách, bảng tính và ứng dụng nhắn tin.
 
 Bảng 1.1 so sánh các tiêu chí quan trọng giữa cách quản lý thủ công, phần mềm nước ngoài, phần mềm trong nước và hệ thống GenSmile của đồ án. Với SimlyDent, bảng chỉ ghi những gì nhà cung cấp công bố trên trang giới thiệu; "không thấy công bố" nghĩa là trang giới thiệu không nhắc tới, không khẳng định phần mềm không có.
 
@@ -51,14 +51,14 @@ Bảng 1.1 so sánh các tiêu chí quan trọng giữa cách quản lý thủ c
 Bảng 1.1. So sánh các cách quản lý phòng khám nha khoa
 :::
 
-| Tiêu chí | Sổ sách, bảng tính, Zalo | Phần mềm nước ngoài (Open Dental, Dentrix) | Phần mềm trong nước (SimlyDent) | GenSmile (đồ án) |
+| Tiêu chí | Sổ sách, bảng tính, tin nhắn | Phần mềm nước ngoài (Open Dental, Dentrix) | Phần mềm trong nước (SimlyDent) | GenSmile (đồ án) |
 |---|---|---|---|---|
 | Lịch hẹn nhiều bác sĩ, chống trùng giờ | Thủ công | Có | Có | Có, khóa ở cơ sở dữ liệu |
 | Bệnh nhân tự đặt lịch trực tuyến | Không | Tùy gói, thêm phí | Mua thêm ở một số gói | Có |
 | Sơ đồ răng, lịch sử theo từng răng | Không | Có | Có sơ đồ răng | Có, xem lịch sử ngay trên răng |
 | Kế hoạch điều trị, báo giá | Thủ công | Có | Có | Có |
 | Thanh toán chuyển khoản QR, tự đối soát | Không | Không phù hợp Việt Nam | Không thấy công bố | Có (VietQR, webhook) |
-| Nhắc lịch qua Zalo/SMS tiếng Việt | Thủ công | Không | Có | Có |
+| Nhắc lịch qua SMS, email tiếng Việt | Thủ công | Không | Có | Có |
 | Phân quyền theo vai trò và theo dòng dữ liệu | Không | Theo vai trò | Phân quyền nhân sự | Có cả hai |
 | Nhật ký kiểm toán | Không | Có | Không thấy công bố | Có |
 | Bệnh nhân tự tra cứu lịch sử khám | Không | Qua cổng bệnh nhân | Không thấy công bố | Có, đường dẫn bảo mật |
@@ -166,7 +166,7 @@ Mọi thao tác nhạy cảm (đăng nhập, xem hồ sơ qua kênh đặc biệ
 
 VietQR là chuẩn mã QR thanh toán liên ngân hàng tại Việt Nam, xây dựng trên tiêu chuẩn kỹ thuật của Ngân hàng Nhà nước [@vietqr]. Một mã VietQR chứa mã ngân hàng, số tài khoản nhận, số tiền và nội dung chuyển khoản; khách mở ứng dụng ngân hàng bất kỳ, quét mã là các thông tin được điền sẵn. Đồ án sinh mã VietQR trên mỗi hóa đơn với nội dung là mã hóa đơn. Khi tiền về tài khoản, dịch vụ trung gian theo dõi tài khoản ngân hàng gửi một lời gọi webhook tới hệ thống; hệ thống kiểm tra khóa xác thực đi kèm lời gọi, tìm hóa đơn theo nội dung và số tiền, rồi tự ghi nhận thanh toán. Mỗi giao dịch chỉ được ghi một lần dù lời gọi bị gửi lặp lại. Giao dịch không khớp được đưa vào danh sách chờ lễ tân xử lý tay.
 
-Về liên lạc, hệ thống gửi email qua SMTP, gửi SMS qua nhà cung cấp tin nhắn thương hiệu và gửi tin Zalo qua Zalo Notification Service (ZNS) [@zns], dịch vụ cho phép doanh nghiệp gửi tin thông báo theo mẫu đã duyệt tới số điện thoại người dùng Zalo. Tin nhắn được gửi theo thứ tự ưu tiên kênh, có chống gửi trùng và ghi nhật ký kết quả.
+Về liên lạc, hệ thống gửi email qua SMTP và gửi SMS qua nhà cung cấp tin nhắn thương hiệu (SMS brandname). Tin nhắn có chống gửi trùng và ghi nhật ký kết quả.
 
 ## 1.8. Mô hình ngôn ngữ lớn trong phần mềm nghiệp vụ
 

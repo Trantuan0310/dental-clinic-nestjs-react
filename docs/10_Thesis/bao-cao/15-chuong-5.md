@@ -247,7 +247,7 @@ Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 | Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.4, KT-LH-01 | Đạt |
 | Bác sĩ theo dõi lịch sử, kế hoạch điều trị, sơ đồ răng tập trung | Sơ đồ răng gắn với điều trị, lịch sử theo từng răng, kế hoạch điều trị có tiến độ | Hình 4.6, 4.7 | Đạt |
 | Báo cáo, thống kê: doanh thu, lượt khám, hiệu suất bác sĩ, tồn kho | Bảng điều khiển, sáu chỉ số vận hành có mục tiêu, báo cáo doanh thu theo bác sĩ và dịch vụ, cảnh báo tồn kho | Hình 4.11 | Đạt |
-| Nhắc lịch tự động qua email, SMS, Zalo | Nhắc lịch theo kênh ưu tiên, thử lại tối đa 3 lần; email gửi qua SMTP; SMS và Zalo đã cài đặt nhưng chưa thử với nhà cung cấp thật | Mục 3.3.6 | Đạt một phần |
+| Nhắc lịch tự động qua email, SMS | Nhắc lịch qua email (SMTP) và SMS, thử lại tối đa 3 lần; SMS đã cài đặt nhưng chưa thử với nhà cung cấp thật | Mục 3.3.6 | Đạt một phần |
 | Bệnh nhân tra cứu lịch sử khám dễ dàng | Đường dẫn bảo mật, có thời hạn, không cần tài khoản | Hình 4.10 | Đạt |
 | Hồ sơ X-quang | Chưa thực hiện | – | Chưa đạt |
 
@@ -260,7 +260,7 @@ Nguồn: Tác giả
 ## 5.6. Hạn chế
 
 - **Chưa có hồ sơ X-quang:** chưa lưu và xem được phim chụp, một phần quan trọng của hồ sơ nha khoa.
-- **Kênh SMS và Zalo chưa được thử với nhà cung cấp thật:** phần gửi tin đã cài đặt theo tài liệu của nhà cung cấp và được kiểm thử với bộ giả lập, nhưng cần tài khoản doanh nghiệp để chạy thật.
+- **Kênh SMS chưa được thử với nhà cung cấp thật:** phần gửi tin đã cài đặt theo tài liệu của nhà cung cấp và được kiểm thử với bộ giả lập, nhưng cần tài khoản doanh nghiệp để chạy thật.
 - **Độ bao phủ kiểm thử chưa đều:** một số module như chi phí vận hành và các guard dùng chung có độ bao phủ kiểm thử đơn vị thấp (Bảng 5.6), mới được kiểm tra gián tiếp qua kiểm thử API.
 - **Chưa kiểm thử tải:** các số đo ở Bảng 5.7 là thời gian phản hồi với một người dùng; khả năng chịu tải khi nhiều người dùng cùng lúc mới được suy ra từ thiết kế, chưa đo.
 - **Chưa đánh giá với người dùng thật:** hệ thống mới được trình diễn trên dữ liệu mẫu, chưa vận hành tại một phòng khám.
@@ -269,4 +269,4 @@ Nguồn: Tác giả
 
 ## 5.7. Kết luận chương
 
-Hệ thống được kiểm thử ở ba tầng với khoảng 2.000 ca tự động, chạy lại trước mỗi lần cập nhật. Các tình huống khó nhất của phần mềm quản lý (yêu cầu đồng thời, thanh toán trùng, phân quyền theo dòng dữ liệu, múi giờ) đều được kiểm thử trên PostgreSQL thật và đạt. Thời gian phản hồi các API thường dùng dưới 20 ms. Hệ thống có các điểm nổi bật rõ ràng: lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu, đối soát chuyển khoản tự động, bệnh nhân tự phục vụ không cần tài khoản và AI có kiểm soát. Đối chiếu với phiếu giao đề tài, hệ thống đạt các mục tiêu chính, trừ phần X-quang và việc chạy thật kênh SMS, Zalo.
+Hệ thống được kiểm thử ở ba tầng với khoảng 2.000 ca tự động, chạy lại trước mỗi lần cập nhật. Các tình huống khó nhất của phần mềm quản lý (yêu cầu đồng thời, thanh toán trùng, phân quyền theo dòng dữ liệu, múi giờ) đều được kiểm thử trên PostgreSQL thật và đạt. Thời gian phản hồi các API thường dùng dưới 20 ms. Hệ thống có các điểm nổi bật rõ ràng: lịch sử điều trị theo từng răng, chống đặt trùng lịch ở mức cơ sở dữ liệu, đối soát chuyển khoản tự động, bệnh nhân tự phục vụ không cần tài khoản và AI có kiểm soát. Đối chiếu với phiếu giao đề tài, hệ thống đạt các mục tiêu chính, trừ phần X-quang và việc chạy thật kênh SMS.

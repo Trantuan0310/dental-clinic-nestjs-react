@@ -10,13 +10,13 @@ Về kỹ thuật, hệ thống chống đặt trùng lịch bằng khóa tư v�
 
 Về chất lượng, hệ thống có khoảng 2.000 kiểm thử tự động ở ba tầng (1.788 kiểm thử đơn vị, 111 kiểm thử API trên cơ sở dữ liệu thật, 122 kịch bản giao diện), chạy trong 10 bước kiểm tra trước mỗi lần cập nhật. Cả 34 yêu cầu chức năng đều có cách kiểm thử tương ứng (Phụ lục B), và hệ thống đã được đóng gói bằng Docker, triển khai trên máy chủ ảo.
 
-Điểm nổi bật nhất là các đặc thù của nha khoa và của thị trường Việt Nam được đưa vào phần mềm: lịch sử điều trị theo từng răng ngay trên sơ đồ hai cung răng, thanh toán VietQR tự đối soát, nhắc lịch qua Zalo, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản. Đồng thời, hệ thống bảo đảm tính đúng đắn khi nhiều người thao tác cùng lúc và bảo vệ dữ liệu sức khỏe theo quy định hiện hành.
+Điểm nổi bật nhất là các đặc thù của nha khoa và của thị trường Việt Nam được đưa vào phần mềm: lịch sử điều trị theo từng răng ngay trên sơ đồ hai cung răng, thanh toán VietQR tự đối soát, nhắc lịch tự động qua email và SMS, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản. Đồng thời, hệ thống bảo đảm tính đúng đắn khi nhiều người thao tác cùng lúc và bảo vệ dữ liệu sức khỏe theo quy định hiện hành.
 
 Qua đồ án, em hiểu sâu hơn quy trình phát triển một phần mềm hoàn chỉnh: từ phân tích nghiệp vụ chuyên môn, thiết kế dữ liệu, xử lý đồng thời và bảo mật đến kiểm thử tự động và vận hành hệ thống thật.
 
 ## 2. Hạn chế
 
-Hệ thống chưa lưu trữ và xem được phim X-quang, một phần quan trọng của hồ sơ nha khoa. Kênh SMS và Zalo mới được kiểm thử với bộ giả lập, chưa chạy với nhà cung cấp thật; hệ thống cũng chưa được kiểm thử tải với nhiều người dùng đồng thời.
+Hệ thống chưa lưu trữ và xem được phim X-quang, một phần quan trọng của hồ sơ nha khoa. Kênh SMS mới được kiểm thử với bộ giả lập, chưa chạy với nhà cung cấp thật; hệ thống cũng chưa được kiểm thử tải với nhiều người dùng đồng thời.
 
 Độ bao phủ kiểm thử đơn vị chưa đều giữa các module; một số phần mới được kiểm tra gián tiếp qua kiểm thử API. Hệ thống chưa được vận hành và đánh giá tại một phòng khám thực tế, chất lượng trợ lý AI còn phụ thuộc dịch vụ AI bên ngoài. Ngoài ra, hệ thống mới hỗ trợ một phòng khám và chưa có ứng dụng di động riêng.
 

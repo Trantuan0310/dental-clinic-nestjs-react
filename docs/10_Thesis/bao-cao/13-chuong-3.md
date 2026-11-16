@@ -13,7 +13,7 @@ Hệ thống gồm bốn thành phần chạy trong các container trên một m
 - **PostgreSQL 16** lưu toàn bộ dữ liệu.
 - **Migrate** là container chạy một lần khi phát hành phiên bản mới, áp dụng các migration còn thiếu trước khi ứng dụng khởi động.
 
-Ba nhóm dịch vụ bên ngoài là ngân hàng (qua dịch vụ theo dõi tài khoản SePay), các kênh nhắn tin (SMTP, eSMS, Zalo ZNS) và cổng mô hình ngôn ngữ lớn. Hệ thống được thiết kế để hoạt động đầy đủ chức năng nghiệp vụ khi bất kỳ dịch vụ ngoài nào ngừng hoạt động.
+Ba nhóm dịch vụ bên ngoài là ngân hàng (qua dịch vụ theo dõi tài khoản SePay), các kênh nhắn tin (SMTP, eSMS) và cổng mô hình ngôn ngữ lớn. Hệ thống được thiết kế để hoạt động đầy đủ chức năng nghiệp vụ khi bất kỳ dịch vụ ngoài nào ngừng hoạt động.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-1-kien-truc.png){width=15cm}
@@ -54,7 +54,7 @@ Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
 | expense | Chi phí vận hành | 10 |
 | reports | Báo cáo doanh thu, chỉ số vận hành, phễu bệnh nhân, công suất | 22 |
 | recalls | Nhắc tái khám | 5 |
-| messaging, notifications | Tin nhắn SMS/Zalo, thông báo trong ứng dụng | 8 |
+| messaging, notifications | Tin nhắn email, SMS, thông báo trong ứng dụng | 8 |
 | ai | Soạn nháp, tóm tắt hồ sơ, trợ lý dạng chat | 7 |
 | media, audit, common | Ảnh trang chủ, nhật ký kiểm toán, kiểm tra sức khỏe hệ thống | 9 |
 | **Tổng** | | **339** |
@@ -338,7 +338,7 @@ Khi ngân hàng báo một giao dịch, nguyên tắc là chỉ tự ghi khi ch�
 
 ### 3.3.6. Nhắc lịch và nhắc tái khám
 
-Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) và một cho điện thoại (phút 20 mỗi giờ), cùng quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc. Email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS hoặc Zalo, tin điện thoại được gửi theo thứ tự ưu tiên Zalo rồi SMS. Tách hai tác vụ giúp một kênh lỗi (ví dụ máy chủ email không phản hồi) không làm khách mất tin nhắn ở kênh kia. Mỗi tin điện thoại có khóa chống trùng và mỗi lịch hẹn lưu thời điểm đã gửi email, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin điện thoại lỗi được thử lại tối đa ba lần. Nhắc tái khám qua điện thoại hoạt động tương tự nhưng chạy mỗi ngày một lần lúc 9 giờ 15, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
+Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) và một cho SMS (phút 20 mỗi giờ), cùng quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc. Email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS, khách nhận thêm tin nhắn ngắn có liên kết tương tự. Tách hai tác vụ giúp một kênh lỗi (ví dụ máy chủ email không phản hồi) không làm khách mất tin nhắn ở kênh kia. Mỗi tin SMS có khóa chống trùng và mỗi lịch hẹn lưu thời điểm đã gửi email, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin SMS lỗi được thử lại tối đa ba lần. Nhắc tái khám qua SMS hoạt động tương tự nhưng chạy mỗi ngày một lần lúc 9 giờ 15, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
 
 Hình 3.14 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khung thời gian nêu trên, tác vụ không gửi tin trong giờ yên lặng từ 21 giờ đến 7 giờ và bỏ qua những lịch hẹn được đặt quá sát giờ (dưới 2 giờ), vì khách vừa đặt thì không cần nhắc.
 

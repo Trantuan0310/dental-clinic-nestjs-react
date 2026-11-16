@@ -38,7 +38,7 @@ Bảng 2.1. Các vấn đề của cách quản lý thủ công và hướng gi�
 | Khâu | Vấn đề | Hướng giải quyết trong hệ thống |
 |---|---|---|
 | Đặt lịch | Lịch nằm trong sổ, nhiều người ghi nên dễ đặt trùng giờ một bác sĩ; khách chỉ đặt được trong giờ hành chính qua điện thoại | Lịch dùng chung, máy chủ kiểm tra trùng giờ theo lịch làm việc từng bác sĩ; khách tự đặt trực tuyến 24/7 |
-| Nhắc lịch | Lễ tân gọi tay từng khách, dễ sót; khách quên hẹn | Tự gửi nhắc qua email, SMS, Zalo; khách xác nhận hoặc dời lịch qua liên kết |
+| Nhắc lịch | Lễ tân gọi tay từng khách, dễ sót; khách quên hẹn | Tự gửi nhắc qua email, SMS; khách xác nhận hoặc dời lịch qua liên kết |
 | Tiếp nhận | Không biết ai đang chờ, chờ bao lâu; bác sĩ phải hỏi lễ tân | Hàng chờ thời gian thực theo bác sĩ, bảng trạng thái ghế |
 | Hồ sơ khám | Ghi tay, khó đọc lại; không tra được lịch sử một chiếc răng | Phiên khám điện tử, sơ đồ răng theo từng lần khám, lịch sử theo răng |
 | Kế hoạch điều trị | Báo giá miệng hoặc giấy, khó theo dõi bước nào đã làm | Kế hoạch có báo giá, khách đồng ý, đánh dấu từng bước đã thực hiện |
@@ -67,7 +67,7 @@ Bảng 2.2. Các tác nhân của hệ thống
 | Bác sĩ | Nha sĩ khám và điều trị | Khám, ghi hồ sơ, sơ đồ răng, điều trị, đơn thuốc, kế hoạch điều trị; xem ca làm và lương của mình |
 | Bệnh nhân | Khách hàng của phòng khám, không có tài khoản | Đặt lịch, xác nhận hoặc dời lịch, khai thông tin trước khi đến, tra cứu lịch sử khám |
 | Ngân hàng (hệ thống ngoài) | Dịch vụ theo dõi tài khoản ngân hàng | Báo giao dịch chuyển khoản đến qua webhook |
-| Dịch vụ nhắn tin (hệ thống ngoài) | Máy chủ email, nhà cung cấp SMS, Zalo ZNS | Chuyển tin nhắc lịch, liên kết tới bệnh nhân |
+| Dịch vụ nhắn tin (hệ thống ngoài) | Máy chủ email, nhà cung cấp SMS | Chuyển tin nhắc lịch, liên kết tới bệnh nhân |
 | Dịch vụ AI (hệ thống ngoài) | Mô hình ngôn ngữ lớn qua cổng API | Soạn nháp văn bản, trả lời tra cứu theo yêu cầu của nhân viên |
 
 ::: {custom-style="nguồn"}

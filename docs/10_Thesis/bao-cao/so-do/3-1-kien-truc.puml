@@ -12,7 +12,7 @@ node "Máy chủ ảo (Docker Compose)" {
 }
 cloud "Dịch vụ bên ngoài" {
   component "Ngân hàng / SePay\n(webhook giao dịch)" as BANK
-  component "SMTP, eSMS,\nZalo ZNS" as MSG
+  component "SMTP, eSMS" as MSG
   component "Cổng LLM\n(OpenAI-compatible / Gemini)" as LLM
 }
 NV --> WEB : HTTPS
@@ -21,6 +21,6 @@ WEB --> API : HTTP /api/v1
 API --> DB : Prisma (SQL)
 MIG --> DB
 BANK --> API : POST /webhooks/bank/sepay
-API --> MSG : gửi email, SMS, Zalo
+API --> MSG : gửi email, SMS
 API --> LLM : soạn nháp, gọi công cụ
 @enduml

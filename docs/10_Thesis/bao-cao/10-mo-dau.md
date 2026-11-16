@@ -6,7 +6,7 @@ Nha khoa là lĩnh vực khám chữa bệnh có tần suất quay lại cao: m�
 
 Cách làm thủ công này gây ra những khó khăn quen thuộc. Lễ tân khó biết giờ nào bác sĩ nào còn trống nên lịch hẹn dễ chồng chéo hoặc để trống ghế. Khách quên lịch mà không được nhắc. Bác sĩ muốn xem chiếc răng số 36 đã được điều trị gì từ trước phải lật lại nhiều trang hồ sơ. Công nợ của khách điều trị nhiều đợt khó theo dõi, vật tư hết lúc nào không hay. Chủ phòng khám thiếu số liệu đáng tin cậy để biết tỷ lệ khách bỏ hẹn, công suất ghế hay doanh thu thực thu. Về phía bệnh nhân, muốn biết mình đã khám những gì, còn nợ bao nhiêu thì phải gọi điện hỏi phòng khám.
 
-Trong khi đó, khung pháp lý về hồ sơ y tế điện tử và bảo vệ dữ liệu cá nhân ở Việt Nam ngày càng rõ ràng [@tt46; @nd13], đòi hỏi phần mềm quản lý không chỉ tiện lợi mà còn phải kiểm soát được ai được xem dữ liệu sức khỏe nào và lưu vết mọi thao tác. Các phần mềm quản lý nha khoa nước ngoài có đầy đủ chức năng [@opendental; @dentrix] nhưng chưa phù hợp với quy trình, ngôn ngữ, cách thanh toán (chuyển khoản qua mã QR) và kênh liên lạc (Zalo) phổ biến ở Việt Nam.
+Trong khi đó, khung pháp lý về hồ sơ y tế điện tử và bảo vệ dữ liệu cá nhân ở Việt Nam ngày càng rõ ràng [@tt46; @nd13], đòi hỏi phần mềm quản lý không chỉ tiện lợi mà còn phải kiểm soát được ai được xem dữ liệu sức khỏe nào và lưu vết mọi thao tác. Các phần mềm quản lý nha khoa nước ngoài có đầy đủ chức năng [@opendental; @dentrix] nhưng chưa phù hợp với quy trình, ngôn ngữ, cách thanh toán (chuyển khoản qua mã QR) và kênh liên lạc phổ biến ở Việt Nam.
 
 Xuất phát từ thực tế đó, em chọn đề tài **"Phát triển phần mềm quản lý phòng khám nha khoa"**, với sản phẩm là ứng dụng web GenSmile, nhằm số hóa trọn vẹn vòng hoạt động của một phòng khám, từ lúc khách đặt lịch đến lúc thanh toán và được nhắc tái khám.
 
@@ -20,7 +20,7 @@ Xuất phát từ thực tế đó, em chọn đề tài **"Phát triển phần
 - Số hóa quy trình đặt lịch và tiếp nhận bệnh nhân, giảm thời gian chờ và sai sót do thao tác thủ công.
 - Hỗ trợ bác sĩ theo dõi lịch sử điều trị, kế hoạch điều trị và hồ sơ nha khoa (sơ đồ răng) của từng bệnh nhân một cách tập trung.
 - Cung cấp công cụ báo cáo, thống kê cho quản lý: doanh thu, số lượt khám, hiệu suất bác sĩ, tồn kho vật tư.
-- Cải thiện trải nghiệm bệnh nhân qua nhắc lịch hẹn tự động (email, SMS, Zalo) và tra cứu lịch sử khám dễ dàng.
+- Cải thiện trải nghiệm bệnh nhân qua nhắc lịch hẹn tự động (email, SMS) và tra cứu lịch sử khám dễ dàng.
 
 ## 3. Đối tượng nghiên cứu
 
@@ -28,7 +28,7 @@ Xuất phát từ thực tế đó, em chọn đề tài **"Phát triển phần
 - Mô hình dữ liệu hồ sơ nha khoa, trong đó có hệ đánh số răng FDI [@iso3950] và lịch sử tình trạng của từng răng qua các lần khám.
 - Kiến trúc ứng dụng web nhiều lớp gồm giao diện một trang, REST API và cơ sở dữ liệu quan hệ.
 - Cơ chế phân quyền theo vai trò kết hợp giới hạn theo dòng dữ liệu, nhật ký kiểm toán và bảo vệ dữ liệu sức khỏe.
-- Tích hợp dịch vụ ngoài: thanh toán chuyển khoản qua VietQR, gửi email, SMS, Zalo.
+- Tích hợp dịch vụ ngoài: thanh toán chuyển khoản qua VietQR, gửi email và SMS.
 - Ứng dụng mô hình ngôn ngữ lớn (LLM) trong phần mềm nghiệp vụ theo hướng có kiểm soát.
 
 ## 4. Phạm vi nghiên cứu
