@@ -156,3 +156,13 @@
 - Sửa mô tả Hình 4.4 (3 thẻ thật), 4.5 (các thao tác điều phối). Lỗi giao diện: trang Yêu cầu đặt lịch của lễ tân hiện 'Bạn đã đồng ý giờ mới' (chuỗi của khách) → thêm nhãn bookingStateStaff_PATIENT_ACCEPTED 'Khách đã đồng ý giờ mới' (vi/en); chụp lại Hình 4.7.
 - Nhật ký kiểm toán: thêm nhãn vi/en cho 24 mã hành động và 6 loại đối tượng (AuditLogsPage.tsx, uiWorkforce); chụp lại Hình 4.39 (lọc đối tượng Hóa đơn ngày 15/11), sửa mô tả.
 - Seed demo chi phí: gắn danh mục theo tên (trước chọn ngẫu nhiên) và không để ngày chi ở tương lai; cập nhật dữ liệu demo cục bộ, chụp lại Hình 4.33. tsc/eslint sạch (backend + frontend).
+
+## 2026-11-16 — Rút gọn báo cáo theo góp ý GVHD (≤120 trang)
+
+- Góp ý GVHD: tối đa 120 trang; tên đề tài đúng quyết định; hình/bảng đánh số 2 cấp (bảng: tiêu đề trên, hình: dưới); use case chuẩn, không có "Hệ thống"; ≥5 tài liệu có trích dẫn; chia đoạn; kéo dòng cuối 1–2 từ (co chữ ~0,6 pt); chọn lọc giao diện.
+- Tag `bao-cao-175-trang` giữ bản cũ. Use case 2.2, 2.6: bỏ khung "Hệ thống…", tác nhân ngoài đặt tên cụ thể (SePay, Cổng LLM, Zalo ZNS/SMS/Email).
+- Chương 3: 37 → 20 hình (bỏ các biểu đồ phụ: danh sách chờ, trạng thái phiên khám/kế hoạch/kỳ lương/đăng ký ca/nhắc tái khám/chi phí, đối soát, kho, dashboard, gộp hồ sơ, đồng thuận, danh mục, thông báo, ảnh, nhật ký) và Bảng 3.7; giữ nội dung bằng lời. Kết luận chương viết thành đoạn.
+- Chương 4: 43 → 16 ảnh, 7 → 2 đoạn mã; viết lại 4.3–4.7 gọn. Đánh số lại hình Chương 3, 4 và mọi tham chiếu (script); Bảng 3.8 → 3.7.
+- Phụ lục: bỏ A.3, B (API), C (E2E); ma trận truy vết thành Phụ lục B, ô thiết kế trỏ Mục 3.3.x khi hình đã bỏ.
+- Mở đầu mục 6–7 viết thành đoạn; Chương 5 bỏ cột "Vấn đề" Bảng 5.9 và danh sách "Ba điểm"; Kết luận viết lại thành nhiều đoạn (hạn chế, hướng phát triển không còn gạch đầu dòng).
+- build.py: bước `short_tails` (pdftotext -bbox-layout, nhận đoạn ≥2 dòng có dòng cuối ≤2 từ) + `tighten` (w:spacing −12, lần hai −14 twips).

@@ -5,22 +5,20 @@ actor "Lễ tân" as LT
 actor "Bác sĩ" as BS
 actor "Quản trị viên" as QT
 actor "Bệnh nhân" as BN
-actor "Ngân hàng" as NH <<hệ thống ngoài>>
-actor "Dịch vụ AI" as AI <<hệ thống ngoài>>
-rectangle "Hệ thống quản lý phòng khám nha khoa GenSmile" {
-  usecase "Quản lý bệnh nhân" as U1
-  usecase "Quản lý lịch hẹn,\ntiếp nhận, hàng chờ" as U2
-  usecase "Đặt lịch trực tuyến" as U3
-  usecase "Khám, điều trị,\nsơ đồ răng" as U4
-  usecase "Quản lý kế hoạch\nđiều trị" as U5
-  usecase "Quản lý hóa đơn,\nthanh toán" as U6
-  usecase "Quản lý kho vật tư" as U7
-  usecase "Quản lý nhân sự,\nca làm, lương" as U8
-  usecase "Xem báo cáo,\ndashboard" as U9
-  usecase "Quản trị người dùng,\nphân quyền" as U10
-  usecase "Tra cứu lịch sử khám" as U11
-  usecase "Dùng trợ lý AI" as U12
-}
+actor "SePay\n(báo giao dịch ngân hàng)" as NH
+actor "Cổng mô hình\nngôn ngữ lớn (LLM)" as AI
+usecase "Quản lý bệnh nhân" as U1
+usecase "Quản lý lịch hẹn,\ntiếp nhận, hàng chờ" as U2
+usecase "Đặt lịch trực tuyến" as U3
+usecase "Khám, điều trị,\nsơ đồ răng" as U4
+usecase "Quản lý kế hoạch\nđiều trị" as U5
+usecase "Quản lý hóa đơn,\nthanh toán" as U6
+usecase "Quản lý kho vật tư" as U7
+usecase "Quản lý nhân sự,\nca làm, lương" as U8
+usecase "Xem báo cáo,\ndashboard" as U9
+usecase "Quản trị người dùng,\nphân quyền" as U10
+usecase "Tra cứu lịch sử khám" as U11
+usecase "Dùng trợ lý AI" as U12
 LT -- U1
 LT -- U2
 LT -- U6

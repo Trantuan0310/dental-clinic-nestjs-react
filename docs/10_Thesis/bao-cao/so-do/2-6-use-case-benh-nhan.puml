@@ -2,17 +2,15 @@
 !include _kieu.iuml
 left to right direction
 actor "Bệnh nhân" as BN
-actor "Email / SMS / Zalo" as MS <<hệ thống ngoài>>
-rectangle "Chức năng công khai (không cần tài khoản)" {
-  usecase "Xem thông tin phòng khám,\nbảng giá" as a
-  usecase "Đặt lịch trực tuyến" as b
-  usecase "Chọn dịch vụ, bác sĩ,\ngiờ trống" as b2
-  usecase "Tra cứu trạng thái\nyêu cầu đặt lịch" as c
-  usecase "Xác nhận, dời, hủy lịch\nqua liên kết" as d
-  usecase "Khai thông tin sức khỏe\ntrước khi đến" as e
-  usecase "Yêu cầu link\ntra cứu lịch sử" as f
-  usecase "Xem lịch sử khám,\nkế hoạch, hóa đơn" as g
-}
+actor "Zalo ZNS / SMS / Email" as MS
+usecase "Xem thông tin phòng khám,\nbảng giá" as a
+usecase "Đặt lịch trực tuyến" as b
+usecase "Chọn dịch vụ, bác sĩ,\ngiờ trống" as b2
+usecase "Tra cứu trạng thái\nyêu cầu đặt lịch" as c
+usecase "Xác nhận, dời, hủy lịch\nqua liên kết" as d
+usecase "Khai thông tin sức khỏe\ntrước khi đến" as e
+usecase "Yêu cầu link\ntra cứu lịch sử" as f
+usecase "Xem lịch sử khám,\nkế hoạch, hóa đơn" as g
 BN -- a
 BN -- b
 BN -- c

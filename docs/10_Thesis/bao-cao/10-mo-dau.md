@@ -60,24 +60,15 @@ Ngoài ra, đồ án bổ sung một số chức năng làm tăng giá trị th�
 
 ## 6. Những điểm nổi bật của đề tài
 
-So với một phần mềm quản lý phòng khám thông thường, GenSmile có các điểm nổi bật sau:
+So với một phần mềm quản lý phòng khám thông thường, GenSmile lưu hồ sơ nha khoa theo từng răng trên sơ đồ hai cung răng FDI, bảo đảm lịch hẹn không trùng ngay ở mức cơ sở dữ liệu, và tự đối soát thanh toán VietQR khi tiền về tài khoản.
 
-- **Hồ sơ nha khoa theo từng răng:** sơ đồ hai cung răng theo hệ FDI gắn trực tiếp với điều trị; bấm vào một răng là thấy toàn bộ lịch sử điều trị của răng đó.
-- **Lịch hẹn không bao giờ trùng:** việc chống trùng được bảo đảm ở mức cơ sở dữ liệu, kể cả khi lễ tân và khách đặt trực tuyến cùng lúc.
-- **Thanh toán VietQR tự đối soát:** khách quét mã, tiền về là hóa đơn tự cập nhật, không cần lễ tân dò sao kê.
-- **Bệnh nhân tự phục vụ không cần tài khoản:** đặt lịch, xác nhận, dời lịch và xem lịch sử khám qua đường dẫn bảo mật trên điện thoại.
-- **AI có kiểm soát:** trợ lý AI giúp tra cứu, soạn nháp, nhận xét báo cáo nhưng không nhìn thấy thông tin định danh bệnh nhân và không tự thay đổi dữ liệu khi người dùng chưa xác nhận.
-- **Chất lượng kiểm chứng được:** khoảng 2.000 kiểm thử tự động chạy trước mỗi lần cập nhật; hệ thống đã được triển khai thật trên máy chủ.
+Bệnh nhân tự đặt, xác nhận, dời lịch và xem lịch sử khám qua đường dẫn bảo mật mà không cần tài khoản. Trợ lý AI hỗ trợ nhân viên tra cứu, soạn nháp nhưng không nhận thông tin định danh bệnh nhân và không tự thay đổi dữ liệu khi người dùng chưa xác nhận. Khoảng 2.000 kiểm thử tự động chạy trước mỗi lần cập nhật, và hệ thống đã được triển khai thật trên máy chủ.
 
 ## 7. Ý nghĩa khoa học và thực tiễn
 
-### 7.1. Ý nghĩa khoa học
+**Về khoa học**, đồ án trình bày một cách tiếp cận có hệ thống để xây dựng phần mềm quản lý y tế quy mô nhỏ: hồ sơ được thiết kế để lưu lịch sử theo từng răng; phân quyền theo vai trò kết hợp giới hạn theo dòng dữ liệu; mô hình ngôn ngữ lớn được đưa vào phần mềm nghiệp vụ theo nguyên tắc "AI đề xuất, con người quyết định", có phương án dự phòng khi AI không hoạt động.
 
-Đồ án trình bày một cách tiếp cận có hệ thống để xây dựng phần mềm quản lý y tế quy mô nhỏ. Về dữ liệu, hồ sơ nha khoa được thiết kế để lưu lịch sử theo từng răng. Về bảo mật, phân quyền theo vai trò được kết hợp với giới hạn theo dòng dữ liệu, và bệnh nhân tra cứu qua đường dẫn công khai an toàn mà không cần tài khoản. Về AI, đồ án đưa mô hình ngôn ngữ lớn vào phần mềm nghiệp vụ theo nguyên tắc "AI đề xuất, con người quyết định", có cơ chế bảo vệ dữ liệu cá nhân và phương án dự phòng khi AI không hoạt động.
-
-### 7.2. Ý nghĩa thực tiễn
-
-Hệ thống có thể dùng ngay cho một phòng khám nha khoa: giảm việc ghi chép trùng lặp, hạn chế đặt trùng lịch, tự nhắc khách, giúp bác sĩ xem nhanh lịch sử từng răng, giúp lễ tân thu tiền và theo dõi công nợ chính xác, và cung cấp cho chủ phòng khám các chỉ số vận hành để ra quyết định. Bệnh nhân được đặt lịch, xác nhận lịch và tra cứu lịch sử khám của mình mà không phải gọi điện.
+**Về thực tiễn**, hệ thống có thể dùng ngay cho một phòng khám nha khoa: giảm ghi chép trùng lặp, tránh đặt trùng lịch, tự nhắc khách, giúp bác sĩ xem nhanh lịch sử từng răng, giúp lễ tân thu tiền và theo dõi công nợ chính xác, và cung cấp cho chủ phòng khám các chỉ số vận hành để ra quyết định.
 
 ## 8. Bố cục đồ án
 
@@ -85,8 +76,8 @@ Ngoài phần Mở đầu, Kết luận, Tài liệu tham khảo và Phụ lục
 
 - **Chương 1. Cơ sở lý thuyết và công nghệ:** nghiệp vụ phòng khám nha khoa, tổng quan các phần mềm hiện có, kiến trúc và công nghệ sử dụng, các vấn đề bảo mật, thanh toán và ứng dụng AI.
 - **Chương 2. Khảo sát hiện trạng và phân tích yêu cầu:** quy trình tại phòng khám, các tác nhân, yêu cầu chức năng và phi chức năng, biểu đồ use case.
-- **Chương 3. Phân tích và thiết kế hệ thống:** kiến trúc tổng thể và 23 module nghiệp vụ, thiết kế cơ sở dữ liệu, đặc tả các chức năng chính kèm 30 biểu đồ tuần tự, hoạt động và trạng thái (mỗi module có ít nhất một biểu đồ), thiết kế bảo mật và giao diện.
-- **Chương 4. Xây dựng và triển khai hệ thống:** môi trường phát triển, tổ chức mã nguồn, các điểm cài đặt quan trọng kèm đoạn mã, kết quả giao diện của từng chức năng chụp từ hệ thống chạy thật, quy trình tích hợp liên tục và triển khai.
+- **Chương 3. Phân tích và thiết kế hệ thống:** kiến trúc tổng thể và 23 module nghiệp vụ, thiết kế cơ sở dữ liệu, đặc tả các chức năng chính kèm biểu đồ tuần tự, hoạt động và trạng thái, thiết kế bảo mật và giao diện.
+- **Chương 4. Xây dựng và triển khai hệ thống:** môi trường phát triển, tổ chức mã nguồn, các điểm cài đặt quan trọng kèm đoạn mã, giao diện các chức năng tiêu biểu chụp từ hệ thống chạy thật, quy trình tích hợp liên tục và triển khai.
 - **Chương 5. Kiểm thử và đánh giá:** chiến lược kiểm thử ba tầng, các ca kiểm thử tiêu biểu, số ca và độ bao phủ mã, hiệu năng, những điểm nổi bật, đối chiếu với mục tiêu đề tài và các hạn chế.
 
-Phần Phụ lục gồm hướng dẫn cài đặt và triển khai (A), danh sách API tiêu biểu (B), danh sách kịch bản kiểm thử đầu cuối (C) và ma trận truy vết từ yêu cầu tới thiết kế, giao diện và kiểm thử (D).
+Phần Phụ lục gồm hướng dẫn cài đặt và triển khai (A) và ma trận truy vết từ yêu cầu tới thiết kế, giao diện và kiểm thử (B).

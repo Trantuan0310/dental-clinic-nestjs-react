@@ -426,6 +426,51 @@ def fit_gaps(pdf):
     return found
 
 
+TIGHT = {}  # start of a paragraph (normalised) -> character spacing in twips (negative = condensed)
+
+
+def short_tails(pdf):
+    """Paragraphs of two or more lines whose last line holds only one or two words:
+    returns the normalised start of each, to be condensed by about 0.6 pt."""
+    xml = subprocess.run(['pdftotext', '-bbox-layout', pdf, '-'], capture_output=True, text=True).stdout
+    cm = 28.35
+    found = []
+    for page in re.findall(r'<page [^>]*>(.*?)</page>', xml, re.S):
+        lines = [(float(a), float(b), float(c), re.findall(r'>([^<]*)</word>', w))
+                 for a, b, c, w in re.findall(r'<line xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="[\d.]+">(.*?)</line>', page, re.S)]
+        lines = [l for l in lines if l[1] > 2.5 * cm]  # skip the page number
+        if not lines:
+            continue
+        right = max(l[2] for l in lines)
+        para = []
+        for x0, y, x1, words in lines:  # a line ending short of the right margin ends a paragraph
+            para.append((x1 - x0, words))
+            if x1 < right - 0.5 * cm:
+                if len(para) >= 2 and para[0][0] > 13 * cm and (len(words) <= 2 or para[-1][0] < 0.12 * para[0][0]):
+                    found.append(norm(' '.join(para[0][1]))[:40])
+                para = []
+    return found
+
+
+def tighten(doc):
+    if not TIGHT:
+        return
+    for p in doc.paragraphs:
+        t = norm(p.text)
+        if p._p in COVER or not t or t[0] in '/#' or t.isupper():
+            continue  # cover, code, all-caps titles
+        k = next((v for key, v in TIGHT.items() if t.startswith(key) or t.lstrip('•–- ').startswith(key.lstrip('•–- '))), None)
+        if k is None:
+            continue
+        for r in p.runs:
+            rpr = r._r.get_or_add_rPr()
+            sp = rpr.find(qn('w:spacing'))
+            if sp is None:
+                sp = OxmlElement('w:spacing')
+                rpr.append(sp)
+            sp.set(qn('w:val'), str(k))
+
+
 def finish(doc, pages=None):
     body = doc.element.body
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
@@ -609,6 +654,7 @@ def build(pages=None):
     page_header(secs[2], fmt='decimal', start=1)
     page_header(secs[3], fmt='decimal')
     lists = finish(doc, pages)
+    tighten(doc)
     out = os.path.join(OUT, 'BaoCao_DATN_TranTuanAnh.docx')
     doc.save(out)
     os.remove(tmp)
@@ -672,6 +718,15 @@ def main():
             break
         FIT.update(new)
         print('Thu nhỏ để vừa trang: ' + ', '.join(f'{c} ×{k:.2f}' for c, k in new.items()))
+        out, lists = build()
+    for k in (-12, -14):  # pull up a last line of one or two words (condense 0.6, then 0.7 pt)
+        render(out)
+        tails = short_tails(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
+        tails = [t for t in tails if TIGHT.get(t, 0) > k]
+        if not tails:
+            break
+        TIGHT.update({t: k for t in tails})
+        print(f'Co chữ {k / 20:.1f} pt cho {len(tails)} đoạn có dòng cuối 1–2 từ')
         out, lists = build()
     pages = None
     for _ in range(3):
