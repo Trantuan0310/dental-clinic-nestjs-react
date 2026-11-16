@@ -265,7 +265,9 @@ Hình 3.10. Biểu đồ tuần tự khám, ghi điều trị theo răng và đ�
 Nguồn: Tác giả
 :::
 
-Lịch sử điều trị theo răng được thiết kế thành một API riêng `GET /patients/:id/teeth/:fdi/history`: máy chủ lọc ngay trong cơ sở dữ liệu các điều trị có chứa số răng cần xem (toán tử chứa của JSONB) và chỉ lấy mục sơ đồ của răng đó, thay vì để trình duyệt tải toàn bộ các phiên khám rồi tự lọc. Hiệu quả của thiết kế này được đo ở Chương 5. Phiên khám có ba trạng thái: đang khám, đã đóng và đã hủy (chỉ hủy được phiên mở nhầm, chưa có điều trị và đơn thuốc). Phiên đã đóng bị khóa, chỉ thêm được ghi bổ sung; muốn mở lại phải có quyền riêng, ghi lý do và hóa đơn của phiên chưa được phát hành.
+Lịch sử điều trị theo răng được thiết kế thành một API riêng `GET /patients/:id/teeth/:fdi/history`: máy chủ lọc ngay trong cơ sở dữ liệu các điều trị có chứa số răng cần xem (toán tử chứa của JSONB) và chỉ lấy mục sơ đồ của răng đó, thay vì để trình duyệt tải toàn bộ các phiên khám rồi tự lọc. Hiệu quả của thiết kế này được đo ở Chương 5.
+
+Phiên khám có ba trạng thái: đang khám, đã đóng và đã hủy (chỉ hủy được phiên mở nhầm, chưa có điều trị và đơn thuốc). Phiên đã đóng bị khóa, chỉ thêm được ghi bổ sung; muốn mở lại phải có quyền riêng, ghi lý do và hóa đơn của phiên chưa được phát hành.
 
 Hình 3.11 trình bày chi tiết luồng xem lịch sử và thêm điều trị cho một răng. Lớp phân quyền thứ hai nằm ở service: bác sĩ chỉ có quyền xem hồ sơ của mình sẽ nhận lỗi "không tìm thấy bệnh nhân" nếu không có quan hệ khám chữa với bệnh nhân đó. Mỗi lần xem lịch sử răng đều được ghi nhật ký kiểm toán.
 
@@ -338,7 +340,7 @@ Khi ngân hàng báo một giao dịch, nguyên tắc là chỉ tự ghi khi ch�
 
 ### 3.3.6. Nhắc lịch và nhắc tái khám
 
-Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) và một cho SMS (phút 20 mỗi giờ), cùng quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc. Email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS, khách nhận thêm tin nhắn ngắn có liên kết tương tự. Tách hai tác vụ giúp một kênh lỗi (ví dụ máy chủ email không phản hồi) không làm khách mất tin nhắn ở kênh kia. Mỗi tin SMS có khóa chống trùng và mỗi lịch hẹn lưu thời điểm đã gửi email, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin SMS lỗi được thử lại tối đa ba lần. Nhắc tái khám qua SMS hoạt động tương tự nhưng chạy mỗi ngày một lần lúc 9 giờ 15, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
+Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) và một cho SMS (phút 20 mỗi giờ), cùng quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc. Email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS, khách nhận thêm một tin nhắn nhắc ngắn qua điện thoại. Tách hai tác vụ giúp một kênh lỗi (ví dụ máy chủ email không phản hồi) không làm khách mất tin nhắn ở kênh kia. Mỗi tin SMS có khóa chống trùng và mỗi lịch hẹn lưu thời điểm đã gửi email, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin SMS lỗi được thử lại tối đa ba lần. Nhắc tái khám qua SMS hoạt động tương tự nhưng chạy mỗi ngày một lần lúc 9 giờ 15, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
 
 Hình 3.14 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khung thời gian nêu trên, tác vụ không gửi tin trong giờ yên lặng từ 21 giờ đến 7 giờ và bỏ qua những lịch hẹn được đặt quá sát giờ (dưới 2 giờ), vì khách vừa đặt thì không cần nhắc.
 

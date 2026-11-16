@@ -19,7 +19,7 @@ while (Còn lịch hẹn?) is (còn)
     if (Kênh email?) then (có)
       :Gửi email kèm liên kết\nxác nhận / dời / hủy lịch;
     else (không)
-      :Gửi SMS kèm liên kết;
+      :Gửi SMS nhắc lịch;
     endif
     :Ghi kết quả gửi (thành công / lỗi);
   endif
