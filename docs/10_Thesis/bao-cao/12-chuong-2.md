@@ -189,7 +189,7 @@ Nguồn: Tác giả
 
 ## 2.4. Yêu cầu phi chức năng
 
-Các yêu cầu phi chức năng được xác định theo mô hình chất lượng ISO/IEC 25010 [@iso25010] và các khuyến nghị bảo mật OWASP [@owasp], tổng hợp trong Bảng 2.8.
+Các yêu cầu phi chức năng được xác định theo mô hình chất lượng ISO/IEC 25010 và các khuyến nghị bảo mật OWASP [@owasp], tổng hợp trong Bảng 2.8.
 
 ::: {custom-style="bảng"}
 Bảng 2.8. Yêu cầu phi chức năng

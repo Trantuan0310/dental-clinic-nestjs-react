@@ -104,7 +104,7 @@ idOf(ref: string): string | undefined {
 
 ## 4.4. Cài đặt phía giao diện
 
-Mỗi trang được tải lười (`React.lazy`) nên trình duyệt chỉ tải mã của trang đang mở. Mọi lời gọi API đi qua TanStack Query [@tanstack] với khóa truy vấn theo tài nguyên; sau mỗi thao tác ghi, các khóa liên quan được làm mới để mọi màn hình đồng bộ. Hóa đơn đang chờ thanh toán tự làm mới mỗi 8 giây để hiện ngay khoản chuyển khoản vừa về.
+Mỗi trang được tải lười (`React.lazy`) nên trình duyệt chỉ tải mã của trang đang mở. Mọi lời gọi API đi qua TanStack Query với khóa truy vấn theo tài nguyên; sau mỗi thao tác ghi, các khóa liên quan được làm mới để mọi màn hình đồng bộ. Hóa đơn đang chờ thanh toán tự làm mới mỗi 8 giây để hiện ngay khoản chuyển khoản vừa về.
 
 Toàn bộ chữ giao diện nằm trong tệp ngôn ngữ tiếng Việt và tiếng Anh; bản tiếng Anh được tách thành gói riêng, chỉ tải khi cần. Sơ đồ răng được vẽ bằng SVG theo đường cong hình chữ U, mỗi răng là một nút dùng được bằng bàn phím; thay đổi tình trạng răng tự lưu sau 1,5 giây và có hoàn tác.
 

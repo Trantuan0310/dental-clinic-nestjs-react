@@ -29,7 +29,7 @@ Nguồn: Tác giả
 
 ### 3.1.2. Các module nghiệp vụ
 
-Máy chủ ứng dụng được chia thành 23 module nghiệp vụ theo kiến trúc phân lớp [@fowler_layer], mỗi module gồm controller (nhận yêu cầu, kiểm tra dữ liệu bằng DTO), service (quy tắc nghiệp vụ) và phần truy cập dữ liệu qua Prisma. Các module giao tiếp với nhau qua service được công bố hoặc qua **sự kiện miền**: ví dụ khi phiên khám đóng, module hồ sơ khám phát sự kiện `encounter.closed`; module hóa đơn lắng nghe để lập hóa đơn nháp, module lương lắng nghe để ghi ca khám vào bảng lương, module AI lắng nghe để làm mới bản tóm tắt. Cách làm này giữ cho mỗi module không phụ thuộc trực tiếp vào module khác [@evans]. Bảng 3.1 liệt kê các module cùng số điểm cuối API.
+Máy chủ ứng dụng được chia thành 23 module nghiệp vụ theo kiến trúc phân lớp [@sommerville], mỗi module gồm controller (nhận yêu cầu, kiểm tra dữ liệu bằng DTO), service (quy tắc nghiệp vụ) và phần truy cập dữ liệu qua Prisma. Các module giao tiếp với nhau qua service được công bố hoặc qua **sự kiện miền**: ví dụ khi phiên khám đóng, module hồ sơ khám phát sự kiện `encounter.closed`; module hóa đơn lắng nghe để lập hóa đơn nháp, module lương lắng nghe để ghi ca khám vào bảng lương, module AI lắng nghe để làm mới bản tóm tắt. Cách làm này giữ cho mỗi module không phụ thuộc trực tiếp vào module khác. Bảng 3.1 liệt kê các module cùng số điểm cuối API.
 
 ::: {custom-style="bảng"}
 Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
@@ -69,7 +69,7 @@ Nguồn: Tác giả thống kê từ mã nguồn
 
 Cơ sở dữ liệu gồm 70 bảng và 43 kiểu liệt kê, được xây dựng qua 52 lần migration. Các nguyên tắc chung:
 
-- **Khóa chính UUID phiên bản 7** [@uuidv7]: không đoán được (an toàn khi xuất hiện trong đường dẫn), tăng dần theo thời gian nên chèn và đánh chỉ mục hiệu quả. Các mã con người đọc (mã bệnh nhân `PAT-2026-00461`, mã hóa đơn `INV-2026-000123`) được sinh riêng từ sequence.
+- **Khóa chính UUID phiên bản 7**: không đoán được (an toàn khi xuất hiện trong đường dẫn), tăng dần theo thời gian nên chèn và đánh chỉ mục hiệu quả. Các mã con người đọc (mã bệnh nhân `PAT-2026-00461`, mã hóa đơn `INV-2026-000123`) được sinh riêng từ sequence.
 - **Xóa mềm** bằng cột `deleted_at` cho dữ liệu nghiệp vụ, giữ lịch sử và cho phép khôi phục; các truy vấn mặc định bỏ qua bản ghi đã xóa.
 - **Tiền** dùng kiểu `decimal`, không dùng số thực, để không sai số khi cộng dồn.
 - **Thời gian** dùng `timestamptz` (có múi giờ); các phép tính "hôm nay", "giờ làm việc" quy đổi theo múi giờ phòng khám (Asia/Ho_Chi_Minh).
@@ -526,7 +526,7 @@ Giao diện nội bộ gồm thanh điều hướng bên trái được lọc th
 
 Sơ đồ răng ban đầu được thiết kế dạng lưới ô vuông 16 × 2, nhưng dạng này khó nhận biết vị trí răng vì không giống hình dạng hàm thật. Phiên bản cuối vẽ hai cung răng như nhìn từ mặt nhai (Hình 1.1): mỗi răng có hình dạng theo loại răng, tô màu theo tình trạng; trẻ em có thêm cung răng sữa phía trong. Sơ đồ được đặt chung với danh sách điều trị trên một tab, bấm một răng là thấy ngay lịch sử của răng đó.
 
-Giao diện tuân theo các nguyên tắc khả dụng [@nielsen] và khả năng tiếp cận [@wcag]: trạng thái hệ thống luôn hiển thị, ngăn lỗi từ đầu (chỉ hiện giờ trống, chặn số răng sai chuẩn FDI), cho phép hoàn tác, mọi điều khiển có nhãn cho trình đọc màn hình và dùng được bằng bàn phím, bố cục co giãn xuống điện thoại 390 px.
+Giao diện tuân theo các nguyên tắc khả dụng và khả năng tiếp cận: trạng thái hệ thống luôn hiển thị, ngăn lỗi từ đầu (chỉ hiện giờ trống, chặn số răng sai chuẩn FDI), cho phép hoàn tác, mọi điều khiển có nhãn cho trình đọc màn hình và dùng được bằng bàn phím, bố cục co giãn xuống điện thoại 390 px.
 
 ## 3.6. Kết luận chương
 

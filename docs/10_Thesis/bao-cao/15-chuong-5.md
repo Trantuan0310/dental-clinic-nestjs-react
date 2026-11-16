@@ -12,9 +12,9 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 
 | Tầng | Công cụ | Số lượng | Phạm vi kiểm tra |
 |---|---|---|---|
-| Đơn vị (máy chủ) | Jest [@jest] | 1.788 ca, 89 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
+| Đơn vị (máy chủ) | Jest | 1.788 ca, 89 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
 | API trên PostgreSQL thật | Jest + Supertest | 111 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
-| Đầu cuối (E2E) | Playwright [@playwright] | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
+| Đầu cuối (E2E) | Playwright | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
 
 ::: {custom-style="nguồn"}
@@ -198,14 +198,14 @@ Gói mã giảm nhờ tách bản tiếng Anh thành gói riêng và tải lư�
 
 Các biện pháp bảo mật được đối chiếu với danh sách rủi ro OWASP Top 10 [@owasp] ở Bảng 3.7 và được kiểm thử tự động ở Bảng 5.5. Ngoài ra:
 
-- **Mật khẩu** được băm bằng Argon2 [@argon2]; mã làm mới được lưu dạng băm, xoay vòng mỗi lần dùng, phát hiện dùng lại.
+- **Mật khẩu** được băm bằng Argon2; mã làm mới được lưu dạng băm, xoay vòng mỗi lần dùng, phát hiện dùng lại.
 - **Khóa bí mật** không có trong mã nguồn; tệp cấu hình mẫu chỉ chứa tên biến.
 - **Dữ liệu gửi cho AI** được kiểm thử đơn vị để bảo đảm không chứa họ tên, số điện thoại, email của bệnh nhân; các công cụ của trợ lý AI chỉ trả về dữ liệu trong phạm vi quyền của người hỏi.
 - **Nhật ký kiểm toán** ghi lại các thao tác đọc hồ sơ lâm sàng và mọi thao tác ghi quan trọng.
 
 ### 5.3.3. Khả năng sử dụng
 
-Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.10). Các nguyên tắc khả dụng của Nielsen [@nielsen] được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
+Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.10). Các nguyên tắc khả dụng của Nielsen được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
 
 Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kịch bản một ngày làm việc của phòng khám. Việc đánh giá với người dùng thật tại phòng khám chưa được thực hiện và được nêu trong phần hạn chế.
 
