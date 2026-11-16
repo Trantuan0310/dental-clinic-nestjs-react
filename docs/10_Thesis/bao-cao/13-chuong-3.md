@@ -345,7 +345,7 @@ Nguồn: Tác giả
 
 ### 3.3.4. Kế hoạch điều trị
 
-Kế hoạch điều trị gồm nhiều dòng, mỗi dòng là một thủ thuật kèm số răng, số lượng và đơn giá. Khi bệnh nhân đồng ý, giá trong kế hoạch trở thành giá đã chốt: lúc bác sĩ chọn dòng kế hoạch trong phiên khám, giá được lấy theo kế hoạch thay vì bảng giá hiện hành. Trạng thái kế hoạch được tính từ tiến độ các dòng (Hình 3.17). Các kế hoạch đã đồng ý mà bệnh nhân chưa đặt lịch được đưa vào danh sách "điều trị chờ đặt lịch" để lễ tân gọi mời.
+Kế hoạch điều trị gồm nhiều dòng, mỗi dòng là một thủ thuật kèm số răng, số lượng và đơn giá. Khi bệnh nhân đồng ý, giá trong kế hoạch trở thành giá đã chốt: lúc bác sĩ chọn dòng kế hoạch trong phiên khám, giá được lấy theo kế hoạch thay vì bảng giá hiện hành. Trạng thái kế hoạch được tính từ tiến độ các dòng (Hình 3.17); nếu bác sĩ sửa các bước của một báo giá đã gửi, kế hoạch quay về nháp để báo giá cũ không bị hiểu là đã chốt. Các kế hoạch đã đồng ý mà bệnh nhân chưa đặt lịch được đưa vào danh sách "điều trị chờ đặt lịch" để lễ tân gọi mời.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-15-trang-thai-ke-hoach.png){width=11cm}
@@ -640,7 +640,7 @@ Hình 3.31. Biểu đồ hoạt động quản lý dịch vụ và phân công b
 Nguồn: Tác giả
 :::
 
-**Chi phí vận hành.** Các khoản chi của phòng khám (vật tư ngoài kho, điện nước, sửa chữa, đầu tư) được ghi thành phiếu chi phí đi qua quy trình duyệt ở Hình 3.32, làm cơ sở cho báo cáo lợi nhuận.
+**Chi phí vận hành.** Các khoản chi của phòng khám (vật tư ngoài kho, điện nước, sửa chữa, đầu tư) được ghi thành phiếu chi phí đi qua quy trình duyệt ở Hình 3.32, làm cơ sở cho báo cáo lợi nhuận. Người tạo phiếu không tự duyệt được phiếu của mình (tách nhiệm vụ), nên mỗi khoản chi luôn có hai người xác nhận.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-29-trang-thai-chi-phi.png){width=10cm}

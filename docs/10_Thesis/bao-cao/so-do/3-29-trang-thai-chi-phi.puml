@@ -7,7 +7,7 @@ APPROVED : Đã duyệt
 REJECTED : Bị từ chối
 REIMBURSED : Đã hoàn ứng
 [*] -down-> DRAFT : Tạo phiếu chi phí\n(loại: vận hành / đầu tư / khác,\nmã phiếu tự sinh)
-DRAFT -down-> APPROVED : Quản lý duyệt
+DRAFT -down-> APPROVED : Quản lý duyệt\n[người duyệt khác người tạo phiếu]
 DRAFT -right-> REJECTED : Từ chối (có lý do)
 APPROVED -down-> REIMBURSED : Ghi nhận đã hoàn ứng
 REJECTED -down-> [*]

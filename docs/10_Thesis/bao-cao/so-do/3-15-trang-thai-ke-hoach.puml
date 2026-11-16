@@ -4,6 +4,8 @@ hide empty description
 [*] --> DRAFT : Bác sĩ lập kế hoạch
 DRAFT --> PROPOSED : Gửi báo giá
 PROPOSED --> ACCEPTED : Khách đồng ý
+DRAFT --> ACCEPTED : Khách đồng ý ngay
+PROPOSED --> DRAFT : Sửa các bước của báo giá
 ACCEPTED --> IN_PROGRESS : Bước đầu tiên được làm\n(khi đóng phiên khám)
 IN_PROGRESS --> COMPLETED : Mọi bước đã làm hoặc bỏ qua
 DRAFT --> CANCELLED
