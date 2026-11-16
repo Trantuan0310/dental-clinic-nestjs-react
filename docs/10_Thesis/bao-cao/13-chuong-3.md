@@ -422,7 +422,7 @@ Nguồn: Tác giả
 
 ### 3.3.6. Nhắc lịch và nhắc tái khám
 
-Tác vụ định kỳ của máy chủ quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc, gửi email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS hoặc Zalo, tin được gửi theo thứ tự ưu tiên Zalo rồi SMS. Mỗi tin có khóa chống trùng, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin lỗi được thử lại tối đa ba lần. Nhắc tái khám hoạt động tương tự, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
+Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) và một cho điện thoại (phút 20 mỗi giờ), cùng quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc. Email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS hoặc Zalo, tin điện thoại được gửi theo thứ tự ưu tiên Zalo rồi SMS. Tách hai tác vụ giúp một kênh lỗi (ví dụ máy chủ email không phản hồi) không làm khách mất tin nhắn ở kênh kia. Mỗi tin điện thoại có khóa chống trùng và mỗi lịch hẹn lưu thời điểm đã gửi email, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin điện thoại lỗi được thử lại tối đa ba lần. Nhắc tái khám qua điện thoại hoạt động tương tự nhưng chạy mỗi ngày một lần lúc 9 giờ 15, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
 
 Hình 3.21 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khung thời gian nêu trên, tác vụ không gửi tin trong giờ yên lặng từ 21 giờ đến 7 giờ và bỏ qua những lịch hẹn được đặt quá sát giờ (dưới 2 giờ), vì khách vừa đặt thì không cần nhắc.
 

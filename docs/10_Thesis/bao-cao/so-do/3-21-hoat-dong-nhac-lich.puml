@@ -1,29 +1,35 @@
 @startuml
 !include _kieu.iuml
 start
-:Tác vụ định kỳ chạy mỗi giờ;
-if (Giờ yên lặng 21:00–7:00?) then (có)
+:Mỗi kênh có tác vụ riêng chạy theo quy trình này\n(email: đầu mỗi giờ; Zalo / SMS: phút 20 mỗi giờ);
+note right
+  Hai tác vụ độc lập:
+  một kênh lỗi không chặn kênh kia
+end note
+if (Giờ yên lặng 21:00–7:00\nhoặc kênh chưa cấu hình?) then (có)
   :Không gửi, chờ lần chạy sau;
   stop
 endif
-:Lấy lịch hẹn đã đặt hoặc đã xác nhận, bắt đầu\nsau 30 phút và trong vòng 24 giờ tới,\nđặt trước giờ hẹn ít nhất 2 giờ, chưa nhắc;
+:Lấy lịch hẹn đã đặt hoặc đã xác nhận, bắt đầu sau 30 phút\nvà trong vòng 24 giờ tới, có email / số điện thoại;
+:Bỏ lịch được đặt quá sát giờ\n(đặt trước giờ hẹn dưới 2 giờ);
 while (Còn lịch hẹn?) is (còn)
-  :Gửi email nhắc kèm liên kết\nxác nhận / dời / hủy lịch;
-  if (Bật kênh điện thoại\nvà khách có số điện thoại?) then (có)
-    if (Tin cùng khóa chống trùng\nđã gửi?) then (rồi)
-      :Bỏ qua;
-    else (chưa)
+  if (Đã nhắc qua kênh này?\n(email: dấu thời gian trên lịch hẹn;\nđiện thoại: khóa chống trùng)) then (rồi)
+    :Bỏ qua;
+  else (chưa)
+    if (Kênh email?) then (có)
+      :Gửi email kèm liên kết\nxác nhận / dời / hủy lịch;
+    else (không)
       :Gửi qua Zalo ZNS;
       if (Thành công?) then (không)
         :Gửi qua SMS;
       endif
-      :Ghi nhật ký tin nhắn\n(SENT hoặc FAILED);
     endif
+    :Ghi kết quả gửi (thành công / lỗi);
   endif
 endwhile (hết)
 note right
-  Tin FAILED được thử lại ở các
-  lần chạy sau, tối đa 3 lần
+  Tin điện thoại bị lỗi được thử lại
+  ở các lần chạy sau, tối đa 3 lần
 end note
 stop
 @enduml
