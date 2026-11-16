@@ -212,9 +212,7 @@ Nguồn: Tác giả
 
 ## 2.5. Biểu đồ use case
 
-### 2.5.1. Biểu đồ use case tổng quát
-
-Hình 2.2 trình bày biểu đồ use case tổng quát, thể hiện các nhóm chức năng chính và tác nhân sử dụng chúng.
+Hình 2.2 trình bày biểu đồ use case tổng quát, thể hiện các nhóm chức năng chính và tác nhân sử dụng chúng; các hình tiếp theo chi tiết hóa use case của từng tác nhân.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-2-use-case-tong-quat.png){width=8.5cm}
@@ -227,8 +225,6 @@ Hình 2.2. Biểu đồ use case tổng quát
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
-
-### 2.5.2. Use case của lễ tân
 
 Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3). Use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ. Việc gộp hai hồ sơ trùng không hoàn tác được nên được giao cho quản trị viên (Hình 2.5).
 
@@ -244,9 +240,7 @@ Hình 2.3. Biểu đồ use case của lễ tân
 Nguồn: Tác giả
 :::
 
-### 2.5.3. Use case của bác sĩ
-
-Hình 2.4 mô tả các use case lâm sàng. Kê đơn luôn bao gồm bước kiểm tra dị ứng thuốc; đóng phiên khám luôn bao gồm việc trừ vật tư đã dùng.
+Hình 2.4 mô tả các use case lâm sàng của bác sĩ. Kê đơn luôn bao gồm bước kiểm tra dị ứng thuốc; đóng phiên khám luôn bao gồm việc trừ vật tư đã dùng.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-4-use-case-bac-si.png){width=8.5cm}
@@ -259,8 +253,6 @@ Hình 2.4. Biểu đồ use case của bác sĩ
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
-
-### 2.5.4. Use case của quản trị viên
 
 Hình 2.5 trình bày các use case của quản trị viên: quản lý người dùng và phân quyền, dịch vụ và bảng giá, bác sĩ và lịch làm, lương, chi phí, vật tư; xem bảng điều khiển, báo cáo và nhật ký kiểm toán; hoàn tiền, hủy hóa đơn và gộp hồ sơ bệnh nhân trùng.
 
@@ -275,8 +267,6 @@ Hình 2.5. Biểu đồ use case của quản trị viên
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
-
-### 2.5.5. Use case của bệnh nhân
 
 Bệnh nhân không có tài khoản. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc liên kết có mã bí mật gửi riêng tới bệnh nhân (Hình 2.6).
 
