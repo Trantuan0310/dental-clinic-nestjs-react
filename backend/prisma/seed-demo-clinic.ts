@@ -853,23 +853,28 @@ async function main() {
     for (let m = 0; m <= MONTHS; m++) {
       const month = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + m, 5));
       if (month > today) break;
-      const items: Array<[string, number]> = [
-        ['Tiền thuê mặt bằng tháng', 25_000_000],
-        ['Tiền điện tháng', randInt(4, 7) * 1_000_000],
-        ['Tiền nước, internet tháng', randInt(8, 15) * 100_000],
-        ['Quảng cáo Facebook/Google tháng', randInt(3, 8) * 1_000_000],
-        ['Mua vật tư tiêu hao', randInt(5, 15) * 1_000_000],
+      // Each item goes to the category it belongs to (a random one made the
+      // expense list read "electricity bill · Medicine").
+      const items: Array<[string, number, string]> = [
+        ['Tiền thuê mặt bằng tháng', 25_000_000, 'Thuê mặt bằng'],
+        ['Tiền điện tháng', randInt(4, 7) * 1_000_000, 'Điện nước'],
+        ['Tiền nước, internet tháng', randInt(8, 15) * 100_000, 'Internet & điện thoại'],
+        ['Quảng cáo Facebook/Google tháng', randInt(3, 8) * 1_000_000, 'Marketing & quảng cáo'],
+        ['Mua vật tư tiêu hao', randInt(5, 15) * 1_000_000, 'Vật tư tiêu hao'],
       ];
-      for (const [desc, amount] of items) {
+      for (const [desc, amount, catName] of items) {
         n++;
         await prisma.expense.create({
           data: {
             code: `EXP-${String(n).padStart(5, '0')}`,
             amount: new Prisma.Decimal(amount),
             description: `${desc} ${month.getUTCMonth() + 1}/${month.getUTCFullYear()}`,
-            expenseDate: new Date(month.getTime() + randInt(0, 20) * DAY_MS),
+            // Never after today: a future expense date reads as a typo.
+            expenseDate: new Date(
+              Math.min(month.getTime() + randInt(0, 20) * DAY_MS, today.getTime()),
+            ),
             status: 'APPROVED',
-            categoryId: pick(cats).id,
+            categoryId: (cats.find(c => c.name === catName) ?? pick(cats)).id,
             notes: NOTE,
             createdBy: admin.id,
           },

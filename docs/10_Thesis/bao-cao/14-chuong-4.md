@@ -687,7 +687,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.9. Người dùng, phân quyền, nhật ký và thông báo
 
-Quản trị viên quản lý vai trò và tích chọn từng quyền cho vai trò (Hình 4.38). Nhật ký kiểm toán (Hình 4.39) cho phép lọc theo người thực hiện, loại hành động, khoảng thời gian và xem chi tiết từng thay đổi.
+Quản trị viên quản lý vai trò và tích chọn từng quyền cho vai trò (Hình 4.38). Nhật ký kiểm toán (Hình 4.39) cho phép lọc theo loại hành động, loại đối tượng, khoảng ngày và tìm theo người thực hiện, xem chi tiết từng thay đổi và xuất CSV. Hình minh họa bộ lọc các thao tác trên hóa đơn trong ngày 15/11/2026: lễ tân phát hành hóa đơn, khoản chuyển khoản được hệ thống tự ghi nhận, và một chuyển khoản khác bị đưa vào danh sách cần xử lý.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-phan-quyen.png){width=15cm}

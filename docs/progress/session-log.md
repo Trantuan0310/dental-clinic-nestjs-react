@@ -154,3 +154,5 @@
 - Locales vi: sửa thêm 'clinical note', 'status', 'AI summary' (giữ từ vay quen: check-in, online, link, Dashboard).
 - Đối chiếu mô tả ↔ ảnh Chương 4: sửa mô tả Hình 4.27 (kho: nút Sắp hết, mục Nên nhập), 4.34 (thẻ thật: bệnh nhân, lịch hẹn, doanh số, đã thu; không có công nợ), 4.35 (3 mức đánh giá), 4.32 (mẫu khám nhanh).
 - Sửa mô tả Hình 4.4 (3 thẻ thật), 4.5 (các thao tác điều phối). Lỗi giao diện: trang Yêu cầu đặt lịch của lễ tân hiện 'Bạn đã đồng ý giờ mới' (chuỗi của khách) → thêm nhãn bookingStateStaff_PATIENT_ACCEPTED 'Khách đã đồng ý giờ mới' (vi/en); chụp lại Hình 4.7.
+- Nhật ký kiểm toán: thêm nhãn vi/en cho 24 mã hành động và 6 loại đối tượng (AuditLogsPage.tsx, uiWorkforce); chụp lại Hình 4.39 (lọc đối tượng Hóa đơn ngày 15/11), sửa mô tả.
+- Seed demo chi phí: gắn danh mục theo tên (trước chọn ngẫu nhiên) và không để ngày chi ở tương lai; cập nhật dữ liệu demo cục bộ, chụp lại Hình 4.33. tsc/eslint sạch (backend + frontend).
