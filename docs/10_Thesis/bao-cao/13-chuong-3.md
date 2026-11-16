@@ -530,18 +530,20 @@ Bảng điều khiển cho quản lý hiển thị các con số tổng (lịch 
 Bảng 3.5. Các chỉ số vận hành trên bảng điều khiển
 :::
 
-| Chỉ số | Cách tính | Mục tiêu mặc định |
-|---|---|---|
-| Tỷ lệ vắng mặt | Lịch vắng mặt ÷ lịch đã đến hạn (không tính lịch phòng khám tự hủy) | ≤ 5% |
-| Tỷ lệ đặt lịch tiếp | Lượt khám xong mà bệnh nhân có lịch hẹn sau đó ÷ lượt khám xong | ≥ 85% |
-| Tỷ lệ chấp nhận kế hoạch | Kế hoạch được đồng ý ÷ kế hoạch đã báo giá trong kỳ | ≥ 75% |
-| Thời gian chờ trung vị | Trung vị khoảng từ giờ hẹn (hoặc giờ check-in nếu đến muộn) đến lúc bắt đầu khám | ≤ 15 phút |
-| Tỷ lệ hủy sát giờ | Lịch khách hủy trước giờ hẹn dưới 24 giờ ÷ tổng lịch | ≤ 5% |
-| Tỷ lệ thu | Đã thu ÷ doanh thu điều trị của kỳ | ≥ 95% |
+| Chỉ số | Cách tính | Mục tiêu mặc định | Ngưỡng chấp nhận |
+|---|---|---|---|
+| Tỷ lệ vắng mặt | Lịch vắng mặt ÷ lịch đã đến hạn (không tính lịch phòng khám tự hủy) | ≤ 5% | ≤ 10% |
+| Tỷ lệ đặt lịch tiếp | Lượt khám xong mà bệnh nhân có lịch hẹn sau đó ÷ lượt khám xong | ≥ 85% | ≥ 70% |
+| Tỷ lệ chấp nhận kế hoạch | Kế hoạch được đồng ý ÷ kế hoạch đã báo giá trong kỳ | ≥ 75% | ≥ 60% |
+| Thời gian chờ trung vị | Trung vị khoảng từ giờ hẹn (hoặc giờ check-in nếu đến muộn) đến lúc bắt đầu khám | ≤ 15 phút | ≤ 30 phút |
+| Tỷ lệ hủy sát giờ | Lịch khách hủy trước giờ hẹn dưới 24 giờ ÷ tổng lịch | ≤ 5% | ≤ 10% |
+| Tỷ lệ thu | Đã thu ÷ doanh thu điều trị của kỳ | ≥ 95% | ≥ 85% |
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
+
+Mỗi chỉ số được tô ba mức: đạt mục tiêu, trong ngưỡng chấp nhận, hoặc dưới ngưỡng cần chú ý; quản trị viên chỉnh được cả hai mức trong phần cài đặt mà không phải sửa mã.
 
 Ngoài ra, báo cáo gồm doanh thu theo kỳ, theo bác sĩ, theo dịch vụ; tuổi nợ; bản đồ nhiệt công suất ghế theo giờ trong tuần; và phễu hành trình bệnh nhân từ đặt lịch tới thanh toán đủ và đặt lịch tiếp.
 

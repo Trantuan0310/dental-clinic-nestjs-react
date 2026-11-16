@@ -137,3 +137,4 @@
 - Báo cáo: đổi "Sổ đồng ý" về "Sổ đồng thuận" cho khớp tên trên giao diện (sửa lại lần thống nhất thuật ngữ trước).
 - Đối chiếu chữ giao diện trích trong báo cáo với locales: tất cả khớp; sửa thông báo khóa lịch thành nguyên văn 'Đang có thao tác khác trên lịch này, vui lòng thử lại' (409 CALENDAR_BUSY).
 - Đối chiếu 5 khối mã Chương 4 với nguồn: đều khớp (bỏ qua chú thích); thêm câu ở đầu 4.3 nói rõ mã được trích rút gọn, đánh dấu chỗ lược trong truy vấn lịch sử răng.
+- Đối chiếu số liệu nghiệp vụ Chương 3 (check-in, nhắc lịch, link 7 ngày/256 bit, tự lưu 1,5 s, 5 lần đăng nhập/phút, gợi ý nhập 30 ngày, mục tiêu KPI): đều khớp. Bảng 3.5 thêm cột ngưỡng chấp nhận (okAt) và câu giải thích tô 3 mức.
