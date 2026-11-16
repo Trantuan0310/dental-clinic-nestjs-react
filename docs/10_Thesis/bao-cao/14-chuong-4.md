@@ -13,10 +13,10 @@ Bảng 4.1. Môi trường và công cụ phát triển
 | Thành phần | Công cụ, phiên bản |
 |---|---|
 | Ngôn ngữ | TypeScript 5 (cả máy chủ và giao diện) |
-| Máy chủ ứng dụng | Node.js 22, NestJS 10, Prisma 5, class-validator, Passport JWT, Argon2 |
+| Máy chủ ứng dụng | Node.js (22 khi kiểm thử, 24 trong bản triển khai), NestJS 10, Prisma 5, class-validator, Zod, Passport JWT, Argon2 |
 | Cơ sở dữ liệu | PostgreSQL 16 |
-| Giao diện | React 18, Vite 5, TanStack Query 5, React Router, Tailwind CSS 3, Recharts, i18next |
-| Kiểm thử | Jest (đơn vị và API), Playwright (đầu cuối) |
+| Giao diện | React 18, Vite 5, TanStack Query 5, React Router 6, React Hook Form, Zod, Tailwind CSS 3, Recharts 3, i18next |
+| Kiểm thử | Jest 29 (đơn vị và API), Playwright (đầu cuối) |
 | Chất lượng mã | ESLint, Prettier, kiểm tra kiểu TypeScript |
 | Triển khai | Docker, Docker Compose, Nginx, máy chủ ảo Linux |
 | Quản lý mã nguồn, CI | Git, GitHub, GitHub Actions |

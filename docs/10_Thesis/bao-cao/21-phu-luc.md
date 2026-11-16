@@ -4,7 +4,7 @@
 
 ### A.1. Chạy trên máy phát triển
 
-Yêu cầu: Node.js 22 trở lên, npm, Docker (để chạy PostgreSQL). Các bước:
+Yêu cầu: Node.js 20 trở lên (khuyến nghị 22), npm, Docker (để chạy PostgreSQL). Các bước:
 
 ```bash
 git clone https://github.com/Trantuan0310/dental-clinic-nestjs-react.git
@@ -36,7 +36,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml \
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d backend web
 ```
 
-Các lần cập nhật sau chỉ cần chạy `bash scripts/deploy-vps.sh`: script sao lưu cơ sở dữ liệu, đóng gói lại, chạy migration, khởi động lại và kiểm tra phiên bản đang chạy.
+Các lần cập nhật sau chỉ cần chạy `bash scripts/deploy-vps.sh`: script kiểm tra điều kiện, sao lưu cơ sở dữ liệu (pg_dump), lấy mã mới, đóng gói lại, chạy migration, khởi động lại máy chủ API và giao diện, rồi chờ máy chủ báo hoạt động bình thường; script dừng ngay ở bước đầu tiên bị lỗi.
 
 ### A.3. Các nhóm biến môi trường
 
