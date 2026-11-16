@@ -383,6 +383,8 @@ def cover(doc):
     p._p.getparent().remove(p._p)
 
 
+GAPS = {}  # caption prefix -> lines of white space left above the figure (seen in the last render)
+PULL = {}  # caption prefix -> lines of following body text to place before the figure
 FIT = {}  # caption prefix ("Hình 3.8.") -> extra scale so the figure fits the gap above it
 
 
@@ -423,6 +425,9 @@ def fit_gaps(pdf):
         # Diagrams (chapters 1–3) may shrink by 25 %; screenshots only by 10 % to stay legible.
         if (0.75 if num[0] in '123' else 0.9) <= k < 1:
             found[f'Hình {num}'] = k
+        elif k < 1 and free > 4 * 22.5 and f'Hình {num}' not in FIT:
+            # Too tall to shrink into the gap: let the text that follows the figure fill it instead.
+            GAPS[f'Hình {num}'] = int(free / 22.5) - 1
     return found
 
 
@@ -471,8 +476,37 @@ def tighten(doc):
             sp.set(qn('w:val'), str(k))
 
 
+def pull_text(doc):
+    """Word has no floats: move the plain paragraphs that follow a figure in front of it,
+    as many as fit the white space the figure left on the previous page."""
+    for p in list(doc.paragraphs):
+        if p._p in COVER or not p._p.findall('.//' + qn('w:drawing')):
+            continue
+        budget = PULL.get(caption_after(p))
+        if not budget:
+            continue
+        el = p._p.getnext()
+        for _ in range(2):  # skip the caption and the source line
+            while el is not None and el.tag != qn('w:p'):
+                el = el.getnext()
+            el = el.getnext() if el is not None else None
+        while el is not None and el.tag == qn('w:p'):
+            st = el.find(qn('w:pPr') + '/' + qn('w:pStyle'))
+            text = ''.join(el.itertext())
+            if st is None or st.get(qn('w:val')) not in ('FirstParagraph', 'BodyText') or el.findall('.//' + qn('w:drawing')):
+                break
+            lines = len(text) // 85 + 1.3
+            if lines > budget:
+                break
+            budget -= lines
+            nxt = el.getnext()
+            p._p.addprevious(el)
+            el = nxt
+
+
 def finish(doc, pages=None):
     body = doc.element.body
+    pull_text(doc)
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
     codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
              '[[BANG]]': ' TOC \\h \\z \\t "bảng,1" '}
@@ -710,14 +744,20 @@ def locate(texts, lists):
 
 def main():
     out, lists = build()
-    for _ in range(3):  # shrink figures that leave a large gap above them
+    for _ in range(4):  # shrink figures that leave a large gap above them, or fill the gap with text
         render(out)
         new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
         new = {c: k for c, k in new.items() if c not in FIT}
-        if not new:
+        pull = {c: n for c, n in GAPS.items() if c not in PULL and c not in new}
+        GAPS.clear()
+        if not new and not pull:
             break
         FIT.update(new)
-        print('Thu nhỏ để vừa trang: ' + ', '.join(f'{c} ×{k:.2f}' for c, k in new.items()))
+        PULL.update(pull)
+        if new:
+            print('Thu nhỏ để vừa trang: ' + ', '.join(f'{c} ×{k:.2f}' for c, k in new.items()))
+        if pull:
+            print('Đưa đoạn văn lên trước hình: ' + ', '.join(f'{c} ({n} dòng)' for c, n in pull.items()))
         out, lists = build()
     for k in (-12, -14):  # pull up a last line of one or two words (condense 0.6, then 0.7 pt)
         render(out)
