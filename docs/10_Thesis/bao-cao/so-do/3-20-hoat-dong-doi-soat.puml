@@ -23,9 +23,15 @@ elseif (Hóa đơn đã phát hành và còn nợ?) then (không)
   :Cần xem xét: hóa đơn không cần thu;
 elseif (Số tiền ≤ số còn nợ?) then (không)
   :Cần xem xét: số tiền vượt nợ;
+elseif (Đã cấu hình tài khoản\nghi nhận tự động?) then (không)
+  :Cần xem xét: thiếu người ghi nhận;
 else (có)
   :Ghi thanh toán chuyển khoản\nvới request_key = bank:sepay:<mã giao dịch>;
-  :Hóa đơn chuyển PARTIAL hoặc PAID;
+  if (Ghi thành công?) then (có)
+    :Hóa đơn chuyển PARTIAL hoặc PAID;
+  else (không)
+    :Cần xem xét: ghi thanh toán lỗi;
+  endif
 endif
 :Lưu giao dịch ngân hàng\n(RECORDED hoặc NEEDS_REVIEW kèm lý do);
 if (Cần xem xét?) then (có)

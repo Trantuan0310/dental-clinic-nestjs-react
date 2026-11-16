@@ -6,7 +6,20 @@ start
 :Xem tóm tắt điều trị, đơn thuốc;
 :Xác nhận;
 |Hệ thống|
-:Bắt đầu giao dịch;
+:Bắt đầu giao dịch, khóa phiên khám;
+if (Đã có lý do khám hoặc chẩn đoán?) then (chưa)
+  |Bác sĩ|
+  :Được yêu cầu bổ sung ghi chú lâm sàng;
+  stop
+endif
+|Hệ thống|
+:Kiểm tra lại đơn thuốc với dị ứng hiện tại;
+if (Có thuốc trùng dị ứng\nmà chưa ghi lý do vượt cảnh báo?) then (có)
+  |Bác sĩ|
+  :Nhận cảnh báo, ghi lý do hoặc sửa đơn;
+  stop
+endif
+|Hệ thống|
 while (Còn vật tư của điều trị chưa trừ?) is (còn)
   :UPDATE tồn kho = tồn kho − số lượng\nWHERE tồn kho ≥ số lượng;
   if (Cập nhật được?) then (có)
@@ -20,6 +33,7 @@ while (Còn vật tư của điều trị chưa trừ?) is (còn)
 endwhile (hết)
 |Hệ thống|
 :Khóa ghi chú lâm sàng;\nphiên khám và lịch hẹn chuyển COMPLETED;
+:Tạo nhắc tái khám cho dịch vụ có chu kỳ\n(ví dụ cạo vôi sau 6 tháng);
 :Kết thúc giao dịch;
 :Phát sự kiện encounter.closed;
 fork

@@ -141,3 +141,4 @@
 - 3.4.1: bổ sung phát hiện dùng lại mã làm mới (thu hồi mọi phiên, REFRESH_REUSE_DETECTED) và khóa tài khoản 15 phút sau >5 lần sai (đã đối chiếu auth.service.ts).
 - Đối chiếu chuyển trạng thái: Hình 3.8 lịch hẹn thêm NO_SHOW→CHECKED_IN (đến muộn, có lý do) và LEFT→CHECKED_IN (hoàn tác), ghi rõ luật hủy; Hình 3.18 hóa đơn thêm hủy phiếu thu (PAID→PARTIAL→ISSUED), điều kiện hủy hóa đơn, lập lại hóa đơn; cập nhật đoạn mô tả. Kỳ lương, đăng ký ca khớp sẵn.
 - Đối chiếu chuyển trạng thái còn lại: phiên khám (điều kiện hủy/mở lại, encounter.reopen, hủy hóa đơn nháp), kế hoạch (DRAFT→ACCEPTED, PROPOSED→DRAFT khi sửa báo giá), chi phí (không tự duyệt); nhắc tái khám khớp sẵn. Vẽ lại 3 hình, bổ sung đoạn mô tả.
+- Đối chiếu biểu đồ hoạt động: đối soát (thêm NO_ACTOR, RECORD_FAILED; Bảng A.1 thêm BANK_WEBHOOK_ACTOR_EMAIL); đóng phiên khám (thêm bắt buộc lý do khám/chẩn đoán, sàng lọc dị ứng lúc đóng + PRESCRIPTION_ALLERGY_OVERRIDE, tạo nhắc tái khám trong giao dịch).

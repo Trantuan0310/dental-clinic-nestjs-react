@@ -55,7 +55,7 @@ Bảng A.1. Các nhóm biến môi trường của bản triển khai
 | Đặt lịch | `BOOKING_MIN_LEAD_MIN`, `BOOKING_MAX_DAYS_AHEAD`, `SLOT_STEP_MIN` | Quy tắc đặt lịch trực tuyến |
 | Nhắn tin | `SMS_PROVIDER`, `ZALO_PROVIDER` và khóa tương ứng | Kênh SMS, Zalo ZNS |
 | AI | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | Dịch vụ mô hình ngôn ngữ; để trống để dùng chế độ dự phòng |
-| Thanh toán | `VIETQR_BANK_BIN`, `VIETQR_ACCOUNT_NO`, `BANK_WEBHOOK_API_KEY` | Mã VietQR và webhook ngân hàng |
+| Thanh toán | `VIETQR_BANK_BIN`, `VIETQR_ACCOUNT_NO`, `BANK_WEBHOOK_API_KEY`, `BANK_WEBHOOK_ACTOR_EMAIL` | Mã VietQR, webhook ngân hàng và tài khoản đứng tên các khoản tự ghi |
 | Phòng khám | `CLINIC_NAME`, `CLINIC_PHONE`, `CLINIC_ADDRESS`, `CLINIC_HOURS`… | Thông tin hiển thị trên trang công khai |
 
 ::: {custom-style="nguồn"}

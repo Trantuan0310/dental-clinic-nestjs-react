@@ -329,7 +329,7 @@ Hình 3.15. Biểu đồ tuần tự xem lịch sử và thêm điều trị cho
 Nguồn: Tác giả
 :::
 
-Đóng phiên khám là thao tác có nhiều hệ quả nhất của bác sĩ (Hình 3.16). Việc trừ kho nằm trong cùng giao dịch với việc đóng phiên khám, bằng câu lệnh cập nhật có điều kiện "tồn kho đủ", nên chỉ cần một vật tư không đủ là toàn bộ thay đổi được hoàn tác và phiên khám vẫn mở. Sau khi giao dịch thành công, sự kiện `encounter.closed` được phát cho ba module độc lập: hóa đơn, lương và AI.
+Đóng phiên khám là thao tác có nhiều hệ quả nhất của bác sĩ (Hình 3.16). Trước khi ghi bất cứ thứ gì, hệ thống yêu cầu phiên khám đã có lý do khám hoặc chẩn đoán, và sàng lọc lại đơn thuốc với danh sách dị ứng hiện tại: một dị ứng vừa được bổ sung sau khi kê đơn vẫn bị phát hiện, bác sĩ phải sửa đơn hoặc ghi lý do vượt cảnh báo (lý do này được lưu vào nhật ký kiểm toán). Việc trừ kho nằm trong cùng giao dịch với việc đóng phiên khám, bằng câu lệnh cập nhật có điều kiện "tồn kho đủ", nên chỉ cần một vật tư không đủ là toàn bộ thay đổi được hoàn tác và phiên khám vẫn mở. Cùng giao dịch đó cũng tạo các lần nhắc tái khám cho những dịch vụ có chu kỳ. Sau khi giao dịch thành công, sự kiện `encounter.closed` được phát cho ba module độc lập: hóa đơn, lương và AI.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-19-hoat-dong-dong-phien-kham.png){width=15cm}
@@ -406,7 +406,7 @@ Hình 3.19. Biểu đồ tuần tự thanh toán VietQR và tự đối soát
 Nguồn: Tác giả
 :::
 
-Hình 3.20 chi tiết hóa các nhánh quyết định khi ngân hàng báo một giao dịch. Nguyên tắc là chỉ tự ghi khi chắc chắn: có mã hóa đơn, hóa đơn tồn tại, đang còn nợ và số tiền không vượt quá số nợ; mọi trường hợp khác đều được lưu lại với lý do cụ thể để lễ tân xử lý, không đoán bừa.
+Hình 3.20 chi tiết hóa các nhánh quyết định khi ngân hàng báo một giao dịch. Nguyên tắc là chỉ tự ghi khi chắc chắn: có mã hóa đơn, hóa đơn tồn tại, đang còn nợ, số tiền không vượt quá số nợ và đã cấu hình tài khoản hệ thống đứng tên ghi nhận; mọi trường hợp khác, kể cả khi bước ghi thanh toán bị lỗi, đều được lưu lại với lý do cụ thể để lễ tân xử lý, không đoán bừa.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-20-hoat-dong-doi-soat.png){width=15cm}
