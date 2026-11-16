@@ -300,23 +300,23 @@ Quyền trong hệ thống được định nghĩa chi tiết tới từng hành
 Bảng 2.9. Ma trận quyền tiêu biểu theo vai trò
 :::
 
-| Hành động | Mã quyền | Quản trị | Lễ tân | Bác sĩ |
-|---|---|---|---|---|
-| Tạo, sửa hồ sơ bệnh nhân | `patient.create`, `patient.update` | Có | Có | – |
-| Xem danh sách bệnh nhân | `patient.read` | Có | Có | Có |
-| Đặt lịch hẹn | `appointment.create` | Có | Có | Riêng |
-| Check-in | `appointment.check_in` | Có | Có | – |
-| Xem, gọi hàng chờ | `queue.read`, `queue.call` | Có | Có | Riêng |
-| Bắt đầu phiên khám, ghi chú lâm sàng | `encounter.start`, `clinical_note.write` | – | – | Riêng |
-| Xem hồ sơ khám đầy đủ | `encounter.read.any` / `.own` | Có | – | Riêng |
-| Ghi điều trị, sửa giá | `treatment.write`, `treatment.price_override` | – | – | Riêng |
-| Cập nhật sơ đồ răng | `dental_chart.write` | – | – | Riêng |
-| Lập kế hoạch điều trị | `treatment_plan.write` | Có | – | Riêng |
-| Phát hành hóa đơn, thu tiền | `invoice.issue`, `payment.create` | Có | Có | – |
-| Hoàn tiền, hủy hóa đơn | `payment.reverse` | Có | – | – |
-| Nhập, xuất kho | `inventory.stock_in`, `inventory.stock_out` | Có | Có | – |
-| Xem báo cáo doanh thu | `report.revenue.read` | Có | – | – |
-| Quản lý người dùng, vai trò | `user.*`, `role.upsert` | Có | – | – |
+| Hành động | Quản trị | Lễ tân | Bác sĩ |
+|---|---|---|---|
+| Tạo, sửa hồ sơ bệnh nhân | Có | Có | – |
+| Xem danh sách bệnh nhân | Có | Có | Có |
+| Đặt lịch hẹn | Có | Có | Riêng |
+| Check-in | Có | Có | – |
+| Xem, gọi hàng chờ | Có | Có | Riêng |
+| Bắt đầu phiên khám, ghi chú lâm sàng | – | – | Riêng |
+| Xem hồ sơ khám đầy đủ | Có | – | Riêng |
+| Ghi điều trị, sửa giá | – | – | Riêng |
+| Cập nhật sơ đồ răng | – | – | Riêng |
+| Lập kế hoạch điều trị | Có | – | Riêng |
+| Phát hành hóa đơn, thu tiền | Có | Có | – |
+| Hoàn tiền, hủy hóa đơn | Có | – | – |
+| Nhập, xuất kho | Có | Có | – |
+| Xem báo cáo doanh thu | Có | – | – |
+| Quản lý người dùng, vai trò | Có | – | – |
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả tổng hợp từ cấu hình phân quyền của hệ thống

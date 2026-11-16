@@ -450,19 +450,11 @@ Bảng 3.6. Rủi ro khi dùng mô hình ngôn ngữ lớn và biện pháp tron
 Nguồn: Tác giả
 :::
 
-### 3.3.12. Hồ sơ bệnh nhân, danh mục dịch vụ và các module hỗ trợ
+### 3.3.12. Hồ sơ bệnh nhân và các module hỗ trợ
 
-**Hồ sơ bệnh nhân.** Trùng hồ sơ là lỗi thường gặp nhất ở quầy lễ tân: cùng một người được tạo hai lần với cách viết tên khác nhau. Hệ thống giảm lỗi này từ lúc tạo, bằng cách gợi ý các hồ sơ có thể trùng, và cho phép gộp khi phát hiện muộn. Việc gộp chỉ được phép khi hai hồ sơ cùng họ tên (bỏ qua dấu và chữ hoa) và cùng ngày sinh, và được thực hiện trong một giao dịch khóa cả hai hồ sơ để không có lịch hẹn hay hóa đơn nào được tạo cho hồ sơ nguồn giữa chừng.
+Trùng hồ sơ là lỗi thường gặp nhất ở quầy lễ tân: cùng một người được tạo hai lần với cách viết tên khác nhau. Hệ thống gợi ý các hồ sơ có thể trùng ngay lúc tạo và cho phép quản trị viên gộp khi phát hiện muộn; việc gộp chỉ được phép khi hai hồ sơ cùng họ tên (bỏ qua dấu và chữ hoa) và cùng ngày sinh, trong một giao dịch khóa cả hai hồ sơ.
 
-**Sổ đồng thuận.** Hệ thống lưu sự đồng ý của bệnh nhân từ ba kênh. Mỗi bản ghi giữ nguyên văn nội dung và phiên bản văn bản mà bệnh nhân đã đồng ý tại thời điểm đó, nên khi văn bản thay đổi về sau vẫn biết chính xác bệnh nhân đã đồng ý với điều gì, đáp ứng yêu cầu về sự đồng ý của chủ thể dữ liệu [@nd13]. Nếu văn bản vừa được cập nhật trong lúc khách đang đọc bản cũ, hệ thống từ chối và yêu cầu tải lại, để không ghi nhận sự đồng ý với một nội dung khách chưa thấy.
-
-**Danh mục dịch vụ.** Dịch vụ là đầu vào của đặt lịch, điều trị, hóa đơn và nhắc tái khám, nên việc thêm, phân công và ngừng dịch vụ được kiểm soát chặt. Trước khi ngừng một dịch vụ, quản trị viên được xem trước ảnh hưởng; khi bật lại, hệ thống khôi phục các phân công còn hợp lệ.
-
-**Chi phí vận hành.** Các khoản chi của phòng khám (vật tư ngoài kho, điện nước, sửa chữa, đầu tư) được ghi thành phiếu chi phí đi qua quy trình duyệt, làm cơ sở cho báo cáo lợi nhuận. Người tạo phiếu không tự duyệt được phiếu của mình (tách nhiệm vụ), nên mỗi khoản chi luôn có hai người xác nhận.
-
-**Thông báo trong ứng dụng.** Bên cạnh tin nhắn gửi cho bệnh nhân, nhân viên nhận thông báo trên biểu tượng chuông về những việc cần làm. Thông báo chỉ gửi tới người có quyền xử lý việc đó và có khóa chống trùng, nên tác vụ chạy chồng hoặc khởi động lại không tạo thông báo lặp.
-
-**Ảnh trang chủ.** Quản trị viên tự cập nhật ảnh phòng khám và ảnh bác sĩ trên trang công khai. Tệp tải lên được kiểm tra cả dung lượng lẫn chữ ký nhị phân ở đầu tệp, không chỉ tin vào loại tệp do trình duyệt khai báo, để chặn tệp độc hại đội lốt ảnh.
+Sổ đồng thuận lưu nguyên văn và phiên bản văn bản mà bệnh nhân đã đồng ý, nên khi văn bản thay đổi về sau vẫn biết chính xác bệnh nhân đã đồng ý với điều gì [@nd13]. Phiếu chi phí vận hành đi qua quy trình duyệt, người tạo phiếu không tự duyệt được phiếu của mình. Thông báo trong ứng dụng chỉ gửi tới người có quyền xử lý và có khóa chống trùng; ảnh tải lên trang chủ được kiểm tra cả dung lượng lẫn chữ ký nhị phân ở đầu tệp.
 
 ## 3.4. Thiết kế bảo mật
 
@@ -528,29 +520,11 @@ Nhật ký kiểm toán được ghi trong cùng giao dịch với thay đổi m
 
 ## 3.5. Thiết kế giao diện
 
-### 3.5.1. Tổ chức màn hình theo vai trò
+Giao diện nội bộ gồm thanh điều hướng bên trái được lọc theo quyền (người dùng chỉ thấy mục mình được dùng) và thanh trên cùng có ô tìm bệnh nhân nhanh, nút trợ lý AI, chuyển ngôn ngữ và thông báo. Lễ tân làm việc chủ yếu với tổng quan ngày, lịch hẹn, hàng chờ, bệnh nhân và hóa đơn; bác sĩ với hàng chờ của mình và màn hình phiên khám; quản trị viên với bảng điều khiển, báo cáo, nhân sự, lương và phân quyền. Bệnh nhân dùng các trang công khai: trang chủ, đặt lịch, xác nhận hoặc dời lịch và tra cứu lịch sử khám.
 
-Giao diện nội bộ gồm thanh điều hướng bên trái được lọc theo quyền (người dùng chỉ thấy mục mình được dùng), thanh trên cùng có ô tìm bệnh nhân nhanh, nút trợ lý AI, chuyển ngôn ngữ, chế độ sáng/tối và thông báo. Các nhóm màn hình chính:
+Sơ đồ răng ban đầu được thiết kế dạng lưới ô vuông 16 × 2, nhưng dạng này khó nhận biết vị trí răng vì không giống hình dạng hàm thật. Phiên bản cuối vẽ hai cung răng như nhìn từ mặt nhai (Hình 1.1): mỗi răng có hình dạng theo loại răng, tô màu theo tình trạng; trẻ em có thêm cung răng sữa phía trong. Sơ đồ được đặt chung với danh sách điều trị trên một tab, bấm một răng là thấy ngay lịch sử của răng đó.
 
-- **Lễ tân:** tổng quan ngày, lịch hẹn (dạng lịch và dạng danh sách), yêu cầu đặt lịch, hàng chờ và bảng ghế, danh sách chờ, bệnh nhân, hóa đơn, chuyển khoản cần xem xét, nhắc tái khám, kho.
-- **Bác sĩ:** hàng chờ của tôi, bệnh nhân của tôi, phiên khám (ghi chú, điều trị và sơ đồ răng, đơn thuốc, tổng kết), kế hoạch điều trị, ca làm và phiếu lương của tôi.
-- **Quản trị:** bảng điều khiển, báo cáo, nhân sự, lương, dịch vụ, chi phí, người dùng và vai trò, nhật ký kiểm toán, cấu hình tin nhắn và trang chủ.
-- **Công khai:** trang chủ phòng khám, đặt lịch, tra cứu yêu cầu, trang xác nhận/dời lịch, trang tra cứu lịch sử khám.
-
-### 3.5.2. Thiết kế sơ đồ răng
-
-Sơ đồ răng ban đầu được thiết kế dạng lưới ô vuông 16 × 2. Qua thử nghiệm, dạng này khó nhận biết vị trí răng vì không giống hình dạng hàm thật. Phiên bản cuối vẽ hai cung răng như nhìn từ mặt nhai (Hình 1.1): mỗi răng có kích thước theo độ rộng thân răng trung bình, hình dạng theo loại răng (răng cửa, răng nanh, răng cối nhỏ, răng cối lớn), tô màu theo tình trạng; răng có điều trị trong phiên hiện tại được đánh dấu chấm; trẻ em có thêm cung răng sữa phía trong. Sơ đồ được gộp chung với danh sách điều trị trên một tab: bấm một răng là thấy ngay lịch sử của răng đó bên cạnh, giảm số lần chuyển màn hình của bác sĩ.
-
-### 3.5.3. Nguyên tắc chung
-
-Giao diện tuân theo các nguyên tắc khả dụng [@nielsen] và khả năng tiếp cận [@wcag]:
-
-- **Trạng thái hệ thống luôn hiển thị:** đang lưu, đã đồng bộ, đang tải.
-- **Ngăn lỗi:** chỉ hiện giờ trống; chặn số răng sai chuẩn FDI.
-- **Hoàn tác:** sơ đồ răng, check-in, đánh dấu vắng mặt.
-- **Tiếp cận:** mọi điều khiển có nhãn cho trình đọc màn hình và dùng được bằng bàn phím.
-- **Co giãn:** bố cục tự sắp xếp lại từ màn hình rộng xuống điện thoại 390 px.
-- **Hai ngôn ngữ:** toàn bộ chữ giao diện nằm trong tệp ngôn ngữ, có bản tiếng Việt và tiếng Anh.
+Giao diện tuân theo các nguyên tắc khả dụng [@nielsen] và khả năng tiếp cận [@wcag]: trạng thái hệ thống luôn hiển thị, ngăn lỗi từ đầu (chỉ hiện giờ trống, chặn số răng sai chuẩn FDI), cho phép hoàn tác, mọi điều khiển có nhãn cho trình đọc màn hình và dùng được bằng bàn phím, bố cục co giãn xuống điện thoại 390 px.
 
 ## 3.6. Kết luận chương
 
