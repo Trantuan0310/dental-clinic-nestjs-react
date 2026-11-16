@@ -9,7 +9,7 @@ participant "RolesService" as S
 participant "Kiểm tra leo thang quyền\n(assertActorHolds)" as E
 database "PostgreSQL" as DB
 QT -> FE : Tích chọn các quyền cho vai trò "Lễ tân"
-FE -> C : PATCH /roles/:id (danh sách mã quyền)
+FE -> C : PATCH /admin/roles/:id (danh sách mã quyền)
 C -> C : Kiểm tra quyền role.upsert
 C -> S : upsert(vai trò, mã quyền, người thực hiện)
 S -> E : Người thực hiện có giữ đủ\ncác quyền định cấp không?

@@ -84,15 +84,15 @@ Bảng B.1. Các API tiêu biểu
 | POST | `/appointments` | Tạo lịch hẹn (có khóa chống trùng) |
 | POST | `/appointments/:id/check-in` | Ghi nhận khách đến |
 | GET | `/appointments/waiting-queue` | Hàng chờ |
-| POST | `/encounters/start` | Bắt đầu phiên khám |
-| PUT | `/encounters/:id/clinical-note` | Lưu ghi chú lâm sàng |
-| POST | `/encounters/:id/treatments` | Thêm điều trị |
-| POST | `/encounters/:id/dental-chart/snapshot` | Lưu sơ đồ răng |
+| POST | `/medical-records/encounters/start` | Bắt đầu phiên khám |
+| PUT | `/medical-records/encounters/:id/clinical-note` | Lưu ghi chú lâm sàng |
+| POST | `/medical-records/encounters/:id/treatments` | Thêm điều trị |
+| POST | `/medical-records/encounters/:id/dental-chart/snapshot` | Lưu sơ đồ răng |
 | GET | `/patients/:id/teeth/:fdi/history` | Lịch sử điều trị một răng |
-| POST | `/encounters/:id/close` | Đóng phiên khám |
-| POST | `/invoices/:id/issue` | Phát hành hóa đơn |
-| GET | `/invoices/:id/payment-qr` | Dữ liệu mã VietQR của hóa đơn |
-| POST | `/invoices/:id/payments` | Ghi nhận thanh toán |
+| POST | `/medical-records/encounters/:id/close` | Đóng phiên khám |
+| POST | `/billing/invoices/:id/issue` | Phát hành hóa đơn |
+| GET | `/billing/invoices/:id/payment-qr` | Dữ liệu mã VietQR của hóa đơn |
+| POST | `/billing/invoices/:id/payments` | Ghi nhận thanh toán |
 | POST | `/webhooks/bank/sepay` | Ngân hàng báo giao dịch chuyển khoản |
 | POST | `/patients/:id/history-link` | Gửi đường dẫn tra cứu lịch sử cho bệnh nhân |
 | POST | `/public/patient-history/request` | Bệnh nhân xin đường dẫn bằng số điện thoại |

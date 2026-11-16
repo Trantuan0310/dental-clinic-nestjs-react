@@ -19,7 +19,7 @@ note right of DB
   hoặc cùng bị hủy: không có thay đổi
   nào mà không có nhật ký
 end note
-QT -> AC : GET /audit-logs?người thực hiện=…&hành động=…&từ ngày=…
+QT -> AC : GET /admin/audit-logs?người thực hiện=…&hành động=…&từ ngày=…
 AC -> AC : Kiểm tra quyền system.audit.read
 AC -> DB : Truy vấn có lọc, phân trang
 AC --> QT : Danh sách và chi tiết trước/sau

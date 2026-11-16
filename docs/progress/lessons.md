@@ -87,3 +87,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Khoảng trắng do hình cao bị đẩy trang: thu nhỏ có giới hạn tự động tốt hơn sửa tay từng hình; ảnh chụp màn hình không được thu quá 10% vì chữ UI đã nhỏ.
 - Ảnh chụp màn hình có dữ liệu theo ngày: kiểm tra ảnh không trống (chụp vào ngày có dữ liệu, không phải Chủ nhật).
 - Thống nhất thuật ngữ trong báo cáo phải theo nhãn thật trên giao diện (grep locales) trước khi đổi, không theo số lần xuất hiện.
+- Đường dẫn API trong tài liệu: kiểm bằng script so với @Controller prefix + decorator, vì dễ quên tiền tố controller.

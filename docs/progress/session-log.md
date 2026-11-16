@@ -146,3 +146,4 @@
 - Đối chiếu biểu đồ: kho (sửa phiếu nhập: số lượng, lý do, chứng từ; không có đơn giá/nhà cung cấp), gộp hồ sơ (khớp), đồng thuận (thêm kiểm tra phiên bản thông báo cho cả 3 kênh, đổi tên Sổ đồng thuận).
 - Đối chiếu biểu đồ: danh mục (thêm ràng buộc 5 phút, giá/miễn phí, ngày phân công không ở quá khứ), thông báo (thêm loại giờ trống danh sách chờ), ảnh trang chủ khớp. Đã soát hết biểu đồ hoạt động/trạng thái Chương 3.
 - Soát biểu đồ tuần tự: đặt lịch trực tuyến (thêm nhánh khách đồng ý → lễ tân xác nhận → CONFIRMED, khách từ chối → PENDING_REVIEW, hết hạn); tra cứu lịch sử, trợ lý AI (4 bước, 9 công cụ) khớp.
+- Đối chiếu mọi đường dẫn API trong báo cáo/biểu đồ với route thật (script quét @Controller+@Get/Post…): sửa tiền tố /medical-records/encounters, /billing/invoices, /admin/roles, /admin/audit-logs ở 4 hình và Bảng B.1. Biểu đồ đặt lịch tại quầy, phân quyền khớp.

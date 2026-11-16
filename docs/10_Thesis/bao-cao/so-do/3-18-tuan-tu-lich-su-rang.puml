@@ -24,7 +24,7 @@ FE --> BS : Khung chi tiết bên cạnh sơ đồ
 BS -> FE : "Thêm điều trị cho răng này"
 FE --> BS : Hộp thoại mở sẵn răng 37
 BS -> FE : Chọn dịch vụ, vật tư, Lưu
-FE -> C : POST /encounters/:id/treatments\n(toothNumbers: [37])
+FE -> C : POST /medical-records/encounters/:id/treatments\n(toothNumbers: [37])
 C -> S : Kiểm tra treatment.write, phiên còn mở,\nđúng bác sĩ khám; giá theo bảng giá
 S -> DB : INSERT treatment, treatment_inventory_usages
 S --> FE : 201
