@@ -23,6 +23,9 @@ const ROUTE_LABELS: Record<string, string> = {
   '/my-appointments': 'mySchedule',
   '/dispatch': 'dispatch',
   '/booking-requests': 'bookingRequests',
+  '/waitlist': 'waitlist',
+  '/appointment-links': 'appointments',
+  '/appointment-links/reschedule-requests': 'rescheduleRequests',
   '/recalls': 'recalls',
   '/pending-treatments': 'pendingTreatments',
   '/today': 'today',
@@ -43,6 +46,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/billing/invoices': 'invoices',
   '/payroll': 'payroll',
   '/payroll/config': 'payrollConfig',
+  '/payroll/periods': 'payrollPeriods',
   '/payroll/compensations': 'compensation',
   '/payroll/shifts/approval': 'shiftApproval',
   '/my-payroll': 'myPayroll',
@@ -68,6 +72,7 @@ const ROUTE_LABELS: Record<string, string> = {
   // fell back to the parent label and rendered "Quản trị / Quản trị".
   '/admin/audit': 'auditLog',
   '/admin/messages': 'messages',
+  '/admin/consents': 'consentLedger',
   '/admin/shifts/pending': 'shiftApproval',
 };
 

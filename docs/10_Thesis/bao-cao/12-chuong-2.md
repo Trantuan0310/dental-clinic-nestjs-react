@@ -91,7 +91,7 @@ Bảng 2.3. Yêu cầu chức năng phân hệ quản lý bệnh nhân
 | BN-01 | Tạo, xem, sửa hồ sơ bệnh nhân: họ tên, ngày sinh, giới tính, số điện thoại, người liên hệ (bắt buộc với trẻ em), địa chỉ, nghề nghiệp, tiền sử dị ứng, bệnh mạn tính. Hệ thống tự cấp mã bệnh nhân. |
 | BN-02 | Tìm kiếm nhanh theo tên, mã, số điện thoại; gợi ý hồ sơ có thể trùng khi tạo mới. |
 | BN-03 | Gộp hai hồ sơ trùng, giữ lại toàn bộ lịch sử; xóa mềm và khôi phục hồ sơ. |
-| BN-04 | Xem trên một màn hình: thông tin, lịch hẹn, các phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng ý điều trị. |
+| BN-04 | Xem trên một màn hình: thông tin, lịch hẹn, các phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng thuận điều trị. |
 | BN-05 | Gửi cho bệnh nhân đường dẫn bảo mật để tự tra cứu lịch sử khám. |
 
 ::: {custom-style="nguồn"}

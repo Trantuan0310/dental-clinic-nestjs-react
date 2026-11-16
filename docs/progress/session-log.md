@@ -133,3 +133,5 @@
 - Ảnh chụp Chương 4: cắt thanh menu trái (448 px) ở 38 ảnh nội bộ (giữ Hình 4.4 đầy đủ) và cắt phần trống phía dưới 9 ảnh; thêm câu giải thích ở đầu 4.5. Chữ giao diện khi in to hơn ~18%. Báo cáo 174 trang, Kết luận = 142. Ảnh gốc chưa cắt có trong lịch sử git.
 - Đối chiếu Phụ lục A và Bảng 4.1 với mã: Node ≥20 (engines), CI Node 22, Docker Node 24; mô tả đúng các bước deploy-vps.sh; bổ sung phiên bản thư viện.
 - Thêm Hình 3.11 biểu đồ hoạt động danh sách chờ lấp giờ trống (theo waitlist.ts, inbox.service.ts, appointments.service.ts); đánh số lại Hình 3.11–3.36 → 3.12–3.37; Bảng 3.7, D.1 (LH-07), số biểu đồ hành vi 29 → 30. 175 trang, Kết luận = 143.
+- Sửa lỗi giao diện: breadcrumb thiếu nhãn cho /waitlist, /appointment-links/reschedule-requests, /payroll/periods, /admin/consents (useBreadcrumbs.ts + locales vi/en); typecheck, eslint sạch. Chụp lại Hình 4.9 (breadcrumb "Danh sách chờ").
+- Báo cáo: đổi "Sổ đồng ý" về "Sổ đồng thuận" cho khớp tên trên giao diện (sửa lại lần thống nhất thuật ngữ trước).

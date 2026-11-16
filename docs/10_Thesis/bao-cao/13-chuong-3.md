@@ -45,7 +45,7 @@ Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
 | booking | Đặt lịch trực tuyến, duyệt yêu cầu, liên kết xác nhận/dời lịch, phiếu khai trước | 39 |
 | medical-records | Phiên khám, ghi chú lâm sàng, điều trị, đơn thuốc, sơ đồ răng, mẫu khám | 22 |
 | treatment-plans | Kế hoạch điều trị, báo giá, tiến độ, lịch sử liên hệ | 13 |
-| consents | Sổ đồng ý điều trị | 6 |
+| consents | Sổ đồng thuận | 6 |
 | billing | Hóa đơn, thanh toán, hoàn tiền, VietQR, webhook ngân hàng, đối soát | 22 |
 | inventory | Vật tư, nhập xuất, kiểm kê, gợi ý nhập | 13 |
 | catalog | Danh mục dịch vụ, bảng giá, dịch vụ của từng bác sĩ | 15 |
@@ -610,7 +610,7 @@ Hình 3.29. Biểu đồ hoạt động tạo và gộp hồ sơ bệnh nhân
 Nguồn: Tác giả
 :::
 
-**Sổ đồng ý điều trị.** Hệ thống lưu sự đồng ý của bệnh nhân từ ba kênh (Hình 3.30). Mỗi bản ghi giữ nguyên văn nội dung và phiên bản văn bản mà bệnh nhân đã đồng ý tại thời điểm đó, nên khi văn bản thay đổi về sau vẫn biết chính xác bệnh nhân đã đồng ý với điều gì, đáp ứng yêu cầu về sự đồng ý của chủ thể dữ liệu [@nd13].
+**Sổ đồng thuận.** Hệ thống lưu sự đồng ý của bệnh nhân từ ba kênh (Hình 3.30). Mỗi bản ghi giữ nguyên văn nội dung và phiên bản văn bản mà bệnh nhân đã đồng ý tại thời điểm đó, nên khi văn bản thay đổi về sau vẫn biết chính xác bệnh nhân đã đồng ý với điều gì, đáp ứng yêu cầu về sự đồng ý của chủ thể dữ liệu [@nd13].
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-25-hoat-dong-dong-y.png){width=12cm}

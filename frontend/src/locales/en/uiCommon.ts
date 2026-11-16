@@ -95,6 +95,7 @@ export const en = {
     staff: 'Staff', dentists: 'Dentists', services: 'Services', shifts: 'Shifts', myAccount: 'My account', notifications: 'Notifications',
     admin: 'Administration', users: 'Users', roles: 'Roles', homepageImages: 'Homepage images', settings: 'Settings',
     auditLog: 'Audit log', details: 'Details', id: 'ID',
+    waitlist: 'Waitlist', rescheduleRequests: 'Reschedule requests', payrollPeriods: 'Payroll periods', consentLedger: 'Consent ledger',
   },
   dialog: { cancel: 'Cancel', confirm: 'Confirm' },
   exporting: 'Exporting…',
