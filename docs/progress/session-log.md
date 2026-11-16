@@ -153,3 +153,4 @@
 - Chụp lại Hình 4.18 (đóng phiên), 4.21, 4.22 (hóa đơn), 4.30 (duyệt ca), 4.31 (kỳ lương), 4.41 (sổ đồng thuận). Để chụp 4.21/4.18 đã tạm đổi dữ liệu demo cục bộ (xóa/khôi phục payment, mở/đóng lại phiên) và khôi phục nguyên trạng; dev-local cần VIETQR_* để hiện mã QR.
 - Locales vi: sửa thêm 'clinical note', 'status', 'AI summary' (giữ từ vay quen: check-in, online, link, Dashboard).
 - Đối chiếu mô tả ↔ ảnh Chương 4: sửa mô tả Hình 4.27 (kho: nút Sắp hết, mục Nên nhập), 4.34 (thẻ thật: bệnh nhân, lịch hẹn, doanh số, đã thu; không có công nợ), 4.35 (3 mức đánh giá), 4.32 (mẫu khám nhanh).
+- Sửa mô tả Hình 4.4 (3 thẻ thật), 4.5 (các thao tác điều phối). Lỗi giao diện: trang Yêu cầu đặt lịch của lễ tân hiện 'Bạn đã đồng ý giờ mới' (chuỗi của khách) → thêm nhãn bookingStateStaff_PATIENT_ACCEPTED 'Khách đã đồng ý giờ mới' (vi/en); chụp lại Hình 4.7.
