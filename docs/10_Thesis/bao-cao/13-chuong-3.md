@@ -95,6 +95,10 @@ Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ th�
 
 Nhóm bệnh nhân và lịch hẹn (Hình 3.2) xoay quanh bảng `appointments`: mỗi lịch hẹn thuộc một bệnh nhân và một bác sĩ (bảng `users`), có thể gồm nhiều dịch vụ (`appointment_services`, lưu lại giá tại thời điểm đặt). Yêu cầu đặt lịch trực tuyến được lưu riêng trong `booking_requests` cho đến khi lễ tân duyệt. Hàng chờ (`queue_entries`), lịch làm việc (`working_schedules`), danh sách chờ (`waitlist_entries`) và nhắc tái khám (`recalls`) đều tham chiếu tới bệnh nhân hoặc lịch hẹn. Hai bảng `appointment_links` và `patient_history_links` lưu các liên kết công khai gửi cho bệnh nhân; chỉ giá trị băm SHA-256 của mã bí mật được lưu.
 
+Nhóm khám và điều trị (Hình 3.3) có bảng trung tâm `encounters` (phiên khám), quan hệ một – một với lịch hẹn. Mỗi phiên khám có một ghi chú lâm sàng (kèm các ghi bổ sung sau khi khóa), nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB), tối đa một đơn thuốc và một bản chụp sơ đồ răng (`dental_chart_snapshots`). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
+
+Thiết kế **mỗi phiên khám một bản chụp sơ đồ răng** (thay vì một sơ đồ duy nhất bị ghi đè) là quyết định quan trọng: tình trạng răng tại từng thời điểm được giữ nguyên, nhờ đó có thể xem lịch sử một chiếc răng qua các lần khám, đáp ứng yêu cầu không ghi đè hồ sơ [@tt46]. Sơ đồ hiện tại của bệnh nhân là bản chụp của phiên khám gần nhất không bị hủy.
+
 ::: {custom-style="Ảnh"}
 ![](hinh/3-3-erd-kham-dieu-tri.png){width=12cm}
 :::
@@ -106,10 +110,6 @@ Hình 3.3. Sơ đồ thực thể liên kết nhóm khám và điều trị
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
-
-Nhóm khám và điều trị (Hình 3.3) có bảng trung tâm `encounters` (phiên khám), quan hệ một – một với lịch hẹn. Mỗi phiên khám có một ghi chú lâm sàng (kèm các ghi bổ sung sau khi khóa), nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB), tối đa một đơn thuốc và một bản chụp sơ đồ răng (`dental_chart_snapshots`). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
-
-Thiết kế **mỗi phiên khám một bản chụp sơ đồ răng** (thay vì một sơ đồ duy nhất bị ghi đè) là quyết định quan trọng: tình trạng răng tại từng thời điểm được giữ nguyên, nhờ đó có thể xem lịch sử một chiếc răng qua các lần khám, đáp ứng yêu cầu không ghi đè hồ sơ [@tt46]. Sơ đồ hiện tại của bệnh nhân là bản chụp của phiên khám gần nhất không bị hủy.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-4-erd-hoa-don.png){width=10cm}
@@ -125,6 +125,8 @@ Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ th�
 
 Nhóm hóa đơn (Hình 3.4): mỗi hóa đơn lập từ một phiên khám, gồm các dòng (`invoice_items`) sao chép từ điều trị; thanh toán (`payments`) có khóa `request_key` duy nhất theo hóa đơn để một lần bấm hai lần hoặc một giao dịch ngân hàng báo hai lần cũng chỉ ghi một khoản. Hóa đơn lưu sẵn các tổng đã thu, đã hoàn, đã điều chỉnh và số còn nợ để báo cáo nhanh. Giao dịch ngân hàng (`bank_transactions`) lưu toàn bộ dữ liệu ngân hàng gửi về cùng kết quả đối soát.
 
+Nhóm người dùng và phân quyền (Hình 3.5) theo mô hình RBAC [@rbac]: người dùng – vai trò – quyền với hai bảng nối `user_roles`, `role_permissions`. Thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập. Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
+
 ::: {custom-style="Ảnh"}
 ![](hinh/3-5-erd-nhan-su-kho.png){width=15cm}
 :::
@@ -136,8 +138,6 @@ Hình 3.5. Sơ đồ thực thể liên kết nhóm người dùng, phân quyề
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
-
-Nhóm người dùng và phân quyền (Hình 3.5) theo mô hình RBAC [@rbac]: người dùng – vai trò – quyền với hai bảng nối `user_roles`, `role_permissions`. Thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập. Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
 
 ## 3.3. Đặc tả và thiết kế các chức năng chính
 
@@ -197,7 +197,7 @@ Nguồn: Tác giả
 Khi khách đến, lễ tân check-in và hệ thống đưa khách vào hàng chờ của bác sĩ (Hình 3.8). Check-in chỉ được thực hiện trong khung từ 15 phút trước đến 30 phút sau giờ hẹn; ngoài khung này phải có lý do ghi đè và phải trong ngày hẹn. Thứ tự hàng chờ không đơn thuần theo giờ đến: khách đến đúng giờ được xếp theo giờ hẹn, khách trễ quá 15 phút được xếp như thể đến muộn thêm 15 phút, khách vãng lai chờ sau khách có hẹn tối đa khoảng 45 phút, còn ca cấp cứu luôn được đưa lên đầu. Cách xếp này được viết thành một hàm thuần và kiểm thử bằng bảng quyết định.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-17-hoat-dong-tiep-nhan.png){width=15cm}
+![](hinh/3-17-hoat-dong-tiep-nhan.png){width=11.5cm}
 :::
 
 ::: {custom-style="hình"}
@@ -436,6 +436,8 @@ Bác sĩ đăng ký ca theo tuần, quản trị viên duyệt; hệ thống c�
 
 Vòng đời kỳ lương được thể hiện ở Hình 3.21. Khi duyệt, hệ thống tính lại lương theo dữ liệu mới nhất (ca làm, nghỉ phép, mức lương có thể vừa thay đổi); nếu kết quả khác với số người duyệt đang xem thì kỳ lương không được duyệt mà báo thay đổi để xem lại. Mỗi bước chuyển trạng thái dùng câu lệnh cập nhật có điều kiện theo trạng thái hiện tại, nên hai quản trị viên thao tác cùng lúc không ghi đè lên nhau.
 
+Lịch làm việc của bác sĩ được xây dựng từ các đăng ký ca (Hình 3.22). Mọi điều kiện được kiểm tra hai lần, khi đăng ký và khi duyệt, vì giữa hai thời điểm có thể đã phát sinh ca khác hoặc ngày nghỉ. Ca đã duyệt chỉ hủy được khi chưa có lịch hẹn nào, để không bỏ rơi khách đã đặt.
+
 ::: {custom-style="Ảnh"}
 ![](hinh/3-22-trang-thai-ky-luong.png){width=10cm}
 :::
@@ -447,8 +449,6 @@ Hình 3.21. Biểu đồ trạng thái của kỳ lương
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
-
-Lịch làm việc của bác sĩ được xây dựng từ các đăng ký ca (Hình 3.22). Mọi điều kiện được kiểm tra hai lần, khi đăng ký và khi duyệt, vì giữa hai thời điểm có thể đã phát sinh ca khác hoặc ngày nghỉ. Ca đã duyệt chỉ hủy được khi chưa có lịch hẹn nào, để không bỏ rơi khách đã đặt.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-28-trang-thai-dang-ky-ca.png){width=13cm}
@@ -585,7 +585,7 @@ Nguồn: Tác giả
 **Danh mục dịch vụ.** Dịch vụ là đầu vào của đặt lịch, điều trị, hóa đơn và nhắc tái khám, nên việc thêm, phân công và ngừng dịch vụ được kiểm soát chặt (Hình 3.28). Trước khi ngừng một dịch vụ, quản trị viên được xem trước ảnh hưởng; khi bật lại, hệ thống khôi phục các phân công còn hợp lệ.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-27-hoat-dong-danh-muc.png){width=13cm}
+![](hinh/3-27-hoat-dong-danh-muc.png){width=12cm}
 :::
 
 ::: {custom-style="hình"}

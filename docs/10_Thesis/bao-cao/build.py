@@ -383,6 +383,49 @@ def cover(doc):
     p._p.getparent().remove(p._p)
 
 
+FIT = {}  # caption prefix ("Hình 3.8.") -> extra scale so the figure fits the gap above it
+
+
+def caption_after(p):
+    """Prefix "Hình x.y." of the caption that follows an image paragraph."""
+    nxt = p._p.getnext()
+    while nxt is not None and not ''.join(nxt.itertext()).strip():
+        nxt = nxt.getnext()
+    m = re.match(r'(Hình [0-9A-Z]+\.\d+\.)', ''.join(nxt.itertext()).strip()) if nxt is not None else None
+    return m.group(1) if m else None
+
+
+def fit_gaps(pdf):
+    """Figures pushed to the next page that would fit the white space left above them
+    if shrunk a little (see the limits below): returns {caption prefix: scale}."""
+    xml = subprocess.run(['pdftotext', '-bbox', pdf, '-'], capture_output=True, text=True).stdout
+    pages = re.findall(r'<page width="[\d.]+" height="([\d.]+)">(.*?)</page>', xml, re.S)
+    cm = 28.35
+    found = {}
+    for i in range(len(pages) - 1):
+        h = float(pages[i][0])
+        words = [(float(a), float(b), w) for a, b, w in re.findall(r'yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">([^<]*)<', pages[i][1])]
+        body = [b for a, b, w in words if a > 2.5 * cm]  # skip the page number in the header
+        nxt = [(float(a), float(b), w) for a, b, w in re.findall(r'yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">([^<]*)<', pages[i + 1][1])]
+        nxt = [x for x in nxt if x[0] > 2.5 * cm]
+        if not body or not nxt or nxt[0][2] != 'Hình':
+            continue
+        cap_top = nxt[0][0]
+        num = nxt[1][2]
+        # caption + source block: from the caption to the first line after "Nguồn: ..."
+        src = [b for a, b, w in nxt if w.startswith('Nguồn')]
+        if not src:
+            continue
+        cap_block = max(b for a, b, w in nxt if a <= src[0] + 2) - cap_top
+        img_h = cap_top - 2.5 * cm - 6
+        free = h - 2.5 * cm - max(body) - 18  # room left on the page, minus spacing
+        k = (free - cap_block - 12) / img_h
+        # Diagrams (chapters 1–3) may shrink by 25 %; screenshots only by 10 % to stay legible.
+        if (0.75 if num[0] in '123' else 0.9) <= k < 1:
+            found[f'Hình {num}'] = k
+    return found
+
+
 def finish(doc, pages=None):
     body = doc.element.body
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
@@ -419,6 +462,7 @@ def finish(doc, pages=None):
                 cx, cy = int(ext.get('cx')), int(ext.get('cy'))
                 # Fit inside the text block: 15 cm wide, 21 cm tall (room for the caption).
                 k = min(1.0, Cm(15) / cx, Cm(21) / cy)
+                k *= FIT.get(caption_after(p), 1.0)
                 if k < 1.0:
                     ncx, ncy = str(int(cx * k)), str(int(cy * k))
                     ext.set('cx', ncx)
@@ -620,6 +664,15 @@ def locate(texts, lists):
 
 def main():
     out, lists = build()
+    for _ in range(3):  # shrink figures that leave a large gap above them
+        render(out)
+        new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
+        new = {c: k for c, k in new.items() if c not in FIT}
+        if not new:
+            break
+        FIT.update(new)
+        print('Thu nhỏ để vừa trang: ' + ', '.join(f'{c} ×{k:.2f}' for c, k in new.items()))
+        out, lists = build()
     pages = None
     for _ in range(3):
         new = locate(render(out), lists)
