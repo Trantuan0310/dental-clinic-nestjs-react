@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+hide footbox
 autonumber
 actor "Bác sĩ" as BS
 participant "Sơ đồ răng\n(React, SVG)" as FE

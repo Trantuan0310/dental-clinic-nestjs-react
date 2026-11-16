@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+hide footbox
 autonumber
 actor "Bệnh nhân" as BN
 participant "Trang /tra-cuu-lich-su" as FE

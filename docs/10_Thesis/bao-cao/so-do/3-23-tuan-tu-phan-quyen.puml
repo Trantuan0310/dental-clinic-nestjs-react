@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+hide footbox
 autonumber
 actor "Quản trị viên" as QT
 participant "Giao diện\nQuản lý vai trò" as FE

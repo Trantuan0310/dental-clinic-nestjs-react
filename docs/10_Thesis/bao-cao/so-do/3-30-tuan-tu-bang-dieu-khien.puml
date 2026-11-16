@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+hide footbox
 autonumber
 actor "Quản lý" as QL
 participant "Bảng điều khiển\n(React, Recharts)" as FE

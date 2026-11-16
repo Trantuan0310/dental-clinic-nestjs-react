@@ -127,3 +127,4 @@
 - Khoảng trắng lớn trước hình: dời đoạn mô tả lên trước Hình 3.3, 3.5, 3.21; build.py thêm bước fit_gaps (đọc pdftotext -bbox, thu nhỏ hình bị đẩy sang trang sau để vừa chỗ trống: sơ đồ tối đa 25%, ảnh chụp 10%). Báo cáo 166 trang, Kết luận = 134. Build giờ mất ~4–5 phút.
 - Tách ERD nhóm người dùng/phân quyền/nhật ký (Hình 3.5) khỏi nhóm nhân sự, lương, kho (Hình 3.6); đánh số lại Hình 3.6–3.34 → 3.7–3.35 ở mọi tệp. Chữ in của ERD nhân sự từ ~6 pt lên ~7,7 pt. 166 trang.
 - Hình 3.12 (VietQR): rút gọn tên đối tượng, bỏ hộp chân, chữ in ~7,3 pt.
+- Mọi sơ đồ tuần tự: hide footbox (bớt chiều cao).

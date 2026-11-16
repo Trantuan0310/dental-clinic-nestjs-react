@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+hide footbox
 autonumber
 actor "Lễ tân" as LT
 participant "Khung chat" as FE

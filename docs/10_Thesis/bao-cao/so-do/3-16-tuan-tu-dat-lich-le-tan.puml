@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+hide footbox
 autonumber
 actor "Lễ tân A" as A
 actor "Lễ tân B" as B
