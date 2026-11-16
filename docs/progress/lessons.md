@@ -88,3 +88,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Ảnh chụp màn hình có dữ liệu theo ngày: kiểm tra ảnh không trống (chụp vào ngày có dữ liệu, không phải Chủ nhật).
 - Thống nhất thuật ngữ trong báo cáo phải theo nhãn thật trên giao diện (grep locales) trước khi đổi, không theo số lần xuất hiện.
 - Đường dẫn API trong tài liệu: kiểm bằng script so với @Controller prefix + decorator, vì dễ quên tiền tố controller.
+- Chụp màn hình cho báo cáo: dev-local.sh không đặt VIETQR_*; truyền VIETQR_BANK_BIN/ACCOUNT_NO/ACCOUNT_NAME khi start, nếu không mã QR không hiện.
