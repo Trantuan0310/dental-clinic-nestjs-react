@@ -3,7 +3,7 @@
 start
 fork
   :Mỗi 2 phút: quét sự kiện mới;
-  :Yêu cầu đặt lịch trực tuyến,\nđăng ký ca chờ duyệt,\nhóa đơn nháp của phiên khám đã đóng;
+  :Yêu cầu đặt lịch trực tuyến,\nđăng ký ca chờ duyệt,\nhóa đơn nháp của phiên khám đã đóng,\ngiờ trống phù hợp danh sách chờ;
 fork again
   :7:31 sáng mỗi ngày: bản tin;
   :Nhắc tái khám cần gọi,\nvật tư dưới mức tối thiểu,\nphiên khám còn mở từ hôm trước;

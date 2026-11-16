@@ -4,11 +4,11 @@
 start
 :Tạo dịch vụ: mã, tên, nhóm, giá, thời lượng,\nchuyên môn yêu cầu, chu kỳ nhắc tái khám;
 |Hệ thống|
-:Kiểm tra mã không trùng, ghi nhật ký;
+:Kiểm tra mã không trùng, thời lượng là bội số\n5 phút, có giá hoặc đánh dấu miễn phí;\nghi nhật ký;
 |Quản trị viên|
 :Phân công bác sĩ được làm dịch vụ\n(từ ngày, đến ngày);
 |Hệ thống|
-if (Bác sĩ đang hành nghề,\ncó chuyên môn yêu cầu,\nkhông trùng khoảng phân công cũ?) then (có)
+if (Ngày bắt đầu không ở quá khứ,\nbác sĩ đang hành nghề, có chuyên môn\nyêu cầu, không trùng khoảng phân công cũ?) then (có)
   :Lưu phân công;
 else (không)
   :Từ chối, nêu lý do;
