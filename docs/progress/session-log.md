@@ -148,3 +148,4 @@
 - Soát biểu đồ tuần tự: đặt lịch trực tuyến (thêm nhánh khách đồng ý → lễ tân xác nhận → CONFIRMED, khách từ chối → PENDING_REVIEW, hết hạn); tra cứu lịch sử, trợ lý AI (4 bước, 9 công cụ) khớp.
 - Đối chiếu mọi đường dẫn API trong báo cáo/biểu đồ với route thật (script quét @Controller+@Get/Post…): sửa tiền tố /medical-records/encounters, /billing/invoices, /admin/roles, /admin/audit-logs ở 4 hình và Bảng B.1. Biểu đồ đặt lịch tại quầy, phân quyền khớp.
 - Chương 5: các ca KT trong Bảng 5.2–5.5 đều có test tương ứng trong backend/test/isolated; số kiểm thử API chính xác là 111 (99 it + 12 it.each), sửa 'khoảng 100' ở Tóm tắt, Bảng 5.1, Kết luận.
+- Đối chiếu use case với quyền thật (role_permissions): gộp hồ sơ (patient.merge) chỉ quản trị viên → chuyển use case từ Hình 2.3 sang 2.5, sửa làn Hình 3.29, văn bản Ch.2 và Ch.4. Các use case khác khớp quyền.

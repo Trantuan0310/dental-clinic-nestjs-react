@@ -230,7 +230,7 @@ Nguồn: Tác giả
 
 ### 2.5.2. Use case của lễ tân
 
-Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3). Use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ; "Gộp hồ sơ trùng" là phần mở rộng của quản lý hồ sơ khi phát hiện hai hồ sơ cùng một người.
+Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3). Use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ. Việc gộp hai hồ sơ trùng không hoàn tác được nên được giao cho quản trị viên (Hình 2.5).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-3-use-case-le-tan.png){width=12cm}
@@ -262,7 +262,7 @@ Nguồn: Tác giả
 
 ### 2.5.4. Use case của quản trị viên
 
-Hình 2.5 trình bày các use case của quản trị viên: quản lý người dùng và phân quyền, dịch vụ và bảng giá, bác sĩ và lịch làm, lương, chi phí, vật tư; xem bảng điều khiển, báo cáo và nhật ký kiểm toán; hoàn tiền, hủy hóa đơn.
+Hình 2.5 trình bày các use case của quản trị viên: quản lý người dùng và phân quyền, dịch vụ và bảng giá, bác sĩ và lịch làm, lương, chi phí, vật tư; xem bảng điều khiển, báo cáo và nhật ký kiểm toán; hoàn tiền, hủy hóa đơn và gộp hồ sơ bệnh nhân trùng.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-5-use-case-quan-tri.png){width=12cm}

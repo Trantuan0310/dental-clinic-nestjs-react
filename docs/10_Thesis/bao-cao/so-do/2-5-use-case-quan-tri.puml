@@ -13,6 +13,7 @@ usecase "Xem báo cáo\ndoanh thu, công nợ" as h
 usecase "Xem nhật ký kiểm toán" as i
 usecase "Cấu hình tin nhắn,\nnội dung trang chủ" as j
 usecase "Hoàn tiền,\nhủy hóa đơn" as k
+usecase "Gộp hồ sơ\nbệnh nhân trùng" as l
 a -- QT
 b -- QT
 c -- QT
@@ -20,6 +21,7 @@ d -- QT
 e -- QT
 f -- QT
 QT -- k
+QT -- l
 QT -- j
 QT -- i
 QT -- h

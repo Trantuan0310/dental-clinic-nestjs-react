@@ -315,7 +315,7 @@ Hình 4.10. Trang hồ sơ bệnh nhân
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Khi phát hiện hai hồ sơ là cùng một người, lễ tân dùng chức năng "Gộp hồ sơ" (Hình 4.11): chọn hồ sơ chính, nhập lý do; hộp thoại nhắc rõ điều kiện gộp (cùng họ tên, cùng ngày sinh, không có phiên khám đang mở) và việc gộp không hoàn tác được.
+Khi phát hiện hai hồ sơ là cùng một người, người có quyền gộp hồ sơ (mặc định là quản trị viên) dùng chức năng "Gộp hồ sơ" (Hình 4.11): chọn hồ sơ chính, nhập lý do; hộp thoại nhắc rõ điều kiện gộp (cùng họ tên, cùng ngày sinh, không có phiên khám đang mở) và việc gộp không hoàn tác được.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-gop-ho-so.png){width=15cm}

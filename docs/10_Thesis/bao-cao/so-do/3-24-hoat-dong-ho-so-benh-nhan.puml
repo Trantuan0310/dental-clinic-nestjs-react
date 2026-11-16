@@ -18,7 +18,7 @@ if (Dữ liệu hợp lệ?\n(ngày sinh không ở tương lai, SĐT đúng d�
 endif
 :Cấp mã bệnh nhân PAT-năm-số thứ tự,\nkhóa chính UUID v7;
 :Ghi nhật ký kiểm toán;
-|Lễ tân|
+|Quản trị viên|
 if (Phát hiện về sau hai hồ sơ là một người?) then (có)
   :Chọn hồ sơ nguồn và hồ sơ đích, bấm Gộp;
   |Hệ thống|
