@@ -85,3 +85,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Đo độ bao phủ: collectCoverageFrom của backend chỉ gồm *.service.ts/*.controller.ts và loại domain/**, nên khi trích số phải nói rõ phạm vi đo.
 - Kiểm tra cỡ chữ in của hình = cỡ font × (độ rộng hiển thị pt × dpi/72) / px ảnh; sơ đồ tuần tự rộng cần maxMessageSize để không bị thu quá nhỏ.
 - Khoảng trắng do hình cao bị đẩy trang: thu nhỏ có giới hạn tự động tốt hơn sửa tay từng hình; ảnh chụp màn hình không được thu quá 10% vì chữ UI đã nhỏ.
+- Ảnh chụp màn hình có dữ liệu theo ngày: kiểm tra ảnh không trống (chụp vào ngày có dữ liệu, không phải Chủ nhật).

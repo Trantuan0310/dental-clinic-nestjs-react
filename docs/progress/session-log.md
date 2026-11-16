@@ -129,3 +129,4 @@
 - Hình 3.12 (VietQR): rút gọn tên đối tượng, bỏ hộp chân, chữ in ~7,3 pt.
 - Mọi sơ đồ tuần tự: hide footbox (bớt chiều cao).
 - Tách ERD Hình 3.3 thành phiên khám (3.3) và điều trị/kế hoạch (3.4); đánh số lại Hình 3.4–3.35 → 3.5–3.36. Không còn sơ đồ chữ dưới ~6,5 pt. 167 trang, Kết luận = 135.
+- Hình 4.6 chụp lại (ảnh cũ chụp ngày Chủ nhật, lịch trống) ở ngày 17/11 có 13 lịch hẹn; sửa mô tả: lịch phân biệt bác sĩ bằng chấm màu và bộ lọc, có ngày/tuần/tháng.

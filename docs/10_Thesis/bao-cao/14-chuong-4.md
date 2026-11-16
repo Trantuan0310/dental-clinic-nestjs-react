@@ -219,7 +219,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.2. Lễ tân: tiếp nhận và điều phối trong ngày
 
-Màn hình "Hôm nay" (Hình 4.4) tóm tắt số lịch, số khách chưa đến, đã đến, đang khám và danh sách lịch hẹn trong ngày theo giờ, mỗi lịch có nút check-in. Màn hình điều phối (Hình 4.5) hiển thị từng bác sĩ cùng khách đang khám và hàng chờ của bác sĩ đó; lễ tân có thể chuyển khách sang bác sĩ khác, ưu tiên cấp cứu hoặc ghi nhận khách về trước. Lịch hẹn (Hình 4.6) hiển thị theo ngày hoặc tuần, mỗi cột một bác sĩ.
+Màn hình "Hôm nay" (Hình 4.4) tóm tắt số lịch, số khách chưa đến, đã đến, đang khám và danh sách lịch hẹn trong ngày theo giờ, mỗi lịch có nút check-in. Màn hình điều phối (Hình 4.5) hiển thị từng bác sĩ cùng khách đang khám và hàng chờ của bác sĩ đó; lễ tân có thể chuyển khách sang bác sĩ khác, ưu tiên cấp cứu hoặc ghi nhận khách về trước. Lịch hẹn (Hình 4.6) hiển thị theo ngày, tuần hoặc tháng; mỗi lịch có chấm màu theo bác sĩ và có thể lọc riêng từng bác sĩ, bấm vào khung giờ trống để tạo lịch mới.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-hom-nay.png){width=15cm}
@@ -250,7 +250,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ::: {custom-style="hình"}
-Hình 4.6. Lịch hẹn theo ngày, chia cột theo bác sĩ
+Hình 4.6. Lịch hẹn theo ngày của các bác sĩ
 :::
 
 ::: {custom-style="nguồn"}
