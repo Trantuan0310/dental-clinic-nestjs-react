@@ -13,7 +13,7 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 | Tầng | Công cụ | Số lượng | Phạm vi kiểm tra |
 |---|---|---|---|
 | Đơn vị (máy chủ) | Jest [@jest] | 1.788 ca, 89 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
-| API trên PostgreSQL thật | Jest + Supertest | khoảng 100 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
+| API trên PostgreSQL thật | Jest + Supertest | 111 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
 | Đầu cuối (E2E) | Playwright [@playwright] | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
 
