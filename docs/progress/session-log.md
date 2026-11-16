@@ -172,3 +172,4 @@
 - Bản cuối: build.py thêm `pull_text` (hình bị đẩy sang trang sau mà không co vừa → đưa các đoạn văn thường phía sau hình lên trước để lấp khoảng trắng; dừng ở tiêu đề/bảng/hình); use case 8,5 cm, không tự co thêm; gộp 2.5.1–2.5.5 thành một mục 2.5 để chữ chảy quanh hình. Còn 118 trang.
 - Soát lời văn Ch.1–3: sửa 1.3.3 (loại biểu đồ còn dùng), mở đầu Ch.3/Ch.4, tách đoạn kết luận Ch.2, Ch.5 và 3.3.3; SMS nhắc lịch không kèm liên kết (đối chiếu messaging.service) — sửa 3.3.6 và sơ đồ nhắc lịch.
 - Chọn lọc tài liệu tham khảo theo yêu cầu: 42 → 20 (7 nghiệp vụ/pháp lý: TT46, NĐ13, ISO 3950, Open Dental, Dentrix, SimlyDent, VietQR; 13 công nghệ). Bỏ trích dẫn tài liệu công cụ phụ; cohn/pressman/fowler_layer gộp về Sommerville.
+- Co chữ dòng cuối ngắn giảm còn 0,5 rồi 0,6 pt (0,7 pt trông chật, đúng gợi ý GVHD 0,5–0,6); trả lại trích dẫn Cohn cho mô hình kim tự tháp kiểm thử (21 tài liệu).

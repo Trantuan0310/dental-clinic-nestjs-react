@@ -4,7 +4,7 @@ Chương này trình bày chiến lược kiểm thử, kết quả kiểm thử
 
 ## 5.1. Chiến lược kiểm thử
 
-Kiểm thử được tổ chức theo mô hình kim tự tháp [@sommerville]: nhiều kiểm thử đơn vị chạy nhanh ở đáy, ít hơn ở tầng API trên cơ sở dữ liệu thật, và một số kịch bản đầu cuối trên trình duyệt ở đỉnh (Bảng 5.1). Mọi tầng đều chạy tự động trong quy trình tích hợp liên tục (Bảng 4.3) trước khi một thay đổi được gộp vào nhánh chính.
+Kiểm thử được tổ chức theo mô hình kim tự tháp [@cohn]: nhiều kiểm thử đơn vị chạy nhanh ở đáy, ít hơn ở tầng API trên cơ sở dữ liệu thật, và một số kịch bản đầu cuối trên trình duyệt ở đỉnh (Bảng 5.1). Mọi tầng đều chạy tự động trong quy trình tích hợp liên tục (Bảng 4.3) trước khi một thay đổi được gộp vào nhánh chính.
 
 ::: {custom-style="bảng"}
 Bảng 5.1. Các tầng kiểm thử của hệ thống

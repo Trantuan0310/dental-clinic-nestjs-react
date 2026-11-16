@@ -759,7 +759,7 @@ def main():
         if pull:
             print('Đưa đoạn văn lên trước hình: ' + ', '.join(f'{c} ({n} dòng)' for c, n in pull.items()))
         out, lists = build()
-    for k in (-12, -14):  # pull up a last line of one or two words (condense 0.6, then 0.7 pt)
+    for k in (-10, -12):  # pull up a last line of one or two words (condense 0.5, then 0.6 pt)
         render(out)
         tails = short_tails(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
         tails = [t for t in tails if TIGHT.get(t, 0) > k]

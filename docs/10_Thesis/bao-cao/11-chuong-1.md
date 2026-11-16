@@ -182,7 +182,7 @@ Tuy nhiên, đưa LLM vào phần mềm y tế đặt ra ba rủi ro: mô hình 
 
 ### 1.9.1. Chiến lược kiểm thử
 
-Đồ án áp dụng mô hình kim tự tháp kiểm thử [@sommerville]: nhiều kiểm thử đơn vị nhanh ở đáy, ít hơn kiểm thử tích hợp ở giữa và một số kịch bản đầu cuối ở đỉnh. Cụ thể:
+Đồ án áp dụng mô hình kim tự tháp kiểm thử [@cohn]: nhiều kiểm thử đơn vị nhanh ở đáy, ít hơn kiểm thử tích hợp ở giữa và một số kịch bản đầu cuối ở đỉnh. Cụ thể:
 
 - **Kiểm thử đơn vị** bằng Jest cho từng dịch vụ và quy tắc nghiệp vụ, cơ sở dữ liệu được giả lập.
 - **Kiểm thử API trên PostgreSQL thật:** chạy toàn bộ migration trên một cơ sở dữ liệu sạch rồi gọi API thật, phát hiện lỗi mà kiểm thử giả lập bỏ sót (ràng buộc, giao dịch, truy vấn sai).
