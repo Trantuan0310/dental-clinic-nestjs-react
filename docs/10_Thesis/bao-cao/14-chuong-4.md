@@ -168,102 +168,78 @@ Hình 4.4. Lịch hẹn theo ngày của các bác sĩ
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Màn hình điều phối (Hình 4.5) hiển thị hàng chờ của từng bác sĩ, mỗi khách kèm mức ưu tiên và thời gian đã chờ. Lễ tân có thể gọi, bỏ qua, đánh dấu cấp cứu, chuyển khách sang bác sĩ khác, ghi nhận khách về trước, hoàn tác check-in, hoặc chuyển toàn bộ lịch trong ngày sang bác sĩ khác khi một bác sĩ vắng.
-
-::: {custom-style="Ảnh"}
-![](hinh/4-lt-bang-ghe.png){width=15cm}
-:::
-
-::: {custom-style="hình"}
-Hình 4.5. Màn hình điều phối hàng chờ theo bác sĩ
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
+Màn hình điều phối hiển thị hàng chờ của từng bác sĩ, mỗi khách kèm mức ưu tiên và thời gian đã chờ. Lễ tân có thể gọi, bỏ qua, đánh dấu cấp cứu, chuyển khách sang bác sĩ khác, ghi nhận khách về trước, hoàn tác check-in, hoặc chuyển toàn bộ lịch trong ngày sang bác sĩ khác khi một bác sĩ vắng.
 
 ### 4.5.3. Bác sĩ khám và điều trị theo răng
 
-Hồ sơ bệnh nhân (Hình 4.6) gom trên một trang thông tin cá nhân, tiền sử, dị ứng và các thẻ lịch hẹn, phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng thuận.
+Hồ sơ bệnh nhân (Hình 4.5) gom trên một trang thông tin cá nhân, tiền sử, dị ứng và các thẻ lịch hẹn, phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng thuận.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-ho-so-benh-nhan.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.6. Trang hồ sơ bệnh nhân
+Hình 4.5. Trang hồ sơ bệnh nhân
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Tab "Điều trị & sơ đồ răng" (Hình 4.7) là màn hình chính của bác sĩ. Sơ đồ hai cung răng hiển thị tình trạng hiện tại: răng 12, 16, 37, 46, 48 đã hàn (xanh), răng 38 đã nhổ (nét đứt). Khi bác sĩ bấm răng 37, khung bên phải hiện tình trạng, ghi chú và hai lần điều trị trước của răng này, kèm ngày, bác sĩ thực hiện và liên kết mở lại phiên khám cũ.
+Tab "Điều trị & sơ đồ răng" (Hình 4.6) là màn hình chính của bác sĩ. Sơ đồ hai cung răng hiển thị tình trạng hiện tại: răng 12, 16, 37, 46, 48 đã hàn (xanh), răng 38 đã nhổ (nét đứt). Khi bác sĩ bấm răng 37, khung bên phải hiện tình trạng, ghi chú và hai lần điều trị trước của răng này, kèm ngày, bác sĩ thực hiện và liên kết mở lại phiên khám cũ.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-lich-su-rang.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.7. Chọn răng 37 trên sơ đồ để xem lịch sử điều trị
+Hình 4.6. Chọn răng 37 trên sơ đồ để xem lịch sử điều trị
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Bác sĩ chọn răng 36 (sâu ngà), thêm điều trị "Trám răng composite" từ danh mục; đơn giá tự lấy theo bảng giá và có thể khai báo vật tư để trừ kho. Sau khi trám, bác sĩ đổi tình trạng răng 36 thành "Đã hàn"; sơ đồ cập nhật màu, đánh dấu chấm cho răng có điều trị trong phiên và danh sách điều trị hiện dòng mới cùng tổng tiền (Hình 4.8).
+Bác sĩ chọn răng 36 (sâu ngà), thêm điều trị "Trám răng composite" từ danh mục; đơn giá tự lấy theo bảng giá và có thể khai báo vật tư để trừ kho. Sau khi trám, bác sĩ đổi tình trạng răng 36 thành "Đã hàn"; sơ đồ cập nhật màu, đánh dấu chấm cho răng có điều trị trong phiên và danh sách điều trị hiện dòng mới cùng tổng tiền (Hình 4.7).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-bs-sau-dieu-tri.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.8. Sơ đồ răng và danh sách điều trị sau khi trám răng 36
+Hình 4.7. Sơ đồ răng và danh sách điều trị sau khi trám răng 36
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Bác sĩ kê đơn thuốc; nếu thuốc trùng tiền sử dị ứng, hệ thống hiện cảnh báo bắt buộc. Cuối cùng, bác sĩ đóng phiên khám (Hình 4.9): màn hình tóm tắt nhắc lại lý do khám, chẩn đoán, điều trị, đơn thuốc và yêu cầu xác nhận trước khi khóa hồ sơ.
-
-::: {custom-style="Ảnh"}
-![](hinh/4-bs-dong-phien.png){width=15cm}
-:::
-
-::: {custom-style="hình"}
-Hình 4.9. Xác nhận đóng phiên khám
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
+Bác sĩ kê đơn thuốc; nếu thuốc trùng tiền sử dị ứng, hệ thống hiện cảnh báo bắt buộc. Cuối cùng, bác sĩ đóng phiên khám: màn hình tóm tắt nhắc lại lý do khám, chẩn đoán, điều trị, đơn thuốc và yêu cầu xác nhận trước khi khóa hồ sơ.
 
 ### 4.5.4. Hóa đơn và thanh toán VietQR
 
-Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động. Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn (Hình 4.10).
+Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động. Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn (Hình 4.8).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-hoa-don-qr.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.10. Hóa đơn đã phát hành kèm mã VietQR
+Hình 4.8. Hóa đơn đã phát hành kèm mã VietQR
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền về, hóa đơn tự chuyển sang "Thanh toán một phần" và hiện thông báo đã nhận chuyển khoản mà lễ tân không cần thao tác (Hình 4.11). Khi ngân hàng gửi lại cùng giao dịch lần thứ hai, hệ thống trả kết quả "trùng" và không ghi thêm; chuyển khoản không có mã hóa đơn được đưa vào danh sách "Chuyển khoản cần xử lý" kèm lý do.
+Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền về, hóa đơn tự chuyển sang "Thanh toán một phần" và hiện thông báo đã nhận chuyển khoản mà lễ tân không cần thao tác (Hình 4.9). Khi ngân hàng gửi lại cùng giao dịch lần thứ hai, hệ thống trả kết quả "trùng" và không ghi thêm; chuyển khoản không có mã hóa đơn được đưa vào danh sách "Chuyển khoản cần xử lý" kèm lý do.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-hoa-don-da-thu.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.11. Hóa đơn tự ghi nhận khoản chuyển khoản từ ngân hàng
+Hình 4.9. Hóa đơn tự ghi nhận khoản chuyển khoản từ ngân hàng
 :::
 
 ::: {custom-style="nguồn"}
@@ -272,14 +248,14 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.5. Bệnh nhân tra cứu lịch sử khám
 
-Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.12, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.12, phải).
+Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.10, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.10, phải).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-cong-lich-su-kham.png){width=6cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.12. Trang xin đường dẫn (trái) và trang lịch sử khám trên điện thoại (phải)
+Hình 4.10. Trang xin đường dẫn (trái) và trang lịch sử khám trên điện thoại (phải)
 :::
 
 ::: {custom-style="nguồn"}
@@ -288,56 +264,32 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.6. Quản lý: lương, bảng điều khiển và trợ lý AI
 
-Chi tiết kỳ lương (Hình 4.13) hiển thị tổng lương, thực nhận, thuế thu nhập cá nhân, bảo hiểm xã hội và bảng lương từng bác sĩ theo số phiên khám, giờ làm, giờ làm thêm; quản trị viên tính lại, duyệt kỳ lương và xuất phiếu lương PDF.
+Chi tiết kỳ lương hiển thị tổng lương, thực nhận, thuế thu nhập cá nhân, bảo hiểm xã hội và bảng lương từng bác sĩ theo số phiên khám, giờ làm, giờ làm thêm; quản trị viên tính lại, duyệt kỳ lương và xuất phiếu lương PDF.
 
-::: {custom-style="Ảnh"}
-![](hinh/4-ql-ky-luong.png){width=15cm}
-:::
-
-::: {custom-style="hình"}
-Hình 4.13. Chi tiết kỳ lương tháng 10/2026 đang rà soát
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
-Bảng điều khiển (Hình 4.14) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số bệnh nhân mới và cũ, số lịch hẹn, doanh số điều trị, tiền đã thu kèm mức tăng giảm so với kỳ trước, cùng bảng phân loại lịch khám theo trạng thái cuối.
+Bảng điều khiển (Hình 4.11) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số bệnh nhân mới và cũ, số lịch hẹn, doanh số điều trị, tiền đã thu kèm mức tăng giảm so với kỳ trước, cùng bảng phân loại lịch khám theo trạng thái cuối.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-dashboard.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.14. Bảng điều khiển của quản lý (kỳ 30 ngày)
+Hình 4.11. Bảng điều khiển của quản lý (kỳ 30 ngày)
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Phần dưới bảng điều khiển (Hình 4.15) gồm sáu chỉ số vận hành so với mục tiêu, mỗi chỉ số ghi rõ mức "đạt mục tiêu", "chấp nhận được" hoặc "cần cải thiện", và bản đồ nhiệt công suất ghế theo giờ trong tuần.
+Phần dưới bảng điều khiển gồm sáu chỉ số vận hành so với mục tiêu, mỗi chỉ số ghi rõ mức "đạt mục tiêu", "chấp nhận được" hoặc "cần cải thiện", và bản đồ nhiệt công suất ghế theo giờ trong tuần.
 
-::: {custom-style="Ảnh"}
-![](hinh/4-ql-dashboard-2.png){width=15cm}
-:::
-
-::: {custom-style="hình"}
-Hình 4.15. Chỉ số vận hành so với mục tiêu và công suất ghế theo giờ
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
-Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung chat bên phải (Hình 4.16). Hình được chụp ở chế độ dự phòng khi chưa cấu hình dịch vụ AI: trợ lý vẫn nhận ra ý định của câu hỏi, gọi đúng công cụ tra cứu, trả lời từ dữ liệu thật và ghi rõ "Trả lời theo mẫu". Khi có dịch vụ AI, câu trả lời được viết tự nhiên và trợ lý có thể đề xuất đặt, hủy, dời lịch dưới dạng thẻ xác nhận.
+Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung chat bên phải (Hình 4.12). Hình được chụp ở chế độ dự phòng khi chưa cấu hình dịch vụ AI: trợ lý vẫn nhận ra ý định của câu hỏi, gọi đúng công cụ tra cứu, trả lời từ dữ liệu thật và ghi rõ "Trả lời theo mẫu". Khi có dịch vụ AI, câu trả lời được viết tự nhiên và trợ lý có thể đề xuất đặt, hủy, dời lịch dưới dạng thẻ xác nhận.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-tro-ly-ai.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 4.16. Trợ lý AI ở chế độ dự phòng
+Hình 4.12. Trợ lý AI ở chế độ dự phòng
 :::
 
 ::: {custom-style="nguồn"}

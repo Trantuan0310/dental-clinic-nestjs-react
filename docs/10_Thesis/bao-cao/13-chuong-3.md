@@ -79,7 +79,7 @@ Cơ sở dữ liệu gồm 70 bảng và 43 kiểu liệt kê, được xây d�
 
 ### 3.2.2. Sơ đồ thực thể liên kết
 
-Do số bảng lớn, sơ đồ thực thể liên kết được chia thành sáu nhóm theo miền nghiệp vụ. Các sơ đồ dưới đây được sinh tự động từ lược đồ Prisma của hệ thống để bảo đảm khớp với cơ sở dữ liệu thật; mỗi bảng hiển thị khóa chính, các khóa ngoại và một số cột nghiệp vụ chính.
+Do số bảng lớn, sơ đồ thực thể liên kết được chia theo miền nghiệp vụ; báo cáo trình bày bốn nhóm chính, hai nhóm còn lại được mô tả bằng lời. Các sơ đồ dưới đây được sinh tự động từ lược đồ Prisma của hệ thống để bảo đảm khớp với cơ sở dữ liệu thật; mỗi bảng hiển thị khóa chính, các khóa ngoại và một số cột nghiệp vụ chính.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-2-erd-benh-nhan-lich-hen.png){width=15cm}
@@ -111,61 +111,37 @@ Hình 3.3. Sơ đồ thực thể liên kết nhóm phiên khám, ghi chú lâm 
 Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
 
-Nhóm điều trị và kế hoạch (Hình 3.4): mỗi phiên khám có nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
-
-::: {custom-style="Ảnh"}
-![](hinh/3-3-erd-dieu-tri-ke-hoach.png){width=8cm}
-:::
-
-::: {custom-style="hình"}
-Hình 3.4. Sơ đồ thực thể liên kết nhóm điều trị và kế hoạch điều trị
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
-:::
+Nhóm điều trị và kế hoạch: mỗi phiên khám có nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-4-erd-hoa-don.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.5. Sơ đồ thực thể liên kết nhóm hóa đơn và thanh toán
+Hình 3.4. Sơ đồ thực thể liên kết nhóm hóa đơn và thanh toán
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
 
-Nhóm hóa đơn (Hình 3.5): mỗi hóa đơn lập từ một phiên khám, gồm các dòng (`invoice_items`) sao chép từ điều trị; thanh toán (`payments`) có khóa `request_key` duy nhất theo hóa đơn để một lần bấm hai lần hoặc một giao dịch ngân hàng báo hai lần cũng chỉ ghi một khoản. Hóa đơn lưu sẵn các tổng đã thu, đã hoàn, đã điều chỉnh và số còn nợ để báo cáo nhanh. Giao dịch ngân hàng (`bank_transactions`) lưu toàn bộ dữ liệu ngân hàng gửi về cùng kết quả đối soát.
+Nhóm hóa đơn (Hình 3.4): mỗi hóa đơn lập từ một phiên khám, gồm các dòng (`invoice_items`) sao chép từ điều trị; thanh toán (`payments`) có khóa `request_key` duy nhất theo hóa đơn để một lần bấm hai lần hoặc một giao dịch ngân hàng báo hai lần cũng chỉ ghi một khoản. Hóa đơn lưu sẵn các tổng đã thu, đã hoàn, đã điều chỉnh và số còn nợ để báo cáo nhanh. Giao dịch ngân hàng (`bank_transactions`) lưu toàn bộ dữ liệu ngân hàng gửi về cùng kết quả đối soát.
 
-Nhóm người dùng và phân quyền (Hình 3.6) theo mô hình RBAC [@rbac]: người dùng – vai trò – quyền với hai bảng nối `user_roles`, `role_permissions`. Nhật ký kiểm toán (`audit_logs`) ghi người thực hiện, hành động, đối tượng và dữ liệu kèm theo của mọi thao tác nhạy cảm.
+Nhóm người dùng và phân quyền (Hình 3.5) theo mô hình RBAC [@rbac]: người dùng – vai trò – quyền với hai bảng nối `user_roles`, `role_permissions`. Nhật ký kiểm toán (`audit_logs`) ghi người thực hiện, hành động, đối tượng và dữ liệu kèm theo của mọi thao tác nhạy cảm.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-5-erd-nguoi-dung-phan-quyen.png){width=13cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.6. Sơ đồ thực thể liên kết nhóm người dùng, phân quyền và nhật ký
+Hình 3.5. Sơ đồ thực thể liên kết nhóm người dùng, phân quyền và nhật ký
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
 
-Nhóm nhân sự, lương và kho (Hình 3.7): thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập. Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
-
-::: {custom-style="Ảnh"}
-![](hinh/3-5-erd-nhan-su-kho.png){width=15cm}
-:::
-
-::: {custom-style="hình"}
-Hình 3.7. Sơ đồ thực thể liên kết nhóm nhân sự, lương và kho
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
-:::
+Nhóm nhân sự, lương và kho: thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập. Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
 
 ## 3.3. Đặc tả và thiết kế các chức năng chính
 
@@ -173,14 +149,14 @@ Mục này đặc tả các chức năng tiêu biểu theo mẫu: tên chức n�
 
 ### 3.3.1. Quản lý lịch hẹn và trạng thái lịch hẹn
 
-Vòng đời một lịch hẹn được mô hình hóa bằng biểu đồ trạng thái ở Hình 3.8. Các chuyển trạng thái đều kiểm tra quyền và điều kiện thời gian: chỉ check-in được trong ngày hẹn; chỉ đánh dấu vắng mặt khi đã qua giờ hẹn; hoàn tác check-in chỉ được trước khi bác sĩ mở phiên khám. Lịch đã check-in không hủy được: khách rời đi trước khi khám được ghi là "đã về" và có thể hoàn tác trong ngày. Khách đã bị đánh vắng mặt nhưng đến muộn vẫn được check-in nếu lễ tân ghi lý do, còn trong ngày hẹn và giờ đó chưa bị lịch khác chiếm. Sau giờ hẹn, lịch chỉ được hủy dưới dạng "phòng khám hủy" (bác sĩ vắng, đóng cửa) kèm lý do; bác sĩ chỉ tự hủy được lịch của mình trước giờ hẹn ít nhất 24 giờ. Mọi thay đổi được ghi vào bảng lịch sử lịch hẹn.
+Vòng đời một lịch hẹn được mô hình hóa bằng biểu đồ trạng thái ở Hình 3.6. Các chuyển trạng thái đều kiểm tra quyền và điều kiện thời gian: chỉ check-in được trong ngày hẹn; chỉ đánh dấu vắng mặt khi đã qua giờ hẹn; hoàn tác check-in chỉ được trước khi bác sĩ mở phiên khám. Lịch đã check-in không hủy được: khách rời đi trước khi khám được ghi là "đã về" và có thể hoàn tác trong ngày. Khách đã bị đánh vắng mặt nhưng đến muộn vẫn được check-in nếu lễ tân ghi lý do, còn trong ngày hẹn và giờ đó chưa bị lịch khác chiếm. Sau giờ hẹn, lịch chỉ được hủy dưới dạng "phòng khám hủy" (bác sĩ vắng, đóng cửa) kèm lý do; bác sĩ chỉ tự hủy được lịch của mình trước giờ hẹn ít nhất 24 giờ. Mọi thay đổi được ghi vào bảng lịch sử lịch hẹn.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-6-trang-thai-lich-hen.png){width=14cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.8. Biểu đồ trạng thái của lịch hẹn
+Hình 3.6. Biểu đồ trạng thái của lịch hẹn
 :::
 
 ::: {custom-style="nguồn"}
@@ -208,28 +184,28 @@ Nguồn: Tác giả
 
 Việc chống đặt trùng giờ được bảo đảm ở máy chủ, không chỉ ở giao diện: hai lễ tân cùng đặt một khung giờ ở hai máy khác nhau, giao dịch thứ hai phải chờ khóa của giao dịch thứ nhất, rồi kiểm tra lại và bị từ chối.
 
-Hình 3.9 mô tả chi tiết luồng lễ tân đặt lịch hẹn, trong đó có tình huống hai lễ tân cùng đặt một bác sĩ vào cùng một giờ. Yêu cầu đi qua ba lớp kiểm tra: `PermissionsGuard` kiểm tra quyền `appointment.create`, lớp DTO kiểm tra dữ liệu đầu vào, rồi service thực hiện toàn bộ việc kiểm tra và ghi trong một giao dịch có khóa tư vấn. Giao dịch đến sau phải chờ giao dịch trước kết thúc, nên lần kiểm tra trùng của nó luôn thấy lịch vừa được ghi.
+Hình 3.7 mô tả chi tiết luồng lễ tân đặt lịch hẹn, trong đó có tình huống hai lễ tân cùng đặt một bác sĩ vào cùng một giờ. Yêu cầu đi qua ba lớp kiểm tra: `PermissionsGuard` kiểm tra quyền `appointment.create`, lớp DTO kiểm tra dữ liệu đầu vào, rồi service thực hiện toàn bộ việc kiểm tra và ghi trong một giao dịch có khóa tư vấn. Giao dịch đến sau phải chờ giao dịch trước kết thúc, nên lần kiểm tra trùng của nó luôn thấy lịch vừa được ghi.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-16-tuan-tu-dat-lich-le-tan.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.9. Biểu đồ tuần tự lễ tân đặt lịch hẹn khi có hai yêu cầu cùng lúc
+Hình 3.7. Biểu đồ tuần tự lễ tân đặt lịch hẹn khi có hai yêu cầu cùng lúc
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
 
-Khi khách đến, lễ tân check-in và hệ thống đưa khách vào hàng chờ của bác sĩ (Hình 3.10). Check-in chỉ được thực hiện trong khung từ 15 phút trước đến 30 phút sau giờ hẹn; ngoài khung này phải có lý do ghi đè và phải trong ngày hẹn. Thứ tự hàng chờ không đơn thuần theo giờ đến: khách đến đúng giờ được xếp theo giờ hẹn, khách trễ quá 15 phút được xếp như thể đến muộn thêm 15 phút, khách vãng lai chờ sau khách có hẹn tối đa khoảng 45 phút, còn ca cấp cứu luôn được đưa lên đầu. Cách xếp này được viết thành một hàm thuần và kiểm thử bằng bảng quyết định.
+Khi khách đến, lễ tân check-in và hệ thống đưa khách vào hàng chờ của bác sĩ (Hình 3.8). Check-in chỉ được thực hiện trong khung từ 15 phút trước đến 30 phút sau giờ hẹn; ngoài khung này phải có lý do ghi đè và phải trong ngày hẹn. Thứ tự hàng chờ không đơn thuần theo giờ đến: khách đến đúng giờ được xếp theo giờ hẹn, khách trễ quá 15 phút được xếp như thể đến muộn thêm 15 phút, khách vãng lai chờ sau khách có hẹn tối đa khoảng 45 phút, còn ca cấp cứu luôn được đưa lên đầu. Cách xếp này được viết thành một hàm thuần và kiểm thử bằng bảng quyết định.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-17-hoat-dong-tiep-nhan.png){width=11.5cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.10. Biểu đồ hoạt động tiếp nhận và hàng chờ
+Hình 3.8. Biểu đồ hoạt động tiếp nhận và hàng chờ
 :::
 
 ::: {custom-style="nguồn"}
@@ -240,14 +216,14 @@ Khi một lịch hẹn bị hủy hoặc khách vắng mặt, giờ trống đó
 
 ### 3.3.2. Đặt lịch trực tuyến
 
-Bệnh nhân đặt lịch không cần tài khoản (Hình 3.11). Yêu cầu đặt lịch không trở thành lịch hẹn ngay mà chờ lễ tân duyệt, để phòng khám kiểm soát được những lịch phức tạp và tránh lịch giả; lễ tân có thể đề xuất giờ khác. Khách đồng ý hoặc từ chối (kèm lời nhắn) qua trang tra cứu; khi khách đồng ý, hệ thống kiểm tra lại giờ đó còn dùng được rồi báo lễ tân xác nhận lần cuối để tạo lịch hẹn, còn khi khách từ chối, yêu cầu quay về chờ duyệt. Yêu cầu không được xử lý kịp sẽ tự hết hạn.
+Bệnh nhân đặt lịch không cần tài khoản (Hình 3.9). Yêu cầu đặt lịch không trở thành lịch hẹn ngay mà chờ lễ tân duyệt, để phòng khám kiểm soát được những lịch phức tạp và tránh lịch giả; lễ tân có thể đề xuất giờ khác. Khách đồng ý hoặc từ chối (kèm lời nhắn) qua trang tra cứu; khi khách đồng ý, hệ thống kiểm tra lại giờ đó còn dùng được rồi báo lễ tân xác nhận lần cuối để tạo lịch hẹn, còn khi khách từ chối, yêu cầu quay về chờ duyệt. Yêu cầu không được xử lý kịp sẽ tự hết hạn.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-9-tuan-tu-dat-lich-online.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.11. Biểu đồ tuần tự đặt lịch trực tuyến
+Hình 3.9. Biểu đồ tuần tự đặt lịch trực tuyến
 :::
 
 ::: {custom-style="nguồn"}
@@ -275,14 +251,14 @@ Bảng 3.3. Đặc tả chức năng Khám và ghi điều trị theo răng
 Nguồn: Tác giả
 :::
 
-Hình 3.12 trình bày tuần tự xử lý, trong đó việc đóng phiên khám là một giao dịch duy nhất (trừ kho, ghi biến động kho, khóa hồ sơ). Các việc phụ (lập hóa đơn nháp, ghi ca khám cho bảng lương) được thực hiện qua sự kiện, nên module hồ sơ khám không cần biết về hóa đơn hay lương.
+Hình 3.10 trình bày tuần tự xử lý, trong đó việc đóng phiên khám là một giao dịch duy nhất (trừ kho, ghi biến động kho, khóa hồ sơ). Các việc phụ (lập hóa đơn nháp, ghi ca khám cho bảng lương) được thực hiện qua sự kiện, nên module hồ sơ khám không cần biết về hóa đơn hay lương.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-10-tuan-tu-kham-dong-phien.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.12. Biểu đồ tuần tự khám, ghi điều trị theo răng và đóng phiên khám
+Hình 3.10. Biểu đồ tuần tự khám, ghi điều trị theo răng và đóng phiên khám
 :::
 
 ::: {custom-style="nguồn"}
@@ -291,14 +267,14 @@ Nguồn: Tác giả
 
 Lịch sử điều trị theo răng được thiết kế thành một API riêng `GET /patients/:id/teeth/:fdi/history`: máy chủ lọc ngay trong cơ sở dữ liệu các điều trị có chứa số răng cần xem (toán tử chứa của JSONB) và chỉ lấy mục sơ đồ của răng đó, thay vì để trình duyệt tải toàn bộ các phiên khám rồi tự lọc. Hiệu quả của thiết kế này được đo ở Chương 5. Phiên khám có ba trạng thái: đang khám, đã đóng và đã hủy (chỉ hủy được phiên mở nhầm, chưa có điều trị và đơn thuốc). Phiên đã đóng bị khóa, chỉ thêm được ghi bổ sung; muốn mở lại phải có quyền riêng, ghi lý do và hóa đơn của phiên chưa được phát hành.
 
-Hình 3.13 trình bày chi tiết luồng xem lịch sử và thêm điều trị cho một răng. Lớp phân quyền thứ hai nằm ở service: bác sĩ chỉ có quyền xem hồ sơ của mình sẽ nhận lỗi "không tìm thấy bệnh nhân" nếu không có quan hệ khám chữa với bệnh nhân đó. Mỗi lần xem lịch sử răng đều được ghi nhật ký kiểm toán.
+Hình 3.11 trình bày chi tiết luồng xem lịch sử và thêm điều trị cho một răng. Lớp phân quyền thứ hai nằm ở service: bác sĩ chỉ có quyền xem hồ sơ của mình sẽ nhận lỗi "không tìm thấy bệnh nhân" nếu không có quan hệ khám chữa với bệnh nhân đó. Mỗi lần xem lịch sử răng đều được ghi nhật ký kiểm toán.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-18-tuan-tu-lich-su-rang.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.13. Biểu đồ tuần tự xem lịch sử và thêm điều trị cho một răng
+Hình 3.11. Biểu đồ tuần tự xem lịch sử và thêm điều trị cho một răng
 :::
 
 ::: {custom-style="nguồn"}
@@ -313,21 +289,21 @@ Kế hoạch điều trị gồm nhiều dòng, mỗi dòng là một thủ thu�
 
 ### 3.3.5. Hóa đơn và thanh toán qua VietQR
 
-Hóa đơn đi qua các trạng thái ở Hình 3.14. Khoản thanh toán có thể đến từ ba nguồn: lễ tân ghi tiền mặt, lễ tân ghi chuyển khoản, hoặc hệ thống tự ghi khi ngân hàng báo tiền về. Trạng thái không được đặt tay mà luôn tính lại từ số đã thu, đã hoàn và đã điều chỉnh so với tổng tiền; vì vậy khi một phiếu thu ghi nhầm bị hủy, hóa đơn tự lùi về "thu một phần" hoặc "đã phát hành". Hóa đơn chỉ hủy được khi không còn khoản thu nào hiệu lực, để tiền không thể "biến mất" khỏi sổ sách; hóa đơn đã hủy có thể được lập lại thành bản nháp mới từ cùng phiên khám.
+Hóa đơn đi qua các trạng thái ở Hình 3.12. Khoản thanh toán có thể đến từ ba nguồn: lễ tân ghi tiền mặt, lễ tân ghi chuyển khoản, hoặc hệ thống tự ghi khi ngân hàng báo tiền về. Trạng thái không được đặt tay mà luôn tính lại từ số đã thu, đã hoàn và đã điều chỉnh so với tổng tiền; vì vậy khi một phiếu thu ghi nhầm bị hủy, hóa đơn tự lùi về "thu một phần" hoặc "đã phát hành". Hóa đơn chỉ hủy được khi không còn khoản thu nào hiệu lực, để tiền không thể "biến mất" khỏi sổ sách; hóa đơn đã hủy có thể được lập lại thành bản nháp mới từ cùng phiên khám.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-8-trang-thai-hoa-don.png){width=12cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.14. Biểu đồ trạng thái của hóa đơn
+Hình 3.12. Biểu đồ trạng thái của hóa đơn
 :::
 
 ::: {custom-style="nguồn"}
 Nguồn: Tác giả
 :::
 
-Bảng 3.4 đặc tả cách hệ thống tự ghi nhận khoản chuyển khoản; trình tự xử lý giữa khách, ngân hàng và hệ thống được thể hiện ở Hình 3.15.
+Bảng 3.4 đặc tả cách hệ thống tự ghi nhận khoản chuyển khoản; trình tự xử lý giữa khách, ngân hàng và hệ thống được thể hiện ở Hình 3.13.
 
 ::: {custom-style="bảng"}
 Bảng 3.4. Đặc tả chức năng Tự đối soát chuyển khoản
@@ -351,7 +327,7 @@ Nguồn: Tác giả
 :::
 
 ::: {custom-style="hình"}
-Hình 3.15. Biểu đồ tuần tự thanh toán VietQR và tự đối soát
+Hình 3.13. Biểu đồ tuần tự thanh toán VietQR và tự đối soát
 :::
 
 ::: {custom-style="nguồn"}
@@ -364,14 +340,14 @@ Khi ngân hàng báo một giao dịch, nguyên tắc là chỉ tự ghi khi ch�
 
 Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) và một cho điện thoại (phút 20 mỗi giờ), cùng quét các lịch hẹn trong vòng 24 giờ tới (chậm nhất 30 phút trước giờ hẹn) chưa được nhắc. Email kèm liên kết xác nhận, dời, hủy lịch; nếu bật SMS hoặc Zalo, tin điện thoại được gửi theo thứ tự ưu tiên Zalo rồi SMS. Tách hai tác vụ giúp một kênh lỗi (ví dụ máy chủ email không phản hồi) không làm khách mất tin nhắn ở kênh kia. Mỗi tin điện thoại có khóa chống trùng và mỗi lịch hẹn lưu thời điểm đã gửi email, nên khi tác vụ chạy lại hoặc chạy trên nhiều máy, khách không nhận hai tin. Tin điện thoại lỗi được thử lại tối đa ba lần. Nhắc tái khám qua điện thoại hoạt động tương tự nhưng chạy mỗi ngày một lần lúc 9 giờ 15, dựa trên ngày đến hạn tính từ lần điều trị gần nhất.
 
-Hình 3.16 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khung thời gian nêu trên, tác vụ không gửi tin trong giờ yên lặng từ 21 giờ đến 7 giờ và bỏ qua những lịch hẹn được đặt quá sát giờ (dưới 2 giờ), vì khách vừa đặt thì không cần nhắc.
+Hình 3.14 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khung thời gian nêu trên, tác vụ không gửi tin trong giờ yên lặng từ 21 giờ đến 7 giờ và bỏ qua những lịch hẹn được đặt quá sát giờ (dưới 2 giờ), vì khách vừa đặt thì không cần nhắc.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-21-hoat-dong-nhac-lich.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.16. Biểu đồ hoạt động gửi nhắc lịch tự động
+Hình 3.14. Biểu đồ hoạt động gửi nhắc lịch tự động
 :::
 
 ::: {custom-style="nguồn"}
@@ -382,7 +358,7 @@ Nhắc tái khám là một đối tượng riêng. Lần nhắc được tạo 
 
 ### 3.3.7. Bệnh nhân tra cứu lịch sử khám
 
-Chức năng này hướng tới mục tiêu "tra cứu lịch sử khám dễ dàng" mà không yêu cầu bệnh nhân tạo tài khoản. Thách thức là bảo vệ dữ liệu sức khỏe: biết số điện thoại của một người không được phép đủ để xem hồ sơ của họ. Thiết kế (Hình 3.17) giải quyết bằng ba nguyên tắc:
+Chức năng này hướng tới mục tiêu "tra cứu lịch sử khám dễ dàng" mà không yêu cầu bệnh nhân tạo tài khoản. Thách thức là bảo vệ dữ liệu sức khỏe: biết số điện thoại của một người không được phép đủ để xem hồ sơ của họ. Thiết kế (Hình 3.15) giải quyết bằng ba nguyên tắc:
 
 - Đường dẫn chứa mã ngẫu nhiên 256 bit, hết hạn sau 7 ngày; cơ sở dữ liệu chỉ lưu SHA-256 của mã, nên kể cả khi lộ dữ liệu cũng không dựng lại được đường dẫn.
 - Khi bệnh nhân tự xin đường dẫn bằng số điện thoại, đường dẫn chỉ được gửi tới email và số điện thoại đã có trong hồ sơ, không hiện trên màn hình; màn hình luôn trả một câu giống nhau để không dò được ai là bệnh nhân. Số điện thoại phải là của chính bệnh nhân; số người giám hộ chỉ được chấp nhận với trẻ em chưa có số riêng.
@@ -393,7 +369,7 @@ Chức năng này hướng tới mục tiêu "tra cứu lịch sử khám dễ d
 :::
 
 ::: {custom-style="hình"}
-Hình 3.17. Biểu đồ tuần tự bệnh nhân tra cứu lịch sử khám
+Hình 3.15. Biểu đồ tuần tự bệnh nhân tra cứu lịch sử khám
 :::
 
 ::: {custom-style="nguồn"}
@@ -441,14 +417,14 @@ Dữ liệu thô của kỳ hiện tại và kỳ trước được lấy từ c
 
 ### 3.3.11. Trợ lý AI
 
-Trợ lý AI dạng chat cho nhân viên được thiết kế theo vòng lặp gọi công cụ [@react_agent]: mô hình nhận câu hỏi và danh sách công cụ được phép (chỉ những công cụ người dùng có quyền), mỗi lượt trả về một JSON hoặc là yêu cầu gọi công cụ, hoặc là câu trả lời; tối đa bốn lần gọi công cụ cho một câu hỏi (Hình 3.18). Có hai nhóm công cụ: nhóm tra cứu (tìm bệnh nhân, giờ trống, điều trị chờ đặt lịch, hóa đơn chưa trả, lịch hẹn theo ngày, ca làm việc, hàng chờ, số liệu tổng) và nhóm đề xuất (đặt, hủy, dời lịch). Nhóm đề xuất chỉ tạo thẻ xác nhận; hành động chỉ được thực hiện khi người dùng bấm xác nhận, qua đúng service và quyền như thao tác tay, và được ghi nhật ký riêng.
+Trợ lý AI dạng chat cho nhân viên được thiết kế theo vòng lặp gọi công cụ [@react_agent]: mô hình nhận câu hỏi và danh sách công cụ được phép (chỉ những công cụ người dùng có quyền), mỗi lượt trả về một JSON hoặc là yêu cầu gọi công cụ, hoặc là câu trả lời; tối đa bốn lần gọi công cụ cho một câu hỏi (Hình 3.16). Có hai nhóm công cụ: nhóm tra cứu (tìm bệnh nhân, giờ trống, điều trị chờ đặt lịch, hóa đơn chưa trả, lịch hẹn theo ngày, ca làm việc, hàng chờ, số liệu tổng) và nhóm đề xuất (đặt, hủy, dời lịch). Nhóm đề xuất chỉ tạo thẻ xác nhận; hành động chỉ được thực hiện khi người dùng bấm xác nhận, qua đúng service và quyền như thao tác tay, và được ghi nhật ký riêng.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-13-tuan-tu-tro-ly-ai.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.18. Biểu đồ tuần tự trợ lý AI đề xuất đặt lịch
+Hình 3.16. Biểu đồ tuần tự trợ lý AI đề xuất đặt lịch
 :::
 
 ::: {custom-style="nguồn"}
@@ -492,14 +468,14 @@ Nguồn: Tác giả
 
 ### 3.4.1. Xác thực
 
-Luồng xác thực theo Hình 3.19: mã truy cập JWT ngắn hạn gửi kèm mỗi yêu cầu, mã làm mới dài hạn nằm trong cookie HttpOnly, được thay mới sau mỗi lần dùng và lưu dạng băm trong cơ sở dữ liệu để thu hồi được. Nếu một mã làm mới đã dùng rồi lại được gửi lên (dấu hiệu bị đánh cắp), hệ thống thu hồi toàn bộ phiên đăng nhập của tài khoản đó và ghi sự kiện REFRESH_REUSE_DETECTED vào nhật ký kiểm toán. Để chống dò mật khẩu, mỗi địa chỉ chỉ được thử đăng nhập 5 lần mỗi phút, và tài khoản bị khóa 15 phút khi nhập sai mật khẩu quá 5 lần liên tiếp.
+Luồng xác thực theo Hình 3.17: mã truy cập JWT ngắn hạn gửi kèm mỗi yêu cầu, mã làm mới dài hạn nằm trong cookie HttpOnly, được thay mới sau mỗi lần dùng và lưu dạng băm trong cơ sở dữ liệu để thu hồi được. Nếu một mã làm mới đã dùng rồi lại được gửi lên (dấu hiệu bị đánh cắp), hệ thống thu hồi toàn bộ phiên đăng nhập của tài khoản đó và ghi sự kiện REFRESH_REUSE_DETECTED vào nhật ký kiểm toán. Để chống dò mật khẩu, mỗi địa chỉ chỉ được thử đăng nhập 5 lần mỗi phút, và tài khoản bị khóa 15 phút khi nhập sai mật khẩu quá 5 lần liên tiếp.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-14-tuan-tu-xac-thuc.png){width=14cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.19. Biểu đồ tuần tự xác thực và làm mới token
+Hình 3.17. Biểu đồ tuần tự xác thực và làm mới token
 :::
 
 ::: {custom-style="nguồn"}
@@ -510,14 +486,14 @@ Nguồn: Tác giả
 
 Mỗi điểm cuối API khai báo các mã quyền cần có; `PermissionsGuard` so với danh sách quyền trong token trước khi vào controller. Lớp thứ hai nằm trong service: với người dùng chỉ có quyền "riêng" (ví dụ `encounter.read.own`), truy vấn được thêm điều kiện theo quan hệ bác sĩ – bệnh nhân (bác sĩ đã khám hoặc đang có lịch với bệnh nhân). Khi không thỏa, hệ thống trả lỗi "không tìm thấy" thay vì "không có quyền" để không tiết lộ sự tồn tại của bản ghi.
 
-Phân quyền chỉ an toàn khi chính việc phân quyền cũng được kiểm soát. Hình 3.20 trình bày cơ chế chống leo thang quyền: người thực hiện chỉ cấp được những quyền mình đang giữ, và không sửa được vai trò của người có nhiều quyền hơn mình. Nhờ vậy, một tài khoản được giao quyền quản lý người dùng cũng không thể tự nâng mình lên quyền cao hơn.
+Phân quyền chỉ an toàn khi chính việc phân quyền cũng được kiểm soát. Hình 3.18 trình bày cơ chế chống leo thang quyền: người thực hiện chỉ cấp được những quyền mình đang giữ, và không sửa được vai trò của người có nhiều quyền hơn mình. Nhờ vậy, một tài khoản được giao quyền quản lý người dùng cũng không thể tự nâng mình lên quyền cao hơn.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-23-tuan-tu-phan-quyen.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
-Hình 3.20. Biểu đồ tuần tự cập nhật quyền của vai trò, có kiểm tra leo thang quyền
+Hình 3.18. Biểu đồ tuần tự cập nhật quyền của vai trò, có kiểm tra leo thang quyền
 :::
 
 ::: {custom-style="nguồn"}

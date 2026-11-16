@@ -217,7 +217,7 @@ Nguồn: Tác giả
 Hình 2.2 trình bày biểu đồ use case tổng quát, thể hiện các nhóm chức năng chính và tác nhân sử dụng chúng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-2-use-case-tong-quat.png){width=12cm}
+![](hinh/2-2-use-case-tong-quat.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
@@ -233,7 +233,7 @@ Nguồn: Tác giả
 Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3). Use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ. Việc gộp hai hồ sơ trùng không hoàn tác được nên được giao cho quản trị viên (Hình 2.5).
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-3-use-case-le-tan.png){width=12cm}
+![](hinh/2-3-use-case-le-tan.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
@@ -249,7 +249,7 @@ Nguồn: Tác giả
 Hình 2.4 mô tả các use case lâm sàng. Kê đơn luôn bao gồm bước kiểm tra dị ứng thuốc; đóng phiên khám luôn bao gồm việc trừ vật tư đã dùng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-4-use-case-bac-si.png){width=12cm}
+![](hinh/2-4-use-case-bac-si.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
@@ -265,7 +265,7 @@ Nguồn: Tác giả
 Hình 2.5 trình bày các use case của quản trị viên: quản lý người dùng và phân quyền, dịch vụ và bảng giá, bác sĩ và lịch làm, lương, chi phí, vật tư; xem bảng điều khiển, báo cáo và nhật ký kiểm toán; hoàn tiền, hủy hóa đơn và gộp hồ sơ bệnh nhân trùng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-5-use-case-quan-tri.png){width=12cm}
+![](hinh/2-5-use-case-quan-tri.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
@@ -281,7 +281,7 @@ Nguồn: Tác giả
 Bệnh nhân không có tài khoản. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc liên kết có mã bí mật gửi riêng tới bệnh nhân (Hình 2.6).
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-6-use-case-benh-nhan.png){width=12cm}
+![](hinh/2-6-use-case-benh-nhan.png){width=10cm}
 :::
 
 ::: {custom-style="hình"}
