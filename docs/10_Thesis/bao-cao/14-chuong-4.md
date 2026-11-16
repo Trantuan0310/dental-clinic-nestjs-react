@@ -541,7 +541,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.7. Kho, nhân sự và danh mục
 
-Màn hình kho (Hình 4.27) liệt kê vật tư, tồn kho, mức tối thiểu và trạng thái; vật tư sắp hết được đánh dấu cùng gợi ý số lượng nhập. Lịch làm việc (Hình 4.28) cho phép đặt ca theo tuần và ghi ngày nghỉ cho từng bác sĩ; đây là cơ sở để tính giờ trống khi đặt lịch.
+Màn hình kho (Hình 4.27) liệt kê vật tư với mã, danh mục, tồn kho, mức tối thiểu, giá nhập và trạng thái; nút "Sắp hết" lọc nhanh các vật tư dưới mức tối thiểu, còn mục "Nên nhập" phía trên (đang thu gọn) gợi ý số lượng cần nhập theo mức tiêu thụ thực tế. Lịch làm việc (Hình 4.28) cho phép đặt ca theo tuần và ghi ngày nghỉ cho từng bác sĩ; đây là cơ sở để tính giờ trống khi đặt lịch.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-kho.png){width=15cm}
@@ -607,7 +607,7 @@ Hình 4.31. Chi tiết kỳ lương tháng 10/2026 đang rà soát
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
-Danh mục dịch vụ (Hình 4.32) được nhóm theo loại, mỗi dịch vụ có mã, thời lượng, thời gian chuẩn bị, giá và số bác sĩ được phân công; cùng trang có các mẫu khám nhanh. Chi phí vận hành (Hình 4.33) hiển thị tổng chi, phần đã duyệt và danh sách phiếu với trạng thái từng phiếu.
+Danh mục dịch vụ (Hình 4.32) được nhóm theo loại, mỗi dịch vụ có mã, thời lượng, thời gian chuẩn bị, giá và số bác sĩ được phân công; cùng trang là nơi quản lý các mẫu khám nhanh. Chi phí vận hành (Hình 4.33) hiển thị tổng chi, phần đã duyệt và danh sách phiếu với trạng thái từng phiếu.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-dich-vu.png){width=15cm}
@@ -635,7 +635,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.5.8. Bảng điều khiển và báo cáo cho quản lý
 
-Bảng điều khiển (Hình 4.34) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số lịch hẹn, doanh thu, thực thu, công nợ có so sánh với kỳ trước. Phần dưới (Hình 4.35) là sáu chỉ số vận hành dạng biểu đồ thanh so với mục tiêu và bản đồ nhiệt công suất ghế theo giờ trong tuần; tiếp theo là phễu hành trình bệnh nhân và các biểu đồ tài chính (Hình 4.36). Trang báo cáo (Hình 4.37) cho phép xem doanh thu theo khoảng ngày, theo bác sĩ, theo dịch vụ, xuất tệp và nhờ AI viết nhận xét.
+Bảng điều khiển (Hình 4.34) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số bệnh nhân (mới, cũ), số lịch hẹn, doanh số điều trị và tiền đã thu, mỗi thẻ có mức tăng giảm so với kỳ trước; hàng nút thao tác nhanh (đặt lịch, thêm bệnh nhân, thu tiền, check-in) và bảng phân loại lịch khám theo trạng thái cuối (đã đến, vắng, hủy, vãng lai, đặt online…). Phần dưới (Hình 4.35) là sáu chỉ số vận hành dạng biểu đồ thanh so với mục tiêu, mỗi chỉ số ghi rõ mức "đạt mục tiêu", "chấp nhận được" hoặc "cần cải thiện" và bản đồ nhiệt công suất ghế theo giờ trong tuần; tiếp theo là phễu hành trình bệnh nhân và các biểu đồ tài chính (Hình 4.36). Trang báo cáo (Hình 4.37) cho phép xem doanh thu theo khoảng ngày, theo bác sĩ, theo dịch vụ, xuất tệp và nhờ AI viết nhận xét.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-ql-dashboard.png){width=15cm}
