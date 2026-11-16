@@ -143,3 +143,4 @@
 - Đối chiếu chuyển trạng thái còn lại: phiên khám (điều kiện hủy/mở lại, encounter.reopen, hủy hóa đơn nháp), kế hoạch (DRAFT→ACCEPTED, PROPOSED→DRAFT khi sửa báo giá), chi phí (không tự duyệt); nhắc tái khám khớp sẵn. Vẽ lại 3 hình, bổ sung đoạn mô tả.
 - Đối chiếu biểu đồ hoạt động: đối soát (thêm NO_ACTOR, RECORD_FAILED; Bảng A.1 thêm BANK_WEBHOOK_ACTOR_EMAIL); đóng phiên khám (thêm bắt buộc lý do khám/chẩn đoán, sàng lọc dị ứng lúc đóng + PRESCRIPTION_ALLERGY_OVERRIDE, tạo nhắc tái khám trong giao dịch).
 - Hình 3.21 nhắc lịch vẽ lại: hai tác vụ độc lập email (đầu giờ, reminderSentAt) và Zalo/SMS (phút 20, dedupeKey, thử lại 3 lần); nhắc tái khám 9:15 hằng ngày; cập nhật đoạn 3.3.6.
+- Đối chiếu biểu đồ: kho (sửa phiếu nhập: số lượng, lý do, chứng từ; không có đơn giá/nhà cung cấp), gộp hồ sơ (khớp), đồng thuận (thêm kiểm tra phiên bản thông báo cho cả 3 kênh, đổi tên Sổ đồng thuận).

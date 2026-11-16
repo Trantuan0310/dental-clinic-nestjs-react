@@ -3,7 +3,7 @@
 start
 switch (Thao tác kho?)
 case (Nhập kho)
-  :Nhập số lượng, đơn giá, nhà cung cấp;
+  :Nhập số lượng, lý do,\nchứng từ tham chiếu (nếu có);
   :Tồn kho tăng;
 case (Xuất kho thủ công)
   :Nhập số lượng, lý do;

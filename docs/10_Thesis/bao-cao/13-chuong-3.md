@@ -612,7 +612,7 @@ Hình 3.29. Biểu đồ hoạt động tạo và gộp hồ sơ bệnh nhân
 Nguồn: Tác giả
 :::
 
-**Sổ đồng thuận.** Hệ thống lưu sự đồng ý của bệnh nhân từ ba kênh (Hình 3.30). Mỗi bản ghi giữ nguyên văn nội dung và phiên bản văn bản mà bệnh nhân đã đồng ý tại thời điểm đó, nên khi văn bản thay đổi về sau vẫn biết chính xác bệnh nhân đã đồng ý với điều gì, đáp ứng yêu cầu về sự đồng ý của chủ thể dữ liệu [@nd13].
+**Sổ đồng thuận.** Hệ thống lưu sự đồng ý của bệnh nhân từ ba kênh (Hình 3.30). Mỗi bản ghi giữ nguyên văn nội dung và phiên bản văn bản mà bệnh nhân đã đồng ý tại thời điểm đó, nên khi văn bản thay đổi về sau vẫn biết chính xác bệnh nhân đã đồng ý với điều gì, đáp ứng yêu cầu về sự đồng ý của chủ thể dữ liệu [@nd13]. Nếu văn bản vừa được cập nhật trong lúc khách đang đọc bản cũ, hệ thống từ chối và yêu cầu tải lại, để không ghi nhận sự đồng ý với một nội dung khách chưa thấy.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-25-hoat-dong-dong-y.png){width=12cm}
