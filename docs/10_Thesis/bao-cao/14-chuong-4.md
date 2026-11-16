@@ -86,7 +86,7 @@ const write = async (tx: Prisma.TransactionClient) => {
 };
 ```
 
-Thời gian chờ khóa được giới hạn 5 giây; quá thời gian, người dùng nhận thông báo "lịch đang bận, thử lại" (mã 409) thay vì lỗi hệ thống. Các không gian khóa (bác sĩ, bệnh nhân, số điện thoại đặt lịch, lịch nghỉ toàn phòng khám, lương) được khai báo tập trung trong một tệp để không bao giờ trùng nhau.
+Thời gian chờ khóa được giới hạn 5 giây; quá thời gian, người dùng nhận thông báo "Đang có thao tác khác trên lịch này, vui lòng thử lại" (mã 409, CALENDAR_BUSY) thay vì lỗi hệ thống. Các không gian khóa (bác sĩ, bệnh nhân, số điện thoại đặt lịch, lịch nghỉ toàn phòng khám, lương) được khai báo tập trung trong một tệp để không bao giờ trùng nhau.
 
 ### 4.3.3. Đóng phiên khám và sự kiện miền
 

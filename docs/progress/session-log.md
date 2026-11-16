@@ -135,3 +135,4 @@
 - Thêm Hình 3.11 biểu đồ hoạt động danh sách chờ lấp giờ trống (theo waitlist.ts, inbox.service.ts, appointments.service.ts); đánh số lại Hình 3.11–3.36 → 3.12–3.37; Bảng 3.7, D.1 (LH-07), số biểu đồ hành vi 29 → 30. 175 trang, Kết luận = 143.
 - Sửa lỗi giao diện: breadcrumb thiếu nhãn cho /waitlist, /appointment-links/reschedule-requests, /payroll/periods, /admin/consents (useBreadcrumbs.ts + locales vi/en); typecheck, eslint sạch. Chụp lại Hình 4.9 (breadcrumb "Danh sách chờ").
 - Báo cáo: đổi "Sổ đồng ý" về "Sổ đồng thuận" cho khớp tên trên giao diện (sửa lại lần thống nhất thuật ngữ trước).
+- Đối chiếu chữ giao diện trích trong báo cáo với locales: tất cả khớp; sửa thông báo khóa lịch thành nguyên văn 'Đang có thao tác khác trên lịch này, vui lòng thử lại' (409 CALENDAR_BUSY).
