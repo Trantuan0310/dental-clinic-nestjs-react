@@ -2,6 +2,7 @@
 !include _kieu.iuml
 hide circle
 skinparam linetype ortho
+left to right direction
 skinparam defaultFontSize 13
 title Nhóm bệnh nhân, lịch hẹn và tiếp nhận
 

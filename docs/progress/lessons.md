@@ -83,3 +83,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - E2E: trình duyệt khách phải mở bằng `browser.newContext({ storageState: { cookies: [], origins: [] } })`; `newContext()` trơn kế thừa phiên admin lưu sẵn, trang mở ra refresh bằng cookie cũ và làm backend thu hồi phiên chung (mọi test sau đỏ hàng loạt). Kiểm giả thuyết trước khi đẩy bản sửa: test hỏng bắt đầu đúng sau test nào thì đọc test đó trước.
 - Khi chép XML từ file Word mẫu vào bản dựng: loại các phần đó khỏi mọi bước định dạng chung (bảng, ảnh, kiểu Normal), vì kiểu mặc định của báo cáo làm bìa tràn trang và khung bị co như ảnh.
 - Đo độ bao phủ: collectCoverageFrom của backend chỉ gồm *.service.ts/*.controller.ts và loại domain/**, nên khi trích số phải nói rõ phạm vi đo.
+- Kiểm tra cỡ chữ in của hình = cỡ font × (độ rộng hiển thị pt × dpi/72) / px ảnh; sơ đồ tuần tự rộng cần maxMessageSize để không bị thu quá nhỏ.

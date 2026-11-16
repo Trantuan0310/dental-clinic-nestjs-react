@@ -123,3 +123,4 @@
 - Thống nhất thuật ngữ "Sổ đồng ý"; giải thích tiền tố mã yêu cầu (BN, LH, KB, TT, NS, KH, BC, AI, QT) ở Mục 2.3 và danh mục viết tắt; kiểm tra mọi hình/bảng đều được nhắc trong văn bản.
 - Kết luận: nêu số kiểm thử cụ thể, ma trận truy vết; hạn chế đồng bộ với Mục 5.6.
 - Tóm tắt thêm Từ khóa; tách 3 câu dài trên 70 từ ở Mở đầu và Chương 1.
+- Sơ đồ: thêm maxMessageSize/wrapWidth trong _kieu.iuml và xếp dọc 2 ERD rộng (sinh-erd.py) để chữ in ≥ ~6,5 pt (trước có hình chỉ 4–5 pt); vẽ lại toàn bộ sơ đồ, báo cáo 175 trang (Chương 3: 35–89).

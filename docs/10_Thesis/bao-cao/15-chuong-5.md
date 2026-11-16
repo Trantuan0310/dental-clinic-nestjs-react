@@ -102,7 +102,7 @@ Bảng 5.5. Ca kiểm thử nhóm xác thực, phân quyền và bảo mật
 | KT-BM-03 | Dùng lại mã làm mới đã được xoay vòng | Bị từ chối | API | Đạt |
 | KT-BM-04 | Đăng xuất | Cookie làm mới bị thu hồi | API | Đạt |
 | KT-BM-05 | Tài khoản đã bị xóa dùng mã truy cập còn hạn | Bị từ chối | API | Đạt |
-| KT-BM-06 | Lễ tân gọi API bảng lương, ghi ghi chú lâm sàng | 403 | API | Đạt |
+| KT-BM-06 | Lễ tân gọi API bảng lương, tạo ghi chú lâm sàng | 403 | API | Đạt |
 | KT-BM-07 | Bác sĩ đổi tham số `dentistId` để xem lịch của bác sĩ khác | Không mở rộng được phạm vi | API | Đạt |
 | KT-BM-08 | Truyền mã không phải UUID, ngày sinh trong tương lai, số điện thoại sai định dạng | 400 với thông báo rõ ràng | API | Đạt |
 | KT-BM-09 | Mở đường dẫn tra cứu lịch sử đã hết hạn hoặc bị thu hồi | Từ chối giống hệt đường dẫn sai, không lộ dữ liệu | Đơn vị | Đạt |
