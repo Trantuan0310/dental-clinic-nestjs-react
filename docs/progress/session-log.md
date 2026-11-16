@@ -130,3 +130,4 @@
 - Mọi sơ đồ tuần tự: hide footbox (bớt chiều cao).
 - Tách ERD Hình 3.3 thành phiên khám (3.3) và điều trị/kế hoạch (3.4); đánh số lại Hình 3.4–3.35 → 3.5–3.36. Không còn sơ đồ chữ dưới ~6,5 pt. 167 trang, Kết luận = 135.
 - Hình 4.6 chụp lại (ảnh cũ chụp ngày Chủ nhật, lịch trống) ở ngày 17/11 có 13 lịch hẹn; sửa mô tả: lịch phân biệt bác sĩ bằng chấm màu và bộ lọc, có ngày/tuần/tháng.
+- Ảnh chụp Chương 4: cắt thanh menu trái (448 px) ở 38 ảnh nội bộ (giữ Hình 4.4 đầy đủ) và cắt phần trống phía dưới 9 ảnh; thêm câu giải thích ở đầu 4.5. Chữ giao diện khi in to hơn ~18%. Báo cáo 174 trang, Kết luận = 142. Ảnh gốc chưa cắt có trong lịch sử git.

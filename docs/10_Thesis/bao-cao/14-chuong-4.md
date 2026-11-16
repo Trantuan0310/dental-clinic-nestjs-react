@@ -175,6 +175,8 @@ idOf(ref: string): string | undefined {
 
 ## 4.5. Kết quả giao diện các chức năng
 
+Các hình trong mục này được chụp từ hệ thống chạy với dữ liệu mẫu, đăng nhập bằng tài khoản của từng vai trò. Thanh menu bên trái chỉ hiện các mục mà vai trò đó có quyền (Hình 4.4); ở các hình còn lại, thanh menu được cắt bỏ để phần nội dung đủ rõ khi in.
+
 ### 4.5.1. Trang công khai và đặt lịch trực tuyến
 
 Trang chủ (Hình 4.1) giới thiệu phòng khám, dịch vụ, bảng giá, đội ngũ bác sĩ; khách bấm vào một răng trên sơ đồ để xem các dịch vụ liên quan. Từ đây khách vào trang đặt lịch (Hình 4.2): chọn dịch vụ, bác sĩ, ngày, hệ thống hiện các khung giờ còn trống; khách nhập họ tên, số điện thoại và nhận mã tra cứu yêu cầu.
