@@ -121,7 +121,7 @@ Ngân hàng có thể gửi lại cùng một giao dịch khi mạng chập ch�
 
 ### 4.3.6. Xếp thứ tự hàng chờ bằng hàm thuần
 
-Quy tắc xếp hàng chờ (Hình 3.9) được viết thành hàm thuần, không đọc cơ sở dữ liệu, nên kiểm thử được bằng bảng quyết định với đủ các tình huống: khách đến sớm, đúng giờ, trễ, vãng lai, cấp cứu, bị bỏ qua.
+Quy tắc xếp hàng chờ (Hình 3.10) được viết thành hàm thuần, không đọc cơ sở dữ liệu, nên kiểm thử được bằng bảng quyết định với đủ các tình huống: khách đến sớm, đúng giờ, trễ, vãng lai, cấp cứu, bị bỏ qua.
 
 ```typescript
 export function dueAt(e: Orderable): number {

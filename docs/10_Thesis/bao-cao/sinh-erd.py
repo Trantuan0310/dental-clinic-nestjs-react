@@ -15,10 +15,12 @@ GROUPS = {
     '3-2-erd-benh-nhan-lich-hen': ('Nhóm bệnh nhân, lịch hẹn và tiếp nhận', [
         'Patient', 'Appointment', 'AppointmentService', 'Service', 'BookingRequest', 'QueueEntry',
         'WorkingSchedule', 'AppointmentLink', 'PatientHistoryLink', 'WaitlistEntry', 'Recall', 'User']),
-    '3-3-erd-kham-dieu-tri': ('Nhóm khám và điều trị', [
-        'Patient', 'Appointment', 'Encounter', 'ClinicalNote', 'ClinicalNoteAddendum', 'Treatment',
-        'TreatmentInventoryUsage', 'Prescription', 'PrescriptionLine', 'DentalChartSnapshot', 'TreatmentPlan',
-        'TreatmentPlanItem', 'InventoryItem']),
+    '3-3-erd-kham-dieu-tri': ('Nhóm phiên khám, ghi chú lâm sàng và đơn thuốc', [
+        'Patient', 'Appointment', 'Encounter', 'ClinicalNote', 'ClinicalNoteAddendum',
+        'Prescription', 'PrescriptionLine', 'DentalChartSnapshot']),
+    '3-3-erd-dieu-tri-ke-hoach': ('Nhóm điều trị và kế hoạch điều trị', [
+        'Patient', 'Encounter', 'Treatment', 'TreatmentInventoryUsage', 'InventoryItem',
+        'TreatmentPlan', 'TreatmentPlanItem']),
     '3-4-erd-hoa-don': ('Nhóm hóa đơn và thanh toán', [
         'Patient', 'Encounter', 'Invoice', 'InvoiceItem', 'Payment', 'InvoiceAdjustment', 'BankTransaction',
         'Treatment']),
