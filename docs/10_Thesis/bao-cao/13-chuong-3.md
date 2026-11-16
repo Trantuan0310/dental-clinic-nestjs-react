@@ -173,7 +173,7 @@ Mục này đặc tả các chức năng tiêu biểu theo mẫu: tên chức n�
 
 ### 3.3.1. Quản lý lịch hẹn và trạng thái lịch hẹn
 
-Vòng đời một lịch hẹn được mô hình hóa bằng biểu đồ trạng thái ở Hình 3.8. Các chuyển trạng thái đều kiểm tra quyền và điều kiện thời gian: chỉ check-in được trong ngày hẹn; chỉ đánh dấu vắng mặt khi đã qua giờ hẹn; hoàn tác check-in chỉ được trước khi bác sĩ mở phiên khám; mọi thay đổi được ghi vào bảng lịch sử lịch hẹn.
+Vòng đời một lịch hẹn được mô hình hóa bằng biểu đồ trạng thái ở Hình 3.8. Các chuyển trạng thái đều kiểm tra quyền và điều kiện thời gian: chỉ check-in được trong ngày hẹn; chỉ đánh dấu vắng mặt khi đã qua giờ hẹn; hoàn tác check-in chỉ được trước khi bác sĩ mở phiên khám. Lịch đã check-in không hủy được: khách rời đi trước khi khám được ghi là "đã về" và có thể hoàn tác trong ngày. Khách đã bị đánh vắng mặt nhưng đến muộn vẫn được check-in nếu lễ tân ghi lý do, còn trong ngày hẹn và giờ đó chưa bị lịch khác chiếm. Sau giờ hẹn, lịch chỉ được hủy dưới dạng "phòng khám hủy" (bác sĩ vắng, đóng cửa) kèm lý do; bác sĩ chỉ tự hủy được lịch của mình trước giờ hẹn ít nhất 24 giờ. Mọi thay đổi được ghi vào bảng lịch sử lịch hẹn.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-6-trang-thai-lich-hen.png){width=14cm}
@@ -361,7 +361,7 @@ Nguồn: Tác giả
 
 ### 3.3.5. Hóa đơn và thanh toán qua VietQR
 
-Hóa đơn đi qua các trạng thái ở Hình 3.18. Khoản thanh toán có thể đến từ ba nguồn: lễ tân ghi tiền mặt, lễ tân ghi chuyển khoản, hoặc hệ thống tự ghi khi ngân hàng báo tiền về.
+Hóa đơn đi qua các trạng thái ở Hình 3.18. Khoản thanh toán có thể đến từ ba nguồn: lễ tân ghi tiền mặt, lễ tân ghi chuyển khoản, hoặc hệ thống tự ghi khi ngân hàng báo tiền về. Trạng thái không được đặt tay mà luôn tính lại từ số đã thu, đã hoàn và đã điều chỉnh so với tổng tiền; vì vậy khi một phiếu thu ghi nhầm bị hủy, hóa đơn tự lùi về "thu một phần" hoặc "đã phát hành". Hóa đơn chỉ hủy được khi không còn khoản thu nào hiệu lực, để tiền không thể "biến mất" khỏi sổ sách; hóa đơn đã hủy có thể được lập lại thành bản nháp mới từ cùng phiên khám.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-8-trang-thai-hoa-don.png){width=12cm}

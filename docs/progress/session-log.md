@@ -139,3 +139,4 @@
 - Đối chiếu 5 khối mã Chương 4 với nguồn: đều khớp (bỏ qua chú thích); thêm câu ở đầu 4.3 nói rõ mã được trích rút gọn, đánh dấu chỗ lược trong truy vấn lịch sử răng.
 - Đối chiếu số liệu nghiệp vụ Chương 3 (check-in, nhắc lịch, link 7 ngày/256 bit, tự lưu 1,5 s, 5 lần đăng nhập/phút, gợi ý nhập 30 ngày, mục tiêu KPI): đều khớp. Bảng 3.5 thêm cột ngưỡng chấp nhận (okAt) và câu giải thích tô 3 mức.
 - 3.4.1: bổ sung phát hiện dùng lại mã làm mới (thu hồi mọi phiên, REFRESH_REUSE_DETECTED) và khóa tài khoản 15 phút sau >5 lần sai (đã đối chiếu auth.service.ts).
+- Đối chiếu chuyển trạng thái: Hình 3.8 lịch hẹn thêm NO_SHOW→CHECKED_IN (đến muộn, có lý do) và LEFT→CHECKED_IN (hoàn tác), ghi rõ luật hủy; Hình 3.18 hóa đơn thêm hủy phiếu thu (PAID→PARTIAL→ISSUED), điều kiện hủy hóa đơn, lập lại hóa đơn; cập nhật đoạn mô tả. Kỳ lương, đăng ký ca khớp sẵn.

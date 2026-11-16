@@ -9,11 +9,13 @@ CHECKED_IN --> SCHEDULED : Hoàn tác check-in\n(trước khi khám)
 CHECKED_IN --> IN_PROGRESS : Bác sĩ mở phiên khám
 CHECKED_IN --> LEFT : Khách về trước khi khám
 IN_PROGRESS --> COMPLETED : Đóng phiên khám
-SCHEDULED --> CANCELLED : Hủy (có lý do)
-CONFIRMED --> CANCELLED : Hủy (có lý do)
+SCHEDULED --> CANCELLED : Hủy trước giờ hẹn\n(bác sĩ: trước ít nhất 24 giờ;\nsau giờ hẹn: chỉ "phòng khám hủy", có lý do)
+CONFIRMED --> CANCELLED : Hủy (cùng quy tắc)
 SCHEDULED --> NO_SHOW : Quá giờ không đến
 CONFIRMED --> NO_SHOW : Quá giờ không đến
 NO_SHOW --> SCHEDULED : Hoàn tác trong ngày
+NO_SHOW --> CHECKED_IN : Khách đến muộn: check-in có lý do\n(cùng ngày, giờ còn trống)
+LEFT --> CHECKED_IN : Hoàn tác "đã về" (trong ngày)
 COMPLETED --> [*]
 CANCELLED --> [*]
 LEFT --> [*]
