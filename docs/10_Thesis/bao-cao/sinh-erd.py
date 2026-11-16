@@ -22,10 +22,11 @@ GROUPS = {
     '3-4-erd-hoa-don': ('Nhóm hóa đơn và thanh toán', [
         'Patient', 'Encounter', 'Invoice', 'InvoiceItem', 'Payment', 'InvoiceAdjustment', 'BankTransaction',
         'Treatment']),
+    '3-5-erd-nguoi-dung-phan-quyen': ('Nhóm người dùng, phân quyền và nhật ký', [
+        'User', 'Role', 'Permission', 'UserRole', 'RolePermission', 'AuditLog']),
     '3-5-erd-nhan-su-kho': ('Nhóm nhân sự, lương và kho', [
-        'User', 'Role', 'Permission', 'UserRole', 'RolePermission', 'Employee', 'DentistProfile',
-        'ShiftRegistration', 'PayrollPeriod', 'PayrollLineItem', 'InventoryCategory', 'InventoryItem',
-        'StockMovement', 'AuditLog']),
+        'User', 'Employee', 'DentistProfile', 'ShiftRegistration', 'PayrollPeriod', 'PayrollLineItem',
+        'InventoryCategory', 'InventoryItem', 'StockMovement']),
 }
 SKIP_COLS = {'createdBy', 'updatedBy', 'updatedAt', 'deletedBy', 'lastEditedBy'}
 MAX_COLS = 5

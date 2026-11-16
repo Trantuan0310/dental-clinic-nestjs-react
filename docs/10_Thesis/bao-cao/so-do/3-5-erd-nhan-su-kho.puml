@@ -15,36 +15,6 @@ entity "users" as User {
   * status : enum
   * failed_login_attempts : int
 }
-entity "roles" as Role {
-  * id : uuid <<PK>>
-  --
-  * code : varchar
-  * name : varchar
-  description : varchar
-  * is_system : bool
-  * created_at : timestamptz
-}
-entity "permissions" as Permission {
-  * id : uuid <<PK>>
-  --
-  * code : varchar
-  * resource : varchar
-  * action : varchar
-  description : varchar
-  * is_system : bool
-}
-entity "user_roles" as UserRole {
-  --
-  * user_id : uuid <<FK>>
-  * role_id : uuid <<FK>>
-  * assigned_at : timestamptz
-  assigned_by : uuid
-}
-entity "role_permissions" as RolePermission {
-  --
-  * role_id : uuid <<FK>>
-  * permission_id : uuid <<FK>>
-}
 entity "employees" as Employee {
   * id : uuid <<PK>>
   --
@@ -133,23 +103,9 @@ entity "stock_movements" as StockMovement {
   * quantity_after : decimal
   performed_by : uuid <<FK>>
 }
-entity "audit_logs" as AuditLog {
-  * id : uuid <<PK>>
-  --
-  actor_user_id : uuid <<FK>>
-  actor_email_at_time : varchar
-  * action : varchar
-  target_type : varchar
-  target_id : uuid
-  metadata : jsonb
-}
 
 User |o--o{ User
 User |o--o{ User
-User ||--o{ UserRole
-Role ||--o{ UserRole
-Role ||--o{ RolePermission
-Permission ||--o{ RolePermission
 User |o--o{ Employee
 Employee ||--o| DentistProfile
 User ||--o| DentistProfile
@@ -170,5 +126,4 @@ InventoryCategory |o--o{ InventoryItem
 User |o--o{ InventoryItem
 InventoryItem ||--o{ StockMovement
 User |o--o{ StockMovement
-User |o--o{ AuditLog
 @enduml

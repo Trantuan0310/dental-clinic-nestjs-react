@@ -1,0 +1,65 @@
+@startuml
+!include _kieu.iuml
+hide circle
+skinparam linetype ortho
+skinparam defaultFontSize 13
+title Nhóm người dùng, phân quyền và nhật ký
+
+entity "users" as User {
+  * id : uuid <<PK>>
+  --
+  * email : varchar
+  * password_hash : varchar
+  * full_name : varchar
+  * status : enum
+  * failed_login_attempts : int
+}
+entity "roles" as Role {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * name : varchar
+  description : varchar
+  * is_system : bool
+  * created_at : timestamptz
+}
+entity "permissions" as Permission {
+  * id : uuid <<PK>>
+  --
+  * code : varchar
+  * resource : varchar
+  * action : varchar
+  description : varchar
+  * is_system : bool
+}
+entity "user_roles" as UserRole {
+  --
+  * user_id : uuid <<FK>>
+  * role_id : uuid <<FK>>
+  * assigned_at : timestamptz
+  assigned_by : uuid
+}
+entity "role_permissions" as RolePermission {
+  --
+  * role_id : uuid <<FK>>
+  * permission_id : uuid <<FK>>
+}
+entity "audit_logs" as AuditLog {
+  * id : uuid <<PK>>
+  --
+  actor_user_id : uuid <<FK>>
+  actor_email_at_time : varchar
+  * action : varchar
+  target_type : varchar
+  target_id : uuid
+  metadata : jsonb
+}
+
+User |o--o{ User
+User |o--o{ User
+User ||--o{ UserRole
+Role ||--o{ UserRole
+Role ||--o{ RolePermission
+Permission ||--o{ RolePermission
+User |o--o{ AuditLog
+@enduml
