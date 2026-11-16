@@ -422,8 +422,8 @@ def fit_gaps(pdf):
         img_h = cap_top - 2.5 * cm - 6
         free = h - 2.5 * cm - max(body) - 18  # room left on the page, minus spacing
         k = (free - cap_block - 12) / img_h
-        # Diagrams (chapters 1–3) may shrink by 25 %; screenshots only by 10 % to stay legible.
-        if (0.75 if num[0] in '123' else 0.9) <= k < 1:
+        # Diagrams (chapters 1 and 3) may shrink by 25 %; screenshots only by 10 % to stay legible.
+        if (0.75 if num[0] in '13' else 0.9) <= k < 1:  # use-case diagrams (chapter 2) are already small
             found[f'Hình {num}'] = k
         elif k < 1 and free > 4 * 22.5 and f'Hình {num}' not in FIT:
             # Too tall to shrink into the gap: let the text that follows the figure fill it instead.

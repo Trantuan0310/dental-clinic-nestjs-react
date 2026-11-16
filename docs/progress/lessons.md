@@ -91,3 +91,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Chụp màn hình cho báo cáo: dev-local.sh không đặt VIETQR_*; truyền VIETQR_BANK_BIN/ACCOUNT_NO/ACCOUNT_NAME khi start, nếu không mã QR không hiện.
 - pdftotext -bbox-layout của bản LibreOffice tách mỗi dòng thành một block: muốn nhận đoạn văn phải tự ghép dòng (dòng ngắn hơn lề phải = hết đoạn).
 - Cắt bớt hình: đánh số lại bằng script theo thứ tự chú thích và ánh xạ mọi "Hình x.y" trong các tệp (kể cả phụ lục), xử lý tay các dải "4.21–4.23" trước.
+- Word không có hình trôi: muốn hết khoảng trắng cuối trang trước hình cao thì đổi thứ tự (đưa đoạn văn sau hình lên trước) — tiêu đề con ngay sau hình chặn việc này, nên mục toàn hình (use case) đừng chia tiểu mục.
