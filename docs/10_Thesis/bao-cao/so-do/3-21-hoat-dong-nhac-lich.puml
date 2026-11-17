@@ -1,31 +1,26 @@
 @startuml
 !include _kieu.iuml
+skinparam wrapWidth 300
 start
-:Mỗi kênh có tác vụ riêng chạy theo quy trình này\n(email: đầu mỗi giờ; SMS: phút 20 mỗi giờ);
+:Tác vụ định kỳ của một kênh chạy\n(email: đầu mỗi giờ; SMS: phút 20 mỗi giờ);
 note right
   Hai tác vụ độc lập:
   một kênh lỗi không chặn kênh kia
 end note
-if (Giờ yên lặng 21:00–7:00\nhoặc kênh chưa cấu hình?) then (có)
+if (Giờ yên lặng 21:00–7:00 hoặc kênh chưa cấu hình?) then (có)
   :Không gửi, chờ lần chạy sau;
   stop
 endif
-:Lấy lịch hẹn đã đặt hoặc đã xác nhận, bắt đầu sau 30 phút\nvà trong vòng 24 giờ tới, có email / số điện thoại;
-:Bỏ lịch được đặt quá sát giờ\n(đặt trước giờ hẹn dưới 2 giờ);
+:Lấy lịch hẹn đã đặt hoặc đã xác nhận, bắt đầu trong 30 phút – 24 giờ tới,\ncó email / số điện thoại; bỏ lịch đặt sát giờ (dưới 2 giờ);
 while (Còn lịch hẹn?) is (còn)
-  if (Đã nhắc qua kênh này?\n(email: dấu thời gian trên lịch hẹn;\nSMS: khóa chống trùng)) then (rồi)
+  if (Đã nhắc qua kênh này?\n(email: dấu thời gian; SMS: khóa chống trùng)) then (rồi)
     :Bỏ qua;
   else (chưa)
-    if (Kênh email?) then (có)
-      :Gửi email kèm liên kết\nxác nhận / dời / hủy lịch;
-    else (không)
-      :Gửi SMS nhắc lịch;
-    endif
-    :Ghi kết quả gửi (thành công / lỗi);
+    :Gửi email kèm liên kết xác nhận / dời / hủy, hoặc gửi SMS nhắc lịch;\nghi kết quả gửi (thành công / lỗi);
   endif
 endwhile (hết)
 note right
-  Tin SMS bị lỗi được thử lại
+  SMS bị lỗi được thử lại
   ở các lần chạy sau, tối đa 3 lần
 end note
 stop

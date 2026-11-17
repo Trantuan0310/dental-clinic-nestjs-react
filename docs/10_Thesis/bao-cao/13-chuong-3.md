@@ -201,7 +201,7 @@ Nguồn: Tác giả
 Khi khách đến, lễ tân check-in và hệ thống đưa khách vào hàng chờ của bác sĩ (Hình 3.8). Check-in chỉ được thực hiện trong khung từ 15 phút trước đến 30 phút sau giờ hẹn; ngoài khung này phải có lý do ghi đè và phải trong ngày hẹn. Thứ tự hàng chờ không đơn thuần theo giờ đến: khách đến đúng giờ được xếp theo giờ hẹn, khách trễ quá 15 phút được xếp như thể đến muộn thêm 15 phút, khách vãng lai chờ sau khách có hẹn tối đa khoảng 45 phút, còn ca cấp cứu luôn được đưa lên đầu. Cách xếp này được viết thành một hàm thuần và kiểm thử bằng bảng quyết định.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-17-hoat-dong-tiep-nhan.png){width=11.5cm}
+![](hinh/3-17-hoat-dong-tiep-nhan.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
@@ -345,7 +345,7 @@ Hai tác vụ định kỳ độc lập, một cho email (đầu mỗi giờ) v�
 Hình 3.14 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khung thời gian nêu trên, tác vụ không gửi tin trong giờ yên lặng từ 21 giờ đến 7 giờ và bỏ qua những lịch hẹn được đặt quá sát giờ (dưới 2 giờ), vì khách vừa đặt thì không cần nhắc.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-21-hoat-dong-nhac-lich.png){width=10cm}
+![](hinh/3-21-hoat-dong-nhac-lich.png){width=11cm}
 :::
 
 ::: {custom-style="hình"}

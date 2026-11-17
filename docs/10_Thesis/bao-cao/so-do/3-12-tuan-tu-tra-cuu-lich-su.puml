@@ -1,5 +1,6 @@
 @startuml
 !include _kieu.iuml
+skinparam wrapWidth 240
 hide footbox
 autonumber
 actor "Bệnh nhân" as BN
@@ -9,17 +10,14 @@ database "PostgreSQL" as DB
 participant "Email / SMS" as MS
 BN -> FE : Nhập số điện thoại
 FE -> SV : POST /public/patient-history/request (3 lần/phút)
-SV -> DB : Tìm bệnh nhân có đúng SĐT này\n(SĐT người giám hộ chỉ với trẻ em)
+SV -> DB : Tìm bệnh nhân đúng SĐT (SĐT người giám hộ chỉ với trẻ em)
 opt Có bệnh nhân khớp
-  SV -> SV : Sinh token ngẫu nhiên 256 bit
-  SV -> DB : Lưu SHA-256(token), hạn 7 ngày
+  SV -> DB : Lưu SHA-256 của token ngẫu nhiên 256 bit, hạn 7 ngày
   SV -> MS : Gửi /lich-su/<token> tới email, SĐT trong hồ sơ
 end
 SV --> FE : Luôn cùng một câu trả lời
 BN -> FE : Mở liên kết trong email / tin nhắn
 FE -> SV : GET /public/patient-history/<token>
-SV -> DB : Tra theo SHA-256(token), kiểm tra hạn
-SV -> DB : Lần khám, kế hoạch, lịch hẹn, hóa đơn của bệnh nhân
-SV -> DB : Ghi nhật ký PATIENT_HISTORY_VIEWED
+SV -> DB : Kiểm tra SHA-256(token) và hạn; đọc lần khám, kế hoạch,\nlịch hẹn, hóa đơn; ghi nhật ký PATIENT_HISTORY_VIEWED
 SV --> FE : Dữ liệu (không có ghi chú nội bộ, id, liên lạc)
 @enduml
