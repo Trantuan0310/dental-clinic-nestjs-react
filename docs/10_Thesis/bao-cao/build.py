@@ -15,6 +15,7 @@ those page numbers (twice more if the numbers moved). Word can still refresh
 them with F9.
 """
 import copy
+import unicodedata
 import os
 import re
 import subprocess
@@ -477,6 +478,11 @@ def tighten(doc):
             sp.set(qn('w:val'), str(k))
 
 
+def text_of(el):
+    """Plain text of a block (itertext also walks pandoc's field copies and repeats it)."""
+    return ''.join(t.text or '' for t in el.iter(qn('w:t')))
+
+
 def pull_text(doc):
     """Word has no floats: move the plain paragraphs that follow a figure in front of it,
     as many as fit the white space the figure left on the previous page."""
@@ -493,42 +499,61 @@ def pull_text(doc):
             el = el.getnext() if el is not None else None
         def sid_of(e):
             st = e.find(qn('w:pPr') + '/' + qn('w:pStyle')) if e is not None and e.tag == qn('w:p') else None
-            return st.get(qn('w:val')) if st is not None else ''
+            return unicodedata.normalize('NFC', st.get(qn('w:val'))) if st is not None else ''
 
+        def step(e, marks):
+            """Next block after e; the bookmark tags pandoc puts between blocks are collected to move along."""
+            e = e.getnext()
+            while e is not None and e.tag in (qn('w:bookmarkStart'), qn('w:bookmarkEnd')):
+                marks.append(e)
+                e = e.getnext()
+            return e
+
+        pre = []
+        if el is not None and el.tag in (qn('w:bookmarkStart'), qn('w:bookmarkEnd')):
+            pre.append(el)
+            el = step(el, pre)
         while el is not None and el.tag == qn('w:p'):
-            run, cost = [], 0.0  # a heading only moves together with the text under it
+            run, cost = list(pre), 0.0  # a heading only moves together with the text under it
             cur = el
             if sid_of(el) == 'bảng' and budget >= 4:
                 # A table (caption, grid, source line) breaks across pages, so it fills any gap.
-                tbl = el.getnext()
-                src = tbl.getnext() if tbl is not None and tbl.tag == qn('w:tbl') else None
-                if src is None:
+                block = run + [el]
+                tbl = step(el, block)
+                if tbl is None or tbl.tag != qn('w:tbl'):
                     break
-                block = [el, tbl] + ([src] if sid_of(src) == 'nguồn' else [])
-                el = block[-1].getnext()
+                block.append(tbl)
+                tail = []
+                src = step(tbl, tail)
+                if sid_of(src) == 'nguồn':
+                    block += tail + [src]
+                pre = []
+                el = step(block[-1], pre)
                 for r in block:
                     p._p.addprevious(r)
                 budget -= 5 + 1.2 * len(tbl.findall(qn('w:tr')))
                 if budget <= 0:
                     break
                 continue
+            heads = 0
             while cur is not None and cur.tag == qn('w:p'):
-                st = cur.find(qn('w:pPr') + '/' + qn('w:pStyle'))
-                sid = st.get(qn('w:val')) if st is not None else ''
-                if 'Kết luận chương' in ''.join(cur.itertext()) or cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact', 'Heading3', 'Heading2'):
+                sid = sid_of(cur)
+                if 'Kết luận chương' in text_of(cur) or cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact', 'Heading3', 'Heading2'):
                     cur = None
                     break
                 run.append(cur)
                 if sid in ('Heading3', 'Heading2'):
+                    heads += 1
                     cost += 2.2
-                    cur = cur.getnext()
+                    cur = step(cur, run)
                     continue
-                cost += len(''.join(cur.itertext())) // 85 + (1.1 if sid == 'Compact' else 1.3)
+                cost += len(text_of(cur)) // 85 + (1.1 if sid == 'Compact' else 1.3)
                 break
-            if cur is None or budget < 3 or (len(run) > 1 and budget < 4.5):
+            if cur is None or budget < 3 or (heads and budget < 4.5):
                 break  # paragraphs break across pages: the last one may overshoot the gap
             budget -= cost
-            el = run[-1].getnext()
+            pre = []
+            el = step(cur, pre)
             for r in run:
                 p._p.addprevious(r)
 
