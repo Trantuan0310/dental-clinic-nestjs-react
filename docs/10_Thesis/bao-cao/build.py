@@ -491,17 +491,35 @@ def pull_text(doc):
             while el is not None and el.tag != qn('w:p'):
                 el = el.getnext()
             el = el.getnext() if el is not None else None
+        def sid_of(e):
+            st = e.find(qn('w:pPr') + '/' + qn('w:pStyle')) if e is not None and e.tag == qn('w:p') else None
+            return st.get(qn('w:val')) if st is not None else ''
+
         while el is not None and el.tag == qn('w:p'):
             run, cost = [], 0.0  # a heading only moves together with the text under it
             cur = el
+            if sid_of(el) == 'bảng' and budget >= 5:
+                # A table (caption, grid, source line) breaks across pages, so it fills any gap.
+                tbl = el.getnext()
+                src = tbl.getnext() if tbl is not None and tbl.tag == qn('w:tbl') else None
+                if src is None:
+                    break
+                block = [el, tbl] + ([src] if sid_of(src) == 'nguồn' else [])
+                el = block[-1].getnext()
+                for r in block:
+                    p._p.addprevious(r)
+                budget -= 5 + 1.2 * len(tbl.findall(qn('w:tr')))
+                if budget <= 0:
+                    break
+                continue
             while cur is not None and cur.tag == qn('w:p'):
                 st = cur.find(qn('w:pPr') + '/' + qn('w:pStyle'))
                 sid = st.get(qn('w:val')) if st is not None else ''
-                if cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact', 'Heading3'):
+                if 'Kết luận chương' in ''.join(cur.itertext()) or cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact', 'Heading3', 'Heading2'):
                     cur = None
                     break
                 run.append(cur)
-                if sid == 'Heading3':
+                if sid in ('Heading3', 'Heading2'):
                     cost += 2.2
                     cur = cur.getnext()
                     continue
