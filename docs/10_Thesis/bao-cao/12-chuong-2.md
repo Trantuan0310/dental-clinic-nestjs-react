@@ -312,8 +312,8 @@ Bảng 2.9. Ma trận quyền tiêu biểu theo vai trò
 Nguồn: Tác giả tổng hợp từ cấu hình phân quyền của hệ thống
 :::
 
-Điểm đáng chú ý là quản trị viên không có quyền ghi hồ sơ lâm sàng: chỉ bác sĩ trực tiếp khám mới được ghi chẩn đoán, điều trị và sơ đồ răng. Thiết kế này bảo đảm mỗi dòng trong hồ sơ y tế gắn với người có chuyên môn chịu trách nhiệm, phù hợp yêu cầu truy vết của hồ sơ bệnh án điện tử [@tt46].
+Điểm đáng chú ý là quản trị viên không có quyền ghi hồ sơ lâm sàng: chỉ bác sĩ trực tiếp khám mới được ghi chẩn đoán, điều trị và sơ đồ răng. Nhờ vậy, mỗi dòng hồ sơ y tế gắn với người có chuyên môn chịu trách nhiệm [@tt46].
 
 ## 2.7. Kết luận chương
 
-Chương 2 đã khảo sát quy trình làm việc của phòng khám, xác định bốn tác nhân người dùng, ba hệ thống bên ngoài cùng các yêu cầu chức năng và phi chức năng. Các biểu đồ use case và ma trận quyền là cơ sở để Chương 3 thiết kế hệ thống.
+Chương 2 đã khảo sát quy trình của phòng khám, xác định các tác nhân cùng yêu cầu chức năng và phi chức năng; các biểu đồ use case và ma trận quyền là cơ sở cho thiết kế ở Chương 3.
