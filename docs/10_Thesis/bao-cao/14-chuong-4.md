@@ -251,7 +251,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.10, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.10, phải).
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-cong-lich-su-kham.png){width=6cm}
+![](hinh/4-cong-tra-cuu-lich-su.png){width=12cm}
 :::
 
 ::: {custom-style="hình"}

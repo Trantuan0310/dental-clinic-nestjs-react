@@ -384,6 +384,7 @@ def cover(doc):
 
 
 GAPS = {}  # caption prefix -> lines of white space left above the figure (seen in the last render)
+ROUNDS = {}  # caption prefix -> how many times its gap was topped up
 PULL = {}  # caption prefix -> lines of following body text to place before the figure
 FIT = {}  # caption prefix ("Hình 3.8.") -> extra scale so the figure fits the gap above it
 
@@ -423,9 +424,9 @@ def fit_gaps(pdf):
         free = h - 2.5 * cm - max(body) - 18  # room left on the page, minus spacing
         k = (free - cap_block - 12) / img_h
         # Diagrams (chapters 1 and 3) may shrink by 25 %; screenshots only by 10 % to stay legible.
-        if (0.75 if num[0] in '13' else 0.9) <= k < 1:  # use-case diagrams (chapter 2) are already small
+        if (0.7 if num[0] in '13' else 0.9) <= k < 1:  # use-case diagrams (chapter 2) are already small
             found[f'Hình {num}'] = k
-        elif k < 1 and free > 4 * 22.5 and f'Hình {num}' not in FIT:
+        elif k < 1 and free > 4 * 22.5:
             # Too tall to shrink into the gap: let the text that follows the figure fill it instead.
             GAPS[f'Hình {num}'] = int(free / 22.5) - 1
     return found
@@ -491,17 +492,27 @@ def pull_text(doc):
                 el = el.getnext()
             el = el.getnext() if el is not None else None
         while el is not None and el.tag == qn('w:p'):
-            st = el.find(qn('w:pPr') + '/' + qn('w:pStyle'))
-            text = ''.join(el.itertext())
-            if st is None or st.get(qn('w:val')) not in ('FirstParagraph', 'BodyText') or el.findall('.//' + qn('w:drawing')):
+            run, cost = [], 0.0  # a heading only moves together with the text under it
+            cur = el
+            while cur is not None and cur.tag == qn('w:p'):
+                st = cur.find(qn('w:pPr') + '/' + qn('w:pStyle'))
+                sid = st.get(qn('w:val')) if st is not None else ''
+                if cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact', 'Heading3'):
+                    cur = None
+                    break
+                run.append(cur)
+                if sid == 'Heading3':
+                    cost += 2.2
+                    cur = cur.getnext()
+                    continue
+                cost += len(''.join(cur.itertext())) // 85 + (1.1 if sid == 'Compact' else 1.3)
                 break
-            lines = len(text) // 85 + 1.3
-            if lines > budget:
+            if cur is None or cost > budget or (len(run) > 1 and cost + 2 > budget):
                 break
-            budget -= lines
-            nxt = el.getnext()
-            p._p.addprevious(el)
-            el = nxt
+            budget -= cost
+            el = run[-1].getnext()
+            for r in run:
+                p._p.addprevious(r)
 
 
 def finish(doc, pages=None):
@@ -744,11 +755,13 @@ def locate(texts, lists):
 
 def main():
     out, lists = build()
-    for _ in range(4):  # shrink figures that leave a large gap above them, or fill the gap with text
+    for _ in range(7):  # shrink figures that leave a large gap above them, or fill the gap with text
         render(out)
         new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
         new = {c: k for c, k in new.items() if c not in FIT}
-        pull = {c: n for c, n in GAPS.items() if c not in PULL and c not in new}
+        pull = {c: PULL.get(c, 0) + n for c, n in GAPS.items() if c not in new and ROUNDS.get(c, 0) < 3}
+        for c in pull:
+            ROUNDS[c] = ROUNDS.get(c, 0) + 1
         GAPS.clear()
         if not new and not pull:
             break
