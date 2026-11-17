@@ -246,6 +246,9 @@ Hình 4.9. Hóa đơn tự ghi nhận khoản chuyển khoản từ ngân hàng
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
+Hoàn tiền là thao tác cần quyền riêng: hộp thoại cho biết số tiền tối đa được hoàn, hình thức hoàn và bắt buộc nhập lý do. Phiếu hoàn được tính vào ngày thực hiện, không sửa số thu của ngày cũ, để báo cáo các kỳ trước không bị thay đổi. Mọi thao tác trên hóa đơn (phát hành, khoản thu tự ghi, hoàn tiền, hủy) đều xuất hiện trong nhật ký kiểm toán, nơi quản trị viên lọc theo loại hành động, loại đối tượng, khoảng ngày và xuất tệp CSV.
+
+
 ### 4.5.5. Bệnh nhân tra cứu lịch sử khám
 
 Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.10, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.10, phải).
@@ -262,7 +265,12 @@ Hình 4.10. Trang xin đường dẫn (trái) và trang lịch sử khám trên 
 Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
+Khi lễ tân gửi, đường dẫn được chuyển tới email và số điện thoại trong hồ sơ, đồng thời hiện trên màn hình để sao chép khi cần gửi qua kênh khác. Khi bệnh nhân tự xin, trang chỉ trả lời một câu chung và không hiện đường dẫn, nên người biết số điện thoại của người khác cũng không xem được hồ sơ của họ.
+
+
 ### 4.5.6. Quản lý: lương, bảng điều khiển và trợ lý AI
+
+Các màn hình quản lý được tổ chức theo cùng một kiểu danh sách có bộ lọc. Màn hình kho liệt kê vật tư với tồn kho, mức tối thiểu và giá nhập; nút "Sắp hết" lọc nhanh các vật tư dưới mức tối thiểu, mục "Nên nhập" gợi ý số lượng cần nhập theo mức tiêu thụ thực tế. Lịch làm việc cho phép đặt ca theo tuần và ghi ngày nghỉ cho từng bác sĩ; đăng ký ca thêm của bác sĩ được quản trị viên duyệt hoặc từ chối, kèm phần "Phủ ca so với lịch đặt" cho biết khung giờ nào đã có khách đặt mà chưa có bác sĩ.
 
 Chi tiết kỳ lương hiển thị tổng lương, thực nhận, thuế thu nhập cá nhân, bảo hiểm xã hội và bảng lương từng bác sĩ theo số phiên khám, giờ làm, giờ làm thêm; quản trị viên tính lại, duyệt kỳ lương và xuất phiếu lương PDF.
 
@@ -281,6 +289,8 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 Phần dưới bảng điều khiển gồm sáu chỉ số vận hành so với mục tiêu, mỗi chỉ số ghi rõ mức "đạt mục tiêu", "chấp nhận được" hoặc "cần cải thiện", và bản đồ nhiệt công suất ghế theo giờ trong tuần.
+
+Ở phần quản trị, quản trị viên tích chọn từng quyền cho vai trò, quản lý tài khoản (gửi đường dẫn đặt mật khẩu, cấp mật khẩu tạm, vô hiệu hóa) và xem sổ đồng thuận, nơi liệt kê mọi bản ghi đồng ý của bệnh nhân kèm mục đích, phiên bản văn bản, kênh ghi nhận và trạng thái còn hiệu lực hay đã rút lại.
 
 Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung chat bên phải (Hình 4.12). Hình được chụp ở chế độ dự phòng khi chưa cấu hình dịch vụ AI: trợ lý vẫn nhận ra ý định của câu hỏi, gọi đúng công cụ tra cứu, trả lời từ dữ liệu thật và ghi rõ "Trả lời theo mẫu". Khi có dịch vụ AI, câu trả lời được viết tự nhiên và trợ lý có thể đề xuất đặt, hủy, dời lịch dưới dạng thẻ xác nhận.
 
