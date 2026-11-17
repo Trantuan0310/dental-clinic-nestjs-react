@@ -553,7 +553,7 @@ def pull_text(doc):
             pre.append(el)
             el = step(el, pre)
         while el is not None and el.tag == qn('w:p'):
-            run, cost = list(pre), 0.0  # a heading only moves together with the text under it
+            run, cost = list(pre), 0.0  # a heading never moves: the figure must stay in its own section
             cur = el
             if sid_of(el) == 'bảng' and budget >= 4:
                 # A table (caption, grid, source line) breaks across pages, so it fills any gap.
@@ -579,7 +579,7 @@ def pull_text(doc):
             heads = 0
             while cur is not None and cur.tag == qn('w:p'):
                 sid = sid_of(cur)
-                if 'Kết luận chương' in text_of(cur) or cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact', 'Heading3', 'Heading2'):
+                if 'Kết luận chương' in text_of(cur) or cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact'):
                     cur = None
                     break
                 run.append(cur)
