@@ -28,7 +28,7 @@ Xuất phát từ thực tế đó, em chọn đề tài **"Phát triển phần
 - Mô hình dữ liệu hồ sơ nha khoa, trong đó có hệ đánh số răng FDI [@iso3950] và lịch sử tình trạng của từng răng qua các lần khám.
 - Kiến trúc ứng dụng web nhiều lớp gồm giao diện một trang, REST API và cơ sở dữ liệu quan hệ.
 - Cơ chế phân quyền theo vai trò kết hợp giới hạn theo dòng dữ liệu, nhật ký kiểm toán và bảo vệ dữ liệu sức khỏe.
-- Tích hợp dịch vụ ngoài: thanh toán chuyển khoản qua VietQR, gửi email và SMS.
+- Tích hợp dịch vụ ngoài: thanh toán chuyển khoản qua mã VietQR, gửi email và tin nhắn SMS.
 - Ứng dụng mô hình ngôn ngữ lớn (LLM) trong phần mềm nghiệp vụ theo hướng có kiểm soát.
 
 ## 4. Phạm vi nghiên cứu
@@ -72,7 +72,7 @@ Bệnh nhân tự đặt, xác nhận, dời lịch và xem lịch sử khám qu
 
 ## 8. Bố cục đồ án
 
-Ngoài phần Mở đầu, Kết luận, Tài liệu tham khảo và Phụ lục, đồ án gồm năm chương:
+Ngoài các phần Mở đầu, Kết luận, Tài liệu tham khảo và Phụ lục, nội dung đồ án gồm năm chương:
 
 - **Chương 1. Cơ sở lý thuyết và công nghệ:** nghiệp vụ phòng khám nha khoa, tổng quan các phần mềm hiện có, kiến trúc và công nghệ sử dụng, các vấn đề bảo mật, thanh toán và ứng dụng AI.
 - **Chương 2. Khảo sát hiện trạng và phân tích yêu cầu:** quy trình tại phòng khám, các tác nhân, yêu cầu chức năng và phi chức năng, biểu đồ use case.

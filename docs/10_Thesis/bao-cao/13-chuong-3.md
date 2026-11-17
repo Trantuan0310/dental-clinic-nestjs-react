@@ -71,7 +71,7 @@ Cơ sở dữ liệu PostgreSQL [@postgres] gồm 70 bảng và 43 kiểu liệt
 
 - **Khóa chính UUID phiên bản 7**: không đoán được (an toàn khi xuất hiện trong đường dẫn), tăng dần theo thời gian nên chèn và đánh chỉ mục hiệu quả. Các mã con người đọc (mã bệnh nhân `PAT-2026-00461`, mã hóa đơn `INV-2026-000123`) được sinh riêng từ sequence.
 - **Xóa mềm** bằng cột `deleted_at` cho dữ liệu nghiệp vụ, giữ lịch sử và cho phép khôi phục; các truy vấn mặc định bỏ qua bản ghi đã xóa.
-- **Tiền** dùng kiểu `decimal`, không dùng số thực, để không sai số khi cộng dồn.
+- **Tiền** dùng kiểu `decimal` thay cho số thực, để không phát sinh sai số khi cộng dồn.
 - **Thời gian** dùng `timestamptz` (có múi giờ); các phép tính "hôm nay", "giờ làm việc" quy đổi theo múi giờ phòng khám (Asia/Ho_Chi_Minh).
 - **JSONB cho dữ liệu bán cấu trúc:** danh sách số răng của một thủ thuật, bản chụp sơ đồ răng (khóa là số răng FDI, giá trị là tình trạng và ghi chú), danh sách dị ứng.
 - **Ràng buộc ở cơ sở dữ liệu:** khóa ngoại, duy nhất (ví dụ mỗi lịch hẹn có tối đa một phiên khám, mỗi giao dịch ngân hàng chỉ được lưu một lần), ràng buộc kiểm tra cho các giá trị có miền hữu hạn.
