@@ -93,3 +93,5 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Cắt bớt hình: đánh số lại bằng script theo thứ tự chú thích và ánh xạ mọi "Hình x.y" trong các tệp (kể cả phụ lục), xử lý tay các dải "4.21–4.23" trước.
 - Word không có hình trôi: muốn hết khoảng trắng cuối trang trước hình cao thì đổi thứ tự (đưa đoạn văn sau hình lên trước) — tiêu đề con ngay sau hình chặn việc này, nên mục toàn hình (use case) đừng chia tiểu mục.
 - Rút kinh nghiệm từ nhận xét hội đồng với đồ án khác: (1) lược mô tả quá chi tiết về hạ tầng/nghiệp vụ không gắn trực tiếp đề tài; (2) không lặp sơ đồ, ảnh demo cùng một nghiệp vụ, chỉ giữ minh chứng trực tiếp; (3) đặt số trích dẫn ngay tại chỗ dùng, nhất là Chương 1 và nội dung kỹ thuật; (4) nêu rõ phạm vi triển khai/kiểm thử (thiết bị, trình duyệt nào đã kiểm, cái nào chưa); (5) phụ lục không lặp nội dung đã có trong thân báo cáo.
+- python-docx/lxml: `itertext()` trên đoạn của pandoc lặp nội dung (đếm gấp 3) — lấy chữ bằng `w:t`; giữa các khối có `w:bookmarkStart/End`, duyệt anh em phải bỏ qua và mang theo khi di chuyển tiêu đề.
+- So tên kiểu tiếng Việt ('bảng', 'nguồn') phải chuẩn hóa NFC hai phía.
