@@ -67,7 +67,7 @@ Nguồn: Tác giả thống kê từ mã nguồn
 
 ### 3.2.1. Nguyên tắc thiết kế
 
-Cơ sở dữ liệu gồm 70 bảng và 43 kiểu liệt kê, được xây dựng qua 52 lần migration. Các nguyên tắc chung:
+Cơ sở dữ liệu PostgreSQL [@postgres] gồm 70 bảng và 43 kiểu liệt kê, được xây dựng qua 52 lần migration của Prisma [@prisma]. Các nguyên tắc chung:
 
 - **Khóa chính UUID phiên bản 7**: không đoán được (an toàn khi xuất hiện trong đường dẫn), tăng dần theo thời gian nên chèn và đánh chỉ mục hiệu quả. Các mã con người đọc (mã bệnh nhân `PAT-2026-00461`, mã hóa đơn `INV-2026-000123`) được sinh riêng từ sequence.
 - **Xóa mềm** bằng cột `deleted_at` cho dữ liệu nghiệp vụ, giữ lịch sử và cho phép khôi phục; các truy vấn mặc định bỏ qua bản ghi đã xóa.
@@ -291,7 +291,7 @@ Kế hoạch điều trị gồm nhiều dòng, mỗi dòng là một thủ thu�
 
 ### 3.3.5. Hóa đơn và thanh toán qua VietQR
 
-Hóa đơn đi qua các trạng thái ở Hình 3.12. Khoản thanh toán có thể đến từ ba nguồn: lễ tân ghi tiền mặt, lễ tân ghi chuyển khoản, hoặc hệ thống tự ghi khi ngân hàng báo tiền về. Trạng thái không được đặt tay mà luôn tính lại từ số đã thu, đã hoàn và đã điều chỉnh so với tổng tiền; vì vậy khi một phiếu thu ghi nhầm bị hủy, hóa đơn tự lùi về "thu một phần" hoặc "đã phát hành". Hóa đơn chỉ hủy được khi không còn khoản thu nào hiệu lực, để tiền không thể "biến mất" khỏi sổ sách; hóa đơn đã hủy có thể được lập lại thành bản nháp mới từ cùng phiên khám.
+Hóa đơn đi qua các trạng thái ở Hình 3.12; mã QR trên hóa đơn theo chuẩn VietQR [@vietqr]. Khoản thanh toán có thể đến từ ba nguồn: lễ tân ghi tiền mặt, lễ tân ghi chuyển khoản, hoặc hệ thống tự ghi khi ngân hàng báo tiền về. Trạng thái không được đặt tay mà luôn tính lại từ số đã thu, đã hoàn và đã điều chỉnh so với tổng tiền; vì vậy khi một phiếu thu ghi nhầm bị hủy, hóa đơn tự lùi về "thu một phần" hoặc "đã phát hành". Hóa đơn chỉ hủy được khi không còn khoản thu nào hiệu lực, để tiền không thể "biến mất" khỏi sổ sách; hóa đơn đã hủy có thể được lập lại thành bản nháp mới từ cùng phiên khám.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-8-trang-thai-hoa-don.png){width=12cm}
@@ -360,7 +360,7 @@ Nhắc tái khám là một đối tượng riêng. Lần nhắc được tạo 
 
 ### 3.3.7. Bệnh nhân tra cứu lịch sử khám
 
-Chức năng này hướng tới mục tiêu "tra cứu lịch sử khám dễ dàng" mà không yêu cầu bệnh nhân tạo tài khoản. Thách thức là bảo vệ dữ liệu sức khỏe: biết số điện thoại của một người không được phép đủ để xem hồ sơ của họ. Thiết kế (Hình 3.15) giải quyết bằng ba nguyên tắc:
+Chức năng này hướng tới mục tiêu "tra cứu lịch sử khám dễ dàng" mà không yêu cầu bệnh nhân tạo tài khoản. Thách thức là bảo vệ dữ liệu sức khỏe, loại dữ liệu cá nhân nhạy cảm [@nd13]: biết số điện thoại của một người không được phép đủ để xem hồ sơ của họ. Thiết kế (Hình 3.15) giải quyết bằng ba nguyên tắc:
 
 - Đường dẫn chứa mã ngẫu nhiên 256 bit, hết hạn sau 7 ngày; cơ sở dữ liệu chỉ lưu SHA-256 của mã, nên kể cả khi lộ dữ liệu cũng không dựng lại được đường dẫn.
 - Khi bệnh nhân tự xin đường dẫn bằng số điện thoại, đường dẫn chỉ được gửi tới email và số điện thoại đã có trong hồ sơ, không hiện trên màn hình; màn hình luôn trả một câu giống nhau để không dò được ai là bệnh nhân. Số điện thoại phải là của chính bệnh nhân; số người giám hộ chỉ được chấp nhận với trẻ em chưa có số riêng.
@@ -462,7 +462,7 @@ Sổ đồng thuận lưu nguyên văn và phiên bản văn bản mà bệnh nh
 
 ### 3.4.1. Xác thực
 
-Luồng xác thực theo Hình 3.17: mã truy cập JWT ngắn hạn gửi kèm mỗi yêu cầu, mã làm mới dài hạn nằm trong cookie HttpOnly, được thay mới sau mỗi lần dùng và lưu dạng băm trong cơ sở dữ liệu để thu hồi được. Nếu một mã làm mới đã dùng rồi lại được gửi lên (dấu hiệu bị đánh cắp), hệ thống thu hồi toàn bộ phiên đăng nhập của tài khoản đó và ghi sự kiện REFRESH_REUSE_DETECTED vào nhật ký kiểm toán. Để chống dò mật khẩu, mỗi địa chỉ chỉ được thử đăng nhập 5 lần mỗi phút, và tài khoản bị khóa 15 phút khi nhập sai mật khẩu quá 5 lần liên tiếp.
+Luồng xác thực theo Hình 3.17: mã truy cập JWT [@jwt] ngắn hạn gửi kèm mỗi yêu cầu, mã làm mới dài hạn nằm trong cookie HttpOnly, được thay mới sau mỗi lần dùng và lưu dạng băm trong cơ sở dữ liệu để thu hồi được. Nếu một mã làm mới đã dùng rồi lại được gửi lên (dấu hiệu bị đánh cắp), hệ thống thu hồi toàn bộ phiên đăng nhập của tài khoản đó và ghi sự kiện REFRESH_REUSE_DETECTED vào nhật ký kiểm toán. Để chống dò mật khẩu, mỗi địa chỉ chỉ được thử đăng nhập 5 lần mỗi phút, và tài khoản bị khóa 15 phút khi nhập sai mật khẩu quá 5 lần liên tiếp.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-14-tuan-tu-xac-thuc.png){width=14cm}
@@ -478,7 +478,7 @@ Nguồn: Tác giả
 
 ### 3.4.2. Phân quyền hai lớp
 
-Mỗi điểm cuối API khai báo các mã quyền cần có; `PermissionsGuard` so với danh sách quyền trong token trước khi vào controller. Lớp thứ hai nằm trong service: với người dùng chỉ có quyền "riêng" (ví dụ `encounter.read.own`), truy vấn được thêm điều kiện theo quan hệ bác sĩ – bệnh nhân (bác sĩ đã khám hoặc đang có lịch với bệnh nhân). Khi không thỏa, hệ thống trả lỗi "không tìm thấy" thay vì "không có quyền" để không tiết lộ sự tồn tại của bản ghi.
+Theo mô hình RBAC [@rbac], mỗi điểm cuối API khai báo các mã quyền cần có; `PermissionsGuard` so với danh sách quyền trong token trước khi vào controller. Lớp thứ hai nằm trong service: với người dùng chỉ có quyền "riêng" (ví dụ `encounter.read.own`), truy vấn được thêm điều kiện theo quan hệ bác sĩ – bệnh nhân (bác sĩ đã khám hoặc đang có lịch với bệnh nhân). Khi không thỏa, hệ thống trả lỗi "không tìm thấy" thay vì "không có quyền" để không tiết lộ sự tồn tại của bản ghi.
 
 Phân quyền chỉ an toàn khi chính việc phân quyền cũng được kiểm soát. Hình 3.18 trình bày cơ chế chống leo thang quyền: người thực hiện chỉ cấp được những quyền mình đang giữ, và không sửa được vai trò của người có nhiều quyền hơn mình. Nhờ vậy, một tài khoản được giao quyền quản lý người dùng cũng không thể tự nâng mình lên quyền cao hơn.
 

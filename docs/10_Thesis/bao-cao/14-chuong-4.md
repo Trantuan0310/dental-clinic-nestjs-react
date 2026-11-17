@@ -300,7 +300,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 ### 4.6.1. Quy trình tích hợp liên tục
 
-Mỗi thay đổi được đưa lên một nhánh riêng và mở yêu cầu gộp (pull request). GitHub Actions chạy 10 bước kiểm tra song song (Bảng 4.3); chỉ khi tất cả đạt mới được gộp vào nhánh chính.
+Theo thực hành tích hợp liên tục [@fowler_ci], mỗi thay đổi được đưa lên một nhánh riêng và mở yêu cầu gộp (pull request). GitHub Actions chạy 10 bước kiểm tra song song (Bảng 4.3); chỉ khi tất cả đạt mới được gộp vào nhánh chính.
 
 ::: {custom-style="bảng"}
 Bảng 4.3. Các bước kiểm tra trong quy trình tích hợp liên tục

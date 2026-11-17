@@ -207,6 +207,8 @@ Các biện pháp bảo mật được đối chiếu với danh sách rủi ro 
 
 Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.10). Các nguyên tắc khả dụng của Nielsen được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
 
+Về phạm vi, kiểm thử giao diện tự động chạy trên trình duyệt Chromium ở cỡ màn hình máy tính, riêng các trang công khai và bố cục chung được kiểm tra thêm ở cỡ điện thoại. Máy tính bảng dùng chung bố cục co giãn nhưng chưa được kiểm thử độc lập; các trình duyệt khác (Firefox, Safari) cũng chưa nằm trong bộ kiểm thử tự động.
+
 Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kịch bản một ngày làm việc của phòng khám. Việc đánh giá với người dùng thật tại phòng khám chưa được thực hiện và được nêu trong phần hạn chế.
 
 ## 5.4. Những điểm nổi bật của hệ thống

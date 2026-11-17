@@ -6,7 +6,7 @@ Chương này trình bày các kiến thức làm nền tảng cho đồ án: đ
 
 ### 1.1.1. Đặc điểm hoạt động
 
-Khác với khám bệnh thông thường, điều trị nha khoa thường kéo dài qua nhiều lần hẹn và gắn với từng chiếc răng cụ thể. Một bệnh nhân có thể vừa trám răng hàm dưới bên trái, vừa đang trong liệu trình bọc sứ răng cửa hàm trên, vừa được nhắc cạo vôi định kỳ sáu tháng một lần. Vì vậy, dữ liệu của phòng khám nha khoa có ba đặc điểm cần được phần mềm phản ánh:
+Khác với khám bệnh thông thường, điều trị nha khoa thường kéo dài qua nhiều lần hẹn và gắn với từng chiếc răng cụ thể. Một bệnh nhân có thể vừa trám răng hàm dưới bên trái, vừa đang trong liệu trình bọc sứ răng cửa hàm trên, vừa được nhắc cạo vôi định kỳ sáu tháng một lần. Vì vậy, dữ liệu của phòng khám nha khoa có ba đặc điểm cần được phần mềm phản ánh, cũng là cách các phần mềm nha khoa chuyên dụng tổ chức hồ sơ [@opendental]:
 
 - **Theo thời gian:** mỗi lần khám (phiên khám) ghi lại lý do khám, chẩn đoán, các thủ thuật đã làm, đơn thuốc và tình trạng răng tại thời điểm đó. Lịch sử phải được giữ nguyên, không ghi đè.
 - **Theo vị trí:** thủ thuật và tình trạng được gắn với số răng. Câu hỏi thường gặp của bác sĩ là "răng này đã làm gì, khi nào, ai làm".
@@ -78,7 +78,7 @@ Từ so sánh trên, phần mềm trong nước như SimlyDent đã đáp ứng 
 
 Hệ thống được xây dựng theo mô hình tách biệt giao diện và máy chủ. Phía người dùng là một ứng dụng web một trang (Single-Page Application, SPA): trình duyệt tải ứng dụng một lần, sau đó chỉ trao đổi dữ liệu dạng JSON với máy chủ và tự vẽ lại phần giao diện thay đổi. Cách làm này cho trải nghiệm mượt như ứng dụng cài đặt, phù hợp với nhân viên làm việc liên tục cả ngày trên cùng một màn hình.
 
-Phía máy chủ cung cấp giao diện lập trình theo phong cách REST: mỗi loại dữ liệu là một tài nguyên có địa chỉ riêng (ví dụ `/patients/:id`, `/appointments`), thao tác qua các phương thức HTTP chuẩn GET, POST, PATCH, DELETE với ngữ nghĩa và mã trạng thái thống nhất. Toàn bộ API được mô tả theo đặc tả OpenAPI và sinh tài liệu tự động, giúp kiểm thử và tích hợp dễ dàng.
+Phía máy chủ cung cấp giao diện lập trình theo phong cách REST [@fielding]: mỗi loại dữ liệu là một tài nguyên có địa chỉ riêng (ví dụ `/patients/:id`, `/appointments`), thao tác qua các phương thức HTTP chuẩn GET, POST, PATCH, DELETE với ngữ nghĩa và mã trạng thái thống nhất. Toàn bộ API được mô tả theo đặc tả OpenAPI và sinh tài liệu tự động, giúp kiểm thử và tích hợp dễ dàng.
 
 ### 1.3.2. Kiến trúc phân lớp và chia module theo nghiệp vụ
 
@@ -138,13 +138,9 @@ Nguồn: Tác giả tổng hợp từ [@kleppmann; @postgres]
 
 ## 1.5. Công nghệ phía giao diện
 
-- **React** là thư viện xây dựng giao diện theo thành phần (component): mỗi phần giao diện là một hàm nhận dữ liệu và trả về cấu trúc hiển thị; khi dữ liệu thay đổi, React tự cập nhật phần tương ứng [@react].
-- **Vite** là công cụ phát triển và đóng gói, khởi động nhanh trong lúc lập trình và tạo bản phát hành được chia nhỏ theo trang để tải nhanh.
-- **TanStack Query** quản lý dữ liệu lấy từ máy chủ: lưu đệm, tự làm mới, đồng bộ giữa các màn hình và xử lý trạng thái đang tải, lỗi. Nhờ đó giao diện luôn hiển thị dữ liệu mới mà không cần tự viết nhiều mã đồng bộ.
-- **Tailwind CSS** là bộ lớp tiện ích để định kiểu giao diện nhất quán, hỗ trợ giao diện co giãn theo màn hình và chế độ tối.
-- **Recharts** vẽ biểu đồ cho bảng điều khiển và báo cáo; **i18next** quản lý chữ giao diện hai ngôn ngữ Việt – Anh.
+Giao diện được xây dựng bằng React, thư viện tổ chức giao diện theo thành phần (component): mỗi phần giao diện là một hàm nhận dữ liệu và trả về cấu trúc hiển thị; khi dữ liệu thay đổi, React tự cập nhật phần tương ứng [@react]. Dữ liệu lấy từ máy chủ được quản lý bằng TanStack Query (lưu đệm, tự làm mới, đồng bộ giữa các màn hình), nhờ đó giao diện luôn hiển thị dữ liệu mới mà không cần tự viết nhiều mã đồng bộ.
 
-Giao diện tuân theo các nguyên tắc khả dụng phổ biến (trạng thái hệ thống luôn hiển thị, ngăn lỗi trước khi xảy ra, cho phép hoàn tác) và các khuyến nghị về khả năng tiếp cận (nhãn cho trình đọc màn hình, điều khiển bằng bàn phím, độ tương phản màu).
+Các công cụ còn lại gồm Vite để đóng gói và chia nhỏ mã theo trang, Tailwind CSS để định kiểu giao diện co giãn theo màn hình, Recharts để vẽ biểu đồ và i18next để quản lý chữ giao diện hai ngôn ngữ Việt – Anh. Giao diện tuân theo các nguyên tắc khả dụng phổ biến (trạng thái hệ thống luôn hiển thị, ngăn lỗi trước khi xảy ra, cho phép hoàn tác) và các khuyến nghị về khả năng tiếp cận (nhãn cho trình đọc màn hình, điều khiển bằng bàn phím, độ tương phản màu).
 
 ## 1.6. Xác thực, phân quyền và kiểm toán
 

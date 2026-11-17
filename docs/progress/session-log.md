@@ -173,3 +173,4 @@
 - Soát lời văn Ch.1–3: sửa 1.3.3 (loại biểu đồ còn dùng), mở đầu Ch.3/Ch.4, tách đoạn kết luận Ch.2, Ch.5 và 3.3.3; SMS nhắc lịch không kèm liên kết (đối chiếu messaging.service) — sửa 3.3.6 và sơ đồ nhắc lịch.
 - Chọn lọc tài liệu tham khảo theo yêu cầu: 42 → 20 (7 nghiệp vụ/pháp lý: TT46, NĐ13, ISO 3950, Open Dental, Dentrix, SimlyDent, VietQR; 13 công nghệ). Bỏ trích dẫn tài liệu công cụ phụ; cohn/pressman/fowler_layer gộp về Sommerville.
 - Co chữ dòng cuối ngắn giảm còn 0,5 rồi 0,6 pt (0,7 pt trông chật, đúng gợi ý GVHD 0,5–0,6); trả lại trích dẫn Cohn cho mô hình kim tự tháp kiểm thử (21 tài liệu).
+- Áp bài học từ nhận xét đồ án khác: thêm trích dẫn tại chỗ dùng (REST→Fielding, 1.1.1, 3.2.1, 3.3.5, 3.3.7, 3.4.1, 3.4.2, 4.6.1; 22 tài liệu), nêu phạm vi kiểm thử giao diện ở 5.3.3 (Chromium máy tính + cỡ điện thoại; máy tính bảng, Firefox/Safari chưa kiểm), gọn mục 1.5 thành 2 đoạn.
