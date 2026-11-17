@@ -6,29 +6,6 @@ left to right direction
 skinparam defaultFontSize 13
 title Nhóm phiên khám, ghi chú lâm sàng và đơn thuốc
 
-entity "patients" as Patient {
-  * id : uuid <<PK>>
-  --
-  * code : varchar
-  * full_name : varchar
-  * dob : timestamptz
-  * gender : enum
-  primary_phone : varchar
-}
-entity "appointments" as Appointment {
-  * id : uuid <<PK>>
-  --
-  * patient_id : uuid <<FK>>
-  * dentist_id : uuid <<FK>>
-  * start_at : timestamptz
-  * end_at : timestamptz
-  * status : enum
-  reason : varchar
-  chief_complaint : varchar
-  confirmed_by : uuid <<FK>>
-  checked_in_by : uuid <<FK>>
-  cancelled_by : uuid <<FK>>
-}
 entity "encounters" as Encounter {
   * id : uuid <<PK>>
   --
@@ -89,9 +66,6 @@ entity "dental_chart_snapshots" as DentalChartSnapshot {
   snapshot_by : uuid <<FK>>
 }
 
-Patient ||--o{ Appointment
-Appointment ||--o| Encounter
-Patient ||--o{ Encounter
 Encounter ||--o| ClinicalNote
 ClinicalNote ||--o{ ClinicalNoteAddendum
 Encounter ||--o| Prescription

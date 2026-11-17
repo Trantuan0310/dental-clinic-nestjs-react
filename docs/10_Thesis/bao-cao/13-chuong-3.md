@@ -79,7 +79,7 @@ Cơ sở dữ liệu PostgreSQL [@postgres] gồm 70 bảng và 43 kiểu liệt
 
 ### 3.2.2. Sơ đồ thực thể liên kết
 
-Do số bảng lớn, sơ đồ thực thể liên kết được chia theo miền nghiệp vụ; báo cáo trình bày bốn nhóm chính, hai nhóm còn lại được mô tả bằng lời. Các sơ đồ dưới đây được sinh tự động từ lược đồ Prisma của hệ thống để bảo đảm khớp với cơ sở dữ liệu thật; mỗi bảng hiển thị khóa chính, các khóa ngoại và một số cột nghiệp vụ chính.
+Do số bảng lớn, sơ đồ thực thể liên kết được chia theo miền nghiệp vụ; báo cáo trình bày bốn nhóm chính, hai nhóm còn lại được mô tả bằng lời. Các sơ đồ dưới đây được sinh tự động từ lược đồ Prisma của hệ thống để bảo đảm khớp với cơ sở dữ liệu thật; mỗi bảng hiển thị khóa chính, các khóa ngoại và một số cột nghiệp vụ chính. Để sơ đồ gọn và chữ đủ lớn khi in, bảng đã có ở nhóm trước (bệnh nhân, lịch hẹn, phiên khám) không vẽ lại mà chỉ thể hiện qua cột khóa ngoại.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/3-2-erd-benh-nhan-lich-hen.png){width=15cm}
@@ -100,7 +100,7 @@ Nhóm phiên khám (Hình 3.3) có bảng trung tâm `encounters`, quan hệ m�
 Thiết kế **mỗi phiên khám một bản chụp sơ đồ răng** (thay vì một sơ đồ duy nhất bị ghi đè) là quyết định quan trọng: tình trạng răng tại từng thời điểm được giữ nguyên, nhờ đó có thể xem lịch sử một chiếc răng qua các lần khám, đáp ứng yêu cầu không ghi đè hồ sơ [@tt46]. Sơ đồ hiện tại của bệnh nhân là bản chụp của phiên khám gần nhất không bị hủy.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-3-erd-kham-dieu-tri.png){width=15cm}
+![](hinh/3-3-erd-kham-dieu-tri.png){width=12cm}
 :::
 
 ::: {custom-style="hình"}
@@ -114,7 +114,7 @@ Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ th�
 Nhóm điều trị và kế hoạch: mỗi phiên khám có nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-4-erd-hoa-don.png){width=15cm}
+![](hinh/3-4-erd-hoa-don.png){width=12cm}
 :::
 
 ::: {custom-style="hình"}
