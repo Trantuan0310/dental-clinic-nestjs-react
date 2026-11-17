@@ -218,7 +218,9 @@ Bác sĩ kê đơn thuốc; nếu thuốc trùng tiền sử dị ứng, hệ th
 
 ### 4.5.4. Hóa đơn và thanh toán VietQR
 
-Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động. Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn (Hình 4.8).
+Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động từ các điều trị trong phiên. Màn hình chi tiết hóa đơn hiển thị huy hiệu trạng thái, ngày tạo, ngày phát hành, thông tin bệnh nhân, bảng các dòng điều trị kèm số lượng, đơn giá, thành tiền, và khối tổng kết gồm tổng cộng, phải thu, đã thu, còn nợ. Hàng nút phía trên gồm thu tiền, điều chỉnh giảm hoặc xóa nợ, in, xuất PDF và gửi hóa đơn qua email.
+
+Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn, kèm nút sao chép nội dung cho khách tự nhập khi cần (Hình 4.8).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-hoa-don-qr.png){width=13.4cm}

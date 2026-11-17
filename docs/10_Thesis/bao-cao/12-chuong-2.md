@@ -212,7 +212,9 @@ Nguồn: Tác giả
 
 ## 2.5. Biểu đồ use case
 
-Hình 2.2 trình bày biểu đồ use case tổng quát, thể hiện các nhóm chức năng chính và tác nhân sử dụng chúng; các hình tiếp theo chi tiết hóa use case của từng tác nhân.
+Biểu đồ use case được vẽ theo quy ước của UML: tác nhân là hình người, mỗi use case là một hình elip, đường nối liền thể hiện tác nhân tham gia use case đó, còn mũi tên nét đứt kèm nhãn `<<include>>` cho biết một use case luôn gọi tới use case khác như một bước bắt buộc. Ngoài bốn tác nhân người dùng, biểu đồ còn hai tác nhân là hệ thống bên ngoài: dịch vụ theo dõi tài khoản ngân hàng SePay báo giao dịch về cho chức năng thanh toán, và cổng mô hình ngôn ngữ lớn phục vụ trợ lý AI.
+
+Hình 2.2 trình bày biểu đồ use case tổng quát với mười hai nhóm chức năng: quản lý bệnh nhân; quản lý lịch hẹn, tiếp nhận và hàng chờ; đặt lịch trực tuyến; khám, điều trị và sơ đồ răng; kế hoạch điều trị; hóa đơn và thanh toán; kho vật tư; nhân sự, ca làm và lương; báo cáo và bảng điều khiển; quản trị người dùng và phân quyền; tra cứu lịch sử khám; trợ lý AI. Các hình tiếp theo chi tiết hóa use case của từng tác nhân.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-2-use-case-tong-quat.png){width=8.5cm}
@@ -226,7 +228,9 @@ Hình 2.2. Biểu đồ use case tổng quát
 Nguồn: Tác giả
 :::
 
-Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3). Use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ. Việc gộp hai hồ sơ trùng không hoàn tác được nên được giao cho quản trị viên (Hình 2.5).
+Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3) với mười hai use case, trải khắp vòng hoạt động của phòng khám: tìm kiếm và tạo hồ sơ bệnh nhân; đặt, dời, hủy lịch hẹn; duyệt yêu cầu đặt lịch trực tuyến; check-in và quản lý hàng chờ; ghi khách vắng mặt hoặc về trước; quản lý danh sách chờ lấp giờ trống; phát hành hóa đơn và ghi thanh toán; xử lý các khoản chuyển khoản chưa khớp; gọi nhắc tái khám; nhập, xuất kho; gửi đường dẫn tra cứu lịch sử khám cho bệnh nhân.
+
+Hai use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ, nên được nối tới use case này bằng quan hệ `<<include>>`. Việc gộp hai hồ sơ trùng không hoàn tác được nên không giao cho lễ tân mà thuộc về quản trị viên (Hình 2.5).
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-3-use-case-le-tan.png){width=8.5cm}
@@ -240,7 +244,7 @@ Hình 2.3. Biểu đồ use case của lễ tân
 Nguồn: Tác giả
 :::
 
-Hình 2.4 mô tả các use case lâm sàng của bác sĩ. Kê đơn luôn bao gồm bước kiểm tra dị ứng thuốc; đóng phiên khám luôn bao gồm việc trừ vật tư đã dùng.
+Hình 2.4 mô tả các use case lâm sàng của bác sĩ: xem hàng chờ của mình và gọi bệnh nhân, bắt đầu phiên khám, ghi chú lâm sàng, cập nhật sơ đồ răng, xem lịch sử điều trị theo răng, thêm điều trị cho răng, kê đơn thuốc, lập kế hoạch điều trị kèm báo giá, đóng phiên khám, ghi bổ sung sau khi đóng, đặt lịch tái khám và xem ca làm, phiếu lương của mình. Hai quan hệ `<<include>>` thể hiện hai quy tắc bắt buộc: kê đơn luôn kèm bước kiểm tra dị ứng thuốc, còn đóng phiên khám luôn kèm việc trừ vật tư đã dùng.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-4-use-case-bac-si.png){width=8.5cm}
@@ -268,7 +272,7 @@ Hình 2.5. Biểu đồ use case của quản trị viên
 Nguồn: Tác giả
 :::
 
-Bệnh nhân không có tài khoản. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc liên kết có mã bí mật gửi riêng tới bệnh nhân (Hình 2.6).
+Bệnh nhân không có tài khoản trong hệ thống. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc đường dẫn chứa mã bí mật gửi riêng tới bệnh nhân (Hình 2.6): xem thông tin phòng khám và bảng giá, đặt lịch trực tuyến (luôn kèm bước chọn dịch vụ, bác sĩ và giờ trống), tra cứu trạng thái yêu cầu đặt lịch, xác nhận hoặc dời, hủy lịch qua liên kết trong tin nhắc, khai thông tin sức khỏe trước khi đến, yêu cầu đường dẫn tra cứu và xem lịch sử khám, kế hoạch điều trị, hóa đơn của mình. Đường dẫn tra cứu được gửi qua nhà cung cấp email hoặc SMS, nên tác nhân này cũng xuất hiện trên biểu đồ.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-6-use-case-benh-nhan.png){width=8.5cm}
