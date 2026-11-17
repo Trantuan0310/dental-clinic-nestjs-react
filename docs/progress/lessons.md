@@ -95,3 +95,6 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Rút kinh nghiệm từ nhận xét hội đồng với đồ án khác: (1) lược mô tả quá chi tiết về hạ tầng/nghiệp vụ không gắn trực tiếp đề tài; (2) không lặp sơ đồ, ảnh demo cùng một nghiệp vụ, chỉ giữ minh chứng trực tiếp; (3) đặt số trích dẫn ngay tại chỗ dùng, nhất là Chương 1 và nội dung kỹ thuật; (4) nêu rõ phạm vi triển khai/kiểm thử (thiết bị, trình duyệt nào đã kiểm, cái nào chưa); (5) phụ lục không lặp nội dung đã có trong thân báo cáo.
 - python-docx/lxml: `itertext()` trên đoạn của pandoc lặp nội dung (đếm gấp 3) — lấy chữ bằng `w:t`; giữa các khối có `w:bookmarkStart/End`, duyệt anh em phải bỏ qua và mang theo khi di chuyển tiêu đề.
 - So tên kiểu tiếng Việt ('bảng', 'nguồn') phải chuẩn hóa NFC hai phía.
+- Không kéo tiêu đề mục qua hình để lấp trang: hình sẽ rơi sang mục khác — sai bố cục khoa học; kiểm bằng script so thứ tự tiêu đề/chú thích giữa md và PDF.
+- Cỡ chữ in của sơ đồ = cỡ font × bề rộng in(pt) × dpi/(72 × bề rộng px); giữ ≥ 8 pt, đừng ước lượng bằng mắt.
+- PlantUML: `skinparam wrapWidth` cũng ngắt chữ tin nhắn của sơ đồ tuần tự (không chỉ maxMessageSize).
