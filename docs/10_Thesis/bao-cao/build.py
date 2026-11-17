@@ -386,6 +386,8 @@ def cover(doc):
 
 GAPS = {}  # caption prefix -> lines of white space left above the figure (seen in the last render)
 USED = {}  # caption prefix -> lines actually moved in front of the figure by the last build
+LAST = {}  # caption prefix -> (lines pulled, gap in lines) before the last top-up
+FROZEN = set()  # figures whose top-up was undone
 ROUNDS = {}  # caption prefix -> how many times its gap was topped up
 PULL = {}  # caption prefix -> lines of following body text to place before the figure
 def figure_fonts():
@@ -840,15 +842,29 @@ def locate(texts, lists):
 
 def main():
     out, lists = build()
-    for _ in range(9):  # shrink figures that leave a large gap above them, or fill the gap with text
+    for _ in range(10):  # shrink figures that leave a large gap above them, or fill the gap with text
         render(out)
         new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
         new = {c: k for c, k in new.items() if c not in FIT}
-        pull = {c: USED.get(c, 0) + n for c, n in GAPS.items() if c not in new and ROUNDS.get(c, 0) < 4}
-        for c in pull:
-            ROUNDS[c] = ROUNDS.get(c, 0) + 1
+        pull, undo = {}, {}
+        for c, n in GAPS.items():
+            if c in new or c in FROZEN:
+                continue
+            if c in LAST and n > LAST[c][1]:
+                # The text pulled last time overshot the gap and pushed the figure a page on:
+                # go back to the previous amount and leave this figure alone from now on.
+                undo[c] = LAST[c][0]
+                FROZEN.add(c)
+                continue
+            if ROUNDS.get(c, 0) < 4:
+                LAST[c] = (PULL.get(c, 0), n)
+                pull[c] = USED.get(c, 0) + n
+                ROUNDS[c] = ROUNDS.get(c, 0) + 1
         GAPS.clear()
-        if not new and not pull:
+        if undo:
+            PULL.update(undo)
+            print('Bỏ bớt đoạn kéo lên (làm hình trôi trang): ' + ', '.join(undo))
+        if not new and not pull and not undo:
             break
         FIT.update(new)
         PULL.update(pull)
