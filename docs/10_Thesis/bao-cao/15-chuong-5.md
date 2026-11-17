@@ -13,7 +13,7 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 | Tầng | Công cụ | Số lượng | Phạm vi kiểm tra |
 |---|---|---|---|
 | Đơn vị (máy chủ) | Jest | 1.788 ca, 89 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
-| API trên PostgreSQL thật | Jest + Supertest | 111 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
+| API trên PostgreSQL thật | Jest + Supertest | 113 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
 | Đầu cuối (E2E) | Playwright | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
 
@@ -127,7 +127,7 @@ Bộ E2E cũng kiểm tra chuyển đổi ngôn ngữ Việt – Anh và các y�
 
 ### 5.2.3. Số ca kiểm thử và độ bao phủ mã
 
-Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest: 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy khoảng 42 giây. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 75,0% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.6 thống kê theo module.
+Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest: 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy dưới một phút. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 74,8% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.6 thống kê theo module.
 
 ::: {custom-style="bảng"}
 Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
@@ -149,7 +149,7 @@ Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
 | **Tổng** | | **1.788** | **76,6** | **70,0** |
 
 ::: {custom-style="nguồn"}
-Nguồn: Tác giả, chạy `npx jest --coverage` trên mã nguồn ngày 15/11/2026
+Nguồn: Tác giả, chạy `npx jest --coverage` trên mã nguồn ngày 17/11/2026
 :::
 
 Số ca kiểm thử tập trung ở những module có nhiều quy tắc và rủi ro nhất: lịch hẹn và đặt lịch (gần một phần ba tổng số ca), khám bệnh, lương và thanh toán. Một số module có độ bao phủ thấp hơn, như chi phí vận hành (36,7% số dòng) và các guard dùng chung trong `common/` (29,3%); phần lớn đường đi của các guard này được kiểm tra gián tiếp qua kiểm thử API trên PostgreSQL thật (Bảng 5.5), nhưng đây vẫn là điểm cần bổ sung kiểm thử đơn vị.

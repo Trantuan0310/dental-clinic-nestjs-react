@@ -16,7 +16,7 @@ Bảng 4.1. Môi trường và công cụ phát triển
 | Máy chủ ứng dụng | Node.js (22 khi kiểm thử, 24 trong bản triển khai), NestJS 10, Prisma 5, class-validator, Zod, Passport JWT, Argon2 |
 | Cơ sở dữ liệu | PostgreSQL 16 |
 | Giao diện | React 18, Vite 5, TanStack Query 5, React Router 6, React Hook Form, Zod, Tailwind CSS 3, Recharts 3, i18next |
-| Kiểm thử | Jest 29 (đơn vị và API), Playwright (đầu cuối) |
+| Kiểm thử | Jest 29 (đơn vị và API), Playwright 1.61 (đầu cuối) |
 | Chất lượng mã | ESLint, Prettier, kiểm tra kiểu TypeScript |
 | Triển khai | Docker, Docker Compose, Nginx, máy chủ ảo Linux |
 | Quản lý mã nguồn, CI | Git, GitHub, GitHub Actions |
@@ -57,7 +57,7 @@ Các đoạn mã dưới đây được trích từ mã nguồn và rút gọn �
 
 ### 4.3.1. Phân quyền và chống đặt trùng lịch
 
-Mỗi điểm cuối API khai báo mã quyền cần có; `JwtAuthGuard` xác thực mã truy cập, `PermissionsGuard` kiểm tra quyền trước khi vào hàm xử lý. Bên trong service, lớp phân quyền thứ hai giới hạn theo dòng dữ liệu: bác sĩ chỉ có quyền "riêng" chỉ thấy bệnh nhân mình đã khám hoặc đang có lịch.
+Mỗi điểm cuối API khai báo mã quyền cần có; `JwtAuthGuard` xác thực mã truy cập, `PermissionsGuard` kiểm tra quyền trước khi vào hàm xử lý. Bên trong service, lớp phân quyền thứ hai giới hạn theo dòng dữ liệu: bác sĩ có quyền "riêng" chỉ thấy bệnh nhân mình đã khám hoặc đang có lịch.
 
 Kiểm tra "giờ này còn trống không" rồi mới ghi là hai bước tách rời, nên hai lễ tân cùng đặt một khung giờ có thể cùng thấy giờ còn trống. Hệ thống giải quyết bằng khóa tư vấn của PostgreSQL theo phạm vi giao dịch [@postgres]: việc đầu tiên trong giao dịch đặt lịch là lấy khóa theo bác sĩ và bệnh nhân, sau đó mới kiểm tra trùng và ghi. Giao dịch thứ hai phải chờ giao dịch thứ nhất kết thúc nên thấy lịch vừa được ghi và bị từ chối.
 
@@ -110,7 +110,7 @@ Toàn bộ chữ giao diện nằm trong tệp ngôn ngữ tiếng Việt và ti
 
 ## 4.5. Kết quả giao diện các chức năng
 
-Mục này trình bày các màn hình tiêu biểu theo luồng nghiệp vụ chính, chụp từ hệ thống chạy với dữ liệu mẫu 6 tháng (500 bệnh nhân, 4 bác sĩ, 2 lễ tân; tên người là giả lập). Thanh menu bên trái chỉ hiện các mục vai trò đó có quyền (Hình 4.3); ở các hình còn lại, thanh menu được cắt bỏ để nội dung đủ rõ khi in.
+Mục này trình bày các màn hình tiêu biểu theo luồng nghiệp vụ chính, chụp từ hệ thống chạy với dữ liệu mẫu 6 tháng (500 bệnh nhân, 4 bác sĩ, 2 lễ tân; tên người là giả lập). Thanh menu bên trái chỉ hiện những mục mà vai trò đang đăng nhập có quyền (Hình 4.3); ở các hình còn lại, thanh menu được cắt bỏ để nội dung đủ rõ khi in.
 
 ### 4.5.1. Bệnh nhân đặt lịch trực tuyến
 
@@ -250,7 +250,6 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 
 Hoàn tiền là thao tác cần quyền riêng: hộp thoại cho biết số tiền tối đa được hoàn, hình thức hoàn và bắt buộc nhập lý do. Phiếu hoàn được tính vào ngày thực hiện, không sửa số thu của ngày cũ, để báo cáo các kỳ trước không bị thay đổi. Mọi thao tác trên hóa đơn (phát hành, khoản thu tự ghi, hoàn tiền, hủy) đều xuất hiện trong nhật ký kiểm toán, nơi quản trị viên lọc theo loại hành động, loại đối tượng, khoảng ngày và xuất tệp CSV.
 
-
 ### 4.5.5. Bệnh nhân tra cứu lịch sử khám
 
 Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.10, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.10, phải).
@@ -268,7 +267,6 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 Khi lễ tân gửi, đường dẫn được chuyển tới email và số điện thoại trong hồ sơ, đồng thời hiện trên màn hình để sao chép khi cần gửi qua kênh khác. Khi bệnh nhân tự xin, trang chỉ trả lời một câu chung và không hiện đường dẫn, nên người biết số điện thoại của người khác cũng không xem được hồ sơ của họ.
-
 
 ### 4.5.6. Quản lý: lương, bảng điều khiển và trợ lý AI
 
@@ -343,6 +341,6 @@ Các khóa bí mật (khóa ký JWT, mật khẩu cơ sở dữ liệu, khóa d�
 
 ## 4.7. Kết luận chương
 
-Chương 4 đã trình bày môi trường phát triển, cách tổ chức khoảng 100 nghìn dòng mã và các điểm cài đặt quan trọng: phân quyền khai báo trên từng API, chống đặt trùng lịch bằng khóa tư vấn, đóng phiên khám bằng giao dịch và sự kiện miền, webhook không ghi trùng, ẩn danh bệnh nhân khi làm việc với AI.
+Chương 4 đã trình bày môi trường phát triển, cách tổ chức khoảng 106 nghìn dòng mã và các điểm cài đặt quan trọng: phân quyền khai báo trên từng API, chống đặt trùng lịch bằng khóa tư vấn, đóng phiên khám bằng giao dịch và sự kiện miền, webhook không ghi trùng, ẩn danh bệnh nhân khi làm việc với AI.
 
 Kết quả giao diện được minh họa qua một luồng hoàn chỉnh: bệnh nhân đặt lịch, lễ tân tiếp nhận, bác sĩ khám và điều trị theo răng, hóa đơn được thanh toán bằng VietQR và tự đối soát, bệnh nhân tra cứu lịch sử khám, quản lý theo dõi lương và chỉ số vận hành. Hệ thống được kiểm tra tự động qua 10 bước trước mỗi lần cập nhật và triển khai bằng Docker; Chương 5 đánh giá hệ thống qua kiểm thử và đối chiếu với mục tiêu đề tài.

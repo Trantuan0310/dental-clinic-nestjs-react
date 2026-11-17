@@ -320,4 +320,6 @@ Nguồn: Tác giả tổng hợp từ cấu hình phân quyền của hệ thố
 
 ## 2.7. Kết luận chương
 
-Chương 2 đã khảo sát quy trình của phòng khám, xác định các tác nhân cùng yêu cầu chức năng và phi chức năng; các biểu đồ use case và ma trận quyền là cơ sở cho thiết kế ở Chương 3.
+Chương 2 đã khảo sát quy trình làm việc hằng ngày của phòng khám, chỉ ra những khó khăn của cách quản lý bằng sổ sách, bảng tính và tin nhắn, đồng thời xác định bốn tác nhân người dùng cùng ba hệ thống bên ngoài mà hệ thống phải làm việc cùng.
+
+Từ khảo sát đó, chương đã phân tích 34 yêu cầu chức năng theo chín nhóm nghiệp vụ và các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Các biểu đồ use case và ma trận phân quyền là cơ sở để Chương 3 thiết kế kiến trúc, cơ sở dữ liệu và từng chức năng của hệ thống.

@@ -114,7 +114,7 @@ TÓM TẮT ĐỒ ÁN
 
 Hệ thống dùng kiến trúc ứng dụng một trang (React) gọi REST API (NestJS) trên cơ sở dữ liệu PostgreSQL, gồm 23 module nghiệp vụ, khoảng 340 điểm cuối API và 70 bảng dữ liệu. Phân quyền theo vai trò với 133 mã quyền, kết hợp giới hạn theo từng dòng dữ liệu (bác sĩ chỉ thấy bệnh nhân của mình) và nhật ký kiểm toán cho mọi thao tác nhạy cảm. Đồ án tích hợp mô hình ngôn ngữ lớn ở dạng có kiểm soát: AI chỉ soạn nháp và đề xuất, người dùng duyệt mới thực hiện, mô hình không nhìn thấy tên hay số điện thoại bệnh nhân.
 
-Chất lượng được bảo đảm bằng 1.788 kiểm thử đơn vị (bao phủ 76,6% số dòng mã service và controller), 111 kiểm thử API trên PostgreSQL thật và 122 kịch bản kiểm thử giao diện tự động, chạy trong 10 bước kiểm tra liên tục trước mỗi lần cập nhật. Hệ thống đã được triển khai bằng Docker trên máy chủ ảo và đáp ứng các mục tiêu trong phiếu giao đề tài, trừ phần lưu trữ phim X-quang được để lại làm hướng phát triển.
+Chất lượng được bảo đảm bằng 1.788 kiểm thử đơn vị (bao phủ 76,6% số dòng mã service và controller), 113 kiểm thử API trên PostgreSQL thật và 122 kịch bản kiểm thử giao diện tự động, chạy trong 10 bước kiểm tra liên tục trước mỗi lần cập nhật. Hệ thống đã được triển khai bằng Docker trên máy chủ ảo và đáp ứng các mục tiêu trong phiếu giao đề tài, trừ phần lưu trữ phim X-quang được để lại làm hướng phát triển.
 
 **Từ khóa:** quản lý phòng khám nha khoa, sơ đồ răng FDI, đặt lịch trực tuyến, VietQR, phân quyền theo vai trò, mô hình ngôn ngữ lớn, NestJS, React, PostgreSQL.
 
@@ -255,7 +255,7 @@ DANH MỤC THUẬT NGỮ
 | Đối soát (reconciliation) | Khớp một giao dịch chuyển khoản ngân hàng với hóa đơn tương ứng. |
 | Webhook | Lời gọi HTTP mà một hệ thống ngoài (ví dụ ngân hàng) gửi tới hệ thống khi có sự kiện. |
 | Nhật ký kiểm toán (audit log) | Bản ghi về việc ai đã làm gì, lúc nào, trên dữ liệu nào; ứng dụng chỉ ghi thêm, không có chức năng sửa hay xóa. |
-| Phạm vi theo dòng (row-level scope) | Giới hạn dữ liệu một người được thấy trong cùng một loại bản ghi, ví dụ bác sĩ chỉ thấy bệnh nhân mình điều trị. |
+| Giới hạn theo dòng dữ liệu (row-level scope) | Giới hạn dữ liệu một người được thấy trong cùng một loại bản ghi, ví dụ bác sĩ chỉ thấy bệnh nhân mình điều trị. |
 | Migration | Một bước thay đổi cấu trúc cơ sở dữ liệu có đánh số, chạy tuần tự khi cập nhật hệ thống. |
 | Check-in | Ghi nhận bệnh nhân đã đến phòng khám, đưa vào hàng chờ. |
 | Khóa tư vấn (advisory lock) | Khóa do ứng dụng tự đặt tên trong PostgreSQL; dùng để hai giao dịch đặt lịch cho cùng bác sĩ không chạy chồng lên nhau. |

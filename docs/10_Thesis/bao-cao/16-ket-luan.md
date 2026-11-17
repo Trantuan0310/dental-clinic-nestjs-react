@@ -8,7 +8,7 @@ Về phân tích và thiết kế, đồ án đã khảo sát quy trình vận h
 
 Về kỹ thuật, hệ thống chống đặt trùng lịch bằng khóa tư vấn của cơ sở dữ liệu, ghi nhận thanh toán và webhook ngân hàng không ghi trùng, phân quyền hai lớp (theo vai trò với 133 mã quyền và theo dòng dữ liệu) kèm nhật ký kiểm toán. Thanh toán VietQR được đối soát tự động; trợ lý AI không nhận thông tin định danh bệnh nhân và vẫn hoạt động ở chế độ dự phòng khi dịch vụ AI lỗi.
 
-Về chất lượng, hệ thống có khoảng 2.000 kiểm thử tự động ở ba tầng (1.788 kiểm thử đơn vị, 111 kiểm thử API trên cơ sở dữ liệu thật, 122 kịch bản giao diện), chạy trong 10 bước kiểm tra trước mỗi lần cập nhật. Cả 34 yêu cầu chức năng đều có cách kiểm thử tương ứng (Phụ lục B), và hệ thống đã được đóng gói bằng Docker, triển khai trên máy chủ ảo.
+Về chất lượng, hệ thống có khoảng 2.000 kiểm thử tự động ở ba tầng (1.788 kiểm thử đơn vị, 113 kiểm thử API trên cơ sở dữ liệu thật, 122 kịch bản giao diện), chạy trong 10 bước kiểm tra trước mỗi lần cập nhật. Cả 34 yêu cầu chức năng đều có cách kiểm thử tương ứng (Phụ lục B), và hệ thống đã được đóng gói bằng Docker, triển khai trên máy chủ ảo.
 
 Điểm nổi bật nhất là các đặc thù của nha khoa và của thị trường Việt Nam được đưa vào phần mềm: lịch sử điều trị theo từng răng ngay trên sơ đồ hai cung răng, thanh toán VietQR tự đối soát, nhắc lịch tự động qua email và SMS, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản. Đồng thời, hệ thống bảo đảm tính đúng đắn khi nhiều người thao tác cùng lúc và bảo vệ dữ liệu sức khỏe theo quy định hiện hành.
 
