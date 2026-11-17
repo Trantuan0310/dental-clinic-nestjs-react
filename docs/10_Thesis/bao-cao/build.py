@@ -498,7 +498,7 @@ def pull_text(doc):
         while el is not None and el.tag == qn('w:p'):
             run, cost = [], 0.0  # a heading only moves together with the text under it
             cur = el
-            if sid_of(el) == 'bảng' and budget >= 5:
+            if sid_of(el) == 'bảng' and budget >= 4:
                 # A table (caption, grid, source line) breaks across pages, so it fills any gap.
                 tbl = el.getnext()
                 src = tbl.getnext() if tbl is not None and tbl.tag == qn('w:tbl') else None
@@ -525,8 +525,8 @@ def pull_text(doc):
                     continue
                 cost += len(''.join(cur.itertext())) // 85 + (1.1 if sid == 'Compact' else 1.3)
                 break
-            if cur is None or cost > budget or (len(run) > 1 and cost + 2 > budget):
-                break
+            if cur is None or budget < 3 or (len(run) > 1 and budget < 4.5):
+                break  # paragraphs break across pages: the last one may overshoot the gap
             budget -= cost
             el = run[-1].getnext()
             for r in run:
@@ -773,11 +773,11 @@ def locate(texts, lists):
 
 def main():
     out, lists = build()
-    for _ in range(7):  # shrink figures that leave a large gap above them, or fill the gap with text
+    for _ in range(9):  # shrink figures that leave a large gap above them, or fill the gap with text
         render(out)
         new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
         new = {c: k for c, k in new.items() if c not in FIT}
-        pull = {c: PULL.get(c, 0) + n for c, n in GAPS.items() if c not in new and ROUNDS.get(c, 0) < 3}
+        pull = {c: PULL.get(c, 0) + n for c, n in GAPS.items() if c not in new and ROUNDS.get(c, 0) < 4}
         for c in pull:
             ROUNDS[c] = ROUNDS.get(c, 0) + 1
         GAPS.clear()

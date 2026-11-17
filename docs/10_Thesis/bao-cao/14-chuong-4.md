@@ -189,7 +189,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 Tab "Điều trị & sơ đồ răng" (Hình 4.6) là màn hình chính của bác sĩ. Sơ đồ hai cung răng hiển thị tình trạng hiện tại: răng 12, 16, 37, 46, 48 đã hàn (xanh), răng 38 đã nhổ (nét đứt). Khi bác sĩ bấm răng 37, khung bên phải hiện tình trạng, ghi chú và hai lần điều trị trước của răng này, kèm ngày, bác sĩ thực hiện và liên kết mở lại phiên khám cũ.
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-bs-lich-su-rang.png){width=15cm}
+![](hinh/4-bs-lich-su-rang.png){width=13.4cm}
 :::
 
 ::: {custom-style="hình"}
@@ -203,7 +203,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 Bác sĩ chọn răng 36 (sâu ngà), thêm điều trị "Trám răng composite" từ danh mục; đơn giá tự lấy theo bảng giá và có thể khai báo vật tư để trừ kho. Sau khi trám, bác sĩ đổi tình trạng răng 36 thành "Đã hàn"; sơ đồ cập nhật màu, đánh dấu chấm cho răng có điều trị trong phiên và danh sách điều trị hiện dòng mới cùng tổng tiền (Hình 4.7).
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-bs-sau-dieu-tri.png){width=15cm}
+![](hinh/4-bs-sau-dieu-tri.png){width=13.4cm}
 :::
 
 ::: {custom-style="hình"}
@@ -221,7 +221,7 @@ Bác sĩ kê đơn thuốc; nếu thuốc trùng tiền sử dị ứng, hệ th
 Khi phiên khám đóng, hóa đơn nháp INV-2026-002380 được tạo tự động. Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa số tài khoản, số tiền và nội dung là mã hóa đơn (Hình 4.8).
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-lt-hoa-don-qr.png){width=15cm}
+![](hinh/4-lt-hoa-don-qr.png){width=13.4cm}
 :::
 
 ::: {custom-style="hình"}
@@ -235,7 +235,7 @@ Nguồn: Tác giả, chụp từ hệ thống GenSmile
 Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền về, hóa đơn tự chuyển sang "Thanh toán một phần" và hiện thông báo đã nhận chuyển khoản mà lễ tân không cần thao tác (Hình 4.9). Khi ngân hàng gửi lại cùng giao dịch lần thứ hai, hệ thống trả kết quả "trùng" và không ghi thêm; chuyển khoản không có mã hóa đơn được đưa vào danh sách "Chuyển khoản cần xử lý" kèm lý do.
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-lt-hoa-don-da-thu.png){width=15cm}
+![](hinh/4-lt-hoa-don-da-thu.png){width=13.4cm}
 :::
 
 ::: {custom-style="hình"}
@@ -269,7 +269,7 @@ Chi tiết kỳ lương hiển thị tổng lương, thực nhận, thuế thu n
 Bảng điều khiển (Hình 4.11) cho phép chọn kỳ (hôm nay, 7, 15, 30 ngày, 6 tháng), hiển thị số bệnh nhân mới và cũ, số lịch hẹn, doanh số điều trị, tiền đã thu kèm mức tăng giảm so với kỳ trước, cùng bảng phân loại lịch khám theo trạng thái cuối.
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-ql-dashboard.png){width=15cm}
+![](hinh/4-ql-dashboard.png){width=13.4cm}
 :::
 
 ::: {custom-style="hình"}
@@ -285,7 +285,7 @@ Phần dưới bảng điều khiển gồm sáu chỉ số vận hành so với
 Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung chat bên phải (Hình 4.12). Hình được chụp ở chế độ dự phòng khi chưa cấu hình dịch vụ AI: trợ lý vẫn nhận ra ý định của câu hỏi, gọi đúng công cụ tra cứu, trả lời từ dữ liệu thật và ghi rõ "Trả lời theo mẫu". Khi có dịch vụ AI, câu trả lời được viết tự nhiên và trợ lý có thể đề xuất đặt, hủy, dời lịch dưới dạng thẻ xác nhận.
 
 ::: {custom-style="Ảnh"}
-![](hinh/4-lt-tro-ly-ai.png){width=15cm}
+![](hinh/4-lt-tro-ly-ai.png){width=13.4cm}
 :::
 
 ::: {custom-style="hình"}
