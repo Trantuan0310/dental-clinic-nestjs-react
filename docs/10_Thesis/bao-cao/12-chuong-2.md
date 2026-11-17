@@ -284,7 +284,7 @@ Nguồn: Tác giả
 
 ## 2.6. Ma trận tác nhân và quyền
 
-Quyền trong hệ thống được định nghĩa chi tiết tới từng hành động. Bảng 2.9 trích một số quyền tiêu biểu cùng phân bổ mặc định cho ba vai trò; ký hiệu "Có" là được phép, "Riêng" là chỉ với dữ liệu của mình (ví dụ bác sĩ chỉ với bệnh nhân mình điều trị), "–" là không được phép. Quản trị viên có thể tạo vai trò tùy chỉnh với tổ hợp quyền khác.
+Quyền trong hệ thống được định nghĩa chi tiết tới từng hành động. Bảng 2.9 trích một số quyền tiêu biểu cùng phân bổ mặc định cho ba vai trò; ký hiệu "Có" là được phép, "Riêng" là chỉ với dữ liệu của mình (ví dụ bác sĩ chỉ với bệnh nhân mình điều trị), "–" là không được phép.
 
 ::: {custom-style="bảng"}
 Bảng 2.9. Ma trận quyền tiêu biểu theo vai trò
@@ -316,4 +316,4 @@ Nguồn: Tác giả tổng hợp từ cấu hình phân quyền của hệ thố
 
 ## 2.7. Kết luận chương
 
-Chương 2 đã khảo sát quy trình làm việc của phòng khám, chỉ ra các vấn đề của cách quản lý thủ công và xác định bốn tác nhân người dùng cùng ba hệ thống bên ngoài. Yêu cầu chức năng được chia thành chín nhóm, kèm các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu và hiệu năng. Các biểu đồ use case và ma trận quyền là cơ sở để Chương 3 thiết kế hệ thống.
+Chương 2 đã khảo sát quy trình làm việc của phòng khám, xác định bốn tác nhân người dùng, ba hệ thống bên ngoài cùng các yêu cầu chức năng và phi chức năng. Các biểu đồ use case và ma trận quyền là cơ sở để Chương 3 thiết kế hệ thống.
