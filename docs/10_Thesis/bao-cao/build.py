@@ -388,6 +388,30 @@ GAPS = {}  # caption prefix -> lines of white space left above the figure (seen 
 USED = {}  # caption prefix -> lines actually moved in front of the figure by the last build
 ROUNDS = {}  # caption prefix -> how many times its gap was topped up
 PULL = {}  # caption prefix -> lines of following body text to place before the figure
+def figure_fonts():
+    """Caption prefix -> printed size (pt) of the body text inside a PlantUML figure at its
+    width before any extra shrinking, so that fitting a page never makes it unreadable."""
+    from PIL import Image
+    out = {}
+    for name in BODY:
+        text = open(os.path.join(HERE, name), encoding='utf-8').read()
+        for m in re.finditer(r'hinh/([^)]+)\.png\)\{width=([\d.]+)cm\}\n:::\n\n::: \{custom-style="hình"\}\n(Hình [\d.]+\.)', text):
+            img, width, cap = m.group(1), float(m.group(2)), m.group(3)
+            puml = os.path.join(HERE, 'so-do', img + '.puml')
+            if not os.path.exists(puml):
+                continue
+            size = re.search(r'defaultFontSize (\d+)', open(puml, encoding='utf-8').read())
+            size = int(size.group(1)) if size else 15  # _kieu.iuml
+            px_w, px_h = Image.open(os.path.join(HERE, 'hinh', img + '.png')).size
+            cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
+            out[cap] = size * (cm / 2.54 * 72) * 220 / (72 * px_w)
+    return out
+
+
+FONTS = None
+MIN_FONT = 8.0  # pt: smallest text a diagram may be shrunk to
+
+
 FIT = {}  # caption prefix ("Hình 3.8.") -> extra scale so the figure fits the gap above it
 
 
@@ -426,7 +450,14 @@ def fit_gaps(pdf):
         free = h - 2.5 * cm - max(body) - 18  # room left on the page, minus spacing
         k = (free - cap_block - 12) / img_h
         # Diagrams (chapters 1 and 3) may shrink by 25 %; screenshots only by 10 % to stay legible.
-        if (0.7 if num[0] in '13' else 0.9) <= k < 1:  # use-case diagrams (chapter 2) are already small
+        global FONTS
+        if FONTS is None:
+            FONTS = figure_fonts()
+        floor = 0.7 if num[0] in '13' else 0.9  # use-case diagrams (chapter 2) are already small
+        font = FONTS.get(f'Hình {num}')
+        if font:
+            floor = max(floor, MIN_FONT / font)  # never shrink diagram text below MIN_FONT
+        if floor <= k < 1:
             found[f'Hình {num}'] = k
         elif k < 1 and free > 4 * 22.5:
             # Too tall to shrink into the gap: let the text that follows the figure fill it instead.
