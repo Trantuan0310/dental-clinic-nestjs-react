@@ -74,7 +74,7 @@ SQL = {'Uuid': 'uuid', 'String': 'varchar', 'Int': 'int', 'Boolean': 'bool', 'Da
 def emit(name, title, wanted, models):
     lines = ['@startuml', '!include _kieu.iuml', 'hide circle', 'skinparam linetype ortho',
              'skinparam defaultFontSize 13', f'title {title}', '']
-    if name in ('3-2-erd-benh-nhan-lich-hen', '3-5-erd-nhan-su-kho'):  # sơ đồ rộng: xếp dọc để chữ đủ to khi in
+    if name in ('3-2-erd-benh-nhan-lich-hen', '3-5-erd-nhan-su-kho', '3-3-erd-kham-dieu-tri', '3-4-erd-hoa-don'):  # sơ đồ rộng: xếp dọc để chữ đủ to khi in
         lines.insert(4, 'left to right direction')
     for mname in wanted:
         m = models[mname]

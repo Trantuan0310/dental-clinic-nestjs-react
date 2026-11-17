@@ -100,7 +100,7 @@ Nhóm phiên khám (Hình 3.3) có bảng trung tâm `encounters`, quan hệ m�
 Thiết kế **mỗi phiên khám một bản chụp sơ đồ răng** (thay vì một sơ đồ duy nhất bị ghi đè) là quyết định quan trọng: tình trạng răng tại từng thời điểm được giữ nguyên, nhờ đó có thể xem lịch sử một chiếc răng qua các lần khám, đáp ứng yêu cầu không ghi đè hồ sơ [@tt46]. Sơ đồ hiện tại của bệnh nhân là bản chụp của phiên khám gần nhất không bị hủy.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-3-erd-kham-dieu-tri.png){width=14cm}
+![](hinh/3-3-erd-kham-dieu-tri.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
@@ -114,7 +114,7 @@ Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ th�
 Nhóm điều trị và kế hoạch: mỗi phiên khám có nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/3-4-erd-hoa-don.png){width=10cm}
+![](hinh/3-4-erd-hoa-don.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}

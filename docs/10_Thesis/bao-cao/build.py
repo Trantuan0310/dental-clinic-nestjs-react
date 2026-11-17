@@ -385,6 +385,7 @@ def cover(doc):
 
 
 GAPS = {}  # caption prefix -> lines of white space left above the figure (seen in the last render)
+USED = {}  # caption prefix -> lines actually moved in front of the figure by the last build
 ROUNDS = {}  # caption prefix -> how many times its gap was topped up
 PULL = {}  # caption prefix -> lines of following body text to place before the figure
 FIT = {}  # caption prefix ("Hình 3.8.") -> extra scale so the figure fits the gap above it
@@ -489,9 +490,16 @@ def pull_text(doc):
     for p in list(doc.paragraphs):
         if p._p in COVER or not p._p.findall('.//' + qn('w:drawing')):
             continue
-        budget = PULL.get(caption_after(p))
+        cap = caption_after(p)
+        budget = PULL.get(cap)
         if not budget:
             continue
+        start = budget
+        ext = next(p._p.iter(qn('wp:extent')))
+        cx, cy = int(ext.get('cx')), int(ext.get('cy'))
+        # A figure that fills most of a page must start a page: text pulled in front of it may
+        # not overshoot the gap, or its remainder would sit alone on the page before the figure.
+        tall = cy * min(1.0, Cm(15) / cx, Cm(21) / cy) * FIT.get(cap, 1.0) > Cm(12)
         el = p._p.getnext()
         for _ in range(2):  # skip the caption and the source line
             while el is not None and el.tag != qn('w:p'):
@@ -522,6 +530,8 @@ def pull_text(doc):
                 tbl = step(el, block)
                 if tbl is None or tbl.tag != qn('w:tbl'):
                     break
+                if tall and 5 + 1.2 * len(tbl.findall(qn('w:tr'))) > budget + 1:
+                    break
                 block.append(tbl)
                 tail = []
                 src = step(tbl, tail)
@@ -549,13 +559,14 @@ def pull_text(doc):
                     continue
                 cost += len(text_of(cur)) // 85 + (1.1 if sid == 'Compact' else 1.3)
                 break
-            if cur is None or budget < 3 or (heads and budget < 4.5):
-                break  # paragraphs break across pages: the last one may overshoot the gap
+            if cur is None or budget < 3 or (heads and budget < 4.5) or (tall and cost > budget + 1):
+                break  # paragraphs break across pages: before a short figure the last one may overshoot the gap
             budget -= cost
             pre = []
             el = step(cur, pre)
             for r in run:
                 p._p.addprevious(r)
+        USED[cap] = start - budget
 
 
 def finish(doc, pages=None):
@@ -802,7 +813,7 @@ def main():
         render(out)
         new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
         new = {c: k for c, k in new.items() if c not in FIT}
-        pull = {c: PULL.get(c, 0) + n for c, n in GAPS.items() if c not in new and ROUNDS.get(c, 0) < 4}
+        pull = {c: USED.get(c, 0) + n for c, n in GAPS.items() if c not in new and ROUNDS.get(c, 0) < 4}
         for c in pull:
             ROUNDS[c] = ROUNDS.get(c, 0) + 1
         GAPS.clear()
