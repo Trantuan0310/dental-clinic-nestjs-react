@@ -1,7 +1,6 @@
 @startuml
 !include _kieu.iuml
 skinparam componentStyle rectangle
-left to right direction
 actor "Nhân viên\n(trình duyệt)" as NV
 actor "Bệnh nhân\n(trình duyệt, điện thoại)" as BN
 node "Máy chủ ảo (Docker Compose)" {

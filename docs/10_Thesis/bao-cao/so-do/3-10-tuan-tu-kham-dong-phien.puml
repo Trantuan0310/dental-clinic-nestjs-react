@@ -1,5 +1,7 @@
 @startuml
 !include _kieu.iuml
+skinparam wrapWidth 110
+skinparam maxMessageSize 110
 hide footbox
 autonumber
 actor "Bác sĩ" as BS

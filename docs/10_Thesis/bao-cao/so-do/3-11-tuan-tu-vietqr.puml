@@ -1,8 +1,9 @@
 @startuml
 !include _kieu.iuml
+skinparam wrapWidth 130
+skinparam maxMessageSize 130
 autonumber
 hide footbox
-skinparam maxMessageSize 95
 actor "Bệnh nhân" as BN
 participant "Ứng dụng\nngân hàng" as APP
 participant "SePay" as SP

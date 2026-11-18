@@ -88,7 +88,7 @@ def emit(name, title, wanted, models):
             if c['pk'] or c['field'] in SKIP_COLS:
                 continue
             is_fk = c['field'] in fks
-            if not is_fk and shown >= MAX_COLS:
+            if not is_fk and shown >= (3 if name == '3-2-erd-benh-nhan-lich-hen' else MAX_COLS):  # nhóm 12 bảng: bớt cột để chữ đủ lớn
                 continue
             typ = SQL.get(c['type'], 'enum')
             tag = ' <<FK>>' if is_fk else (' <<UQ>>' if c['unique'] else '')
