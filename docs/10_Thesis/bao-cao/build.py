@@ -751,6 +751,51 @@ def finish(doc, pages=None):
     return lists
 
 
+# Child order of the property elements in the WordprocessingML schema. Word refuses
+# ("unreadable content") a file whose properties are out of order or repeated, even
+# though LibreOffice opens it, so every property element is put back in schema order.
+SCHEMA_ORDER = {
+    'rPr': 'ins del moveFrom moveTo rStyle rFonts b bCs i iCs caps smallCaps strike dstrike outline shadow '
+           'emboss imprint noProof snapToGrid vanish webHidden color spacing w kern position sz szCs highlight u '
+           'effect bdr shd fitText vertAlign rtl cs em lang eastAsianLayout specVanish oMath rPrChange',
+    'pPr': 'pStyle keepNext keepLines pageBreakBefore framePr widowControl numPr suppressLineNumbers pBdr shd tabs '
+           'suppressAutoHyphens kinsoku wordWrap overflowPunct topLinePunct autoSpaceDE autoSpaceDN bidi '
+           'adjustRightInd snapToGrid spacing ind contextualSpacing mirrorIndents suppressOverlap jc textDirection '
+           'textAlignment textboxTightWrap outlineLvl divId cnfStyle rPr sectPr pPrChange',
+    'trPr': 'cnfStyle divId gridBefore gridAfter wBefore wAfter cantSplit trHeight tblHeader tblCellSpacing jc hidden '
+            'ins del trPrChange',
+    'tblPr': 'tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize tblW jc tblCellSpacing '
+             'tblInd tblBorders shd tblLayout tblCellMar tblLook tblCaption tblDescription tblPrChange',
+    'tcPr': 'cnfStyle tcW gridSpan hMerge vMerge tcBorders shd noWrap tcMar textDirection tcFitText vAlign hideMark',
+    'sectPr': 'headerReference footerReference footnotePr endnotePr type pgSz pgMar paperSrc pgBorders lnNumType '
+              'pgNumType cols formProt vAlign noEndnote titlePg textDirection bidi rtlGutter docGrid printerSettings '
+              'sectPrChange',
+}
+W_NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def schema_order(root):
+    """Sort the children of every property element and drop repeats (the last one wins)."""
+    for tag, names in SCHEMA_ORDER.items():
+        rank = {n: i for i, n in enumerate(names.split())}
+        multi = {'headerReference', 'footerReference'}
+        for el in root.iter(W_NS + tag):
+            kids = list(el)
+            seen, keep = set(), []
+            for k in reversed(kids):
+                n = k.tag.replace(W_NS, '')
+                if n in seen and n not in multi:
+                    continue
+                seen.add(n)
+                keep.append(k)
+            keep.reverse()
+            keep.sort(key=lambda k: rank.get(k.tag.replace(W_NS, ''), len(rank)))
+            for k in kids:
+                el.remove(k)
+            for k in keep:
+                el.append(k)
+
+
 def build(pages=None):
     os.makedirs(OUT, exist_ok=True)
     ref = os.path.join(OUT, 'reference.docx')
@@ -787,6 +832,12 @@ def build(pages=None):
     page_header(secs[3], fmt='decimal')
     lists = finish(doc, pages)
     tighten(doc)
+    schema_order(doc.element.body)
+    schema_order(doc.styles.element)
+    for sec in doc.sections:
+        for part in (sec.header, sec.footer):
+            if not part.is_linked_to_previous:
+                schema_order(part._element)
     out = os.path.join(OUT, 'BaoCao_DATN_TranTuanAnh.docx')
     doc.save(out)
     os.remove(tmp)
