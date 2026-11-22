@@ -17,10 +17,6 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 | Đầu cuối (E2E) | Playwright | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Môi trường kiểm thử: máy chủ Linux trên GitHub Actions (Ubuntu, Node.js 22, PostgreSQL 16 dạng dịch vụ), trình duyệt Chromium của Playwright. Mỗi lần chạy, cơ sở dữ liệu được tạo mới hoàn toàn từ các migration, nên kết quả không phụ thuộc dữ liệu cũ.
 
 Tầng API trên PostgreSQL thật được đưa vào vì nhiều lỗi nghiêm trọng nhất của hệ thống quản lý chỉ xuất hiện với cơ sở dữ liệu thật: hai yêu cầu đồng thời, làm tròn số thập phân, ranh giới ngày theo múi giờ, ràng buộc khóa ngoại. Kiểm thử đơn vị với cơ sở dữ liệu giả lập không phát hiện được các lỗi này.
@@ -47,10 +43,6 @@ Bảng 5.2. Ca kiểm thử nhóm lịch hẹn và tiếp nhận
 | KT-LH-08 | Khách mở đường dẫn trong tin nhắc để xác nhận hoặc dời lịch | Trạng thái lịch cập nhật; đường dẫn đã dùng hoặc hết hạn bị từ chối | E2E | Đạt |
 | KT-LH-09 | Lễ tân chuyển khách sang bác sĩ khác trên màn hình điều phối | Khách xuất hiện ở hàng chờ bác sĩ mới | E2E | Đạt |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ::: {custom-style="bảng"}
 Bảng 5.3. Ca kiểm thử nhóm khám, điều trị và kho
 :::
@@ -67,10 +59,6 @@ Bảng 5.3. Ca kiểm thử nhóm khám, điều trị và kho
 | KT-KB-08 | Bác sĩ có lịch với bệnh nhân nhưng không phải người khám | Được xem, không được sửa | API | Đạt |
 | KT-KB-09 | Áp dụng mẫu khám nhanh hai lần đồng thời | Các dòng điều trị chỉ được thêm một lần | API | Đạt |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ::: {custom-style="bảng"}
 Bảng 5.4. Ca kiểm thử nhóm hóa đơn và thanh toán
 :::
@@ -86,10 +74,6 @@ Bảng 5.4. Ca kiểm thử nhóm hóa đơn và thanh toán
 | KT-TT-07 | Ngân hàng gửi cùng một giao dịch chuyển khoản nhiều lần | Khoản thanh toán chỉ được ghi một lần | API | Đạt |
 | KT-TT-08 | Chuyển khoản có nội dung không chứa mã hóa đơn | Giao dịch vào danh sách cần xử lý, không tự ghi | Đơn vị | Đạt |
 | KT-TT-09 | Bác sĩ xem hóa đơn của bệnh nhân không phải của mình | Bị từ chối | API | Đạt |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 ::: {custom-style="bảng"}
 Bảng 5.5. Ca kiểm thử nhóm xác thực, phân quyền và bảo mật
@@ -109,10 +93,6 @@ Bảng 5.5. Ca kiểm thử nhóm xác thực, phân quyền và bảo mật
 | KT-BM-10 | Xin đường dẫn tra cứu bằng số điện thoại không có trong hệ thống | Phản hồi giống hệt trường hợp có, để không dò được số điện thoại | Đơn vị | Đạt |
 | KT-BM-11 | Lễ tân gửi đường dẫn tra cứu, bệnh nhân mở trên trình duyệt khác | Bệnh nhân xem được lịch sử của chính mình | E2E | Đạt |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ### 5.2.2. Kiểm thử đầu cuối các luồng chính
 
 Ngoài các ca riêng lẻ, một số kịch bản E2E đi trọn một luồng nghiệp vụ qua nhiều màn hình và nhiều vai trò, như một người dùng thật:
@@ -127,7 +107,7 @@ Bộ E2E cũng kiểm tra chuyển đổi ngôn ngữ Việt – Anh và các y�
 
 ### 5.2.3. Số ca kiểm thử và độ bao phủ mã
 
-Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest: 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy dưới một phút. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 74,8% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.6 thống kê theo module.
+Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest (ngày 17/11/2026): 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy dưới một phút. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 74,8% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.6 thống kê theo module.
 
 ::: {custom-style="bảng"}
 Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
@@ -147,10 +127,6 @@ Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
 | auth, users, roles | Xác thực, người dùng, phân quyền | 93 | 70,7 | 60,8 |
 | Các module còn lại | Danh mục, kho, kế hoạch, chi phí, đồng ý, nhắc tái khám, thông báo, tin nhắn, kiểm toán, ảnh… | 325 | 63,8 | 62,8 |
 | **Tổng** | | **1.788** | **76,6** | **70,0** |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chạy `npx jest --coverage` trên mã nguồn ngày 17/11/2026
-:::
 
 Số ca kiểm thử tập trung ở những module có nhiều quy tắc và rủi ro nhất: lịch hẹn và đặt lịch (gần một phần ba tổng số ca), khám bệnh, lương và thanh toán. Một số module có độ bao phủ thấp hơn, như chi phí vận hành (36,7% số dòng) và các guard dùng chung trong `common/` (29,3%); phần lớn đường đi của các guard này được kiểm tra gián tiếp qua kiểm thử API trên PostgreSQL thật (Bảng 5.5), nhưng đây vẫn là điểm cần bổ sung kiểm thử đơn vị.
 
@@ -172,10 +148,6 @@ Bảng 5.7. Thời gian phản hồi của một số API (50 lần gọi)
 | Doanh thu theo ngày (30 ngày) | 12 | 13 |
 | Chỉ số bảng điều khiển (30 ngày) | 46 | 56 |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, đo trên máy chạy thử
-:::
-
 Hai tối ưu đáng kể được thực hiện trong quá trình phát triển, có đo trước và sau (Bảng 5.8).
 
 ::: {custom-style="bảng"}
@@ -187,10 +159,6 @@ Bảng 5.8. Kết quả tối ưu hiệu năng
 | Số yêu cầu để hiện lịch sử một răng (bệnh nhân có 50 phiên khám) | tối đa 50 | 1 |
 | Gói mã giao diện chính (chưa nén) | 540 KB | 384 KB |
 | Gói mã giao diện chính (nén gzip) | 156 KB | 109 KB |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 Gói mã giảm nhờ tách bản tiếng Anh thành gói riêng và tải lười các trang. Với người dùng, trang đăng nhập và trang chủ mở nhanh hơn rõ rệt trên kết nối di động.
 
@@ -231,10 +199,6 @@ Bảng 5.9. Các điểm nổi bật của hệ thống và minh chứng
 | Chỉ số vận hành cho chủ phòng khám | Sáu chỉ số vận hành so với mục tiêu, công suất ghế theo giờ, hành trình bệnh nhân, tuổi công nợ | Hình 4.11 |
 | Chất lượng được kiểm chứng liên tục | Khoảng 2.000 kiểm thử tự động ở ba tầng, chạy trong 10 bước trước mỗi lần cập nhật | Bảng 4.3, Bảng 5.1 |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ## 5.5. Đối chiếu kết quả với mục tiêu đề tài
 
 Bảng 5.10 đối chiếu từng mục tiêu trong phiếu giao đề tài với kết quả đạt được và minh chứng tương ứng trong báo cáo.
@@ -252,10 +216,6 @@ Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 | Nhắc lịch tự động qua email, SMS | Nhắc lịch qua email (SMTP) và SMS, thử lại tối đa 3 lần; SMS đã cài đặt nhưng chưa thử với nhà cung cấp thật | Mục 3.3.6 | Đạt một phần |
 | Bệnh nhân tra cứu lịch sử khám dễ dàng | Đường dẫn bảo mật, có thời hạn, không cần tài khoản | Hình 4.10 | Đạt |
 | Hồ sơ X-quang | Chưa thực hiện | – | Chưa đạt |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 Ở mức chi tiết hơn, Phụ lục B truy vết từng yêu cầu trong 34 yêu cầu chức năng của Mục 2.3 tới thiết kế, giao diện và ca kiểm thử tương ứng; mọi yêu cầu đều có ít nhất một hình thiết kế hoặc giao diện và ít nhất một cách kiểm thử. Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuyển khoản VietQR tự động và trợ lý AI có kiểm soát.
 

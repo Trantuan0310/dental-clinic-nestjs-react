@@ -23,10 +23,6 @@ Ba nhóm dịch vụ bên ngoài là ngân hàng (qua dịch vụ theo dõi tài
 Hình 3.1. Kiến trúc triển khai của hệ thống
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ### 3.1.2. Các module nghiệp vụ
 
 Máy chủ ứng dụng được chia thành 23 module nghiệp vụ theo kiến trúc phân lớp [@sommerville], mỗi module gồm controller (nhận yêu cầu, kiểm tra dữ liệu bằng DTO), service (quy tắc nghiệp vụ) và phần truy cập dữ liệu qua Prisma. Các module giao tiếp với nhau qua service được công bố hoặc qua **sự kiện miền**: ví dụ khi phiên khám đóng, module hồ sơ khám phát sự kiện `encounter.closed`; module hóa đơn lắng nghe để lập hóa đơn nháp, module lương lắng nghe để ghi ca khám vào bảng lương, module AI lắng nghe để làm mới bản tóm tắt. Cách làm này giữ cho mỗi module không phụ thuộc trực tiếp vào module khác. Bảng 3.1 liệt kê các module cùng số điểm cuối API.
@@ -59,10 +55,6 @@ Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
 | media, audit, common | Ảnh trang chủ, nhật ký kiểm toán, kiểm tra sức khỏe hệ thống | 9 |
 | **Tổng** | | **339** |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả thống kê từ mã nguồn
-:::
-
 ## 3.2. Thiết kế cơ sở dữ liệu
 
 ### 3.2.1. Nguyên tắc thiết kế
@@ -89,10 +81,6 @@ Do số bảng lớn, sơ đồ thực thể liên kết được chia theo mi�
 Hình 3.2. Sơ đồ thực thể liên kết nhóm bệnh nhân, lịch hẹn và tiếp nhận
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
-:::
-
 Nhóm bệnh nhân và lịch hẹn (Hình 3.2) xoay quanh bảng `appointments`: mỗi lịch hẹn thuộc một bệnh nhân và một bác sĩ (bảng `users`), có thể gồm nhiều dịch vụ (`appointment_services`, lưu lại giá tại thời điểm đặt). Yêu cầu đặt lịch trực tuyến được lưu riêng trong `booking_requests` cho đến khi lễ tân duyệt. Hàng chờ (`queue_entries`), lịch làm việc (`working_schedules`), danh sách chờ (`waitlist_entries`) và nhắc tái khám (`recalls`) đều tham chiếu tới bệnh nhân hoặc lịch hẹn. Hai bảng `appointment_links` và `patient_history_links` lưu các liên kết công khai gửi cho bệnh nhân; chỉ giá trị băm SHA-256 của mã bí mật được lưu.
 
 Nhóm phiên khám (Hình 3.3) có bảng trung tâm `encounters`, quan hệ một – một với lịch hẹn. Mỗi phiên khám có một ghi chú lâm sàng (kèm các ghi bổ sung sau khi khóa), tối đa một đơn thuốc và một bản chụp sơ đồ răng (`dental_chart_snapshots`).
@@ -107,10 +95,6 @@ Thiết kế **mỗi phiên khám một bản chụp sơ đồ răng** (thay vì
 Hình 3.3. Sơ đồ thực thể liên kết nhóm phiên khám, ghi chú lâm sàng và đơn thuốc
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
-:::
-
 Nhóm điều trị và kế hoạch: mỗi phiên khám có nhiều dòng điều trị (`treatments`, có cột `tooth_numbers` kiểu JSONB). Vật tư dùng cho mỗi điều trị được ghi trong `treatment_inventory_usages` để trừ kho khi đóng phiên. Kế hoạch điều trị (`treatment_plans`, `treatment_plan_items`) gắn với bệnh nhân; mỗi dòng kế hoạch được đánh dấu đã làm khi có điều trị tương ứng trong một phiên khám đã đóng.
 
 ::: {custom-style="Ảnh"}
@@ -119,10 +103,6 @@ Nhóm điều trị và kế hoạch: mỗi phiên khám có nhiều dòng đi�
 
 ::: {custom-style="hình"}
 Hình 3.4. Sơ đồ thực thể liên kết nhóm hóa đơn và thanh toán
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
 
 Nhóm hóa đơn (Hình 3.4): mỗi hóa đơn lập từ một phiên khám, gồm các dòng (`invoice_items`) sao chép từ điều trị; thanh toán (`payments`) có khóa `request_key` duy nhất theo hóa đơn để một lần bấm hai lần hoặc một giao dịch ngân hàng báo hai lần cũng chỉ ghi một khoản. Hóa đơn lưu sẵn các tổng đã thu, đã hoàn, đã điều chỉnh và số còn nợ để báo cáo nhanh. Giao dịch ngân hàng (`bank_transactions`) lưu toàn bộ dữ liệu ngân hàng gửi về cùng kết quả đối soát.
@@ -135,10 +115,6 @@ Nhóm người dùng và phân quyền (Hình 3.5) theo mô hình RBAC [@rbac]: 
 
 ::: {custom-style="hình"}
 Hình 3.5. Sơ đồ thực thể liên kết nhóm người dùng, phân quyền và nhật ký
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, sinh từ lược đồ cơ sở dữ liệu của hệ thống
 :::
 
 Nhóm nhân sự, lương và kho: thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập. Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
@@ -159,10 +135,6 @@ Vòng đời một lịch hẹn được mô hình hóa bằng biểu đồ tr�
 Hình 3.6. Biểu đồ trạng thái của lịch hẹn
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Đặc tả chi tiết chức năng đặt lịch hẹn được trình bày ở Bảng 3.2.
 
 ::: {custom-style="bảng"}
@@ -178,10 +150,6 @@ Bảng 3.2. Đặc tả chức năng Đặt lịch hẹn
 | Luồng thay thế, ngoại lệ | Giờ vừa bị người khác đặt: báo lỗi trùng, gợi ý giờ khác. Ngoài giờ làm việc, ngày phòng khám nghỉ: từ chối. Bệnh nhân đã có lịch trùng giờ: từ chối. |
 | Hậu điều kiện | Lịch hẹn ở trạng thái SCHEDULED; khung giờ không còn hiển thị là trống |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Việc chống đặt trùng giờ được bảo đảm ở máy chủ, không chỉ ở giao diện: hai lễ tân cùng đặt một khung giờ ở hai máy khác nhau, giao dịch thứ hai phải chờ khóa của giao dịch thứ nhất, rồi kiểm tra lại và bị từ chối.
 
 Hình 3.7 mô tả chi tiết luồng lễ tân đặt lịch hẹn, trong đó có tình huống hai lễ tân cùng đặt một bác sĩ vào cùng một giờ. Yêu cầu đi qua ba lớp kiểm tra: `PermissionsGuard` kiểm tra quyền `appointment.create`, lớp DTO kiểm tra dữ liệu đầu vào, rồi service thực hiện toàn bộ việc kiểm tra và ghi trong một giao dịch có khóa tư vấn. Giao dịch đến sau phải chờ giao dịch trước kết thúc, nên lần kiểm tra trùng của nó luôn thấy lịch vừa được ghi.
@@ -194,10 +162,6 @@ Hình 3.7 mô tả chi tiết luồng lễ tân đặt lịch hẹn, trong đó 
 Hình 3.7. Biểu đồ tuần tự lễ tân đặt lịch hẹn khi có hai yêu cầu cùng lúc
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Khi khách đến, lễ tân check-in và hệ thống đưa khách vào hàng chờ của bác sĩ (Hình 3.8). Check-in chỉ được thực hiện trong khung từ 15 phút trước đến 30 phút sau giờ hẹn; ngoài khung này phải có lý do ghi đè và phải trong ngày hẹn. Thứ tự hàng chờ không đơn thuần theo giờ đến: khách đến đúng giờ được xếp theo giờ hẹn, khách trễ quá 15 phút được xếp như thể đến muộn thêm 15 phút, khách vãng lai chờ sau khách có hẹn tối đa khoảng 45 phút, còn ca cấp cứu luôn được đưa lên đầu. Cách xếp này được viết thành một hàm thuần và kiểm thử bằng bảng quyết định.
 
 ::: {custom-style="Ảnh"}
@@ -206,10 +170,6 @@ Khi khách đến, lễ tân check-in và hệ thống đưa khách vào hàng c
 
 ::: {custom-style="hình"}
 Hình 3.8. Biểu đồ hoạt động tiếp nhận và hàng chờ
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 Khi một lịch hẹn bị hủy hoặc khách vắng mặt, giờ trống đó có thể dành cho bệnh nhân trong danh sách chờ. Mỗi yêu cầu chờ ghi dịch vụ, bác sĩ mong muốn (hoặc bất kỳ), khoảng ngày và buổi. Cứ hai phút, hệ thống tìm các giờ vừa trống, tính phần còn lại và chỉ giữ những dịch vụ mà bác sĩ đó làm được trong khoảng thời gian ấy; nếu có yêu cầu phù hợp, lễ tân nhận thông báo để liên hệ khách. Khi đặt lịch từ yêu cầu chờ, điều kiện khớp được kiểm tra lại trong cùng giao dịch tạo lịch, nên hai lễ tân không thể cùng xếp một yêu cầu vào hai giờ khác nhau.
@@ -224,10 +184,6 @@ Bệnh nhân đặt lịch không cần tài khoản (Hình 3.9). Yêu cầu đ�
 
 ::: {custom-style="hình"}
 Hình 3.9. Biểu đồ tuần tự đặt lịch trực tuyến
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 ### 3.3.3. Khám, điều trị và sơ đồ răng
@@ -247,10 +203,6 @@ Bảng 3.3. Đặc tả chức năng Khám và ghi điều trị theo răng
 | Luồng thay thế, ngoại lệ | Sửa giá khác bảng giá: cần quyền `treatment.price_override` và lý do, ghi nhật ký. Thuốc trùng dị ứng: hiện cảnh báo bắt buộc, phải nhập lý do nếu vẫn giữ. Không đủ tồn kho khi đóng: báo lỗi, giữ phiên mở. Mở nhầm phiên: hủy khi chưa có điều trị. |
 | Hậu điều kiện | Phiên khám COMPLETED, hồ sơ khóa (chỉ được ghi bổ sung); tồn kho giảm; có hóa đơn nháp; ca khám được ghi vào bảng lương của bác sĩ (hoa hồng tính khi hóa đơn được phát hành); các dòng kế hoạch điều trị tương ứng được đánh dấu đã làm |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Hình 3.10 trình bày tuần tự xử lý, trong đó việc đóng phiên khám là một giao dịch duy nhất (trừ kho, ghi biến động kho, khóa hồ sơ). Các việc phụ (lập hóa đơn nháp, ghi ca khám cho bảng lương) được thực hiện qua sự kiện, nên module hồ sơ khám không cần biết về hóa đơn hay lương.
 
 ::: {custom-style="Ảnh"}
@@ -259,10 +211,6 @@ Hình 3.10 trình bày tuần tự xử lý, trong đó việc đóng phiên kh�
 
 ::: {custom-style="hình"}
 Hình 3.10. Biểu đồ tuần tự khám, ghi điều trị theo răng và đóng phiên khám
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 Lịch sử điều trị theo răng được thiết kế thành một API riêng `GET /patients/:id/teeth/:fdi/history`: máy chủ lọc ngay trong cơ sở dữ liệu các điều trị có chứa số răng cần xem (toán tử chứa của JSONB) và chỉ lấy mục sơ đồ của răng đó, thay vì để trình duyệt tải toàn bộ các phiên khám rồi tự lọc. Hiệu quả của thiết kế này được đo ở Chương 5.
@@ -277,10 +225,6 @@ Hình 3.11 trình bày chi tiết luồng xem lịch sử và thêm điều tr�
 
 ::: {custom-style="hình"}
 Hình 3.11. Biểu đồ tuần tự xem lịch sử và thêm điều trị cho một răng
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 Đóng phiên khám là thao tác có nhiều hệ quả nhất của bác sĩ. Trước khi ghi bất cứ thứ gì, hệ thống yêu cầu phiên khám đã có lý do khám hoặc chẩn đoán, và sàng lọc lại đơn thuốc với danh sách dị ứng hiện tại: một dị ứng vừa được bổ sung sau khi kê đơn vẫn bị phát hiện, bác sĩ phải sửa đơn hoặc ghi lý do vượt cảnh báo (lý do này được lưu vào nhật ký kiểm toán). Việc trừ kho nằm trong cùng giao dịch với việc đóng phiên khám, bằng câu lệnh cập nhật có điều kiện "tồn kho đủ", nên chỉ cần một vật tư không đủ là toàn bộ thay đổi được hoàn tác và phiên khám vẫn mở. Cùng giao dịch đó cũng tạo các lần nhắc tái khám cho những dịch vụ có chu kỳ. Sau khi giao dịch thành công, sự kiện `encounter.closed` được phát cho ba module độc lập: hóa đơn, lương và AI.
@@ -301,10 +245,6 @@ Hóa đơn đi qua các trạng thái ở Hình 3.12; mã QR trên hóa đơn th
 Hình 3.12. Biểu đồ trạng thái của hóa đơn
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Bảng 3.4 đặc tả cách hệ thống tự ghi nhận khoản chuyển khoản; trình tự xử lý giữa khách, ngân hàng và hệ thống được thể hiện ở Hình 3.13.
 
 ::: {custom-style="bảng"}
@@ -320,20 +260,12 @@ Bảng 3.4. Đặc tả chức năng Tự đối soát chuyển khoản
 | Luồng thay thế, ngoại lệ | Không có mã hóa đơn, không tìm thấy hóa đơn, hóa đơn không còn nợ, số tiền vượt nợ: đánh dấu "cần xem xét" kèm lý do để lễ tân xử lý tay. Ngân hàng gửi lại cùng giao dịch: không ghi thêm. Sai khóa: từ chối. |
 | Hậu điều kiện | Thanh toán được ghi đúng một lần; hóa đơn chuyển PARTIAL hoặc PAID; giao dịch được lưu vết |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ::: {custom-style="Ảnh"}
 ![](hinh/3-11-tuan-tu-vietqr.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 3.13. Biểu đồ tuần tự thanh toán VietQR và tự đối soát
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 Khi ngân hàng báo một giao dịch, nguyên tắc là chỉ tự ghi khi chắc chắn: có mã hóa đơn, hóa đơn tồn tại, đang còn nợ, số tiền không vượt quá số nợ và đã cấu hình tài khoản hệ thống đứng tên ghi nhận; mọi trường hợp khác, kể cả khi bước ghi thanh toán bị lỗi, đều được lưu lại với lý do cụ thể để lễ tân xử lý, không đoán bừa.
@@ -352,10 +284,6 @@ Hình 3.14 mô tả một lần chạy của tác vụ nhắc lịch. Ngoài khu
 Hình 3.14. Biểu đồ hoạt động gửi nhắc lịch tự động
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Nhắc tái khám là một đối tượng riêng. Lần nhắc được tạo tự động khi đóng phiên khám có dịch vụ được cấu hình chu kỳ nhắc; lễ tân gọi cho khách đến hạn và ghi lại kết quả từng lần gọi. Khi khách quay lại khám cùng dịch vụ, lần nhắc tự đóng, kể cả khi khách tự đến mà không qua cuộc gọi nào.
 
 ### 3.3.7. Bệnh nhân tra cứu lịch sử khám
@@ -372,10 +300,6 @@ Chức năng này hướng tới mục tiêu "tra cứu lịch sử khám dễ d
 
 ::: {custom-style="hình"}
 Hình 3.15. Biểu đồ tuần tự bệnh nhân tra cứu lịch sử khám
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 ### 3.3.8. Nhân sự, ca làm việc và tính lương
@@ -407,10 +331,6 @@ Bảng 3.5. Các chỉ số vận hành trên bảng điều khiển
 | Tỷ lệ hủy sát giờ | Lịch khách hủy trước giờ hẹn dưới 24 giờ ÷ tổng lịch | ≤ 5% | ≤ 10% |
 | Tỷ lệ thu | Đã thu ÷ doanh thu điều trị của kỳ | ≥ 95% | ≥ 85% |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Mỗi chỉ số được tô ba mức: đạt mục tiêu, trong ngưỡng chấp nhận, hoặc dưới ngưỡng cần chú ý; quản trị viên chỉnh được cả hai mức trong phần cài đặt mà không phải sửa mã.
 
 Ngoài ra, báo cáo gồm doanh thu theo kỳ, theo bác sĩ, theo dịch vụ; tuổi nợ; bản đồ nhiệt công suất ghế theo giờ trong tuần; và phễu hành trình bệnh nhân từ đặt lịch tới thanh toán đủ và đặt lịch tiếp.
@@ -429,10 +349,6 @@ Trợ lý AI dạng chat cho nhân viên được thiết kế theo vòng lặp 
 Hình 3.16. Biểu đồ tuần tự trợ lý AI đề xuất đặt lịch
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 Các biện pháp an toàn được tổng hợp trong Bảng 3.6, đối chiếu với các rủi ro của ứng dụng dùng mô hình ngôn ngữ lớn [@owaspllm].
 
 ::: {custom-style="bảng"}
@@ -447,10 +363,6 @@ Bảng 3.6. Rủi ro khi dùng mô hình ngôn ngữ lớn và biện pháp tron
 | Hành động ngoài ý muốn | Mọi thay đổi chỉ là đề xuất, người dùng xác nhận; công cụ chạy với quyền của người hỏi |
 | Phụ thuộc dịch vụ AI | Khi AI lỗi hoặc chưa cấu hình: trợ lý chuyển sang chế độ tra cứu theo từ khóa, các chức năng soạn nháp dùng mẫu soạn sẵn |
 | Lạm dụng, chi phí | Giới hạn 20 lượt/phút mỗi người, giới hạn độ dài hội thoại và thời gian xử lý |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 ### 3.3.12. Hồ sơ bệnh nhân và các module hỗ trợ
 
@@ -472,10 +384,6 @@ Luồng xác thực theo Hình 3.17: mã truy cập JWT [@jwt] ngắn hạn gử
 Hình 3.17. Biểu đồ tuần tự xác thực và làm mới token
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ### 3.4.2. Phân quyền hai lớp
 
 Theo mô hình RBAC [@rbac], mỗi điểm cuối API khai báo các mã quyền cần có; `PermissionsGuard` so với danh sách quyền trong token trước khi vào controller. Lớp thứ hai nằm trong service: với người dùng chỉ có quyền "riêng" (ví dụ `encounter.read.own`), truy vấn được thêm điều kiện theo quan hệ bác sĩ – bệnh nhân (bác sĩ đã khám hoặc đang có lịch với bệnh nhân). Khi không thỏa, hệ thống trả lỗi "không tìm thấy" thay vì "không có quyền" để không tiết lộ sự tồn tại của bản ghi.
@@ -488,10 +396,6 @@ Phân quyền chỉ an toàn khi chính việc phân quyền cũng được ki�
 
 ::: {custom-style="hình"}
 Hình 3.18. Biểu đồ tuần tự cập nhật quyền của vai trò, có kiểm tra leo thang quyền
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
 :::
 
 ### 3.4.3. Đối chiếu với các rủi ro OWASP Top 10
@@ -512,26 +416,50 @@ Bảng 3.7. Biện pháp phòng chống các rủi ro bảo mật phổ biến
 | A07 Lỗi xác thực | Token ngắn hạn, refresh xoay vòng, cookie HttpOnly SameSite=Strict, giới hạn 5 lần đăng nhập mỗi phút |
 | A09 Thiếu ghi nhận, giám sát | Nhật ký kiểm toán cho thao tác nhạy cảm; nhật ký tin nhắn; kiểm tra sức khỏe và phiên bản sau triển khai |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ### 3.4.4. Nhật ký kiểm toán
 
 Nhật ký kiểm toán được ghi trong cùng giao dịch với thay đổi mà nó ghi lại: thay đổi và dòng nhật ký cùng thành công hoặc cùng bị hủy, nên không có thay đổi nào thiếu dấu vết. Mỗi dòng lưu người thực hiện, hành động, đối tượng, dữ liệu trước và sau, địa chỉ IP và trình duyệt. Quản trị viên xem và lọc nhật ký theo người, hành động, khoảng thời gian; ứng dụng không cung cấp API sửa hay xóa nhật ký.
 
 ## 3.5. Thiết kế giao diện
 
-Giao diện nội bộ gồm thanh điều hướng bên trái được lọc theo quyền (người dùng chỉ thấy mục mình được dùng) và thanh trên cùng có ô tìm bệnh nhân nhanh, nút trợ lý AI, chuyển ngôn ngữ và thông báo. Lễ tân làm việc chủ yếu với tổng quan ngày, lịch hẹn, hàng chờ, bệnh nhân và hóa đơn; bác sĩ với hàng chờ của mình và màn hình phiên khám; quản trị viên với bảng điều khiển, báo cáo, nhân sự, lương và phân quyền. Bệnh nhân dùng các trang công khai: trang chủ, đặt lịch, xác nhận hoặc dời lịch và tra cứu lịch sử khám.
+Ý tưởng chung của giao diện là bám theo công việc hằng ngày của từng vai trò: mỗi người mở ứng dụng là thấy ngay những việc mình cần làm, với ít lần chuyển màn hình nhất. Trước khi cài đặt, các màn hình chính được phác thảo dưới dạng bản phác thảo khung (wireframe) để thống nhất bố cục; các bản phác thảo chỉ thể hiện vị trí và chức năng của từng vùng, chưa có màu sắc, kết quả cài đặt thật được trình bày ở Mục 4.5.
 
-Sơ đồ răng ban đầu được thiết kế dạng lưới ô vuông 16 × 2, nhưng dạng này khó nhận biết vị trí răng vì không giống hình dạng hàm thật. Phiên bản cuối vẽ hai cung răng như nhìn từ mặt nhai (Hình 1.1): mỗi răng có hình dạng theo loại răng, tô màu theo tình trạng; trẻ em có thêm cung răng sữa phía trong. Sơ đồ được đặt chung với danh sách điều trị trên một tab, bấm một răng là thấy ngay lịch sử của răng đó.
+Mọi màn hình nội bộ dùng chung một bố cục (Hình 3.19), nhờ đó người dùng chỉ cần học một lần. Thanh trên cùng (1) có ô tìm bệnh nhân nhanh, nút trợ lý AI, chuyển ngôn ngữ, thông báo và tài khoản. Thanh điều hướng bên trái (2) nhóm các mục theo công việc và được lọc theo quyền: lễ tân, bác sĩ và quản trị viên mỗi người chỉ thấy những mục mình được dùng. Vùng nội dung lần lượt có đường dẫn vị trí (3), tiêu đề trang với thao tác chính tô đậm ở góc phải (4), hàng bộ lọc (5) và bảng dữ liệu kèm huy hiệu trạng thái và phân trang (6).
 
-Giao diện tuân theo các nguyên tắc khả dụng và khả năng tiếp cận: trạng thái hệ thống luôn hiển thị, ngăn lỗi từ đầu (chỉ hiện giờ trống, chặn số răng sai chuẩn FDI), cho phép hoàn tác, mọi điều khiển có nhãn cho trình đọc màn hình và dùng được bằng bàn phím, bố cục co giãn xuống điện thoại 390 px.
+::: {custom-style="Ảnh"}
+![](hinh/3-36-mockup-bo-cuc.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 3.19. Bản phác thảo bố cục chung của giao diện nội bộ
+:::
+
+Màn hình quan trọng nhất của bác sĩ là phiên khám (Hình 3.20). Sơ đồ răng ban đầu được thiết kế dạng lưới ô vuông 16 × 2, nhưng dạng này khó nhận biết vị trí răng vì không giống hình dạng hàm thật. Bản thiết kế cuối vẽ hai cung răng như nhìn từ mặt nhai (1), tô theo tình trạng từng răng; bấm một răng thì khung bên phải (2) hiện tình trạng, ghi chú và các lần điều trị trước của răng đó, còn danh sách điều trị của phiên và tổng tiền nằm ngay bên dưới (3). Cả ba vùng nằm trên một tab, nên bác sĩ xem lịch sử, ghi điều trị và kiểm tra tổng tiền mà không phải rời màn hình.
+
+::: {custom-style="Ảnh"}
+![](hinh/3-37-mockup-phien-kham.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 3.20. Bản phác thảo màn hình phiên khám, tab "Điều trị & sơ đồ răng"
+:::
+
+Các trang công khai được thiết kế trước hết cho điện thoại, vì phần lớn bệnh nhân mở đường dẫn từ tin nhắn. Trang đặt lịch (Hình 3.21) chỉ có một cột và hai bước: chọn dịch vụ, bác sĩ, ngày và một khung giờ còn trống (1), rồi nhập số điện thoại, họ tên (2) và gửi yêu cầu (3). Hệ thống chỉ hiện các khung giờ còn trống dưới dạng nút lớn, dễ bấm, nên khách không thể chọn nhầm giờ đã kín.
+
+::: {custom-style="Ảnh"}
+![](hinh/3-38-mockup-dat-lich.png){width=7.5cm}
+:::
+
+::: {custom-style="hình"}
+Hình 3.21. Bản phác thảo trang đặt lịch trên điện thoại
+:::
+
+Toàn bộ giao diện tuân theo các nguyên tắc khả dụng và khả năng tiếp cận: trạng thái hệ thống luôn hiển thị, ngăn lỗi từ đầu (chỉ hiện giờ trống, chặn số răng sai chuẩn FDI), cho phép hoàn tác, mọi điều khiển có nhãn cho trình đọc màn hình và dùng được bằng bàn phím, bố cục co giãn từ màn hình rộng xuống điện thoại 390 px.
 
 ## 3.6. Kết luận chương
 
 Chương 3 đã trình bày thiết kế của hệ thống theo kiến trúc container hóa với 23 module nghiệp vụ và 339 điểm cuối API. Cơ sở dữ liệu gồm 70 bảng, trong đó hồ sơ khám được lưu theo từng phiên và sơ đồ răng theo từng bản chụp để không ghi đè lịch sử.
 
-Các chức năng chính được đặc tả kèm 13 biểu đồ tuần tự, hoạt động và trạng thái, tập trung vào những tình huống khó: nhiều người đặt lịch cùng lúc, đóng phiên khám khi thiếu vật tư, chuyển khoản không khớp hóa đơn và chống leo thang quyền. Phần bảo mật gồm xác thực, phân quyền hai lớp, nhật ký kiểm toán ghi trong cùng giao dịch và đối chiếu với OWASP Top 10.
+Các chức năng chính được đặc tả kèm 13 biểu đồ tuần tự, hoạt động và trạng thái, tập trung vào những tình huống khó: nhiều người đặt lịch cùng lúc, đóng phiên khám khi thiếu vật tư, chuyển khoản không khớp hóa đơn và chống leo thang quyền. Phần bảo mật gồm xác thực, phân quyền hai lớp, nhật ký kiểm toán ghi trong cùng giao dịch và đối chiếu với OWASP Top 10. Giao diện được thiết kế theo một bố cục chung cho các màn hình nội bộ, với màn hình phiên khám đặt sơ đồ răng làm trung tâm và các trang công khai ưu tiên điện thoại.
 
 Chương 4 trình bày việc hiện thực thiết kế này thành phần mềm hoàn chỉnh và triển khai thực tế.

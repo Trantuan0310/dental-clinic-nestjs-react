@@ -31,10 +31,6 @@ Hệ thống trong đồ án dùng ký hiệu FDI cho mọi dữ liệu gắn v�
 Hình 1.1. Sơ đồ 32 răng vĩnh viễn đánh số theo hệ FDI
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 ### 1.1.3. Yêu cầu pháp lý về hồ sơ và dữ liệu cá nhân
 
 Thông tư 46/2018/TT-BYT của Bộ Y tế quy định về hồ sơ bệnh án điện tử, trong đó nhấn mạnh việc bảo đảm tính toàn vẹn, khả năng truy vết người tạo và người sửa hồ sơ, cũng như phân quyền truy cập [@tt46]. Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân xếp dữ liệu về tình trạng sức khỏe vào nhóm dữ liệu cá nhân nhạy cảm, yêu cầu bên xử lý dữ liệu phải có biện pháp bảo vệ phù hợp và chỉ xử lý trong phạm vi cần thiết [@nd13]. Hai văn bản này định hướng nhiều quyết định của đồ án: hồ sơ khám sau khi đóng chỉ được bổ sung chứ không được sửa đè, mọi thao tác nhạy cảm đều ghi nhật ký kiểm toán, nhân viên chỉ thấy dữ liệu cần cho công việc của mình, và dữ liệu nhận diện bệnh nhân không được gửi cho dịch vụ AI bên ngoài.
@@ -65,10 +61,6 @@ Bảng 1.1. So sánh các cách quản lý phòng khám nha khoa
 | Nhiều chi nhánh | Không | Có | Có | Chưa hỗ trợ |
 | Truy cập qua trình duyệt, điện thoại | Một phần | Chủ yếu máy bàn | Có (đám mây) | Có |
 | Trợ lý AI có kiểm soát | Không | Không | Không thấy công bố | Có |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả tổng hợp từ [@opendental; @dentrix; @simlydent] và khảo sát thực tế
-:::
 
 Từ so sánh trên, phần mềm trong nước như SimlyDent đã đáp ứng tốt nhu cầu vận hành cơ bản và có lợi thế về chuỗi nhiều chi nhánh. Khoảng trống mà đồ án hướng tới nằm ở các điểm chưa thấy được công bố: tự đối soát chuyển khoản VietQR theo từng hóa đơn, giới hạn dữ liệu theo từng bác sĩ cùng nhật ký kiểm toán phục vụ yêu cầu bảo vệ dữ liệu sức khỏe, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản, và trợ lý AI có kiểm soát.
 
@@ -129,10 +121,6 @@ Bảng 1.2. Các kỹ thuật xử lý đồng thời và nơi áp dụng trong 
 | Kiểm soát đồng thời lạc quan | Mỗi bản ghi có số phiên bản; lần ghi mang số phiên bản cũ bị từ chối thay vì ghi đè | Sửa hóa đơn, đơn thuốc |
 | Khóa chống ghi lặp (idempotency key) | Mỗi yêu cầu mang một khóa duy nhất; yêu cầu lặp lại với cùng khóa không tạo bản ghi mới | Ghi nhận thanh toán, giao dịch ngân hàng, tin nhắn, bản ghi đồng ý |
 | Ràng buộc duy nhất | Cơ sở dữ liệu từ chối bản ghi thứ hai cùng giá trị khóa | Mỗi lịch hẹn một phiên khám, mỗi giao dịch ngân hàng một bản ghi |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả tổng hợp từ [@kleppmann; @postgres]
-:::
 
 Điểm chung của các kỹ thuật trên là đặt quy tắc ở tầng cơ sở dữ liệu, nơi mọi yêu cầu đều phải đi qua, thay vì chỉ kiểm tra ở giao diện. Các tình huống đồng thời này được kiểm thử trên PostgreSQL thật ở Chương 5.
 

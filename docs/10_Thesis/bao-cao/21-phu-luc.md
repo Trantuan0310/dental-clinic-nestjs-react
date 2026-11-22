@@ -85,6 +85,3 @@ Bảng B.1. Ma trận truy vết yêu cầu – thiết kế – giao diện –
 | AI-01 Trợ lý AI có kiểm soát | Bảng 3.6, Hình 3.16 | Hình 4.12 | E2E: ai-assist, ai-assistant |
 | QT-01 Vai trò, quyền, nhật ký, cấu hình | Hình 3.18 | – | KT-BM-06, KT-BM-07 |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::

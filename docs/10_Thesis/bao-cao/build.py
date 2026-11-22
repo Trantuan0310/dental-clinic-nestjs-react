@@ -111,7 +111,7 @@ def make_reference(path):
     for name in ('hình', 'bảng'):
         s = style(d, name)
         set_font(s, bold=False, italic=True)
-        para(s, C, before=3, after=6, indent=Cm(0))
+        para(s, C, before=3, after=10, indent=Cm(0))
     para(style(d, 'bảng'), C, before=6, after=3, indent=Cm(0), keep=True)
     s = style(d, 'nguồn')
     set_font(s, 12, italic=True)
@@ -400,6 +400,11 @@ def figure_fonts():
         for m in re.finditer(r'hinh/([^)]+)\.png\)\{width=([\d.]+)cm\}\n:::\n\n::: \{custom-style="hình"\}\n(Hình [\d.]+\.)', text):
             img, width, cap = m.group(1), float(m.group(2)), m.group(3)
             puml = os.path.join(HERE, 'so-do', img + '.puml')
+            if 'mockup' in img:  # HTML wireframe shot at 3x, body text 14 CSS px
+                px_w, px_h = Image.open(os.path.join(HERE, 'hinh', img + '.png')).size
+                cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
+                out[cap] = 14 * (cm / 2.54 * 72) / (px_w / 3)
+                continue
             if not os.path.exists(puml):
                 continue
             size = re.search(r'defaultFontSize (\d+)', open(puml, encoding='utf-8').read())
@@ -443,11 +448,8 @@ def fit_gaps(pdf):
             continue
         cap_top = nxt[0][0]
         num = nxt[1][2]
-        # caption + source block: from the caption to the first line after "Nguồn: ..."
-        src = [b for a, b, w in nxt if w.startswith('Nguồn')]
-        if not src:
-            continue
-        cap_block = max(b for a, b, w in nxt if a <= src[0] + 2) - cap_top
+        # caption block: the caption's own line(s), i.e. words within two lines of its top
+        cap_block = max(b for a, b, w in nxt if a <= cap_top + 30) - cap_top
         img_h = cap_top - 2.5 * cm - 6
         free = h - 2.5 * cm - max(body) - 18  # room left on the page, minus spacing
         k = (free - cap_block - 12) / img_h
@@ -534,10 +536,9 @@ def pull_text(doc):
         # not overshoot the gap, or its remainder would sit alone on the page before the figure.
         tall = cy * min(1.0, Cm(15) / cx, Cm(21) / cy) * FIT.get(cap, 1.0) > Cm(12)
         el = p._p.getnext()
-        for _ in range(2):  # skip the caption and the source line
-            while el is not None and el.tag != qn('w:p'):
-                el = el.getnext()
-            el = el.getnext() if el is not None else None
+        while el is not None and el.tag != qn('w:p'):  # skip the caption
+            el = el.getnext()
+        el = el.getnext() if el is not None else None
         def sid_of(e):
             st = e.find(qn('w:pPr') + '/' + qn('w:pStyle')) if e is not None and e.tag == qn('w:p') else None
             return unicodedata.normalize('NFC', st.get(qn('w:val'))) if st is not None else ''
@@ -832,6 +833,19 @@ def build(pages=None):
     page_header(secs[3], fmt='decimal')
     lists = finish(doc, pages)
     tighten(doc)
+    # Without a source line under it, a table needs some air before the text that follows.
+    for tbl in doc.element.body.iter(qn('w:tbl')):
+        nxt = tbl.getnext()
+        while nxt is not None and nxt.tag in (qn('w:bookmarkStart'), qn('w:bookmarkEnd')):
+            nxt = nxt.getnext()
+        if nxt is not None and nxt.tag == qn("w:p") and tbl.getparent() is doc.element.body and tbl not in COVER and nxt not in COVER:
+            ppr = nxt.get_or_add_pPr()
+            sp = ppr.find(qn('w:spacing'))
+            if sp is None:
+                sp = OxmlElement('w:spacing')
+                ppr.append(sp)
+            if not sp.get(qn('w:before')):
+                sp.set(qn('w:before'), '160')
     schema_order(doc.element.body)
     schema_order(doc.styles.element)
     for sec in doc.sections:

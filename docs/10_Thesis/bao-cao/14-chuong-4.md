@@ -22,10 +22,6 @@ Bảng 4.1. Môi trường và công cụ phát triển
 | Quản lý mã nguồn, CI | Git, GitHub, GitHub Actions |
 | Tài liệu API | OpenAPI (Swagger) sinh tự động |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ## 4.2. Tổ chức mã nguồn
 
 Mã nguồn được đặt trong một kho duy nhất gồm hai phần chính và các thư mục hỗ trợ (Bảng 4.2). Tổng cộng phần máy chủ có khoảng 51 nghìn dòng mã (không tính kiểm thử), phần giao diện khoảng 55 nghìn dòng.
@@ -46,10 +42,6 @@ Bảng 4.2. Cấu trúc thư mục chính của mã nguồn
 | `frontend/e2e/` | Kịch bản kiểm thử đầu cuối Playwright |
 | `docs/` | Đặc tả nghiệp vụ, thiết kế, tài liệu API, hướng dẫn triển khai, báo cáo |
 | `scripts/` | Script triển khai, kiểm tra sau triển khai, dữ liệu mẫu |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 ## 4.3. Cài đặt phía máy chủ
 
@@ -124,20 +116,12 @@ Trang chủ (Hình 4.1) giới thiệu phòng khám, dịch vụ, bảng giá v�
 Hình 4.1. Trang chủ phòng khám
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 ::: {custom-style="Ảnh"}
 ![](hinh/4-cong-dat-lich.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 4.2. Trang đặt lịch trực tuyến
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ### 4.5.2. Lễ tân tiếp nhận và điều phối
@@ -152,20 +136,12 @@ Màn hình "Hôm nay" (Hình 4.3) tóm tắt tổng số lịch hẹn, số khá
 Hình 4.3. Màn hình tổng quan trong ngày của lễ tân
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 ::: {custom-style="Ảnh"}
 ![](hinh/4-lt-lich-hen.png){width=15cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 4.4. Lịch hẹn theo ngày của các bác sĩ
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 Màn hình điều phối hiển thị hàng chờ của từng bác sĩ, mỗi khách kèm mức ưu tiên và thời gian đã chờ. Lễ tân có thể gọi, bỏ qua, đánh dấu cấp cứu, chuyển khách sang bác sĩ khác, ghi nhận khách về trước, hoàn tác check-in, hoặc chuyển toàn bộ lịch trong ngày sang bác sĩ khác khi một bác sĩ vắng.
@@ -182,10 +158,6 @@ Hồ sơ bệnh nhân (Hình 4.5) gom trên một trang thông tin cá nhân, ti
 Hình 4.5. Trang hồ sơ bệnh nhân
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 Tab "Điều trị & sơ đồ răng" (Hình 4.6) là màn hình chính của bác sĩ. Sơ đồ hai cung răng hiển thị tình trạng hiện tại: răng 12, 16, 37, 46, 48 đã hàn (xanh), răng 38 đã nhổ (nét đứt). Khi bác sĩ bấm răng 37, khung bên phải hiện tình trạng, ghi chú và hai lần điều trị trước của răng này, kèm ngày, bác sĩ thực hiện và liên kết mở lại phiên khám cũ.
 
 ::: {custom-style="Ảnh"}
@@ -196,10 +168,6 @@ Tab "Điều trị & sơ đồ răng" (Hình 4.6) là màn hình chính của b�
 Hình 4.6. Chọn răng 37 trên sơ đồ để xem lịch sử điều trị
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 Bác sĩ chọn răng 36 (sâu ngà), thêm điều trị "Trám răng composite" từ danh mục; đơn giá tự lấy theo bảng giá và có thể khai báo vật tư để trừ kho. Sau khi trám, bác sĩ đổi tình trạng răng 36 thành "Đã hàn"; sơ đồ cập nhật màu, đánh dấu chấm cho răng có điều trị trong phiên và danh sách điều trị hiện dòng mới cùng tổng tiền (Hình 4.7).
 
 ::: {custom-style="Ảnh"}
@@ -208,10 +176,6 @@ Bác sĩ chọn răng 36 (sâu ngà), thêm điều trị "Trám răng composite
 
 ::: {custom-style="hình"}
 Hình 4.7. Sơ đồ răng và danh sách điều trị sau khi trám răng 36
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 Bác sĩ kê đơn thuốc; nếu thuốc trùng tiền sử dị ứng, hệ thống hiện cảnh báo bắt buộc. Cuối cùng, bác sĩ đóng phiên khám: màn hình tóm tắt nhắc lại lý do khám, chẩn đoán, điều trị, đơn thuốc và yêu cầu xác nhận trước khi khóa hồ sơ.
@@ -230,10 +194,6 @@ Lễ tân phát hành hóa đơn; khung bên phải hiện mã VietQR chứa s�
 Hình 4.8. Hóa đơn đã phát hành kèm mã VietQR
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền về, hóa đơn tự chuyển sang "Thanh toán một phần" và hiện thông báo đã nhận chuyển khoản mà lễ tân không cần thao tác (Hình 4.9). Khi ngân hàng gửi lại cùng giao dịch lần thứ hai, hệ thống trả kết quả "trùng" và không ghi thêm; chuyển khoản không có mã hóa đơn được đưa vào danh sách "Chuyển khoản cần xử lý" kèm lý do.
 
 ::: {custom-style="Ảnh"}
@@ -242,10 +202,6 @@ Khách quét mã và chuyển trước 200.000 đ. Khi ngân hàng báo tiền v
 
 ::: {custom-style="hình"}
 Hình 4.9. Hóa đơn tự ghi nhận khoản chuyển khoản từ ngân hàng
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 Hoàn tiền là thao tác cần quyền riêng: hộp thoại cho biết số tiền tối đa được hoàn, hình thức hoàn và bắt buộc nhập lý do. Phiếu hoàn được tính vào ngày thực hiện, không sửa số thu của ngày cũ, để báo cáo các kỳ trước không bị thay đổi. Mọi thao tác trên hóa đơn (phát hành, khoản thu tự ghi, hoàn tiền, hủy) đều xuất hiện trong nhật ký kiểm toán, nơi quản trị viên lọc theo loại hành động, loại đối tượng, khoảng ngày và xuất tệp CSV.
@@ -260,10 +216,6 @@ Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, 
 
 ::: {custom-style="hình"}
 Hình 4.10. Trang xin đường dẫn (trái) và trang lịch sử khám trên điện thoại (phải)
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 Khi lễ tân gửi, đường dẫn được chuyển tới email và số điện thoại trong hồ sơ, đồng thời hiện trên màn hình để sao chép khi cần gửi qua kênh khác. Khi bệnh nhân tự xin, trang chỉ trả lời một câu chung và không hiện đường dẫn, nên người biết số điện thoại của người khác cũng không xem được hồ sơ của họ.
@@ -284,10 +236,6 @@ Bảng điều khiển (Hình 4.11) cho phép chọn kỳ (hôm nay, 7, 15, 30 n
 Hình 4.11. Bảng điều khiển của quản lý (kỳ 30 ngày)
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
-:::
-
 Phần dưới bảng điều khiển gồm sáu chỉ số vận hành so với mục tiêu, mỗi chỉ số ghi rõ mức "đạt mục tiêu", "chấp nhận được" hoặc "cần cải thiện", và bản đồ nhiệt công suất ghế theo giờ trong tuần.
 
 Ở phần quản trị, quản trị viên tích chọn từng quyền cho vai trò, quản lý tài khoản (gửi đường dẫn đặt mật khẩu, cấp mật khẩu tạm, vô hiệu hóa) và xem sổ đồng thuận, nơi liệt kê mọi bản ghi đồng ý của bệnh nhân kèm mục đích, phiên bản văn bản, kênh ghi nhận và trạng thái còn hiệu lực hay đã rút lại.
@@ -300,10 +248,6 @@ Trợ lý AI mở từ nút trên thanh tiêu đề, hiển thị thành khung c
 
 ::: {custom-style="hình"}
 Hình 4.12. Trợ lý AI ở chế độ dự phòng
-:::
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả, chụp từ hệ thống GenSmile
 :::
 
 ## 4.6. Triển khai và vận hành
@@ -328,10 +272,6 @@ Bảng 4.3. Các bước kiểm tra trong quy trình tích hợp liên tục
 | Frontend Build | Đóng gói giao diện |
 | Playwright E2E | Dựng cơ sở dữ liệu, máy chủ, giao diện; chạy các kịch bản đầu cuối trên trình duyệt |
 | Production container builds | Đóng gói các container dùng cho môi trường thật |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 ### 4.6.2. Triển khai lên máy chủ ảo
 

@@ -1,0 +1,16 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Liberation Sans",Arial,sans-serif;font-size:14px;color:#111;background:#fff;padding:8px}
+.frame{border:2px solid #333;border-radius:6px;overflow:hidden;background:#fff}
+.bar{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:2px solid #333;background:#e5e7eb}
+.logo{font-weight:700;letter-spacing:.5px;margin-right:4px}
+.input{border:1.5px solid #6b7280;border-radius:4px;background:#fff;padding:3px 6px;color:#6b7280;white-space:nowrap}
+.btn{border:1.5px solid #333;border-radius:4px;background:#fff;padding:3px 8px;white-space:nowrap}
+.btn.pri{background:#333;color:#fff}
+.box{border:1.5px dashed #6b7280;border-radius:4px;padding:6px}
+.muted{color:#6b7280}
+.b{font-weight:700}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #9ca3af;padding:3px 5px;text-align:left;font-weight:normal}
+th{background:#e5e7eb;font-weight:700}
+.n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#111;color:#fff;font-size:12px;font-weight:700;flex:none}
+.chip{display:inline-block;border:1.5px solid #333;border-radius:10px;padding:0 6px;font-size:12px}
