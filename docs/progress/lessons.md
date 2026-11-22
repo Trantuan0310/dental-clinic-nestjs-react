@@ -98,3 +98,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Không kéo tiêu đề mục qua hình để lấp trang: hình sẽ rơi sang mục khác — sai bố cục khoa học; kiểm bằng script so thứ tự tiêu đề/chú thích giữa md và PDF.
 - Cỡ chữ in của sơ đồ = cỡ font × bề rộng in(pt) × dpi/(72 × bề rộng px); giữ ≥ 8 pt, đừng ước lượng bằng mắt.
 - PlantUML: `skinparam wrapWidth` cũng ngắt chữ tin nhắn của sơ đồ tuần tự (không chỉ maxMessageSize).
+- Bỏ dòng nguồn dưới hình thì phải tắt keep-with-next của chú thích hình, nếu không các hình liền nhau bị dính thành một khối và để trống nửa trang.
