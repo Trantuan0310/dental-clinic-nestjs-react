@@ -165,8 +165,8 @@ def make_reference(path):
     s = style(d, 'Ngày ký')
     set_font(s, italic=True)
     para(s, WD_ALIGN_PARAGRAPH.RIGHT, before=12, after=6, indent=Cm(0))
-    # A caption stays on the page of its source line.
-    style(d, 'hình').paragraph_format.keep_with_next = True
+    # A figure caption ends the figure block: nothing ties it to the text that follows.
+    style(d, 'hình').paragraph_format.keep_with_next = False
     # Entries of the table of contents and of the lists of figures and tables.
     for name, left, bold in (('Mục lục 1', 0, True), ('Mục lục 2', 0.6, False), ('Mục lục 3', 1.2, False),
                              ('Danh mục', 0, False)):

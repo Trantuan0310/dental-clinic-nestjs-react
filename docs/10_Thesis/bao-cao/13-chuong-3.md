@@ -460,6 +460,4 @@ Toàn bộ giao diện tuân theo các nguyên tắc khả dụng và khả năn
 
 Chương 3 đã trình bày thiết kế của hệ thống theo kiến trúc container hóa với 23 module nghiệp vụ và 339 điểm cuối API. Cơ sở dữ liệu gồm 70 bảng, trong đó hồ sơ khám được lưu theo từng phiên và sơ đồ răng theo từng bản chụp để không ghi đè lịch sử.
 
-Các chức năng chính được đặc tả kèm 13 biểu đồ tuần tự, hoạt động và trạng thái, tập trung vào những tình huống khó: nhiều người đặt lịch cùng lúc, đóng phiên khám khi thiếu vật tư, chuyển khoản không khớp hóa đơn và chống leo thang quyền. Phần bảo mật gồm xác thực, phân quyền hai lớp, nhật ký kiểm toán ghi trong cùng giao dịch và đối chiếu với OWASP Top 10. Giao diện được thiết kế theo một bố cục chung cho các màn hình nội bộ, với màn hình phiên khám đặt sơ đồ răng làm trung tâm và các trang công khai ưu tiên điện thoại.
-
-Chương 4 trình bày việc hiện thực thiết kế này thành phần mềm hoàn chỉnh và triển khai thực tế.
+Các chức năng chính được đặc tả kèm 13 biểu đồ tuần tự, hoạt động và trạng thái, tập trung vào những tình huống khó: nhiều người đặt lịch cùng lúc, đóng phiên khám khi thiếu vật tư, chuyển khoản không khớp hóa đơn và chống leo thang quyền. Phần bảo mật gồm xác thực, phân quyền hai lớp, nhật ký kiểm toán và đối chiếu với OWASP Top 10; giao diện dùng một bố cục chung, lấy sơ đồ răng làm trung tâm màn hình khám và ưu tiên điện thoại cho trang công khai. Chương 4 trình bày việc hiện thực thiết kế này.
