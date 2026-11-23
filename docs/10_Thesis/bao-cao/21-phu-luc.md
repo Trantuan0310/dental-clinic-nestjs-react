@@ -42,7 +42,7 @@ Các khóa bí mật (khóa ký JWT, mật khẩu cơ sở dữ liệu, khóa d�
 
 ## Phụ lục B. Ma trận truy vết yêu cầu
 
-Bảng B.1 nối mỗi yêu cầu chức năng ở Mục 2.3 với phần thiết kế (Chương 3), giao diện đã hiện thực (Chương 4) và cách kiểm thử (Chương 5). Mã KT-… là các ca kiểm thử ở Bảng 5.2 đến Bảng 5.5; "E2E: tên" là tệp kịch bản kiểm thử đầu cuối tương ứng trong thư mục `frontend/e2e/`; "Đơn vị" là kiểm thử đơn vị của module tương ứng (Bảng 5.6).
+Bảng B.1 nối mỗi yêu cầu chức năng ở Mục 2.3 với phần thiết kế (Chương 3), giao diện đã hiện thực (Chương 4) và cách kiểm thử (Chương 5). Mã KT-… là các ca kiểm thử ở Bảng 5.2 đến Bảng 5.5; "E2E: tên" là tệp kịch bản kiểm thử đầu cuối tương ứng trong thư mục `frontend/e2e/`; "Đơn vị" là kiểm thử đơn vị của module tương ứng (Bảng 5.7).
 
 ::: {custom-style="bảng"}
 Bảng B.1. Ma trận truy vết yêu cầu – thiết kế – giao diện – kiểm thử

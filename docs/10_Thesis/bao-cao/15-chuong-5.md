@@ -105,12 +105,46 @@ Ngoài các ca riêng lẻ, một số kịch bản E2E đi trọn một luồng
 
 Bộ E2E cũng kiểm tra chuyển đổi ngôn ngữ Việt – Anh và các yêu cầu tiếp cận cơ bản: có liên kết "chuyển tới nội dung chính" dùng được bằng bàn phím, các vùng trang có nhãn, hộp thoại giữ tiêu điểm bàn phím.
 
-### 5.2.3. Số ca kiểm thử và độ bao phủ mã
+### 5.2.3. Thống kê kết quả kiểm thử theo nhóm chức năng
 
-Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest (ngày 17/11/2026): 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy dưới một phút. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 74,8% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.6 thống kê theo module.
+Mỗi ca kiểm thử tự động ở ba tầng được xếp vào nhóm yêu cầu chức năng mà nó kiểm tra (Mục 2.3): kiểm thử đơn vị theo module chứa nó, kiểm thử API và kiểm thử đầu cuối theo nội dung từng ca. Nhóm cuối gồm các ca không thuộc riêng một nghiệp vụ: cấu hình hệ thống, sinh dữ liệu mẫu, kiểm thử hồi quy, khung giao diện, đa ngôn ngữ, trợ năng và các luồng xuyên suốt nhiều nhóm. Bảng 5.6 tổng hợp kết quả ở lần chạy cuối của từng tầng: kiểm thử đơn vị chạy ngày 23/11/2026, kiểm thử API ngày 17/11/2026, kiểm thử đầu cuối trong quy trình tích hợp liên tục của nhánh chính.
 
 ::: {custom-style="bảng"}
-Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
+Bảng 5.6. Thống kê ca kiểm thử và tỉ lệ đạt theo nhóm chức năng
+:::
+
+| Nhóm chức năng | Số yêu cầu | Đơn vị | API | E2E | Đạt / tổng số ca | Tỉ lệ đạt |
+|---|---|---|---|---|---|---|
+| Bệnh nhân (BN) | 5 | 89 | 10 | 11 | 110 / 110 | 100% |
+| Lịch hẹn, tiếp nhận (LH) | 8 | 618 | 21 | 18 | 657 / 657 | 100% |
+| Khám, điều trị (KB) | 8 | 242 | 17 | 7 | 266 / 266 | 100% |
+| Hóa đơn, thanh toán (TT) | 4 | 118 | 11 | 7 | 136 / 136 | 100% |
+| Nhân sự, lương (NS) | 3 | 298 | 23 | 9 | 330 / 330 | 100% |
+| Kho vật tư (KH) | 2 | 27 | 4 | 3 | 34 / 34 | 100% |
+| Báo cáo (BC) | 2 | 58 | 1 | 9 | 68 / 68 | 100% |
+| Trợ lý AI (AI) | 1 | 80 | 0 | 7 | 87 / 87 | 100% |
+| Quản trị, phân quyền (QT) | 1 | 187 | 23 | 19 | 229 / 229 | 100% |
+| Hạ tầng, giao diện chung | – | 71 | 3 | 32 | 106 / 106 | 100% |
+| **Tổng** | **34** | **1.788** | **113** | **122** | **2.023 / 2.023** | **100%** |
+
+Cả 2.023 ca đều đạt; mọi nhóm yêu cầu chức năng đều được kiểm thử ở ít nhất hai tầng. Hình 5.1 cho thấy cách phân bố số ca: ở tầng đơn vị, nhóm lịch hẹn và tiếp nhận chiếm khoảng một phần ba vì có nhiều quy tắc nhất (giờ làm việc, trùng lịch, hàng chờ, đặt lịch trực tuyến); ở tầng API, số ca dồn vào các nhóm có rủi ro đồng thời và phân quyền (nhân sự, quản trị, lịch hẹn, khám); ở tầng đầu cuối, nhóm giao diện chung nhiều ca nhất vì gồm các luồng đi xuyên nhiều màn hình.
+
+::: {custom-style="Ảnh"}
+![](hinh/5-1-ca-kiem-thu-theo-nhom.png){width=15cm}
+:::
+
+::: {custom-style="hình"}
+Hình 5.1. Số ca kiểm thử theo nhóm chức năng ở ba tầng
+:::
+
+Nhóm trợ lý AI không có kiểm thử API trên PostgreSQL vì phần xử lý chính gọi dịch vụ AI bên ngoài; các ca đơn vị giả lập dịch vụ này, kể cả khi dịch vụ lỗi, còn các ca đầu cuối kiểm tra luồng trên giao diện. Nhóm báo cáo có một ca API (gộp doanh thu theo ngày Việt Nam) vì các phép tính chỉ số đã được kiểm thử đơn vị dạng bảng quyết định.
+
+### 5.2.4. Độ bao phủ mã
+
+Toàn bộ kiểm thử đơn vị của máy chủ được chạy lại với công cụ đo độ bao phủ của Jest (ngày 17/11/2026): 1.788 ca trong 89 tệp, tất cả đều đạt, thời gian chạy dưới một phút. Độ bao phủ được đo trên toàn bộ tệp service và controller (không chỉ các tệp có kiểm thử) và đạt 76,6% số dòng, 74,8% số câu lệnh, 70,0% số nhánh. Các hàm thuần trong thư mục `domain/` (xếp hàng chờ, khóa tư vấn, tính lương, tính chỉ số) không được tính vào con số này dù có kiểm thử riêng dạng bảng quyết định; kiểm thử API trên PostgreSQL và kiểm thử đầu cuối cũng không được tính. Bảng 5.7 thống kê theo module.
+
+::: {custom-style="bảng"}
+Bảng 5.7. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
 :::
 
 | Module | Nội dung chính | Số ca | Dòng (%) | Nhánh (%) |
@@ -128,16 +162,26 @@ Bảng 5.6. Số ca kiểm thử đơn vị và độ bao phủ mã theo module
 | Các module còn lại | Danh mục, kho, kế hoạch, chi phí, đồng ý, nhắc tái khám, thông báo, tin nhắn, kiểm toán, ảnh… | 325 | 63,8 | 62,8 |
 | **Tổng** | | **1.788** | **76,6** | **70,0** |
 
-Số ca kiểm thử tập trung ở những module có nhiều quy tắc và rủi ro nhất: lịch hẹn và đặt lịch (gần một phần ba tổng số ca), khám bệnh, lương và thanh toán. Một số module có độ bao phủ thấp hơn, như chi phí vận hành (36,7% số dòng) và các guard dùng chung trong `common/` (29,3%); phần lớn đường đi của các guard này được kiểm tra gián tiếp qua kiểm thử API trên PostgreSQL thật (Bảng 5.5), nhưng đây vẫn là điểm cần bổ sung kiểm thử đơn vị.
+Hình 5.2 so sánh độ bao phủ theo dòng và theo nhánh của từng module. Các module có nhiều quy tắc tính toán như trợ lý AI, thanh toán, báo cáo, đặt lịch và lịch hẹn đạt trên 80% số dòng; độ bao phủ nhánh luôn thấp hơn độ bao phủ dòng vì nhiều nhánh xử lý lỗi hiếm gặp chưa có ca kiểm thử riêng.
+
+::: {custom-style="Ảnh"}
+![](hinh/5-2-do-bao-phu-theo-module.png){width=14cm}
+:::
+
+::: {custom-style="hình"}
+Hình 5.2. Độ bao phủ mã của kiểm thử đơn vị theo module
+:::
+
+Một số module có độ bao phủ thấp hơn, như chi phí vận hành (36,7% số dòng) và các guard dùng chung trong `common/` (29,3%); phần lớn đường đi của các guard này được kiểm tra gián tiếp qua kiểm thử API trên PostgreSQL thật (Bảng 5.5), nhưng đây vẫn là điểm cần bổ sung kiểm thử đơn vị.
 
 ## 5.3. Kiểm thử phi chức năng
 
 ### 5.3.1. Hiệu năng
 
-Thời gian phản hồi của một số API thường dùng được đo trên máy chạy thử với bộ dữ liệu mẫu 6 tháng (500 bệnh nhân, khoảng 2.400 hóa đơn), mỗi API gọi liên tiếp 50 lần (Bảng 5.7). Kết quả cho thấy các thao tác hằng ngày phản hồi dưới 20 ms ở phía máy chủ; API tổng hợp chỉ số cho bảng điều khiển, vốn tính trên toàn bộ dữ liệu 30 ngày, phản hồi dưới 60 ms.
+Thời gian phản hồi của một số API thường dùng được đo trên máy chạy thử với bộ dữ liệu mẫu 6 tháng (500 bệnh nhân, khoảng 2.400 hóa đơn), mỗi API gọi liên tiếp 50 lần (Bảng 5.8). Kết quả cho thấy các thao tác hằng ngày phản hồi dưới 20 ms ở phía máy chủ; API tổng hợp chỉ số cho bảng điều khiển, vốn tính trên toàn bộ dữ liệu 30 ngày, phản hồi dưới 60 ms.
 
 ::: {custom-style="bảng"}
-Bảng 5.7. Thời gian phản hồi của một số API (50 lần gọi)
+Bảng 5.8. Thời gian phản hồi của một số API (50 lần gọi)
 :::
 
 | API | Trung vị (ms) | Phân vị 95 (ms) |
@@ -148,10 +192,10 @@ Bảng 5.7. Thời gian phản hồi của một số API (50 lần gọi)
 | Doanh thu theo ngày (30 ngày) | 12 | 13 |
 | Chỉ số bảng điều khiển (30 ngày) | 46 | 56 |
 
-Hai tối ưu đáng kể được thực hiện trong quá trình phát triển, có đo trước và sau (Bảng 5.8).
+Hai tối ưu đáng kể được thực hiện trong quá trình phát triển, có đo trước và sau (Bảng 5.9).
 
 ::: {custom-style="bảng"}
-Bảng 5.8. Kết quả tối ưu hiệu năng
+Bảng 5.9. Kết quả tối ưu hiệu năng
 :::
 
 | Hạng mục | Trước | Sau |
@@ -181,15 +225,15 @@ Hệ thống đã được trình diễn trên bộ dữ liệu mẫu với kị
 
 ## 5.4. Những điểm nổi bật của hệ thống
 
-Phần này tổng hợp những điểm làm GenSmile khác với một phần mềm quản lý thông thường. Mỗi điểm đều gắn với một vấn đề cụ thể của phòng khám và có minh chứng kiểm chứng được trong báo cáo (Bảng 5.9).
+Phần này tổng hợp những điểm làm GenSmile khác với một phần mềm quản lý thông thường. Mỗi điểm đều gắn với một vấn đề cụ thể của phòng khám và có minh chứng kiểm chứng được trong báo cáo (Bảng 5.10).
 
 ::: {custom-style="bảng"}
-Bảng 5.9. Các điểm nổi bật của hệ thống và minh chứng
+Bảng 5.10. Các điểm nổi bật của hệ thống và minh chứng
 :::
 
 | Điểm nổi bật | Cách hệ thống giải quyết | Minh chứng |
 |---|---|---|
-| Lịch sử điều trị theo từng răng | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.6, Bảng 5.8 |
+| Lịch sử điều trị theo từng răng | Bấm vào răng trên sơ đồ hai cung răng là thấy tình trạng và mọi lần điều trị trước của răng đó, trong một yêu cầu | Hình 4.6, Bảng 5.9 |
 | Không bao giờ đặt trùng lịch | Khóa tư vấn của PostgreSQL theo bác sĩ và bệnh nhân, kiểm tra trùng ngay trong giao dịch | Mục 4.3.1, ca KT-LH-01 |
 | Chuyển khoản tự ghi vào hóa đơn | Mã VietQR mang sẵn mã hóa đơn; ngân hàng báo về thì hóa đơn tự cập nhật trong vài giây; khoản không khớp được đưa vào danh sách cần xử lý | Hình 4.8, 4.9, ca KT-TT-07 |
 | Một lần đóng phiên khám, nhiều việc tự chạy | Đóng phiên khám trừ vật tư trong cùng giao dịch, rồi tự tạo hóa đơn nháp, ghi ca tính lương và cập nhật tóm tắt hồ sơ | Mục 4.3.2, ca KT-KB-02, KT-KB-05 |
@@ -201,10 +245,10 @@ Bảng 5.9. Các điểm nổi bật của hệ thống và minh chứng
 
 ## 5.5. Đối chiếu kết quả với mục tiêu đề tài
 
-Bảng 5.10 đối chiếu từng mục tiêu trong phiếu giao đề tài với kết quả đạt được và minh chứng tương ứng trong báo cáo.
+Bảng 5.11 đối chiếu từng mục tiêu trong phiếu giao đề tài với kết quả đạt được và minh chứng tương ứng trong báo cáo.
 
 ::: {custom-style="bảng"}
-Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
+Bảng 5.11. Đối chiếu kết quả với mục tiêu trong phiếu giao đề tài
 :::
 
 | Mục tiêu | Kết quả đạt được | Minh chứng | Mức độ |
@@ -223,8 +267,8 @@ Bảng 5.10. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 
 - **Chưa có hồ sơ X-quang:** chưa lưu và xem được phim chụp, một phần quan trọng của hồ sơ nha khoa.
 - **Kênh SMS chưa được thử với nhà cung cấp thật:** phần gửi tin đã cài đặt theo tài liệu của nhà cung cấp và được kiểm thử với bộ giả lập, nhưng cần tài khoản doanh nghiệp để chạy thật.
-- **Độ bao phủ kiểm thử chưa đều:** một số module như chi phí vận hành và các guard dùng chung có độ bao phủ kiểm thử đơn vị thấp (Bảng 5.6), mới được kiểm tra gián tiếp qua kiểm thử API.
-- **Chưa kiểm thử tải:** các số đo ở Bảng 5.7 là thời gian phản hồi với một người dùng; khả năng chịu tải khi nhiều người dùng cùng lúc mới được suy ra từ thiết kế, chưa đo.
+- **Độ bao phủ kiểm thử chưa đều:** một số module như chi phí vận hành và các guard dùng chung có độ bao phủ kiểm thử đơn vị thấp (Bảng 5.7), mới được kiểm tra gián tiếp qua kiểm thử API.
+- **Chưa kiểm thử tải:** các số đo ở Bảng 5.8 là thời gian phản hồi với một người dùng; khả năng chịu tải khi nhiều người dùng cùng lúc mới được suy ra từ thiết kế, chưa đo.
 - **Chưa đánh giá với người dùng thật:** hệ thống mới được trình diễn trên dữ liệu mẫu, chưa vận hành tại một phòng khám.
 - **Phụ thuộc dịch vụ AI bên ngoài:** chất lượng trả lời của trợ lý phụ thuộc mô hình được cấu hình; khi dịch vụ AI lỗi, hệ thống chuyển sang chế độ dự phòng có khả năng hạn chế hơn.
 - **Một phòng khám, không có ứng dụng di động riêng:** chưa hỗ trợ nhiều chi nhánh; bệnh nhân dùng trình duyệt trên điện thoại.

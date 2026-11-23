@@ -405,6 +405,11 @@ def figure_fonts():
                 cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
                 out[cap] = 14 * (cm / 2.54 * 72) / (px_w / 3)
                 continue
+            if img.startswith('5-'):  # matplotlib chart (ve-bieu-do.py), 300 dpi, labels 9 pt
+                px_w, px_h = Image.open(os.path.join(HERE, 'hinh', img + '.png')).size
+                cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
+                out[cap] = 9 * (cm / 2.54) / (px_w / 300)
+                continue
             if not os.path.exists(puml):
                 continue
             size = re.search(r'defaultFontSize (\d+)', open(puml, encoding='utf-8').read())
@@ -714,6 +719,13 @@ def finish(doc, pages=None):
         for row in tbl.rows:
             for j, cell in enumerate(row.cells[:ncol]):
                 lens[j] = max(lens[j], min(len(cell.text), 60))
+        # Number-only columns are sized by their numbers, not by the header (it may wrap).
+        num = re.compile(r'^[\d.,%–/\-\s]*$')
+        for j in range(ncol):
+            body = [row.cells[j].text for row in list(tbl.rows)[1:] if j < len(row.cells)]
+            if body and all(num.match(t) for t in body):
+                head = max((len(w) for w in tbl.rows[0].cells[j].text.split()), default=0)
+                lens[j] = max([head] + [len(t) for t in body])
         words = [0] * ncol
         for row in tbl.rows:
             for j, cell in enumerate(row.cells[:ncol]):
