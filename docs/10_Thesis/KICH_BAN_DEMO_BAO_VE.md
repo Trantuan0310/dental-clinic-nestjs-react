@@ -64,7 +64,17 @@ Một bệnh nhân đi hết vòng nghiệp vụ, qua 4 vai: **bệnh nhân → 
 - [ ] Phóng to trình duyệt 125% (máy chiếu), tắt thông báo hệ điều hành, tắt các tab khác, sạc đầy pin.
 - [ ] Điện thoại có app ngân hàng (để quét QR, **không chuyển tiền**); hoặc dùng chế độ điện thoại của DevTools (F12 → biểu tượng điện thoại) cho phần ⑤.
 - [ ] Mở sẵn terminal có lệnh mô phỏng ngân hàng (mục 3.4), đã điền khóa, chỉ còn sửa mã hóa đơn.
-- [ ] **Giờ hẹn online phải sau giờ hiện tại ít nhất 2 giờ** (quy tắc đặt online) và trong giờ làm việc của bác sĩ. Nếu buổi bảo vệ sau khoảng 16:30, xem phương án B ở bước ①.
+- [ ] **Mở ca cho bác sĩ demo trong ngày bảo vệ** (tài khoản quản trị): **Lịch làm việc** → tab **Ngoại lệ theo ngày** → loại **Thay đổi giờ làm trong ngày** → bác sĩ demo, ngày bảo vệ, `06:00`–`23:30`, lý do "Ca demo bảo vệ đồ án". Chỉ thay lịch của bác sĩ đó trong đúng ngày đó, dùng được cả Chủ nhật; đặt lịch, khách vãng lai, check-in, hàng chờ và khám đều theo lịch này. (Đã thử 25/11: sau khi đổi, đặt 22:00 với bác sĩ đó được, với bác sĩ khác bị chặn "nằm ngoài giờ làm việc".) Làm xong buổi bảo vệ thì xóa ngoại lệ.
+- [ ] **Giờ hẹn online phải sau giờ hiện tại ít nhất 2 giờ.** Riêng đặt online còn tính theo **giờ mở cửa phòng khám** (`CLINIC_HOURS`, mặc định T2–T7 08:00–12:00, 13:30–19:00, Chủ nhật nghỉ): khi phòng khám đang đóng, 2 giờ được tính từ lần mở cửa kế tiếp. Vì vậy nếu bảo vệ sau khoảng 17:00, trong giờ nghỉ trưa hoặc Chủ nhật, khách không đặt online được cho chính buổi đó dù bác sĩ đã mở ca → dùng phương án B ở bước ①, hoặc tạm đặt giờ mở cửa 24/24 (mục 3.5).
+
+### 3.5. (Tùy chọn) Tạm cho phòng khám mở 24/24
+
+Chỉ cần khi muốn khách **đặt online** cho chính buổi tối/Chủ nhật bảo vệ. Trên VPS, trong `.env.production`:
+```bash
+CLINIC_HOURS="00:00 – 23:59"
+CLINIC_SUNDAY_HOURS="00:00 – 23:59"
+```
+rồi chạy lại lệnh deploy (giao diện phải build lại vì trang chủ đọc giờ này lúc build). Nhược điểm: trang chủ hiện giờ mở cửa "00:00 – 23:59", trợ lý AI cũng nói như vậy. Sau buổi bảo vệ trả về `"08:00 – 12:00 · 13:30 – 19:00"` và xóa dòng Chủ nhật, deploy lại. Giờ mở cửa không tự mở ca cho bác sĩ: vẫn phải "Thay đổi giờ làm trong ngày" như mục 3.3.
 
 ### 3.4. Lệnh mô phỏng ngân hàng báo tiền về
 

@@ -199,3 +199,9 @@
 - Tài liệu: `docs/10_Thesis/KICH_BAN_DEMO_BAO_VE.md` (+ docx/pdf trong `docs/10_Thesis/out-demo/`).
 - Tiếp theo: gộp nhánh vào main (PR, 10 check) và deploy; chạy `scripts/demo-teeth-vps.sh` trên VPS; người dùng tập 3 lượt.
 - Sự cố: container bị thay giữa chừng làm mất thay đổi chưa commit; đã làm lại.
+
+## 25/11/2026 — Demo ngoài giờ: mở ca bác sĩ theo ngày, giờ mở cửa 24/24
+
+- Hai lớp giờ: `CLINIC_HOURS`/`CLINIC_SUNDAY_HOURS` (trang chủ, AI, thời gian báo trước và giữ chỗ của đặt online) và lịch từng bác sĩ (lịch tuần + "Thay đổi giờ làm trong ngày"); đặt lịch, vãng lai, check-in, khám theo lớp sau.
+- Thử cục bộ: đổi giờ bác sĩ 06:00–23:30 (cả Chủ nhật) → trang đặt lịch hiện giờ đến 23:15; đặt 22:00 được, bác sĩ khác bị chặn "ngoài giờ làm việc".
+- Kịch bản demo: thêm bước mở ca trong mục 3.3 và mục 3.5 (tạm mở cửa 24/24 bằng env, chưa thử trên production).
