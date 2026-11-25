@@ -140,7 +140,7 @@ export default function PublicHistoryPage() {
                               <ul className="mt-1 space-y-0.5 text-gray-700 dark:text-surface-300">
                                 {v.prescription.map((p, j) => (
                                   <li key={j}>
-                                    {p.drugName} {p.dosage} — {p.frequency}, {p.duration}
+                                    {[p.drugName, p.dosage].filter(Boolean).join(' ')} — {[p.frequency, /^\d+$/.test(p.duration) ? `${p.duration} ngày` : p.duration].filter(Boolean).join(', ')}
                                   </li>
                                 ))}
                               </ul>

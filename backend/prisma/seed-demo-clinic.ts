@@ -21,6 +21,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { backfillStaffRecords } from './staff-backfill';
 import { DEMO_PATIENT_NOTE, DEMO_SUMMARY, seedDemoCharts } from './seed-demo-charts';
+import { clinicalFor, fitsAge, isPenicillin, teethFor } from './demo-teeth';
 
 const prisma = new PrismaClient();
 
@@ -155,29 +156,6 @@ const JOBS = [
 ];
 const ALLERGIES = ['Penicillin', 'Lidocain', 'Aspirin', 'Hải sản'];
 const CHRONIC = ['Tăng huyết áp', 'Tiểu đường type 2', 'Hen suyễn', 'Viêm dạ dày'];
-const COMPLAINTS = [
-  'Đau răng hàm dưới',
-  'Ê buốt khi uống lạnh',
-  'Chảy máu chân răng',
-  'Muốn làm trắng răng',
-  'Răng bị mẻ',
-  'Khám định kỳ',
-  'Hôi miệng',
-  'Răng khôn mọc lệch',
-  'Muốn niềng răng',
-  'Mất răng muốn làm lại',
-];
-const DIAGNOSES = [
-  'Sâu răng ngà',
-  'Viêm nướu',
-  'Viêm nha chu mức độ nhẹ',
-  'Viêm tủy răng',
-  'Răng khôn mọc lệch',
-  'Mòn cổ răng',
-  'Mất răng',
-  'Răng khấp khểnh',
-  'Cao răng nhiều',
-];
 const DRUGS = [
   ['Amoxicillin 500mg', '1 viên', '3 lần/ngày', '5 ngày', 'Uống sau ăn'],
   ['Paracetamol 500mg', '1 viên', 'Khi đau', '3 ngày', 'Cách nhau 4-6 giờ'],
@@ -522,6 +500,8 @@ async function main() {
     return p <= 500_000 ? 10 : p <= 2_000_000 ? 5 : p <= 8_000_000 ? 2 : 1;
   };
   const bag = paid.flatMap(s => Array(weightOf(s)).fill(s) as typeof paid);
+  // Children get children's work, adults adult work (demo-teeth.ts).
+  const bagFor = { true: bag.filter(s => fitsAge(s, true)), false: bag.filter(s => fitsAge(s, false)) };
 
   // Pay terms, so payroll can be computed from the app.
   for (const d of dentists) {
@@ -550,7 +530,7 @@ async function main() {
     ),
   );
   const span = today.getTime() - start.getTime();
-  const patients: Array<{ id: string; joined: number }> = [];
+  const patients: Array<{ id: string; joined: number; child: boolean; penicillin: boolean }> = [];
   for (let i = 0; i < PATIENTS; i++) {
     const female = chance(0.56);
     const child = chance(0.12);
@@ -558,6 +538,7 @@ async function main() {
     // A third were already patients before the window, the rest arrive over time.
     const joined = chance(0.3) ? start.getTime() : start.getTime() + Math.floor(rand() * span);
     const name = personName(female);
+    const allergies = chance(0.08) ? [pick(ALLERGIES)] : [];
     const year = new Date(joined).getUTCFullYear();
     const p = await prisma.patient.create({
       data: {
@@ -571,7 +552,7 @@ async function main() {
         email: !child && chance(0.35) ? `khach${i + 1}@example.com` : null,
         address: `${randInt(1, 399)} ${pick(STREETS)}, ${pick(DISTRICTS)}, TP.HCM`,
         occupation: child ? 'Học sinh' : pick(JOBS),
-        allergies: chance(0.08) ? [pick(ALLERGIES)] : [],
+        allergies,
         chronicDiseases: !child && chance(0.12) ? [pick(CHRONIC)] : [],
         currentMedications: [],
         notes: NOTE,
@@ -579,7 +560,7 @@ async function main() {
         createdBy: pick(receptionists).id,
       },
     });
-    patients.push({ id: p.id, joined });
+    patients.push({ id: p.id, joined, child, penicillin: allergies.includes('Penicillin') });
   }
   console.log(`✓ ${patients.length} bệnh nhân`);
 
@@ -604,23 +585,24 @@ async function main() {
         const target =
           isPast || isToday ? randInt(2, 4) : chance(0.5) ? randInt(1, 3) : randInt(0, 2);
         for (let n = 0; n < target; n++) {
-          const svcList = chance(0.35) ? [exam] : [pick(bag)];
-          const extra = pick(bag);
+          let patient = pick(eligible);
+          for (let t = 0; t < 5 && busyToday.has(patient.id); t++) patient = pick(eligible);
+          if (busyToday.has(patient.id)) continue;
+          const ageBag = bagFor[String(patient.child) as 'true' | 'false'];
+          const svcList = chance(0.35) ? [exam] : [pick(ageBag)];
+          const extra = pick(ageBag);
           if (chance(0.2) && !svcList.includes(extra)) svcList.push(extra);
           const minutes = Math.max(
             30,
             Math.ceil(svcList.reduce((a, s) => a + s.defaultDurationMin, 0) / 15) * 15,
           );
           if (cursor + minutes > to) break;
-          let patient = pick(eligible);
-          for (let t = 0; t < 5 && busyToday.has(patient.id); t++) patient = pick(eligible);
-          if (busyToday.has(patient.id)) continue;
           busyToday.add(patient.id);
           const startAt = at(day, cursor);
           const endAt = at(day, cursor + minutes);
           cursor += minutes + pick([0, 0, 15, 30]);
           const past = endAt <= now;
-          await createVisit({ day, startAt, endAt, past, patientId: patient.id, svcRows: svcList });
+          await createVisit({ day, startAt, endAt, past, patientId: patient.id, child: patient.child, penicillin: patient.penicillin, svcRows: svcList });
         }
       }
 
@@ -630,10 +612,15 @@ async function main() {
         endAt: Date;
         past: boolean;
         patientId: string;
+        child: boolean;
+        penicillin: boolean;
         svcRows: typeof services;
       }) {
         const recept = pick(receptionists);
         const p = v.patientId;
+        // Reason and diagnosis follow the main (first paid) service.
+        const main = v.svcRows.find(x => Number(x.basePrice) > 0) ?? v.svcRows[0];
+        const clinical = clinicalFor(main.code);
         const source = pick(['PHONE', 'PHONE', 'WALK_IN', 'ONLINE', 'RETURNING'] as const);
         const r = rand();
         const status = !v.past
@@ -662,7 +649,7 @@ async function main() {
                 : chance(0.2)
                   ? 'FOLLOW_UP'
                   : 'TREATMENT',
-            reason: pick(COMPLAINTS),
+            reason: clinical[0],
             calculatedDurationMin: Math.round((v.endAt.getTime() - v.startAt.getTime()) / 60_000),
             // Demo patients have @example.com addresses: no reminder emails.
             reminderSentAt: v.past ? null : now,
@@ -698,7 +685,7 @@ async function main() {
         stats.completed++;
 
         const closedAt = addMin(v.endAt, randInt(0, 10));
-        const diagnosis = pick(DIAGNOSES);
+        const diagnosis = clinical[1];
         const enc = await prisma.encounter.create({
           data: {
             appointmentId: appt.id,
@@ -713,7 +700,6 @@ async function main() {
             treatmentPlanText: 'Theo kế hoạch đã tư vấn với bệnh nhân.',
           },
         });
-        const tooth = () => pick([11, 12, 16, 21, 26, 36, 37, 46, 47, 48, 38]);
         const treatments = [];
         for (const [i, s] of svcRows.entries()) {
           treatments.push(
@@ -726,7 +712,7 @@ async function main() {
                 unitPrice: s.basePrice,
                 quantity: 1,
                 durationMinutes: s.defaultDurationMin,
-                toothNumbers: Number(s.basePrice) > 0 && chance(0.7) ? [tooth()] : Prisma.JsonNull,
+                toothNumbers: (chance(0.85) && teethFor(s.code, v.child, pick)) || Prisma.JsonNull,
                 sequence: i,
                 createdBy: dentist.id,
               },
@@ -759,7 +745,7 @@ async function main() {
               createdAt: closedAt,
               lines: {
                 create: Array.from({ length: randInt(1, 3) }, (_, i) => {
-                  const d = pick(DRUGS);
+                  const d = pick(v.penicillin ? DRUGS.filter(x => !isPenicillin(x[0])) : DRUGS);
                   return {
                     sequence: i,
                     drugName: d[0],
