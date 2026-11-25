@@ -100,3 +100,6 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - PlantUML: `skinparam wrapWidth` cũng ngắt chữ tin nhắn của sơ đồ tuần tự (không chỉ maxMessageSize).
 - Bỏ dòng nguồn dưới hình thì phải tắt keep-with-next của chú thích hình, nếu không các hình liền nhau bị dính thành một khối và để trống nửa trang.
 - Biểu đồ trong báo cáo in: dùng một hàng "Toàn hệ thống" thay đường tham chiếu đứt nét vì đường dọc đè lên nhãn số; bảng nhiều cột số thì gộp cột ("đạt / tổng") để cột tên đủ rộng.
+- Commit WIP ngay sau mỗi cụm sửa (kể cả chưa chạy kiểm tra): container cloud có thể bị thay giữa phiên, mất mọi thay đổi chưa commit và cả scratchpad.
+- Tập dượt demo bằng trình duyệt thật bắt được lỗi mà test không bắt (mã khóa i18n động `t(\`ns.${map[x]}\`)`, dữ liệu mẫu sai chuyên môn): khi tập, quét chữ trang tìm mẫu `ui[A-Z]\w+\.\w+`.
+- `npm run lint` ở backend có `--fix`, sửa định dạng cả file ngoài phạm vi: chỉ `git add` đúng file của mình, rồi `git checkout -- backend/src backend/test`.

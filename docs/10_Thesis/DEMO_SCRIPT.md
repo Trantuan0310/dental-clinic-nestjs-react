@@ -1,5 +1,7 @@
 # Kịch bản Demo Sản phẩm
 
+> **Buổi bảo vệ (10–15 phút): dùng [`KICH_BAN_DEMO_BAO_VE.md`](KICH_BAN_DEMO_BAO_VE.md)** — bản đã chạy thử từ đầu đến cuối ngày 25/11/2026. File này là bản dài 22–25 phút, một số chữ trên giao diện đã đổi.
+
 > **Phiên bản:** 2.0  
 > **Cập nhật:** 05/11/2026 (thêm AI soạn nháp, heatmap công suất, chỉ số vận hành, QR chuyển khoản, tự ghi chuyển khoản, điều trị chờ đặt lịch, hẹn tiếp khi thu tiền)  
 > **Thời lượng:** 22-25 phút đủ bộ, **15 phút nếu bỏ các phần đánh dấu ⏱ (có thể bỏ)**  

@@ -189,3 +189,13 @@
 - `ve-bieu-do.py` (matplotlib) sinh `hinh/5-1-*.png`, `hinh/5-2-*.png`; build.py: cỡ chữ in của biểu đồ cho MIN_FONT, cột chỉ có số trong bảng lấy độ rộng theo số chứ không theo tiêu đề.
 - Kết quả: 115 trang, 0 hình sai mục, 0 lỗi thứ tự OOXML.
 - Tiếp theo: chờ người dùng xem; các việc treo cũ (mở Word, Phụ lục B, mục tiêu so với phiếu giao, PR gộp 5 commit giao diện).
+
+## 25/11/2026 — Kịch bản demo bảo vệ 10–15 phút, tập dượt thật, sửa lỗi phát hiện
+
+- Dựng bản chạy cục bộ với dữ liệu mẫu 6 tháng, chạy trọn cốt truyện bằng Playwright (đặt lịch online khách cũ → lễ tân duyệt → check-in sớm → bác sĩ khám, sơ đồ răng, cảnh báo dị ứng nhóm Penicillin, đóng phiên → phát hành hóa đơn, QR, webhook tự ghi + gửi lặp "duplicate" → hẹn tiếp → link tra cứu lịch sử trên điện thoại → dashboard).
+- Lỗi tìm ra và đã sửa (commit 46d51b9): thông báo duyệt đặt lịch hiện mã khóa thô (thiếu 6 câu vi/en, có cả trên main); dữ liệu mẫu sai chuyên môn (người lớn "điều trị tủy răng sữa", trẻ em implant, lý do/chẩn đoán/điều trị không khớp, Amoxicillin cho người dị ứng Penicillin) → `prisma/demo-teeth.ts`, `seed-demo-fix-teeth.ts`, `scripts/demo-teeth-vps.sh`; trang tra cứu hiện "5" thành "5 ngày".
+- Không sửa, ghi vào kịch bản: AI dự phòng không điền lý do khám nên chặn đóng phiên (BR-MR-013); form hẹn tiếp mặc định hôm nay 09:00.
+- Kiểm tra: backend tsc, lint, 1.794 test đạt; frontend typecheck, lint, build đạt.
+- Tài liệu: `docs/10_Thesis/KICH_BAN_DEMO_BAO_VE.md` (+ docx/pdf trong `docs/10_Thesis/out-demo/`).
+- Tiếp theo: gộp nhánh vào main (PR, 10 check) và deploy; chạy `scripts/demo-teeth-vps.sh` trên VPS; người dùng tập 3 lượt.
+- Sự cố: container bị thay giữa chừng làm mất thay đổi chưa commit; đã làm lại.
