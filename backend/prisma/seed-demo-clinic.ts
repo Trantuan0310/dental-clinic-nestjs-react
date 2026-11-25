@@ -501,7 +501,10 @@ async function main() {
   };
   const bag = paid.flatMap(s => Array(weightOf(s)).fill(s) as typeof paid);
   // Children get children's work, adults adult work (demo-teeth.ts).
-  const bagFor = { true: bag.filter(s => fitsAge(s, true)), false: bag.filter(s => fitsAge(s, false)) };
+  const bagFor = {
+    true: bag.filter(s => fitsAge(s, true)),
+    false: bag.filter(s => fitsAge(s, false)),
+  };
 
   // Pay terms, so payroll can be computed from the app.
   for (const d of dentists) {
@@ -602,7 +605,16 @@ async function main() {
           const endAt = at(day, cursor + minutes);
           cursor += minutes + pick([0, 0, 15, 30]);
           const past = endAt <= now;
-          await createVisit({ day, startAt, endAt, past, patientId: patient.id, child: patient.child, penicillin: patient.penicillin, svcRows: svcList });
+          await createVisit({
+            day,
+            startAt,
+            endAt,
+            past,
+            patientId: patient.id,
+            child: patient.child,
+            penicillin: patient.penicillin,
+            svcRows: svcList,
+          });
         }
       }
 

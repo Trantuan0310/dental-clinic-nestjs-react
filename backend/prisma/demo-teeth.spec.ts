@@ -3,7 +3,10 @@ import { ADULT_FOR, childOnly, clinicalFor, fitsAge, isPenicillin, teethFor } fr
 const first = <T>(xs: readonly T[]) => xs[0];
 /** Returns the whole list instead of one item, to check the range offered. */
 const all = <T>(xs: readonly T[]) => xs as unknown as T;
-const svc = (code: string, requiredSpecialty: string | null = null) => ({ code, requiredSpecialty });
+const svc = (code: string, requiredSpecialty: string | null = null) => ({
+  code,
+  requiredSpecialty,
+});
 
 describe('demo-teeth', () => {
   it("keeps children's work for children and adult work for adults", () => {
@@ -36,7 +39,10 @@ describe('demo-teeth', () => {
   });
 
   it('gives a complaint and diagnosis that lead to the service', () => {
-    expect(clinicalFor('TUY_RANG_HAM')).toEqual(['Đau nhức răng về đêm', 'Viêm tủy răng không hồi phục']);
+    expect(clinicalFor('TUY_RANG_HAM')).toEqual([
+      'Đau nhức răng về đêm',
+      'Viêm tủy răng không hồi phục',
+    ]);
     expect(clinicalFor('NHO_RANG_KHON_NGAM')[1]).toBe('Răng khôn mọc lệch');
     expect(clinicalFor('CN_KHAY_TRONG')[1]).toBe('Răng khấp khểnh');
     expect(clinicalFor('KHAM_TQ')).toEqual(['Khám định kỳ', 'Răng miệng ổn định']);

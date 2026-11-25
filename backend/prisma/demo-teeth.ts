@@ -76,8 +76,7 @@ export function clinicalFor(code: string): [string, string] {
 }
 
 /** A penicillin-group drug (to keep off a patient allergic to penicillin). */
-export const isPenicillin = (drug: string) =>
-  /^(amoxi|ampi|penicil|augmentin)/i.test(drug.trim());
+export const isPenicillin = (drug: string) => /^(amoxi|ampi|penicil|augmentin)/i.test(drug.trim());
 
 /** Work on the whole mouth or a whole arch: no tooth number. */
 const WHOLE_MOUTH =
@@ -110,6 +109,7 @@ export function teethFor(
     case 'NHO_RANG_KHON':
       return [pick([18, 28])];
     case 'NHO_RANG_KHON_NGAM':
+    case 'CAT_LOI':
       return [pick([38, 48])];
     case 'MAT_DAN_SU':
       return [pick(ANTERIOR)];

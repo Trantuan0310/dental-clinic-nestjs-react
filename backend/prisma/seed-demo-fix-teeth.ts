@@ -19,14 +19,7 @@
  * Safe to run again.
  */
 import { Prisma, PrismaClient } from '@prisma/client';
-import {
-  ADULT_FOR,
-  childOnly,
-  clinicalFor,
-  fitsAge,
-  isPenicillin,
-  teethFor,
-} from './demo-teeth';
+import { ADULT_FOR, childOnly, clinicalFor, fitsAge, isPenicillin, teethFor } from './demo-teeth';
 import { DEMO_PATIENT_NOTE, DEMO_SUMMARY, seedDemoCharts } from './seed-demo-charts';
 
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
