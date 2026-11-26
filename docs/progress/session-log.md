@@ -205,3 +205,9 @@
 - Hai lớp giờ: `CLINIC_HOURS`/`CLINIC_SUNDAY_HOURS` (trang chủ, AI, thời gian báo trước và giữ chỗ của đặt online) và lịch từng bác sĩ (lịch tuần + "Thay đổi giờ làm trong ngày"); đặt lịch, vãng lai, check-in, khám theo lớp sau.
 - Thử cục bộ: đổi giờ bác sĩ 06:00–23:30 (cả Chủ nhật) → trang đặt lịch hiện giờ đến 23:15; đặt 22:00 được, bác sĩ khác bị chặn "ngoài giờ làm việc".
 - Kịch bản demo: thêm bước mở ca trong mục 3.3 và mục 3.5 (tạm mở cửa 24/24 bằng env, chưa thử trên production).
+
+## 26/11/2026 — Gộp PR #118 vào main
+
+- PR #118 (báo cáo bản cuối, kịch bản demo, sửa lỗi giao diện và dữ liệu demo) gộp squash: main = b7d583e.
+- Lần CI đầu đỏ 1/122 E2E: test còn tìm nút "Đóng encounter" sau khi Việt hóa thành "Đóng phiên khám"; sửa 2 file test, chạy lại cục bộ 7/7 đạt, CI lần hai 10/10 xanh.
+- Chờ người dùng deploy trên VPS và chạy `bash scripts/demo-teeth-vps.sh`; kiểm tra `/health` commit = b7d583e.
