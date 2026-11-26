@@ -15,17 +15,19 @@ GROUPS = {
     '3-2-erd-benh-nhan-lich-hen': ('Nhóm bệnh nhân, lịch hẹn và tiếp nhận', [
         'Patient', 'Appointment', 'AppointmentService', 'Service', 'BookingRequest', 'QueueEntry',
         'WorkingSchedule', 'AppointmentLink', 'PatientHistoryLink', 'WaitlistEntry', 'Recall', 'User']),
-    '3-3-erd-kham-dieu-tri': ('Nhóm khám và điều trị', [
-        'Patient', 'Appointment', 'Encounter', 'ClinicalNote', 'ClinicalNoteAddendum', 'Treatment',
-        'TreatmentInventoryUsage', 'Prescription', 'PrescriptionLine', 'DentalChartSnapshot', 'TreatmentPlan',
-        'TreatmentPlanItem', 'InventoryItem']),
+    '3-3-erd-kham-dieu-tri': ('Nhóm phiên khám, ghi chú lâm sàng và đơn thuốc', [
+        'Encounter', 'ClinicalNote', 'ClinicalNoteAddendum',
+        'Prescription', 'PrescriptionLine', 'DentalChartSnapshot']),
+    '3-3-erd-dieu-tri-ke-hoach': ('Nhóm điều trị và kế hoạch điều trị', [
+        'Patient', 'Encounter', 'Treatment', 'TreatmentInventoryUsage', 'InventoryItem',
+        'TreatmentPlan', 'TreatmentPlanItem']),
     '3-4-erd-hoa-don': ('Nhóm hóa đơn và thanh toán', [
-        'Patient', 'Encounter', 'Invoice', 'InvoiceItem', 'Payment', 'InvoiceAdjustment', 'BankTransaction',
-        'Treatment']),
+        'Invoice', 'InvoiceItem', 'Payment', 'InvoiceAdjustment', 'BankTransaction', 'Treatment']),
+    '3-5-erd-nguoi-dung-phan-quyen': ('Nhóm người dùng, phân quyền và nhật ký', [
+        'User', 'Role', 'Permission', 'UserRole', 'RolePermission', 'AuditLog']),
     '3-5-erd-nhan-su-kho': ('Nhóm nhân sự, lương và kho', [
-        'User', 'Role', 'Permission', 'UserRole', 'RolePermission', 'Employee', 'DentistProfile',
-        'ShiftRegistration', 'PayrollPeriod', 'PayrollLineItem', 'InventoryCategory', 'InventoryItem',
-        'StockMovement', 'AuditLog']),
+        'User', 'Employee', 'DentistProfile', 'ShiftRegistration', 'PayrollPeriod', 'PayrollLineItem',
+        'InventoryCategory', 'InventoryItem', 'StockMovement']),
 }
 SKIP_COLS = {'createdBy', 'updatedBy', 'updatedAt', 'deletedBy', 'lastEditedBy'}
 MAX_COLS = 5
@@ -71,6 +73,8 @@ SQL = {'Uuid': 'uuid', 'String': 'varchar', 'Int': 'int', 'Boolean': 'bool', 'Da
 def emit(name, title, wanted, models):
     lines = ['@startuml', '!include _kieu.iuml', 'hide circle', 'skinparam linetype ortho',
              'skinparam defaultFontSize 13', f'title {title}', '']
+    if name in ('3-2-erd-benh-nhan-lich-hen', '3-5-erd-nhan-su-kho', '3-3-erd-kham-dieu-tri', '3-4-erd-hoa-don'):  # sơ đồ rộng: xếp dọc để chữ đủ to khi in
+        lines.insert(4, 'left to right direction')
     for mname in wanted:
         m = models[mname]
         fks = {fk for fk, _ in m['rels']}
@@ -84,7 +88,7 @@ def emit(name, title, wanted, models):
             if c['pk'] or c['field'] in SKIP_COLS:
                 continue
             is_fk = c['field'] in fks
-            if not is_fk and shown >= MAX_COLS:
+            if not is_fk and shown >= (3 if name == '3-2-erd-benh-nhan-lich-hen' else MAX_COLS):  # nhóm 12 bảng: bớt cột để chữ đủ lớn
                 continue
             typ = SQL.get(c['type'], 'enum')
             tag = ' <<FK>>' if is_fk else (' <<UQ>>' if c['unique'] else '')

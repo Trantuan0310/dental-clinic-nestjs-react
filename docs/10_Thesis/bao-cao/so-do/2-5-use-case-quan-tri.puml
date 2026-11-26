@@ -2,28 +2,28 @@
 !include _kieu.iuml
 left to right direction
 actor "Quản trị viên" as QT
-rectangle "Quản trị" {
-  usecase "Quản lý người dùng,\nvai trò, quyền" as a
-  usecase "Quản lý dịch vụ,\nbảng giá" as b
-  usecase "Quản lý bác sĩ, lịch làm,\nduyệt ca" as c
-  usecase "Tính lương theo kỳ,\nduyệt, chi trả" as d
-  usecase "Quản lý chi phí\nvận hành" as e
-  usecase "Quản lý vật tư, kiểm kê" as f
-  usecase "Xem dashboard,\nchỉ số vận hành" as g
-  usecase "Xem báo cáo\ndoanh thu, công nợ" as h
-  usecase "Xem nhật ký kiểm toán" as i
-  usecase "Cấu hình tin nhắn,\nnội dung trang chủ" as j
-  usecase "Hoàn tiền,\nhủy hóa đơn" as k
-}
-QT -- a
-QT -- b
-QT -- c
-QT -- d
-QT -- e
-QT -- f
-QT -- g
-QT -- h
-QT -- i
-QT -- j
+usecase "Quản lý người dùng,\nvai trò, quyền" as a
+usecase "Quản lý dịch vụ,\nbảng giá" as b
+usecase "Quản lý bác sĩ, lịch làm,\nduyệt ca" as c
+usecase "Tính lương theo kỳ,\nduyệt, chi trả" as d
+usecase "Quản lý chi phí\nvận hành" as e
+usecase "Quản lý vật tư, kiểm kê" as f
+usecase "Xem dashboard,\nchỉ số vận hành" as g
+usecase "Xem báo cáo\ndoanh thu, công nợ" as h
+usecase "Xem nhật ký kiểm toán" as i
+usecase "Cấu hình tin nhắn,\nnội dung trang chủ" as j
+usecase "Hoàn tiền,\nhủy hóa đơn" as k
+usecase "Gộp hồ sơ\nbệnh nhân trùng" as l
+a -- QT
+b -- QT
+c -- QT
+d -- QT
+e -- QT
+f -- QT
 QT -- k
+QT -- l
+QT -- j
+QT -- i
+QT -- h
+QT -- g
 @enduml

@@ -1,0 +1,27 @@
+@startuml
+!include _kieu.iuml
+skinparam wrapWidth 220
+|Lễ tân|
+start
+:Tìm lịch hẹn của khách (hoặc tạo lịch cho khách vãng lai);
+if (Trong khung 15 phút trước đến 30 phút sau giờ hẹn,\nhoặc có lý do ghi đè và cùng ngày hẹn?) then (có)
+else (không)
+  :Hệ thống từ chối check-in;
+  stop
+endif
+|Hệ thống|
+:Ghi check-in (người thực hiện, thời điểm);\nxếp mức ưu tiên và thêm vào hàng chờ của bác sĩ;
+|Lễ tân|
+if (Cần điều phối?) then (có)
+  :Đánh dấu cấp cứu / chuyển bác sĩ khác / ghi nhận khách về trước;
+else (không)
+endif
+|Bác sĩ|
+:Gọi bệnh nhân đầu hàng chờ;
+if (Bệnh nhân có mặt?) then (có)
+  :Bắt đầu phiên khám (mục hàng chờ DONE,\nlịch hẹn IN_PROGRESS);
+else (không)
+  :Bỏ qua, xếp xuống cuối (SKIPPED);
+endif
+stop
+@enduml

@@ -6,7 +6,7 @@ Chương này khảo sát cách một phòng khám nha khoa vận hành hằng n
 
 ### 2.1.1. Một ngày làm việc điển hình
 
-Đối tượng khảo sát là một phòng khám nha khoa tư nhân quy mô vừa: bốn bác sĩ làm theo ca, hai lễ tân kiêm thu ngân, một chủ phòng khám kiêm quản lý. Một ngày làm việc diễn ra như sau:
+Khảo sát được thực hiện tại Nha khoa An Việt, qua trao đổi với bác sĩ Nguyễn Văn Việt về quy trình làm việc hằng ngày, các khó khăn trong quản lý và mong muốn đối với phần mềm. Từ kết quả khảo sát, hệ thống được thiết kế cho mô hình phòng khám nha khoa tư nhân quy mô vừa: nhiều bác sĩ làm theo ca, lễ tân kiêm thu ngân, chủ phòng khám kiêm quản lý. Một ngày làm việc diễn ra như sau:
 
 - **Đầu ngày:** lễ tân xem danh sách lịch hẹn trong ngày, gọi nhắc những khách chưa xác nhận, sắp xếp ghế cho từng bác sĩ theo ca.
 - **Trong ngày:** khách đến được lễ tân tìm hồ sơ (hoặc tạo hồ sơ mới), đánh dấu đã đến và xếp vào hàng chờ. Bác sĩ gọi khách vào ghế, khám, ghi lại tình trạng răng và các thủ thuật đã làm, kê đơn nếu cần, lập kế hoạch điều trị cho các ca nhiều bước. Vật tư được lấy từ kho theo từng ca.
@@ -23,10 +23,6 @@ Hình 2.1 mô tả quy trình nghiệp vụ tổng thể mà hệ thống cần 
 Hình 2.1. Biểu đồ hoạt động của quy trình nghiệp vụ tổng thể
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ### 2.1.2. Những khó khăn của cách quản lý hiện tại
 
 Khi các bước trên được thực hiện bằng sổ sách, bảng tính và tin nhắn, khảo sát ghi nhận các vấn đề được tổng hợp trong Bảng 2.1.
@@ -38,7 +34,7 @@ Bảng 2.1. Các vấn đề của cách quản lý thủ công và hướng gi�
 | Khâu | Vấn đề | Hướng giải quyết trong hệ thống |
 |---|---|---|
 | Đặt lịch | Lịch nằm trong sổ, nhiều người ghi nên dễ đặt trùng giờ một bác sĩ; khách chỉ đặt được trong giờ hành chính qua điện thoại | Lịch dùng chung, máy chủ kiểm tra trùng giờ theo lịch làm việc từng bác sĩ; khách tự đặt trực tuyến 24/7 |
-| Nhắc lịch | Lễ tân gọi tay từng khách, dễ sót; khách quên hẹn | Tự gửi nhắc qua email, SMS, Zalo; khách xác nhận hoặc dời lịch qua liên kết |
+| Nhắc lịch | Lễ tân gọi tay từng khách, dễ sót; khách quên hẹn | Tự gửi nhắc qua email, SMS; khách xác nhận hoặc dời lịch qua liên kết |
 | Tiếp nhận | Không biết ai đang chờ, chờ bao lâu; bác sĩ phải hỏi lễ tân | Hàng chờ thời gian thực theo bác sĩ, bảng trạng thái ghế |
 | Hồ sơ khám | Ghi tay, khó đọc lại; không tra được lịch sử một chiếc răng | Phiên khám điện tử, sơ đồ răng theo từng lần khám, lịch sử theo răng |
 | Kế hoạch điều trị | Báo giá miệng hoặc giấy, khó theo dõi bước nào đã làm | Kế hoạch có báo giá, khách đồng ý, đánh dấu từng bước đã thực hiện |
@@ -47,10 +43,6 @@ Bảng 2.1. Các vấn đề của cách quản lý thủ công và hướng gi�
 | Nhân sự | Đếm ca, đếm hoa hồng bằng tay để tính lương | Lịch làm việc, chấm ca, tính lương theo kỳ có lương nền và hoa hồng |
 | Quản lý | Không có số liệu tổng hợp đáng tin | Dashboard chỉ số vận hành, báo cáo doanh thu, công nợ, hiệu suất bác sĩ |
 | Bảo mật | Ai cũng xem được mọi hồ sơ; không biết ai đã sửa gì | Phân quyền theo vai trò và theo dòng dữ liệu, nhật ký kiểm toán |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả khảo sát và tổng hợp
-:::
 
 ## 2.2. Các tác nhân của hệ thống
 
@@ -67,18 +59,16 @@ Bảng 2.2. Các tác nhân của hệ thống
 | Bác sĩ | Nha sĩ khám và điều trị | Khám, ghi hồ sơ, sơ đồ răng, điều trị, đơn thuốc, kế hoạch điều trị; xem ca làm và lương của mình |
 | Bệnh nhân | Khách hàng của phòng khám, không có tài khoản | Đặt lịch, xác nhận hoặc dời lịch, khai thông tin trước khi đến, tra cứu lịch sử khám |
 | Ngân hàng (hệ thống ngoài) | Dịch vụ theo dõi tài khoản ngân hàng | Báo giao dịch chuyển khoản đến qua webhook |
-| Dịch vụ nhắn tin (hệ thống ngoài) | Máy chủ email, nhà cung cấp SMS, Zalo ZNS | Chuyển tin nhắc lịch, liên kết tới bệnh nhân |
+| Dịch vụ nhắn tin (hệ thống ngoài) | Máy chủ email, nhà cung cấp SMS | Chuyển tin nhắc lịch, liên kết tới bệnh nhân |
 | Dịch vụ AI (hệ thống ngoài) | Mô hình ngôn ngữ lớn qua cổng API | Soạn nháp văn bản, trả lời tra cứu theo yêu cầu của nhân viên |
-
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
 
 ## 2.3. Yêu cầu chức năng
 
-Yêu cầu chức năng được nhóm theo các phân hệ nêu trong phiếu giao đề tài. Mỗi yêu cầu được đánh mã để đối chiếu khi kiểm thử ở Chương 5.
+Yêu cầu chức năng được nhóm theo các phân hệ nêu trong phiếu giao đề tài. Mỗi yêu cầu được đánh mã dạng nhóm-số để đối chiếu khi kiểm thử ở Chương 5, với các nhóm: BN (bệnh nhân), LH (lịch hẹn và tiếp nhận), KB (khám bệnh), TT (thanh toán), NS (nhân sự), KH (kho và danh mục), BC (báo cáo), AI (trợ lý AI) và QT (quản trị).
 
 ### 2.3.1. Quản lý bệnh nhân
+
+Bảng 2.3 liệt kê các yêu cầu về hồ sơ bệnh nhân, từ tạo hồ sơ, gộp hồ sơ trùng đến việc bệnh nhân tự tra cứu lịch sử khám.
 
 ::: {custom-style="bảng"}
 Bảng 2.3. Yêu cầu chức năng phân hệ quản lý bệnh nhân
@@ -89,10 +79,12 @@ Bảng 2.3. Yêu cầu chức năng phân hệ quản lý bệnh nhân
 | BN-01 | Tạo, xem, sửa hồ sơ bệnh nhân: họ tên, ngày sinh, giới tính, số điện thoại, người liên hệ (bắt buộc với trẻ em), địa chỉ, nghề nghiệp, tiền sử dị ứng, bệnh mạn tính. Hệ thống tự cấp mã bệnh nhân. |
 | BN-02 | Tìm kiếm nhanh theo tên, mã, số điện thoại; gợi ý hồ sơ có thể trùng khi tạo mới. |
 | BN-03 | Gộp hai hồ sơ trùng, giữ lại toàn bộ lịch sử; xóa mềm và khôi phục hồ sơ. |
-| BN-04 | Xem trên một màn hình: thông tin, lịch hẹn, các phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng ý điều trị. |
+| BN-04 | Xem trên một màn hình: thông tin, lịch hẹn, các phiên khám, kế hoạch điều trị, hóa đơn, sổ đồng thuận điều trị. |
 | BN-05 | Gửi cho bệnh nhân đường dẫn bảo mật để tự tra cứu lịch sử khám. |
 
 ### 2.3.2. Quản lý lịch hẹn và tiếp nhận
+
+Phân hệ lịch hẹn và tiếp nhận là nơi lễ tân thao tác nhiều nhất trong ngày; các yêu cầu được nêu ở Bảng 2.4.
 
 ::: {custom-style="bảng"}
 Bảng 2.4. Yêu cầu chức năng phân hệ lịch hẹn và tiếp nhận
@@ -111,6 +103,8 @@ Bảng 2.4. Yêu cầu chức năng phân hệ lịch hẹn và tiếp nhận
 
 ### 2.3.3. Khám và điều trị
 
+Bảng 2.5 nêu các yêu cầu của bác sĩ trong phiên khám, trong đó yêu cầu cốt lõi là gắn mỗi điều trị với số răng trên sơ đồ.
+
 ::: {custom-style="bảng"}
 Bảng 2.5. Yêu cầu chức năng phân hệ khám và điều trị
 :::
@@ -128,6 +122,8 @@ Bảng 2.5. Yêu cầu chức năng phân hệ khám và điều trị
 
 ### 2.3.4. Hóa đơn và thanh toán
 
+Các yêu cầu về hóa đơn và thanh toán, kể cả thanh toán chuyển khoản qua VietQR, được trình bày ở Bảng 2.6.
+
 ::: {custom-style="bảng"}
 Bảng 2.6. Yêu cầu chức năng phân hệ hóa đơn và thanh toán
 :::
@@ -140,6 +136,8 @@ Bảng 2.6. Yêu cầu chức năng phân hệ hóa đơn và thanh toán
 | TT-04 | Hoàn tiền, hủy hóa đơn, điều chỉnh giảm, có quyền riêng và lý do. |
 
 ### 2.3.5. Nhân sự, kho, báo cáo và các chức năng hỗ trợ
+
+Bảng 2.7 gom các yêu cầu của những phân hệ phục vụ quản lý: nhân sự và lương, kho, báo cáo, trợ lý AI và quản trị hệ thống.
 
 ::: {custom-style="bảng"}
 Bảng 2.7. Yêu cầu chức năng các phân hệ quản lý
@@ -159,7 +157,7 @@ Bảng 2.7. Yêu cầu chức năng các phân hệ quản lý
 
 ## 2.4. Yêu cầu phi chức năng
 
-Các yêu cầu phi chức năng được xác định theo mô hình chất lượng ISO/IEC 25010 [@iso25010] và các khuyến nghị bảo mật OWASP [@owasp], tổng hợp trong Bảng 2.8.
+Các yêu cầu phi chức năng được xác định theo mô hình chất lượng ISO/IEC 25010 và các khuyến nghị bảo mật OWASP [@owasp], tổng hợp trong Bảng 2.8.
 
 ::: {custom-style="bảng"}
 Bảng 2.8. Yêu cầu phi chức năng
@@ -176,122 +174,92 @@ Bảng 2.8. Yêu cầu phi chức năng
 | Khả năng bảo trì | Mã nguồn chia module theo nghiệp vụ; kiểm thử tự động; thay đổi cơ sở dữ liệu qua migration có đánh số. |
 | Khả năng triển khai | Đóng gói container, triển khai lên máy chủ ảo bằng một lệnh, có kiểm tra phiên bản sau khi triển khai. |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ## 2.5. Biểu đồ use case
 
-### 2.5.1. Biểu đồ use case tổng quát
+Biểu đồ use case được vẽ theo quy ước của UML: tác nhân là hình người, mỗi use case là một hình elip, đường nối liền thể hiện tác nhân tham gia use case đó, còn mũi tên nét đứt kèm nhãn `<<include>>` cho biết một use case luôn gọi tới use case khác như một bước bắt buộc. Ngoài bốn tác nhân người dùng, biểu đồ còn hai tác nhân là hệ thống bên ngoài: dịch vụ theo dõi tài khoản ngân hàng SePay báo giao dịch về cho chức năng thanh toán, và cổng mô hình ngôn ngữ lớn phục vụ trợ lý AI.
 
-Hình 2.2 trình bày biểu đồ use case tổng quát, thể hiện các nhóm chức năng chính và tác nhân sử dụng chúng.
+Hình 2.2 trình bày biểu đồ use case tổng quát với mười hai nhóm chức năng: quản lý bệnh nhân; quản lý lịch hẹn, tiếp nhận và hàng chờ; đặt lịch trực tuyến; khám, điều trị và sơ đồ răng; kế hoạch điều trị; hóa đơn và thanh toán; kho vật tư; nhân sự, ca làm và lương; báo cáo và bảng điều khiển; quản trị người dùng và phân quyền; tra cứu lịch sử khám; trợ lý AI. Các hình tiếp theo chi tiết hóa use case của từng tác nhân.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-2-use-case-tong-quat.png){width=12cm}
+![](hinh/2-2-use-case-tong-quat.png){width=8.5cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 2.2. Biểu đồ use case tổng quát
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
+Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3) với mười hai use case, trải khắp vòng hoạt động của phòng khám: tìm kiếm và tạo hồ sơ bệnh nhân; đặt, dời, hủy lịch hẹn; duyệt yêu cầu đặt lịch trực tuyến; check-in và quản lý hàng chờ; ghi khách vắng mặt hoặc về trước; quản lý danh sách chờ lấp giờ trống; phát hành hóa đơn và ghi thanh toán; xử lý các khoản chuyển khoản chưa khớp; gọi nhắc tái khám; nhập, xuất kho; gửi đường dẫn tra cứu lịch sử khám cho bệnh nhân.
 
-### 2.5.2. Use case của lễ tân
-
-Lễ tân là tác nhân thao tác nhiều nhất trong ngày (Hình 2.3). Use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ; "Gộp hồ sơ trùng" là phần mở rộng của quản lý hồ sơ khi phát hiện hai hồ sơ cùng một người.
+Hai use case "Đặt, dời, hủy lịch hẹn" và "Duyệt yêu cầu đặt lịch online" đều bao gồm bước kiểm tra giờ trống của bác sĩ, nên được nối tới use case này bằng quan hệ `<<include>>`. Việc gộp hai hồ sơ trùng không hoàn tác được nên không giao cho lễ tân mà thuộc về quản trị viên (Hình 2.5).
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-3-use-case-le-tan.png){width=12cm}
+![](hinh/2-3-use-case-le-tan.png){width=8.5cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 2.3. Biểu đồ use case của lễ tân
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
-### 2.5.3. Use case của bác sĩ
-
-Hình 2.4 mô tả các use case lâm sàng. Kê đơn luôn bao gồm bước kiểm tra dị ứng thuốc; đóng phiên khám luôn bao gồm việc trừ vật tư đã dùng.
+Hình 2.4 mô tả các use case lâm sàng của bác sĩ: xem hàng chờ của mình và gọi bệnh nhân, bắt đầu phiên khám, ghi chú lâm sàng, cập nhật sơ đồ răng, xem lịch sử điều trị theo răng, thêm điều trị cho răng, kê đơn thuốc, lập kế hoạch điều trị kèm báo giá, đóng phiên khám, ghi bổ sung sau khi đóng, đặt lịch tái khám và xem ca làm, phiếu lương của mình. Hai quan hệ `<<include>>` thể hiện hai quy tắc bắt buộc: kê đơn luôn kèm bước kiểm tra dị ứng thuốc, còn đóng phiên khám luôn kèm việc trừ vật tư đã dùng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-4-use-case-bac-si.png){width=12cm}
+![](hinh/2-4-use-case-bac-si.png){width=8.5cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 2.4. Biểu đồ use case của bác sĩ
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
-### 2.5.4. Use case của quản trị viên
+Hình 2.5 trình bày các use case của quản trị viên: quản lý người dùng và phân quyền, dịch vụ và bảng giá, bác sĩ và lịch làm, lương, chi phí, vật tư; xem bảng điều khiển, báo cáo và nhật ký kiểm toán; hoàn tiền, hủy hóa đơn và gộp hồ sơ bệnh nhân trùng.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-5-use-case-quan-tri.png){width=12cm}
+![](hinh/2-5-use-case-quan-tri.png){width=8.5cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 2.5. Biểu đồ use case của quản trị viên
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
-### 2.5.5. Use case của bệnh nhân
-
-Bệnh nhân không có tài khoản. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc liên kết có mã bí mật gửi riêng tới bệnh nhân (Hình 2.6).
+Bệnh nhân không có tài khoản trong hệ thống. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc đường dẫn chứa mã bí mật gửi riêng tới bệnh nhân (Hình 2.6): xem thông tin phòng khám và bảng giá, đặt lịch trực tuyến (luôn kèm bước chọn dịch vụ, bác sĩ và giờ trống), tra cứu trạng thái yêu cầu đặt lịch, xác nhận hoặc dời, hủy lịch qua liên kết trong tin nhắc, khai thông tin sức khỏe trước khi đến, yêu cầu đường dẫn tra cứu và xem lịch sử khám, kế hoạch điều trị, hóa đơn của mình. Đường dẫn tra cứu được gửi qua nhà cung cấp email hoặc SMS, nên tác nhân này cũng xuất hiện trên biểu đồ.
 
 ::: {custom-style="Ảnh"}
-![](hinh/2-6-use-case-benh-nhan.png){width=12cm}
+![](hinh/2-6-use-case-benh-nhan.png){width=8.5cm}
 :::
 
 ::: {custom-style="hình"}
 Hình 2.6. Biểu đồ use case của bệnh nhân
 :::
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả
-:::
-
 ## 2.6. Ma trận tác nhân và quyền
 
-Quyền trong hệ thống được định nghĩa chi tiết tới từng hành động. Bảng 2.9 trích một số quyền tiêu biểu cùng phân bổ mặc định cho ba vai trò; ký hiệu "Có" là được phép, "Riêng" là chỉ với dữ liệu của mình (ví dụ bác sĩ chỉ với bệnh nhân mình điều trị), "–" là không được phép. Quản trị viên có thể tạo vai trò tùy chỉnh với tổ hợp quyền khác.
+Quyền trong hệ thống được định nghĩa chi tiết tới từng hành động. Bảng 2.9 trích một số quyền tiêu biểu cùng phân bổ mặc định cho ba vai trò; ký hiệu "Có" là được phép, "Riêng" là chỉ với dữ liệu của mình (ví dụ bác sĩ chỉ với bệnh nhân mình điều trị), "–" là không được phép.
 
 ::: {custom-style="bảng"}
 Bảng 2.9. Ma trận quyền tiêu biểu theo vai trò
 :::
 
-| Hành động | Mã quyền | Quản trị | Lễ tân | Bác sĩ |
-|---|---|---|---|---|
-| Tạo, sửa hồ sơ bệnh nhân | `patient.create`, `patient.update` | Có | Có | – |
-| Xem danh sách bệnh nhân | `patient.read` | Có | Có | Có |
-| Đặt lịch hẹn | `appointment.create` | Có | Có | Riêng |
-| Check-in | `appointment.check_in` | Có | Có | – |
-| Xem, gọi hàng chờ | `queue.read`, `queue.call` | Có | Có | Riêng |
-| Bắt đầu phiên khám, ghi chú lâm sàng | `encounter.start`, `clinical_note.write` | – | – | Riêng |
-| Xem hồ sơ khám đầy đủ | `encounter.read.any` / `.own` | Có | – | Riêng |
-| Ghi điều trị, sửa giá | `treatment.write`, `treatment.price_override` | – | – | Riêng |
-| Cập nhật sơ đồ răng | `dental_chart.write` | – | – | Riêng |
-| Lập kế hoạch điều trị | `treatment_plan.write` | Có | – | Riêng |
-| Phát hành hóa đơn, thu tiền | `invoice.issue`, `payment.create` | Có | Có | – |
-| Hoàn tiền, hủy hóa đơn | `payment.reverse` | Có | – | – |
-| Nhập, xuất kho | `inventory.stock_in`, `inventory.stock_out` | Có | Có | – |
-| Xem báo cáo doanh thu | `report.revenue.read` | Có | – | – |
-| Quản lý người dùng, vai trò | `user.*`, `role.upsert` | Có | – | – |
+| Hành động | Quản trị | Lễ tân | Bác sĩ |
+|---|---|---|---|
+| Tạo, sửa hồ sơ bệnh nhân | Có | Có | – |
+| Xem danh sách bệnh nhân | Có | Có | Có |
+| Đặt lịch hẹn | Có | Có | Riêng |
+| Check-in | Có | Có | – |
+| Xem, gọi hàng chờ | Có | Có | Riêng |
+| Bắt đầu phiên khám, ghi chú lâm sàng | – | – | Riêng |
+| Xem hồ sơ khám đầy đủ | Có | – | Riêng |
+| Ghi điều trị, sửa giá | – | – | Riêng |
+| Cập nhật sơ đồ răng | – | – | Riêng |
+| Lập kế hoạch điều trị | Có | – | Riêng |
+| Phát hành hóa đơn, thu tiền | Có | Có | – |
+| Hoàn tiền, hủy hóa đơn | Có | – | – |
+| Nhập, xuất kho | Có | Có | – |
+| Xem báo cáo doanh thu | Có | – | – |
+| Quản lý người dùng, vai trò | Có | – | – |
 
-::: {custom-style="nguồn"}
-Nguồn: Tác giả tổng hợp từ cấu hình phân quyền của hệ thống
-:::
-
-Điểm đáng chú ý là quản trị viên không có quyền ghi hồ sơ lâm sàng: chỉ bác sĩ trực tiếp khám mới được ghi chẩn đoán, điều trị và sơ đồ răng. Thiết kế này bảo đảm mỗi dòng trong hồ sơ y tế gắn với người có chuyên môn chịu trách nhiệm, phù hợp yêu cầu truy vết của hồ sơ bệnh án điện tử [@tt46].
+Điểm đáng chú ý là quản trị viên không có quyền ghi hồ sơ lâm sàng: chỉ bác sĩ trực tiếp khám mới được ghi chẩn đoán, điều trị và sơ đồ răng. Nhờ vậy, mỗi dòng hồ sơ y tế gắn với người có chuyên môn chịu trách nhiệm [@tt46].
 
 ## 2.7. Kết luận chương
 
-Chương 2 đã khảo sát quy trình làm việc của phòng khám, chỉ ra các vấn đề của cách quản lý thủ công và hướng giải quyết. Hệ thống có bốn tác nhân người dùng và ba hệ thống bên ngoài. Yêu cầu chức năng được phân tích thành các nhóm bệnh nhân, lịch hẹn và tiếp nhận, khám và điều trị, thanh toán, nhân sự, kho, báo cáo, AI và quản trị, kèm các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Các biểu đồ use case và ma trận quyền là cơ sở để Chương 3 thiết kế kiến trúc, dữ liệu và từng chức năng của hệ thống.
+Chương 2 đã khảo sát quy trình làm việc hằng ngày của phòng khám, chỉ ra những khó khăn của cách quản lý bằng sổ sách, bảng tính và tin nhắn, đồng thời xác định bốn tác nhân người dùng cùng ba hệ thống bên ngoài.
+
+Từ khảo sát đó, chương đã phân tích 34 yêu cầu chức năng theo chín nhóm nghiệp vụ và các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Biểu đồ use case và ma trận phân quyền là cơ sở cho thiết kế ở Chương 3.

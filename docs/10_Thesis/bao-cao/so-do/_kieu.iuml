@@ -15,3 +15,5 @@ skinparam rectangle {
 skinparam ArrowColor black
 skinparam ActorBorderColor black
 skinparam ActorBackgroundColor white
+skinparam maxMessageSize 130
+skinparam wrapWidth 170

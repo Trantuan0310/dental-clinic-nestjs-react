@@ -7,10 +7,16 @@ DRAFT --> VOIDED : Hủy hóa đơn nháp
 ISSUED --> PARTIAL : Thu một phần
 ISSUED --> PAID : Thu đủ
 PARTIAL --> PAID : Thu phần còn lại
-ISSUED --> VOIDED : Hủy (chưa thu tiền)
+ISSUED --> VOIDED : Hủy [không còn khoản thu hiệu lực]
+PAID --> PARTIAL : Hủy phiếu thu
+PARTIAL --> ISSUED : Hủy hết phiếu thu
 PAID --> PAID : Hoàn tiền / điều chỉnh\n(ghi nhận riêng, có lý do)
 PAID --> [*]
 VOIDED --> [*]
+note bottom of VOIDED
+  Có thể "lập lại hóa đơn":
+  tạo bản nháp mới từ cùng phiên khám
+end note
 note right of ISSUED
   Thanh toán đến từ: tiền mặt,
   chuyển khoản nhập tay,

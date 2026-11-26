@@ -1,0 +1,34 @@
+@startuml
+!include _kieu.iuml
+|Lễ tân|
+start
+:Nhập họ tên, ngày sinh, số điện thoại;
+|Hệ thống|
+:Tìm hồ sơ có thể trùng\n(theo số điện thoại, họ tên không dấu);
+|Lễ tân|
+if (Có hồ sơ trùng?) then (là cùng người)
+  :Mở hồ sơ có sẵn;
+  stop
+else (không)
+endif
+|Hệ thống|
+if (Dữ liệu hợp lệ?\n(ngày sinh không ở tương lai, SĐT đúng dạng,\ntrẻ em phải có người giám hộ,\ngiấy tờ tùy thân không trùng)) then (không)
+  :Báo lỗi theo từng trường;
+  stop
+endif
+:Cấp mã bệnh nhân PAT-năm-số thứ tự,\nkhóa chính UUID v7;
+:Ghi nhật ký kiểm toán;
+|Quản trị viên|
+if (Phát hiện về sau hai hồ sơ là một người?) then (có)
+  :Chọn hồ sơ nguồn và hồ sơ đích, bấm Gộp;
+  |Hệ thống|
+  :Khóa hai hồ sơ theo thứ tự cố định\n(tránh khóa chéo), giao dịch Serializable;
+  if (Cùng họ tên (bỏ dấu), cùng ngày sinh,\nkhông có phiên khám đang mở?) then (có)
+    :Chuyển lịch hẹn, phiên khám, hóa đơn, kế hoạch,\nnhắc tái khám, giấy tờ sang hồ sơ đích;
+    :Xóa mềm hồ sơ nguồn, ghi nhật ký;
+  else (không)
+    :Từ chối gộp, nêu lý do;
+  endif
+endif
+stop
+@enduml

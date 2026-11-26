@@ -2,33 +2,29 @@
 !include _kieu.iuml
 left to right direction
 actor "Lễ tân" as LT
-rectangle "Tiếp nhận và thu ngân" {
-  usecase "Tìm kiếm, tạo, sửa\nhồ sơ bệnh nhân" as a
-  usecase "Gộp hồ sơ trùng" as g
-  usecase "Đặt, dời, hủy lịch hẹn" as b
-  usecase "Kiểm tra giờ trống\ncủa bác sĩ" as b2
-  usecase "Duyệt yêu cầu\nđặt lịch online" as c
-  usecase "Check-in, quản lý\nhàng chờ" as d
-  usecase "Ghi vắng mặt / về trước" as e
-  usecase "Quản lý danh sách chờ\nlấp giờ trống" as w
-  usecase "Phát hành hóa đơn,\nghi thanh toán" as f
-  usecase "Xử lý chuyển khoản\nchưa khớp" as h
-  usecase "Gọi nhắc tái khám" as r
-  usecase "Nhập, xuất kho" as k
-  usecase "Gửi link tra cứu\nlịch sử khám" as l
-}
+usecase "Tìm kiếm, tạo, sửa\nhồ sơ bệnh nhân" as a
+usecase "Đặt, dời, hủy lịch hẹn" as b
+usecase "Kiểm tra giờ trống\ncủa bác sĩ" as b2
+usecase "Duyệt yêu cầu\nđặt lịch online" as c
+usecase "Check-in, quản lý\nhàng chờ" as d
+usecase "Ghi vắng mặt / về trước" as e
+usecase "Quản lý danh sách chờ\nlấp giờ trống" as w
+usecase "Phát hành hóa đơn,\nghi thanh toán" as f
+usecase "Xử lý chuyển khoản\nchưa khớp" as h
+usecase "Gọi nhắc tái khám" as r
+usecase "Nhập, xuất kho" as k
+usecase "Gửi link tra cứu\nlịch sử khám" as l
+b .> b2 : <<include>>
+c .> b2 : <<include>>
+d -- LT
+e -- LT
+w -- LT
+f -- LT
+h -- LT
+r -- LT
 LT -- a
 LT -- b
 LT -- c
-LT -- d
-LT -- e
-LT -- w
-LT -- f
-LT -- h
-LT -- r
-LT -- k
 LT -- l
-g .> a : <<extend>>
-b .> b2 : <<include>>
-c .> b2 : <<include>>
+LT -- k
 @enduml

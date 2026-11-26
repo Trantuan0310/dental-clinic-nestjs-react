@@ -82,3 +82,24 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Không chạy `npx prisma format` (định dạng lại cả schema) và giữ CRLF khi sửa file bằng Python (đọc/ghi dạng bytes): `docs/05_API/*.md` dùng CRLF. Xem `git diff --stat` trước khi commit.
 - E2E: trình duyệt khách phải mở bằng `browser.newContext({ storageState: { cookies: [], origins: [] } })`; `newContext()` trơn kế thừa phiên admin lưu sẵn, trang mở ra refresh bằng cookie cũ và làm backend thu hồi phiên chung (mọi test sau đỏ hàng loạt). Kiểm giả thuyết trước khi đẩy bản sửa: test hỏng bắt đầu đúng sau test nào thì đọc test đó trước.
 - Khi chép XML từ file Word mẫu vào bản dựng: loại các phần đó khỏi mọi bước định dạng chung (bảng, ảnh, kiểu Normal), vì kiểu mặc định của báo cáo làm bìa tràn trang và khung bị co như ảnh.
+- Đo độ bao phủ: collectCoverageFrom của backend chỉ gồm *.service.ts/*.controller.ts và loại domain/**, nên khi trích số phải nói rõ phạm vi đo.
+- Kiểm tra cỡ chữ in của hình = cỡ font × (độ rộng hiển thị pt × dpi/72) / px ảnh; sơ đồ tuần tự rộng cần maxMessageSize để không bị thu quá nhỏ.
+- Khoảng trắng do hình cao bị đẩy trang: thu nhỏ có giới hạn tự động tốt hơn sửa tay từng hình; ảnh chụp màn hình không được thu quá 10% vì chữ UI đã nhỏ.
+- Ảnh chụp màn hình có dữ liệu theo ngày: kiểm tra ảnh không trống (chụp vào ngày có dữ liệu, không phải Chủ nhật).
+- Thống nhất thuật ngữ trong báo cáo phải theo nhãn thật trên giao diện (grep locales) trước khi đổi, không theo số lần xuất hiện.
+- Đường dẫn API trong tài liệu: kiểm bằng script so với @Controller prefix + decorator, vì dễ quên tiền tố controller.
+- Chụp màn hình cho báo cáo: dev-local.sh không đặt VIETQR_*; truyền VIETQR_BANK_BIN/ACCOUNT_NO/ACCOUNT_NAME khi start, nếu không mã QR không hiện.
+- pdftotext -bbox-layout của bản LibreOffice tách mỗi dòng thành một block: muốn nhận đoạn văn phải tự ghép dòng (dòng ngắn hơn lề phải = hết đoạn).
+- Cắt bớt hình: đánh số lại bằng script theo thứ tự chú thích và ánh xạ mọi "Hình x.y" trong các tệp (kể cả phụ lục), xử lý tay các dải "4.21–4.23" trước.
+- Word không có hình trôi: muốn hết khoảng trắng cuối trang trước hình cao thì đổi thứ tự (đưa đoạn văn sau hình lên trước) — tiêu đề con ngay sau hình chặn việc này, nên mục toàn hình (use case) đừng chia tiểu mục.
+- Rút kinh nghiệm từ nhận xét hội đồng với đồ án khác: (1) lược mô tả quá chi tiết về hạ tầng/nghiệp vụ không gắn trực tiếp đề tài; (2) không lặp sơ đồ, ảnh demo cùng một nghiệp vụ, chỉ giữ minh chứng trực tiếp; (3) đặt số trích dẫn ngay tại chỗ dùng, nhất là Chương 1 và nội dung kỹ thuật; (4) nêu rõ phạm vi triển khai/kiểm thử (thiết bị, trình duyệt nào đã kiểm, cái nào chưa); (5) phụ lục không lặp nội dung đã có trong thân báo cáo.
+- python-docx/lxml: `itertext()` trên đoạn của pandoc lặp nội dung (đếm gấp 3) — lấy chữ bằng `w:t`; giữa các khối có `w:bookmarkStart/End`, duyệt anh em phải bỏ qua và mang theo khi di chuyển tiêu đề.
+- So tên kiểu tiếng Việt ('bảng', 'nguồn') phải chuẩn hóa NFC hai phía.
+- Không kéo tiêu đề mục qua hình để lấp trang: hình sẽ rơi sang mục khác — sai bố cục khoa học; kiểm bằng script so thứ tự tiêu đề/chú thích giữa md và PDF.
+- Cỡ chữ in của sơ đồ = cỡ font × bề rộng in(pt) × dpi/(72 × bề rộng px); giữ ≥ 8 pt, đừng ước lượng bằng mắt.
+- PlantUML: `skinparam wrapWidth` cũng ngắt chữ tin nhắn của sơ đồ tuần tự (không chỉ maxMessageSize).
+- Bỏ dòng nguồn dưới hình thì phải tắt keep-with-next của chú thích hình, nếu không các hình liền nhau bị dính thành một khối và để trống nửa trang.
+- Biểu đồ trong báo cáo in: dùng một hàng "Toàn hệ thống" thay đường tham chiếu đứt nét vì đường dọc đè lên nhãn số; bảng nhiều cột số thì gộp cột ("đạt / tổng") để cột tên đủ rộng.
+- Commit WIP ngay sau mỗi cụm sửa (kể cả chưa chạy kiểm tra): container cloud có thể bị thay giữa phiên, mất mọi thay đổi chưa commit và cả scratchpad.
+- Tập dượt demo bằng trình duyệt thật bắt được lỗi mà test không bắt (mã khóa i18n động `t(\`ns.${map[x]}\`)`, dữ liệu mẫu sai chuyên môn): khi tập, quét chữ trang tìm mẫu `ui[A-Z]\w+\.\w+`.
+- `npm run lint` ở backend có `--fix`, sửa định dạng cả file ngoài phạm vi: chỉ `git add` đúng file của mình, rồi `git checkout -- backend/src backend/test`.

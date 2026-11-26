@@ -1,0 +1,38 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="_chung.css">
+<style>body{width:660px}.tabs{display:flex;gap:0;border-bottom:2px solid #333;padding:0 8px}.tabs span{padding:4px 10px;border:1.5px solid #9ca3af;border-bottom:none;margin-right:3px;border-radius:4px 4px 0 0;background:#f3f4f6}.tabs .on{background:#fff;border-color:#333;font-weight:700}</style>
+<div class="frame">
+ <div class="bar"><span class="b" style="flex:1">Phiên khám — Đặng Quang Hải</span><span class="chip">Đang khám</span><span class="btn pri">Đóng phiên khám</span></div>
+ <div class="tabs" style="padding-top:6px"><span>Ghi chú</span><span class="on">Điều trị &amp; sơ đồ răng</span><span>Đơn thuốc</span><span>Tổng quan</span></div>
+ <div style="display:flex;gap:8px;padding:8px">
+  <div class="box" style="width:330px"><div style="display:flex;gap:6px;align-items:center"><span class="n">1</span><span class="b">Sơ đồ hai cung răng (FDI)</span></div>
+   <svg id="chart" width="316" height="250"></svg>
+   <div style="font-size:12px;display:flex;gap:8px;flex-wrap:wrap"><span>○ bình thường</span><span>◍ sâu (xám)</span><span>● đã hàn</span><span>◌ đã nhổ</span><span>▣ đang chọn</span></div>
+  </div>
+  <div class="box" style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="display:flex;gap:6px;align-items:center"><span class="n">2</span><span class="b">Răng 36 — đang chọn</span></div>
+   <div>Tình trạng <span class="input" style="color:#111">Sâu ngà ▾</span></div>
+   <div>Ghi chú <span class="input">Sâu mặt nhai</span></div>
+   <span class="btn" style="align-self:flex-start">+ Thêm điều trị cho răng này</span>
+   <div class="b" style="margin-top:4px">Các lần điều trị trước</div>
+   <div style="font-size:13px">19/10/2026 · Trám composite<br><span class="muted">BS. Huy · Mở phiên khám ›</span></div>
+   <div style="font-size:13px">21/07/2026 · Khám tổng quát<br><span class="muted">BS. Anh · Mở phiên khám ›</span></div>
+  </div>
+ </div>
+ <div style="padding:0 8px 8px"><div class="box"><div style="display:flex;gap:6px;align-items:center;margin-bottom:4px"><span class="n">3</span><span class="b">Điều trị trong phiên khám này</span></div>
+  <table><tr><th>Răng</th><th>Thủ thuật</th><th>SL</th><th>Đơn giá</th><th>Thành tiền</th></tr><tr><td>36</td><td>Trám răng composite</td><td>1</td><td>500.000 đ</td><td>500.000 đ</td></tr></table>
+  <div style="display:flex;justify-content:space-between;margin-top:5px;align-items:center"><span class="b">Tổng: 500.000 đ</span><span><span class="btn">+ Thêm điều trị</span> <span class="btn">Lập kế hoạch</span></span></div></div></div>
+</div>
+<script>
+const svg=document.getElementById('chart'),ns='http://www.w3.org/2000/svg';
+function arch(nums,cy,up){const n=nums.length,cx=158,rx=132,ry=84,t0=Math.PI*0.03,t1=Math.PI*0.97;
+ // points spaced evenly along the arc (not by angle) so no two teeth overlap
+ const pts=[],M=2000;let L=[0];for(let k=0;k<=M;k++){const a=t0+(t1-t0)*k/M;pts.push(a);if(k){const p=pts[k-1];L.push(L[k-1]+Math.hypot(rx*(Math.cos(a)-Math.cos(p)),ry*(Math.sin(a)-Math.sin(p))))}}
+ nums.forEach((t,i)=>{const want=L[M]*(i+0.5)/n;let k=0;while(L[k]<want)k++;const a=pts[k],dx=-Math.cos(a),dy=(up?-1:1)*Math.sin(a),x=cx+rx*dx,y=cy+ry*dy;
+ const c=document.createElementNS(ns,'circle');c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',9);
+ let fill='#fff',stroke='#333',dash='';if([16,12,37,46].includes(t))fill='#333';if(t==36){fill='#9ca3af'}if(t==38){dash='2 2';stroke='#9ca3af'}
+ c.setAttribute('fill',fill);c.setAttribute('stroke',stroke);c.setAttribute('stroke-width',t==36?2.5:1.5);if(dash)c.setAttribute('stroke-dasharray',dash);svg.appendChild(c);
+ if(t==36){const r=document.createElementNS(ns,'rect');r.setAttribute('x',x-12);r.setAttribute('y',y-12);r.setAttribute('width',24);r.setAttribute('height',24);r.setAttribute('fill','none');r.setAttribute('stroke','#111');r.setAttribute('stroke-width',1.5);svg.appendChild(r)}
+ const tx=document.createElementNS(ns,'text');tx.setAttribute('x',x+dx*20);tx.setAttribute('y',y+dy*20+4);tx.setAttribute('text-anchor','middle');tx.setAttribute('font-size','10');tx.textContent=t;svg.appendChild(tx)})}
+arch([18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28],108,true);
+arch([48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38],130,false);
+const l=(t,y)=>{const e=document.createElementNS(ns,'text');e.setAttribute('x',158);e.setAttribute('y',y);e.setAttribute('text-anchor','middle');e.setAttribute('font-size','11');e.setAttribute('fill','#6b7280');e.textContent=t;svg.appendChild(e)};l('Hàm trên',96);l('Hàm dưới',148);
+</script>

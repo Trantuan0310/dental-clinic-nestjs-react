@@ -1,12 +1,15 @@
 @startuml
 !include _kieu.iuml
+skinparam wrapWidth 130
+skinparam maxMessageSize 130
 autonumber
+hide footbox
 actor "Bệnh nhân" as BN
-participant "Ứng dụng ngân hàng" as APP
-participant "SePay\n(theo dõi tài khoản)" as SP
-participant "BankWebhookController" as WH
-participant "BankWebhookService" as SV
-participant "BillingService" as BI
+participant "Ứng dụng\nngân hàng" as APP
+participant "SePay" as SP
+participant "BankWebhook\nController" as WH
+participant "BankWebhook\nService" as SV
+participant "Billing\nService" as BI
 database "PostgreSQL" as DB
 BN -> APP : Quét mã VietQR trên hóa đơn\n(số tiền, nội dung INV-2026-000123)
 APP -> SP : Chuyển khoản thành công
@@ -15,10 +18,10 @@ WH -> WH : So khóa (thời gian hằng)
 WH -> SV : Xử lý giao dịch
 SV -> DB : Lưu BankTransaction\n(duy nhất theo mã giao dịch)
 SV -> SV : Tách mã hóa đơn từ nội dung
-alt Tìm thấy hóa đơn còn nợ và số tiền không vượt nợ
-  SV -> BI : recordPayment(BANK_TRANSFER, requestKey theo giao dịch)
+alt Hóa đơn còn nợ, số tiền không vượt nợ
+  SV -> BI : recordPayment\n(BANK_TRANSFER)
   BI -> DB : Payment, cập nhật PARTIAL / PAID
-else Không có mã, không thấy hóa đơn, vượt số nợ
+else Không có mã, không thấy\nhóa đơn hoặc vượt số nợ
   SV -> DB : Đánh dấu cần xem xét (kèm lý do)
 end
 WH --> SP : 200 OK

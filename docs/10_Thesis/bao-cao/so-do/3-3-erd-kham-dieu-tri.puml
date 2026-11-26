@@ -2,32 +2,10 @@
 !include _kieu.iuml
 hide circle
 skinparam linetype ortho
+left to right direction
 skinparam defaultFontSize 13
-title Nhóm khám và điều trị
+title Nhóm phiên khám, ghi chú lâm sàng và đơn thuốc
 
-entity "patients" as Patient {
-  * id : uuid <<PK>>
-  --
-  * code : varchar
-  * full_name : varchar
-  * dob : timestamptz
-  * gender : enum
-  primary_phone : varchar
-}
-entity "appointments" as Appointment {
-  * id : uuid <<PK>>
-  --
-  * patient_id : uuid <<FK>>
-  * dentist_id : uuid <<FK>>
-  * start_at : timestamptz
-  * end_at : timestamptz
-  * status : enum
-  reason : varchar
-  chief_complaint : varchar
-  confirmed_by : uuid <<FK>>
-  checked_in_by : uuid <<FK>>
-  cancelled_by : uuid <<FK>>
-}
 entity "encounters" as Encounter {
   * id : uuid <<PK>>
   --
@@ -58,26 +36,6 @@ entity "clinical_note_addendums" as ClinicalNoteAddendum {
   * added_by : uuid <<FK>>
   * added_at : timestamptz
 }
-entity "treatments" as Treatment {
-  * id : uuid <<PK>>
-  --
-  * encounter_id : uuid <<FK>>
-  tooth_numbers : jsonb
-  * procedure : varchar
-  description : varchar
-  * unit_price : decimal
-  * quantity : int
-  service_id : uuid <<FK>>
-  plan_item_id : uuid <<FK>>
-}
-entity "treatment_inventory_usages" as TreatmentInventoryUsage {
-  * id : uuid <<PK>>
-  --
-  * treatment_id : uuid <<FK>>
-  * inventory_item_id : uuid <<FK>>
-  * quantity : decimal
-  * unit : varchar
-}
 entity "prescriptions" as Prescription {
   * id : uuid <<PK>>
   --
@@ -107,54 +65,10 @@ entity "dental_chart_snapshots" as DentalChartSnapshot {
   * snapshot_at : timestamptz
   snapshot_by : uuid <<FK>>
 }
-entity "treatment_plans" as TreatmentPlan {
-  * id : uuid <<PK>>
-  --
-  * patient_id : uuid <<FK>>
-  * dentist_id : uuid <<FK>>
-  * title : varchar
-  notes : varchar
-  * status : enum
-  source_encounter_id : uuid <<FK>>
-  proposed_at : timestamptz
-  accepted_at : timestamptz
-  accepted_by : uuid <<FK>>
-}
-entity "treatment_plan_items" as TreatmentPlanItem {
-  * id : uuid <<PK>>
-  --
-  * plan_id : uuid <<FK>>
-  * sequence : int
-  service_id : uuid <<FK>>
-  * procedure : varchar
-  tooth_numbers : jsonb
-  * quantity : int
-  * unit_price : decimal
-}
-entity "inventory_items" as InventoryItem {
-  * id : uuid <<PK>>
-  --
-  * sku : varchar
-  category_id : uuid <<FK>>
-  * name : varchar
-  description : varchar
-  * quantity_on_hand : decimal
-  * min_stock_level : decimal
-}
 
-Patient ||--o{ Appointment
-Appointment ||--o| Encounter
-Patient ||--o{ Encounter
 Encounter ||--o| ClinicalNote
 ClinicalNote ||--o{ ClinicalNoteAddendum
-Encounter ||--o{ Treatment
-TreatmentPlanItem |o--o{ Treatment
-Treatment ||--o{ TreatmentInventoryUsage
-InventoryItem ||--o{ TreatmentInventoryUsage
 Encounter ||--o| Prescription
 Prescription ||--o{ PrescriptionLine
 Encounter ||--o| DentalChartSnapshot
-Patient ||--o{ TreatmentPlan
-Encounter |o--o{ TreatmentPlan
-TreatmentPlan ||--o{ TreatmentPlanItem
 @enduml

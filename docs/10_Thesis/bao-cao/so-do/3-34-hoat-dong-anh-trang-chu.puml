@@ -1,0 +1,23 @@
+@startuml
+!include _kieu.iuml
+|Quản trị viên|
+start
+:Chọn ảnh phòng khám hoặc ảnh bác sĩ;
+|Hệ thống|
+if (Dung lượng ≤ 3 MB?) then (không)
+  :Từ chối: ảnh quá lớn;
+  stop
+endif
+if (Byte đầu tệp khớp định dạng khai báo\n(JPEG, PNG, WebP)?) then (không)
+  :Từ chối: tệp không phải ảnh hợp lệ;
+  stop
+endif
+if (Thư viện ảnh đã đủ 12 ảnh?) then (có)
+  :Từ chối: đã đủ số ảnh;
+  stop
+endif
+:Lưu ảnh, ghi nhật ký kiểm toán;
+|Khách truy cập|
+:Trang chủ tải danh sách ảnh công khai\nvà hiển thị trong thư viện;
+stop
+@enduml

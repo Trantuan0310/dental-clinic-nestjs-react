@@ -23,6 +23,9 @@ const ROUTE_LABELS: Record<string, string> = {
   '/my-appointments': 'mySchedule',
   '/dispatch': 'dispatch',
   '/booking-requests': 'bookingRequests',
+  '/waitlist': 'waitlist',
+  '/appointment-links': 'appointments',
+  '/appointment-links/reschedule-requests': 'rescheduleRequests',
   '/recalls': 'recalls',
   '/pending-treatments': 'pendingTreatments',
   '/today': 'today',
@@ -43,6 +46,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/billing/invoices': 'invoices',
   '/payroll': 'payroll',
   '/payroll/config': 'payrollConfig',
+  '/payroll/periods': 'payrollPeriods',
   '/payroll/compensations': 'compensation',
   '/payroll/shifts/approval': 'shiftApproval',
   '/my-payroll': 'myPayroll',
@@ -68,6 +72,7 @@ const ROUTE_LABELS: Record<string, string> = {
   // fell back to the parent label and rendered "Quản trị / Quản trị".
   '/admin/audit': 'auditLog',
   '/admin/messages': 'messages',
+  '/admin/consents': 'consentLedger',
   '/admin/shifts/pending': 'shiftApproval',
 };
 
@@ -119,10 +124,15 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
         labelKey = getLabel(accumulated);
       }
 
-      breadcrumbs.push({
-        label: t(`uiCommon.breadcrumbRoutes.${labelKey}`, { defaultValue: labelKey }),
-        href: isLast ? undefined : accumulated,
-      });
+      const label = t(`uiCommon.breadcrumbRoutes.${labelKey}`, { defaultValue: labelKey });
+      // A segment with no label of its own falls back to its parent's
+      // ("/billing/invoices/:id" → "Hóa đơn / Hóa đơn / Chi tiết"): show it once.
+      const prev = breadcrumbs[breadcrumbs.length - 1];
+      if (prev && prev.label === label) {
+        if (isLast) prev.href = undefined;
+        continue;
+      }
+      breadcrumbs.push({ label, href: isLast ? undefined : accumulated });
     }
 
     return breadcrumbs;

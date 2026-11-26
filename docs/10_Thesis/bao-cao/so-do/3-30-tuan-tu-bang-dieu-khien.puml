@@ -1,0 +1,30 @@
+@startuml
+!include _kieu.iuml
+hide footbox
+autonumber
+actor "Quản lý" as QL
+participant "Bảng điều khiển\n(React, Recharts)" as FE
+participant "ReportsController\n+ PermissionsGuard" as C
+participant "PracticeMetricsService\n/ ReportsService" as S
+participant "Hàm tính thuần\n(practice-metrics.ts,\nfinancial-math.ts)" as F
+database "PostgreSQL" as DB
+QL -> FE : Chọn kỳ "30 ngày"
+par Các thẻ và biểu đồ tải song song
+  FE -> C : GET /billing/reports/dashboard-kpis
+else
+  FE -> C : GET .../scorecard, .../capacity-heatmap, .../patient-funnel
+end
+C -> C : Kiểm tra quyền report.revenue.read
+C -> S : Tải dữ liệu thô của kỳ hiện tại và kỳ trước
+S -> DB : Lịch hẹn, phiên khám, hóa đơn, thanh toán,\nlịch làm việc (theo ngày giờ Việt Nam)
+DB --> S : Các dòng dữ liệu
+S -> F : Tính số liệu
+F -> F : Tỷ lệ vắng mặt, đặt lịch tiếp, chấp nhận kế hoạch,\nthời gian chờ trung vị, hủy sát giờ, tỷ lệ thu;\ncông suất ghế theo giờ; phễu bệnh nhân
+F --> S : Giá trị, so với mục tiêu và kỳ trước
+S --> FE : JSON
+FE --> QL : Thẻ số liệu, biểu đồ thanh so mục tiêu,\nbản đồ nhiệt, phễu
+note over F
+  Không truy cập cơ sở dữ liệu:
+  mỗi công thức có kiểm thử đơn vị riêng
+end note
+@enduml

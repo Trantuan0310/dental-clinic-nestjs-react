@@ -106,7 +106,12 @@ const matchLabel = (p: PatientMatch, t: TFunction) =>
     .filter(Boolean)
     .join(" · ");
 const REQUEST_STATES = ["PENDING_REVIEW", "NEEDS_INFORMATION", "PROPOSED", "PATIENT_ACCEPTED", "CONFIRMED", "DECLINED", "CANCELLED", "EXPIRED"];
-const requestState = (t: TFunction, status: string) => t(`uiScheduling.bookingState_${status}`);
+// The patient-facing labels say "you" for the patient; staff read the same
+// status about the patient, so the one first-person label has a staff variant.
+const requestState = (t: TFunction, status: string) =>
+  status === 'PATIENT_ACCEPTED'
+    ? t('uiScheduling.bookingStateStaff_PATIENT_ACCEPTED')
+    : t(`uiScheduling.bookingState_${status}`);
 const visitState = (t: TFunction, status: string) => {
   const key: Record<string, string> = { SCHEDULED: 'statusScheduled', CONFIRMED: 'statusConfirmed', CHECKED_IN: 'statusCheckedIn', IN_PROGRESS: 'statusInProgress', COMPLETED: 'statusCompleted', CANCELLED: 'statusCancelled', NO_SHOW: 'statusNoShow', LEFT: 'statusLeft' };
   return key[status] ? t(`uiScheduling.${key[status]}`) : status;

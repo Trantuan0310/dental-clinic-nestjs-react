@@ -15,6 +15,7 @@ those page numbers (twice more if the numbers moved). Word can still refresh
 them with F9.
 """
 import copy
+import unicodedata
 import os
 import re
 import subprocess
@@ -109,8 +110,8 @@ def make_reference(path):
         s.paragraph_format.first_line_indent = Cm(0)
     for name in ('hình', 'bảng'):
         s = style(d, name)
-        set_font(s, bold=False, italic=False)
-        para(s, C, before=3, after=6, indent=Cm(0))
+        set_font(s, bold=False, italic=True)
+        para(s, C, before=3, after=10, indent=Cm(0))
     para(style(d, 'bảng'), C, before=6, after=3, indent=Cm(0), keep=True)
     s = style(d, 'nguồn')
     set_font(s, 12, italic=True)
@@ -128,7 +129,7 @@ def make_reference(path):
     para(s, C, before=0, after=12, indent=Cm(0), keep=True)
     s = style(d, 'Tài liệu')
     set_font(s)
-    para(s, J, after=6, indent=Cm(0))
+    para(s, L, after=6, indent=Cm(0))
     s.paragraph_format.left_indent = Cm(1)
     s.paragraph_format.first_line_indent = Cm(-1)
     s = style(d, 'Ảnh')
@@ -164,8 +165,8 @@ def make_reference(path):
     s = style(d, 'Ngày ký')
     set_font(s, italic=True)
     para(s, WD_ALIGN_PARAGRAPH.RIGHT, before=12, after=6, indent=Cm(0))
-    # A caption stays on the page of its source line.
-    style(d, 'hình').paragraph_format.keep_with_next = True
+    # A figure caption ends the figure block: nothing ties it to the text that follows.
+    style(d, 'hình').paragraph_format.keep_with_next = False
     # Entries of the table of contents and of the lists of figures and tables.
     for name, left, bold in (('Mục lục 1', 0, True), ('Mục lục 2', 0.6, False), ('Mục lục 3', 1.2, False),
                              ('Danh mục', 0, False)):
@@ -294,8 +295,6 @@ def entries(doc):
         name, text = p.style.name, ' '.join(p.text.split())
         if text == '[[TOC]]':
             after_toc = True
-        elif name == 'Tiêu đề phụ' and after_toc and text != 'MỤC LỤC':
-            toc.append((1, text))
         elif name in ('Heading 1', 'Heading 2', 'Heading 3') and text:
             toc.append((int(name[-1]), text))
         elif name == 'hình' and text:
@@ -385,10 +384,235 @@ def cover(doc):
     p._p.getparent().remove(p._p)
 
 
+GAPS = {}  # caption prefix -> lines of white space left above the figure (seen in the last render)
+USED = {}  # caption prefix -> lines actually moved in front of the figure by the last build
+LAST = {}  # caption prefix -> (lines pulled, gap in lines) before the last top-up
+FROZEN = set()  # figures whose top-up was undone
+ROUNDS = {}  # caption prefix -> how many times its gap was topped up
+PULL = {}  # caption prefix -> lines of following body text to place before the figure
+def figure_fonts():
+    """Caption prefix -> printed size (pt) of the body text inside a PlantUML figure at its
+    width before any extra shrinking, so that fitting a page never makes it unreadable."""
+    from PIL import Image
+    out = {}
+    for name in BODY:
+        text = open(os.path.join(HERE, name), encoding='utf-8').read()
+        for m in re.finditer(r'hinh/([^)]+)\.png\)\{width=([\d.]+)cm\}\n:::\n\n::: \{custom-style="hình"\}\n(Hình [\d.]+\.)', text):
+            img, width, cap = m.group(1), float(m.group(2)), m.group(3)
+            puml = os.path.join(HERE, 'so-do', img + '.puml')
+            if 'mockup' in img:  # HTML wireframe shot at 3x, body text 14 CSS px
+                px_w, px_h = Image.open(os.path.join(HERE, 'hinh', img + '.png')).size
+                cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
+                out[cap] = 14 * (cm / 2.54 * 72) / (px_w / 3)
+                continue
+            if img.startswith('5-'):  # matplotlib chart (ve-bieu-do.py), 300 dpi, labels 9 pt
+                px_w, px_h = Image.open(os.path.join(HERE, 'hinh', img + '.png')).size
+                cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
+                out[cap] = 9 * (cm / 2.54) / (px_w / 300)
+                continue
+            if not os.path.exists(puml):
+                continue
+            size = re.search(r'defaultFontSize (\d+)', open(puml, encoding='utf-8').read())
+            size = int(size.group(1)) if size else 15  # _kieu.iuml
+            px_w, px_h = Image.open(os.path.join(HERE, 'hinh', img + '.png')).size
+            cm = width * min(1.0, 15 / width, 21 / (width * px_h / px_w))
+            out[cap] = size * (cm / 2.54 * 72) * 220 / (72 * px_w)
+    return out
+
+
+FONTS = None
+MIN_FONT = 8.0  # pt: smallest text a diagram may be shrunk to
+
+
+FIT = {}  # caption prefix ("Hình 3.8.") -> extra scale so the figure fits the gap above it
+
+
+def caption_after(p):
+    """Prefix "Hình x.y." of the caption that follows an image paragraph."""
+    nxt = p._p.getnext()
+    while nxt is not None and not ''.join(nxt.itertext()).strip():
+        nxt = nxt.getnext()
+    m = re.match(r'(Hình [0-9A-Z]+\.\d+\.)', ''.join(nxt.itertext()).strip()) if nxt is not None else None
+    return m.group(1) if m else None
+
+
+def fit_gaps(pdf):
+    """Figures pushed to the next page that would fit the white space left above them
+    if shrunk a little (see the limits below): returns {caption prefix: scale}."""
+    xml = subprocess.run(['pdftotext', '-bbox', pdf, '-'], capture_output=True, text=True).stdout
+    pages = re.findall(r'<page width="[\d.]+" height="([\d.]+)">(.*?)</page>', xml, re.S)
+    cm = 28.35
+    found = {}
+    for i in range(len(pages) - 1):
+        h = float(pages[i][0])
+        words = [(float(a), float(b), w) for a, b, w in re.findall(r'yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">([^<]*)<', pages[i][1])]
+        body = [b for a, b, w in words if a > 2.5 * cm]  # skip the page number in the header
+        nxt = [(float(a), float(b), w) for a, b, w in re.findall(r'yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">([^<]*)<', pages[i + 1][1])]
+        nxt = [x for x in nxt if x[0] > 2.5 * cm]
+        if not body or not nxt or nxt[0][2] != 'Hình':
+            continue
+        cap_top = nxt[0][0]
+        num = nxt[1][2]
+        # caption block: the caption's own line(s), i.e. words within two lines of its top
+        cap_block = max(b for a, b, w in nxt if a <= cap_top + 30) - cap_top
+        img_h = cap_top - 2.5 * cm - 6
+        free = h - 2.5 * cm - max(body) - 18  # room left on the page, minus spacing
+        k = (free - cap_block - 12) / img_h
+        # Diagrams (chapters 1 and 3) may shrink by 25 %; screenshots only by 10 % to stay legible.
+        global FONTS
+        if FONTS is None:
+            FONTS = figure_fonts()
+        floor = 0.7 if num[0] in '13' else 0.9  # use-case diagrams (chapter 2) are already small
+        font = FONTS.get(f'Hình {num}')
+        if font:
+            floor = max(floor, MIN_FONT / font)  # never shrink diagram text below MIN_FONT
+        if floor <= k < 1:
+            found[f'Hình {num}'] = k
+        elif k < 1 and free > 4 * 22.5:
+            # Too tall to shrink into the gap: let the text that follows the figure fill it instead.
+            GAPS[f'Hình {num}'] = int(free / 22.5) - 1
+    return found
+
+
+TIGHT = {}  # start of a paragraph (normalised) -> character spacing in twips (negative = condensed)
+
+
+def short_tails(pdf):
+    """Paragraphs of two or more lines whose last line holds only one or two words:
+    returns the normalised start of each, to be condensed by about 0.6 pt."""
+    xml = subprocess.run(['pdftotext', '-bbox-layout', pdf, '-'], capture_output=True, text=True).stdout
+    cm = 28.35
+    found = []
+    for page in re.findall(r'<page [^>]*>(.*?)</page>', xml, re.S):
+        lines = [(float(a), float(b), float(c), re.findall(r'>([^<]*)</word>', w))
+                 for a, b, c, w in re.findall(r'<line xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="[\d.]+">(.*?)</line>', page, re.S)]
+        lines = [l for l in lines if l[1] > 2.5 * cm]  # skip the page number
+        if not lines:
+            continue
+        right = max(l[2] for l in lines)
+        para = []
+        for x0, y, x1, words in lines:  # a line ending short of the right margin ends a paragraph
+            para.append((x1 - x0, words))
+            if x1 < right - 0.5 * cm:
+                if len(para) >= 2 and para[0][0] > 13 * cm and (len(words) <= 2 or para[-1][0] < 0.12 * para[0][0]):
+                    found.append(norm(' '.join(para[0][1]))[:40])
+                para = []
+    return found
+
+
+def tighten(doc):
+    if not TIGHT:
+        return
+    for p in doc.paragraphs:
+        t = norm(p.text)
+        if p._p in COVER or not t or t[0] in '/#' or t.isupper():
+            continue  # cover, code, all-caps titles
+        k = next((v for key, v in TIGHT.items() if t.startswith(key) or t.lstrip('•–- ').startswith(key.lstrip('•–- '))), None)
+        if k is None:
+            continue
+        for r in p.runs:
+            rpr = r._r.get_or_add_rPr()
+            sp = rpr.find(qn('w:spacing'))
+            if sp is None:
+                sp = OxmlElement('w:spacing')
+                rpr.append(sp)
+            sp.set(qn('w:val'), str(k))
+
+
+def text_of(el):
+    """Plain text of a block (itertext also walks pandoc's field copies and repeats it)."""
+    return ''.join(t.text or '' for t in el.iter(qn('w:t')))
+
+
+def pull_text(doc):
+    """Word has no floats: move the plain paragraphs that follow a figure in front of it,
+    as many as fit the white space the figure left on the previous page."""
+    for p in list(doc.paragraphs):
+        if p._p in COVER or not p._p.findall('.//' + qn('w:drawing')):
+            continue
+        cap = caption_after(p)
+        budget = PULL.get(cap)
+        if not budget:
+            continue
+        start = budget
+        ext = next(p._p.iter(qn('wp:extent')))
+        cx, cy = int(ext.get('cx')), int(ext.get('cy'))
+        # A figure that fills most of a page must start a page: text pulled in front of it may
+        # not overshoot the gap, or its remainder would sit alone on the page before the figure.
+        tall = cy * min(1.0, Cm(15) / cx, Cm(21) / cy) * FIT.get(cap, 1.0) > Cm(12)
+        el = p._p.getnext()
+        while el is not None and el.tag != qn('w:p'):  # skip the caption
+            el = el.getnext()
+        el = el.getnext() if el is not None else None
+        def sid_of(e):
+            st = e.find(qn('w:pPr') + '/' + qn('w:pStyle')) if e is not None and e.tag == qn('w:p') else None
+            return unicodedata.normalize('NFC', st.get(qn('w:val'))) if st is not None else ''
+
+        def step(e, marks):
+            """Next block after e; the bookmark tags pandoc puts between blocks are collected to move along."""
+            e = e.getnext()
+            while e is not None and e.tag in (qn('w:bookmarkStart'), qn('w:bookmarkEnd')):
+                marks.append(e)
+                e = e.getnext()
+            return e
+
+        pre = []
+        if el is not None and el.tag in (qn('w:bookmarkStart'), qn('w:bookmarkEnd')):
+            pre.append(el)
+            el = step(el, pre)
+        while el is not None and el.tag == qn('w:p'):
+            run, cost = list(pre), 0.0  # a heading never moves: the figure must stay in its own section
+            cur = el
+            if sid_of(el) == 'bảng' and budget >= 4:
+                # A table (caption, grid, source line) breaks across pages, so it fills any gap.
+                block = run + [el]
+                tbl = step(el, block)
+                if tbl is None or tbl.tag != qn('w:tbl'):
+                    break
+                if tall and 5 + 1.2 * len(tbl.findall(qn('w:tr'))) > budget + 1:
+                    break
+                block.append(tbl)
+                tail = []
+                src = step(tbl, tail)
+                if sid_of(src) == 'nguồn':
+                    block += tail + [src]
+                pre = []
+                el = step(block[-1], pre)
+                for r in block:
+                    p._p.addprevious(r)
+                budget -= 5 + 1.2 * len(tbl.findall(qn('w:tr')))
+                if budget <= 0:
+                    break
+                continue
+            heads = 0
+            while cur is not None and cur.tag == qn('w:p'):
+                sid = sid_of(cur)
+                if 'Kết luận chương' in text_of(cur) or cur.findall('.//' + qn('w:drawing')) or sid not in ('FirstParagraph', 'BodyText', 'Compact'):
+                    cur = None
+                    break
+                run.append(cur)
+                if sid in ('Heading3', 'Heading2'):
+                    heads += 1
+                    cost += 2.2
+                    cur = step(cur, run)
+                    continue
+                cost += len(text_of(cur)) // 85 + (1.1 if sid == 'Compact' else 1.3)
+                break
+            if cur is None or budget < 3 or (heads and budget < 4.5) or (tall and cost > budget + 1):
+                break  # paragraphs break across pages: before a short figure the last one may overshoot the gap
+            budget -= cost
+            pre = []
+            el = step(cur, pre)
+            for r in run:
+                p._p.addprevious(r)
+        USED[cap] = start - budget
+
+
 def finish(doc, pages=None):
     body = doc.element.body
+    pull_text(doc)
     # Placeholders written in the Markdown as [[TOC]], [[HINH]], [[BANG]], [[NGAT]].
-    codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z \\t "Tiêu đề phụ,1" ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
+    codes = {'[[TOC]]': ' TOC \\o "1-3" \\h \\z ', '[[HINH]]': ' TOC \\h \\z \\t "hình,1" ',
              '[[BANG]]': ' TOC \\h \\z \\t "bảng,1" '}
     lists = entries(doc)
     cover(doc)
@@ -421,6 +645,7 @@ def finish(doc, pages=None):
                 cx, cy = int(ext.get('cx')), int(ext.get('cy'))
                 # Fit inside the text block: 15 cm wide, 21 cm tall (room for the caption).
                 k = min(1.0, Cm(15) / cx, Cm(21) / cy)
+                k *= FIT.get(caption_after(p), 1.0)
                 if k < 1.0:
                     ncx, ncy = str(int(cx * k)), str(int(cy * k))
                     ext.set('cx', ncx)
@@ -494,6 +719,13 @@ def finish(doc, pages=None):
         for row in tbl.rows:
             for j, cell in enumerate(row.cells[:ncol]):
                 lens[j] = max(lens[j], min(len(cell.text), 60))
+        # Number-only columns are sized by their numbers, not by the header (it may wrap).
+        num = re.compile(r'^[\d.,%–/\-\s]*$')
+        for j in range(ncol):
+            body = [row.cells[j].text for row in list(tbl.rows)[1:] if j < len(row.cells)]
+            if body and all(num.match(t) for t in body):
+                head = max((len(w) for w in tbl.rows[0].cells[j].text.split()), default=0)
+                lens[j] = max([head] + [len(t) for t in body])
         words = [0] * ncol
         for row in tbl.rows:
             for j, cell in enumerate(row.cells[:ncol]):
@@ -532,6 +764,51 @@ def finish(doc, pages=None):
     return lists
 
 
+# Child order of the property elements in the WordprocessingML schema. Word refuses
+# ("unreadable content") a file whose properties are out of order or repeated, even
+# though LibreOffice opens it, so every property element is put back in schema order.
+SCHEMA_ORDER = {
+    'rPr': 'ins del moveFrom moveTo rStyle rFonts b bCs i iCs caps smallCaps strike dstrike outline shadow '
+           'emboss imprint noProof snapToGrid vanish webHidden color spacing w kern position sz szCs highlight u '
+           'effect bdr shd fitText vertAlign rtl cs em lang eastAsianLayout specVanish oMath rPrChange',
+    'pPr': 'pStyle keepNext keepLines pageBreakBefore framePr widowControl numPr suppressLineNumbers pBdr shd tabs '
+           'suppressAutoHyphens kinsoku wordWrap overflowPunct topLinePunct autoSpaceDE autoSpaceDN bidi '
+           'adjustRightInd snapToGrid spacing ind contextualSpacing mirrorIndents suppressOverlap jc textDirection '
+           'textAlignment textboxTightWrap outlineLvl divId cnfStyle rPr sectPr pPrChange',
+    'trPr': 'cnfStyle divId gridBefore gridAfter wBefore wAfter cantSplit trHeight tblHeader tblCellSpacing jc hidden '
+            'ins del trPrChange',
+    'tblPr': 'tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize tblW jc tblCellSpacing '
+             'tblInd tblBorders shd tblLayout tblCellMar tblLook tblCaption tblDescription tblPrChange',
+    'tcPr': 'cnfStyle tcW gridSpan hMerge vMerge tcBorders shd noWrap tcMar textDirection tcFitText vAlign hideMark',
+    'sectPr': 'headerReference footerReference footnotePr endnotePr type pgSz pgMar paperSrc pgBorders lnNumType '
+              'pgNumType cols formProt vAlign noEndnote titlePg textDirection bidi rtlGutter docGrid printerSettings '
+              'sectPrChange',
+}
+W_NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def schema_order(root):
+    """Sort the children of every property element and drop repeats (the last one wins)."""
+    for tag, names in SCHEMA_ORDER.items():
+        rank = {n: i for i, n in enumerate(names.split())}
+        multi = {'headerReference', 'footerReference'}
+        for el in root.iter(W_NS + tag):
+            kids = list(el)
+            seen, keep = set(), []
+            for k in reversed(kids):
+                n = k.tag.replace(W_NS, '')
+                if n in seen and n not in multi:
+                    continue
+                seen.add(n)
+                keep.append(k)
+            keep.reverse()
+            keep.sort(key=lambda k: rank.get(k.tag.replace(W_NS, ''), len(rank)))
+            for k in kids:
+                el.remove(k)
+            for k in keep:
+                el.append(k)
+
+
 def build(pages=None):
     os.makedirs(OUT, exist_ok=True)
     ref = os.path.join(OUT, 'reference.docx')
@@ -559,12 +836,34 @@ def build(pages=None):
     for sec in secs:
         geometry(sec)
         sec.start_type = WD_SECTION.NEW_PAGE
-    # Arabic numerals all the way: the cover pages count but show no number.
+    # Arabic numerals only. MỞ ĐẦU is page 1; the cover and the front matter
+    # show no number (Arabic numbers there would repeat the body's 1, 2…);
+    # the reference list and the appendices continue the body's numbering.
     secs[0].header.is_linked_to_previous = False
-    page_header(secs[1], fmt='decimal')
-    page_header(secs[2], fmt='decimal')
+    secs[1].header.is_linked_to_previous = False
+    page_header(secs[2], fmt='decimal', start=1)
     page_header(secs[3], fmt='decimal')
     lists = finish(doc, pages)
+    tighten(doc)
+    # Without a source line under it, a table needs some air before the text that follows.
+    for tbl in doc.element.body.iter(qn('w:tbl')):
+        nxt = tbl.getnext()
+        while nxt is not None and nxt.tag in (qn('w:bookmarkStart'), qn('w:bookmarkEnd')):
+            nxt = nxt.getnext()
+        if nxt is not None and nxt.tag == qn("w:p") and tbl.getparent() is doc.element.body and tbl not in COVER and nxt not in COVER:
+            ppr = nxt.get_or_add_pPr()
+            sp = ppr.find(qn('w:spacing'))
+            if sp is None:
+                sp = OxmlElement('w:spacing')
+                ppr.append(sp)
+            if not sp.get(qn('w:before')):
+                sp.set(qn('w:before'), '160')
+    schema_order(doc.element.body)
+    schema_order(doc.styles.element)
+    for sec in doc.sections:
+        for part in (sec.header, sec.footer):
+            if not part.is_linked_to_previous:
+                schema_order(part._element)
     out = os.path.join(OUT, 'BaoCao_DATN_TranTuanAnh.docx')
     doc.save(out)
     os.remove(tmp)
@@ -590,8 +889,10 @@ def norm(t):
 
 
 def locate(texts, lists):
-    """Page (1-based, the number printed on it) of every entry, searched in order."""
+    """The number printed on the page of every entry, searched in document order."""
     pages_lines = [[norm(l) for l in t.splitlines() if norm(l)] for t in texts]
+    # The number printed in the page header (first line), not the PDF page index.
+    printed = [int(l[0]) if l and l[0].isdigit() else 0 for l in pages_lines]
 
     def on(lines, want):
         for j, l in enumerate(lines):
@@ -611,13 +912,53 @@ def locate(texts, lists):
                 k += 1
             if k == len(pages_lines):
                 raise SystemExit(f'Không thấy trang của: {text}')
-            out.append(k + 1)
+            out.append(printed[k])
         found[key] = out
     return found
 
 
 def main():
     out, lists = build()
+    for _ in range(10):  # shrink figures that leave a large gap above them, or fill the gap with text
+        render(out)
+        new = fit_gaps(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
+        new = {c: k for c, k in new.items() if c not in FIT}
+        pull, undo = {}, {}
+        for c, n in GAPS.items():
+            if c in new or c in FROZEN:
+                continue
+            if c in LAST and n > LAST[c][1]:
+                # The text pulled last time overshot the gap and pushed the figure a page on:
+                # go back to the previous amount and leave this figure alone from now on.
+                undo[c] = LAST[c][0]
+                FROZEN.add(c)
+                continue
+            if ROUNDS.get(c, 0) < 4:
+                LAST[c] = (PULL.get(c, 0), n)
+                pull[c] = USED.get(c, 0) + n
+                ROUNDS[c] = ROUNDS.get(c, 0) + 1
+        GAPS.clear()
+        if undo:
+            PULL.update(undo)
+            print('Bỏ bớt đoạn kéo lên (làm hình trôi trang): ' + ', '.join(undo))
+        if not new and not pull and not undo:
+            break
+        FIT.update(new)
+        PULL.update(pull)
+        if new:
+            print('Thu nhỏ để vừa trang: ' + ', '.join(f'{c} ×{k:.2f}' for c, k in new.items()))
+        if pull:
+            print('Đưa đoạn văn lên trước hình: ' + ', '.join(f'{c} ({n} dòng)' for c, n in pull.items()))
+        out, lists = build()
+    for k in (-10, -12):  # pull up a last line of one or two words (condense 0.5, then 0.6 pt)
+        render(out)
+        tails = short_tails(os.path.join(OUT, os.path.basename(out)[:-5] + '.pdf'))
+        tails = [t for t in tails if TIGHT.get(t, 0) > k]
+        if not tails:
+            break
+        TIGHT.update({t: k for t in tails})
+        print(f'Co chữ {k / 20:.1f} pt cho {len(tails)} đoạn có dòng cuối 1–2 từ')
+        out, lists = build()
     pages = None
     for _ in range(3):
         new = locate(render(out), lists)

@@ -247,22 +247,22 @@ test('full patient-to-payment journey: receptionist books, dentist treats, admin
 
     // ---- Step 8: dentist closes the encounter ----
     await addChiefComplaint(dentistPage, 'E2E: khám và trám răng');
-    await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
+    await dentistPage.getByRole('button', { name: /đóng phiên khám/i }).click();
     await dentistPage.getByLabel(/tóm tắt cuối cùng/i).fill('E2E: hoàn tất hàn răng 16, hẹn tái khám nếu cần.');
     const checkboxes = dentistPage.locator('input[type="checkbox"]');
     const cbCount = await checkboxes.count();
     for (let i = 0; i < cbCount; i++) {
       await checkboxes.nth(i).check();
     }
-    const closeBtn = dentistPage.getByRole('button', { name: /đóng encounter/i });
+    const closeBtn = dentistPage.getByRole('button', { name: /đóng phiên khám/i });
     await expect(closeBtn).toBeEnabled();
     await closeBtn.click();
 
-    // Closing is irreversible and removes the "Đóng Encounter" affordance
+    // Closing is irreversible and removes the "Đóng phiên khám" affordance
     // entirely (EncounterDetailPage only renders it while !isCompleted) —
     // its disappearance is the structural proof the close actually landed,
     // independent of any toast copy.
-    await expect(dentistPage.getByRole('button', { name: /đóng encounter/i })).toBeHidden({ timeout: 15_000 });
+    await expect(dentistPage.getByRole('button', { name: /đóng phiên khám/i })).toBeHidden({ timeout: 15_000 });
     await dentistPage.getByRole('tab', { name: /đơn thuốc/i }).click();
     await dentistPage.evaluate(() => {
       window.print = () => document.body.setAttribute('data-print-called', 'true');

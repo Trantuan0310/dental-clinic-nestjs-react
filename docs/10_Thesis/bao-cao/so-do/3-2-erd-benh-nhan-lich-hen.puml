@@ -2,6 +2,7 @@
 !include _kieu.iuml
 hide circle
 skinparam linetype ortho
+left to right direction
 skinparam defaultFontSize 13
 title Nhóm bệnh nhân, lịch hẹn và tiếp nhận
 
@@ -11,8 +12,6 @@ entity "patients" as Patient {
   * code : varchar
   * full_name : varchar
   * dob : timestamptz
-  * gender : enum
-  primary_phone : varchar
 }
 entity "appointments" as Appointment {
   * id : uuid <<PK>>
@@ -22,8 +21,6 @@ entity "appointments" as Appointment {
   * start_at : timestamptz
   * end_at : timestamptz
   * status : enum
-  reason : varchar
-  chief_complaint : varchar
   confirmed_by : uuid <<FK>>
   checked_in_by : uuid <<FK>>
   cancelled_by : uuid <<FK>>
@@ -36,8 +33,6 @@ entity "appointment_services" as AppointmentService {
   * service_code : varchar
   * service_name : varchar
   * price : decimal
-  * duration_min : int
-  * buffer_before_min : int
 }
 entity "services" as Service {
   * id : uuid <<PK>>
@@ -46,8 +41,6 @@ entity "services" as Service {
   * category_id : uuid <<FK>>
   * name : varchar
   description : varchar
-  * default_duration_min : int
-  * buffer_before_min : int
 }
 entity "booking_requests" as BookingRequest {
   * id : uuid <<PK>>
@@ -55,8 +48,6 @@ entity "booking_requests" as BookingRequest {
   * reference_code : varchar <<UQ>>
   * access_token_hash : varchar
   * full_name : varchar
-  * dob : timestamptz
-  * gender : enum
   * service_id : uuid <<FK>>
   * preferred_dentist_id : uuid <<FK>>
   proposed_dentist_id : uuid <<FK>>
@@ -71,8 +62,6 @@ entity "queue_entries" as QueueEntry {
   * dentist_id : uuid
   * queue_date : timestamptz
   * status : enum
-  * priority : enum
-  * checked_in_at : timestamptz
 }
 entity "working_schedules" as WorkingSchedule {
   * id : uuid <<PK>>
@@ -81,8 +70,6 @@ entity "working_schedules" as WorkingSchedule {
   * day_of_week : int
   * start_time : timestamptz
   * end_time : timestamptz
-  * slot_duration_min : int
-  * valid_from : timestamptz
 }
 entity "appointment_links" as AppointmentLink {
   * id : uuid <<PK>>
@@ -91,8 +78,6 @@ entity "appointment_links" as AppointmentLink {
   * patient_id : uuid
   * token_hash : varchar <<UQ>>
   * expires_at : timestamptz
-  last_used_at : timestamptz
-  * created_at : timestamptz
 }
 entity "patient_history_links" as PatientHistoryLink {
   * id : uuid <<PK>>
@@ -101,7 +86,6 @@ entity "patient_history_links" as PatientHistoryLink {
   * token_hash : varchar <<UQ>>
   * expires_at : timestamptz
   last_used_at : timestamptz
-  * created_at : timestamptz
 }
 entity "waitlist_entries" as WaitlistEntry {
   * id : uuid <<PK>>
@@ -112,8 +96,6 @@ entity "waitlist_entries" as WaitlistEntry {
   * from_date : timestamptz
   * to_date : timestamptz
   * period : varchar
-  note : varchar
-  * status : varchar
   appointment_id : uuid <<FK>>
 }
 entity "recalls" as Recall {
@@ -125,8 +107,6 @@ entity "recalls" as Recall {
   * due_date : timestamptz
   * status : enum
   postponed_until : timestamptz
-  emailed_at : timestamptz
-  email_token_hash : varchar <<UQ>>
   last_contact_by : uuid <<FK>>
   resolved_by_encounter_id : uuid <<FK>>
 }
@@ -136,8 +116,6 @@ entity "users" as User {
   * email : varchar
   * password_hash : varchar
   * full_name : varchar
-  * status : enum
-  * failed_login_attempts : int
 }
 
 User |o--o{ Patient

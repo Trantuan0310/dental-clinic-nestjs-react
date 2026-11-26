@@ -2,34 +2,32 @@
 !include _kieu.iuml
 left to right direction
 actor "Bác sĩ" as BS
-rectangle "Lâm sàng" {
-  usecase "Xem hàng chờ của mình,\ngọi bệnh nhân" as a
-  usecase "Bắt đầu phiên khám" as b
-  usecase "Ghi chú lâm sàng" as c
-  usecase "Cập nhật sơ đồ răng" as d
-  usecase "Xem lịch sử\nđiều trị theo răng" as e
-  usecase "Thêm điều trị cho răng" as f
-  usecase "Kê đơn thuốc" as g
-  usecase "Kiểm tra dị ứng thuốc" as g2
-  usecase "Lập kế hoạch điều trị,\nbáo giá" as h
-  usecase "Đóng phiên khám" as i
-  usecase "Trừ vật tư\ntheo điều trị" as i2
-  usecase "Ghi bổ sung\nsau khi đóng" as j
-  usecase "Đặt lịch tái khám" as k
-  usecase "Xem ca làm,\nphiếu lương" as m
-}
-BS -- a
-BS -- b
-BS -- c
-BS -- d
-BS -- e
-BS -- f
-BS -- g
-BS -- h
-BS -- i
-BS -- j
-BS -- k
-BS -- m
+usecase "Xem hàng chờ của mình,\ngọi bệnh nhân" as a
+usecase "Bắt đầu phiên khám" as b
+usecase "Ghi chú lâm sàng" as c
+usecase "Cập nhật sơ đồ răng" as d
+usecase "Xem lịch sử\nđiều trị theo răng" as e
+usecase "Thêm điều trị cho răng" as f
+usecase "Kê đơn thuốc" as g
+usecase "Kiểm tra dị ứng thuốc" as g2
+usecase "Lập kế hoạch điều trị,\nbáo giá" as h
+usecase "Đóng phiên khám" as i
+usecase "Trừ vật tư\ntheo điều trị" as i2
+usecase "Ghi bổ sung\nsau khi đóng" as j
+usecase "Đặt lịch tái khám" as k
+usecase "Xem ca làm,\nphiếu lương" as m
 g .> g2 : <<include>>
 i .> i2 : <<include>>
+a -- BS
+b -- BS
+c -- BS
+d -- BS
+e -- BS
+f -- BS
+BS -- g
+BS -- i
+BS -- m
+BS -- k
+BS -- j
+BS -- h
 @enduml

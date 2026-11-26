@@ -2,30 +2,10 @@
 !include _kieu.iuml
 hide circle
 skinparam linetype ortho
+left to right direction
 skinparam defaultFontSize 13
 title Nhóm hóa đơn và thanh toán
 
-entity "patients" as Patient {
-  * id : uuid <<PK>>
-  --
-  * code : varchar
-  * full_name : varchar
-  * dob : timestamptz
-  * gender : enum
-  primary_phone : varchar
-}
-entity "encounters" as Encounter {
-  * id : uuid <<PK>>
-  --
-  * appointment_id : uuid <<FK>>
-  * patient_id : uuid <<FK>>
-  * dentist_id : uuid <<FK>>
-  * status : enum
-  * started_at : timestamptz
-  closed_at : timestamptz
-  summary : varchar
-  chief_complaint : varchar
-}
 entity "invoices" as Invoice {
   * id : uuid <<PK>>
   --
@@ -97,15 +77,11 @@ entity "treatments" as Treatment {
   plan_item_id : uuid <<FK>>
 }
 
-Patient ||--o{ Encounter
-Encounter ||--o{ Invoice
 Invoice |o--o| Invoice
-Patient ||--o{ Invoice
 Invoice ||--o{ InvoiceItem
 Treatment |o--o{ InvoiceItem
 Invoice ||--o{ Payment
 Invoice ||--o{ InvoiceAdjustment
 Invoice |o--o{ BankTransaction
 Payment |o--o{ BankTransaction
-Encounter ||--o{ Treatment
 @enduml

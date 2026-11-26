@@ -1,0 +1,24 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+[*] -down-> DRAFT : Tạo kỳ lương
+DRAFT : Nháp
+DRAFT : tính lương, thêm điều chỉnh
+REVIEWING : Đang rà soát
+REVIEWING : vẫn tính lại, điều chỉnh được
+APPROVED : Đã duyệt
+PAID : Đã chi trả
+LOCKED : Đã khóa, không sửa được
+DRAFT -down-> REVIEWING : Khóa số liệu để rà soát
+REVIEWING -up-> DRAFT : Mở lại
+REVIEWING -down-> APPROVED : Duyệt\n[tính lại không làm đổi\nlương của ai]
+REVIEWING --> REVIEWING : Duyệt nhưng số liệu thay đổi:\nbáo thay đổi, chưa duyệt
+APPROVED -down-> PAID : Ghi nhận đã chi trả
+PAID -down-> LOCKED : Tự động sau 7 ngày
+LOCKED -down-> [*]
+note right of LOCKED
+  Sai sót phát hiện sau khi khóa
+  được sửa bằng một kỳ điều chỉnh
+  riêng, chỉ chứa phần chênh lệch
+end note
+@enduml

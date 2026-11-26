@@ -1,0 +1,16 @@
+@startuml
+!include _kieu.iuml
+hide empty description
+PENDING : Chờ duyệt
+APPROVED : Đã duyệt
+REJECTED : Bị từ chối
+CANCELLED : Đã hủy
+[*] -down-> PENDING : Bác sĩ đăng ký ca\n[không phải ngày đã qua, giờ kết thúc sau giờ bắt đầu,\nkhông trùng ca khác, không rơi vào ngày nghỉ]
+PENDING -down-> APPROVED : Quản trị viên duyệt\n[kiểm tra lại trùng ca]
+PENDING -right-> REJECTED : Từ chối (có lý do)
+PENDING -left-> CANCELLED : Bác sĩ tự hủy, hoặc\ntự động hủy khi ngày đã qua
+APPROVED -left-> CANCELLED : Hủy\n[ca chưa có lịch hẹn nào]
+REJECTED -down-> [*]
+CANCELLED -down-> [*]
+APPROVED -down-> [*] : Ca đã làm,\nđược tính vào kỳ lương
+@enduml

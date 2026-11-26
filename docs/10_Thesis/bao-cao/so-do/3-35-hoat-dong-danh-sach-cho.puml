@@ -1,0 +1,33 @@
+@startuml
+!include _kieu.iuml
+|Lễ tân|
+start
+:Ghi yêu cầu chờ cho bệnh nhân: dịch vụ, bác sĩ (hoặc bất kỳ), khoảng ngày, buổi sáng / chiều / bất kỳ;
+|Hệ thống|
+:Lưu yêu cầu ở trạng thái WAITING;
+:Định kỳ 2 phút: tìm lịch hẹn vừa hủy hoặc vắng mặt mà chưa hết giờ;
+:Tính phần giờ trống còn lại (từ thời điểm hiện tại, làm tròn 5 phút);
+:Lọc dịch vụ bác sĩ được phân công, vừa khoảng trống và không trùng lịch khác;
+:Đếm yêu cầu chờ phù hợp (dịch vụ, bác sĩ, ngày, buổi);
+if (Có yêu cầu phù hợp?) then (có)
+  :Gửi thông báo "Có giờ trống cho danh sách chờ" (mỗi giờ trống một lần trong ngày);
+else (không)
+  stop
+endif
+|Lễ tân|
+:Mở danh sách chờ, lọc theo giờ trống;
+:Liên hệ bệnh nhân (có thể nhờ AI soạn tin mời);
+if (Bệnh nhân nhận giờ?) then (có)
+  :Đặt lịch từ yêu cầu chờ;
+  |Hệ thống|
+  if (Trong cùng giao dịch: yêu cầu vẫn WAITING và khớp giờ, dịch vụ, bác sĩ?) then (có)
+    :Tạo lịch hẹn, yêu cầu chuyển BOOKED và gắn với lịch hẹn;
+  else (không)
+    :Hủy thao tác, báo yêu cầu đã được xử lý hoặc không còn khớp;
+  endif
+else (không)
+  |Lễ tân|
+  :Giữ yêu cầu chờ hoặc bỏ yêu cầu (REMOVED);
+endif
+stop
+@enduml
