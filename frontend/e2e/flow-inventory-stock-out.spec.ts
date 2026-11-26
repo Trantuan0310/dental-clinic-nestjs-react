@@ -194,12 +194,12 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     await expect(dentistPage.getByText('E2E stock-out probe treatment', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     await addChiefComplaint(dentistPage, 'E2E: đau răng 24');
-    await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
+    await dentistPage.getByRole('button', { name: /đóng phiên khám/i }).click();
     await dentistPage.getByLabel(/tóm tắt cuối cùng/i).fill('E2E inventory probe — 1 unit attached via the materials picker.');
     const checkboxes = dentistPage.locator('input[type="checkbox"]');
     for (let i = 0; i < (await checkboxes.count()); i++) await checkboxes.nth(i).check();
-    await dentistPage.getByRole('button', { name: /đóng encounter/i }).click();
-    await expect(dentistPage.getByRole('button', { name: /đóng encounter/i })).toBeHidden({ timeout: 15_000 });
+    await dentistPage.getByRole('button', { name: /đóng phiên khám/i }).click();
+    await expect(dentistPage.getByRole('button', { name: /đóng phiên khám/i })).toBeHidden({ timeout: 15_000 });
 
     // ---- Re-check the same inventory item ----
     await adminPage.goto('/inventory');

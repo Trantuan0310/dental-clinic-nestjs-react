@@ -106,14 +106,14 @@ test.describe('Dentist UI regressions', () => {
     status = 'completed';
     await page.reload();
     await page.getByRole('tab', { name: 'Đơn thuốc', exact: true }).click();
-    await expect(page.getByRole('button', { name: /đóng encounter/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /đóng phiên khám/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'In đơn thuốc', exact: true })).toBeVisible();
     await savePrint(page, 'prescription');
     await expect(page.getByText('Thuốc demo', { exact: true })).toBeVisible();
     status = 'cancelled';
     await page.emulateMedia({ media: 'screen' });
     await page.reload();
-    await expect(page.getByRole('button', { name: /đóng encounter/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /đóng phiên khám/i })).toHaveCount(0);
     await page.getByRole('tab', { name: 'Điều trị & sơ đồ răng', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Thêm điều trị', exact: true })).toHaveCount(0);
   });
