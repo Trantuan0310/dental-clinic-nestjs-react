@@ -25,7 +25,7 @@ Hình 3.1. Kiến trúc triển khai của hệ thống
 
 ### 3.1.2. Các module nghiệp vụ
 
-Máy chủ ứng dụng được chia thành 23 module nghiệp vụ theo kiến trúc phân lớp [@sommerville], mỗi module gồm controller (nhận yêu cầu, kiểm tra dữ liệu bằng DTO), service (quy tắc nghiệp vụ) và phần truy cập dữ liệu qua Prisma. Các module giao tiếp với nhau qua service được công bố hoặc qua **sự kiện miền**: ví dụ khi phiên khám đóng, module hồ sơ khám phát sự kiện `encounter.closed`; module hóa đơn lắng nghe để lập hóa đơn nháp, module lương lắng nghe để ghi ca khám vào bảng lương, module AI lắng nghe để làm mới bản tóm tắt. Cách làm này giữ cho mỗi module không phụ thuộc trực tiếp vào module khác. Bảng 3.1 liệt kê các module cùng số điểm cuối API.
+Máy chủ ứng dụng được chia thành 24 module nghiệp vụ theo kiến trúc phân lớp [@sommerville], mỗi module gồm controller (nhận yêu cầu, kiểm tra dữ liệu bằng DTO), service (quy tắc nghiệp vụ) và phần truy cập dữ liệu qua Prisma. Các module giao tiếp với nhau qua service được công bố hoặc qua **sự kiện miền**: ví dụ khi phiên khám đóng, module hồ sơ khám phát sự kiện `encounter.closed`; module hóa đơn lắng nghe để lập hóa đơn nháp, module lương lắng nghe để ghi ca khám vào bảng lương, module AI lắng nghe để làm mới bản tóm tắt. Cách làm này giữ cho mỗi module không phụ thuộc trực tiếp vào module khác. Bảng 3.1 liệt kê các module cùng số điểm cuối API.
 
 ::: {custom-style="bảng"}
 Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
@@ -36,16 +36,16 @@ Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
 | auth | Đăng nhập, làm mới token, quên mật khẩu, thiết lập tài khoản | 9 |
 | users, roles | Người dùng, vai trò, quyền | 16 |
 | patients | Hồ sơ bệnh nhân, tìm kiếm, gộp hồ sơ, xem dữ liệu liên module, lịch sử theo răng | 21 |
-| patient-history | Liên kết tra cứu lịch sử khám cho bệnh nhân | 3 |
+| patient-history | Liên kết tra cứu lịch sử khám, bệnh nhân gửi đánh giá bác sĩ | 4 |
 | appointments | Lịch hẹn, lịch làm việc, giờ trống, check-in, hàng chờ, bảng ghế, danh sách chờ | 54 |
-| booking | Đặt lịch trực tuyến, duyệt yêu cầu, liên kết xác nhận/dời lịch, phiếu khai trước | 39 |
+| booking | Đặt lịch trực tuyến, hồ sơ công khai của bác sĩ, duyệt yêu cầu, liên kết xác nhận/dời lịch, phiếu khai trước | 40 |
 | medical-records | Phiên khám, ghi chú lâm sàng, điều trị, đơn thuốc, sơ đồ răng, mẫu khám | 22 |
 | treatment-plans | Kế hoạch điều trị, báo giá, tiến độ, lịch sử liên hệ | 13 |
 | consents | Sổ đồng thuận | 6 |
 | billing | Hóa đơn, thanh toán, hoàn tiền, VietQR, webhook ngân hàng, đối soát | 22 |
 | inventory | Vật tư, nhập xuất, kiểm kê, gợi ý nhập | 13 |
 | catalog | Danh mục dịch vụ, bảng giá, dịch vụ của từng bác sĩ | 15 |
-| staff | Nhân viên, hồ sơ bác sĩ, đăng ký và duyệt ca | 15 |
+| staff, dentist-reviews | Nhân viên, hồ sơ bác sĩ, đăng ký và duyệt ca, kiểm duyệt đánh giá | 17 |
 | payroll | Cấu hình lương, kỳ lương, phiếu lương | 30 |
 | expense | Chi phí vận hành | 10 |
 | reports | Báo cáo doanh thu, chỉ số vận hành, phễu bệnh nhân, công suất | 22 |
@@ -53,13 +53,13 @@ Bảng 3.1. Các module nghiệp vụ của máy chủ ứng dụng
 | messaging, notifications | Tin nhắn email, SMS, thông báo trong ứng dụng | 8 |
 | ai | Soạn nháp, tóm tắt hồ sơ, trợ lý dạng chat | 7 |
 | media, audit, common | Ảnh trang chủ, nhật ký kiểm toán, kiểm tra sức khỏe hệ thống | 9 |
-| **Tổng** | | **339** |
+| **Tổng** | | **343** |
 
 ## 3.2. Thiết kế cơ sở dữ liệu
 
 ### 3.2.1. Nguyên tắc thiết kế
 
-Cơ sở dữ liệu PostgreSQL [@postgres] gồm 70 bảng và 43 kiểu liệt kê, được xây dựng qua 52 lần migration của Prisma [@prisma]. Các nguyên tắc chung:
+Cơ sở dữ liệu PostgreSQL [@postgres] gồm 71 bảng và 44 kiểu liệt kê, được xây dựng qua 53 lần migration của Prisma [@prisma]. Các nguyên tắc chung:
 
 - **Khóa chính UUID phiên bản 7**: không đoán được (an toàn khi xuất hiện trong đường dẫn), tăng dần theo thời gian nên chèn và đánh chỉ mục hiệu quả. Các mã con người đọc (mã bệnh nhân `PAT-2026-00461`, mã hóa đơn `INV-2026-000123`) được sinh riêng từ sequence.
 - **Xóa mềm** bằng cột `deleted_at` cho dữ liệu nghiệp vụ, giữ lịch sử và cho phép khôi phục; các truy vấn mặc định bỏ qua bản ghi đã xóa.
@@ -117,7 +117,7 @@ Nhóm người dùng và phân quyền (Hình 3.5) theo mô hình RBAC [@rbac]: 
 Hình 3.5. Sơ đồ thực thể liên kết nhóm người dùng, phân quyền và nhật ký
 :::
 
-Nhóm nhân sự, lương và kho: thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập. Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
+Nhóm nhân sự, lương và kho: thông tin nhân sự (`employees`, `dentist_profiles`) tách khỏi tài khoản đăng nhập; hồ sơ bác sĩ có thêm các trường công khai (năm bắt đầu hành nghề, chức vụ, quá trình đào tạo, công tác, giải thưởng). Bảng `dentist_reviews` lưu đánh giá của bệnh nhân, mỗi phiên khám tối đa một đánh giá (khóa duy nhất trên `encounter_id`). Ca làm việc được đăng ký và duyệt trong `shift_registrations`; kỳ lương (`payroll_periods`) gồm các dòng lương của từng người. Kho gồm danh mục, vật tư và biến động kho (`stock_movements`) ghi lại số lượng trước và sau mỗi lần nhập, xuất, kiểm kê.
 
 ## 3.3. Đặc tả và thiết kế các chức năng chính
 
@@ -185,6 +185,10 @@ Bệnh nhân đặt lịch không cần tài khoản (Hình 3.9). Yêu cầu đ�
 ::: {custom-style="hình"}
 Hình 3.9. Biểu đồ tuần tự đặt lịch trực tuyến
 :::
+
+Trang đặt lịch được chia thành bốn bước theo cách người bệnh ra quyết định: chọn dịch vụ trước, rồi chọn bác sĩ, giờ khám và cuối cùng mới nhập thông tin cá nhân. Ở bước dịch vụ, danh mục được chia theo nhóm (khám và tư vấn, dự phòng, điều trị, phẫu thuật, phục hình, chỉnh nha), có ô tìm kiếm không phân biệt dấu và hiện giá tham khảo cùng thời lượng của từng dịch vụ, để khách biết trước khoảng chi phí. Bước bác sĩ chỉ liệt kê những bác sĩ thực hiện được dịch vụ đã chọn; mỗi bác sĩ hiện số năm kinh nghiệm (tính từ năm bắt đầu hành nghề), chức vụ, điểm đánh giá trung bình và số lượt đánh giá; khách có thể mở hồ sơ đầy đủ gồm quá trình đào tạo, quá trình công tác, giải thưởng và các nhận xét gần nhất. Các trường bắt buộc được đánh dấu sao đỏ và mỗi ô nhập có ví dụ gợi ý.
+
+Đánh giá bác sĩ chỉ đến từ bệnh nhân đã khám thật: bệnh nhân chấm từ 1 đến 5 sao (kèm nhận xét tùy chọn) ngay dưới lượt khám trên trang tra cứu lịch sử (Mục 3.3.7), với điều kiện phiên khám đã đóng, chưa quá 90 ngày và chưa được đánh giá. Trang tra cứu không trả mã phiên khám mà trả một khóa băm được dựng từ mã truy cập và mã phiên khám, nên không thể dùng đường dẫn của người này để đánh giá lượt khám của người khác. Trên trang đặt lịch, tên người đánh giá được che (chỉ giữ chữ cái đầu của tên), điểm trung bình chỉ tính các đánh giá đang hiển thị. Quản lý có quyền sửa hồ sơ bác sĩ được ẩn một đánh giá vi phạm (ví dụ chứa số điện thoại) với lý do bắt buộc, và mọi lần ẩn, hiện lại đều ghi vào nhật ký kiểm toán.
 
 ### 3.3.3. Khám, điều trị và sơ đồ răng
 
@@ -458,6 +462,6 @@ Toàn bộ giao diện tuân theo các nguyên tắc khả dụng và khả năn
 
 ## 3.6. Kết luận chương
 
-Chương 3 đã trình bày thiết kế của hệ thống theo kiến trúc container hóa với 23 module nghiệp vụ và 339 điểm cuối API. Cơ sở dữ liệu gồm 70 bảng, trong đó hồ sơ khám được lưu theo từng phiên và sơ đồ răng theo từng bản chụp để không ghi đè lịch sử.
+Chương 3 đã trình bày thiết kế của hệ thống theo kiến trúc container hóa với 24 module nghiệp vụ và 343 điểm cuối API. Cơ sở dữ liệu gồm 71 bảng, trong đó hồ sơ khám được lưu theo từng phiên và sơ đồ răng theo từng bản chụp để không ghi đè lịch sử.
 
 Các chức năng chính được đặc tả kèm 13 biểu đồ tuần tự, hoạt động và trạng thái, tập trung vào những tình huống khó: nhiều người đặt lịch cùng lúc, đóng phiên khám khi thiếu vật tư, chuyển khoản không khớp hóa đơn và chống leo thang quyền. Phần bảo mật gồm xác thực, phân quyền hai lớp, nhật ký kiểm toán và đối chiếu với OWASP Top 10; giao diện dùng một bố cục chung, lấy sơ đồ răng làm trung tâm màn hình khám và ưu tiên điện thoại cho trang công khai. Chương 4 trình bày việc hiện thực thiết kế này.

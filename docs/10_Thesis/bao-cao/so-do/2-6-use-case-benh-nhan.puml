@@ -6,11 +6,13 @@ actor "Nhà cung cấp SMS / Email" as MS
 usecase "Xem thông tin phòng khám,\nbảng giá" as a
 usecase "Đặt lịch trực tuyến" as b
 usecase "Chọn dịch vụ, bác sĩ,\ngiờ trống" as b2
+usecase "Xem hồ sơ và đánh giá\ncủa bác sĩ" as b3
 usecase "Tra cứu trạng thái\nyêu cầu đặt lịch" as c
 usecase "Xác nhận, dời, hủy lịch\nqua liên kết" as d
 usecase "Khai thông tin sức khỏe\ntrước khi đến" as e
 usecase "Yêu cầu link\ntra cứu lịch sử" as f
 usecase "Xem lịch sử khám,\nkế hoạch, hóa đơn" as g
+usecase "Đánh giá bác sĩ\nsau lượt khám" as h
 BN -- a
 BN -- b
 BN -- c
@@ -18,6 +20,8 @@ BN -- d
 BN -- e
 BN -- f
 BN -- g
+BN -- h
 b .> b2 : <<include>>
+b2 <.. b3 : <<extend>>
 f -- MS
 @enduml

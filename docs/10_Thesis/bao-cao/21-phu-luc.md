@@ -63,6 +63,7 @@ Bảng B.1. Ma trận truy vết yêu cầu – thiết kế – giao diện –
 | LH-06 Check-in, hàng chờ | Hình 3.8 | Hình 4.3 | KT-LH-05, KT-LH-09 |
 | LH-07 Danh sách chờ | Mục 3.3.1 | – | E2E: waitlist |
 | LH-08 Nhắc tái khám | Mục 3.3.6 | – | Đơn vị (recalls) |
+| LH-09 Đánh giá bác sĩ | Hình 2.6, Mục 3.3.2 | Hình 4.2, Mục 4.5.5 | KT-LH-10; E2E: public-booking |
 | KB-01 Mở phiên khám | Hình 3.10 | – | KT-KB-01 |
 | KB-02 Ghi chú lâm sàng | Hình 3.10 | – | KT-KB-04, KT-KB-09 |
 | KB-03 Sơ đồ răng | Hình 3.10 | Hình 4.6, Hình 4.7 | E2E: dentist-view |

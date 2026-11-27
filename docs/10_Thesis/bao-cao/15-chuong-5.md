@@ -12,7 +12,7 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 
 | Tầng | Công cụ | Số lượng | Phạm vi kiểm tra |
 |---|---|---|---|
-| Đơn vị (máy chủ) | Jest | 1.788 ca, 89 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
+| Đơn vị (máy chủ) | Jest | 1.803 ca, 92 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
 | API trên PostgreSQL thật | Jest + Supertest | 113 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
 | Đầu cuối (E2E) | Playwright | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
@@ -42,6 +42,7 @@ Bảng 5.2. Ca kiểm thử nhóm lịch hẹn và tiếp nhận
 | KT-LH-07 | Khách đặt lịch trực tuyến, lễ tân duyệt yêu cầu | Lịch hẹn và hồ sơ bệnh nhân được tạo | E2E | Đạt |
 | KT-LH-08 | Khách mở đường dẫn trong tin nhắc để xác nhận hoặc dời lịch | Trạng thái lịch cập nhật; đường dẫn đã dùng hoặc hết hạn bị từ chối | E2E | Đạt |
 | KT-LH-09 | Lễ tân chuyển khách sang bác sĩ khác trên màn hình điều phối | Khách xuất hiện ở hàng chờ bác sĩ mới | E2E | Đạt |
+| KT-LH-10 | Bệnh nhân đánh giá lượt khám của người khác, lượt khám quá 90 ngày, chấm 6 sao hoặc đánh giá lần hai | Đều bị từ chối; ẩn đánh giá không có lý do cũng bị từ chối | Đơn vị | Đạt |
 
 ::: {custom-style="bảng"}
 Bảng 5.3. Ca kiểm thử nhóm khám, điều trị và kho
@@ -107,7 +108,7 @@ Bộ E2E cũng kiểm tra chuyển đổi ngôn ngữ Việt – Anh và các y�
 
 ### 5.2.3. Thống kê kết quả kiểm thử theo nhóm chức năng
 
-Mỗi ca kiểm thử tự động ở ba tầng được xếp vào nhóm yêu cầu chức năng mà nó kiểm tra (Mục 2.3): kiểm thử đơn vị theo module chứa nó, kiểm thử API và kiểm thử đầu cuối theo nội dung từng ca. Nhóm cuối gồm các ca không thuộc riêng một nghiệp vụ: cấu hình hệ thống, sinh dữ liệu mẫu, kiểm thử hồi quy, khung giao diện, đa ngôn ngữ, trợ năng và các luồng xuyên suốt nhiều nhóm. Bảng 5.6 tổng hợp kết quả ở lần chạy cuối của từng tầng: kiểm thử đơn vị chạy ngày 23/11/2026, kiểm thử API ngày 17/11/2026, kiểm thử đầu cuối trong quy trình tích hợp liên tục của nhánh chính.
+Mỗi ca kiểm thử tự động ở ba tầng được xếp vào nhóm yêu cầu chức năng mà nó kiểm tra (Mục 2.3): kiểm thử đơn vị theo module chứa nó, kiểm thử API và kiểm thử đầu cuối theo nội dung từng ca. Nhóm cuối gồm các ca không thuộc riêng một nghiệp vụ: cấu hình hệ thống, sinh dữ liệu mẫu, kiểm thử hồi quy, khung giao diện, đa ngôn ngữ, trợ năng và các luồng xuyên suốt nhiều nhóm. Bảng 5.6 tổng hợp kết quả ở lần chạy cuối của từng tầng: kiểm thử đơn vị chạy ngày 27/11/2026, kiểm thử API ngày 17/11/2026, kiểm thử đầu cuối trong quy trình tích hợp liên tục của nhánh chính.
 
 ::: {custom-style="bảng"}
 Bảng 5.6. Thống kê ca kiểm thử và tỉ lệ đạt theo nhóm chức năng
@@ -116,18 +117,18 @@ Bảng 5.6. Thống kê ca kiểm thử và tỉ lệ đạt theo nhóm chức n
 | Nhóm chức năng | Số yêu cầu | Đơn vị | API | E2E | Đạt / tổng số ca | Tỉ lệ đạt |
 |---|---|---|---|---|---|---|
 | Bệnh nhân (BN) | 5 | 89 | 10 | 11 | 110 / 110 | 100% |
-| Lịch hẹn, tiếp nhận (LH) | 8 | 618 | 21 | 18 | 657 / 657 | 100% |
+| Lịch hẹn, tiếp nhận (LH) | 9 | 625 | 21 | 18 | 664 / 664 | 100% |
 | Khám, điều trị (KB) | 8 | 242 | 17 | 7 | 266 / 266 | 100% |
 | Hóa đơn, thanh toán (TT) | 4 | 118 | 11 | 7 | 136 / 136 | 100% |
 | Nhân sự, lương (NS) | 3 | 298 | 23 | 9 | 330 / 330 | 100% |
 | Kho vật tư (KH) | 2 | 27 | 4 | 3 | 34 / 34 | 100% |
 | Báo cáo (BC) | 2 | 58 | 1 | 9 | 68 / 68 | 100% |
 | Trợ lý AI (AI) | 1 | 80 | 0 | 7 | 87 / 87 | 100% |
-| Quản trị, phân quyền (QT) | 1 | 187 | 23 | 19 | 229 / 229 | 100% |
-| Hạ tầng, giao diện chung | – | 71 | 3 | 32 | 106 / 106 | 100% |
-| **Tổng** | **34** | **1.788** | **113** | **122** | **2.023 / 2.023** | **100%** |
+| Quản trị, phân quyền (QT) | 1 | 189 | 23 | 19 | 231 / 231 | 100% |
+| Hạ tầng, giao diện chung | – | 77 | 3 | 32 | 112 / 112 | 100% |
+| **Tổng** | **35** | **1.803** | **113** | **122** | **2.038 / 2.038** | **100%** |
 
-Cả 2.023 ca đều đạt; mọi nhóm yêu cầu chức năng đều được kiểm thử ở ít nhất hai tầng. Hình 5.1 cho thấy cách phân bố số ca: ở tầng đơn vị, nhóm lịch hẹn và tiếp nhận chiếm khoảng một phần ba vì có nhiều quy tắc nhất (giờ làm việc, trùng lịch, hàng chờ, đặt lịch trực tuyến); ở tầng API, số ca dồn vào các nhóm có rủi ro đồng thời và phân quyền (nhân sự, quản trị, lịch hẹn, khám); ở tầng đầu cuối, nhóm giao diện chung nhiều ca nhất vì gồm các luồng đi xuyên nhiều màn hình.
+Cả 2.038 ca đều đạt; mọi nhóm yêu cầu chức năng đều được kiểm thử ở ít nhất hai tầng. Hình 5.1 cho thấy cách phân bố số ca: ở tầng đơn vị, nhóm lịch hẹn và tiếp nhận chiếm khoảng một phần ba vì có nhiều quy tắc nhất (giờ làm việc, trùng lịch, hàng chờ, đặt lịch trực tuyến); ở tầng API, số ca dồn vào các nhóm có rủi ro đồng thời và phân quyền (nhân sự, quản trị, lịch hẹn, khám); ở tầng đầu cuối, nhóm giao diện chung nhiều ca nhất vì gồm các luồng đi xuyên nhiều màn hình.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/5-1-ca-kiem-thu-theo-nhom.png){width=15cm}
@@ -253,15 +254,15 @@ Bảng 5.11. Đối chiếu kết quả với mục tiêu trong phiếu giao đ�
 
 | Mục tiêu | Kết quả đạt được | Minh chứng | Mức độ |
 |---|---|---|---|
-| Quản lý toàn diện: hồ sơ bệnh nhân, lịch hẹn, điều trị, kho, thanh toán | 23 module nghiệp vụ, 339 API, 70 bảng dữ liệu | Bảng 3.1, Mục 4.5 | Đạt |
-| Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.4, KT-LH-01 | Đạt |
+| Quản lý toàn diện: hồ sơ bệnh nhân, lịch hẹn, điều trị, kho, thanh toán | 24 module nghiệp vụ, 343 API, 71 bảng dữ liệu | Bảng 3.1, Mục 4.5 | Đạt |
+| Số hóa đặt lịch và tiếp nhận, giảm sai sót | Đặt lịch trực tuyến bốn bước kèm giá dịch vụ, hồ sơ và đánh giá bác sĩ; chống trùng lịch ở mức cơ sở dữ liệu; hàng chờ và điều phối theo bác sĩ | Hình 4.2–4.4, KT-LH-01 | Đạt |
 | Bác sĩ theo dõi lịch sử, kế hoạch điều trị, sơ đồ răng tập trung | Sơ đồ răng gắn với điều trị, lịch sử theo từng răng, kế hoạch điều trị có tiến độ | Hình 4.6, 4.7 | Đạt |
 | Báo cáo, thống kê: doanh thu, lượt khám, hiệu suất bác sĩ, tồn kho | Bảng điều khiển, sáu chỉ số vận hành có mục tiêu, báo cáo doanh thu theo bác sĩ và dịch vụ, cảnh báo tồn kho | Hình 4.11 | Đạt |
 | Nhắc lịch tự động qua email, SMS | Nhắc lịch qua email (SMTP) và SMS, thử lại tối đa 3 lần; SMS đã cài đặt nhưng chưa thử với nhà cung cấp thật | Mục 3.3.6 | Đạt một phần |
 | Bệnh nhân tra cứu lịch sử khám dễ dàng | Đường dẫn bảo mật, có thời hạn, không cần tài khoản | Hình 4.10 | Đạt |
 | Hồ sơ X-quang | Chưa thực hiện | – | Chưa đạt |
 
-Ở mức chi tiết hơn, Phụ lục B truy vết từng yêu cầu trong 34 yêu cầu chức năng của Mục 2.3 tới thiết kế, giao diện và ca kiểm thử tương ứng; mọi yêu cầu đều có ít nhất một hình thiết kế hoặc giao diện và ít nhất một cách kiểm thử. Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuyển khoản VietQR tự động và trợ lý AI có kiểm soát.
+Ở mức chi tiết hơn, Phụ lục B truy vết từng yêu cầu trong 35 yêu cầu chức năng của Mục 2.3 tới thiết kế, giao diện và ca kiểm thử tương ứng; mọi yêu cầu đều có ít nhất một hình thiết kế hoặc giao diện và ít nhất một cách kiểm thử. Ngoài các mục tiêu trên, đồ án thực hiện thêm đối soát chuyển khoản VietQR tự động và trợ lý AI có kiểm soát.
 
 ## 5.6. Hạn chế
 

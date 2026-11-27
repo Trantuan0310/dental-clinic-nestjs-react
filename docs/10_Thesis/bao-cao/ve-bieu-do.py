@@ -1,7 +1,7 @@
 """Vẽ biểu đồ thống kê kiểm thử cho Chương 5 (Hình 5.1, Hình 5.2).
 
 Số liệu lấy từ lần chạy thật:
-- kiểm thử đơn vị: `npx jest --json` trong backend (23/11/2026), nhóm theo module;
+- kiểm thử đơn vị: `npx jest --json` trong backend (27/11/2026), nhóm theo module;
 - kiểm thử API: backend/test-results/.../jest-results.json (17/11/2026);
 - E2E: `npx playwright test --list`, kết quả 122/122 đạt ở CI nhánh chính.
 Độ bao phủ: Bảng 5.7 (jest --coverage, 17/11/2026).
@@ -32,15 +32,15 @@ plt.rcParams.update({
 # (nhóm, đơn vị, API, E2E)
 NHOM = [
     ("Bệnh nhân (BN)", 89, 10, 11),
-    ("Lịch hẹn, tiếp nhận (LH)", 618, 21, 18),
+    ("Lịch hẹn, tiếp nhận (LH)", 625, 21, 18),
     ("Khám, điều trị (KB)", 242, 17, 7),
     ("Hóa đơn, thanh toán (TT)", 118, 11, 7),
     ("Nhân sự, lương (NS)", 298, 23, 9),
     ("Kho vật tư (KH)", 27, 4, 3),
     ("Báo cáo (BC)", 58, 1, 9),
     ("Trợ lý AI (AI)", 80, 0, 7),
-    ("Quản trị, phân quyền (QT)", 187, 23, 19),
-    ("Hạ tầng, giao diện chung", 71, 3, 32),
+    ("Quản trị, phân quyền (QT)", 189, 23, 19),
+    ("Hạ tầng, giao diện chung", 77, 3, 32),
 ]
 
 

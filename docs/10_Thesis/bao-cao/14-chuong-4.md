@@ -34,7 +34,7 @@ Bảng 4.2. Cấu trúc thư mục chính của mã nguồn
 |---|---|
 | `backend/src/<module>/` | Mỗi module nghiệp vụ: `*.controller.ts` (API), `*.service.ts` (quy tắc nghiệp vụ), `dto/` (kiểm tra dữ liệu vào), `domain/` (hàm thuần tính toán), `*.spec.ts` (kiểm thử) |
 | `backend/src/common/` | Guard xác thực, phân quyền, giới hạn theo dòng; tiện ích ngày giờ theo múi giờ phòng khám; sự kiện miền; dịch vụ email |
-| `backend/prisma/` | Lược đồ dữ liệu, 52 migration, dữ liệu khởi tạo và dữ liệu mẫu |
+| `backend/prisma/` | Lược đồ dữ liệu, 53 migration, dữ liệu khởi tạo và dữ liệu mẫu |
 | `backend/test/` | Kiểm thử API chạy trên PostgreSQL thật |
 | `frontend/src/features/<chức năng>/` | Trang và thành phần giao diện theo chức năng, kèm hook gọi API |
 | `frontend/src/components/ui/` | Thư viện thành phần dùng chung (nút, ô nhập, bảng, hộp thoại, thông báo…) |
@@ -98,7 +98,7 @@ idOf(ref: string): string | undefined {
 
 Mỗi trang được tải lười (`React.lazy`) nên trình duyệt chỉ tải mã của trang đang mở. Mọi lời gọi API đi qua TanStack Query với khóa truy vấn theo tài nguyên; sau mỗi thao tác ghi, các khóa liên quan được làm mới để mọi màn hình đồng bộ. Hóa đơn đang chờ thanh toán tự làm mới mỗi 8 giây để hiện ngay khoản chuyển khoản vừa về.
 
-Toàn bộ chữ giao diện nằm trong tệp ngôn ngữ tiếng Việt và tiếng Anh; bản tiếng Anh được tách thành gói riêng, chỉ tải khi cần. Sơ đồ răng được vẽ bằng SVG theo đường cong hình chữ U, mỗi răng là một nút dùng được bằng bàn phím; thay đổi tình trạng răng tự lưu sau 1,5 giây và có hoàn tác.
+Toàn bộ chữ giao diện nằm trong tệp ngôn ngữ tiếng Việt và tiếng Anh; bản tiếng Anh được tách thành gói riêng, chỉ tải khi cần. Để màn hình không bao giờ hiện mã khóa thô (như `uiScheduling.bookingActionConfirmed`), bước kiểm tra mã nguồn dùng trình biên dịch TypeScript dò mọi khóa được gọi, kể cả khóa ghép động từ hằng số, và báo lỗi nếu khóa thiếu ở một trong hai ngôn ngữ hoặc tham số chèn không khớp; khi chạy kiểm thử đầu cuối, khóa nào bị thiếu lúc hiển thị cũng làm kịch bản thất bại. Sơ đồ răng được vẽ bằng SVG theo đường cong hình chữ U, mỗi răng là một nút dùng được bằng bàn phím; thay đổi tình trạng răng tự lưu sau 1,5 giây và có hoàn tác.
 
 ## 4.5. Kết quả giao diện các chức năng
 
@@ -106,7 +106,7 @@ Mục này trình bày các màn hình tiêu biểu theo luồng nghiệp vụ c
 
 ### 4.5.1. Bệnh nhân đặt lịch trực tuyến
 
-Trang chủ (Hình 4.1) giới thiệu phòng khám, dịch vụ, bảng giá và đội ngũ bác sĩ; khách bấm vào một răng trên sơ đồ để xem dịch vụ liên quan. Ở trang đặt lịch (Hình 4.2), khách chọn dịch vụ, bác sĩ, ngày; hệ thống hiện các khung giờ còn trống, khách nhập họ tên, số điện thoại và nhận mã tra cứu yêu cầu.
+Trang chủ (Hình 4.1) giới thiệu phòng khám, dịch vụ, bảng giá và đội ngũ bác sĩ; khách bấm vào một răng trên sơ đồ để xem dịch vụ liên quan. Trang đặt lịch (Hình 4.2) đi qua bốn bước có thanh tiến trình: khách tìm hoặc lọc dịch vụ theo nhóm và thấy ngay giá tham khảo; sang bước bác sĩ, mỗi thẻ bác sĩ hiện số năm kinh nghiệm, chức vụ và điểm đánh giá, nút "Xem hồ sơ" mở quá trình đào tạo, công tác, giải thưởng cùng nhận xét của bệnh nhân đã khám; sau đó khách chọn ngày, giờ còn trống, nhập họ tên, số điện thoại và nhận mã tra cứu yêu cầu.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-cong-trang-chu.png){width=15cm}
@@ -121,7 +121,7 @@ Hình 4.1. Trang chủ phòng khám
 :::
 
 ::: {custom-style="hình"}
-Hình 4.2. Trang đặt lịch trực tuyến
+Hình 4.2. Trang đặt lịch trực tuyến: chọn dịch vụ và xem hồ sơ bác sĩ
 :::
 
 ### 4.5.2. Lễ tân tiếp nhận và điều phối
@@ -208,7 +208,7 @@ Hoàn tiền là thao tác cần quyền riêng: hộp thoại cho biết số t
 
 ### 4.5.5. Bệnh nhân tra cứu lịch sử khám
 
-Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.10, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.10, phải).
+Lễ tân bấm "Gửi link tra cứu lịch sử" tại hồ sơ bệnh nhân, hoặc bệnh nhân tự xin đường dẫn bằng số điện thoại (Hình 4.10, trái). Mở đường dẫn trên điện thoại, bệnh nhân thấy lịch hẹn sắp tới, các lần khám kèm điều trị và số răng, đơn thuốc, kế hoạch điều trị và hóa đơn (Hình 4.10, phải). Dưới mỗi lần khám đã hoàn tất trong 90 ngày gần nhất có nút "Đánh giá" kèm tên bác sĩ: bệnh nhân chọn số sao, viết nhận xét nếu muốn; sau khi gửi, ô này chuyển thành đánh giá đã gửi và không sửa được nữa. Ở phía phòng khám, trang chi tiết bác sĩ có thẻ "Đánh giá của bệnh nhân" để quản lý xem và ẩn đánh giá kèm lý do.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-cong-tra-cuu-lich-su.png){width=12cm}

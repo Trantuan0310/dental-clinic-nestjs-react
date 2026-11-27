@@ -95,11 +95,12 @@ Bảng 2.4. Yêu cầu chức năng phân hệ lịch hẹn và tiếp nhận
 | LH-01 | Đặt lịch hẹn theo bác sĩ, dịch vụ, khung giờ; chỉ cho đặt trong giờ làm việc của bác sĩ, không trùng lịch bác sĩ và không trùng lịch bệnh nhân. |
 | LH-02 | Xem lịch theo ngày, tuần, theo bác sĩ; danh sách lịch hẹn có lọc. |
 | LH-03 | Dời lịch, hủy lịch có lý do; đánh dấu vắng mặt; hoàn tác trong ngày. |
-| LH-04 | Bệnh nhân đặt lịch trực tuyến: chọn dịch vụ, bác sĩ, giờ trống; lễ tân duyệt, đề xuất giờ khác hoặc từ chối. |
+| LH-04 | Bệnh nhân đặt lịch trực tuyến theo bốn bước: chọn dịch vụ (theo nhóm, có tìm kiếm và giá tham khảo), chọn bác sĩ (xem kinh nghiệm, chức vụ, quá trình đào tạo, công tác, giải thưởng và đánh giá), chọn giờ trống, nhập thông tin; lễ tân duyệt, đề xuất giờ khác hoặc từ chối. |
 | LH-05 | Tự gửi nhắc lịch trước giờ hẹn; bệnh nhân xác nhận, xin dời hoặc hủy qua liên kết riêng. |
 | LH-06 | Check-in khi khách đến, tiếp nhận khách vãng lai; hàng chờ theo thứ tự đến cho từng bác sĩ, ưu tiên cấp cứu, chuyển bác sĩ. |
 | LH-07 | Danh sách chờ: ghi nhận khách muốn khám sớm hơn, gợi ý khi có giờ trống. |
 | LH-08 | Nhắc tái khám định kỳ (ví dụ 6 tháng cạo vôi) và theo dõi kết quả gọi nhắc. |
+| LH-09 | Bệnh nhân đánh giá bác sĩ (1–5 sao, nhận xét) sau lượt khám đã hoàn tất; đánh giá hiện công khai ở trang đặt lịch, quản lý được ẩn kèm lý do. |
 
 ### 2.3.3. Khám và điều trị
 
@@ -220,7 +221,7 @@ Hình 2.5 trình bày các use case của quản trị viên: quản lý ngườ
 Hình 2.5. Biểu đồ use case của quản trị viên
 :::
 
-Bệnh nhân không có tài khoản trong hệ thống. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc đường dẫn chứa mã bí mật gửi riêng tới bệnh nhân (Hình 2.6): xem thông tin phòng khám và bảng giá, đặt lịch trực tuyến (luôn kèm bước chọn dịch vụ, bác sĩ và giờ trống), tra cứu trạng thái yêu cầu đặt lịch, xác nhận hoặc dời, hủy lịch qua liên kết trong tin nhắc, khai thông tin sức khỏe trước khi đến, yêu cầu đường dẫn tra cứu và xem lịch sử khám, kế hoạch điều trị, hóa đơn của mình. Đường dẫn tra cứu được gửi qua nhà cung cấp email hoặc SMS, nên tác nhân này cũng xuất hiện trên biểu đồ.
+Bệnh nhân không có tài khoản trong hệ thống. Mọi chức năng dành cho bệnh nhân là chức năng công khai, được bảo vệ bằng mã tham chiếu hoặc đường dẫn chứa mã bí mật gửi riêng tới bệnh nhân (Hình 2.6): xem thông tin phòng khám và bảng giá, đặt lịch trực tuyến (luôn kèm bước chọn dịch vụ, bác sĩ và giờ trống; khi chọn bác sĩ có thể xem hồ sơ chuyên môn), tra cứu trạng thái yêu cầu đặt lịch, xác nhận hoặc dời, hủy lịch qua liên kết trong tin nhắc, khai thông tin sức khỏe trước khi đến, yêu cầu đường dẫn tra cứu và xem lịch sử khám, kế hoạch điều trị, hóa đơn của mình, và đánh giá bác sĩ sau mỗi lượt khám đã hoàn tất. Đường dẫn tra cứu được gửi qua nhà cung cấp email hoặc SMS, nên tác nhân này cũng xuất hiện trên biểu đồ.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/2-6-use-case-benh-nhan.png){width=8.5cm}
@@ -262,4 +263,4 @@ Bảng 2.9. Ma trận quyền tiêu biểu theo vai trò
 
 Chương 2 đã khảo sát quy trình làm việc hằng ngày của phòng khám, chỉ ra những khó khăn của cách quản lý bằng sổ sách, bảng tính và tin nhắn, đồng thời xác định bốn tác nhân người dùng cùng ba hệ thống bên ngoài.
 
-Từ khảo sát đó, chương đã phân tích 34 yêu cầu chức năng theo chín nhóm nghiệp vụ và các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Biểu đồ use case và ma trận phân quyền là cơ sở cho thiết kế ở Chương 3.
+Từ khảo sát đó, chương đã phân tích 35 yêu cầu chức năng theo chín nhóm nghiệp vụ và các yêu cầu phi chức năng về bảo mật, quyền riêng tư, toàn vẹn dữ liệu, độ tin cậy, hiệu năng và khả dụng. Biểu đồ use case và ma trận phân quyền là cơ sở cho thiết kế ở Chương 3.

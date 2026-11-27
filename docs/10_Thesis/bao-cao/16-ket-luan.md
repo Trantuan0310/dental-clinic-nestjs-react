@@ -4,11 +4,11 @@
 
 Đồ án đã xây dựng GenSmile, ứng dụng web quản lý phòng khám nha khoa nhiều bác sĩ, đáp ứng các mục tiêu chính của phiếu giao đề tài. Hệ thống bao phủ vòng hoạt động của phòng khám, từ đặt lịch trực tuyến, tiếp nhận, hàng chờ, khám và điều trị theo sơ đồ răng, kế hoạch điều trị, hóa đơn và thanh toán, đến nhắc lịch, nhân sự, lương, kho và báo cáo.
 
-Về phân tích và thiết kế, đồ án đã khảo sát quy trình vận hành tại Nha khoa An Việt, xác định bốn nhóm người dùng cùng 34 yêu cầu chức năng và các yêu cầu phi chức năng. Hệ thống được thiết kế theo kiến trúc ba lớp với 23 module nghiệp vụ, cơ sở dữ liệu 70 bảng và các biểu đồ UML mô tả những hành vi quan trọng.
+Về phân tích và thiết kế, đồ án đã khảo sát quy trình vận hành tại Nha khoa An Việt, xác định bốn nhóm người dùng cùng 35 yêu cầu chức năng và các yêu cầu phi chức năng. Hệ thống được thiết kế theo kiến trúc ba lớp với 24 module nghiệp vụ, cơ sở dữ liệu 71 bảng và các biểu đồ UML mô tả những hành vi quan trọng.
 
 Về kỹ thuật, hệ thống chống đặt trùng lịch bằng khóa tư vấn của cơ sở dữ liệu, ghi nhận thanh toán và webhook ngân hàng không ghi trùng, phân quyền hai lớp (theo vai trò với 133 mã quyền và theo dòng dữ liệu) kèm nhật ký kiểm toán. Thanh toán VietQR được đối soát tự động; trợ lý AI không nhận thông tin định danh bệnh nhân và vẫn hoạt động ở chế độ dự phòng khi dịch vụ AI lỗi.
 
-Về chất lượng, hệ thống có khoảng 2.000 kiểm thử tự động ở ba tầng (1.788 kiểm thử đơn vị, 113 kiểm thử API trên cơ sở dữ liệu thật, 122 kịch bản giao diện), chạy trong 10 bước kiểm tra trước mỗi lần cập nhật. Cả 34 yêu cầu chức năng đều có cách kiểm thử tương ứng (Phụ lục B), và hệ thống đã được đóng gói bằng Docker, triển khai trên máy chủ ảo.
+Về chất lượng, hệ thống có khoảng 2.000 kiểm thử tự động ở ba tầng (1.803 kiểm thử đơn vị, 113 kiểm thử API trên cơ sở dữ liệu thật, 122 kịch bản giao diện), chạy trong 10 bước kiểm tra trước mỗi lần cập nhật. Cả 35 yêu cầu chức năng đều có cách kiểm thử tương ứng (Phụ lục B), và hệ thống đã được đóng gói bằng Docker, triển khai trên máy chủ ảo.
 
 Điểm nổi bật nhất là các đặc thù của nha khoa và của thị trường Việt Nam được đưa vào phần mềm: lịch sử điều trị theo từng răng ngay trên sơ đồ hai cung răng, thanh toán VietQR tự đối soát, nhắc lịch tự động qua email và SMS, bệnh nhân tự tra cứu lịch sử khám không cần tài khoản. Đồng thời, hệ thống bảo đảm tính đúng đắn khi nhiều người thao tác cùng lúc và bảo vệ dữ liệu sức khỏe theo quy định hiện hành.
 
