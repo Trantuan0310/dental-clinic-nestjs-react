@@ -25,6 +25,22 @@
     transition: background-color 200ms ease, color 200ms ease;
   }
 
+  /* Dark theme: native controls (date pickers, <select> lists, scrollbars) follow it, and a
+     form field without its own styling still gets dark colours. :where() keeps this at zero
+     specificity, so any utility class on a field wins. */
+  html.dark {
+    color-scheme: dark;
+  }
+  :where(html.dark) :where(select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'])) {
+    background-color: theme('colors.surface.800');
+    color: theme('colors.surface.100');
+    border-color: theme('colors.surface.600');
+  }
+  :where(html.dark) :where(option, optgroup) {
+    background-color: theme('colors.surface.800');
+    color: theme('colors.surface.100');
+  }
+
   *:focus-visible {
     @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-surface-900;
   }
