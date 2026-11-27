@@ -16,6 +16,7 @@ import { vi as uiRecalls } from './uiRecalls';
 import { vi as uiNotifications } from './uiNotifications';
 import { vi as uiMessaging } from './uiMessaging';
 import { vi as uiAi } from './uiAi';
+import { vi as uiPermissions } from './uiPermissions';
 
 /**
  * Initialize i18next once at app boot.
@@ -35,7 +36,7 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      vi: { translation: { ...vi, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce, uiPatientHistory } },
+      vi: { translation: { ...vi, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce, uiPatientHistory, uiPermissions } },
     },
     fallbackLng: DEFAULT_LOCALE,
     supportedLngs: LOCALES.map((l) => l.code),

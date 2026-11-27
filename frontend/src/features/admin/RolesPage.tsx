@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Edit, Trash2, Lock, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Lock, Users, Search } from 'lucide-react';
+import { vi as permissionNames } from '@/locales/uiPermissions';
 import { Button, Card, Modal, Input, Spinner } from '@/components/ui';
 import { notify } from '@/components/ui/Toast';
 import {
@@ -185,12 +186,34 @@ function RoleModal({
     new Set(role?.permissions ?? []),
   );
 
-  const groupedPermissions = permissions.reduce<Record<string, typeof permissions>>((acc, p) => {
-    const group = p.resource.charAt(0).toUpperCase() + p.resource.slice(1);
-    if (!acc[group]) acc[group] = [];
-    acc[group].push(p);
-    return acc;
-  }, {});
+  const [query, setQuery] = useState('');
+  // Readable names (locales/uiPermissions); a permission added later without one falls
+  // back to its description from the server, then to its code.
+  const permLabel = (p: (typeof permissions)[number]) =>
+    t(`uiPermissions.codes.${p.code.replace(/\./g, '_')}`, { defaultValue: p.description ?? p.code });
+  const groupLabel = (resource: string) => t(`uiPermissions.groups.${resource}`, { defaultValue: resource });
+  const groupOrder = Object.keys(permissionNames.groups);
+  const groupedPermissions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const byGroup = new Map<string, typeof permissions>();
+    for (const p of permissions) {
+      if (q && !permLabel(p).toLowerCase().includes(q) && !p.code.toLowerCase().includes(q)) continue;
+      byGroup.set(p.resource, [...(byGroup.get(p.resource) ?? []), p]);
+    }
+    const rank = (r: string) => (groupOrder.includes(r) ? groupOrder.indexOf(r) : groupOrder.length);
+    return [...byGroup.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
+    // permLabel/groupOrder only change with the language, which re-renders anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions, query, t]);
+  const setGroup = (perms: typeof permissions, on: boolean) =>
+    setSelectedPerms((prev) => {
+      const next = new Set(prev);
+      for (const p of perms) {
+        if (on) next.add(p.code);
+        else next.delete(p.code);
+      }
+      return next;
+    });
 
   const togglePerm = (permCode: string) => {
     setSelectedPerms((prev) => {
@@ -245,28 +268,58 @@ function RoleModal({
         />
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-surface-200">{t('uiWorkforce.rolePermissions')}</label>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {Object.entries(groupedPermissions).map(([group, perms]) => (
-              <div key={group} className="rounded-lg border border-gray-200 p-3 dark:border-surface-700">
-                <h4 className="mb-1.5 font-medium text-gray-900 dark:text-surface-100">{group}</h4>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {perms.map((perm) => (
-                    <label key={perm.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-brand-500"
-                        checked={selectedPerms.has(perm.code)}
-                        onChange={() => togglePerm(perm.code)}
-                      />
-                      <span className="text-sm text-gray-700 dark:text-surface-200" title={perm.description ?? undefined}>
-                        {perm.code}
-                      </span>
-                    </label>
-                  ))}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-medium text-gray-700 dark:text-surface-200">{t('uiWorkforce.rolePermissions')}</span>
+            <span className="text-xs text-gray-500 dark:text-surface-400">{t('uiPermissions.selected', { count: selectedPerms.size })}</span>
+          </div>
+          <div className="relative mb-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('uiPermissions.search')}
+              aria-label={t('uiPermissions.search')}
+              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100 dark:placeholder:text-surface-400"
+            />
+          </div>
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            {groupedPermissions.length === 0 && (
+              <p className="py-4 text-center text-sm text-gray-500 dark:text-surface-400">{t('uiPermissions.noMatch', { query })}</p>
+            )}
+            {groupedPermissions.map(([resource, perms]) => {
+              const allOn = perms.every((p) => selectedPerms.has(p.code));
+              return (
+                <div key={resource} className="rounded-lg border border-gray-200 p-3 dark:border-surface-700">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h4 className="font-medium text-gray-900 dark:text-surface-100">{groupLabel(resource)}</h4>
+                    <button
+                      type="button"
+                      onClick={() => setGroup(perms, !allOn)}
+                      className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                    >
+                      {allOn ? t('uiPermissions.clearGroup') : t('uiPermissions.selectGroup')}
+                    </button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {perms.map((perm) => (
+                      <label key={perm.id} className="flex cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-brand-500"
+                          checked={selectedPerms.has(perm.code)}
+                          onChange={() => togglePerm(perm.code)}
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm text-gray-800 dark:text-surface-100">{permLabel(perm)}</span>
+                          <span className="block font-mono text-[11px] text-gray-400 dark:text-surface-400">{perm.code}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

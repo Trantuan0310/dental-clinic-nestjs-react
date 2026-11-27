@@ -8,7 +8,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 
-const modules = ['uiCommon', 'uiClinical', 'uiEntry', 'uiOperations', 'uiScheduling', 'uiWorkforce', 'uiPlans', 'uiRecalls', 'uiMessaging', 'uiNotifications', 'uiAi', 'uiPatientHistory', 'uiVisitTemplates'];
+const modules = ['uiCommon', 'uiClinical', 'uiEntry', 'uiOperations', 'uiScheduling', 'uiWorkforce', 'uiPlans', 'uiRecalls', 'uiMessaging', 'uiNotifications', 'uiAi', 'uiPatientHistory', 'uiVisitTemplates', 'uiPermissions'];
 const verbose = process.argv.includes('--verbose');
 
 function flatten(value, prefix = '', out = {}) {
