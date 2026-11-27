@@ -36,6 +36,12 @@ export function DentistProfileForm({
     acceptsOnlineBooking: initial?.acceptsOnlineBooking ?? true,
     acceptsNewPatients: initial?.acceptsNewPatients ?? true,
     bio: initial?.bio ?? '',
+    title: initial?.title ?? '',
+    position: initial?.position ?? '',
+    practiceSince: initial?.practiceSince ? String(initial.practiceSince) : '',
+    education: initial?.education ?? '',
+    experience: initial?.experience ?? '',
+    awards: initial?.awards ?? '',
   });
   const isAdmin = mode === 'admin';
 
@@ -52,6 +58,9 @@ export function DentistProfileForm({
     const self: DentistProfilePayload = {
       specialties: form.specialties,
       bio: form.bio.trim() || null,
+      education: form.education.trim() || null,
+      experience: form.experience.trim() || null,
+      awards: form.awards.trim() || null,
       // Empty = let the server pick the next palette colour (create only).
       ...(form.calendarColor ? { calendarColor: form.calendarColor } : {}),
     };
@@ -64,6 +73,9 @@ export function DentistProfileForm({
             defaultSlotMinutes: Number(form.defaultSlotMinutes),
             acceptsOnlineBooking: form.acceptsOnlineBooking,
             acceptsNewPatients: form.acceptsNewPatients,
+            title: form.title.trim() || null,
+            position: form.position.trim() || null,
+            practiceSince: form.practiceSince ? Number(form.practiceSince) : null,
           }
         : self,
     );
@@ -162,13 +174,73 @@ export function DentistProfileForm({
         </div>
       )}
 
-      <Textarea
-        label={t('uiWorkforce.dentistBio')}
-        value={form.bio}
-        onChange={(e) => setForm({ ...form, bio: e.target.value })}
-        rows={3}
-        maxLength={2000}
-      />
+      <fieldset className="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-surface-700">
+        <legend className="px-1 text-sm font-semibold text-gray-900 dark:text-surface-100">{t('uiWorkforce.publicProfile')}</legend>
+        <p className="-mt-2 text-xs text-gray-500 dark:text-surface-400">{t('uiWorkforce.publicProfileHint')}</p>
+        {isAdmin && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Input
+              label={t('uiWorkforce.dentistTitle')}
+              placeholder={t('uiWorkforce.dentistTitlePlaceholder')}
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              maxLength={50}
+            />
+            <Input
+              label={t('uiWorkforce.dentistPosition')}
+              placeholder={t('uiWorkforce.dentistPositionPlaceholder')}
+              value={form.position}
+              onChange={(e) => setForm({ ...form, position: e.target.value })}
+              maxLength={150}
+            />
+            <Input
+              label={t('uiWorkforce.practiceSince')}
+              placeholder={t('uiWorkforce.practiceSincePlaceholder')}
+              type="number"
+              min={1950}
+              max={new Date().getFullYear()}
+              value={form.practiceSince}
+              onChange={(e) => setForm({ ...form, practiceSince: e.target.value })}
+              hint={t('uiWorkforce.practiceSinceHint')}
+            />
+          </div>
+        )}
+        <Textarea
+          label={t('uiWorkforce.dentistBio')}
+          placeholder={t('uiWorkforce.dentistBioPlaceholder')}
+          value={form.bio}
+          onChange={(e) => setForm({ ...form, bio: e.target.value })}
+          rows={3}
+          maxLength={2000}
+        />
+        <Textarea
+          label={t('uiWorkforce.dentistEducation')}
+          placeholder={t('uiWorkforce.dentistEducationPlaceholder')}
+          hint={t('uiWorkforce.onePerLine')}
+          value={form.education}
+          onChange={(e) => setForm({ ...form, education: e.target.value })}
+          rows={3}
+          maxLength={3000}
+        />
+        <Textarea
+          label={t('uiWorkforce.dentistExperience')}
+          placeholder={t('uiWorkforce.dentistExperiencePlaceholder')}
+          hint={t('uiWorkforce.onePerLine')}
+          value={form.experience}
+          onChange={(e) => setForm({ ...form, experience: e.target.value })}
+          rows={3}
+          maxLength={3000}
+        />
+        <Textarea
+          label={t('uiWorkforce.dentistAwards')}
+          placeholder={t('uiWorkforce.dentistAwardsPlaceholder')}
+          hint={t('uiWorkforce.onePerLine')}
+          value={form.awards}
+          onChange={(e) => setForm({ ...form, awards: e.target.value })}
+          rows={2}
+          maxLength={3000}
+        />
+      </fieldset>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>

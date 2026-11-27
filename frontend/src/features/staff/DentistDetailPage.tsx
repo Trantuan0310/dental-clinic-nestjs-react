@@ -11,6 +11,7 @@ import { staffApi, useDentistOverview, useStaffMutation } from './staffApi';
 import { DentistProfileForm } from './DentistProfileForm';
 import { BlockingAppointmentsList } from './BlockingAppointmentsList';
 import { DentistReadinessCard } from './DentistReadinessCard';
+import { DentistReviewsCard } from './DentistReviewsCard';
 import { DentistServicesCard } from '@/features/catalog/DentistServicesCard';
 import { DentistPhotoCard } from '@/features/media/DentistPhotoCard';
 import {
@@ -146,7 +147,30 @@ export default function DentistDetailPage() {
                 {profile.acceptsOnlineBooking ? t('common.yes') : t('common.no')}
               </Field>
               <Field label={t('uiWorkforce.contact')}>{[profile.phone, profile.email].filter(Boolean).join(' · ') || '—'}</Field>
+              {(profile.title || profile.position) && (
+                <Field label={t('uiWorkforce.dentistPosition')}>{[profile.title, profile.position].filter(Boolean).join(' · ')}</Field>
+              )}
+              {profile.practiceSince && (
+                <Field label={t('uiWorkforce.practiceSince')}>
+                  {t('uiWorkforce.practiceSinceValue', { year: profile.practiceSince, count: new Date().getFullYear() - profile.practiceSince })}
+                </Field>
+              )}
               {profile.bio && <Field label={t('uiWorkforce.dentistBio')}>{profile.bio}</Field>}
+              {([
+                ['dentistEducation', profile.education],
+                ['dentistExperience', profile.experience],
+                ['dentistAwards', profile.awards],
+              ] as const).map(([label, text]) =>
+                text ? (
+                  <Field key={label} label={t(`uiWorkforce.${label}`)}>
+                    <ul className="list-disc pl-4">
+                      {text.split('\n').filter((l) => l.trim()).map((l) => (
+                        <li key={l}>{l}</li>
+                      ))}
+                    </ul>
+                  </Field>
+                ) : null,
+              )}
             </dl>
           </Card>
           <div id="dentist-photo" className="scroll-mt-20">
@@ -161,6 +185,7 @@ export default function DentistDetailPage() {
               canAssign={profile.practiceStatus === 'ACTIVE'}
             />
           </div>
+          <DentistReviewsCard dentistId={profile.userId} canModerate={canEditAll} />
           <Card title={t('uiWorkforce.regularWorkSchedule')}>
             {schedules.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-surface-400">{t('uiWorkforce.noWorkSchedule')}</p>

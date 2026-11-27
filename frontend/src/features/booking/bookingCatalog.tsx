@@ -4,6 +4,7 @@ import { Award, BriefcaseMedical, Clock, GraduationCap, Search, Star, Stethoscop
 import { api } from "@/lib/api";
 import { SPECIALTY_LABEL } from "@/features/staff/labels";
 import { cn } from "@/lib/cn";
+import { mediaUrl, useSiteMedia } from "@/features/media/mediaApi";
 import {
   dentistDisplayName,
   dentistPriceText,
@@ -47,7 +48,18 @@ export function RatingLine({ rating }: { rating?: Rating }) {
   );
 }
 
-function Avatar({ name, large }: { name: string; large?: boolean }) {
+function Avatar({ name, dentistId, large }: { name: string; dentistId: string; large?: boolean }) {
+  // The photo the clinic uploaded for the dentist (also on the home page), else initials.
+  const photo = useSiteMedia().data?.dentists[dentistId];
+  if (photo)
+    return (
+      <img
+        src={mediaUrl(photo)}
+        alt=""
+        loading="lazy"
+        className={cn("shrink-0 rounded-full object-cover", large ? "h-20 w-20" : "h-14 w-14")}
+      />
+    );
   return (
     <span
       aria-hidden
@@ -187,7 +199,7 @@ export function DentistPicker({
               )}
             >
               <div className="flex gap-4">
-                <Avatar name={d.fullName} />
+                <Avatar name={d.fullName} dentistId={d.id} />
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="font-semibold text-gray-900 dark:text-surface-100">{dentistDisplayName(d)}</p>
                   {d.position && <p className="text-sm text-gray-600 dark:text-surface-300">{d.position}</p>}
@@ -333,7 +345,7 @@ export function DentistProfileModal({
       >
         <div className="overflow-y-auto p-5 sm:p-6">
         <div className="flex items-start gap-4">
-          <Avatar name={dentist.fullName} large />
+          <Avatar name={dentist.fullName} dentistId={dentist.id} large />
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-surface-100">{name}</h2>
             {(profile?.position ?? dentist.position) && (
