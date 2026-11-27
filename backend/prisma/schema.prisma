@@ -176,6 +176,7 @@ model User {
   // and email must stay reusable once a user is deactivated/deleted. The
   // real constraint is a partial unique index — active rows only — created
   // in migration 013_soft_delete_partial_unique (users_email_active_key).
+  dentistReviews DentistReview[] @relation("DentistReviews")
   @@index([email])
   @@index([status])
   @@index([deactivatedAt])
@@ -357,6 +358,7 @@ model Patient {
   treatmentPlans  TreatmentPlan[]
   recalls         Recall[]
 
+  dentistReviews DentistReview[]
   @@unique([code])
   @@index([primaryPhone])
   @@index([fullName])
@@ -555,6 +557,34 @@ model Appointment {
 }
 
 /// A link a patient opens to read their own visit history (066). Token hash only.
+enum DentistReviewStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+/// A patient's rating of the dentist of one closed visit (migration 067), given
+/// through the patient's history link; hidden reviews are not shown or counted.
+model DentistReview {
+  id           String              @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
+  dentistId    String              @map("dentist_id") @db.Uuid
+  patientId    String              @map("patient_id") @db.Uuid
+  encounterId  String              @unique @map("encounter_id") @db.Uuid
+  rating       Int                 @db.SmallInt
+  comment      String?             @db.VarChar(1000)
+  status       DentistReviewStatus @default(PUBLISHED)
+  hiddenReason String?             @map("hidden_reason") @db.VarChar(300)
+  hiddenBy     String?             @map("hidden_by") @db.Uuid
+  hiddenAt     DateTime?           @map("hidden_at") @db.Timestamptz()
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz()
+
+  dentist   User      @relation("DentistReviews", fields: [dentistId], references: [id])
+  patient   Patient   @relation(fields: [patientId], references: [id])
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+
+  @@index([dentistId, status, createdAt(sort: Desc)])
+  @@map("dentist_reviews")
+}
+
 model PatientHistoryLink {
   id         String    @id @default(dbgenerated("uuid_generate_v7()")) @db.Uuid
   patientId  String    @map("patient_id") @db.Uuid
@@ -729,6 +759,7 @@ model Encounter {
   invoices        Invoice[]
   payrollDetails  PayrollEncounterDetail[]
 
+  dentistReview DentistReview?
   @@index([patientId, startedAt(sort: Desc)])
   @@index([dentistId, startedAt(sort: Desc)])
   @@index([status, startedAt])
@@ -1570,6 +1601,14 @@ model DentistProfile {
   acceptsNewPatients   Boolean        @default(true) @map("accepts_new_patients")
   practiceStatus       PracticeStatus @default(ACTIVE) @map("practice_status")
   bio                  String?
+  /// Shown to patients booking online (migration 067): "ThS. BS", "Trưởng khoa Răng sứ",
+  /// the year practice began (years of experience), and one item per line below.
+  title                String?        @db.VarChar(50)
+  position             String?        @db.VarChar(150)
+  practiceSince        Int?           @map("practice_since") @db.SmallInt
+  education            String?
+  experience           String?
+  awards               String?
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
   createdBy            String?        @map("created_by") @db.Uuid
