@@ -269,7 +269,10 @@ export class CreateDentistProfileDto {
   @MaxLength(2000)
   bio?: string | null;
 
-  @ApiPropertyOptional({ example: 'ThS. BS', description: 'Academic/professional title shown before the name' })
+  @ApiPropertyOptional({
+    example: 'ThS. BS',
+    description: 'Academic/professional title shown before the name',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(50)
@@ -281,7 +284,10 @@ export class CreateDentistProfileDto {
   @MaxLength(150)
   position?: string | null;
 
-  @ApiPropertyOptional({ example: 2012, description: 'Year practice began; years of experience are counted from it' })
+  @ApiPropertyOptional({
+    example: 2012,
+    description: 'Year practice began; years of experience are counted from it',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -45,6 +45,10 @@ describe('BookingService public request security and validation', () => {
     prisma = {
       clinicClosure: { findMany: jest.fn().mockResolvedValue([]) },
       dentistService: { findFirst: jest.fn() },
+      dentistReview: {
+        groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       patient: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
