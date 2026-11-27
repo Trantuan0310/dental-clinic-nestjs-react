@@ -222,3 +222,8 @@
 - Kiểm tra: backend 1803 test đạt; frontend typecheck/lint/build đạt; E2E cục bộ 120/122 (2 lỗi do DB e2e dùng lại: kỳ lương trùng 409, lịch sử xuất kho chỉ hiện 10 dòng — CI dùng DB mới).
 - Kịch bản demo mục ① cập nhật theo 4 bước (bản docx/pdf trong out-demo chưa xuất lại).
 - Tiếp theo: người dùng yêu cầu thì mở PR → 10 check → gộp → deploy VPS, rồi `bash scripts/demo-profiles-vps.sh`.
+
+## 27/11/2026 — Gộp PR #119 vào main
+
+- PR #119 (đặt lịch 4 bước, hồ sơ và đánh giá bác sĩ, rà soát i18n) CI 10/10 xanh lần đầu, gộp squash: main = a2bf897.
+- Chờ người dùng deploy trên VPS rồi chạy `bash scripts/demo-profiles-vps.sh`; kiểm tra `/health` commit = a2bf897.
