@@ -668,7 +668,7 @@ export default function PublicBookingPage() {
                         />
                       </div>
                       <Select
-                        label={t("uiScheduling.gender")}
+                        label={t("uiScheduling.gender").replace(/\s*\*$/, "")}
                         required
                         value={form.gender}
                         onChange={(e) => set("gender", e.target.value)}

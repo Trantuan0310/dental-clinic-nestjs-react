@@ -328,9 +328,10 @@ export function DentistProfileModal({
         role="dialog"
         aria-modal="true"
         aria-label={t("uiScheduling.bookingWizard.profileTitle", { name })}
-        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl dark:bg-surface-900 sm:rounded-2xl sm:p-6"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-t-2xl bg-white shadow-xl dark:bg-surface-900 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="overflow-y-auto p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <Avatar name={dentist.fullName} large />
           <div className="min-w-0 flex-1">
@@ -368,7 +369,21 @@ export function DentistProfileModal({
             <Section icon={<GraduationCap className="h-4 w-4 text-brand-600" aria-hidden />} title={t("uiScheduling.bookingWizard.education")} items={profile.education} />
             <Section icon={<BriefcaseMedical className="h-4 w-4 text-brand-600" aria-hidden />} title={t("uiScheduling.bookingWizard.experience")} items={profile.experience} />
             <Section icon={<Award className="h-4 w-4 text-brand-600" aria-hidden />} title={t("uiScheduling.bookingWizard.awards")} items={profile.awards} />
-            <Section icon={<Stethoscope className="h-4 w-4 text-brand-600" aria-hidden />} title={t("uiScheduling.bookingWizard.servicesDone")} items={profile.services.map((s) => s.name)} />
+            {profile.services.length > 0 && (
+              <section>
+                <h3 className="mb-2 flex items-center gap-2 font-semibold text-gray-900 dark:text-surface-100">
+                  <Stethoscope className="h-4 w-4 text-brand-600" aria-hidden />
+                  {t("uiScheduling.bookingWizard.servicesDone")}
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.services.map((s) => (
+                    <span key={s.id} className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 dark:border-surface-700 dark:text-surface-200">
+                      {s.name}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
             <section>
               <h3 className="mb-2 font-semibold text-gray-900 dark:text-surface-100">{t("uiScheduling.bookingWizard.reviewsTitle")}</h3>
               {profile.rating.count === 0 ? (
@@ -413,8 +428,9 @@ export function DentistProfileModal({
             </section>
           </div>
         )}
+        </div>
         {onChoose && (
-          <div className="sticky bottom-0 mt-5 border-t border-gray-100 bg-white pt-3 dark:border-surface-800 dark:bg-surface-900">
+          <div className="shrink-0 border-t border-gray-100 p-4 dark:border-surface-800 sm:px-6">
             <button type="button" onClick={onChoose} className="min-h-11 w-full rounded-md bg-brand-600 px-4 font-semibold text-white hover:bg-brand-700">
               {t("uiScheduling.bookingWizard.chooseThisDentist")}
             </button>
