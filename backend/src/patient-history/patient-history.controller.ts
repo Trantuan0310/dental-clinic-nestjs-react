@@ -11,7 +11,16 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard';
@@ -83,7 +92,9 @@ export class PublicPatientHistoryController {
   @HttpCode(201)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Header('Cache-Control', 'no-store')
-  @ApiOperation({ summary: 'Bệnh nhân đánh giá bác sĩ của một lần khám đã xong (mỗi lần khám một lần)' })
+  @ApiOperation({
+    summary: 'Bệnh nhân đánh giá bác sĩ của một lần khám đã xong (mỗi lần khám một lần)',
+  })
   async review(@Param('token') token: string, @Body() dto: CreateReviewDto) {
     return { data: await this.history.review(token, dto.reviewKey, dto.rating, dto.comment) };
   }

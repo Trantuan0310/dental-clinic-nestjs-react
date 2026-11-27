@@ -21,6 +21,72 @@ export function maskReviewer(fullName: string): string {
 
 export type RatingSummary = { average: number | null; count: number };
 
+/** Average (one decimal) and count of published reviews per dentist. */
+export async function loadRatingSummaries(
+  prisma: PrismaService,
+  dentistIds: string[],
+): Promise<Map<string, RatingSummary>> {
+  const out = new Map<string, RatingSummary>();
+  if (dentistIds.length === 0) return out;
+  const rows = await prisma.dentistReview.groupBy({
+    by: ['dentistId'],
+    where: { dentistId: { in: dentistIds }, status: DentistReviewStatus.PUBLISHED },
+    _avg: { rating: true },
+    _count: { _all: true },
+  });
+  for (const id of dentistIds) out.set(id, { average: null, count: 0 });
+  for (const r of rows) {
+    out.set(r.dentistId, {
+      average: r._avg.rating == null ? null : Math.round(r._avg.rating * 10) / 10,
+      count: r._count._all,
+    });
+  }
+  return out;
+}
+
+/** Newest published reviews of a dentist (reviewer masked) and the count per star. */
+export async function loadPublicReviews(prisma: PrismaService, dentistId: string, take = 20) {
+  const [rows, distribution] = await Promise.all([
+    prisma.dentistReview.findMany({
+      where: { dentistId, status: DentistReviewStatus.PUBLISHED },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+        patient: { select: { fullName: true } },
+        encounter: {
+          select: {
+            treatments: { where: { deletedAt: null }, select: { procedure: true }, take: 1 },
+          },
+        },
+      },
+    }),
+    prisma.dentistReview.groupBy({
+      by: ['rating'],
+      where: { dentistId, status: DentistReviewStatus.PUBLISHED },
+      _count: { _all: true },
+    }),
+  ]);
+  return {
+    // Stars 5..1 → number of reviews.
+    distribution: [5, 4, 3, 2, 1].map(stars => ({
+      stars,
+      count: distribution.find(d => d.rating === stars)?._count._all ?? 0,
+    })),
+    reviews: rows.map(r => ({
+      id: r.id,
+      rating: r.rating,
+      comment: r.comment,
+      createdAt: r.createdAt,
+      reviewer: maskReviewer(r.patient.fullName),
+      service: r.encounter.treatments[0]?.procedure ?? null,
+    })),
+  };
+}
+
 /**
  * Patients rate the dentist of a closed visit (1–5 stars, optional comment)
  * through their history link, once per visit. Published reviews are shown on
@@ -34,63 +100,12 @@ export class DentistReviewsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** Average (one decimal) and count of published reviews per dentist. */
-  async summaries(dentistIds: string[]): Promise<Map<string, RatingSummary>> {
-    const out = new Map<string, RatingSummary>();
-    if (dentistIds.length === 0) return out;
-    const rows = await this.prisma.dentistReview.groupBy({
-      by: ['dentistId'],
-      where: { dentistId: { in: dentistIds }, status: DentistReviewStatus.PUBLISHED },
-      _avg: { rating: true },
-      _count: { _all: true },
-    });
-    for (const id of dentistIds) out.set(id, { average: null, count: 0 });
-    for (const r of rows) {
-      out.set(r.dentistId, {
-        average: r._avg.rating == null ? null : Math.round(r._avg.rating * 10) / 10,
-        count: r._count._all,
-      });
-    }
-    return out;
+  summaries(dentistIds: string[]) {
+    return loadRatingSummaries(this.prisma, dentistIds);
   }
 
-  /** Newest published reviews of a dentist, with the reviewer masked. */
-  async publicList(dentistId: string, take = 20) {
-    const [rows, distribution] = await Promise.all([
-      this.prisma.dentistReview.findMany({
-        where: { dentistId, status: DentistReviewStatus.PUBLISHED },
-        orderBy: { createdAt: 'desc' },
-        take,
-        select: {
-          id: true,
-          rating: true,
-          comment: true,
-          createdAt: true,
-          patient: { select: { fullName: true } },
-          encounter: { select: { treatments: { where: { deletedAt: null }, select: { procedure: true }, take: 1 } } },
-        },
-      }),
-      this.prisma.dentistReview.groupBy({
-        by: ['rating'],
-        where: { dentistId, status: DentistReviewStatus.PUBLISHED },
-        _count: { _all: true },
-      }),
-    ]);
-    return {
-      // Stars 5..1 → number of reviews.
-      distribution: [5, 4, 3, 2, 1].map(stars => ({
-        stars,
-        count: distribution.find(d => d.rating === stars)?._count._all ?? 0,
-      })),
-      reviews: rows.map(r => ({
-        id: r.id,
-        rating: r.rating,
-        comment: r.comment,
-        createdAt: r.createdAt,
-        reviewer: maskReviewer(r.patient.fullName),
-        service: r.encounter.treatments[0]?.procedure ?? null,
-      })),
-    };
+  publicList(dentistId: string, take = 20) {
+    return loadPublicReviews(this.prisma, dentistId, take);
   }
 
   /** Every review of a dentist for staff, hidden ones included. */
@@ -121,7 +136,9 @@ export class DentistReviewsService {
     reason: string | undefined,
     actor: JwtPayload,
   ) {
-    const review = await this.prisma.dentistReview.findFirst({ where: { id: reviewId, dentistId } });
+    const review = await this.prisma.dentistReview.findFirst({
+      where: { id: reviewId, dentistId },
+    });
     if (!review) throw new NotFoundException('Không tìm thấy đánh giá');
     const hide = status === DentistReviewStatus.HIDDEN;
     if (hide && (reason?.trim().length ?? 0) < 5) {
@@ -146,7 +163,8 @@ export class DentistReviewsService {
 
   /** Reviews already given for these visits (the patient's history page). */
   async forEncounters(encounterIds: string[]) {
-    if (encounterIds.length === 0) return new Map<string, { rating: number; comment: string | null }>();
+    if (encounterIds.length === 0)
+      return new Map<string, { rating: number; comment: string | null }>();
     const rows = await this.prisma.dentistReview.findMany({
       where: { encounterId: { in: encounterIds } },
       select: { encounterId: true, rating: true, comment: true },
@@ -173,7 +191,9 @@ export class DentistReviewsService {
     });
     if (!visit) throw new NotFoundException('Không tìm thấy lần khám này');
     if (!DentistReviewsService.canReview(visit.closedAt, now)) {
-      throw new BadRequestException(`Chỉ đánh giá được trong ${REVIEW_WINDOW_DAYS} ngày sau lần khám`);
+      throw new BadRequestException(
+        `Chỉ đánh giá được trong ${REVIEW_WINDOW_DAYS} ngày sau lần khám`,
+      );
     }
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       throw new BadRequestException('Số sao phải từ 1 đến 5');

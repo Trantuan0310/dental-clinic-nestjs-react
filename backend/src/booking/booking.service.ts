@@ -1,3 +1,4 @@
+import { loadPublicReviews, loadRatingSummaries } from '../dentist-reviews/dentist-reviews.service';
 import { getConsentNotices, recordConsent } from '../consents/consent-record';
 import {
   BadRequestException,
@@ -347,39 +348,137 @@ export class BookingService {
               select: {
                 id: true,
                 fullName: true,
-                dentistProfile: { select: { specialties: true, bio: true } },
+                dentistProfile: {
+                  select: {
+                    specialties: true,
+                    bio: true,
+                    title: true,
+                    position: true,
+                    practiceSince: true,
+                  },
+                },
               },
             },
           },
         },
       },
     });
-    const scheduled = await this.scheduledDentists(
-      [...new Set(rows.flatMap(s => s.dentistServices.map(a => a.dentist.id)))],
-      todayDate,
-      lastBookableDate(),
-    );
+    const dentistIds = [...new Set(rows.flatMap(s => s.dentistServices.map(a => a.dentist.id)))];
+    const [scheduled, ratings] = await Promise.all([
+      this.scheduledDentists(dentistIds, todayDate, lastBookableDate()),
+      loadRatingSummaries(this.prisma, dentistIds),
+    ]);
+    const year = Number(todayDate.slice(0, 4));
     return rows
-      .map(s => ({
-        id: s.id,
-        code: s.code,
-        name: s.name,
-        category: s.category.name,
-        description: s.description,
-        durationMinutes: s.defaultDurationMin,
-        // Only when the clinic publishes this service's price.
-        ...(s.showPublicPrice ? { basePrice: s.basePrice } : {}),
-        dentists: s.dentistServices
+      .map(s => {
+        const dentists = s.dentistServices
           .filter(a => scheduled.has(a.dentist.id))
-          .map(a => ({
-            id: a.dentist.id,
-            fullName: a.dentist.fullName,
-            specialties: a.dentist.dentistProfile?.specialties ?? [],
-            bio: a.dentist.dentistProfile?.bio ?? null,
-            durationMinutes: a.durationMin ?? s.defaultDurationMin,
-          })),
-      }))
+          .map(a => {
+            const profile = a.dentist.dentistProfile;
+            return {
+              id: a.dentist.id,
+              fullName: a.dentist.fullName,
+              title: profile?.title ?? null,
+              position: profile?.position ?? null,
+              yearsOfExperience: profile?.practiceSince
+                ? Math.max(0, year - profile.practiceSince)
+                : null,
+              specialties: profile?.specialties ?? [],
+              bio: profile?.bio ?? null,
+              rating: ratings.get(a.dentist.id) ?? { average: null, count: 0 },
+              durationMinutes: a.durationMin ?? s.defaultDurationMin,
+              // This dentist's own price, when the clinic publishes prices.
+              ...(s.showPublicPrice ? { price: Number(a.price ?? s.basePrice) } : {}),
+            };
+          });
+        const prices = dentists.map(d => d.price).filter((p): p is number => p !== undefined);
+        const low = prices.length ? Math.min(...prices) : null;
+        return {
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          category: s.category.name,
+          description: s.description,
+          durationMinutes: s.defaultDurationMin,
+          // Only when the clinic publishes this service's price.
+          ...(s.showPublicPrice ? { basePrice: s.basePrice } : {}),
+          isFree: s.isFree && prices.every(p => p === 0),
+          price: low,
+          priceFrom: low !== null && prices.some(p => p !== low),
+          dentists,
+        };
+      })
       .filter(s => s.dentists.length > 0);
+  }
+
+  /**
+   * What a patient sees before choosing a dentist online: title, position,
+   * years of experience, training, career, awards, rating and the newest
+   * published reviews. Only dentists who take online bookings.
+   */
+  async publicDentist(dentistId: string) {
+    const today = new Date(clinicDateOnly());
+    const dentist = await this.prisma.user.findFirst({
+      where: {
+        id: dentistId,
+        ...SCHEDULABLE_ACCOUNT_WHERE,
+        userRoles: { some: { role: { code: 'dentist' } } },
+        dentistProfile: { is: { ...dentistProfileFilter('booking'), acceptsOnlineBooking: true } },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        dentistProfile: {
+          select: {
+            title: true,
+            position: true,
+            practiceSince: true,
+            specialties: true,
+            bio: true,
+            education: true,
+            experience: true,
+            awards: true,
+          },
+        },
+        dentistServices: {
+          where: {
+            effectiveFrom: { lte: today },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+            service: { isActive: true, bookableOnline: true, category: { isActive: true } },
+          },
+          select: { service: { select: { id: true, name: true } } },
+        },
+      },
+    });
+    if (!dentist?.dentistProfile) throw new NotFoundException('Không tìm thấy bác sĩ');
+    const p = dentist.dentistProfile;
+    const lines = (text: string | null) =>
+      (text ?? '')
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
+    const [ratings, reviews] = await Promise.all([
+      loadRatingSummaries(this.prisma, [dentist.id]),
+      loadPublicReviews(this.prisma, dentist.id, 20),
+    ]);
+    return {
+      id: dentist.id,
+      fullName: dentist.fullName,
+      title: p.title,
+      position: p.position,
+      yearsOfExperience: p.practiceSince
+        ? Math.max(0, today.getUTCFullYear() - p.practiceSince)
+        : null,
+      practiceSince: p.practiceSince,
+      specialties: p.specialties,
+      bio: p.bio,
+      education: lines(p.education),
+      experience: lines(p.experience),
+      awards: lines(p.awards),
+      services: dentist.dentistServices.map(d => d.service),
+      rating: ratings.get(dentist.id) ?? { average: null, count: 0 },
+      ...reviews,
+    };
   }
 
   /**
@@ -866,8 +965,10 @@ export class BookingService {
         select: { id: true, referenceCode: true, email: true, fullName: true },
       });
       await recordConsent(tx, {
-        channel: 'ONLINE', bookingRequestId: request.id,
-        notice, ip,
+        channel: 'ONLINE',
+        bookingRequestId: request.id,
+        notice,
+        ip,
       });
       return request;
     }, LOCKING_TX_OPTIONS);

@@ -210,7 +210,13 @@ export class PatientHistoryService {
     });
     const visit = visits.find(v => reviewKey(link.tokenHash, v.id) === key);
     if (!visit) throw new NotFoundException('Không tìm thấy lần khám này');
-    const review = await this.reviews.createForPatient(link.patientId, visit.id, rating, comment, now);
+    const review = await this.reviews.createForPatient(
+      link.patientId,
+      visit.id,
+      rating,
+      comment,
+      now,
+    );
     return { rating: review.rating, comment: review.comment };
   }
 

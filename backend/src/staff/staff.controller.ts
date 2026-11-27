@@ -13,7 +13,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiProperty,
+  ApiPropertyOptional,
+  ApiTags,
+} from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { DentistReviewStatus } from '@prisma/client';
 import { DentistReviewsService } from '../dentist-reviews/dentist-reviews.service';
@@ -164,7 +170,7 @@ export class DentistsController {
 
   @Get(':userId/reviews')
   @RequirePermissions('dentist.read')
-  @ApiOperation({ summary: 'Patients\' reviews of a dentist, hidden ones included' })
+  @ApiOperation({ summary: "Patients' reviews of a dentist, hidden ones included" })
   async listReviews(@Param('userId', ParseUUIDPipe) userId: string) {
     const [summary, rows] = await Promise.all([
       this.reviews.summaries([userId]),

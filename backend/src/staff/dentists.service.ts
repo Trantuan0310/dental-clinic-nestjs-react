@@ -106,7 +106,8 @@ export class DentistsService {
     if (dto.acceptsNewPatients !== undefined) data.acceptsNewPatients = dto.acceptsNewPatients;
     if (dto.bio !== undefined) data.bio = dto.bio;
     // Public profile (online booking); blank text clears the field.
-    const text = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
+    const text = (v: string | null | undefined) =>
+      v === undefined ? undefined : v?.trim() || null;
     for (const key of ['title', 'position', 'education', 'experience', 'awards'] as const) {
       const value = text(dto[key]);
       if (value !== undefined) data[key] = value;
