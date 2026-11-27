@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { clinicParts, clinicToday } from "@/lib/clinicTime";
-import { Button, Card } from "@/components/ui";
+import { Alert, Button, Card, EmptyState, Input, Select, Spinner } from "@/components/ui";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { useCatalogServices } from "../catalog/catalogApi";
 import { useDentistOptions, usePatientSearch } from "./appointmentApi";
 import { AppointmentFormModal } from "./AppointmentFormModal";
@@ -17,7 +19,7 @@ interface Entry {
   dentistId: string | null;
   fromDate: string;
   toDate: string;
-  period: string;
+  period: "ANY" | "AM" | "PM";
   note: string;
   patient: { fullName: string };
   service: { name: string };
@@ -27,43 +29,37 @@ interface Slot {
   startAt: string;
   dentistId: string;
 }
-const periods: Record<string, string> = {
-  ANY: "Cả ngày",
-  AM: "Sáng",
-  PM: "Chiều",
-};
+const PERIODS = ["ANY", "AM", "PM"] as const;
 const blank = () => ({
   patientId: "",
   serviceId: "",
   dentistId: "",
   fromDate: clinicToday(),
   toDate: clinicToday(),
-  period: "ANY",
+  period: "ANY" as Entry["period"],
   note: "",
 });
+
 export default function WaitlistPage() {
-  const qc = useQueryClient(),
-    [params, setParams] = useSearchParams();
-  const [form, setForm] = useState(blank),
-    [editing, edit] = useState<string | null>(null),
-    [search, setSearch] = useState(""),
-    [name, setName] = useState("");
-  const [service, setService] = useState(""),
-    [doctor, setDoctor] = useState(""),
-    [time, setTime] = useState("");
-  const [book, setBook] = useState<Entry | null>(null),
-    [invite, setInvite] = useState<Entry | null>(null);
-  const dentists = useDentistOptions(),
-    services = useCatalogServices(),
-    patients = usePatientSearch(search);
+  const { t } = useTranslation();
+  const l = (key: string, opts?: Record<string, unknown>) => t(`uiScheduling.waitlistPage.${key}`, opts);
+  const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const [form, setForm] = useState(blank);
+  const [editing, edit] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [name, setName] = useState("");
+  const [service, setService] = useState("");
+  const [doctor, setDoctor] = useState("");
+  const [time, setTime] = useState("");
+  const [book, setBook] = useState<Entry | null>(null);
+  const [invite, setInvite] = useState<Entry | null>(null);
+  const dentists = useDentistOptions();
+  const services = useCatalogServices();
+  const patients = usePatientSearch(search);
   const rows = useQuery({
     queryKey: ["waitlist", params.toString()],
-    queryFn: async () =>
-      (
-        await api.get<{ data: Entry[]; slot: Slot | null }>("/waitlist", {
-          params,
-        })
-      ).data,
+    queryFn: async () => (await api.get<{ data: Entry[]; slot: Slot | null }>("/waitlist", { params })).data,
   });
   const clear = () => {
     edit(null);
@@ -75,208 +71,177 @@ export default function WaitlistPage() {
     mutationFn: async (removeId?: string) => {
       if (removeId) return api.delete("/waitlist/" + removeId);
       const data = { ...form, dentistId: form.dentistId || null };
-      return editing
-        ? api.patch("/waitlist/" + editing, data)
-        : api.post("/waitlist", data);
+      return editing ? api.patch("/waitlist/" + editing, data) : api.post("/waitlist", data);
     },
     onSuccess: () => {
       clear();
       void qc.invalidateQueries({ queryKey: ["waitlist"] });
     },
   });
-  const serviceOptions = services.data?.map((s) => (
-    <option key={s.id} value={s.id}>
-      {s.name}
-    </option>
-  ));
-  const doctorOptions = dentists.data?.map((d) => (
-    <option key={d.id} value={d.id}>
-      {d.fullName}
-    </option>
-  ));
+  // Grouped by service category, so the list is not one long flat run.
+  const serviceOptions = (services.data ?? []).map((s) => ({ value: s.id, label: s.name, group: s.category?.name }));
+  const doctorOptions = (dentists.data ?? []).map((d) => ({ value: d.id, label: d.fullName }));
+  const periodLabel = (p: Entry["period"]) => l(`period${p}`);
   const slot = rows.data?.slot;
+
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-semibold">Danh sách chờ</h1>
-      <Card title={editing ? "Sửa yêu cầu chờ" : "Thêm người chờ"}>
+      <PageHeader title={l("title")} description={l("subtitle")} />
+      <Card title={editing ? l("editTitle") : l("addTitle")}>
         <form
-          className="grid gap-3 md:grid-cols-2"
+          className="grid gap-4 md:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
             save.mutate(undefined);
           }}
         >
-          <label>
-            Bệnh nhân
-            <input
-              className="block w-full rounded border p-2"
-              placeholder="Tìm theo tên hoặc mã"
+          <div className="space-y-2">
+            <Input
+              label={l("patient")}
+              required
+              placeholder={l("patientPlaceholder")}
               value={name || search}
               onChange={(e) => {
                 setForm({ ...form, patientId: "" });
                 setName("");
                 setSearch(e.target.value);
               }}
+              hint={form.patientId && name ? l("patientChosen", { name }) : undefined}
             />
-          </label>
-          {search && (
-            <div>
-              {patients.data?.map((p) => (
-                <Button
-                  key={p.id}
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setForm({ ...form, patientId: p.id });
-                    setName(p.fullName);
-                    setSearch("");
-                  }}
-                >
-                  {p.fullName} · {p.code}
-                </Button>
-              ))}
-            </div>
-          )}
-          <label>
-            Dịch vụ{" "}
-            <select
-              required
-              value={form.serviceId}
-              onChange={(e) => setForm({ ...form, serviceId: e.target.value })}
-            >
-              <option value="">Chọn dịch vụ</option>
-              {serviceOptions}
-            </select>
-          </label>
-          <label>
-            Bác sĩ mong muốn{" "}
-            <select
-              value={form.dentistId}
-              onChange={(e) => setForm({ ...form, dentistId: e.target.value })}
-            >
-              <option value="">Bất kỳ</option>
-              {doctorOptions}
-            </select>
-          </label>
-          <label>
-            Từ ngày{" "}
-            <input
-              required
-              type="date"
-              value={form.fromDate}
-              onChange={(e) => setForm({ ...form, fromDate: e.target.value })}
-            />
-          </label>
-          <label>
-            Đến ngày{" "}
-            <input
-              required
-              type="date"
-              min={form.fromDate}
-              value={form.toDate}
-              onChange={(e) => setForm({ ...form, toDate: e.target.value })}
-            />
-          </label>
-          <label>
-            Buổi{" "}
-            <select
-              value={form.period}
-              onChange={(e) => setForm({ ...form, period: e.target.value })}
-            >
-              {Object.entries(periods).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Ghi chú{" "}
-            <input
+            {search && (patients.data?.length ?? 0) > 0 && (
+              <ul className="max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white text-sm shadow-sm dark:border-surface-700 dark:bg-surface-800">
+                {patients.data?.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-surface-700"
+                      onClick={() => {
+                        setForm({ ...form, patientId: p.id });
+                        setName(p.fullName);
+                        setSearch("");
+                      }}
+                    >
+                      {p.fullName} <span className="text-gray-500 dark:text-surface-400">· {p.code}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <Select
+            label={l("service")}
+            required
+            value={form.serviceId}
+            onChange={(e) => setForm({ ...form, serviceId: e.target.value })}
+            placeholder={l("servicePlaceholder")}
+            options={serviceOptions}
+          />
+          <Select
+            label={l("dentist")}
+            value={form.dentistId}
+            onChange={(e) => setForm({ ...form, dentistId: e.target.value })}
+            options={[{ value: "", label: l("anyDentist") }, ...doctorOptions]}
+          />
+          <Select
+            label={l("period")}
+            value={form.period}
+            onChange={(e) => setForm({ ...form, period: e.target.value as Entry["period"] })}
+            options={PERIODS.map((p) => ({ value: p, label: periodLabel(p) }))}
+          />
+          <Input
+            label={l("fromDate")}
+            required
+            type="date"
+            value={form.fromDate}
+            onChange={(e) => setForm({ ...form, fromDate: e.target.value })}
+          />
+          <Input
+            label={l("toDate")}
+            required
+            type="date"
+            min={form.fromDate}
+            value={form.toDate}
+            onChange={(e) => setForm({ ...form, toDate: e.target.value })}
+          />
+          <div className="md:col-span-2">
+            <Input
+              label={l("note")}
+              placeholder={l("notePlaceholder")}
               value={form.note}
               maxLength={500}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
-          </label>
-          <div>
-            <Button type="submit" disabled={!form.patientId || save.isPending}>
-              Lưu yêu cầu
+          </div>
+          <div className="flex flex-wrap gap-2 md:col-span-2">
+            <Button type="submit" disabled={!form.patientId || !form.serviceId || save.isPending} isLoading={save.isPending}>
+              {l("save")}
             </Button>
             {editing && (
               <Button type="button" variant="outline" onClick={clear}>
-                Hủy sửa
+                {l("cancelEdit")}
               </Button>
             )}
           </div>
         </form>
         {save.isError && (
-          <p role="alert">
-            {getApiErrorMessage(save.error, "Không lưu được yêu cầu")}
-          </p>
+          <div className="mt-3">
+            <Alert type="danger">{getApiErrorMessage(save.error, l("saveError"))}</Alert>
+          </div>
         )}
       </Card>
-      <Card title="Gợi ý theo giờ trống">
+      <Card title={l("matchTitle")} description={l("matchSubtitle")}>
         <form
-          className="flex flex-wrap gap-2"
+          className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto]"
           onSubmit={(e) => {
             e.preventDefault();
-            setParams({
-              dentistId: doctor,
-              serviceId: service,
-              startAt: new Date(time + ":00+07:00").toISOString(),
-            });
+            setParams({ dentistId: doctor, serviceId: service, startAt: new Date(time + ":00+07:00").toISOString() });
           }}
         >
-          <select
-            aria-label="Dịch vụ cần tìm"
+          <Select
+            label={l("matchService")}
             required
             value={service}
             onChange={(e) => setService(e.target.value)}
-          >
-            <option value="">Dịch vụ</option>
-            {serviceOptions}
-          </select>
-          <select
-            aria-label="Bác sĩ có giờ trống"
+            placeholder={l("servicePlaceholder")}
+            options={serviceOptions}
+          />
+          <Select
+            label={l("matchDentist")}
             required
             value={doctor}
             onChange={(e) => setDoctor(e.target.value)}
-          >
-            <option value="">Bác sĩ</option>
-            {doctorOptions}
-          </select>
-          <input
-            aria-label="Giờ trống"
-            required
-            type="datetime-local"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
+            placeholder={l("matchDentistPlaceholder")}
+            options={doctorOptions}
           />
-          <Button type="submit">Tìm người phù hợp</Button>
-          <Button type="button" variant="outline" onClick={() => setParams({})}>
-            Xem tất cả
-          </Button>
+          <Input label={l("matchTime")} required type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} />
+          <div className="flex items-end gap-2">
+            <Button type="submit">{l("find")}</Button>
+            <Button type="button" variant="outline" onClick={() => setParams({})}>
+              {l("showAll")}
+            </Button>
+          </div>
         </form>
       </Card>
       {rows.isError ? (
-        <p role="alert">Không tải được danh sách chờ.</p>
+        <Alert type="danger">{l("loadError")}</Alert>
       ) : rows.isPending ? (
-        <p>Đang tải…</p>
+        <div className="flex justify-center p-8">
+          <Spinner />
+        </div>
       ) : !rows.data.data.length ? (
-        <p>Không có yêu cầu phù hợp.</p>
+        <EmptyState title={l("empty")} />
       ) : (
         rows.data.data.map((r) => (
           <Card key={r.id} title={r.patient.fullName}>
-            <p>
-              {r.service.name} · {r.dentist?.fullName || "Bất kỳ bác sĩ"} ·{" "}
-              {periods[r.period]} · {r.fromDate.slice(0, 10)} —{" "}
-              {r.toDate.slice(0, 10)}
+            <p className="text-sm text-gray-700 dark:text-surface-200">
+              {r.service.name} · {r.dentist?.fullName || l("anyDentistShort")} · {periodLabel(r.period)} ·{" "}
+              {r.fromDate.slice(0, 10)} — {r.toDate.slice(0, 10)}
             </p>
-            {r.note && <p>{r.note}</p>}
+            {r.note && <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{r.note}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button onClick={() => setBook(r)}>Đặt lịch</Button>
+              <Button onClick={() => setBook(r)}>{l("book")}</Button>
               <Button variant="outline" onClick={() => setInvite(r)}>
-                Soạn tin mời
+                {l("invite")}
               </Button>
               <Button
                 variant="outline"
@@ -293,29 +258,26 @@ export default function WaitlistPage() {
                   });
                   setName(r.patient.fullName);
                   setSearch("");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
               >
-                Sửa
+                {l("edit")}
               </Button>
               <Button
                 disabled={save.isPending}
                 variant="ghost"
                 onClick={() => {
-                  if (window.confirm("Xóa yêu cầu chờ này?")) save.mutate(r.id);
+                  if (window.confirm(l("deleteConfirm"))) save.mutate(r.id);
                 }}
               >
-                Xóa
+                {l("delete")}
               </Button>
             </div>
           </Card>
         ))
       )}
       {invite && (
-        <MessageDraftModal
-          open
-          context={{ kind: "waitlist_invite", waitlistId: invite.id }}
-          onClose={() => setInvite(null)}
-        />
+        <MessageDraftModal open context={{ kind: "waitlist_invite", waitlistId: invite.id }} onClose={() => setInvite(null)} />
       )}
       {book && (
         <AppointmentFormModal
@@ -324,11 +286,7 @@ export default function WaitlistPage() {
           defaultPatientId={book.patientId}
           defaultServiceId={book.serviceId}
           defaultDentistId={slot?.dentistId ?? book.dentistId ?? undefined}
-          defaultDate={
-            slot
-              ? clinicParts(slot.startAt).date
-              : [clinicToday(), book.fromDate.slice(0, 10)].sort()[1]
-          }
+          defaultDate={slot ? clinicParts(slot.startAt).date : [clinicToday(), book.fromDate.slice(0, 10)].sort()[1]}
           defaultStartTime={slot ? clinicParts(slot.startAt).time : undefined}
           onClose={() => {
             setBook(null);

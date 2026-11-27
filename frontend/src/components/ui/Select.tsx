@@ -6,6 +6,8 @@ export interface SelectOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /** Options with a group are shown under it (<optgroup>), in the order the groups first appear. */
+  group?: string;
 }
 
 export interface SelectProps
@@ -15,6 +17,32 @@ export interface SelectProps
   hint?: string;
   options: SelectOption[];
   placeholder?: string;
+}
+
+const renderOption = (option: SelectOption) => (
+  <option key={option.value} value={option.value} disabled={option.disabled}>
+    {option.label}
+  </option>
+);
+
+/** Consecutive runs of options by group; ungrouped options keep their place. */
+function groupOptions(options: SelectOption[]): Array<[string | undefined, SelectOption[]]> {
+  const out: Array<[string | undefined, SelectOption[]]> = [];
+  const byGroup = new Map<string, SelectOption[]>();
+  for (const option of options) {
+    if (!option.group) {
+      out.push([undefined, [option]]);
+      continue;
+    }
+    const list = byGroup.get(option.group);
+    if (list) list.push(option);
+    else {
+      const fresh = [option];
+      byGroup.set(option.group, fresh);
+      out.push([option.group, fresh]);
+    }
+  }
+  return out;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
@@ -62,15 +90,15 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                 {placeholder}
               </option>
             )}
-            {options.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={option.disabled}
-              >
-                {option.label}
-              </option>
-            ))}
+            {groupOptions(options).map(([group, items]) =>
+              group ? (
+                <optgroup key={group} label={group}>
+                  {items.map(renderOption)}
+                </optgroup>
+              ) : (
+                items.map(renderOption)
+              ),
+            )}
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-surface-500" />
         </div>

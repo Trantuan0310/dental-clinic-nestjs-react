@@ -57,6 +57,11 @@ export class PublicBookingController {
   async prices() {
     return { data: await this.booking.priceList() };
   }
+  @Get('dentists/:id')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async dentist(@Param('id', ParseUUIDPipe) id: string) {
+    return { data: await this.booking.publicDentist(id) };
+  }
   @Get('slots')
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   async slots(@Query() q: PublicSlotsQueryDto) {

@@ -103,3 +103,5 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Commit WIP ngay sau mỗi cụm sửa (kể cả chưa chạy kiểm tra): container cloud có thể bị thay giữa phiên, mất mọi thay đổi chưa commit và cả scratchpad.
 - Tập dượt demo bằng trình duyệt thật bắt được lỗi mà test không bắt (mã khóa i18n động `t(\`ns.${map[x]}\`)`, dữ liệu mẫu sai chuyên môn): khi tập, quét chữ trang tìm mẫu `ui[A-Z]\w+\.\w+`.
 - `npm run lint` ở backend có `--fix`, sửa định dạng cả file ngoài phạm vi: chỉ `git add` đúng file của mình, rồi `git checkout -- backend/src backend/test`.
+- Đổi chữ trên giao diện thì grep cả frontend/e2e theo chữ cũ (kể cả regex không dấu như /đóng encounter/i): test toHaveCount(0) với chữ cũ vẫn xanh nhưng vô nghĩa.
+- Đặt class/DTO mới ở trên khối decorator của lớp kế tiếp, không chèn giữa: decorator lớp gắn vào class đứng ngay sau nó, controller mất guard mà tsc/lint không báo (27/11/2026).

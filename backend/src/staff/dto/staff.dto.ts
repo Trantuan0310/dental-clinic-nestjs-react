@@ -268,13 +268,64 @@ export class CreateDentistProfileDto {
   @IsString()
   @MaxLength(2000)
   bio?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'ThS. BS',
+    description: 'Academic/professional title shown before the name',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  title?: string | null;
+
+  @ApiPropertyOptional({ example: 'Trưởng khoa Răng sứ thẩm mỹ' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  position?: string | null;
+
+  @ApiPropertyOptional({
+    example: 2012,
+    description: 'Year practice began; years of experience are counted from it',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1950)
+  @Max(2100)
+  practiceSince?: number | null;
+
+  @ApiPropertyOptional({ description: 'Training, one item per line' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3000)
+  education?: string | null;
+
+  @ApiPropertyOptional({ description: 'Career, one item per line' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3000)
+  experience?: string | null;
+
+  @ApiPropertyOptional({ description: 'Awards and certificates, one item per line' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3000)
+  awards?: string | null;
 }
 
 /** Everything but practiceStatus, which has its own endpoints (BR-STAFF-004). */
 export class UpdateDentistProfileDto extends CreateDentistProfileDto {}
 
 /** Fields a dentist may change on their own profile (dentist.update.own). */
-export const DENTIST_SELF_EDITABLE_FIELDS = ['bio', 'specialties', 'calendarColor'] as const;
+export const DENTIST_SELF_EDITABLE_FIELDS = [
+  'bio',
+  'specialties',
+  'calendarColor',
+  'education',
+  'experience',
+  'awards',
+] as const;
 
 export class ListDentistsQueryDto {
   @ApiPropertyOptional()

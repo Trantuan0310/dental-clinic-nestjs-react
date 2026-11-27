@@ -5,30 +5,18 @@ import { bookingErrorMessage } from "./errorMessage";
 import { PublicTopBar } from "./PublicTopBar";
 import { saveBooking } from "./savedBookings";
 import { clearSavedProfile, loadSavedProfile, saveProfile } from "./savedProfile";
-import { SPECIALTY_LABEL } from "@/features/staff/labels";
+import { Input, Select, Textarea } from "@/components/ui";
+import { ArrowLeft, CalendarDays, Check, Clock, Stethoscope, UserRound } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { DentistPicker, ServicePicker } from "./bookingCatalog";
+import { dentistDisplayName, dentistPriceText, type BookingService } from "./bookingCatalogUtils";
 import { clinic } from "@/config/clinic";
 import { clinicToday } from "@/lib/clinicTime";
 import { i18n } from "@/locales";
 import { useTranslation } from "react-i18next";
 import type { BookingPrefill } from "@/features/landing/LandingPage";
 
-type Dentist = {
-  id: string;
-  fullName: string;
-  specialties: string[];
-  bio?: string | null;
-  /** This dentist's own visit length for the service. */
-  durationMinutes?: number;
-};
-type Service = {
-  id: string;
-  name: string;
-  category: string;
-  durationMinutes: number;
-  /** Left out when the clinic does not publish the price. */
-  basePrice?: string | number;
-  dentists: Dentist[];
-};
+type Service = BookingService;
 type BookingResult = {
   referenceCode: string;
   accessToken: string;
@@ -100,6 +88,8 @@ export default function PublicBookingPage() {
   const preDate = searchParams.get("date") ?? "";
   const preTime = useRef(searchParams.get("time") ?? "");
   const [services, setServices] = useState<Service[]>([]);
+  // 1 service, 2 dentist, 3 date and time, 4 patient details.
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [serviceId, setServiceId] = useState("");
   const service = useMemo(
     () => services.find((x) => x.id === serviceId),
@@ -151,8 +141,13 @@ export default function PublicBookingPage() {
         const pick = r.data.data.find((x) => x.id === preselected);
         if (pick) {
           setServiceId(pick.id);
-          if (pick.dentists.some((d) => d.id === preDentist)) setDentistId(preDentist);
-          else if (pick.dentists.length === 1) setDentistId(pick.dentists[0].id);
+          const dentist = pick.dentists.some((d) => d.id === preDentist)
+            ? preDentist
+            : pick.dentists.length === 1
+              ? pick.dentists[0].id
+              : "";
+          setDentistId(dentist);
+          setStep(dentist ? 3 : 2);
         }
       })
       .catch(() =>
@@ -329,6 +324,41 @@ export default function PublicBookingPage() {
     }
   };
 
+  const dentist = service?.dentists.find((d) => d.id === dentistId);
+  const steps = [
+    { n: 1 as const, label: t("uiScheduling.bookingWizard.stepService"), done: !!serviceId },
+    { n: 2 as const, label: t("uiScheduling.bookingWizard.stepDentist"), done: !!dentistId },
+    { n: 3 as const, label: t("uiScheduling.bookingWizard.stepTime"), done: !!time },
+    { n: 4 as const, label: t("uiScheduling.bookingWizard.stepInfo"), done: false },
+  ];
+  // A step can be opened once everything before it is chosen.
+  const reachable = (n: number) =>
+    n === 1 || (n === 2 && !!serviceId) || (n === 3 && !!dentistId) || (n === 4 && !!time);
+  const go = (n: 1 | 2 | 3 | 4) => {
+    if (!reachable(n)) return;
+    setStep(n);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const chooseService = (id: string) => {
+    setServiceId(id);
+    const dentists = services.find((s) => s.id === id)?.dentists ?? [];
+    const only = dentists.length === 1 ? dentists[0].id : "";
+    setDentistId(only);
+    // State is not updated yet, so step straight there (go() would check the old choice).
+    setStep(only ? 3 : 2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const backButton = (to: 1 | 2 | 3) => (
+    <button
+      type="button"
+      onClick={() => go(to)}
+      className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-700 hover:underline dark:text-brand-300"
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden />
+      {t("uiScheduling.bookingWizard.back")}
+    </button>
+  );
+
   if (loading)
     return (
       <main role="status" className="mx-auto max-w-3xl p-6 text-gray-600 dark:text-surface-300">
@@ -340,20 +370,13 @@ export default function PublicBookingPage() {
     <main className="min-h-screen bg-slate-50 dark:bg-surface-950 px-4 py-8 sm:py-12">
       <div className="mx-auto max-w-3xl">
         <PublicTopBar>
-          <Link
-            to="/booking/status"
-            className="text-brand-600 hover:underline"
-          >
-            {t('uiScheduling.bookingLookup')}
+          <Link to="/booking/status" className="text-brand-600 hover:underline">
+            {t("uiScheduling.bookingLookup")}
           </Link>
         </PublicTopBar>
         <section className="rounded-xl border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-900 p-5 shadow-sm sm:p-8">
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
-            {t('uiScheduling.publicBooking')}
-          </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-surface-300">
-            {t('uiScheduling.bookingIntro')}
-          </p>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t("uiScheduling.publicBooking")}</h1>
+          <p className="mt-2 text-sm text-gray-600 dark:text-surface-300">{t("uiScheduling.bookingIntro")}</p>
           {error && services.length === 0 && (
             <p role="alert" className="mt-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>
           )}
@@ -362,372 +385,376 @@ export default function PublicBookingPage() {
               {error ? t("uiScheduling.bookingReloadOrCall") : t("uiScheduling.bookingOnlineClosed")}
             </div>
           ) : (
-            <form onSubmit={submit} className="mt-6 space-y-6">
-              <div>
-                <h2 className="mb-3 font-semibold text-gray-900 dark:text-surface-100">
-                  1. {t('uiScheduling.bookingChooseTime')}
-                </h2>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.service')}
-                    <select aria-label={t('uiScheduling.service')}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
-                      value={serviceId}
-                      onChange={(e) => {
-                        setServiceId(e.target.value);
-                        const dentists = services.find((s) => s.id === e.target.value)?.dentists;
-                        setDentistId(dentists?.length === 1 ? dentists[0].id : "");
-                      }}
-                      required
-                    >
-                      <option value="">{t('uiScheduling.bookingServiceSelect')}</option>
-                      {services.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.dentist')}
-                    <select aria-label={t('uiScheduling.dentist')}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
-                      value={dentistId}
-                      onChange={(e) => setDentistId(e.target.value)}
-                      required
-                      disabled={!service}
-                    >
-                      <option value="">{t('uiScheduling.bookingDentistSelect')}</option>
-                      {service?.dentists.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.fullName}
-                          {d.specialties.length
-                            ? " · " +
-                              d.specialties
-                                .map((c) => SPECIALTY_LABEL[c] ?? c)
-                                .join(", ")
-                            : ""}
-                        </option>
-                      ))}
-                    </select>
-                    {(() => {
-                      const bio = service?.dentists.find((d) => d.id === dentistId)?.bio;
-                      return bio ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">{bio}</span>
-                      ) : null;
-                    })()}
-                    {/* The length depends on the dentist (their own duration first). */}
-                    {(() => {
-                      const minutes = service?.dentists.find((d) => d.id === dentistId)?.durationMinutes;
-                      return minutes ? (
-                        <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
-                          {t("uiScheduling.bookingEstimatedDuration", { minutes })}
-                        </span>
-                      ) : null;
-                    })()}
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.bookingDate')}
-                    <input
-                      type="date"
-                      aria-label={t('uiScheduling.bookingDate')}
-                      min={today()}
-                      max={lastDate}
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      required
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                    <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-400">
-                      {t('uiScheduling.onlineBookingUntil')} {showDate(lastDate)}.
-                    </span>
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.availableTime')}
-                    <select aria-label={t('uiScheduling.availableTime')}
-                      value={time}
-                      onChange={(e) => setTime(e.target.value)}
-                      required
-                      disabled={!dentistId || slotLoading || slots.length === 0}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
-                    >
-                      <option value="">
-                        {!dentistId
-                          ? t('uiScheduling.bookingChooseDentistFirst')
-                          : !date
-                            ? t('uiScheduling.bookingChooseDateFirst')
-                            : slotLoading
-                          ? t('uiScheduling.loading')
-                          : slots.length
-                            ? t('uiScheduling.bookingChooseTimeSlot')
-                            : t('uiScheduling.noAvailableTime')}
-                      </option>
-                      {slots.map((slot) => (
-                        <option key={slot} value={slot}>
-                          {slot}
-                        </option>
-                      ))}
-                    </select>
-                    {minLead > 0 && (
-                      <span className="mt-1 block text-xs font-normal text-gray-500 dark:text-surface-300">
-                        {t('uiScheduling.bookingLeadTime', { lead: leadText(minLead) })}
-                        {t('uiScheduling.bookingLeadContact')}
-                        {clinic.phone ? (
-                          <>
-                            {" "}
-                            <a
-                              href={`tel:${clinic.phoneHref}`}
-                              className="font-medium text-brand-600 hover:underline"
-                            >
-                              {clinic.phone}
-                            </a>
-                          </>
-                        ) : null}
-                        .
-                      </span>
-                    )}
-                  </label>
-                  {(slotError || (!slotLoading && dentistId && slots.length === 0)) && (
-                    <div className="text-sm sm:col-span-2">
-                      {slotError && (
-                        <span
-                          role="alert"
-                          className="mt-1 block text-xs font-normal text-red-700"
+            <>
+              <nav aria-label={t("uiScheduling.bookingWizard.progress")} className="mt-6">
+                <ol className="grid grid-cols-4 gap-2">
+                  {steps.map((s) => {
+                    const current = step === s.n;
+                    return (
+                      <li key={s.n}>
+                        <button
+                          type="button"
+                          onClick={() => go(s.n)}
+                          disabled={!reachable(s.n)}
+                          aria-current={current ? "step" : undefined}
+                          className="flex w-full flex-col items-center gap-1 text-center disabled:cursor-not-allowed"
                         >
-                          {slotError}
-                        </span>
-                      )}
-                      {!slotLoading && !slotError && dentistId && slots.length === 0 && (
-                        <span className="mt-1 block text-xs font-normal text-amber-800">
-                          {emptyReasonText(emptyReason, minLead, closedReason)}{" "}
-                          {nextDate ? (
-                            <button
-                              type="button"
-                              onClick={() => setDate(nextDate)}
-                              className="font-medium text-brand-600 underline"
-                            >
-                              {t('uiScheduling.nextAvailableDate')}: {showDate(nextDate)}
-                            </button>
-                          ) : (
-                            t('uiScheduling.noSlotsTwoWeeks')
-                          )}
-                        </span>
-                      )}
+                          <span
+                            className={cn(
+                              "flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-semibold",
+                              current
+                                ? "border-brand-600 bg-brand-600 text-white"
+                                : s.done
+                                  ? "border-brand-600 bg-white text-brand-700 dark:bg-surface-900 dark:text-brand-300"
+                                  : "border-gray-300 bg-white text-gray-400 dark:border-surface-600 dark:bg-surface-900",
+                            )}
+                          >
+                            {s.done && !current ? <Check className="h-4 w-4" aria-hidden /> : s.n}
+                          </span>
+                          <span className={cn("text-xs sm:text-sm", current ? "font-semibold text-gray-900 dark:text-surface-100" : "text-gray-500 dark:text-surface-400")}>
+                            {s.label}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </nav>
+
+              {/* What is chosen so far, from step 2 on. */}
+              {step > 1 && service && (
+                <dl className="mt-5 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm dark:bg-surface-800 sm:grid-cols-2">
+                  <div className="flex items-start gap-2">
+                    <Stethoscope className="mt-0.5 h-4 w-4 text-brand-600" aria-hidden />
+                    <div>
+                      <dt className="sr-only">{t("uiScheduling.service")}</dt>
+                      <dd className="font-medium text-gray-900 dark:text-surface-100">{service.name}</dd>
+                    </div>
+                  </div>
+                  {dentist && step > 2 && (
+                    <div className="flex items-start gap-2">
+                      <UserRound className="mt-0.5 h-4 w-4 text-brand-600" aria-hidden />
+                      <div>
+                        <dt className="sr-only">{t("uiScheduling.dentist")}</dt>
+                        <dd className="text-gray-900 dark:text-surface-100">
+                          {dentistDisplayName(dentist)} · <span className="font-semibold text-brand-700 dark:text-brand-300">{dentistPriceText(dentist, t)}</span>
+                        </dd>
+                      </div>
                     </div>
                   )}
-                </div>
-              </div>
-              <div>
-                <h2 className="mb-3 font-semibold text-gray-900 dark:text-surface-100">
-                  2. {t('uiScheduling.bookingPatientInfo')}
-                </h2>
-                <p className="-mt-2 mb-3 text-xs text-gray-500 dark:text-surface-400">
-                  {t('uiScheduling.bookingPatientInfoHint')}
-                </p>
-                {remembered && (
-                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-brand-50 dark:bg-surface-800 px-3 py-2 text-sm text-gray-700 dark:text-surface-200">
-                    <span>{t('uiScheduling.bookingPrefilled', { name: remembered.fullName })}</span>
+                  {time && step > 3 && (
+                    <div className="flex items-start gap-2">
+                      <CalendarDays className="mt-0.5 h-4 w-4 text-brand-600" aria-hidden />
+                      <div>
+                        <dt className="sr-only">{t("uiScheduling.bookingWizard.stepTime")}</dt>
+                        <dd className="text-gray-900 dark:text-surface-100">{time} · {showDate(date)}</dd>
+                      </div>
+                    </div>
+                  )}
+                  {dentist?.durationMinutes && step > 2 ? (
+                    <div className="flex items-start gap-2">
+                      <Clock className="mt-0.5 h-4 w-4 text-brand-600" aria-hidden />
+                      <dd className="text-gray-700 dark:text-surface-200">{t("uiScheduling.bookingEstimatedDuration", { minutes: dentist.durationMinutes })}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              )}
+
+              <form onSubmit={submit} className="mt-6">
+                {step === 1 && (
+                  <div>
+                    <h2 className="mb-3 text-lg font-semibold text-gray-900 dark:text-surface-100">1. {t("uiScheduling.bookingWizard.chooseService")}</h2>
+                    <ServicePicker services={services} value={serviceId} onChange={chooseService} />
+                  </div>
+                )}
+
+                {step === 2 && service && (
+                  <div>
+                    {backButton(1)}
+                    <h2 className="mb-1 text-lg font-semibold text-gray-900 dark:text-surface-100">2. {t("uiScheduling.bookingWizard.chooseDentistTitle")}</h2>
+                    <p className="mb-3 text-sm text-gray-600 dark:text-surface-300">{t("uiScheduling.bookingWizard.chooseDentistHint")}</p>
+                    <DentistPicker
+                      dentists={service.dentists}
+                      value={dentistId}
+                      onChange={(id) => {
+                        setDentistId(id);
+                        setStep(3);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                    />
+                  </div>
+                )}
+
+                {step === 3 && service && dentist && (
+                  <div className="space-y-4">
+                    {backButton(2)}
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-surface-100">3. {t("uiScheduling.bookingWizard.chooseTimeTitle")}</h2>
+                    <div className="max-w-xs">
+                      <Input
+                        label={t("uiScheduling.bookingDate")}
+                        type="date"
+                        min={today()}
+                        max={lastDate}
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
+                        required
+                        hint={`${t("uiScheduling.onlineBookingUntil")} ${showDate(lastDate)}.`}
+                      />
+                    </div>
+                    <fieldset>
+                      <legend className="mb-2 text-sm font-medium text-gray-700 dark:text-surface-200">
+                        {t("uiScheduling.availableTime")}
+                        <span className="ml-1 text-red-500" aria-hidden>*</span>
+                      </legend>
+                      {slotLoading ? (
+                        <p role="status" className="text-sm text-gray-500">{t("uiScheduling.loading")}</p>
+                      ) : slots.length > 0 ? (
+                        <div role="radiogroup" aria-label={t("uiScheduling.availableTime")} className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                          {slots.map((slot) => (
+                            <button
+                              key={slot}
+                              type="button"
+                              role="radio"
+                              aria-checked={time === slot}
+                              onClick={() => setTime(slot)}
+                              className={cn(
+                                "min-h-11 rounded-md border text-sm font-medium",
+                                time === slot
+                                  ? "border-brand-600 bg-brand-600 text-white"
+                                  : "border-gray-300 bg-white text-gray-800 hover:border-brand-500 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100",
+                              )}
+                            >
+                              {slot}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      {slotError && (
+                        <p role="alert" className="mt-1 text-sm text-red-700">{slotError}</p>
+                      )}
+                      {!slotLoading && !slotError && slots.length === 0 && (
+                        <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+                          {emptyReasonText(emptyReason, minLead, closedReason)}{" "}
+                          {nextDate ? (
+                            <button type="button" onClick={() => setDate(nextDate)} className="font-medium text-brand-700 underline">
+                              {t("uiScheduling.nextAvailableDate")}: {showDate(nextDate)}
+                            </button>
+                          ) : (
+                            t("uiScheduling.noSlotsTwoWeeks")
+                          )}
+                        </p>
+                      )}
+                      {minLead > 0 && (
+                        <p className="mt-2 text-xs text-gray-500 dark:text-surface-300">
+                          {t("uiScheduling.bookingLeadTime", { lead: leadText(minLead) })}
+                          {t("uiScheduling.bookingLeadContact")}
+                          {clinic.phone ? (
+                            <>
+                              {" "}
+                              <a href={`tel:${clinic.phoneHref}`} className="font-medium text-brand-600 hover:underline">
+                                {clinic.phone}
+                              </a>
+                            </>
+                          ) : null}
+                          .
+                        </p>
+                      )}
+                    </fieldset>
                     <button
                       type="button"
-                      className="font-medium text-brand-700 underline underline-offset-2"
-                      onClick={() => {
-                        clearSavedProfile();
-                        setRemembered(null);
-                        setOnBehalf(false);
-                        setForm((old) => ({
-                          ...old,
-                          fullName: "",
-                          dob: "",
-                          gender: "UNDISCLOSED",
-                          phone: "",
-                          email: "",
-                          contactPersonName: "",
-                          contactPersonPhone: "",
-                        }));
-                      }}
+                      disabled={!time}
+                      onClick={() => go(4)}
+                      className="min-h-11 w-full rounded-md bg-brand-600 px-4 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                     >
-                      {t('uiScheduling.bookingPrefilledClear')}
+                      {t("uiScheduling.bookingWizard.continue")}
                     </button>
                   </div>
                 )}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.phoneNumber')}
-                    <input
-                      required
-                      type="tel"
-                      maxLength={20}
-                      autoComplete="tel"
-                      value={form.phone}
-                      onChange={(e) => set("phone", e.target.value)}
-                      placeholder="0901 234 567"
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.bookingDob')}
-                    <input
-                      required
-                      type="date"
-                      max={today()}
-                      value={form.dob}
-                      onChange={(e) => set("dob", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                  </label>
-                  <div className="sm:col-span-2">
-                    <p className="text-xs text-gray-500 dark:text-surface-400">{t('uiScheduling.returningHint')}</p>
-                    <button
-                      type="button"
-                      onClick={lookupReturning}
-                      disabled={lookupBusy}
-                      className="mt-2 min-h-11 rounded-md border border-brand-600 px-4 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-60"
-                    >
-                      {lookupBusy ? t('uiScheduling.returningSearching') : t('uiScheduling.returningSearch')}
-                    </button>
-                    {lookupMessage && (
-                      <p role="status" className="mt-2 rounded-md bg-slate-50 dark:bg-surface-800 p-2 text-sm text-gray-700 dark:text-surface-200">
-                        {lookupMessage}
+
+                {step === 4 && (
+                  <div className="space-y-6">
+                    <div>
+                      {backButton(3)}
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-surface-100">4. {t("uiScheduling.bookingPatientInfo")}</h2>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-surface-400">{t("uiScheduling.bookingPatientInfoHint")}</p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-surface-400">
+                        <span className="text-red-500">*</span> {t("uiScheduling.bookingWizard.requiredNote")}
                       </p>
-                    )}
-                    {lookupChoices.length > 1 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {lookupChoices.map((c) => (
-                          <button
-                            key={c.fullName}
-                            type="button"
-                            onClick={() => applyReturning(c)}
-                            className="min-h-11 rounded-md border border-gray-300 px-3 text-sm hover:bg-brand-50"
-                          >
-                            {c.fullName}
-                          </button>
-                        ))}
+                    </div>
+                    {remembered && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-brand-50 dark:bg-surface-800 px-3 py-2 text-sm text-gray-700 dark:text-surface-200">
+                        <span>{t("uiScheduling.bookingPrefilled", { name: remembered.fullName })}</span>
+                        <button
+                          type="button"
+                          className="font-medium text-brand-700 underline underline-offset-2"
+                          onClick={() => {
+                            clearSavedProfile();
+                            setRemembered(null);
+                            setOnBehalf(false);
+                            setForm((old) => ({
+                              ...old,
+                              fullName: "",
+                              dob: "",
+                              gender: "UNDISCLOSED",
+                              phone: "",
+                              email: "",
+                              contactPersonName: "",
+                              contactPersonPhone: "",
+                            }));
+                          }}
+                        >
+                          {t("uiScheduling.bookingPrefilledClear")}
+                        </button>
                       </div>
                     )}
-                  </div>
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
-                    {t('uiScheduling.bookingFullName')}
-                    <input
-                      required
-                      maxLength={100}
-                      autoComplete="name"
-                      value={form.fullName}
-                      onChange={(e) => set("fullName", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.gender')}
-                    <select
-                      value={form.gender}
-                      onChange={(e) => set("gender", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 bg-white dark:bg-surface-900 px-3 py-2"
-                    >
-                      <option value="UNDISCLOSED">{t('uiScheduling.genderUndisclosed')}</option>
-                      <option value="FEMALE">{t('uiScheduling.genderFemale')}</option>
-                      <option value="MALE">{t('uiScheduling.genderMale')}</option>
-                      <option value="OTHER">{t('uiScheduling.genderOther')}</option>
-                    </select>
-                  </label>
-                  {age !== null && age < 18 && (
-                    <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2">
-                      {t('uiScheduling.minorBookingNotice')}{age < 12 ? ` ${t('uiScheduling.minorGuardianDetails')}` : ''}
-                    </p>
-                  )}
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                    {t('uiScheduling.bookingEmail')}
-                    <input
-                      type="email"
-                      autoComplete="email"
-                      value={form.email}
-                      onChange={(e) => set("email", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-surface-200 sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={onBehalf}
-                      onChange={(e) => setOnBehalf(e.target.checked)}
-                    />
-                    {t('uiScheduling.bookingOnBehalf')}
-                  </label>
-                  {showContact && (
-                    <>
-                      <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                        {t('uiScheduling.bookingContactPerson')}{age !== null && age < 12 ? ` (${t('uiScheduling.required')})` : ""}
-                        <input
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Input
+                        label={t("uiScheduling.phoneNumber")}
+                        required
+                        type="tel"
+                        maxLength={20}
+                        autoComplete="tel"
+                        value={form.phone}
+                        onChange={(e) => set("phone", e.target.value)}
+                        placeholder={t("uiScheduling.bookingWizard.phonePlaceholder")}
+                      />
+                      <Input
+                        label={t("uiScheduling.bookingDob")}
+                        required
+                        type="date"
+                        max={today()}
+                        value={form.dob}
+                        onChange={(e) => set("dob", e.target.value)}
+                      />
+                      <div className="sm:col-span-2">
+                        <p className="text-xs text-gray-500 dark:text-surface-400">{t("uiScheduling.returningHint")}</p>
+                        <button
+                          type="button"
+                          onClick={lookupReturning}
+                          disabled={lookupBusy}
+                          className="mt-2 min-h-11 rounded-md border border-brand-600 px-4 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-60 dark:text-brand-300 dark:hover:bg-surface-800"
+                        >
+                          {lookupBusy ? t("uiScheduling.returningSearching") : t("uiScheduling.returningSearch")}
+                        </button>
+                        {lookupMessage && (
+                          <p role="status" className="mt-2 rounded-md bg-slate-50 dark:bg-surface-800 p-2 text-sm text-gray-700 dark:text-surface-200">
+                            {lookupMessage}
+                          </p>
+                        )}
+                        {lookupChoices.length > 1 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {lookupChoices.map((c) => (
+                              <button
+                                key={c.fullName}
+                                type="button"
+                                onClick={() => applyReturning(c)}
+                                className="min-h-11 rounded-md border border-gray-300 px-3 text-sm hover:bg-brand-50 dark:border-surface-600 dark:hover:bg-surface-800"
+                              >
+                                {c.fullName}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Input
+                          label={t("uiScheduling.bookingFullName")}
+                          required
                           maxLength={100}
-                          required={age !== null && age < 12}
-                          value={form.contactPersonName}
-                          onChange={(e) => set("contactPersonName", e.target.value)}
-                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
+                          autoComplete="name"
+                          value={form.fullName}
+                          onChange={(e) => set("fullName", e.target.value)}
+                          placeholder={t("uiScheduling.bookingWizard.namePlaceholder")}
                         />
+                      </div>
+                      <Select
+                        label={t("uiScheduling.gender").replace(/\s*\*$/, "")}
+                        required
+                        value={form.gender}
+                        onChange={(e) => set("gender", e.target.value)}
+                        options={[
+                          { value: "UNDISCLOSED", label: t("uiScheduling.genderUndisclosed") },
+                          { value: "FEMALE", label: t("uiScheduling.genderFemale") },
+                          { value: "MALE", label: t("uiScheduling.genderMale") },
+                          { value: "OTHER", label: t("uiScheduling.genderOther") },
+                        ]}
+                      />
+                      <Input
+                        label={t("uiScheduling.bookingEmail")}
+                        type="email"
+                        autoComplete="email"
+                        value={form.email}
+                        onChange={(e) => set("email", e.target.value)}
+                        placeholder={t("uiScheduling.bookingWizard.emailPlaceholder")}
+                        hint={t("uiScheduling.bookingWizard.emailHint")}
+                      />
+                      {age !== null && age < 18 && (
+                        <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900 sm:col-span-2">
+                          {t("uiScheduling.minorBookingNotice")}
+                          {age < 12 ? ` ${t("uiScheduling.minorGuardianDetails")}` : ""}
+                        </p>
+                      )}
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-surface-200 sm:col-span-2">
+                        <input type="checkbox" checked={onBehalf} onChange={(e) => setOnBehalf(e.target.checked)} />
+                        {t("uiScheduling.bookingOnBehalf")}
                       </label>
-                      <label className="text-sm font-medium text-gray-700 dark:text-surface-200">
-                        {t('uiScheduling.bookingContactPhone')}
-                        <input
-                          type="tel"
-                          required={age !== null && age < 12}
-                          value={form.contactPersonPhone}
-                          onChange={(e) =>
-                            set("contactPersonPhone", e.target.value)
-                          }
-                          className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
+                      {showContact && (
+                        <>
+                          <Input
+                            label={t("uiScheduling.bookingContactPerson")}
+                            maxLength={100}
+                            required={age !== null && age < 12}
+                            value={form.contactPersonName}
+                            onChange={(e) => set("contactPersonName", e.target.value)}
+                            placeholder={t("uiScheduling.bookingWizard.contactNamePlaceholder")}
+                          />
+                          <Input
+                            label={t("uiScheduling.bookingContactPhone")}
+                            type="tel"
+                            required={age !== null && age < 12}
+                            value={form.contactPersonPhone}
+                            onChange={(e) => set("contactPersonPhone", e.target.value)}
+                            placeholder={t("uiScheduling.bookingWizard.phonePlaceholder")}
+                          />
+                        </>
+                      )}
+                      <div className="sm:col-span-2">
+                        <Textarea
+                          label={t("uiScheduling.bookingReason")}
+                          maxLength={1000}
+                          rows={3}
+                          value={form.reason}
+                          onChange={(e) => set("reason", e.target.value)}
+                          placeholder={t("uiScheduling.bookingWizard.reasonPlaceholder")}
                         />
-                      </label>
-                    </>
-                  )}
-                  <label className="text-sm font-medium text-gray-700 dark:text-surface-200 sm:col-span-2">
-                    {t('uiScheduling.bookingReason')}
-                    <textarea
-                      maxLength={1000}
-                      rows={3}
-                      value={form.reason}
-                      onChange={(e) => set("reason", e.target.value)}
-                      className="mt-1 block min-h-11 w-full min-w-0 rounded-md border border-gray-300 dark:border-surface-600 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:bg-gray-100 dark:disabled:bg-surface-800 disabled:text-gray-500 dark:text-surface-400 px-3 py-2"
-                    />
-                  </label>
-                </div>
-              </div>
-              <label className="flex gap-3 rounded-lg bg-slate-50 dark:bg-surface-950 p-3 text-sm text-gray-700 dark:text-surface-200">
-                <input
-                  required
-                  type="checkbox"
-                  checked={form.consent}
-                  onChange={(e) => set("consent", e.target.checked)}
-                  className="mt-1"
-                />
-                <span>{t('uiScheduling.consent')}</span>
-              </label>
-              <label className="flex gap-3 px-3 text-sm text-gray-600 dark:text-surface-300">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="mt-1"
-                />
-                <span>{t('uiScheduling.bookingRemember')}</span>
-              </label>
-              {error && (
-                <p
-                  role="alert"
-                  className="rounded-md bg-red-50 p-3 text-sm text-red-700"
-                >
-                  {error}
-                </p>
-              )}
-              <button
-                disabled={submitting || slotLoading || !time}
-                className="w-full rounded-md bg-brand-600 px-4 py-3 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? t('uiScheduling.sending') : t('uiScheduling.bookingSubmit')}
-              </button>
-            </form>
+                      </div>
+                    </div>
+                    <label className="flex gap-3 rounded-lg bg-slate-50 dark:bg-surface-800 p-3 text-sm text-gray-700 dark:text-surface-200">
+                      <input required type="checkbox" checked={form.consent} onChange={(e) => set("consent", e.target.checked)} className="mt-1" />
+                      <span>
+                        {t("uiScheduling.consent")}
+                        <span className="ml-1 text-red-500" aria-hidden>*</span>
+                      </span>
+                    </label>
+                    <label className="flex gap-3 px-3 text-sm text-gray-600 dark:text-surface-300">
+                      <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="mt-1" />
+                      <span>{t("uiScheduling.bookingRemember")}</span>
+                    </label>
+                    {error && (
+                      <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>
+                    )}
+                    <button
+                      disabled={submitting || slotLoading || !time}
+                      className="w-full rounded-md bg-brand-600 px-4 py-3 font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {submitting ? t("uiScheduling.sending") : t("uiScheduling.bookingSubmit")}
+                    </button>
+                  </div>
+                )}
+              </form>
+            </>
           )}
-          <p className="mt-5 text-xs text-gray-500 dark:text-surface-400">
-            {t('uiScheduling.bookingHelp')}
-          </p>
+          <p className="mt-5 text-xs text-gray-500 dark:text-surface-400">{t("uiScheduling.bookingHelp")}</p>
         </section>
       </div>
     </main>

@@ -11,7 +11,17 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -24,6 +34,26 @@ export class RequestHistoryLinkDto {
   @MinLength(9)
   @MaxLength(20)
   phone!: string;
+}
+
+export class CreateReviewDto {
+  @ApiProperty({ description: 'reviewKey of the visit on the history page' })
+  @IsString()
+  @Matches(/^[0-9a-f]{24}$/)
+  reviewKey!: string;
+
+  @ApiProperty({ minimum: 1, maximum: 5 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @ApiProperty({ required: false, maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  comment?: string;
 }
 
 @ApiTags('Patient history (staff)')
@@ -56,6 +86,17 @@ export class PublicPatientHistoryController {
   })
   async request(@Body() dto: RequestHistoryLinkDto) {
     return { data: await this.history.requestByPhone(dto.phone) };
+  }
+
+  @Post(':token/reviews')
+  @HttpCode(201)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Bệnh nhân đánh giá bác sĩ của một lần khám đã xong (mỗi lần khám một lần)',
+  })
+  async review(@Param('token') token: string, @Body() dto: CreateReviewDto) {
+    return { data: await this.history.review(token, dto.reviewKey, dto.rating, dto.comment) };
   }
 
   @Get(':token')

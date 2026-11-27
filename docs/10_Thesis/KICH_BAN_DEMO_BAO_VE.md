@@ -111,11 +111,12 @@ Quy ước: **Làm** là thao tác, **Nói** là lời gợi ý (nói tự nhiê
 ### ① Bệnh nhân đặt lịch online (1:00–2:30) — cửa sổ *Bệnh nhân*
 
 **Làm:**
-1. Trang **Đặt lịch khám**. Ở mục 2, gõ **Số điện thoại** và **Ngày sinh** của bệnh nhân demo → bấm **Tìm hồ sơ cũ**: họ tên tự điền.
-2. Mục 1: **Dịch vụ** = "Khám tổng quát & tư vấn"; **Bác sĩ** = bác sĩ demo; **Ngày** = hôm nay; **Giờ còn trống** = giờ sớm nhất.
-3. Tích "Tôi đồng ý…" → **Gửi yêu cầu đặt lịch** → màn hình "Đã gửi yêu cầu đặt lịch".
+1. Trang **Đặt lịch khám**, bước **Dịch vụ**: gõ "khám" vào ô tìm kiếm (hoặc bấm nhóm dịch vụ) → chọn "Khám tổng quát & tư vấn" — chỉ vào giá tham khảo và thời lượng trên thẻ.
+2. Bước **Bác sĩ**: chỉ vào số năm kinh nghiệm, chức vụ, số sao → bấm **Xem hồ sơ** bác sĩ demo (đào tạo, công tác, giải thưởng, đánh giá của bệnh nhân đã khám) → **Chọn bác sĩ này và xem giờ trống**.
+3. Bước **Thời gian**: **Ngày** = hôm nay; **Giờ còn trống** = giờ sớm nhất → **Tiếp tục**.
+4. Bước **Thông tin**: gõ **Số điện thoại** và **Ngày sinh** → **Tìm hồ sơ cũ**: họ tên tự điền. Tích "Tôi đồng ý…" → **Gửi yêu cầu đặt lịch** → màn hình "Đã gửi yêu cầu đặt lịch".
 
-**Nói:** "Danh sách giờ trống tính từ lịch làm việc của bác sĩ, trừ giờ đã có người, ngày nghỉ và thời gian đệm giữa hai ca. Đặt online phải trước ít nhất 2 giờ. Yêu cầu chưa thành lịch hẹn cho đến khi lễ tân duyệt; lúc tạo lịch hẹn, máy chủ lấy **khóa tư vấn** của PostgreSQL theo bác sĩ và bệnh nhân rồi kiểm tra trùng ngay trong giao dịch, nên hai lịch trùng giờ không bao giờ cùng được tạo — ca kiểm thử KT-LH-01 gửi hai yêu cầu đồng thời để chứng minh."
+**Nói:** "Bệnh nhân chọn dịch vụ trước, rồi mới chọn bác sĩ làm được dịch vụ đó; đánh giá chỉ đến từ bệnh nhân đã khám thật, gửi qua trang lịch sử khám, và quản lý có thể ẩn kèm lý do. Danh sách giờ trống tính từ lịch làm việc của bác sĩ, trừ giờ đã có người, ngày nghỉ và thời gian đệm giữa hai ca. Đặt online phải trước ít nhất 2 giờ. Yêu cầu chưa thành lịch hẹn cho đến khi lễ tân duyệt; lúc tạo lịch hẹn, máy chủ lấy **khóa tư vấn** của PostgreSQL theo bác sĩ và bệnh nhân rồi kiểm tra trùng ngay trong giao dịch, nên hai lịch trùng giờ không bao giờ cùng được tạo — ca kiểm thử KT-LH-01 gửi hai yêu cầu đồng thời để chứng minh."
 
 **Nếu lỗi / phương án B:** sau 16:30 không còn giờ cách 2 tiếng → chọn **ngày mai**, nói "lịch hẹn sẽ vào ngày mai"; đến bước ② lễ tân duyệt xong thì dùng **Lịch hẹn → Khách vãng lai** để tiếp nhận anh Sơn hôm nay (vẫn đúng nghiệp vụ: khách đến không hẹn).
 

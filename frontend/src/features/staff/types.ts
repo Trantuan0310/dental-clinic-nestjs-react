@@ -91,6 +91,13 @@ export interface DentistProfile {
   acceptsNewPatients: boolean;
   practiceStatus: PracticeStatus;
   bio: string | null;
+  /** Shown to patients booking online (one item per line for the last three). */
+  title: string | null;
+  position: string | null;
+  practiceSince: number | null;
+  education: string | null;
+  experience: string | null;
+  awards: string | null;
 }
 
 export interface DentistProfilePayload {
@@ -102,6 +109,12 @@ export interface DentistProfilePayload {
   acceptsOnlineBooking?: boolean;
   acceptsNewPatients?: boolean;
   bio?: string | null;
+  title?: string | null;
+  position?: string | null;
+  practiceSince?: number | null;
+  education?: string | null;
+  experience?: string | null;
+  awards?: string | null;
 }
 
 /** What still keeps a dentist out of the booking screens / public site. */

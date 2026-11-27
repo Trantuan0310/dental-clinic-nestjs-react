@@ -13,7 +13,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiProperty,
+  ApiPropertyOptional,
+  ApiTags,
+} from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { DentistReviewStatus } from '@prisma/client';
+import { DentistReviewsService } from '../dentist-reviews/dentist-reviews.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtPayload, PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -137,12 +146,50 @@ export class EmployeesController {
   }
 }
 
+export class SetReviewStatusDto {
+  @ApiProperty({ enum: DentistReviewStatus })
+  @IsEnum(DentistReviewStatus)
+  status!: DentistReviewStatus;
+
+  @ApiPropertyOptional({ description: 'Required (5+ characters) when hiding' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
+
 @ApiTags('Staff — dentists')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('dentists')
 export class DentistsController {
-  constructor(private readonly dentists: DentistsService) {}
+  constructor(
+    private readonly dentists: DentistsService,
+    private readonly reviews: DentistReviewsService,
+  ) {}
+
+  @Get(':userId/reviews')
+  @RequirePermissions('dentist.read')
+  @ApiOperation({ summary: "Patients' reviews of a dentist, hidden ones included" })
+  async listReviews(@Param('userId', ParseUUIDPipe) userId: string) {
+    const [summary, rows] = await Promise.all([
+      this.reviews.summaries([userId]),
+      this.reviews.listForStaff(userId),
+    ]);
+    return { data: { summary: summary.get(userId), reviews: rows } };
+  }
+
+  @Patch(':userId/reviews/:reviewId')
+  @RequirePermissions('dentist.update')
+  @ApiOperation({ summary: 'Hide (with a reason) or show again a patient review' })
+  async setReviewStatus(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('reviewId', ParseUUIDPipe) reviewId: string,
+    @Body() dto: SetReviewStatusDto,
+    @User() actor: JwtPayload,
+  ) {
+    return { data: await this.reviews.setStatus(userId, reviewId, dto.status, dto.reason, actor) };
+  }
 
   @Get()
   @RequirePermissions('dentist.read')

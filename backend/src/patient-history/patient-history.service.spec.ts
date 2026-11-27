@@ -1,10 +1,16 @@
 import { NotFoundException } from '@nestjs/common';
-import { PatientHistoryService, historyLinkHash, maskContact } from './patient-history.service';
+import {
+  PatientHistoryService,
+  historyLinkHash,
+  maskContact,
+  reviewKey,
+} from './patient-history.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
 import type { EmailService } from '../common/services/email.service';
 import type { MessagingService } from '../messaging/messaging.service';
 import type { JwtPayload } from '../common/guards/permissions.guard';
+import { DentistReviewsService } from '../dentist-reviews/dentist-reviews.service';
 
 const TOKEN = 'a'.repeat(43);
 const NOW = new Date('2026-11-15T03:00:00Z');
@@ -17,6 +23,7 @@ function setup() {
     treatmentPlan: { findMany: jest.fn().mockResolvedValue([]) },
     appointment: { findMany: jest.fn().mockResolvedValue([]) },
     invoice: { findMany: jest.fn().mockResolvedValue([]) },
+    dentistReview: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
   };
   const audit = { log: jest.fn() };
   const email = { send: jest.fn().mockResolvedValue(true) };
@@ -26,6 +33,7 @@ function setup() {
     audit as unknown as AuditService,
     email as unknown as EmailService,
     messaging as unknown as MessagingService,
+    new DentistReviewsService(db as unknown as PrismaService, audit as unknown as AuditService),
   );
   return { db, audit, email, messaging, service };
 }
@@ -194,6 +202,41 @@ describe('PatientHistoryService', () => {
     });
     expect(audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'PATIENT_HISTORY_VIEWED', targetId: 'p1' }),
+    );
+  });
+
+  it('review: a visit is named by a key only this link can make, never by its id', async () => {
+    const { db, service } = setup();
+    const link = {
+      id: 'l1',
+      patientId: 'p1',
+      tokenHash: historyLinkHash(TOKEN),
+      expiresAt: new Date('2026-11-20T00:00:00Z'),
+      patient: {
+        id: 'p1',
+        code: 'PAT-1',
+        fullName: 'A',
+        dob: new Date('1990-01-01'),
+        deletedAt: null,
+      },
+    };
+    db.patientHistoryLink.findUnique.mockResolvedValue(link);
+    db.encounter.findMany.mockResolvedValue([{ id: 'e1' }, { id: 'e2' }]);
+    Object.assign(db.encounter, {
+      findFirst: jest.fn().mockResolvedValue({ id: 'e2', dentistId: 'd1', closedAt: NOW }),
+    });
+    db.dentistReview.create.mockResolvedValue({ id: 'r1', rating: 4, comment: null });
+
+    await expect(service.review(TOKEN, 'f'.repeat(24), 4, undefined, NOW)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(
+      service.review(TOKEN, reviewKey(link.tokenHash, 'e2'), 4, undefined, NOW),
+    ).resolves.toEqual({ rating: 4, comment: null });
+    expect(db.dentistReview.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ encounterId: 'e2', patientId: 'p1' }),
+      }),
     );
   });
 });

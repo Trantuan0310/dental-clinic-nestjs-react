@@ -13,5 +13,6 @@ import { en as uiScheduling } from './uiScheduling';
 import { en as uiVisitTemplates } from './uiVisitTemplates';
 import { en as uiPatientHistory } from './uiPatientHistory';
 import { en as uiWorkforce } from './uiWorkforce';
+import { en as uiPermissions } from './uiPermissions';
 
-export const translation = { ...en, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce, uiPatientHistory };
+export const translation = { ...en, uiAi, uiClinical, uiCommon, uiEntry, uiMessaging, uiNotifications, uiOperations, uiPlans, uiRecalls, uiScheduling, uiVisitTemplates, uiWorkforce, uiPatientHistory, uiPermissions };

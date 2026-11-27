@@ -22,6 +22,7 @@ import * as argon2 from 'argon2';
 import { backfillStaffRecords } from './staff-backfill';
 import { DEMO_PATIENT_NOTE, DEMO_SUMMARY, seedDemoCharts } from './seed-demo-charts';
 import { clinicalFor, fitsAge, isPenicillin, teethFor } from './demo-teeth';
+import { seedDemoProfiles } from './seed-demo-profiles';
 
 const prisma = new PrismaClient();
 
@@ -908,6 +909,8 @@ async function main() {
   if (items.length) console.log(`✓ Nhập kho ${items.length} vật tư`);
 
   console.log(`✓ ${await seedDemoCharts(prisma)} sơ đồ răng mẫu`);
+  const shown = await seedDemoProfiles(prisma);
+  console.log(`✓ ${shown.filled} hồ sơ bác sĩ, ${shown.reviews} đánh giá mẫu`);
   console.log(`\nXONG. Doanh thu mẫu đã phát hành: ${stats.revenue.toLocaleString('vi-VN')} đ`);
   console.log('Tài khoản nhân viên mẫu (nếu được tạo): mật khẩu Password123!');
 }

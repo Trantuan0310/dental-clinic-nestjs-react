@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MessagingModule } from '../messaging/messaging.module';
+import { DentistReviewsModule } from '../dentist-reviews/dentist-reviews.module';
 import {
   PatientHistoryLinkController,
   PublicPatientHistoryController,
@@ -7,7 +8,7 @@ import {
 import { PatientHistoryService } from './patient-history.service';
 
 @Module({
-  imports: [MessagingModule],
+  imports: [MessagingModule, DentistReviewsModule],
   controllers: [PatientHistoryLinkController, PublicPatientHistoryController],
   providers: [PatientHistoryService],
 })

@@ -5,11 +5,15 @@ import { api, unwrap } from '@/lib/api';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { PublicTopBar } from '@/features/booking/PublicTopBar';
+import { VisitReview } from './VisitReview';
 
 type History = {
   patient: { code: string; fullName: string };
   expiresAt: string;
   visits: Array<{
+    reviewKey: string;
+    review: { rating: number; comment: string | null } | null;
+    canReview: boolean;
     date: string;
     dentistName: string;
     chiefComplaint: string | null;
@@ -147,6 +151,7 @@ export default function PublicHistoryPage() {
                             </div>
                           )}
                           {v.summary && <p className="mt-1 text-xs text-gray-500 dark:text-surface-400">{v.summary}</p>}
+                          <VisitReview token={ma} reviewKey={v.reviewKey} dentistName={v.dentistName} review={v.review} canReview={v.canReview} />
                         </li>
                       ))}
                     </ol>
