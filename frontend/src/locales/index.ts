@@ -49,6 +49,13 @@ void i18n
       lookupLocalStorage: 'gensmile.i18n',
     },
     returnEmptyString: false,
+    // Development only: a key the code asks for but no resource has (it would show as
+    // "uiScheduling.someKey" on screen) is reported, and E2E fails the test that hit it.
+    // Calls with a fallback (t(key, 'text') / defaultValue) are not reported.
+    saveMissing: (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true,
+    missingKeyHandler: (_lngs, _ns, key, fallbackValue) => {
+      if (fallbackValue === key) console.warn(`[i18n] missing key: ${key}`);
+    },
     // English is added on demand (loadLocale), Vietnamese ships with the app.
     partialBundledLanguages: true,
   });

@@ -96,7 +96,16 @@ type StorageStateOption = BrowserNewContextOptions['storageState'];
 // getSharedContext().newPage() go through the same override) closes the gap
 // at its single choke point instead of auditing every spec for a stray
 // double-navigation.
+/** i18n keys a page asked for that no locale has (src/locales/index.ts reports them in dev). */
+const missingKeys = new WeakMap<Page, Set<string>>();
+
 function instrumentPage(page: Page): Page {
+  const missing = new Set<string>();
+  missingKeys.set(page, missing);
+  page.on('console', (msg) => {
+    const m = /^\[i18n\] missing key: (.+)$/.exec(msg.text());
+    if (m) missing.add(m[1]);
+  });
   const settle = () => page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
   const originalGoto = page.goto.bind(page);
   page.goto = (async (...args: Parameters<Page['goto']>) => {
@@ -218,6 +227,9 @@ export const test = base.extend({
     // settle before this fixture (or the test) ever proceeds.
     const page = await context.newPage();
     await use(page);
+    // A missing key shows on screen as "uiX.someKey": fail the test that rendered it.
+    const missing = [...(missingKeys.get(page) ?? [])];
+    expect(missing, `Missing i18n keys rendered: ${missing.join(', ')}`).toEqual([]);
     const path = await saveDemoVideo(page, testInfo.title);
     if (path) {
       await testInfo.attach('demo-video', { path, contentType: 'video/webm' });

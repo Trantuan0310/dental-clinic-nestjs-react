@@ -169,7 +169,7 @@ export default function DentistDetailPage() {
                 {schedules.map((s) => (
                   <li key={s.id} className="flex flex-wrap justify-between gap-2 py-2">
                     <span className="font-medium">
-                      {t(`uiWorkforce.day_${s.dayOfWeek}`)} · {s.startTime}–{s.endTime}
+                      {t(`uiScheduling.weekday${s.dayOfWeek}`)} · {s.startTime}–{s.endTime}
                     </span>
                     <span className="text-xs text-gray-500 dark:text-surface-400">
                       {t('uiWorkforce.scheduleEffectiveFrom', { date: formatDate(s.validFrom) })}
