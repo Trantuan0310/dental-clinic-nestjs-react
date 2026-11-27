@@ -146,9 +146,6 @@ export class EmployeesController {
   }
 }
 
-@ApiTags('Staff — dentists')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SetReviewStatusDto {
   @ApiProperty({ enum: DentistReviewStatus })
   @IsEnum(DentistReviewStatus)
@@ -161,6 +158,9 @@ export class SetReviewStatusDto {
   reason?: string;
 }
 
+@ApiTags('Staff — dentists')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('dentists')
 export class DentistsController {
   constructor(
