@@ -19,17 +19,25 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
   await pub.goto('/booking');
   await expect(pub.getByRole('heading', { name: 'Đặt lịch khám' })).toBeVisible();
 
-  const service = pub.getByLabel('Dịch vụ');
-  const exam = service.locator('option', { hasText: 'Khám tổng quát' });
-  await service.selectOption((await exam.getAttribute('value'))!);
-  const dentist = pub.getByLabel('Bác sĩ');
-  await expect(dentist.locator('option')).not.toHaveCount(1);
-  await dentist.selectOption({ index: 1 });
+  // Step 1: the service, from cards grouped by category (searchable).
+  await pub.getByPlaceholder(/Tìm dịch vụ/).fill('Khám tổng quát');
+  await pub.getByRole('radio', { name: /Khám tổng quát/ }).first().click();
+  // Step 2: the first dentist card (the same order as the public options API).
+  const options = (await (await pub.request.get('/api/v1/public/booking/options')).json()).data as Array<{
+    id: string;
+    name: string;
+    dentists: Array<{ id: string }>;
+  }>;
+  const exam = options.find((s) => s.name.startsWith('Khám tổng quát'))!;
+  const serviceId = exam.id;
+  const dentistId = exam.dentists[0].id;
+  if (exam.dentists.length > 1) {
+    await expect(pub.getByRole('heading', { name: /Chọn bác sĩ/ })).toBeVisible();
+    await pub.getByRole('radiogroup', { name: 'Bác sĩ' }).getByRole('radio').first().click();
+  }
 
-  // First day in the coming two weeks with a free slot, asked of the same
-  // public endpoint the page uses (so the form is filled once, not raced).
-  const serviceId = await service.inputValue();
-  const dentistId = await dentist.inputValue();
+  // Step 3: first day in the coming two weeks with a free slot, asked of the
+  // same public endpoint the page uses (so the form is filled once, not raced).
   let day = '';
   for (let k = 1; k <= 14 && !day; k++) {
     const candidate = new Date(Date.now() + 7 * 3600_000 + k * 86_400_000)
@@ -41,14 +49,15 @@ test('patient requests a visit online and the front desk confirms it', async ({ 
     if (res.ok() && ((await res.json()).data.availableSlots ?? []).length > 0) day = candidate;
   }
   expect(day, 'a free online slot in the next 14 days').not.toBe('');
-  await pub.getByLabel('Ngày', { exact: true }).fill(day);
-  const time = pub.getByLabel('Giờ còn trống');
-  await expect(time).toBeEnabled();
-  await time.selectOption({ index: 1 });
+  await pub.locator('input[type=date]').first().fill(day);
+  const times = pub.getByRole('radiogroup', { name: 'Giờ còn trống' });
+  await times.getByRole('radio').first().click();
+  await pub.getByRole('button', { name: 'Tiếp tục' }).click();
 
-  await pub.getByLabel('Họ và tên').fill(name);
-  await pub.getByLabel('Ngày sinh').fill('1990-05-01');
-  await pub.getByLabel('Số điện thoại', { exact: true }).fill(phone);
+  // Step 4: the patient's details (required fields are starred).
+  await pub.getByLabel(/^Họ và tên/).fill(name);
+  await pub.getByLabel(/^Ngày sinh/).fill('1990-05-01');
+  await pub.getByLabel(/^Số điện thoại/).first().fill(phone);
   await pub.getByRole('checkbox', { name: /Tôi đồng ý/ }).check();
   await pub.getByRole('button', { name: 'Gửi yêu cầu đặt lịch' }).click();
 

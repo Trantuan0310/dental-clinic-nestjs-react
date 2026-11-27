@@ -25,7 +25,9 @@ test('visitors get the landing page and can book a listed service', async ({ pag
   await firstBook.click();
   await expect(page).toHaveURL(/\/booking\?service=/);
   await expect(page.getByRole('heading', { name: 'Đặt lịch khám' })).toBeVisible();
-  await expect(page.getByLabel('Dịch vụ').locator('option:checked')).toContainText(label);
+  // The booking page opens past step 1 with that service chosen (shown in the summary).
+  await expect(page.getByRole('button', { name: /Dịch vụ/ })).toBeEnabled();
+  await expect(page.locator('dl').getByText(label, { exact: true })).toBeVisible();
 });
 
 test('staff sign-in stays reachable from the landing page', async ({ page }) => {
