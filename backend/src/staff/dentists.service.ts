@@ -105,6 +105,18 @@ export class DentistsService {
       data.acceptsOnlineBooking = dto.acceptsOnlineBooking;
     if (dto.acceptsNewPatients !== undefined) data.acceptsNewPatients = dto.acceptsNewPatients;
     if (dto.bio !== undefined) data.bio = dto.bio;
+    // Public profile (online booking); blank text clears the field.
+    const text = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
+    for (const key of ['title', 'position', 'education', 'experience', 'awards'] as const) {
+      const value = text(dto[key]);
+      if (value !== undefined) data[key] = value;
+    }
+    if (dto.practiceSince !== undefined) {
+      if (dto.practiceSince !== null && dto.practiceSince > new Date().getUTCFullYear()) {
+        throw new EmployeeValidationException('Năm bắt đầu hành nghề không thể ở tương lai');
+      }
+      data.practiceSince = dto.practiceSince;
+    }
 
     const updated = await this.prisma.dentistProfile.update({
       where: { userId },
@@ -326,6 +338,12 @@ export class DentistsService {
       acceptsNewPatients: row.acceptsNewPatients,
       practiceStatus: row.practiceStatus,
       bio: row.bio,
+      title: row.title,
+      position: row.position,
+      practiceSince: row.practiceSince,
+      education: row.education,
+      experience: row.experience,
+      awards: row.awards,
       updatedAt: row.updatedAt,
     };
   }

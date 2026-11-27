@@ -5,6 +5,7 @@ import type { AuditService } from '../audit/audit.service';
 import type { EmailService } from '../common/services/email.service';
 import type { MessagingService } from '../messaging/messaging.service';
 import type { JwtPayload } from '../common/guards/permissions.guard';
+import { DentistReviewsService } from '../dentist-reviews/dentist-reviews.service';
 
 const TOKEN = 'a'.repeat(43);
 const NOW = new Date('2026-11-15T03:00:00Z');
@@ -17,6 +18,7 @@ function setup() {
     treatmentPlan: { findMany: jest.fn().mockResolvedValue([]) },
     appointment: { findMany: jest.fn().mockResolvedValue([]) },
     invoice: { findMany: jest.fn().mockResolvedValue([]) },
+    dentistReview: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
   };
   const audit = { log: jest.fn() };
   const email = { send: jest.fn().mockResolvedValue(true) };
@@ -26,6 +28,7 @@ function setup() {
     audit as unknown as AuditService,
     email as unknown as EmailService,
     messaging as unknown as MessagingService,
+    new DentistReviewsService(db as unknown as PrismaService, audit as unknown as AuditService),
   );
   return { db, audit, email, messaging, service };
 }

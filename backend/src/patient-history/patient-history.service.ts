@@ -8,12 +8,16 @@ import { clinicContactLine, publicAppUrl } from '../booking/clinic-contact';
 import { normalizePhone } from '../booking/booking.service';
 import { isMinor } from '../patients/domain/patient-rules';
 import type { JwtPayload } from '../common/guards/permissions.guard';
+import { DentistReviewsService } from '../dentist-reviews/dentist-reviews.service';
 
 /** How long a history link stays open. */
 export const HISTORY_LINK_DAYS = 7;
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 
 export const historyLinkHash = (token: string) => createHash('sha256').update(token).digest('hex');
+/** Names a visit on the history page without its id: only this link can produce or use it. */
+export const reviewKey = (tokenHash: string, encounterId: string) =>
+  historyLinkHash(`${tokenHash}:review:${encounterId}`).slice(0, 24);
 
 /** "0901234567" → "090****567"; "an@example.com" → "a***@example.com". */
 export function maskContact(value: string): string {
@@ -43,6 +47,7 @@ export class PatientHistoryService {
     private readonly audit: AuditService,
     private readonly email: EmailService,
     private readonly messaging: MessagingService,
+    private readonly reviews: DentistReviewsService,
   ) {}
 
   private async issue(patientId: string, createdBy: string | null, now = new Date()) {
@@ -180,7 +185,8 @@ export class PatientHistoryService {
   }
 
   /** Public: the history behind a link. Nothing the patient did not already receive. */
-  async view(token: string, now = new Date()) {
+  /** The live link a token opens, or 404 (same answer for unknown, expired, deleted). */
+  private async openLink(token: string, now: Date) {
     const denied = () => new NotFoundException('Đường dẫn không hợp lệ hoặc đã hết hạn');
     if (typeof token !== 'string' || !TOKEN_RE.test(token)) throw denied();
     const link = await this.prisma.patientHistoryLink.findUnique({
@@ -190,6 +196,26 @@ export class PatientHistoryService {
       },
     });
     if (!link || link.expiresAt <= now || link.patient.deletedAt) throw denied();
+    return link;
+  }
+
+  /** The patient rates the dentist of one of their closed visits (once per visit). */
+  async review(token: string, key: string, rating: number, comment?: string, now = new Date()) {
+    const link = await this.openLink(token, now);
+    const visits = await this.prisma.encounter.findMany({
+      where: { patientId: link.patientId, status: 'COMPLETED' },
+      orderBy: { startedAt: 'desc' },
+      take: 100,
+      select: { id: true },
+    });
+    const visit = visits.find(v => reviewKey(link.tokenHash, v.id) === key);
+    if (!visit) throw new NotFoundException('Không tìm thấy lần khám này');
+    const review = await this.reviews.createForPatient(link.patientId, visit.id, rating, comment, now);
+    return { rating: review.rating, comment: review.comment };
+  }
+
+  async view(token: string, now = new Date()) {
+    const link = await this.openLink(token, now);
     const patientId = link.patientId;
 
     const [visits, plans, upcoming, invoices] = await Promise.all([
@@ -274,13 +300,17 @@ export class PatientHistoryService {
       metadata: { linkId: link.id },
     });
 
+    const given = await this.reviews.forEncounters(visits.map(v => v.id));
     const teeth = (value: unknown) =>
       Array.isArray(value) ? value.map(Number).filter(n => Number.isInteger(n) && n > 0) : [];
     return {
       patient: { code: link.patient.code, fullName: link.patient.fullName },
       expiresAt: link.expiresAt,
       visits: visits.map(v => ({
+        reviewKey: reviewKey(link.tokenHash, v.id),
         date: v.closedAt ?? v.startedAt,
+        review: given.get(v.id) ?? null,
+        canReview: !given.has(v.id) && DentistReviewsService.canReview(v.closedAt, now),
         dentistName: v.dentist.fullName,
         chiefComplaint: v.chiefComplaint,
         diagnosis: v.diagnosis,

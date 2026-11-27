@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { UsersModule } from '../users/users.module';
+import { DentistReviewsModule } from '../dentist-reviews/dentist-reviews.module';
 import { DentistsController, EmployeesController } from './staff.controller';
 import { EmployeesService } from './employees.service';
 import { DentistsService } from './dentists.service';
@@ -7,7 +8,7 @@ import { StaffCron } from './staff.cron';
 
 /** HR records and dentist profiles (ADR-0009 phase 1). */
 @Module({
-  imports: [UsersModule],
+  imports: [UsersModule, DentistReviewsModule],
   controllers: [EmployeesController, DentistsController],
   providers: [EmployeesService, DentistsService, StaffCron],
   exports: [DentistsService],
