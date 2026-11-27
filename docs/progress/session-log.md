@@ -211,3 +211,14 @@
 - PR #118 (báo cáo bản cuối, kịch bản demo, sửa lỗi giao diện và dữ liệu demo) gộp squash: main = b7d583e.
 - Lần CI đầu đỏ 1/122 E2E: test còn tìm nút "Đóng encounter" sau khi Việt hóa thành "Đóng phiên khám"; sửa 2 file test, chạy lại cục bộ 7/7 đạt, CI lần hai 10/10 xanh.
 - Chờ người dùng deploy trên VPS và chạy `bash scripts/demo-teeth-vps.sh`; kiểm tra `/health` commit = b7d583e.
+
+## 27/11/2026 — Rà i18n, quyền, danh sách chờ, đặt lịch 4 bước, hồ sơ và đánh giá bác sĩ
+
+- i18n: `check-ui-locales.mjs` quét cả khóa ghép (TypeScript checker), chạy trong `npm run lint`; E2E fixture fail khi giao diện hiện khóa thiếu. Sửa toàn bộ khóa thiếu (uiScheduling, uiWorkforce, uiPatientHistory, uiPermissions mới).
+- Vai trò & quyền: tên quyền đọc được, tìm kiếm, nhóm tiếng Việt. Danh sách chờ: viết lại bằng component UI, sửa dark mode.
+- Đặt lịch online 4 bước: Dịch vụ (nhóm, tìm kiếm, giá tham khảo) → Bác sĩ (kinh nghiệm, chức vụ, đào tạo, công tác, giải thưởng, sao) → Thời gian → Thông tin (placeholder, dấu * đỏ).
+- Đánh giá bác sĩ: migration 067 (`DentistProfile` thêm trường hồ sơ, bảng `dentist_reviews`); bệnh nhân chấm 1–5 sao từ trang lịch sử khám (lượt đã đóng, trong 90 ngày, mỗi lượt 1 lần); quản lý ẩn kèm lý do. Seed demo: `scripts/demo-profiles-vps.sh`.
+- Lỗi tự gây và đã sửa: chèn DTO giữa các decorator lớp làm `DentistsController` mất `@UseGuards` (500 khi sửa/ngừng bác sĩ) → chuyển DTO lên trên, thêm test kiểm tra guard.
+- Kiểm tra: backend 1803 test đạt; frontend typecheck/lint/build đạt; E2E cục bộ 120/122 (2 lỗi do DB e2e dùng lại: kỳ lương trùng 409, lịch sử xuất kho chỉ hiện 10 dòng — CI dùng DB mới).
+- Kịch bản demo mục ① cập nhật theo 4 bước (bản docx/pdf trong out-demo chưa xuất lại).
+- Tiếp theo: người dùng yêu cầu thì mở PR → 10 check → gộp → deploy VPS, rồi `bash scripts/demo-profiles-vps.sh`.
