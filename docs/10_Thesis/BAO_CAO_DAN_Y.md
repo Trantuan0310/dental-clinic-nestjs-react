@@ -57,7 +57,7 @@ Bìa, phụ bìa (theo mẫu bìa Phenikaa); nhận xét GVHD; nhận xét GVPB;
 
 ## CHƯƠNG 3. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG (≈ 24 trang)
 - 3.1. Kiến trúc tổng thể (Hình 3.1): trình duyệt → Nginx → NestJS API → PostgreSQL; dịch vụ ngoài. Danh sách 25 module backend và 340 endpoint (Bảng 3.1).
-- 3.2. Thiết kế cơ sở dữ liệu: 70 bảng, 43 kiểu liệt kê, 52 lần migration. ERD theo nhóm (Hình 3.2–3.6): bệnh nhân và lịch hẹn; khám và điều trị; hóa đơn và thanh toán; nhân sự, ca và lương; kho. Mô tả các bảng chính (Bảng 3.2–3.8). Quyết định thiết kế: UUIDv7, soft delete, tiền dùng Decimal, sơ đồ răng lưu JSONB theo từng lần khám.
+- 3.2. Thiết kế cơ sở dữ liệu: 71 bảng, 44 kiểu liệt kê, 53 lần migration. ERD theo nhóm (Hình 3.2–3.6): bệnh nhân và lịch hẹn; khám và điều trị; hóa đơn và thanh toán; nhân sự, ca và lương; kho. Mô tả các bảng chính (Bảng 3.2–3.8). Quyết định thiết kế: UUIDv7, soft delete, tiền dùng Decimal, sơ đồ răng lưu JSONB theo từng lần khám.
 - 3.3. Đặc tả chức năng (bảng đặc tả theo mẫu: tên, tác nhân, tiền điều kiện, luồng chính, luồng thay thế, hậu điều kiện), kèm sơ đồ tuần tự hoặc sơ đồ trạng thái:
   - 3.3.1. Đặt lịch online và xác nhận (tuần tự).
   - 3.3.2. Tiếp nhận, check-in, hàng chờ (trạng thái lịch hẹn).

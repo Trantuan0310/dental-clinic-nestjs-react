@@ -106,7 +106,7 @@ Mục này trình bày các màn hình tiêu biểu theo luồng nghiệp vụ c
 
 ### 4.5.1. Bệnh nhân đặt lịch trực tuyến
 
-Trang chủ (Hình 4.1) giới thiệu phòng khám, dịch vụ, bảng giá và đội ngũ bác sĩ; khách bấm vào một răng trên sơ đồ để xem dịch vụ liên quan. Trang đặt lịch (Hình 4.2) đi qua bốn bước có thanh tiến trình: khách tìm hoặc lọc dịch vụ theo nhóm và thấy ngay giá tham khảo; sang bước bác sĩ, mỗi thẻ bác sĩ hiện số năm kinh nghiệm, chức vụ và điểm đánh giá, nút "Xem hồ sơ" mở quá trình đào tạo, công tác, giải thưởng cùng nhận xét của bệnh nhân đã khám; sau đó khách chọn ngày, giờ còn trống, nhập họ tên, số điện thoại và nhận mã tra cứu yêu cầu.
+Trang chủ (Hình 4.1) giới thiệu phòng khám, dịch vụ, bảng giá và đội ngũ bác sĩ; khách bấm vào một răng trên sơ đồ để xem dịch vụ liên quan. Trang đặt lịch (Hình 4.2, chụp ở cỡ màn hình điện thoại) đi qua bốn bước có thanh tiến trình: khách tìm hoặc lọc dịch vụ theo nhóm và thấy ngay giá tham khảo; sang bước bác sĩ, mỗi thẻ bác sĩ hiện số năm kinh nghiệm, chức vụ và điểm đánh giá, nút "Xem hồ sơ" mở quá trình đào tạo, công tác, giải thưởng cùng nhận xét của bệnh nhân đã khám; sau đó khách chọn ngày, giờ còn trống, nhập họ tên, số điện thoại và nhận mã tra cứu yêu cầu.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/4-cong-trang-chu.png){width=15cm}
@@ -121,7 +121,7 @@ Hình 4.1. Trang chủ phòng khám
 :::
 
 ::: {custom-style="hình"}
-Hình 4.2. Trang đặt lịch trực tuyến: chọn dịch vụ và xem hồ sơ bác sĩ
+Hình 4.2. Trang đặt lịch trên điện thoại: chọn dịch vụ (trái), chọn bác sĩ (giữa) và hồ sơ bác sĩ (phải)
 :::
 
 ### 4.5.2. Lễ tân tiếp nhận và điều phối

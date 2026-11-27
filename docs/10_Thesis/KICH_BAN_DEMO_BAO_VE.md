@@ -106,7 +106,7 @@ Quy ước: **Làm** là thao tác, **Nói** là lời gợi ý (nói tự nhiê
 
 ### Mở đầu (0:00–1:00)
 
-**Nói:** "Em xin trình bày phần mềm GenSmile, quản lý phòng khám nha khoa nhiều bác sĩ. Phòng khám có bốn nhóm người dùng: bệnh nhân, lễ tân, bác sĩ và quản lý. Hệ thống gồm giao diện React, máy chủ NestJS với 23 module, cơ sở dữ liệu PostgreSQL 70 bảng, đang chạy thật tại gensmile.online. Em sẽ đi theo một bệnh nhân, anh Sơn, có dị ứng Penicillin, từ lúc tự đặt lịch đến lúc trả tiền và xem lại lịch sử khám."
+**Nói:** "Em xin trình bày phần mềm GenSmile, quản lý phòng khám nha khoa nhiều bác sĩ. Phòng khám có bốn nhóm người dùng: bệnh nhân, lễ tân, bác sĩ và quản lý. Hệ thống gồm giao diện React, máy chủ NestJS với 24 module, cơ sở dữ liệu PostgreSQL 71 bảng, đang chạy thật tại gensmile.online. Em sẽ đi theo một bệnh nhân, anh Sơn, có dị ứng Penicillin, từ lúc tự đặt lịch đến lúc trả tiền và xem lại lịch sử khám."
 
 ### ① Bệnh nhân đặt lịch online (1:00–2:30) — cửa sổ *Bệnh nhân*
 
@@ -207,7 +207,7 @@ Cắt theo thứ tự: ✂ AI soạn ghi chú (−45 s) → ✂ quét QR bằng 
 | AI sai thì sao? | AI chỉ soạn nháp, người dùng sửa và tự lưu; việc rủi ro cao (dị ứng, giờ trống, tiền) chạy bằng quy tắc cố định. |
 | Bác sĩ A xem được bệnh nhân của bác sĩ B không? | Không: giới hạn theo dòng dữ liệu kiểm ở máy chủ cho mọi truy vấn; bác sĩ có lịch với bệnh nhân chỉ được đọc, không được sửa phiên khám của người khác (có kiểm thử API). |
 | Sửa hồ sơ sau khi đóng phiên? | Không sửa được; chỉ ghi bổ sung (addendum) trong 30 ngày, giữ nguyên bản gốc — đúng yêu cầu hồ sơ bệnh án. |
-| Vì sao NestJS + Prisma + PostgreSQL? | TypeScript cả hai đầu, NestJS có module, guard, DI hợp với 23 module nghiệp vụ; PostgreSQL có giao dịch, khóa tư vấn, kiểu số thập phân cho tiền. |
+| Vì sao NestJS + Prisma + PostgreSQL? | TypeScript cả hai đầu, NestJS có module, guard, DI hợp với 24 module nghiệp vụ; PostgreSQL có giao dịch, khóa tư vấn, kiểu số thập phân cho tiền. |
 | Kiểm thử đến đâu? | ≈ 2.000 ca, đạt 100% ở lần chạy cuối (Bảng 5.6); bao phủ 76,6% số dòng; tầng API chạy trên PostgreSQL thật để bắt lỗi đồng thời, múi giờ, làm tròn. |
 | Hiệu năng? | Thao tác hằng ngày dưới 20 ms ở máy chủ, dashboard 30 ngày dưới 60 ms (Bảng 5.8); chưa kiểm thử tải nhiều người dùng — đã nêu ở hạn chế. |
 | Dữ liệu demo là thật? | Không, là dữ liệu mẫu 6 tháng do script sinh ra (500 bệnh nhân), đánh dấu "Dữ liệu mẫu (demo)", có quy tắc cho hợp chuyên môn (dịch vụ trẻ em chỉ cho trẻ, răng khớp dịch vụ…). |

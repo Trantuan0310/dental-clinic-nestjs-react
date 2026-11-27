@@ -227,3 +227,11 @@
 
 - PR #119 (đặt lịch 4 bước, hồ sơ và đánh giá bác sĩ, rà soát i18n) CI 10/10 xanh lần đầu, gộp squash: main = a2bf897.
 - Chờ người dùng deploy trên VPS rồi chạy `bash scripts/demo-profiles-vps.sh`; kiểm tra `/health` commit = a2bf897.
+
+## 27/11/2026 — Báo cáo: bổ sung đặt lịch 4 bước, hồ sơ và đánh giá bác sĩ, kiểm tra khóa i18n
+
+- Ch.2: Bảng 2.4 sửa LH-04, thêm LH-09 (đánh giá bác sĩ) → 35 yêu cầu; Hình 2.6 thêm use case "Xem hồ sơ và đánh giá của bác sĩ" (extend) và "Đánh giá bác sĩ sau lượt khám".
+- Ch.3: Bảng 3.1 (staff + dentist-reviews 17, booking 40, patient-history 4, tổng 343), 24 module, 71 bảng/44 enum/53 migration; 3.2.2 bảng `dentist_reviews`; 3.3.2 thêm 2 đoạn (luồng 4 bước, quy tắc đánh giá).
+- Ch.4: 4.4 kiểm tra khóa i18n; 4.5.1 + Hình 4.2 chụp lại (3 màn hình điện thoại: dịch vụ, bác sĩ, hồ sơ); 4.5.5 đánh giá sau lượt khám.
+- Ch.5: đơn vị 1.803 ca/92 tệp (chạy 27/11), Bảng 5.6 tổng 2.038 (LH 625, QT 189, hạ tầng 77), Hình 5.1 vẽ lại; thêm KT-LH-10. Mục 5.2.4 độ bao phủ giữ số đo 17/11. Phụ lục B thêm LH-09; Tóm tắt, Mở đầu, Kết luận cập nhật số.
+- Dựng: 117 trang PDF (Mở đầu 1 … Phụ lục 96). Cần graphviz + plantuml.jar (scratchpad) + matplotlib/python-docx cho python3.13.
