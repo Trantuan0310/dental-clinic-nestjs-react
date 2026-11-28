@@ -32,7 +32,7 @@ test('admin manages a service and its assignment to a dentist', async ({ page })
   await expect(page.getByText('Dịch vụ thực hiện')).toBeVisible();
   await page.getByRole('button', { name: 'Phân công', exact: true }).click();
   dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Dịch vụ').selectOption({ label: `${name} (45 phút · 350.000 ₫)` });
+  await dialog.getByLabel('Dịch vụ').selectOption({ label: `${name} (45 phút · 350.000\u00a0₫)` });
   await dialog.getByLabel('Thời lượng riêng (phút)').fill('60');
   await dialog.getByRole('button', { name: /^phân công$/i }).click();
   await expect(dialog).toBeHidden();

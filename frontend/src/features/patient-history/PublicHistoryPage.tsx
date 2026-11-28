@@ -39,7 +39,7 @@ const TZ = 'Asia/Ho_Chi_Minh';
 const day = (v: string | null) => (v ? new Date(v).toLocaleDateString('vi-VN', { timeZone: TZ }) : '—');
 const dateTime = (v: string) =>
   new Date(v).toLocaleString('vi-VN', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-const money = (n: number) => `${n.toLocaleString('vi-VN')} ₫`;
+const money = (n: number) => `${n.toLocaleString('vi-VN')}\u00a0₫`;
 const teethText = (teeth: number[]) => (teeth.length ? i18n.t('uiPatientHistory.page.teeth', { teeth: teeth.join(', ') }) : '');
 
 const INVOICE_TONE: Record<string, string> = {

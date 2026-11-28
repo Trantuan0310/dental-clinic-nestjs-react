@@ -282,6 +282,17 @@ html.dark select:not(.appearance-none):not([multiple]) {
   .overflow-x-auto > div > table :is(th, td) {
     white-space: nowrap;
   }
+  /* Empty / loading rows span the whole (wider than the screen) table:
+     keep their message at the visible left edge instead of mid-table. */
+  .overflow-x-auto td[colspan] {
+    white-space: normal;
+    text-align: left;
+  }
+  .overflow-x-auto td[colspan] > * {
+    position: sticky;
+    left: 0;
+    max-width: calc(100vw - 3rem);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

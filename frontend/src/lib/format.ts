@@ -31,7 +31,7 @@ export function formatVnd(value: number | string | null | undefined, locale: For
   if (value === null || value === undefined) return '—';
   const num = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(num)) return '—';
-  return new Intl.NumberFormat(INTL_LOCALES[locale]).format(Math.round(num)) + ' ₫';
+  return new Intl.NumberFormat(INTL_LOCALES[locale]).format(Math.round(num)) + '\u00a0₫'; // no-break space: never "200.000" / "₫" on two lines
 }
 
 /**
