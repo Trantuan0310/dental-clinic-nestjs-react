@@ -443,7 +443,7 @@ export class ReportsService {
           _count: { _all: true },
           _sum: { total: true },
         }),
-        // Write-downs ("xoá nợ") lower revenue on their own date, like refunds.
+        // Write-downs ("xóa nợ") lower revenue on their own date, like refunds.
         this.prisma.invoiceAdjustment.findMany({
           where: revenueAdjustmentWhere(fromDate, toDate, byDentistFilter),
           select: {

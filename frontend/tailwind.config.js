@@ -5,20 +5,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Legacy primary (blue) — kept for backward compatibility with existing screens.
-        // New code should use `brand-*` for the GENSMILE teal palette.
-        // Tailwind's blue ramp. 300/400 were missing, so the dark-mode
-        // classes that reach for them (a lighter blue over a dark surface)
-        // emitted no CSS and silently left the light-mode colour in place.
+        // `primary` used to be Tailwind blue, a second accent next to the brand teal
+        // (blue tabs and focus rings beside teal buttons). It now points at the brand
+        // ramp so every accent in the app is the same colour; prefer `brand-*` in new code.
         primary: {
-          50: '#EFF6FF',
-          100: '#DBEAFE',
-          300: '#93C5FD',
-          400: '#60A5FA',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
-          900: '#1E3A8A',
+          50: '#E6FAF8',
+          100: '#C5EFEC',
+          300: '#82CBC7',
+          400: '#5CBDB9',
+          500: '#2BA3A0',
+          600: '#1B7A78',
+          700: '#155F5E',
+          900: '#082E2E',
         },
         // GENSMILE brand palette — derived from logo.svg.
         // Source of truth: docs/00_Vision/branding/usage-guidelines.md

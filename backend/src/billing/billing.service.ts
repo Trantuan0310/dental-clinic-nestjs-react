@@ -1254,7 +1254,7 @@ export class BillingService {
   }
 
   /**
-   * "Điều chỉnh giảm / xoá nợ" (3.2): lowers what is still owed on an issued
+   * "Điều chỉnh giảm / xóa nợ" (3.2): lowers what is still owed on an issued
    * invoice by `amount` (≤ outstanding), with a reason; payments stay as they
    * are. `total` stays as issued: the write-down is its own dated row, so
    * revenue and commission drop on that day like a refund, and a month

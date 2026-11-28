@@ -5,12 +5,14 @@ import { formatDate } from '@/lib/format';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { usePatientEncounters } from './medicalRecordsApi';
+import { usePatient } from '@/features/patients/patientsApi';
 
 export default function PatientEncountersPage() {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { data: encounters, isLoading } = usePatientEncounters(patientId);
+  const { data: patient } = usePatient(patientId);
 
   // GET /patients/:id/encounters accepts encounter.read.any/.own/.basic and
   // returns a lighter "basic" shape for .basic-only callers (receptionist).
@@ -29,7 +31,11 @@ export default function PatientEncountersPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{t('uiClinical.encounterHistory')}</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">{t('uiClinical.patientCode')}: {patientId}</p>
+          {patient && (
+            <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
+              {patient.fullName} · {t('uiClinical.patientCode')}: {patient.code}
+            </p>
+          )}
         </div>
       </div>
 

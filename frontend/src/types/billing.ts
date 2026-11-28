@@ -57,7 +57,7 @@ export interface Invoice {
   /** Net money kept: payments − refunds. */
   paidAmount: number;
   refundedAmount?: number;
-  /** Σ write-downs ("điều chỉnh giảm / xoá nợ"): no longer owed, no money moved. */
+  /** Σ write-downs ("điều chỉnh giảm / xóa nợ"): no longer owed, no money moved. */
   adjustedAmount?: number;
   adjustments?: InvoiceAdjustment[];
   outstandingAmount: number;
@@ -211,7 +211,7 @@ export interface RevenueReport {
   totalInvoiced: number;
   totalCollected: number;
   totalRefunded: number;
-  /** Written down ("xoá nợ") in the range; lowers revenue like a refund. */
+  /** Written down ("xóa nợ") in the range; lowers revenue like a refund. */
   totalAdjusted?: number;
   /** Taken back by voiding issued invoices in the range (positive). */
   totalVoided: number;

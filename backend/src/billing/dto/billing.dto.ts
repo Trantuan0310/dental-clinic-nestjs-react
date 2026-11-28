@@ -137,7 +137,7 @@ export class RefundDto {
   version!: number;
 }
 
-/** "Điều chỉnh giảm / xoá nợ" of an ISSUED/PARTIAL invoice (≤ outstanding). */
+/** "Điều chỉnh giảm / xóa nợ" of an ISSUED/PARTIAL invoice (≤ outstanding). */
 export class AdjustInvoiceDto {
   @ApiProperty()
   @WholeDong()

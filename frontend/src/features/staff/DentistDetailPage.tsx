@@ -140,7 +140,7 @@ export default function DentistDetailPage() {
                   ? profile.specialties.map((s) => t(`uiWorkforce.specialty_${s}`, { defaultValue: s })).join(', ')
                   : '—'}
               </Field>
-              <Field label={t('uiWorkforce.defaultSlotDuration')}>{t('uiWorkforce.minutesShort', { minutes: profile.defaultSlotMinutes })}</Field>
+              <Field label={t('uiWorkforce.defaultSlotDuration')}>{profile.defaultSlotMinutes ? t('uiWorkforce.minutesShort', { minutes: profile.defaultSlotMinutes }) : '—'}</Field>
               <Field label={t('uiWorkforce.acceptsNewPatients')}>{profile.acceptsNewPatients ? t('common.yes') : t('common.no')}
               </Field>
               <Field label={t('uiWorkforce.acceptsOnlineBooking')}>

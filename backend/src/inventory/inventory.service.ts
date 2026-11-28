@@ -210,7 +210,7 @@ export class InventoryService {
     if (!item || item.deletedAt) throw new InventoryItemNotFoundException(id);
     const stockLeft = () =>
       new StockMovementInvalidException(
-        `Vật tư còn tồn ${item.quantityOnHand} ${item.unit}; điều chỉnh tồn về 0 trước khi xoá`,
+        `Vật tư còn tồn ${item.quantityOnHand} ${item.unit}; điều chỉnh tồn về 0 trước khi xóa`,
       );
     if (Number(item.quantityOnHand) > 0) throw stockLeft();
     // Guarded write: a stock-in committed after the read above must not be

@@ -198,8 +198,8 @@ export class InboxService {
       for (const inv of drafts) {
         sent += await this.send(to, {
           type: 'draftInvoice',
-          title: `Hoá đơn nháp ${inv.code} chờ phát hành`,
-          body: `Bệnh nhân ${inv.patient.fullName}: phiên khám đã đóng, kiểm tra rồi phát hành hoá đơn`,
+          title: `Hóa đơn nháp ${inv.code} chờ phát hành`,
+          body: `Bệnh nhân ${inv.patient.fullName}: phiên khám đã đóng, kiểm tra rồi phát hành hóa đơn`,
           targetId: inv.id,
           dedupeKey: `draft-invoice:${inv.id}`,
         });
@@ -309,7 +309,7 @@ export class InboxService {
       sent += await this.send(readers, {
         type: 'staleEncounters',
         title: `${stale.length} phiên khám còn mở từ hôm trước`,
-        body: 'Đóng hoặc huỷ các phiên khám này',
+        body: 'Đóng hoặc hủy các phiên khám này',
         dedupeKey: `digest:stale-encounters:${day}`,
       });
       const perDentist = new Map<string, number>();
@@ -319,7 +319,7 @@ export class InboxService {
         sent += await this.send([dentistId], {
           type: 'staleEncounters',
           title: `Bạn còn ${count} phiên khám chưa đóng từ hôm trước`,
-          body: 'Đóng hoặc huỷ các phiên khám này',
+          body: 'Đóng hoặc hủy các phiên khám này',
           dedupeKey: `digest:stale-encounters:${day}`,
         });
       }

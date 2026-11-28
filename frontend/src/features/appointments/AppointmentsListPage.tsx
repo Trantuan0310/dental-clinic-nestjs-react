@@ -309,6 +309,7 @@ export default function AppointmentsListPage() {
               size="sm"
               onClick={handleToday}
               disabled={isToday}
+              className="whitespace-nowrap"
             >
               {t('uiScheduling.today')}
             </Button>
@@ -321,7 +322,7 @@ export default function AppointmentsListPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
             <div className="ml-3 hidden items-center gap-2 sm:flex">
-              <span className="text-sm font-medium text-gray-900 dark:text-surface-100">{renderHeaderLabel()}</span>
+              <span className="whitespace-nowrap text-sm font-medium text-gray-900 dark:text-surface-100">{renderHeaderLabel()}</span>
               <input
                 type="date"
                 aria-label={t('uiScheduling.chooseDate')}
@@ -332,7 +333,7 @@ export default function AppointmentsListPage() {
                   const [y, m, d] = e.target.value.split('-').map(Number);
                   if (y && m && d) setDate(new Date(y, m - 1, d));
                 }}
-                className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
+                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
               />
             </div>
           </div>

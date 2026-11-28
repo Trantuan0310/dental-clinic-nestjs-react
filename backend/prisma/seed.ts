@@ -576,7 +576,7 @@ const PERMISSIONS = [
     code: 'invoice.adjust',
     resource: 'invoice',
     action: 'adjust',
-    description: 'Điều chỉnh giảm / xoá nợ hóa đơn đã phát hành (có lý do, giữ phiếu thu)',
+    description: 'Điều chỉnh giảm / xóa nợ hóa đơn đã phát hành (có lý do, giữ phiếu thu)',
   },
   {
     code: 'report.revenue.read',

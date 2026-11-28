@@ -281,7 +281,7 @@ export class TreatmentPlansService {
       row.status === TreatmentPlanStatus.CANCELLED ||
       row.status === TreatmentPlanStatus.COMPLETED
     ) {
-      throw this.state('Kế hoạch đã kết thúc hoặc đã huỷ, không sửa được');
+      throw this.state('Kế hoạch đã kết thúc hoặc đã hủy, không sửa được');
     }
     if (dto.items && !EDITABLE.includes(row.status)) {
       throw this.state(
@@ -400,12 +400,12 @@ export class TreatmentPlansService {
       row.status === TreatmentPlanStatus.CANCELLED ||
       row.status === TreatmentPlanStatus.COMPLETED
     ) {
-      throw this.state('Kế hoạch đã kết thúc hoặc đã huỷ');
+      throw this.state('Kế hoạch đã kết thúc hoặc đã hủy');
     }
     // Closing that encounter would tick off a line of a cancelled plan.
     if (row.items.some(i => this.liveTreatment(i))) {
       throw this.state(
-        'Có mục đang được ghi trong một phiên khám chưa đóng: xoá thủ thuật đó hoặc đóng phiên khám trước',
+        'Có mục đang được ghi trong một phiên khám chưa đóng: xóa thủ thuật đó hoặc đóng phiên khám trước',
       );
     }
     await this.transition(
@@ -493,7 +493,7 @@ export class TreatmentPlansService {
     }
     if (status === TreatmentPlanItemStatus.SKIPPED && this.liveTreatment(item)) {
       throw this.state(
-        'Mục này đang được ghi trong một phiên khám chưa đóng: xoá thủ thuật đó trước',
+        'Mục này đang được ghi trong một phiên khám chưa đóng: xóa thủ thuật đó trước',
       );
     }
     await this.prisma.$transaction(async tx => {

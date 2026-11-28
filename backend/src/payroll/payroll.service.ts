@@ -1097,7 +1097,7 @@ export class PayrollService {
           where: { kind: 'REFUND', status: 'COMPLETED', paidAt: { lt: range.toExclusive } },
           select: { amount: true },
         },
-        // Write-downs ("xoá nợ") lower the basis like refunds, on their own date.
+        // Write-downs ("xóa nợ") lower the basis like refunds, on their own date.
         adjustments: {
           where: { adjustedAt: { lt: range.toExclusive } },
           select: { amount: true },

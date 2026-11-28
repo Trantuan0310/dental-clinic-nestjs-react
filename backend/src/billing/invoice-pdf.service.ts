@@ -30,7 +30,7 @@ export class InvoicePdfService {
     const inv = await this.billing.getInvoiceById(id, actor);
     if (inv.status === 'DRAFT' || inv.status === 'VOIDED') {
       throw new BusinessRuleException(
-        'Chỉ gửi hoá đơn đã phát hành',
+        'Chỉ gửi hóa đơn đã phát hành',
         HttpStatus.CONFLICT,
         { status: inv.status },
         'INVOICE_NOT_SENDABLE',
@@ -53,12 +53,12 @@ export class InvoicePdfService {
     const name = inv.patientName ?? '';
     const sent = await this.email.send({
       to,
-      subject: `Hoá đơn ${inv.code}`,
+      subject: `Hóa đơn ${inv.code}`,
       html:
         `<p>Xin chào ${escape(name)},</p>` +
-        `<p>Phòng khám gửi bạn hoá đơn ${escape(inv.code)} (đính kèm, PDF).</p>` +
+        `<p>Phòng khám gửi bạn hóa đơn ${escape(inv.code)} (đính kèm, PDF).</p>` +
         `<p>${escape(clinicContactLine())}</p>`,
-      text: `Xin chào ${name},\nPhòng khám gửi bạn hoá đơn ${inv.code} (đính kèm, PDF).\n${clinicContactLine()}`,
+      text: `Xin chào ${name},\nPhòng khám gửi bạn hóa đơn ${inv.code} (đính kèm, PDF).\n${clinicContactLine()}`,
       attachments: [
         { filename: `${inv.code}.pdf`, content: bytes, contentType: 'application/pdf' },
       ],

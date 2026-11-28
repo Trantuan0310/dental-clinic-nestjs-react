@@ -58,7 +58,7 @@ export function PlanContacts({
         >
           <label>
             {k('channelLabel')}{' '}
-            <select value={channel} onChange={e => setChannel(e.target.value)}>
+            <select className="input-base mt-1 h-9 w-auto" value={channel} onChange={e => setChannel(e.target.value)}>
               {CHANNELS.map(c => (
                 <option key={c} value={c}>
                   {k(`channel.${c}`)}
@@ -68,7 +68,7 @@ export function PlanContacts({
           </label>
           <label>
             {k('outcomeLabel')}{' '}
-            <select value={outcome} onChange={e => setOutcome(e.target.value)}>
+            <select className="input-base mt-1 h-9 w-auto" value={outcome} onChange={e => setOutcome(e.target.value)}>
               {OUTCOMES.map(o => (
                 <option key={o} value={o}>
                   {k(`outcome.${o}`)}
@@ -78,7 +78,7 @@ export function PlanContacts({
           </label>
           <label>
             {k('timeLabel')}{' '}
-            <input type="datetime-local" value={time} onChange={e => setTime(e.target.value)} />
+            <input className="input-base mt-1 h-9 w-auto" type="datetime-local" value={time} onChange={e => setTime(e.target.value)} />
           </label>
           <Button type="submit" disabled={save.isPending}>
             {k('record')}

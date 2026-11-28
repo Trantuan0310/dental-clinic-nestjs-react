@@ -8,7 +8,7 @@ export const vi = {
   on: 'Bật',
   off: 'Tắt',
   allOff: 'Chưa bật kênh SMS / Zalo nào',
-  allOffHint: 'Chưa bật kênh nào. Đặt SMS_PROVIDER / ZALO_PROVIDER trong .env.production (mock để thử, esms / zns khi đã có khoá API) rồi khởi động lại backend.',
+  allOffHint: 'Chưa bật kênh nào. Đặt SMS_PROVIDER / ZALO_PROVIDER trong .env.production (mock để thử, esms / zns khi đã có khóa API) rồi khởi động lại backend.',
   testPhone: 'Số điện thoại thử',
   sendTest: 'Gửi tin thử',
   testResult: 'Kết quả: {{status}}',

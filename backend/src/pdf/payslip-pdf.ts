@@ -50,7 +50,7 @@ const STATUS: Record<string, string> = {
   REVIEWING: 'Đang xem xét (chưa duyệt)',
   APPROVED: 'Đã duyệt',
   PAID: 'Đã trả lương',
-  LOCKED: 'Đã khoá',
+  LOCKED: 'Đã khóa',
 };
 const ADJUSTMENT: Record<string, string> = {
   BONUS: 'Thưởng',

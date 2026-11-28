@@ -15,7 +15,7 @@ export const vi = {
   statusCancelled: 'Đã hủy', statusNoShow: 'Vắng mặt', statusLeft: 'Đã về', statusLeftNotSeen: 'Đã về (chưa khám)',
   typeConsultation: 'Khám / Tư vấn', typeTreatment: 'Điều trị', typeFollowUp: 'Tái khám', sourceWalkIn: 'Khách vãng lai',
   sourcePhone: 'Qua điện thoại', sourceOnline: 'Trực tuyến', sourceReturning: 'Khách quay lại',
-  tabAll: 'Tất cả', tabNotArrived: 'Chưa đến', tabArrived: 'Đã đến', tabCancelled: 'Hủy',
+  tabAll: 'Tất cả', tabNotArrived: 'Chưa đến', tabArrived: 'Đã đến', tabCancelled: 'Hủy / vắng',
   searchButton: 'Tìm', clearFilters: 'Xóa bộ lọc', noAppointments: 'Không có lịch hẹn', noAppointmentsDescription: 'Không tìm thấy lịch hẹn phù hợp.',
   appointmentDate: 'Ngày', durationMinutes: 'Thời lượng', patientDeleted: '(hồ sơ đã xóa)', filtering: '(đang lọc)',
   patientRequired: 'Bệnh nhân *', choose: 'Chọn →', loadingServices: 'Đang tải dịch vụ…', dentistNoServices: 'Bác sĩ chưa được gán dịch vụ — chọn thời lượng.',

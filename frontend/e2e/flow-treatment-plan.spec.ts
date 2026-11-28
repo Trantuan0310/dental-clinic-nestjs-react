@@ -56,7 +56,7 @@ test('admin drafts, quotes, agrees and cancels a treatment plan', async ({ page 
 
   await page.getByRole('button', { name: 'Ghi nhận khách đồng ý' }).click();
   const accept = page.getByRole('dialog');
-  await accept.getByLabel('Ghi chú (tuỳ chọn)').fill('Khách đồng ý, trả theo buổi');
+  await accept.getByLabel('Ghi chú (tùy chọn)').fill('Khách đồng ý, trả theo buổi');
   await accept.getByRole('button', { name: 'Xác nhận đồng ý' }).click();
   await expect(page.getByText('Khách đã đồng ý', { exact: true })).toBeVisible();
   await expect(page.getByText(/Đồng ý ngày .*Khách đồng ý, trả theo buổi/)).toBeVisible();
@@ -70,14 +70,14 @@ test('admin drafts, quotes, agrees and cancels a treatment plan', async ({ page 
   await expect(scaling.getByText('Khách hẹn làm sau')).toBeVisible();
   await expect(page.getByText('0/1 mục')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Huỷ kế hoạch' }).click();
+  await page.getByRole('button', { name: 'Hủy kế hoạch' }).click();
   const cancel = page.getByRole('dialog');
-  await cancel.getByLabel('Lý do huỷ').fill('Khách chuyển phòng khám khác');
-  await cancel.getByRole('button', { name: 'Huỷ kế hoạch' }).click();
-  await expect(page.getByText(/Đã huỷ ngày .*Khách chuyển phòng khám khác/)).toBeVisible();
+  await cancel.getByLabel('Lý do hủy').fill('Khách chuyển phòng khám khác');
+  await cancel.getByRole('button', { name: 'Hủy kế hoạch' }).click();
+  await expect(page.getByText(/Đã hủy ngày .*Khách chuyển phòng khám khác/)).toBeVisible();
 
   // The patient page lists it.
   await page.getByRole('link', { name: 'Về hồ sơ bệnh nhân' }).click();
   await page.getByRole('tab', { name: 'Kế hoạch điều trị' }).click();
-  await expect(page.getByTestId('patient-plan').filter({ hasText: 'Điều trị tổng quát E2E' })).toContainText('Đã huỷ');
+  await expect(page.getByTestId('patient-plan').filter({ hasText: 'Điều trị tổng quát E2E' })).toContainText('Đã hủy');
 });

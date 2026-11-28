@@ -438,7 +438,10 @@ export function useMyCompensation() {
     // showed "—" for a real 15,000,000₫ base salary (read the nonexistent
     // `baseSalary` field instead) and a blank "%" for a real 30% commission
     // (commissionPct 0.3, read via the nonexistent `commissionPercentage`).
-    queryFn: () => get<PrismaCompensationRow>('/payroll/me/compensation').then(mapCompensation),
+    // No compensation yet is `data: null`, not an error: mapping null threw,
+    // and the page showed a loading skeleton through three retries.
+    queryFn: () =>
+      get<PrismaCompensationRow | null>('/payroll/me/compensation').then((row) => (row ? mapCompensation(row) : null)),
   });
 }
 

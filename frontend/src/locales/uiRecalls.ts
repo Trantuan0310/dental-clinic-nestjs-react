@@ -37,7 +37,7 @@ export const vi = {
   note: 'Ghi chú',
   dismissReason: 'Lý do bỏ nhắc (bắt buộc)',
   optOutLabel: 'Bệnh nhân không muốn nhận email nhắc tái khám',
-  cancel: 'Huỷ',
+  cancel: 'Hủy',
   save: 'Lưu',
   saved: 'Đã ghi kết quả',
   intervalLabel: 'Nhắc tái khám sau (tháng)',

@@ -8,7 +8,7 @@ import { InvoiceStatus, PaymentKind, PaymentStatus, Prisma } from '@prisma/clien
  *     `issuedAt` (clinic time), minus refunds dated by the refund's `paidAt`.
  *     Voiding an issued invoice takes back what was left of it (total −
  *     refunds) on `voidedAt`, like a refund: a month already closed never
- *     changes (5.3). A write-down ("điều chỉnh giảm / xoá nợ",
+ *     changes (5.3). A write-down ("điều chỉnh giảm / xóa nợ",
  *     invoice_adjustments) lowers it on its own `adjustedAt`, like a refund.
  *     DRAFT, and VOIDED never issued, are never summed — they
  *     only appear in their own "not counted" box.

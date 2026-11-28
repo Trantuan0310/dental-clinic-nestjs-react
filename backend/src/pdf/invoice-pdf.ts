@@ -50,21 +50,21 @@ const STATUS: Record<string, string> = {
   ISSUED: 'Đã phát hành, chưa thanh toán',
   PARTIAL: 'Thanh toán một phần',
   PAID: 'Đã thanh toán đủ',
-  VOIDED: 'Đã huỷ',
+  VOIDED: 'Đã hủy',
 };
 const METHOD: Record<string, string> = { CASH: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản' };
 
 export function renderInvoicePdf(inv: InvoicePdfData): Promise<Buffer> {
-  const doc = createPdf(`Hoá đơn ${inv.code}`);
+  const doc = createPdf(`Hóa đơn ${inv.code}`);
   clinicHeader(doc);
-  title(doc, 'HOÁ ĐƠN DỊCH VỤ NHA KHOA', `Số: ${inv.code}`);
+  title(doc, 'HÓA ĐƠN DỊCH VỤ NHA KHOA', `Số: ${inv.code}`);
   fields(doc, [
     ['Bệnh nhân', `${inv.patientName ?? ''}${inv.patientCode ? ` (${inv.patientCode})` : ''}`],
     ['Bác sĩ điều trị', inv.dentistName ?? ''],
     ['Ngày lập', clinicDate(inv.issuedAt ?? inv.createdAt)],
     ['Trạng thái', STATUS[inv.status] ?? inv.status],
     ...(inv.status === 'VOIDED' && inv.voidReason
-      ? ([['Lý do huỷ', `${inv.voidReason} (${clinicDate(inv.voidedAt)})`]] as Array<
+      ? ([['Lý do hủy', `${inv.voidReason} (${clinicDate(inv.voidedAt)})`]] as Array<
           [string, string]
         >)
       : []),

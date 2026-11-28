@@ -20,7 +20,7 @@ export function discountAmountOf(
  * Outstanding and status of an issued invoice. `paid` is the net money kept
  * (payments − refunds); a refund does not reopen the debt, so outstanding is
  * total − (paid + refunded). `adjusted` is the debt written down after issue
- * ("điều chỉnh giảm / xoá nợ"): no longer owed, though nothing was paid.
+ * ("điều chỉnh giảm / xóa nợ"): no longer owed, though nothing was paid.
  */
 export function settle(
   total: number,

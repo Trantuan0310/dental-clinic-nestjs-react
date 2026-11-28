@@ -113,7 +113,7 @@ export interface InvoiceEventBase extends InvoiceChangedEvent {
   /** Net money kept: payments − refunds. */
   paidAmount: number;
   refundedAmount: number;
-  /** Σ write-downs ("điều chỉnh giảm / xoá nợ"), no money moved. */
+  /** Σ write-downs ("điều chỉnh giảm / xóa nợ"), no money moved. */
   adjustedAmount: number;
   outstandingAmount: number;
   /** Null for an invoice voided while still DRAFT. */
@@ -176,7 +176,7 @@ export interface InvoiceRefundedEvent extends InvoiceEventBase {
 }
 
 /**
- * "Điều chỉnh giảm / xoá nợ": the debt was lowered without money moving. Like
+ * "Điều chỉnh giảm / xóa nợ": the debt was lowered without money moving. Like
  * a refund it lowers revenue and the commission basis on adjustedAt.
  */
 export interface InvoiceAdjustedEvent extends InvoiceEventBase {

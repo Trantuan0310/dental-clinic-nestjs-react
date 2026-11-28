@@ -290,7 +290,7 @@ export function RefundModal({ invoice, isOpen, onClose }: { invoice: Invoice; is
 }
 
 /**
- * "Điều chỉnh giảm / xoá nợ" (admin): lowers what is still owed on an issued
+ * "Điều chỉnh giảm / xóa nợ" (admin): lowers what is still owed on an issued
  * invoice, payments untouched; revenue and commission drop on that day.
  */
 export function AdjustModal({ invoice, isOpen, onClose }: { invoice: Invoice; isOpen: boolean; onClose: () => void }) {

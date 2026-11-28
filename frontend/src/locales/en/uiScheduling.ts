@@ -15,7 +15,7 @@ export const en = {
   statusCancelled: 'Cancelled', statusNoShow: 'No-show', statusLeft: 'Left', statusLeftNotSeen: 'Left (not seen)',
   typeConsultation: 'Consultation', typeTreatment: 'Treatment', typeFollowUp: 'Follow-up', sourceWalkIn: 'Walk-in',
   sourcePhone: 'By phone', sourceOnline: 'Online', sourceReturning: 'Returning patient',
-  tabAll: 'All', tabNotArrived: 'Not arrived', tabArrived: 'Arrived', tabCancelled: 'Cancelled',
+  tabAll: 'All', tabNotArrived: 'Not arrived', tabArrived: 'Arrived', tabCancelled: 'Cancelled / no-show',
   searchButton: 'Search', clearFilters: 'Clear filters', noAppointments: 'No appointments', noAppointmentsDescription: 'No matching appointments found.',
   appointmentDate: 'Date', durationMinutes: 'Duration', patientDeleted: '(patient record deleted)', filtering: '(filtered)',
   patientRequired: 'Patient *', choose: 'Select →', loadingServices: 'Loading services…', dentistNoServices: 'No services are assigned to this dentist — choose a duration.',

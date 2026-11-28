@@ -776,7 +776,7 @@ describe('BillingService — 3.1–3.3 (business flow review)', () => {
     prisma.invoice.findUniqueOrThrow.mockImplementation(async () => withItems(validInvoice()));
   });
 
-  describe('adjustDown ("điều chỉnh giảm / xoá nợ")', () => {
+  describe('adjustDown ("điều chỉnh giảm / xóa nợ")', () => {
     const partial = () =>
       validInvoice({
         status: InvoiceStatus.PARTIAL,
@@ -829,11 +829,11 @@ describe('BillingService — 3.1–3.3 (business flow review)', () => {
     it('refuses more than is owed, and drafts or paid invoices', async () => {
       prisma.invoice.findUnique.mockResolvedValueOnce(partial());
       await expect(
-        service.adjustDown('inv-1', { amount: 20_000_001, reason: 'Xoá nợ', version: 3 }, admin),
+        service.adjustDown('inv-1', { amount: 20_000_001, reason: 'Xóa nợ', version: 3 }, admin),
       ).rejects.toMatchObject({ response: { code: 'ADJUSTMENT_EXCEEDS_OUTSTANDING' } });
       prisma.invoice.findUnique.mockResolvedValueOnce(validInvoice());
       await expect(
-        service.adjustDown('inv-1', { amount: 1, reason: 'Xoá nợ', version: 0 }, admin),
+        service.adjustDown('inv-1', { amount: 1, reason: 'Xóa nợ', version: 0 }, admin),
       ).rejects.toMatchObject({ response: { code: 'INVOICE_NOT_EDITABLE' } });
       expect(prisma.invoiceAdjustment.create).not.toHaveBeenCalled();
     });

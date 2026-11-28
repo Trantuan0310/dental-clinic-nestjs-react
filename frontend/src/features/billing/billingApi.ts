@@ -163,7 +163,7 @@ export const billingApi = {
     return unwrap(data);
   },
 
-  /** "Điều chỉnh giảm / xoá nợ" of an issued invoice; payments are kept. */
+  /** "Điều chỉnh giảm / xóa nợ" of an issued invoice; payments are kept. */
   async adjustInvoice(
     id: string,
     payload: { amount: number; reason: string; version: number },

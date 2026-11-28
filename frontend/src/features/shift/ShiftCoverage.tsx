@@ -49,11 +49,11 @@ export function ShiftCoverage() {
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap gap-4">
             <label>
-              {k('from')} <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+              {k('from')} <input className="input-base mt-1 h-9 w-auto" type="date" value={from} onChange={e => setFrom(e.target.value)} />
             </label>
             <label>
               {k('dentist')}{' '}
-              <select value={dentistId} onChange={e => setDentistId(e.target.value)}>
+              <select className="input-base mt-1 h-9 w-auto" value={dentistId} onChange={e => setDentistId(e.target.value)}>
                 <option value="">{k('allDentists')}</option>
                 {query.data?.dentists.map(d => (
                   <option key={d.id} value={d.id}>
