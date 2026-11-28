@@ -276,7 +276,11 @@ html.dark select:not(.appearance-none):not([multiple]) {
 @media (max-width: 640px) {
   .overflow-x-auto > table,
   .overflow-x-auto > div > table {
-    min-width: 36rem;
+    min-width: 44rem;
+  }
+  .overflow-x-auto > table :is(th, td),
+  .overflow-x-auto > div > table :is(th, td) {
+    white-space: nowrap;
   }
 }
 
