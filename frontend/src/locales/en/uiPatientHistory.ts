@@ -67,4 +67,14 @@ export const en: typeof vi = {
     colOutstanding: "Outstanding",
     colStatus: "Status",
   },
+  request: {
+    title: "Look up your visit history",
+    intro: "Enter the phone number you registered at the clinic. We will send a link to your visits, treatments and invoices to the email or phone number in your record. The link is valid for 7 days.",
+    phone: "Phone number",
+    phonePlaceholder: "e.g. 0901 234 567",
+    error: "We could not send the request (you may have tried too many times). Please try again in a few minutes.",
+    submit: "Send me the link",
+    noRecord: "No record yet?",
+    book: "Book a visit",
+  },
 };

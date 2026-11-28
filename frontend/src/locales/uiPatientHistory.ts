@@ -65,4 +65,14 @@ export const vi = {
     colOutstanding: "Còn nợ",
     colStatus: "Trạng thái",
   },
+  request: {
+    title: "Tra cứu lịch sử khám",
+    intro: "Nhập số điện thoại bạn đã đăng ký tại phòng khám. Chúng tôi sẽ gửi đường dẫn xem lịch sử khám, điều trị và hóa đơn tới email hoặc số điện thoại trong hồ sơ của bạn. Đường dẫn có hiệu lực 7 ngày.",
+    phone: "Số điện thoại",
+    phonePlaceholder: "VD: 0901 234 567",
+    error: "Không gửi được yêu cầu (có thể bạn đã thử quá nhiều lần). Vui lòng thử lại sau ít phút.",
+    submit: "Gửi đường dẫn cho tôi",
+    noRecord: "Chưa có hồ sơ?",
+    book: "Đặt lịch khám",
+  },
 };

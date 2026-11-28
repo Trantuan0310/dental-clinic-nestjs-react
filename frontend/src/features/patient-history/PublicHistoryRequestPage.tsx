@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { History } from 'lucide-react';
 import { api, unwrap } from '@/lib/api';
 import { Button, Card, Input } from '@/components/ui';
@@ -12,6 +13,8 @@ import { PublicTopBar } from '@/features/booking/PublicTopBar';
  * number is not enough to read someone's record.
  */
 export default function PublicHistoryRequestPage() {
+  const { t } = useTranslation();
+  const k = (key: string) => t(`uiPatientHistory.request.${key}`);
   const [phone, setPhone] = useState('');
   const request = useMutation({
     mutationFn: async () =>
@@ -23,11 +26,10 @@ export default function PublicHistoryRequestPage() {
         <PublicTopBar />
         <Card className="p-5 sm:p-7">
           <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-surface-100">
-            <History className="h-5 w-5 text-brand-600" aria-hidden /> Tra cứu lịch sử khám
+            <History className="h-5 w-5 text-brand-600" aria-hidden /> {k('title')}
           </h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-surface-300">
-            Nhập số điện thoại bạn đã đăng ký tại phòng khám. Chúng tôi sẽ gửi đường dẫn xem lịch sử khám, điều trị và
-            hóa đơn tới email hoặc số điện thoại trong hồ sơ của bạn. Đường dẫn có hiệu lực 7 ngày.
+            {k('intro')}
           </p>
           {request.isSuccess ? (
             <div role="status" className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -42,26 +44,26 @@ export default function PublicHistoryRequestPage() {
               }}
             >
               <Input
-                label="Số điện thoại"
+                label={k('phone')}
                 inputMode="tel"
                 autoComplete="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="VD: 0901 234 567"
+                placeholder={k('phonePlaceholder')}
                 required
               />
               {request.isError && (
                 <p role="alert" className="text-sm text-red-600">
-                  Không gửi được yêu cầu (có thể bạn đã thử quá nhiều lần). Vui lòng thử lại sau ít phút.
+                  {k('error')}
                 </p>
               )}
               <Button type="submit" isLoading={request.isPending} disabled={phone.replace(/\D/g, '').length < 9}>
-                Gửi đường dẫn cho tôi
+                {k('submit')}
               </Button>
             </form>
           )}
           <p className="mt-6 text-xs text-gray-500 dark:text-surface-400">
-            Chưa có hồ sơ? <Link to="/booking" className="text-brand-700 hover:underline dark:text-brand-300">Đặt lịch khám</Link>
+            {k('noRecord')} <Link to="/booking" className="text-brand-700 hover:underline dark:text-brand-300">{k('book')}</Link>
           </p>
         </Card>
       </div>
