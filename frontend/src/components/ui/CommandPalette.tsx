@@ -406,7 +406,7 @@ export function CommandPalette() {
         >
           <SearchIcon className="h-3.5 w-3.5" aria-hidden="true" />
           <span className="hidden md:inline">{t('command.trigger')}</span>
-          <kbd className="hidden rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 md:inline dark:bg-surface-700 dark:text-surface-300">
+          <kbd className="hidden rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-500 md:inline dark:bg-surface-700 dark:text-surface-300">
             {shortcutLabel}
           </kbd>
         </button>

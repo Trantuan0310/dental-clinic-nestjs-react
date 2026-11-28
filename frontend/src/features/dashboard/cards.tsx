@@ -954,7 +954,7 @@ export function FinanceCard({finance, isLoading, isError, onRetry}: FinanceCardP
             {formatCurrency(finance.totalExpense)}
           </p>
           {/* Its own line: dentist pay is not an expense category. */}
-          <p className="mt-1 text-xs text-rose-700/80 dark:text-rose-300/80">
+          <p className="mt-1 text-xs text-rose-700 dark:text-rose-300">
             {t('uiEntry.dashboard.payrollPaid')}: {formatCurrency(finance.payrollPaid ?? 0)}
           </p>
         </div>
