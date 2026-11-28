@@ -79,7 +79,7 @@ function CardErrorState({onRetry}: CardErrorStateProps) {
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex items-center gap-1.5 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+            className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
             {t('uiEntry.dashboard.retry')}
@@ -255,7 +255,7 @@ export function CustomerTypeCard({rows: data, isLoading, isError, onRetry}: Cust
           action={
             <Link
               to="/billing/list"
-              className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+              className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
             >
               <PlusCircle className="h-4 w-4" /> {t('uiEntry.dashboard.createInvoice')}
             </Link>
@@ -454,7 +454,7 @@ export function ProcedureCard({rows, isLoading, isError, onRetry}: ProcedureCard
           action={
             <Link
               to="/today"
-              className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+              className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
             >
               <Calendar className="h-4 w-4" /> {t('uiEntry.dashboard.openTodayQueue')}
             </Link>
@@ -475,7 +475,7 @@ export function ProcedureCard({rows, isLoading, isError, onRetry}: ProcedureCard
               className="flex items-center justify-between rounded-lg border border-teal-100 bg-teal-50/40 px-3 py-2.5"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-500 text-xs font-bold text-white">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal-700 text-xs font-bold text-white">
                   {idx + 1}
                 </span>
                 <span className="truncate text-sm font-medium text-gray-800 dark:text-surface-200">{r.procedure}</span>
@@ -868,7 +868,7 @@ export function AppointmentsCard({rows, range, ownOnly, isLoading, isError, onRe
             <PermissionGuard permission="appointment.create" mode="hide">
               <Link
                 to="/appointments?action=create"
-                className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+                className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
               >
                 <Calendar className="h-4 w-4" /> {t('uiEntry.dashboard.createAppointmentAction')}
               </Link>
@@ -1015,7 +1015,7 @@ export function OutstandingCard({outstanding, isLoading, isError, onRetry}: Outs
         </div>
         <Link
           to="/billing/list?status=ISSUED,PARTIAL"
-          className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-600"
+          className="inline-flex items-center gap-1 rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
         >
           <Eye className="h-4 w-4" /> {t('uiEntry.dashboard.viewDetails')}
         </Link>

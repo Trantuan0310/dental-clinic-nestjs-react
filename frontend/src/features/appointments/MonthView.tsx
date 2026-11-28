@@ -140,7 +140,7 @@ export function MonthView({
                   className={cn(
                     'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold transition-colors',
                     isToday
-                      ? 'bg-brand-500 text-white hover:bg-brand-600'
+                      ? 'bg-brand-600 text-white hover:bg-brand-700'
                       : cell.inMonth
                         ? 'text-gray-700 hover:bg-gray-200 dark:text-surface-200 dark:hover:bg-surface-700'
                         : 'text-gray-400 hover:bg-gray-200 dark:text-surface-500 dark:hover:bg-surface-700',

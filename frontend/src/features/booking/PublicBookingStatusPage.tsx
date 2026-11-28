@@ -389,7 +389,7 @@ function DetailsForm({
       </div>
       <button
         disabled={busy || Object.keys(filled).length === 0}
-        className="w-full rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60 sm:w-auto"
+        className="w-full rounded-full bg-brand-600 px-5 py-3 font-semibold text-white hover:bg-brand-700 disabled:opacity-60 sm:w-auto"
       >
         {t('uiScheduling.submitDetails')}
       </button>
@@ -693,7 +693,7 @@ export default function PublicBookingStatusPage() {
               )}
               <button
                 disabled={busy}
-                className="w-full rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+                className="w-full rounded-full bg-brand-600 px-5 py-3 font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
               >
                 {busy ? t('uiScheduling.bookingLookingUp') : t('uiScheduling.viewAppointments')}
               </button>
@@ -832,7 +832,7 @@ export default function PublicBookingStatusPage() {
                       t('uiScheduling.errorAcceptProposal'),
                     )
                   }
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
                 >
                   <CalendarCheck className="h-5 w-5" aria-hidden /> {t('uiScheduling.acceptNewTime')}
                 </button>
@@ -852,7 +852,7 @@ export default function PublicBookingStatusPage() {
                   href={googleCalendarUrl(status)}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 font-semibold text-white hover:bg-brand-700"
                 >
                   <CalendarPlus className="h-5 w-5" aria-hidden /> {t('uiScheduling.addGoogleCalendar')}
                 </a>
@@ -860,7 +860,7 @@ export default function PublicBookingStatusPage() {
               {["DECLINED", "CANCELLED", "EXPIRED"].includes(current) || (visit && !visitStands) ? (
                 <Link
                   to="/booking"
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 font-semibold text-white hover:bg-brand-600"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 font-semibold text-white hover:bg-brand-700"
                 >
                   <CalendarCheck className="h-5 w-5" aria-hidden /> {t('uiScheduling.publicBooking')}
                 </Link>
@@ -898,7 +898,7 @@ export default function PublicBookingStatusPage() {
                         t('uiScheduling.errorDeclineProposal'),
                       )
                     }
-                    className="rounded-full bg-brand-500 px-4 py-2 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+                    className="rounded-full bg-brand-600 px-4 py-2 font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
                   >
                     {t('uiScheduling.sendToReception')}
                   </button>

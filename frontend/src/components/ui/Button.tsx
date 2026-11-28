@@ -28,8 +28,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const VARIANT_CLASSES: Record<NonNullable<ButtonProps['variant']>, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800',
   secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-300 dark:bg-surface-700 dark:text-surface-100 dark:hover:bg-surface-600 dark:active:bg-surface-500',
-  danger: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
-  success: 'bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700',
+  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-700',
+  success: 'bg-emerald-700 text-white hover:bg-emerald-800 active:bg-emerald-700',
   ghost: 'bg-transparent hover:bg-gray-100 active:bg-gray-200 dark:hover:bg-surface-800 dark:active:bg-surface-700',
   outline: 'border border-gray-300 bg-white hover:bg-gray-50 active:bg-gray-100 dark:border-surface-700 dark:bg-surface-800 dark:text-surface-100 dark:hover:bg-surface-700 dark:active:bg-surface-600',
 };

@@ -70,7 +70,7 @@ export function LanguageSwitcher({ variant = 'icon', className }: LanguageSwitch
               className={cn(
                 'inline-flex h-7 items-center rounded px-2 font-medium transition-colors',
                 active
-                  ? 'bg-brand-500 text-white shadow-sm'
+                  ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-gray-600 hover:bg-gray-100 dark:text-surface-300 dark:hover:bg-surface-700',
               )}
             >

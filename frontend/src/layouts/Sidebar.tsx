@@ -56,7 +56,7 @@ export function SidebarContent({
         {groups.map((group) => (
           <div key={group.titleKey} className="mb-4 last:mb-0">
             {!collapsed && (
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-surface-500">
+              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-surface-400">
                 {t(`nav.groups.${group.titleKey}`, group.titleKey)}
               </p>
             )}
@@ -94,7 +94,7 @@ export function SidebarContent({
                         {!collapsed && <span className="truncate">{label}</span>}
                         {!collapsed && badge > 0 && (
                           <span
-                            className="ml-auto min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
+                            className="ml-auto min-w-[1.25rem] rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
                             aria-label={t('uiCommon.action.pendingRequests', { count: badge })}
                           >
                             {badge > 99 ? '99+' : badge}

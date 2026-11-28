@@ -21,7 +21,7 @@ export function Breadcrumb({ items, className }: BreadcrumbProps) {
     <nav aria-label={t('uiCommon.action.breadcrumb')} className={cn('flex items-center gap-1 text-sm', className)}>
       <Link
         to="/"
-        className="flex items-center gap-1 text-gray-500 hover:text-gray-700 dark:text-surface-400 dark:hover:text-surface-200"
+        className="-m-1 flex items-center gap-1 rounded p-1 text-gray-500 hover:text-gray-700 dark:text-surface-400 dark:hover:text-surface-200"
         aria-label={t('uiCommon.action.home')}
       >
         <Home className="h-4 w-4" />

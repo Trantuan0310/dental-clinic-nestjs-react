@@ -194,6 +194,65 @@ html.dark [role='dialog'] form > :last-child:has(> button[type='submit'], > * > 
   border-top-color: theme('colors.surface.700');
 }
 
+
+/* Text contrast (WCAG 2.1 AA, 4.5:1 for body text). Measured on every page:
+   gray-400 secondary text on white was 2.5:1, green-600 / amber-600 amounts
+   about 3.2:1, and in dark mode gray-500 / surface-500, brand-600 and red-600
+   text about 3–3.7:1. These only change text colour; borders, fills and
+   placeholders keep their tokens. */
+html:not(.dark) .text-gray-400 { color: #646b78; }
+html:not(.dark) .text-gray-500 { color: #565d6a; }
+html:not(.dark) .text-green-600 { color: theme('colors.green.700'); }
+html:not(.dark) .text-emerald-600 { color: theme('colors.emerald.700'); }
+html:not(.dark) .text-amber-600 { color: theme('colors.amber.700'); }
+html:not(.dark) .text-orange-600 { color: theme('colors.orange.700'); }
+html:not(.dark) .text-red-500 { color: theme('colors.red.600'); }
+html:not(.dark) .text-brand-500 { color: theme('colors.brand.600'); }
+html.dark .dark\:text-surface-500, html.dark .dark\:text-gray-500 { color: theme('colors.surface.400'); }
+html.dark .text-gray-500:not([class*='dark:text-']), html.dark .text-gray-400:not([class*='dark:text-']) { color: theme('colors.surface.400'); }
+html.dark .text-brand-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.brand.400'); }
+html.dark .text-brand-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.brand.400'); }
+html.dark .text-red-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.red.400'); }
+html.dark .text-red-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.red.400'); }
+html.dark .text-green-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.green.400'); }
+html.dark .text-green-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.green.400'); }
+html.dark .text-emerald-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.emerald.400'); }
+html.dark .text-emerald-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.emerald.400'); }
+html.dark .text-amber-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.amber.400'); }
+html.dark .text-amber-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.amber.400'); }
+html.dark .text-blue-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.blue.400'); }
+html.dark .text-blue-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.blue.400'); }
+html.dark .text-sky-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.sky.400'); }
+html.dark .text-sky-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.sky.400'); }
+html.dark .text-teal-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.teal.400'); }
+html.dark .text-teal-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.teal.400'); }
+html.dark .text-orange-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.orange.400'); }
+html.dark .text-orange-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.orange.400'); }
+html.dark .text-rose-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.rose.400'); }
+html.dark .text-rose-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.rose.400'); }
+html.dark .text-indigo-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.indigo.400'); }
+html.dark .text-indigo-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.indigo.400'); }
+html.dark .text-purple-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.purple.400'); }
+html.dark .text-purple-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.purple.400'); }
+html.dark .text-violet-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.violet.400'); }
+html.dark .text-violet-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.violet.400'); }
+html.dark .text-cyan-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.cyan.400'); }
+html.dark .text-cyan-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.cyan.400'); }
+html.dark .text-primary-500:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.primary.400'); }
+html.dark .text-primary-600:not([class*='dark:text-']):not(.keep-light, .keep-light *) { color: theme('colors.primary.400'); }
+
+
+/* Touch targets on phones (WCAG 2.5.8, 24×24 px): standalone links were
+   16–20 px tall. Extra vertical padding grows the tap area; the matching
+   negative margin keeps the layout where it was. Links inside running text
+   are exempt. */
+@media (max-width: 640px) {
+  a[href]:not(p a) {
+    padding-block: 4px;
+    margin-block: -4px;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .payment-confirmation {
     animation: payment-confirmation-in 350ms ease-out both;

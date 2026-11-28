@@ -230,7 +230,7 @@ export function QueueList({
                 <div className="flex min-w-0 items-start gap-3">
                   <span
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      called ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-600'
+                      called ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     {called ? <BellRing className="h-4 w-4" /> : (e.position ?? '–')}

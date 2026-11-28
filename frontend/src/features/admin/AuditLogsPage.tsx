@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { auditActionLabel, auditTargetLabel } from '@/lib/auditLabels';
 import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import { Button, Card, SearchInput, Spinner } from '@/components/ui';
@@ -129,9 +130,9 @@ export default function AuditLogsPage() {
       });
       exportCsv(`nhat-ky-${clinicToday()}`, rows.filter(matchesSearch), [
         { header: t('uiWorkforce.auditTime'), accessor: (log) => new Date(log.occurredAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { timeZone: 'Asia/Ho_Chi_Minh' }) },
-        { header: t('uiWorkforce.auditAction'), accessor: (log) => ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : log.action },
+        { header: t('uiWorkforce.auditAction'), accessor: (log) => ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : auditActionLabel(log.action, t) },
         { header: t('uiWorkforce.auditActor'), accessor: (log) => actorLabel(log) ?? t('uiWorkforce.auditSystem') },
-        { header: t('uiWorkforce.auditTarget'), accessor: (log) => TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : log.targetType ?? '' },
+        { header: t('uiWorkforce.auditTarget'), accessor: (log) => TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : auditTargetLabel(log.targetType, t) },
         { header: t('uiWorkforce.auditEntityId'), accessor: (log) => log.targetId ?? '' },
         { header: t('uiWorkforce.auditIp'), accessor: (log) => log.ipAddress ?? '' },
       ]);
@@ -243,7 +244,7 @@ export default function AuditLogsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-mono dark:bg-surface-700 dark:text-surface-200">
-                        {(ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : log.action)}
+                        {(ACTION_LABEL_KEYS[log.action] ? t(`uiWorkforce.${ACTION_LABEL_KEYS[log.action]}`) : auditActionLabel(log.action, t))}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -258,7 +259,7 @@ export default function AuditLogsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-mono text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
-                        {(TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : log.targetType ?? '—')}
+                        {(TARGET_TYPE_LABEL_KEYS[log.targetType ?? ''] ? t(`uiWorkforce.${TARGET_TYPE_LABEL_KEYS[log.targetType ?? '']}`) : auditTargetLabel(log.targetType, t) || '—')}
                       </span>
                       {log.targetId && (
                         <span className="ml-1 text-xs text-gray-500 dark:text-surface-400">{log.targetId}</span>
