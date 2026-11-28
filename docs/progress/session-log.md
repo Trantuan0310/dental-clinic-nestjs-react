@@ -242,3 +242,10 @@
 - Đã sửa: dark mode (lớp CSS dự phòng cho 352 chỗ thiếu `dark:`, `keep-light` cho QR/logo/bảng nhiệt); hóa đơn tràn ngang trên điện thoại; trang công khai gọi /auth/refresh → 401 khi chưa đăng nhập; nút Lưu/Hủy của hộp thoại dài nằm dưới mép (sticky); thông báo kiểm tra trường của trình duyệt bằng tiếng Anh → theo ngôn ngữ app; placeholder cho form nhân viên, dịch vụ, nhóm, mẫu khám, tiền sử; nhãn cho ô ghi chú, giới tính; i18n cho 9 màn hình còn chữ cứng; giờ theo múi giờ phòng khám ở trang dời lịch và trang liên kết lịch hẹn của bệnh nhân.
 - Kiểm tra: frontend typecheck/lint đạt; E2E 120/122 (2 lỗi cũ do DB e2e cục bộ dùng lại).
 - Chưa làm: KpiThresholdSettings/FinancialPanels song ngữ viết tay (chạy đúng, chưa qua i18n); test flow-inventory-stock-out đếm 10 dòng hiển thị (sẽ hỏng khi DB có >10 phiếu).
+
+## 28/11/2026 — Quy chuẩn mật khẩu, i18n KPI/tài chính, test kho
+
+- Mật khẩu: đăng nhập yêu cầu ≥6 còn đặt/đổi yêu cầu ≥8 → gom về `backend/src/auth/password-policy.ts` (8–128) + `frontend/src/lib/passwordPolicy.ts`; đăng nhập chỉ kiểm không rỗng, ≤128; trang đặt lại mật khẩu kiểm đủ quy tắc (chữ + số) trước khi gửi; bỏ `password` không dùng ở CreateUserDto. Test `password-policy.spec.ts`.
+- i18n: KpiThresholdSettings, FinancialPanels (bỏ kiểu `en ? … : …`).
+- E2E flow-inventory-stock-out: đếm phiếu theo `total` của API (trang chỉ hiện 20 dòng mới nhất); đạt 14 → 15.
+- Kiểm tra: backend 1.806 test, frontend typecheck/lint/build đạt; E2E liên quan đạt.
