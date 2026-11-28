@@ -256,3 +256,11 @@
 - Dò lại giao diện với lễ tân/bác sĩ trên điện thoại (sáng/tối) và hộp thoại: không còn lỗi thật (các mục còn lại là nút trong vùng cuộn, menu ngôn ngữ đang đóng, lỗi do bộ dò cố ý gửi form trống).
 - Kiểm tra: backend 1.808 test (94 tệp), API 113/113 (test:isolated); frontend typecheck/lint đạt; E2E 121/122 rồi 2 test sửa đạt lại.
 - Báo cáo: 3.4.1 quy tắc mật khẩu chung (+ trích [argon2]); 4.4 thông báo lỗi theo ngôn ngữ, múi giờ phòng khám, chế độ tối, nút cố định trong hộp thoại; 5.1/5.2.3 số liệu (2.043 ca, Hình 5.1 vẽ lại); KT-BM-12; 5.3.2 kiểm thử dữ liệu sai trên 343 API; 5.3.3 rà soát giao diện tự động; Phụ lục B. 120 trang PDF (đúng giới hạn).
+
+## 28/11/2026 — Rà soát toàn bộ giao diện (đo WCAG + xem ảnh từng trang)
+
+- Công cụ (scratchpad): audit2.cjs đo tương phản chữ/nền theo WCAG AA, chữ bị cắt, vùng chạm < 24px trên điện thoại, ảnh hỏng, chữ < 11px, tràn ngang, lỗi console; chụp ảnh 57 trang × (máy tính/điện thoại × sáng/tối) + trang công khai, xem bằng mắt.
+- Trước sửa: 984 lỗi tương phản, 202 vùng chạm nhỏ, 880 chữ 10px. Sau sửa: 0 (lần đo cuối máy tính + điện thoại + công khai: 0 mục).
+- Đã sửa: màu chữ phụ/số tiền/nút (Button danger/success, nền brand-500 → 600), màu chế độ tối cho chữ -500/-600; thống nhất màu nhấn (primary = brand); vùng chạm link trên điện thoại; nhật ký kiểm toán có nhãn cho mọi mã hành động/đối tượng (từ điển danh từ + động từ); breadcrumb "ID" → "Chi tiết/Sửa"; UUID ở Lịch sử khám → tên + mã BN; "Thời lượng mặc định: phút" → "—"; trang chính sách lương treo khung tải (map null); thanh công cụ danh sách lịch hẹn, tab "Hủy / vắng"; ô nhập/chọn chưa có kiểu; bảng trên điện thoại (cuộn ngang, không phình trang, ô không bẻ chữ, thông báo trống không bị cắt); nút/nhãn không bẻ dòng; tiêu đề trang chi tiết xuống hàng; kính lúp bị che; ₫ không tách dòng; thẻ vắng mặt bớt mờ; thống nhất chính tả hóa/hủy/xóa.
+- Kiểm tra: frontend typecheck/lint đạt; backend 1.808 test; E2E 122/122 đạt.
+- Báo cáo chưa cập nhật đợt này (đang đúng 120 trang).
