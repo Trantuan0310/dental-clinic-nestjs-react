@@ -1,5 +1,6 @@
 export const vi = {
   pending: {
+    uncontactedOnly: 'Chưa liên hệ thành công',
     title: 'Điều trị chờ đặt lịch',
     description: 'Bệnh nhân đã đồng ý kế hoạch điều trị nhưng chưa làm xong. Gọi và đặt lịch để không mất khách giữa chừng.',
     scope: { unscheduled: 'Chưa đặt lịch', booked: 'Đã có lịch' },

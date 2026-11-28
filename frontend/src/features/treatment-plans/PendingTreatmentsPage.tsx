@@ -57,7 +57,7 @@ export default function PendingTreatmentsPage() {
             <TabsTrigger value="booked">{t('uiPlans.pending.scope.booked')}</TabsTrigger>
           </TabsList>
         </Tabs>
-        <label className="m-2 inline-flex gap-2"><input type="checkbox" checked={uncontacted} onChange={e=>setUncontacted(e.target.checked)}/>Chưa liên hệ thành công</label>
+        <label className="m-2 inline-flex gap-2"><input type="checkbox" checked={uncontacted} onChange={e=>setUncontacted(e.target.checked)}/>{t('uiPlans.pending.uncontactedOnly')}</label>
       </Card>
 
       {error ? (

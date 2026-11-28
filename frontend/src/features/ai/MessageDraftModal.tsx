@@ -67,7 +67,7 @@ export function MessageDraftModal({ context, open, onClose }: { context: Message
       <div className="space-y-4">
         <Tabs value={kind} onValueChange={(v) => { setKind(v as MessageKind); setDraft(null); }}>
           <TabsList>
-            <TabsTrigger value={context.kind}>{context.kind === 'waitlist_invite' || context.kind === 'plan_invite' ? 'Tin mời đặt lịch' : t(`uiAi.message.${context.kind}`)}</TabsTrigger>
+            <TabsTrigger value={context.kind}>{context.kind === 'waitlist_invite' || context.kind === 'plan_invite' ? t('uiAi.message.invite') : t(`uiAi.message.${context.kind}`)}</TabsTrigger>
             <TabsTrigger value="reply">{t('uiAi.message.reply')}</TabsTrigger>
           </TabsList>
         </Tabs>

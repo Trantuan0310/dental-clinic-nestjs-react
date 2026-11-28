@@ -2,6 +2,7 @@ import type { vi } from '../uiPlans';
 
 export const en: typeof vi = {
   pending: {
+    uncontactedOnly: 'Not reached yet',
     title: 'Treatment waiting to be booked',
     description: 'Patients who agreed to a treatment plan that is not finished. Call and book them so they do not drop out half-way.',
     scope: { unscheduled: 'Not booked', booked: 'Booked' },

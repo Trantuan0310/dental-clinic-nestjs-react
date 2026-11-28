@@ -64,7 +64,7 @@ export default function DispatchPage() {
         description={t('uiOperations.dispatchDescription')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" aria-pressed={chairs} onClick={() => setChairs(!chairs)}>{chairs ? 'Hàng chờ' : 'Bảng ghế'}</Button>
+            <Button variant="outline" aria-pressed={chairs} onClick={() => setChairs(!chairs)}>{chairs ? t('uiScheduling.chairBoard.queue') : t('uiScheduling.chairBoard.label')}</Button>
             <Button
               variant="outline"
               leftIcon={<RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />}

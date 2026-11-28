@@ -707,7 +707,7 @@ export function AppointmentFormModal({
                 </div>
 
                 {!!suggestions.data?.length && <fieldset className="flex flex-wrap gap-2">
-                  <legend>Ngày tái khám gợi ý</legend>
+                  <legend>{t('uiScheduling.suggestedRecallDates')}</legend>
                   {suggestions.data.map(s => <Button key={s.id} type="button" variant="outline"
                     onClick={() => setDate(s.date)}>{s.service} · {s.date.split('-').reverse().join('/')}</Button>)}
                 </fieldset>}

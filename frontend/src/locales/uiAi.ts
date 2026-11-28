@@ -22,6 +22,7 @@ export const vi = {
     saveError: 'Không lưu được ghi chú',
   },
   message: {
+    invite: 'Tin mời đặt lịch',
     open: 'AI soạn tin',
     title: 'Soạn tin nhắn gửi khách',
     appointment_reminder: 'Nhắc lịch hẹn',

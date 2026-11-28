@@ -24,6 +24,7 @@ export const en: Shape<typeof vi> = {
     saveError: 'Could not save the notes',
   },
   message: {
+    invite: 'Booking invitation',
     open: 'AI message',
     title: 'Draft a message to the patient',
     appointment_reminder: 'Appointment reminder',
