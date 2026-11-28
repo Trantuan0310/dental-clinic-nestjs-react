@@ -494,6 +494,7 @@ export function AppointmentFormModal({
           <Tabs
             value={tab}
             onChange={(id) => setTab(id as 'info' | 'lookup' | 'new-patient')}
+            listClassName="flex w-full [&>*]:flex-1 [&>*]:whitespace-normal [&>*]:px-2 [&>*]:text-center [&>*]:leading-tight"
             tabs={[
               { id: 'info', label: t('uiScheduling.selectPatient') },
               { id: 'lookup', label: t('uiScheduling.quickSearch') },
@@ -679,7 +680,7 @@ export function AppointmentFormModal({
                       <button
                         type="button"
                         onClick={() => setTab('lookup')}
-                        className="shrink-0 text-xs font-medium text-primary-600 hover:underline"
+                        className="-my-1 -mr-2 shrink-0 rounded px-2 py-1 text-xs font-medium text-primary-600 hover:underline"
                       >
                         {patientId ? t('uiScheduling.change') : t('uiScheduling.findPatient')}
                       </button>

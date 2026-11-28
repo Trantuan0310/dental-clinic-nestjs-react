@@ -27,6 +27,8 @@ interface TabsProps {
   tabs?: TabItem[];
   children?: ReactNode;
   className?: string;
+  /** Extra classes for the generated tab list (only with `tabs`). */
+  listClassName?: string;
   /** Accessible label for the tablist. Required when there are multiple Tabs on a page. */
   'aria-label'?: string;
 }
@@ -39,6 +41,7 @@ export function Tabs({
   tabs,
   children,
   className,
+  listClassName,
   'aria-label': ariaLabel,
 }: TabsProps) {
   const resolvedDefault = defaultValue ?? tabs?.[0]?.id ?? '';
@@ -75,7 +78,7 @@ export function Tabs({
       <div className={cn('w-full', className)}>
         {tabs ? (
           <>
-            <TabsList aria-label={ariaLabel}>
+            <TabsList aria-label={ariaLabel} className={listClassName}>
               {tabs.map((tab) => (
                 <TabsTrigger key={tab.id} value={tab.id}>
                   {tab.label}

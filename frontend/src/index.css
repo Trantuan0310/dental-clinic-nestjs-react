@@ -276,7 +276,9 @@ html.dark select:not(.appearance-none):not([multiple]) {
 @media (max-width: 640px) {
   /* The scroller must not grow its grid/flex parents to the table's width
      (that pushed whole pages sideways), so its size ignores its content. */
-  .overflow-x-auto {
+  /* Only table scrollers: a shrink-to-fit scroller (tab bars are
+     inline-flex) collapsed to zero width under this containment. */
+  .overflow-x-auto:has(> table, > div > table) {
     contain: inline-size;
   }
   .overflow-x-auto > table,

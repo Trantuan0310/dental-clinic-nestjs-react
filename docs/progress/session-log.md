@@ -264,3 +264,12 @@
 - Đã sửa: màu chữ phụ/số tiền/nút (Button danger/success, nền brand-500 → 600), màu chế độ tối cho chữ -500/-600; thống nhất màu nhấn (primary = brand); vùng chạm link trên điện thoại; nhật ký kiểm toán có nhãn cho mọi mã hành động/đối tượng (từ điển danh từ + động từ); breadcrumb "ID" → "Chi tiết/Sửa"; UUID ở Lịch sử khám → tên + mã BN; "Thời lượng mặc định: phút" → "—"; trang chính sách lương treo khung tải (map null); thanh công cụ danh sách lịch hẹn, tab "Hủy / vắng"; ô nhập/chọn chưa có kiểu; bảng trên điện thoại (cuộn ngang, không phình trang, ô không bẻ chữ, thông báo trống không bị cắt); nút/nhãn không bẻ dòng; tiêu đề trang chi tiết xuống hàng; kính lúp bị che; ₫ không tách dòng; thẻ vắng mặt bớt mờ; thống nhất chính tả hóa/hủy/xóa.
 - Kiểm tra: frontend typecheck/lint đạt; backend 1.808 test; E2E 122/122 đạt.
 - Báo cáo: viết lại 5.3.3 (đo tương phản WCAG AA, vùng chạm, kết quả 984 → 0 và 202 → 0, các lỗi đã sửa); trích [wcag], [nielsen] (25 tài liệu); vẫn 120 trang.
+
+## 2026-11-28 — Đo giao diện lễ tân, bác sĩ, hộp thoại, đặt lịch công khai
+
+- Đo tương phản/vùng chạm/chữ bị cắt/tràn ngang cho: lễ tân và bác sĩ (máy tính + điện thoại, sáng + tối), hộp thoại thêm/sửa trên 22 trang (quản trị, lễ tân), 4 bước đặt lịch công khai + hồ sơ bác sĩ.
+- Lỗi tìm thấy và đã sửa:
+  - Trên điện thoại, mọi thanh tab (inline-flex có `overflow-x-auto`) bị co về 0 do quy tắc `contain: inline-size` của bản sửa bảng lần trước (chưa deploy). Giới hạn quy tắc cho khung có bảng (`:has(> table, > div > table)`).
+  - Hộp thoại "Tạo lịch hẹn" trên điện thoại: tab thứ ba bị cắt → ba tab chia đều (prop mới `listClassName` của `Tabs`); nút "Đổi" chỉ rộng 21px → thêm vùng chạm.
+- 404 khi lễ tân gõ thẳng `/encounters/:id`: đúng thiết kế (chỉ có `encounter.read.basic`), không có liên kết nào dẫn tới.
+- Kiểm tra: frontend typecheck/lint/build đạt; E2E lịch hẹn 13/13.
