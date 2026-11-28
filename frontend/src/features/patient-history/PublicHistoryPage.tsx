@@ -1,5 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import { CalendarClock, ClipboardList, FileText, Pill, Receipt, Stethoscope } from 'lucide-react';
 import { api, unwrap } from '@/lib/api';
 import { Card } from '@/components/ui';
@@ -38,13 +40,12 @@ const day = (v: string | null) => (v ? new Date(v).toLocaleDateString('vi-VN', {
 const dateTime = (v: string) =>
   new Date(v).toLocaleString('vi-VN', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const money = (n: number) => `${n.toLocaleString('vi-VN')} ₫`;
-const teethText = (teeth: number[]) => (teeth.length ? ` — răng ${teeth.join(', ')}` : '');
+const teethText = (teeth: number[]) => (teeth.length ? i18n.t('uiPatientHistory.page.teeth', { teeth: teeth.join(', ') }) : '');
 
-const PLAN_STATUS: Record<string, string> = { ACCEPTED: 'Đã đồng ý', IN_PROGRESS: 'Đang điều trị', COMPLETED: 'Hoàn thành' };
-const INVOICE_STATUS: Record<string, { label: string; tone: string }> = {
-  PAID: { label: 'Đã thanh toán', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  PARTIAL: { label: 'Còn nợ', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
-  ISSUED: { label: 'Chưa thanh toán', tone: 'bg-red-50 text-red-700 border-red-200' },
+const INVOICE_TONE: Record<string, string> = {
+  PAID: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  PARTIAL: 'bg-amber-50 text-amber-700 border-amber-200',
+  ISSUED: 'bg-red-50 text-red-700 border-red-200',
 };
 
 function Section({ icon: Icon, title, children }: { icon: typeof FileText; title: string; children: React.ReactNode }) {
@@ -62,6 +63,8 @@ const empty = (text: string) => <p className="text-sm text-gray-500 dark:text-su
 
 /** What the patient sees behind their history link: read-only, no staff notes. */
 export default function PublicHistoryPage() {
+  const { t } = useTranslation();
+  const k = (key: string, o?: Record<string, unknown>) => t(`uiPatientHistory.page.${key}`, o);
   const { ma = '' } = useParams();
   const history = useQuery({
     queryKey: ['public-patient-history', ma],
@@ -76,40 +79,40 @@ export default function PublicHistoryPage() {
         <PublicTopBar />
         <Card className="p-5 sm:p-7">
           {history.isPending ? (
-            <p role="status">Đang tải lịch sử khám…</p>
+            <p role="status">{k('loading')}</p>
           ) : history.isError || !h ? (
             <div role="alert">
-              <h1 className="text-xl font-semibold">Đường dẫn không hợp lệ hoặc đã hết hạn</h1>
+              <h1 className="text-xl font-semibold">{k('invalidTitle')}</h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-surface-300">
-                Bạn có thể <Link to="/tra-cuu-lich-su" className="text-brand-700 hover:underline dark:text-brand-300">yêu cầu đường dẫn mới</Link> hoặc liên hệ phòng khám.
+                {k('invalidBefore')} <Link to="/tra-cuu-lich-su" className="text-brand-700 hover:underline dark:text-brand-300">{k('invalidLink')}</Link> {k('invalidAfter')}
               </p>
             </div>
           ) : (
             <>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-surface-100">Lịch sử khám của {h.patient.fullName}</h1>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-surface-100">{k('title', { name: h.patient.fullName })}</h1>
               <p className="mt-1 text-sm text-gray-500 dark:text-surface-400">
-                Mã hồ sơ {h.patient.code} · Đường dẫn hết hạn ngày {day(h.expiresAt)}. Vui lòng không chia sẻ đường dẫn này.
+                {k('meta', { code: h.patient.code, date: day(h.expiresAt) })}
               </p>
 
-              <Section icon={CalendarClock} title="Lịch hẹn sắp tới">
+              <Section icon={CalendarClock} title={k('upcoming')}>
                 {h.upcoming.length === 0
-                  ? empty('Chưa có lịch hẹn sắp tới.')
+                  ? empty(k('noUpcoming'))
                   : (
                     <ul className="space-y-2">
                       {h.upcoming.map((a) => (
                         <li key={a.startAt} className="rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-2 text-sm dark:border-surface-700 dark:bg-surface-900">
                           <strong className="font-semibold">{dateTime(a.startAt)}</strong> · {a.dentistName}
                           {a.reason ? <span className="text-gray-600 dark:text-surface-300"> · {a.reason}</span> : null}
-                          {a.status === 'CONFIRMED' && <span className="ml-1 text-emerald-700"> (đã xác nhận)</span>}
+                          {a.status === 'CONFIRMED' && <span className="ml-1 text-emerald-700"> {k('confirmed')}</span>}
                         </li>
                       ))}
                     </ul>
                   )}
               </Section>
 
-              <Section icon={Stethoscope} title={`Các lần khám (${h.visits.length})`}>
+              <Section icon={Stethoscope} title={k('visits', { n: h.visits.length })}>
                 {h.visits.length === 0
-                  ? empty('Chưa có lần khám nào được ghi nhận.')
+                  ? empty(k('noVisits'))
                   : (
                     <ol className="relative space-y-4 border-l border-gray-200 pl-5 dark:border-surface-700" data-testid="history-visits">
                       {h.visits.map((v, i) => (
@@ -121,17 +124,17 @@ export default function PublicHistoryPage() {
                           </p>
                           {(v.chiefComplaint || v.diagnosis) && (
                             <p className="mt-0.5 text-sm text-gray-600 dark:text-surface-300">
-                              {v.chiefComplaint && <>Lý do khám: {v.chiefComplaint}. </>}
-                              {v.diagnosis && <>Chẩn đoán: {v.diagnosis}.</>}
+                              {v.chiefComplaint && <>{k('complaint', { text: v.chiefComplaint })} </>}
+                              {v.diagnosis && <>{k('diagnosis', { text: v.diagnosis })}</>}
                             </p>
                           )}
                           {v.treatments.length > 0 && (
                             <ul className="mt-1 list-disc pl-5 text-sm text-gray-900 dark:text-surface-100">
-                              {v.treatments.map((t, j) => (
+                              {v.treatments.map((tr, j) => (
                                 <li key={j}>
-                                  {t.name}
-                                  {teethText(t.teeth)}
-                                  {t.quantity > 1 ? ` × ${t.quantity}` : ''}
+                                  {tr.name}
+                                  {teethText(tr.teeth)}
+                                  {tr.quantity > 1 ? ` × ${tr.quantity}` : ''}
                                 </li>
                               ))}
                             </ul>
@@ -139,12 +142,12 @@ export default function PublicHistoryPage() {
                           {v.prescription.length > 0 && (
                             <div className="mt-2 rounded-md bg-gray-50 px-3 py-2 text-sm dark:bg-surface-800">
                               <p className="flex items-center gap-1 font-medium text-gray-700 dark:text-surface-200">
-                                <Pill className="h-3.5 w-3.5" aria-hidden /> Đơn thuốc
+                                <Pill className="h-3.5 w-3.5" aria-hidden /> {k('prescription')}
                               </p>
                               <ul className="mt-1 space-y-0.5 text-gray-700 dark:text-surface-300">
                                 {v.prescription.map((p, j) => (
                                   <li key={j}>
-                                    {[p.drugName, p.dosage].filter(Boolean).join(' ')} — {[p.frequency, /^\d+$/.test(p.duration) ? `${p.duration} ngày` : p.duration].filter(Boolean).join(', ')}
+                                    {[p.drugName, p.dosage].filter(Boolean).join(' ')} — {[p.frequency, /^\d+$/.test(p.duration) ? k('days', { n: p.duration }) : p.duration].filter(Boolean).join(', ')}
                                   </li>
                                 ))}
                               </ul>
@@ -158,9 +161,9 @@ export default function PublicHistoryPage() {
                   )}
               </Section>
 
-              <Section icon={ClipboardList} title="Kế hoạch điều trị">
+              <Section icon={ClipboardList} title={k('plans')}>
                 {h.plans.length === 0
-                  ? empty('Chưa có kế hoạch điều trị.')
+                  ? empty(k('noPlans'))
                   : (
                     <ul className="space-y-3">
                       {h.plans.map((p, i) => (
@@ -168,7 +171,7 @@ export default function PublicHistoryPage() {
                           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                             <strong className="font-semibold text-gray-900 dark:text-surface-100">{p.title}</strong>
                             <span className="text-gray-500 dark:text-surface-400">
-                              {PLAN_STATUS[p.status] ?? p.status} · {p.done}/{p.total} bước
+                              {t(`uiPatientHistory.page.planStatus.${p.status}`, { defaultValue: p.status })} · {k('steps', { done: p.done, total: p.total })}
                             </span>
                           </div>
                           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-surface-800" aria-hidden>
@@ -188,24 +191,24 @@ export default function PublicHistoryPage() {
                   )}
               </Section>
 
-              <Section icon={Receipt} title="Hóa đơn">
+              <Section icon={Receipt} title={k('invoices')}>
                 {h.invoices.length === 0
-                  ? empty('Chưa có hóa đơn.')
+                  ? empty(k('noInvoices'))
                   : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-surface-700 dark:text-surface-400">
-                            <th className="py-1.5 pr-2 font-medium">Số</th>
-                            <th className="py-1.5 pr-2 font-medium">Ngày</th>
-                            <th className="py-1.5 pr-2 text-right font-medium">Tổng</th>
-                            <th className="py-1.5 pr-2 text-right font-medium">Còn nợ</th>
-                            <th className="py-1.5 font-medium">Trạng thái</th>
+                            <th className="py-1.5 pr-2 font-medium">{k('colNumber')}</th>
+                            <th className="py-1.5 pr-2 font-medium">{k('colDate')}</th>
+                            <th className="py-1.5 pr-2 text-right font-medium">{k('colTotal')}</th>
+                            <th className="py-1.5 pr-2 text-right font-medium">{k('colOutstanding')}</th>
+                            <th className="py-1.5 font-medium">{k('colStatus')}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {h.invoices.map((inv) => {
-                            const s = INVOICE_STATUS[inv.status];
+                            const tone = INVOICE_TONE[inv.status];
                             return (
                               <tr key={inv.code} className="border-b border-gray-100 dark:border-surface-800">
                                 <td className="py-1.5 pr-2 font-mono text-xs">{inv.code}</td>
@@ -213,7 +216,7 @@ export default function PublicHistoryPage() {
                                 <td className="py-1.5 pr-2 text-right tabular-nums">{money(inv.total)}</td>
                                 <td className="py-1.5 pr-2 text-right tabular-nums">{inv.outstanding > 0 ? money(inv.outstanding) : '—'}</td>
                                 <td className="py-1.5">
-                                  <span className={cn('rounded-full border px-2 py-0.5 text-xs', s?.tone)}>{s?.label ?? inv.status}</span>
+                                  <span className={cn('rounded-full border px-2 py-0.5 text-xs', tone)}>{t(`uiPatientHistory.page.invoiceStatus.${inv.status}`, { defaultValue: inv.status })}</span>
                                 </td>
                               </tr>
                             );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
@@ -7,19 +8,8 @@ import { getApiErrorMessage } from '@/lib/errors';
 import { MessageDraftModal } from '../ai/MessageDraftModal';
 import { planKeys, type PendingTreatment } from './treatmentPlansApi';
 
-const channels: Record<string, string> = {
-  PHONE: 'Điện thoại',
-  SMS: 'SMS',
-  ZALO: 'Zalo',
-  EMAIL: 'Email',
-  DESK: 'Tại quầy',
-};
-const outcomes: Record<string, string> = {
-  REACHED: 'Đã liên hệ',
-  CALL_BACK: 'Hẹn gọi lại',
-  DECLINED: 'Từ chối đặt lịch',
-  UNREACHABLE: 'Không liên lạc được',
-};
+const CHANNELS = ['PHONE', 'SMS', 'ZALO', 'EMAIL', 'DESK'];
+const OUTCOMES = ['REACHED', 'CALL_BACK', 'DECLINED', 'UNREACHABLE'];
 export function PlanContacts({
   plan,
   canRecord,
@@ -27,6 +17,8 @@ export function PlanContacts({
   plan: PendingTreatment['plans'][number];
   canRecord: boolean;
 }) {
+  const { t } = useTranslation();
+  const k = (key: string, o?: Record<string, unknown>) => t(`uiPlans.contacts.${key}`, o);
   const qc = useQueryClient();
   const [draft, setDraft] = useState(false),
     [channel, setChannel] = useState('PHONE'),
@@ -47,12 +39,12 @@ export function PlanContacts({
   return (
     <details className="mt-2 rounded border p-2">
       <summary className="cursor-pointer">
-        Liên hệ · {plan.title} ({plan.contacts.length})
+        {k('summary', { title: plan.title, n: plan.contacts.length })}
       </summary>
       <ul>
         {plan.contacts.map(c => (
           <li key={c.id}>
-            {formatDateTime(c.contactedAt)} · {channels[c.channel]} · {outcomes[c.outcome]}
+            {formatDateTime(c.contactedAt)} · {k(`channel.${c.channel}`)} · {k(`outcome.${c.outcome}`)}
           </li>
         ))}
       </ul>
@@ -65,38 +57,38 @@ export function PlanContacts({
           }}
         >
           <label>
-            Kênh liên hệ{' '}
+            {k('channelLabel')}{' '}
             <select value={channel} onChange={e => setChannel(e.target.value)}>
-              {Object.entries(channels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
+              {CHANNELS.map(c => (
+                <option key={c} value={c}>
+                  {k(`channel.${c}`)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Kết quả{' '}
+            {k('outcomeLabel')}{' '}
             <select value={outcome} onChange={e => setOutcome(e.target.value)}>
-              {Object.entries(outcomes).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
+              {OUTCOMES.map(o => (
+                <option key={o} value={o}>
+                  {k(`outcome.${o}`)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Thời điểm (để trống nếu vừa liên hệ){' '}
+            {k('timeLabel')}{' '}
             <input type="datetime-local" value={time} onChange={e => setTime(e.target.value)} />
           </label>
           <Button type="submit" disabled={save.isPending}>
-            Ghi nhận liên hệ
+            {k('record')}
           </Button>
           {save.isError && (
-            <p role="alert">{getApiErrorMessage(save.error, 'Không ghi nhận được liên hệ')}</p>
+            <p role="alert">{getApiErrorMessage(save.error, k('recordError'))}</p>
           )}
-          {save.isSuccess && <p role="status">Đã ghi nhận liên hệ</p>}
+          {save.isSuccess && <p role="status">{k('recorded')}</p>}
           <Button variant="outline" type="button" onClick={() => setDraft(true)}>
-            Soạn tin mời
+            {k('draftInvite')}
           </Button>
         </form>
       )}

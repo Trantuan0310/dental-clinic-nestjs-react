@@ -100,4 +100,27 @@ export const en: typeof vi = {
   fromPlanNone: 'Not from a plan',
   fromPlanHint: 'Uses the price quoted in the plan; the item is marked done when the encounter closes.',
   planLineOption: '{{plan}} — {{procedure}}{{teeth}} ({{price}})',
+  contacts: {
+    channel: {
+      PHONE: "Phone",
+      SMS: "SMS",
+      ZALO: "Zalo",
+      EMAIL: "Email",
+      DESK: "At the desk",
+    },
+    outcome: {
+      REACHED: "Reached",
+      CALL_BACK: "Call back later",
+      DECLINED: "Declined to book",
+      UNREACHABLE: "Unreachable",
+    },
+    summary: "Contacts · {{title}} ({{n}})",
+    channelLabel: "Channel",
+    outcomeLabel: "Outcome",
+    timeLabel: "When (leave empty for just now)",
+    record: "Record contact",
+    recordError: "Could not record the contact",
+    recorded: "Contact recorded",
+    draftInvite: "Draft an invitation",
+  },
 };

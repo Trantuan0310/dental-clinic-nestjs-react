@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api';
 import { exportCsv, type CsvColumn } from '@/lib/csv';
 import { Button, Card } from '@/components/ui';
@@ -15,17 +16,19 @@ interface Row {
   daysLeft: number;
   suggested: number;
 }
-const columns: CsvColumn<Row>[] = [
-  { header: 'Mã', accessor: r => r.sku },
-  { header: 'Vật tư', accessor: r => r.name },
-  { header: 'Đơn vị', accessor: r => r.unit },
-  { header: 'Tồn', accessor: r => r.stock },
-  { header: 'Dùng/ngày (30 ngày)', accessor: r => r.daily30 },
-  { header: 'Dùng/ngày (90 ngày)', accessor: r => r.daily90 },
-  { header: 'Số ngày còn dùng', accessor: r => r.daysLeft },
-  { header: 'Nên nhập', accessor: r => r.suggested },
-];
 export function ReorderReport() {
+  const { t } = useTranslation();
+  const k = (key: string) => t(`uiOperations.reorder.${key}`);
+  const columns: CsvColumn<Row>[] = [
+    { header: k('sku'), accessor: r => r.sku },
+    { header: k('name'), accessor: r => r.name },
+    { header: k('unit'), accessor: r => r.unit },
+    { header: k('stock'), accessor: r => r.stock },
+    { header: k('daily30'), accessor: r => r.daily30 },
+    { header: k('daily90'), accessor: r => r.daily90 },
+    { header: k('daysLeft'), accessor: r => r.daysLeft },
+    { header: k('suggested'), accessor: r => r.suggested },
+  ];
   const [open, setOpen] = useState(false);
   const [days, setDays] = useState('14');
   const leadDays = Number(days);
@@ -39,10 +42,10 @@ export function ReorderReport() {
   return (
     <Card>
       <details onToggle={e => setOpen(e.currentTarget.open)}>
-        <summary className="cursor-pointer font-semibold">Nên nhập</summary>
+        <summary className="cursor-pointer font-semibold">{k('title')}</summary>
         <div className="mt-3 space-y-3">
           <label>
-            Số ngày đặt hàng{' '}
+            {k('leadDays')}{' '}
             <input
               className="w-20 rounded border px-2"
               type="number"
@@ -53,23 +56,22 @@ export function ReorderReport() {
             />
           </label>
           <p className="text-sm">
-            Lượng nên nhập = mức dùng bình quân 30 ngày × số ngày đặt hàng − tồn hiện tại. Mức 90
-            ngày dùng để đối chiếu.
+            {k('formula')}
           </p>
           {!valid ? (
-            <p role="alert">Nhập số nguyên từ 1 đến 365 ngày.</p>
+            <p role="alert">{k('invalidDays')}</p>
           ) : report.isError ? (
-            <p role="alert">Không tải được gợi ý nhập kho.</p>
+            <p role="alert">{k('loadError')}</p>
           ) : !report.data ? (
-            <p>Đang tải…</p>
+            <p>{k('loading')}</p>
           ) : !report.data.length ? (
-            <p>Chưa có vật tư cần nhập trong khoảng đã chọn.</p>
+            <p>{k('empty')}</p>
           ) : (
             <>
               <Button
                 onClick={() => exportCsv('nen-nhap-' + leadDays + '-ngay', report.data, columns)}
               >
-                Xuất CSV
+                {k('exportCsv')}
               </Button>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">

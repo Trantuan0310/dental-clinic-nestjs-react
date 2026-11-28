@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui';
 import { api } from '@/lib/api';
 import { clinicToday } from '@/lib/clinicTime';
@@ -15,10 +16,12 @@ interface Coverage {
   dentists: { id: string; fullName: string }[];
   cells: Cell[];
 }
-const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const order = [1, 2, 3, 4, 5, 6, 0];
 
 export function ShiftCoverage() {
+  const { t } = useTranslation();
+  const k = (key: string) => t(`uiWorkforce.coverage.${key}`);
+  const weekdays = k('weekdays').split(',');
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(clinicToday);
   const [dentistId, setDentistId] = useState('');
@@ -42,16 +45,16 @@ export function ShiftCoverage() {
   return (
     <Card>
       <details onToggle={e => setOpen(e.currentTarget.open)}>
-        <summary className="cursor-pointer font-semibold">Phủ ca so với lịch đặt</summary>
+        <summary className="cursor-pointer font-semibold">{k('title')}</summary>
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap gap-4">
             <label>
-              7 ngày từ <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+              {k('from')} <input type="date" value={from} onChange={e => setFrom(e.target.value)} />
             </label>
             <label>
-              Bác sĩ{' '}
+              {k('dentist')}{' '}
               <select value={dentistId} onChange={e => setDentistId(e.target.value)}>
-                <option value="">Tất cả bác sĩ</option>
+                <option value="">{k('allDentists')}</option>
                 {query.data?.dentists.map(d => (
                   <option key={d.id} value={d.id}>
                     {d.fullName}
@@ -61,17 +64,16 @@ export function ShiftCoverage() {
             </label>
           </div>
           <p className="text-sm">
-            Mỗi ô tính bằng phút, gồm thời gian đệm của lịch hẹn. Giờ làm gồm lịch cố định và ca đã
-            duyệt, sau khi trừ giờ nghỉ.
+            {k('note')}
           </p>
           {!to ? (
-            <p>Chọn ngày bắt đầu.</p>
+            <p>{k('pickStart')}</p>
           ) : query.isError ? (
-            <p role="alert">Không tải được dữ liệu phủ ca.</p>
+            <p role="alert">{k('loadError')}</p>
           ) : !query.data ? (
-            <p>Đang tải…</p>
+            <p>{k('loading')}</p>
           ) : !hours.length ? (
-            <p>Không có giờ làm hoặc lịch đặt trong kỳ.</p>
+            <p>{k('empty')}</p>
           ) : (
             <div className="grid gap-3 xl:grid-cols-2">
               {(['availableMin', 'demandMin'] as const).map(metric => (
@@ -79,12 +81,12 @@ export function ShiftCoverage() {
                   <table className="w-full border-separate border-spacing-1 text-center text-sm">
                     <caption className="font-semibold">
                       {metric === 'availableMin'
-                        ? 'Giờ làm khả dụng (phút)'
-                        : 'Nhu cầu lịch đặt (phút)'}
+                        ? k('available')
+                        : k('demand')}
                     </caption>
                     <thead>
                       <tr>
-                        <th>Giờ</th>
+                        <th>{k('hour')}</th>
                         {order.map(d => (
                           <th key={d}>{weekdays[d]}</th>
                         ))}
@@ -105,7 +107,7 @@ export function ShiftCoverage() {
                             return (
                               <td
                                 key={d}
-                                className="rounded p-1 text-slate-900"
+                                className="keep-light rounded p-1 text-slate-900"
                                 style={{
                                   backgroundColor: `hsl(174 45% ${97 - (32 * value) / scale}%)`,
                                 }}
@@ -119,7 +121,7 @@ export function ShiftCoverage() {
                                         : 'block text-slate-700'
                                     }
                                   >
-                                    {metric === 'demandMin' ? 'Thiếu' : 'Trống'} {Math.round(gap)}′
+                                    {metric === 'demandMin' ? k('short') : k('spare')} {Math.round(gap)}′
                                   </small>
                                 )}
                               </td>

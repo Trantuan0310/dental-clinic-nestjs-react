@@ -98,4 +98,27 @@ export const vi = {
   fromPlanNone: 'Không theo kế hoạch',
   fromPlanHint: 'Dùng giá đã báo trong kế hoạch; mục sẽ được đánh dấu đã làm khi kết thúc phiên khám.',
   planLineOption: '{{plan}} — {{procedure}}{{teeth}} ({{price}})',
+  contacts: {
+    channel: {
+      PHONE: "Điện thoại",
+      SMS: "SMS",
+      ZALO: "Zalo",
+      EMAIL: "Email",
+      DESK: "Tại quầy",
+    },
+    outcome: {
+      REACHED: "Đã liên hệ",
+      CALL_BACK: "Hẹn gọi lại",
+      DECLINED: "Từ chối đặt lịch",
+      UNREACHABLE: "Không liên lạc được",
+    },
+    summary: "Liên hệ · {{title}} ({{n}})",
+    channelLabel: "Kênh liên hệ",
+    outcomeLabel: "Kết quả",
+    timeLabel: "Thời điểm (để trống nếu vừa liên hệ)",
+    record: "Ghi nhận liên hệ",
+    recordError: "Không ghi nhận được liên hệ",
+    recorded: "Đã ghi nhận liên hệ",
+    draftInvite: "Soạn tin mời",
+  },
 };
