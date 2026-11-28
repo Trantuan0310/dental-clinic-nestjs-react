@@ -380,6 +380,8 @@ Sổ đồng thuận lưu nguyên văn và phiên bản văn bản mà bệnh nh
 
 Luồng xác thực theo Hình 3.17: mã truy cập JWT [@jwt] ngắn hạn gửi kèm mỗi yêu cầu, mã làm mới dài hạn nằm trong cookie HttpOnly, được thay mới sau mỗi lần dùng và lưu dạng băm trong cơ sở dữ liệu để thu hồi được. Nếu một mã làm mới đã dùng rồi lại được gửi lên (dấu hiệu bị đánh cắp), hệ thống thu hồi toàn bộ phiên đăng nhập của tài khoản đó và ghi sự kiện REFRESH_REUSE_DETECTED vào nhật ký kiểm toán. Để chống dò mật khẩu, mỗi địa chỉ chỉ được thử đăng nhập 5 lần mỗi phút, và tài khoản bị khóa 15 phút khi nhập sai mật khẩu quá 5 lần liên tiếp.
 
+Mọi nơi đặt mật khẩu (đường dẫn thiết lập tài khoản, quên mật khẩu, đổi mật khẩu) dùng một quy tắc chung, định nghĩa một lần ở máy chủ và lặp lại ở giao diện để báo lỗi trước khi gửi: dài từ 8 đến 128 ký tự, có cả chữ và số, không chứa phần tên của email, không nằm trong danh sách mật khẩu phổ biến. Màn hình đăng nhập không kiểm tra độ dài: mật khẩu quá ngắn chỉ là một mật khẩu sai và nhận đúng câu trả lời chung "Email hoặc mật khẩu không đúng", nên kẻ dò không suy ra được quy tắc; giới hạn 128 ký tự ở cả hai phía ngăn việc gửi chuỗi rất dài để làm tốn tài nguyên băm Argon2 [@argon2].
+
 ::: {custom-style="Ảnh"}
 ![](hinh/3-14-tuan-tu-xac-thuc.png){width=14cm}
 :::

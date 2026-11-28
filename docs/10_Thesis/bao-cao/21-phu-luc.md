@@ -84,5 +84,5 @@ Bảng B.1. Ma trận truy vết yêu cầu – thiết kế – giao diện –
 | BC-01 Bảng điều khiển, chỉ số | Bảng 3.5 | Hình 4.11 | E2E: dashboard |
 | BC-02 Báo cáo doanh thu, công suất | Mục 3.3.10 | – | E2E: dashboard-finance |
 | AI-01 Trợ lý AI có kiểm soát | Bảng 3.6, Hình 3.16 | Hình 4.12 | E2E: ai-assist, ai-assistant |
-| QT-01 Vai trò, quyền, nhật ký, cấu hình | Hình 3.18 | – | KT-BM-06, KT-BM-07 |
+| QT-01 Vai trò, quyền, nhật ký, cấu hình | Hình 3.18 | – | KT-BM-06, KT-BM-07, KT-BM-12 |
 

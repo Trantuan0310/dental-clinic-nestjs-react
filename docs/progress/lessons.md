@@ -107,3 +107,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Đặt class/DTO mới ở trên khối decorator của lớp kế tiếp, không chèn giữa: decorator lớp gắn vào class đứng ngay sau nó, controller mất guard mà tsc/lint không báo (27/11/2026).
 - Không chạy `prisma generate` trong worktree cũ có node_modules liên kết tới bản chính: client bị ghi đè theo schema cũ, test bản chính hỏng âm thầm (27/11/2026).
 - Lớp CSS dự phòng dark mode đổi cả chữ con: phần tử có nền sáng đặt bằng style (bảng nhiệt, QR) phải gắn keep-light, nếu không chữ thành sáng trên nền sáng (28/11/2026).
+- Rà ngôn ngữ phải gồm cả thông báo từ backend: frontend hiện nguyên văn message của API, nên lỗi mặc định của class-validator (tiếng Anh) lọt tới người dùng (28/11/2026).

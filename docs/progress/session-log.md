@@ -249,3 +249,10 @@
 - i18n: KpiThresholdSettings, FinancialPanels (bỏ kiểu `en ? … : …`).
 - E2E flow-inventory-stock-out: đếm phiếu theo `total` của API (trang chỉ hiện 20 dòng mới nhất); đạt 14 → 15.
 - Kiểm tra: backend 1.806 test, frontend typecheck/lint/build đạt; E2E liên quan đạt.
+
+## 28/11/2026 — Rà lỗi đợt 2 + cập nhật báo cáo
+
+- Lỗi tìm và sửa: thông báo kiểm tra mặc định của class-validator bằng tiếng Anh đến tay người dùng → `common/validation-messages.ts` (exceptionFactory, nhãn tiếng Việt cho trường); ~80 thông báo lỗi tiếng Anh trong service (nhân viên, lương, ca, chi phí, đồng thuận, quyền…) → tiếng Việt; 9 nút chỉ có biểu tượng thiếu aria-label; test kỳ lương và đăng ký ca tự tránh ngày đã có khi chạy lại.
+- Dò lại giao diện với lễ tân/bác sĩ trên điện thoại (sáng/tối) và hộp thoại: không còn lỗi thật (các mục còn lại là nút trong vùng cuộn, menu ngôn ngữ đang đóng, lỗi do bộ dò cố ý gửi form trống).
+- Kiểm tra: backend 1.808 test (94 tệp), API 113/113 (test:isolated); frontend typecheck/lint đạt; E2E 121/122 rồi 2 test sửa đạt lại.
+- Báo cáo: 3.4.1 quy tắc mật khẩu chung (+ trích [argon2]); 4.4 thông báo lỗi theo ngôn ngữ, múi giờ phòng khám, chế độ tối, nút cố định trong hộp thoại; 5.1/5.2.3 số liệu (2.043 ca, Hình 5.1 vẽ lại); KT-BM-12; 5.3.2 kiểm thử dữ liệu sai trên 343 API; 5.3.3 rà soát giao diện tự động; Phụ lục B. 120 trang PDF (đúng giới hạn).

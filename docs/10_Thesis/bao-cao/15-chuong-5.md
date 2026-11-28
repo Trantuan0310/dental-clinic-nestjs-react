@@ -12,7 +12,7 @@ Bảng 5.1. Các tầng kiểm thử của hệ thống
 
 | Tầng | Công cụ | Số lượng | Phạm vi kiểm tra |
 |---|---|---|---|
-| Đơn vị (máy chủ) | Jest | 1.803 ca, 92 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
+| Đơn vị (máy chủ) | Jest | 1.808 ca, 94 tệp | Quy tắc nghiệp vụ trong service và hàm miền: trạng thái, tính tiền, lương, KPI, phân quyền, khớp chuyển khoản; cơ sở dữ liệu được giả lập |
 | API trên PostgreSQL thật | Jest + Supertest | 113 ca | Gọi HTTP thật qua toàn bộ guard, validation, giao dịch và ràng buộc của PostgreSQL 16: đồng thời, khóa, số thập phân, múi giờ |
 | Đầu cuối (E2E) | Playwright | 122 kịch bản, 54 tệp | Thao tác người dùng trên trình duyệt thật với máy chủ và cơ sở dữ liệu thật |
 | Tĩnh | TypeScript, ESLint | toàn bộ mã | Lỗi kiểu, quy chuẩn mã; đủ khóa ngôn ngữ Việt – Anh |
@@ -93,6 +93,7 @@ Bảng 5.5. Ca kiểm thử nhóm xác thực, phân quyền và bảo mật
 | KT-BM-09 | Mở đường dẫn tra cứu lịch sử đã hết hạn hoặc bị thu hồi | Từ chối giống hệt đường dẫn sai, không lộ dữ liệu | Đơn vị | Đạt |
 | KT-BM-10 | Xin đường dẫn tra cứu bằng số điện thoại không có trong hệ thống | Phản hồi giống hệt trường hợp có, để không dò được số điện thoại | Đơn vị | Đạt |
 | KT-BM-11 | Lễ tân gửi đường dẫn tra cứu, bệnh nhân mở trên trình duyệt khác | Bệnh nhân xem được lịch sử của chính mình | E2E | Đạt |
+| KT-BM-12 | Đặt mật khẩu 7 ký tự, 129 ký tự; đăng nhập bằng mật khẩu 3 ký tự | Đặt mật khẩu: cùng một thông báo ở mọi màn; đăng nhập: chỉ báo sai email hoặc mật khẩu | Đơn vị | Đạt |
 
 ### 5.2.2. Kiểm thử đầu cuối các luồng chính
 
@@ -108,7 +109,7 @@ Bộ E2E cũng kiểm tra chuyển đổi ngôn ngữ Việt – Anh và các y�
 
 ### 5.2.3. Thống kê kết quả kiểm thử theo nhóm chức năng
 
-Mỗi ca kiểm thử tự động ở ba tầng được xếp vào nhóm yêu cầu chức năng mà nó kiểm tra (Mục 2.3): kiểm thử đơn vị theo module chứa nó, kiểm thử API và kiểm thử đầu cuối theo nội dung từng ca. Nhóm cuối gồm các ca không thuộc riêng một nghiệp vụ: cấu hình hệ thống, sinh dữ liệu mẫu, kiểm thử hồi quy, khung giao diện, đa ngôn ngữ, trợ năng và các luồng xuyên suốt nhiều nhóm. Bảng 5.6 tổng hợp kết quả ở lần chạy cuối của từng tầng: kiểm thử đơn vị chạy ngày 27/11/2026, kiểm thử API ngày 17/11/2026, kiểm thử đầu cuối trong quy trình tích hợp liên tục của nhánh chính.
+Mỗi ca kiểm thử tự động ở ba tầng được xếp vào nhóm yêu cầu chức năng mà nó kiểm tra (Mục 2.3): kiểm thử đơn vị theo module chứa nó, kiểm thử API và kiểm thử đầu cuối theo nội dung từng ca. Nhóm cuối gồm các ca không thuộc riêng một nghiệp vụ: cấu hình hệ thống, sinh dữ liệu mẫu, kiểm thử hồi quy, khung giao diện, đa ngôn ngữ, trợ năng và các luồng xuyên suốt nhiều nhóm. Bảng 5.6 tổng hợp kết quả ở lần chạy cuối của từng tầng: kiểm thử đơn vị và kiểm thử API chạy ngày 28/11/2026, kiểm thử đầu cuối trong quy trình tích hợp liên tục của nhánh chính.
 
 ::: {custom-style="bảng"}
 Bảng 5.6. Thống kê ca kiểm thử và tỉ lệ đạt theo nhóm chức năng
@@ -124,11 +125,11 @@ Bảng 5.6. Thống kê ca kiểm thử và tỉ lệ đạt theo nhóm chức n
 | Kho vật tư (KH) | 2 | 27 | 4 | 3 | 34 / 34 | 100% |
 | Báo cáo (BC) | 2 | 58 | 1 | 9 | 68 / 68 | 100% |
 | Trợ lý AI (AI) | 1 | 80 | 0 | 7 | 87 / 87 | 100% |
-| Quản trị, phân quyền (QT) | 1 | 189 | 23 | 19 | 231 / 231 | 100% |
-| Hạ tầng, giao diện chung | – | 77 | 3 | 32 | 112 / 112 | 100% |
-| **Tổng** | **35** | **1.803** | **113** | **122** | **2.038 / 2.038** | **100%** |
+| Quản trị, phân quyền (QT) | 1 | 192 | 23 | 19 | 234 / 234 | 100% |
+| Hạ tầng, giao diện chung | – | 79 | 3 | 32 | 114 / 114 | 100% |
+| **Tổng** | **35** | **1.808** | **113** | **122** | **2.043 / 2.043** | **100%** |
 
-Cả 2.038 ca đều đạt; mọi nhóm yêu cầu chức năng đều được kiểm thử ở ít nhất hai tầng. Hình 5.1 cho thấy cách phân bố số ca: ở tầng đơn vị, nhóm lịch hẹn và tiếp nhận chiếm khoảng một phần ba vì có nhiều quy tắc nhất (giờ làm việc, trùng lịch, hàng chờ, đặt lịch trực tuyến); ở tầng API, số ca dồn vào các nhóm có rủi ro đồng thời và phân quyền (nhân sự, quản trị, lịch hẹn, khám); ở tầng đầu cuối, nhóm giao diện chung nhiều ca nhất vì gồm các luồng đi xuyên nhiều màn hình.
+Cả 2.043 ca đều đạt; mọi nhóm yêu cầu chức năng đều được kiểm thử ở ít nhất hai tầng. Hình 5.1 cho thấy cách phân bố số ca: ở tầng đơn vị, nhóm lịch hẹn và tiếp nhận chiếm khoảng một phần ba vì có nhiều quy tắc nhất (giờ làm việc, trùng lịch, hàng chờ, đặt lịch trực tuyến); ở tầng API, số ca dồn vào các nhóm có rủi ro đồng thời và phân quyền (nhân sự, quản trị, lịch hẹn, khám); ở tầng đầu cuối, nhóm giao diện chung nhiều ca nhất vì gồm các luồng đi xuyên nhiều màn hình.
 
 ::: {custom-style="Ảnh"}
 ![](hinh/5-1-ca-kiem-thu-theo-nhom.png){width=15cm}
@@ -215,10 +216,13 @@ Các biện pháp bảo mật được đối chiếu với danh sách rủi ro 
 - **Khóa bí mật** không có trong mã nguồn; tệp cấu hình mẫu chỉ chứa tên biến.
 - **Dữ liệu gửi cho AI** được kiểm thử đơn vị để bảo đảm không chứa họ tên, số điện thoại, email của bệnh nhân; các công cụ của trợ lý AI chỉ trả về dữ liệu trong phạm vi quyền của người hỏi.
 - **Nhật ký kiểm toán** ghi lại các thao tác đọc hồ sơ lâm sàng và mọi thao tác ghi quan trọng.
+- **Dữ liệu đầu vào sai**: toàn bộ 343 điểm cuối API được gọi tự động với tham số và nội dung sai (mã định danh ngẫu nhiên, ngày không tồn tại, số âm, chuỗi chứa dấu nháy, nội dung rỗng hoặc sai kiểu); không điểm cuối nào trả lỗi 500, mọi trường hợp đều bị từ chối bằng lỗi 400, 404 hoặc 409 kèm thông báo tiếng Việt. Trang đặt lịch công khai từ chối đúng ngày sinh ở tương lai, số điện thoại có chữ, giờ đã qua và giờ không nằm trong danh sách giờ trống.
 
 ### 5.3.3. Khả năng sử dụng
 
 Giao diện được kiểm tra trên hai cỡ màn hình: máy tính (1440 px) cho nhân viên và điện thoại (390 px) cho các trang công khai của bệnh nhân (Hình 4.10). Các nguyên tắc khả dụng của Nielsen được áp dụng: trạng thái hệ thống luôn hiển thị (huy hiệu trạng thái, thông báo sau mỗi thao tác), ngăn lỗi trước khi xảy ra (xác nhận trước khi đóng phiên khám, cảnh báo dị ứng), cho phép hoàn tác (sơ đồ răng). Toàn bộ chữ giao diện có hai ngôn ngữ.
+
+Trước khi chốt, giao diện được rà soát tự động bằng một công cụ viết riêng trên Playwright: mở 57 trang với ba vai trò (quản trị, lễ tân, bác sĩ), ở chế độ sáng và tối, trên cỡ máy tính và điện thoại, cả tiếng Việt lẫn tiếng Anh; bấm thử khoảng 60 hộp thoại thêm, sửa và gửi biểu mẫu trống. Mỗi màn hình được kiểm tra lỗi trong console, yêu cầu API lỗi, mã khóa ngôn ngữ hiển thị thô, chữ sót ngôn ngữ khác, thanh cuộn ngang, vùng nền trắng trong chế độ tối, ô nhập thiếu nhãn hoặc gợi ý, nút chỉ có biểu tượng mà thiếu tên cho trình đọc màn hình. Các lỗi tìm được đều đã sửa: nhiều thẻ còn nền trắng ở chế độ tối, hàng nút Lưu bị khuất trong hộp thoại dài, thông báo kiểm tra bằng tiếng Anh, chín màn hình còn chữ viết cứng một ngôn ngữ, ngày giờ hiển thị theo múi giờ của máy người xem ở hai trang, trang hóa đơn tràn ngang trên điện thoại, chín nút biểu tượng không có tên, và quy tắc độ dài mật khẩu không thống nhất giữa màn đăng nhập (6 ký tự) và màn đặt mật khẩu (8 ký tự).
 
 Về phạm vi, kiểm thử giao diện tự động chạy trên trình duyệt Chromium ở cỡ màn hình máy tính, riêng các trang công khai và bố cục chung được kiểm tra thêm ở cỡ điện thoại. Máy tính bảng dùng chung bố cục co giãn nhưng chưa được kiểm thử độc lập; các trình duyệt khác (Firefox, Safari) cũng chưa nằm trong bộ kiểm thử tự động.
 

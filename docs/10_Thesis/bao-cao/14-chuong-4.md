@@ -100,6 +100,10 @@ Mỗi trang được tải lười (`React.lazy`) nên trình duyệt chỉ tả
 
 Toàn bộ chữ giao diện nằm trong tệp ngôn ngữ tiếng Việt và tiếng Anh; bản tiếng Anh được tách thành gói riêng, chỉ tải khi cần. Để màn hình không bao giờ hiện mã khóa thô (như `uiScheduling.bookingActionConfirmed`), bước kiểm tra mã nguồn dùng trình biên dịch TypeScript dò mọi khóa được gọi, kể cả khóa ghép động từ hằng số, và báo lỗi nếu khóa thiếu ở một trong hai ngôn ngữ hoặc tham số chèn không khớp; khi chạy kiểm thử đầu cuối, khóa nào bị thiếu lúc hiển thị cũng làm kịch bản thất bại. Sơ đồ răng được vẽ bằng SVG theo đường cong hình chữ U, mỗi răng là một nút dùng được bằng bàn phím; thay đổi tình trạng răng tự lưu sau 1,5 giây và có hoàn tác.
 
+Thông báo lỗi cũng theo ngôn ngữ của người dùng ở cả hai đầu. Phía máy chủ, lớp kiểm tra dữ liệu đầu vào (`ValidationPipe`) viết lại các thông báo mặc định tiếng Anh của thư viện class-validator thành câu tiếng Việt có tên trường dễ hiểu (ví dụ "Họ và tên cần ít nhất 2 ký tự"), còn các thông báo nghiệp vụ được viết sẵn bằng tiếng Việt. Phía giao diện, thông báo kiểm tra sẵn có của trình duyệt (vốn theo ngôn ngữ của trình duyệt, như "Please fill out this field.") được thay bằng câu theo ngôn ngữ đang chọn. Mọi ngày giờ hiển thị theo múi giờ của phòng khám (UTC+7) bất kể máy người xem đặt ở đâu, kể cả trên các trang bệnh nhân mở từ đường dẫn trong tin nhắn.
+
+Giao diện có chế độ tối. Ngoài các lớp màu khai báo riêng cho chế độ tối, một lớp CSS dự phòng tự đổi các lớp màu sáng chưa có biến thể tối (nền trắng, chữ xám đậm, viền nhạt) sang màu tương ứng của chế độ tối, trừ các vùng bắt buộc giữ nền sáng như mã QR và logo. Trong hộp thoại dài, hàng nút Lưu/Hủy luôn nằm cố định ở đáy để không bị khuất khi biểu mẫu cuộn.
+
 ## 4.5. Kết quả giao diện các chức năng
 
 Mục này trình bày các màn hình tiêu biểu theo luồng nghiệp vụ chính, chụp từ hệ thống chạy với dữ liệu mẫu 6 tháng (500 bệnh nhân, 4 bác sĩ, 2 lễ tân; tên người là giả lập). Thanh menu bên trái chỉ hiện những mục mà vai trò đang đăng nhập có quyền (Hình 4.3); ở các hình còn lại, thanh menu được cắt bỏ để nội dung đủ rõ khi in.

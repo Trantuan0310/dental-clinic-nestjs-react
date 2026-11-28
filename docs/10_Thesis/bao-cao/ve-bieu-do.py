@@ -1,8 +1,8 @@
 """Vẽ biểu đồ thống kê kiểm thử cho Chương 5 (Hình 5.1, Hình 5.2).
 
 Số liệu lấy từ lần chạy thật:
-- kiểm thử đơn vị: `npx jest --json` trong backend (27/11/2026), nhóm theo module;
-- kiểm thử API: backend/test-results/.../jest-results.json (17/11/2026);
+- kiểm thử đơn vị: `npx jest --json` trong backend (28/11/2026), nhóm theo module;
+- kiểm thử API: backend/test-results/.../jest-results.json (28/11/2026);
 - E2E: `npx playwright test --list`, kết quả 122/122 đạt ở CI nhánh chính.
 Độ bao phủ: Bảng 5.7 (jest --coverage, 17/11/2026).
 
@@ -39,8 +39,8 @@ NHOM = [
     ("Kho vật tư (KH)", 27, 4, 3),
     ("Báo cáo (BC)", 58, 1, 9),
     ("Trợ lý AI (AI)", 80, 0, 7),
-    ("Quản trị, phân quyền (QT)", 189, 23, 19),
-    ("Hạ tầng, giao diện chung", 77, 3, 32),
+    ("Quản trị, phân quyền (QT)", 192, 23, 19),
+    ("Hạ tầng, giao diện chung", 79, 3, 32),
 ]
 
 
