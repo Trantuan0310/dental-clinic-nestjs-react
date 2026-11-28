@@ -149,12 +149,12 @@ export default function InventoryItemDetailPage() {
   return (
     <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Button variant="ghost" aria-label={t('common.back')} onClick={() => navigate('/inventory')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{item.name}</h1>
             <StatusBadge status={stockStatus} />
           </div>

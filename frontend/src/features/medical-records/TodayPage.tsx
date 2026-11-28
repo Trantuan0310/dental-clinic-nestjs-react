@@ -75,7 +75,7 @@ export default function TodayPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
             {t('uiClinical.todayTitle', { date: format(currentDate, 'EEEE, dd/MM/yyyy', { locale: dateLocale }) })}

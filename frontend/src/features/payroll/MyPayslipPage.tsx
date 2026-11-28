@@ -56,13 +56,13 @@ export default function MyPayslipPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Button variant="ghost" asChild>
-          <Link to="/my-payroll/history">
+          <Link to="/my-payroll/history" aria-label={t('common.back')}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
             {t('uiWorkforce.payrollMyPayslips')} {format(new Date(payslip.periodStart), 'MM/yyyy', { locale: dateLocale })}
           </h1>

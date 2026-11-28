@@ -73,7 +73,7 @@ export default function ShiftApprovalInbox({ variant = 'admin' }: ShiftApprovalI
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">
             {variant === 'admin' ? t('uiWorkforce.shiftApprovalAdminTitle') : t('uiWorkforce.shiftApprovalTitle')}
