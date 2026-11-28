@@ -106,3 +106,4 @@ Cập nhật lần cuối: 08/11/2026 (sau các PR #87 đến #95).
 - Đổi chữ trên giao diện thì grep cả frontend/e2e theo chữ cũ (kể cả regex không dấu như /đóng encounter/i): test toHaveCount(0) với chữ cũ vẫn xanh nhưng vô nghĩa.
 - Đặt class/DTO mới ở trên khối decorator của lớp kế tiếp, không chèn giữa: decorator lớp gắn vào class đứng ngay sau nó, controller mất guard mà tsc/lint không báo (27/11/2026).
 - Không chạy `prisma generate` trong worktree cũ có node_modules liên kết tới bản chính: client bị ghi đè theo schema cũ, test bản chính hỏng âm thầm (27/11/2026).
+- Lớp CSS dự phòng dark mode đổi cả chữ con: phần tử có nền sáng đặt bằng style (bảng nhiệt, QR) phải gắn keep-light, nếu không chữ thành sáng trên nền sáng (28/11/2026).

@@ -235,3 +235,10 @@
 - Ch.4: 4.4 kiểm tra khóa i18n; 4.5.1 + Hình 4.2 chụp lại (3 màn hình điện thoại: dịch vụ, bác sĩ, hồ sơ); 4.5.5 đánh giá sau lượt khám.
 - Ch.5: đơn vị 1.803 ca/92 tệp (chạy 27/11), Bảng 5.6 tổng 2.038 (LH 625, QT 189, hạ tầng 77), Hình 5.1 vẽ lại; thêm KT-LH-10. Mục 5.2.4 độ bao phủ giữ số đo 17/11. Phụ lục B thêm LH-09; Tóm tắt, Mở đầu, Kết luận cập nhật số.
 - Dựng: 117 trang PDF (Mở đầu 1 … Phụ lục 96). Cần graphviz + plantuml.jar (scratchpad) + matplotlib/python-docx cho python3.13.
+
+## 28/11/2026 — Dò lỗi tự động toàn bộ giao diện và API
+
+- Công cụ (scratchpad, không commit): dò 57 trang × 3 vai trò × sáng/tối × máy tính/điện thoại (console, HTTP lỗi, khóa thô, chữ Anh sót, tràn ngang, nền trắng ở dark mode); dò hộp thoại (bấm nút Thêm/Sửa…, kiểm nhãn, *, placeholder, nút ngoài màn hình, gửi rỗng); dò API 144 GET + 199 route ghi với tham số/dữ liệu sai (0 lỗi 500); thử đặt lịch công khai với dữ liệu biên (đều bị chặn đúng); bản tiếng Anh tìm chữ Việt sót.
+- Đã sửa: dark mode (lớp CSS dự phòng cho 352 chỗ thiếu `dark:`, `keep-light` cho QR/logo/bảng nhiệt); hóa đơn tràn ngang trên điện thoại; trang công khai gọi /auth/refresh → 401 khi chưa đăng nhập; nút Lưu/Hủy của hộp thoại dài nằm dưới mép (sticky); thông báo kiểm tra trường của trình duyệt bằng tiếng Anh → theo ngôn ngữ app; placeholder cho form nhân viên, dịch vụ, nhóm, mẫu khám, tiền sử; nhãn cho ô ghi chú, giới tính; i18n cho 9 màn hình còn chữ cứng; giờ theo múi giờ phòng khám ở trang dời lịch và trang liên kết lịch hẹn của bệnh nhân.
+- Kiểm tra: frontend typecheck/lint đạt; E2E 120/122 (2 lỗi cũ do DB e2e cục bộ dùng lại).
+- Chưa làm: KpiThresholdSettings/FinancialPanels song ngữ viết tay (chạy đúng, chưa qua i18n); test flow-inventory-stock-out đếm 10 dòng hiển thị (sẽ hỏng khi DB có >10 phiếu).
