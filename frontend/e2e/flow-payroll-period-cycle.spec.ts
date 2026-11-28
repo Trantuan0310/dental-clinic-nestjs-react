@@ -27,11 +27,28 @@ test('payroll period cycle: create, compute, lock, approve', async ({ page }) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const end = new Date();
   end.setDate(end.getDate() - 1);
-  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() >= 7 ? 1 : end.getDate() - 6);
+  let start = new Date(end.getFullYear(), end.getMonth(), end.getDate() >= 7 ? 1 : end.getDate() - 6);
+
+  // Periods never share a day and an approved one cannot be deleted, so on a
+  // database this test already ran on, the window above is taken: step back
+  // to the latest free week before the existing periods (the page's own list).
+  const [listResponse] = await Promise.all([
+    page.waitForResponse((r) => /\/payroll\/periods(\?|$)/.test(r.url()) && r.request().method() === 'GET' && r.ok()),
+    page.goto('/payroll'),
+  ]);
+  const listed = ((await listResponse.json()) as { data: Array<{ periodStart: string; periodEnd: string; openedFromPeriodId?: string | null }> }).data
+    .filter((p) => !p.openedFromPeriodId)
+    .map((p) => ({ from: p.periodStart.slice(0, 10), to: p.periodEnd.slice(0, 10) }));
+  for (let guard = 0; guard < 200; guard++) {
+    const clash = listed.find((p) => p.from <= ymd(end) && p.to >= ymd(start));
+    if (!clash) break;
+    end.setTime(new Date(`${clash.from}T12:00:00`).getTime());
+    end.setDate(end.getDate() - 1);
+    start = new Date(end);
+    start.setDate(start.getDate() - 6);
+  }
   const periodStart = ymd(start);
   const periodEnd = ymd(end);
-
-  await page.goto('/payroll');
   await page.waitForLoadState('networkidle');
 
   // The seeded periods (May–August) are listed; with none, the empty state

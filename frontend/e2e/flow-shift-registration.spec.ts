@@ -52,8 +52,7 @@ test('shift registration cycle: dentist registers, admin approves', async ({ bro
     const target = new Date();
     target.setDate(target.getDate() + 14 + Math.floor(Math.random() * 42));
     while (target.getDay() !== 6) target.setDate(target.getDate() + 1);
-    const iso = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
-    const ddMmYyyy = `${String(target.getDate()).padStart(2, '0')}/${String(target.getMonth() + 1).padStart(2, '0')}/${target.getFullYear()}`;
+    const isoOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     // ---- Dentist registers a shift ----
     await dentistPage.goto('/my-shifts');
@@ -64,13 +63,21 @@ test('shift registration cycle: dentist registers, admin approves', async ({ bro
     // so .first() (the header button) avoids a strict-mode violation.
     await dentistPage.getByRole('button', { name: /đăng ký ca mới/i }).first().click();
     const registerDialog = dentistPage.getByRole('dialog');
-    await registerDialog.getByLabel(/ngày/i).fill(iso);
-    const [createResponse] = await Promise.all([
-      dentistPage.waitForResponse(
-        (r) => /\/shifts\/registrations$/.test(r.url()) && r.request().method() === 'POST',
-      ),
-      registerDialog.getByRole('button', { name: /^đăng ký ca mới$/i }).click(),
-    ]);
+    // A database this test already ran on may hold that Saturday: on a
+    // conflict (409) try the next Saturday instead of failing.
+    let createResponse!: Awaited<ReturnType<typeof dentistPage.waitForResponse>>;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await registerDialog.getByLabel(/ngày/i).fill(isoOf(target));
+      [createResponse] = await Promise.all([
+        dentistPage.waitForResponse(
+          (r) => /\/shifts\/registrations$/.test(r.url()) && r.request().method() === 'POST',
+        ),
+        registerDialog.getByRole('button', { name: /^đăng ký ca mới$/i }).click(),
+      ]);
+      if (createResponse.status() !== 409) break;
+      target.setDate(target.getDate() + 7);
+    }
+    const ddMmYyyy = `${String(target.getDate()).padStart(2, '0')}/${String(target.getMonth() + 1).padStart(2, '0')}/${target.getFullYear()}`;
     expect(createResponse.ok(), `Create shift request failed: ${createResponse.status()}`).toBe(true);
     await expect(registerDialog).toBeHidden({ timeout: 10_000 });
 

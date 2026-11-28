@@ -150,7 +150,7 @@ export default function InventoryItemDetailPage() {
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/inventory')}>
+        <Button variant="ghost" aria-label={t('common.back')} onClick={() => navigate('/inventory')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">

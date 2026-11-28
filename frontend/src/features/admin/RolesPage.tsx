@@ -112,12 +112,14 @@ export default function RolesPage() {
                       {!role.isSystem && (
                         <div className="flex gap-1">
                           <button
+                            aria-label={`${t('common.edit')} ${role.name}`}
                             className="rounded p-1 hover:bg-gray-100 dark:hover:bg-surface-700"
                             onClick={() => setEditingRole(role)}
                           >
                             <Edit className="h-4 w-4 text-gray-400 dark:text-surface-400" />
                           </button>
                           <button
+                            aria-label={`${t('common.delete')} ${role.name}`}
                             className="rounded p-1 hover:bg-red-50"
                             onClick={() => handleDelete(role.id)}
                           >

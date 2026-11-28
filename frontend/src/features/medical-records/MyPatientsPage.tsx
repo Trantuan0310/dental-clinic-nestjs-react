@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Users } from 'lucide-react';
-import { Button, Card, SearchInput, EmptyState } from '@/components/ui';
+import { Card, SearchInput, EmptyState } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
@@ -108,9 +108,7 @@ export default function MyPatientsPage() {
                       {formatDate(patient.lastVisit)}
                     </p>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
+                  <ArrowRight className="h-4 w-4 text-gray-400" aria-hidden />
                 </div>
               </div>
             ))}

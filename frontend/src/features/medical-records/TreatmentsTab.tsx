@@ -309,12 +309,16 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                   {isEditable && (
                     <div className="flex gap-2">
                       <button
+                        type="button"
+                        aria-label={t('common.edit')}
                         onClick={() => openEditModal(treatment)}
                         className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
+                        type="button"
+                        aria-label={t('common.delete')}
                         onClick={() => setConfirmDelete(treatment)}
                         className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
                       >
@@ -535,6 +539,7 @@ export function TreatmentsTab({ encounter, initialToothNumber, onClearInitialToo
                     </span>
                     <button
                       type="button"
+                      aria-label={`${t('common.delete')} ${usage.inventoryItemName}`}
                       onClick={() => removeInventoryUsage(index)}
                       className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
                     >

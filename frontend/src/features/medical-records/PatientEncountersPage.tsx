@@ -24,7 +24,7 @@ export default function PatientEncountersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate(-1)}>
+        <Button variant="ghost" aria-label={t('common.back')} onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -74,9 +74,7 @@ export default function PatientEncountersPage() {
                   </div>
                 </div>
                 {canViewDetail && (
-                  <Button variant="ghost" size="sm">
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
+                  <ArrowRight className="h-4 w-4 text-gray-400" aria-hidden />
                 )}
               </div>
             ))}
