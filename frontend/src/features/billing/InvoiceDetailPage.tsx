@@ -347,7 +347,8 @@ export default function InvoiceDetailPage() {
           {/* Line Items */}
           <Card title={t('uiOperations.invoiceDetails')}>
             {invoice.items && invoice.items.length > 0 ? (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm [&_td:first-child]:pl-0 [&_td]:px-2 [&_th:first-child]:pl-0 [&_th]:px-2">
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
                     <th className="py-2 font-medium text-gray-600">#</th>
@@ -382,6 +383,7 @@ export default function InvoiceDetailPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">{t('uiOperations.noInvoiceItems')}</p>
             )}

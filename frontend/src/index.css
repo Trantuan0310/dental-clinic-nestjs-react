@@ -274,9 +274,15 @@ html.dark select:not(.appearance-none):not([multiple]) {
    wrapping text one word per line (roles, message log). Give it a working
    width and let the scroller do its job. */
 @media (max-width: 640px) {
+  /* The scroller must not grow its grid/flex parents to the table's width
+     (that pushed whole pages sideways), so its size ignores its content. */
+  .overflow-x-auto {
+    contain: inline-size;
+  }
   .overflow-x-auto > table,
   .overflow-x-auto > div > table {
-    min-width: 44rem;
+    width: max-content;
+    min-width: 100%;
   }
   .overflow-x-auto > table :is(th, td),
   .overflow-x-auto > div > table :is(th, td) {
