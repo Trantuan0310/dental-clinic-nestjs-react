@@ -54,7 +54,7 @@ export function PaymentQrCard({ invoiceId, invoiceCode, balance }: { invoiceId: 
   return (
     <Card title={t('uiOperations.paymentQrTitle')} description={t('uiOperations.paymentQrHint')}>
       <div className="flex flex-col items-center gap-4">
-        <div className="flex h-[240px] w-[240px] shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white p-1">
+        <div className="flex h-[240px] w-[240px] shrink-0 items-center justify-center keep-light rounded-md border border-gray-200 bg-white p-1">
           {image ? (
             <img
               src={image}

@@ -27,6 +27,14 @@ export function SessionBoot({ children }: { children: ReactNode }) {
       setBooted(true);
       return;
     }
+    // Nobody has signed in from this browser (or they signed out): there is no
+    // refresh cookie to use. Calling /auth/refresh anyway logged a 401 on every
+    // public page (booking, history lookup) and held the page behind the
+    // loader for a round trip.
+    if (!user) {
+      setBooted(true);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {

@@ -66,7 +66,7 @@ export default function LoginPage() {
         <div className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-white/10" aria-hidden="true" />
 
         <div className="relative">
-          <div className="mb-10 inline-flex items-center gap-2.5 rounded-2xl bg-white px-5 py-3 shadow-lg">
+          <div className="mb-10 inline-flex items-center gap-2.5 keep-light rounded-2xl bg-white px-5 py-3 shadow-lg">
             <Logo variant="full" size="sm" />
           </div>
 

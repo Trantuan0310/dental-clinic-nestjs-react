@@ -121,7 +121,7 @@ function Brand({ light = false }: { light?: boolean }) {
   const { t } = useTranslation();
   return (
     <a href="#top" className="flex items-center gap-2.5" aria-label={clinic.name}>
-      <img src="/logo-icon.png" alt="" className="h-10 w-10 rounded bg-white" />
+      <img src="/logo-icon.png" alt="" className="keep-light h-10 w-10 rounded bg-white" />
       <span className="flex flex-col leading-none">
         <span className={'font-display text-xl font-extrabold tracking-[0.04em] ' + (light ? 'text-white' : 'text-brand-600')}>GENSMILE</span>
         <span className={'mt-1 text-xs ' + (light ? 'text-brand-100' : 'text-gray-500 dark:text-surface-400')}>{tagline(t)}</span>

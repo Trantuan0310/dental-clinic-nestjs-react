@@ -162,20 +162,20 @@ export default function InvoiceDetailPage() {
         <p>{t('uiOperations.serviceInvoice').toUpperCase()}</p>
       </div>
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Button variant="ghost" aria-label={t('uiOperations.backToInvoiceList')} onClick={() => navigate('/billing/list')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-gray-900">{invoice.code}</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-surface-100">{invoice.code}</h1>
             <InvoiceStatusBadge status={invoice.status} />
           </div>
           <p className="mt-0.5 text-sm text-gray-500">
             {invoice.patientName} • {invoice.patientCode}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canIssue && (
             <PermissionGuard permission="invoice.issue">
               <Button
