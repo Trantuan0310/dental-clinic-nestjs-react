@@ -274,14 +274,14 @@ export class EmployeesService {
   async terminate(id: string, dto: TerminateEmployeeDto, actor: JwtPayload, meta: RequestMeta) {
     const current = await this.findOrThrow(id);
     if (current.employmentStatus === 'TERMINATED') {
-      throw new EmployeeValidationException('Employee is already terminated');
+      throw new EmployeeValidationException('Nhân viên đã nghỉ việc');
     }
     const terminationDate = dto.terminationDate ? toDateOnly(dto.terminationDate) : clinicToday();
     if (terminationDate < current.hireDate) {
-      throw new EmployeeValidationException('Termination date is before the hire date');
+      throw new EmployeeValidationException('Ngày nghỉ việc không được trước ngày vào làm');
     }
     if (current.userId === actor.sub) {
-      throw new EmployeeValidationException('You cannot terminate your own employee record');
+      throw new EmployeeValidationException('Bạn không thể cho chính mình nghỉ việc');
     }
     const planned = terminationDate > clinicToday();
     const firstDayOff = startOfClinicDay(terminationDate.toISOString().slice(0, 10));
@@ -464,10 +464,12 @@ export class EmployeesService {
       throw new EmployeeValidationException('A terminated employee cannot get an account');
     }
     if (current.userId) {
-      throw new StaffLinkConflictException('Employee already has an account');
+      throw new StaffLinkConflictException('Nhân viên đã có tài khoản');
     }
     if (Boolean(dto.userId) === Boolean(dto.loginEmail)) {
-      throw new EmployeeValidationException('Provide exactly one of userId or loginEmail');
+      throw new EmployeeValidationException(
+        'Chọn một tài khoản có sẵn hoặc nhập email đăng nhập mới (chỉ một trong hai)',
+      );
     }
 
     let userId = dto.userId;
@@ -655,7 +657,9 @@ export class EmployeesService {
   ) {
     const current = await this.findOrThrow(id);
     if (current.employmentStatus !== 'ACTIVE') {
-      throw new DentistProfileNotAllowedException('Only an active employee can become a dentist');
+      throw new DentistProfileNotAllowedException(
+        'Chỉ nhân viên đang làm việc mới tạo được hồ sơ bác sĩ',
+      );
     }
     if (!current.userId) {
       throw new DentistProfileNotAllowedException(
@@ -663,13 +667,13 @@ export class EmployeesService {
       );
     }
     if (current.dentistProfile) {
-      throw new StaffLinkConflictException('Employee already has a dentist profile');
+      throw new StaffLinkConflictException('Nhân viên đã có hồ sơ bác sĩ');
     }
     const userId = current.userId;
 
     const profile = await this.prisma.$transaction(async tx => {
       if (await tx.dentistProfile.findUnique({ where: { userId } })) {
-        throw new StaffLinkConflictException('This account already has a dentist profile');
+        throw new StaffLinkConflictException('Tài khoản này đã có hồ sơ bác sĩ');
       }
       if (dto.licenseNumber) await this.assertLicenseFree(tx, dto.licenseNumber);
 
@@ -732,7 +736,7 @@ export class EmployeesService {
   private async assertAccountFree(userId: string) {
     const linked = await this.prisma.employee.findFirst({ where: { userId, deletedAt: null } });
     if (linked) {
-      throw new StaffLinkConflictException(`Account is already linked to employee ${linked.code}`);
+      throw new StaffLinkConflictException(`Tài khoản đã gắn với nhân viên ${linked.code}`);
     }
   }
 
@@ -762,7 +766,7 @@ export class EmployeesService {
 
   private validateContact(dto: { phone?: string | null }) {
     if (dto.phone && !isValidVnPhone(dto.phone)) {
-      throw new EmployeeValidationException('Invalid Vietnamese phone number');
+      throw new EmployeeValidationException('Số điện thoại không hợp lệ');
     }
   }
 
@@ -787,9 +791,9 @@ export class EmployeesService {
     if (!dob) return;
     const date = toDateOnly(dob);
     if (date > clinicToday())
-      throw new EmployeeValidationException('Date of birth is in the future');
+      throw new EmployeeValidationException('Ngày sinh không được ở tương lai');
     if (date >= hireDate)
-      throw new EmployeeValidationException('Date of birth is after the hire date');
+      throw new EmployeeValidationException('Ngày sinh không được sau ngày vào làm');
   }
 
   private async log(

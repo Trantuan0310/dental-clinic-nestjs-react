@@ -71,7 +71,7 @@ export async function recordConsent(
     !subject ||
     (channel !== 'ONLINE' && !patientId)
   ) {
-    throw new BadRequestException('Consent requires the channel source and patient identity');
+    throw new BadRequestException('Đồng thuận cần ghi rõ kênh và người xác nhận');
   }
   if (
     !notice?.purpose?.trim() ||

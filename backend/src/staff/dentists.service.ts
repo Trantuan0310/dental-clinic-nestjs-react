@@ -73,14 +73,14 @@ export class DentistsService {
     if (!canUpdateAny) {
       // dentist.update.own: only their own profile, only the self-service fields.
       if (actor.sub !== userId || !actor.permissions.includes('dentist.update.own')) {
-        throw new ForbiddenException('You can only edit your own dentist profile');
+        throw new ForbiddenException('Bạn chỉ sửa được hồ sơ bác sĩ của chính mình');
       }
       const allowed: readonly string[] = DENTIST_SELF_EDITABLE_FIELDS;
       const forbidden = Object.keys(dto).filter(
         k => dto[k as keyof UpdateDentistProfileDto] !== undefined && !allowed.includes(k),
       );
       if (forbidden.length > 0) {
-        throw new ForbiddenException(`Only an admin can change: ${forbidden.join(', ')}`);
+        throw new ForbiddenException(`Chỉ quản trị viên được sửa: ${forbidden.join(', ')}`);
       }
     }
 
@@ -141,7 +141,7 @@ export class DentistsService {
   ) {
     const current = await this.findOrThrow(userId);
     if (current.practiceStatus === dto.status) {
-      throw new EmployeeValidationException(`Dentist is already ${dto.status}`);
+      throw new EmployeeValidationException(`Bác sĩ đã ở trạng thái ${dto.status}`);
     }
     const updated = await this.prisma.$transaction(
       async tx => {
@@ -166,7 +166,7 @@ export class DentistsService {
   async activate(userId: string, actor: JwtPayload, meta: RequestMeta) {
     const current = await this.findOrThrow(userId);
     if (current.practiceStatus === 'ACTIVE') {
-      throw new EmployeeValidationException('Dentist is already ACTIVE');
+      throw new EmployeeValidationException('Bác sĩ đang hoạt động');
     }
     if (
       current.employee.employmentStatus === 'TERMINATED' ||

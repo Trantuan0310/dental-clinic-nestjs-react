@@ -85,7 +85,7 @@ export class RolesService {
     });
 
     if (existing) {
-      throw new ConflictException(`Role with code '${createRoleDto.code}' already exists`);
+      throw new ConflictException(`Đã có vai trò mã '${createRoleDto.code}'`);
     }
 
     const permissions = createRoleDto.permissionCodes?.length
@@ -98,7 +98,7 @@ export class RolesService {
       createRoleDto.permissionCodes &&
       permissions.length !== new Set(createRoleDto.permissionCodes).size
     ) {
-      throw new NotFoundException('One or more permissions not found');
+      throw new NotFoundException('Có quyền không tồn tại');
     }
     // BR-ADM-001: a role can only carry permissions its author holds.
     await assertActorHolds(
@@ -196,7 +196,7 @@ export class RolesService {
           where: { code: { in: newPermissionCodes } },
         });
         if (foundPerms.length !== new Set(newPermissionCodes).size) {
-          throw new NotFoundException('One or more permissions not found');
+          throw new NotFoundException('Có quyền không tồn tại');
         }
       }
       // BR-ADM-001: the actor must hold every code added or taken away.

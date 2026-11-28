@@ -66,7 +66,7 @@ export class PatientsController {
   @Get(':id')
   @RequirePermissions('patient.read')
   @ApiOperation({ summary: 'Patient detail (BR-PT-021 summary masking)' })
-  @ApiResponse({ status: 404, description: 'Patient not found' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy bệnh nhân' })
   async getById(@Param('id', ParseUUIDPipe) id: string, @User() actor: JwtPayload) {
     return { data: await this.patients.getDetailWithSummary(id, actor) };
   }
@@ -75,7 +75,7 @@ export class PatientsController {
   @RequirePermissions('patient.update')
   @ApiOperation({ summary: 'Update patient (BR-PT-009 phone history, BR-PT-016 code locked)' })
   @ApiResponse({ status: 200, description: 'Patient updated' })
-  @ApiResponse({ status: 404, description: 'Patient not found' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy bệnh nhân' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePatientDto,

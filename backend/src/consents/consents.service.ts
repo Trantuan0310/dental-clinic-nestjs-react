@@ -45,9 +45,11 @@ export class ConsentsService {
     await this.assertPatient(patientId, actor);
     const notice = getConsentNotices().desk;
     if (input.purpose !== notice.purpose)
-      throw new BadRequestException('Unknown desk consent purpose');
+      throw new BadRequestException('Mục đích đồng thuận không hợp lệ');
     if (input.version !== notice.version)
-      throw new ConflictException('Consent notice has changed; reload before accepting');
+      throw new ConflictException(
+        'Nội dung đồng thuận vừa thay đổi; tải lại trang trước khi xác nhận',
+      );
     return this.prisma.$transaction(async tx =>
       this.toView(
         await recordConsent(tx, {
@@ -68,7 +70,7 @@ export class ConsentsService {
       const row = await tx.consentRecord.findFirst({
         where: { id: recordId, ...this.patientRecords(patientId) },
       });
-      if (!row) throw new NotFoundException('Consent record not found');
+      if (!row) throw new NotFoundException('Không tìm thấy bản ghi đồng thuận');
       const updated = await tx.consentRecord.updateMany({
         where: { id: row.id, withdrawnAt: null },
         data: { withdrawnAt: new Date(), withdrawnBy: actor.sub },
@@ -157,28 +159,28 @@ export class ConsentsService {
 
   private requirePermission(actor: JwtPayload, permission: string) {
     if (!actor.permissions.includes(permission))
-      throw new ForbiddenException('Missing permission: ' + permission);
+      throw new ForbiddenException('Thiếu quyền: ' + permission);
   }
 
   private requireManage(actor: JwtPayload) {
     this.requirePermission(actor, 'consent.manage');
     if (rowScope(actor, 'patient') !== 'any')
-      throw new ForbiddenException('Consent changes require clinic-wide patient scope');
+      throw new ForbiddenException('Thay đổi đồng thuận cần quyền xem toàn bộ bệnh nhân');
   }
 
   private async assertPatient(patientId: string, actor: JwtPayload) {
     const scope = rowScope(actor, 'patient');
-    if (scope === 'none') throw new ForbiddenException('Patient access denied');
+    if (scope === 'none') throw new ForbiddenException('Bạn không có quyền xem bệnh nhân này');
     if (
       !(await this.prisma.patient.findFirst({
         where: { id: patientId, deletedAt: null },
         select: { id: true },
       }))
     ) {
-      throw new NotFoundException('Patient not found');
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
     }
     if (scope === 'own' && !(await dentistCanReadPatient(this.prisma, patientId, actor.sub))) {
-      throw new NotFoundException('Patient not found');
+      throw new NotFoundException('Không tìm thấy bệnh nhân');
     }
   }
 

@@ -1,3 +1,4 @@
+import { validationExceptionFactory } from '../../src/common/validation-messages';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
@@ -22,6 +23,7 @@ export async function createTestApp(): Promise<INestApplication> {
       transform: true,
       transformOptions: { enableImplicitConversion: true },
       forbidNonWhitelisted: false, // lenient for e2e
+      exceptionFactory: validationExceptionFactory,
     }),
   );
   await app.init();

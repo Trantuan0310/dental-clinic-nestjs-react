@@ -1,13 +1,13 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
 export class PatientNotFoundException extends HttpException {
-  constructor(id?: string) {
+  constructor(_id?: string) {
     super(
       {
         statusCode: HttpStatus.NOT_FOUND,
         error: 'Not Found',
         code: 'PATIENT_NOT_FOUND',
-        message: id ? `Patient ${id} not found` : 'Patient not found',
+        message: 'Không tìm thấy bệnh nhân',
       },
       HttpStatus.NOT_FOUND,
     );

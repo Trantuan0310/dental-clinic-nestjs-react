@@ -41,7 +41,7 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user as JwtPayload;
 
     if (!user || !user.permissions) {
-      throw new ForbiddenException('Access denied: No permissions found');
+      throw new ForbiddenException('Tài khoản chưa được cấp quyền nào');
     }
 
     const hasPermission = requiredPermissions.some(permission =>

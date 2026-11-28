@@ -219,7 +219,7 @@ export class ExpenseService {
       existing.status === ExpenseStatus.APPROVED ||
       existing.status === ExpenseStatus.REIMBURSED
     ) {
-      throw new BadRequestException('Cannot delete APPROVED or REIMBURSED expenses');
+      throw new BadRequestException('Không thể xóa khoản chi đã duyệt hoặc đã hoàn tiền');
     }
 
     const deleted = await this.prisma.expense.update({

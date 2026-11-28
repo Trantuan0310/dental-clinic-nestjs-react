@@ -1,3 +1,4 @@
+import { validationExceptionFactory } from './common/validation-messages';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -48,6 +49,7 @@ async function bootstrap() {
       transformOptions: {
         enableImplicitConversion: true,
       },
+      exceptionFactory: validationExceptionFactory,
     }),
   );
 

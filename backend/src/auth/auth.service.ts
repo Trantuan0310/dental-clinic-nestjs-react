@@ -573,15 +573,15 @@ export class AuthService {
     });
 
     if (!resetToken) {
-      throw new InvalidTokenException('Invalid or expired token');
+      throw new InvalidTokenException('Liên kết không hợp lệ hoặc đã hết hạn');
     }
 
     if (resetToken.usedAt) {
-      throw new InvalidTokenException('Token has already been used');
+      throw new InvalidTokenException('Liên kết này đã được dùng');
     }
 
     if (resetToken.expiresAt < new Date()) {
-      throw new InvalidTokenException('Token has expired');
+      throw new InvalidTokenException('Liên kết đã hết hạn');
     }
 
     const user = resetToken.user;
@@ -701,7 +701,7 @@ export class AuthService {
     const cookieToken = this.extractRefreshTokenFromCookie(request);
 
     if (!cookieToken) {
-      throw new InvalidTokenException('No refresh token provided');
+      throw new InvalidTokenException('Phiên đăng nhập đã hết, vui lòng đăng nhập lại');
     }
 
     const tokenHash = this.hashToken(cookieToken);
@@ -712,11 +712,11 @@ export class AuthService {
     });
 
     if (!refreshToken) {
-      throw new InvalidTokenException('Invalid refresh token');
+      throw new InvalidTokenException('Phiên đăng nhập không hợp lệ, vui lòng đăng nhập lại');
     }
 
     if (refreshToken.expiresAt < new Date()) {
-      throw new InvalidTokenException('Refresh token has expired');
+      throw new InvalidTokenException('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
     }
 
     // Atomically claim this token for rotation — only succeeds while it's

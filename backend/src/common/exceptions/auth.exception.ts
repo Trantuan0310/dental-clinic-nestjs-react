@@ -47,7 +47,7 @@ export class TokenReuseDetectedException extends HttpException {
 }
 
 export class InvalidTokenException extends HttpException {
-  constructor(message: string = 'Invalid or expired token') {
+  constructor(message: string = 'Liên kết không hợp lệ hoặc đã hết hạn') {
     super(
       {
         statusCode: HttpStatus.UNAUTHORIZED,

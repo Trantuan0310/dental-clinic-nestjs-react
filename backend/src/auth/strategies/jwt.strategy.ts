@@ -47,7 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       user.deletedAt !== null ||
       user.status === 'DEACTIVATED'
     ) {
-      throw new UnauthorizedException('User is deactivated or not found');
+      throw new UnauthorizedException('Tài khoản đã bị khóa hoặc không tồn tại');
     }
 
     const permissions = [

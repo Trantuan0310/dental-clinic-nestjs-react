@@ -63,7 +63,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiCookieAuth('refreshToken')
   @ApiResponse({ status: 200, description: 'Token refreshed' })
-  @ApiResponse({ status: 401, description: 'Invalid or expired token' })
+  @ApiResponse({ status: 401, description: 'Liên kết không hợp lệ hoặc đã hết hạn' })
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.refresh(req);
 
@@ -151,7 +151,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with token' })
   @ApiResponse({ status: 200, description: 'Password reset successful' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  @ApiResponse({ status: 400, description: 'Liên kết không hợp lệ hoặc đã hết hạn' })
   @ApiResponse({ status: 422, description: 'Password too weak' })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     await this.authService.resetPassword(resetPasswordDto, null, null);

@@ -86,7 +86,7 @@ export class ShiftRegistrationService {
     // cron), so 00:00–07:00 VN already counts as the new day.
     const today = new Date(clinicDateOnly());
     if (date < today) {
-      throw new ShiftPastDateException('Cannot register shift for past date');
+      throw new ShiftPastDateException('Không thể đăng ký ca cho ngày đã qua');
     }
 
     // Time validation
@@ -184,13 +184,13 @@ export class ShiftRegistrationService {
     const shift = await this.prisma.shiftRegistration.findUnique({ where: { id } });
     if (!shift) throw new PayrollNotFoundException('ShiftRegistration', id);
     if (!canTransitionShift(shift.status, ShiftRegistrationStatus.APPROVED)) {
-      throw new ShiftConflictException(`Cannot approve shift in status ${shift.status}`);
+      throw new ShiftConflictException(`Không thể duyệt ca đang ở trạng thái ${shift.status}`);
     }
 
     // BR-APPT-029: cannot approve past date (clinic day, see create())
     const today = new Date(clinicDateOnly());
     if (shift.date < today) {
-      throw new ShiftPastDateException('Cannot approve shift for past date');
+      throw new ShiftPastDateException('Không thể duyệt ca của ngày đã qua');
     }
     // A1-17: the day may have closed (or time-off been approved) since.
     const dayProblem = await shiftDayProblem(
@@ -240,7 +240,7 @@ export class ShiftRegistrationService {
     const shift = await this.prisma.shiftRegistration.findUnique({ where: { id } });
     if (!shift) throw new PayrollNotFoundException('ShiftRegistration', id);
     if (!canTransitionShift(shift.status, ShiftRegistrationStatus.REJECTED)) {
-      throw new ShiftConflictException(`Cannot reject shift in status ${shift.status}`);
+      throw new ShiftConflictException(`Không thể từ chối ca đang ở trạng thái ${shift.status}`);
     }
 
     // See approve() above — same guarded-write race protection.

@@ -67,19 +67,19 @@ export class AiService {
       where: { id: patientId, deletedAt: null },
       select: { id: true, allergies: true, chronicDiseases: true, currentMedications: true },
     });
-    if (!patient) throw new NotFoundException('Patient not found');
+    if (!patient) throw new NotFoundException('Không tìm thấy bệnh nhân');
 
     // Match PatientsService's roster scope, including when a cached summary exists.
     // A dentist-like role holding patient.update is still row-scoped
     // (rowScope), and a caller with no patient read scope sees nothing.
     const scope = rowScope(actor, 'patient');
-    if (scope === 'none') throw new NotFoundException('Patient not found');
+    if (scope === 'none') throw new NotFoundException('Không tìm thấy bệnh nhân');
     // Same scope as the patient record: treated (non-cancelled encounter)
     // or booked with a live/completed appointment — a first-visit patient
     // on today's list counts; a CANCELLED/NO_SHOW booking does not.
     const scoped =
       scope === 'own' ? await dentistCanReadPatient(this.prisma, patientId, actor.sub) : null;
-    if (scoped === false) throw new NotFoundException('Patient not found');
+    if (scoped === false) throw new NotFoundException('Không tìm thấy bệnh nhân');
 
     // Diagnoses, plans and notes are clinical content (BR-MR-022): only a
     // record reader (encounter.read.any, or encounter.read.own within the
@@ -268,7 +268,7 @@ export class AiService {
   private async callGemini(
     input: SummaryInput,
   ): Promise<{ bullets: SummaryBullet[]; model: string }> {
-    if (!this.genAI) throw new ServiceUnavailableException('Gemini not configured');
+    if (!this.genAI) throw new ServiceUnavailableException('Trợ lý AI chưa được cấu hình');
 
     const model = this.genAI.getGenerativeModel({
       model: this.model,

@@ -124,7 +124,7 @@ describe('Phase one audit regressions', () => {
       db.appointment.count.mockResolvedValue(0);
       const { cache, service } = ai();
       await expect(service.getPatientSummary('p', 3, refresh, dentist)).rejects.toThrow(
-        'Patient not found',
+        'Không tìm thấy bệnh nhân',
       );
       expect(cache.getJSON).not.toHaveBeenCalled();
       expect(db.encounter.findMany).not.toHaveBeenCalled();
