@@ -128,7 +128,7 @@ export const en = {
     payslip: 'Payslip', myCompensation: 'My compensation', myShifts: 'My shifts', schedule: 'Schedule',
     staff: 'Staff', dentists: 'Dentists', services: 'Services', shifts: 'Shifts', myAccount: 'My account', notifications: 'Notifications',
     admin: 'Administration', users: 'Users', roles: 'Roles', homepageImages: 'Homepage images', settings: 'Settings',
-    auditLog: 'Audit log', details: 'Details', id: 'ID',
+    auditLog: 'Audit log', details: 'Details', id: 'ID', edit: 'Edit',
     waitlist: 'Waitlist', rescheduleRequests: 'Reschedule requests', payrollPeriods: 'Payroll periods', consentLedger: 'Consent ledger',
   },
   dialog: { cancel: 'Cancel', confirm: 'Confirm' },

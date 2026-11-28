@@ -79,18 +79,20 @@ export function PayrollListPage() {
     <div className="space-y-4">
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex gap-2">
-          <select
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-100"
+          <Select
+            aria-label={t('uiWorkforce.allStatuses')}
+            className="min-w-[11rem]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">{t('uiWorkforce.allStatuses')}</option>
-            <option value="DRAFT">{t('uiWorkforce.draft')}</option>
-            <option value="REVIEWING">{t('uiWorkforce.reviewing')}</option>
-            <option value="APPROVED">{t('uiWorkforce.approved')}</option>
-            <option value="PAID">{t('uiWorkforce.paid')}</option>
-            <option value="LOCKED">{t('uiWorkforce.locked')}</option>
-          </select>
+            options={[
+              { value: 'all', label: t('uiWorkforce.allStatuses') },
+              { value: 'DRAFT', label: t('uiWorkforce.draft') },
+              { value: 'REVIEWING', label: t('uiWorkforce.reviewing') },
+              { value: 'APPROVED', label: t('uiWorkforce.approved') },
+              { value: 'PAID', label: t('uiWorkforce.paid') },
+              { value: 'LOCKED', label: t('uiWorkforce.locked') },
+            ]}
+          />
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="h-4 w-4" />

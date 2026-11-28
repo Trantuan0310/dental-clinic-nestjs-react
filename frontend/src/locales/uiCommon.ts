@@ -128,7 +128,7 @@ export const vi = {
     payslip: 'Phiếu lương', myCompensation: 'Đãi ngộ của tôi', myShifts: 'Ca của tôi', schedule: 'Lịch làm việc',
     staff: 'Nhân sự', dentists: 'Bác sĩ', services: 'Dịch vụ', shifts: 'Ca làm việc', myAccount: 'Tài khoản của tôi', notifications: 'Thông báo',
     admin: 'Quản trị', users: 'Người dùng', roles: 'Vai trò', homepageImages: 'Ảnh trang chủ', settings: 'Cài đặt',
-    auditLog: 'Nhật ký kiểm toán', details: 'Chi tiết', id: 'ID',
+    auditLog: 'Nhật ký kiểm toán', details: 'Chi tiết', id: 'ID', edit: 'Sửa',
     waitlist: 'Danh sách chờ', rescheduleRequests: 'Yêu cầu dời lịch', payrollPeriods: 'Kỳ lương', consentLedger: 'Sổ đồng thuận',
   },
   dialog: { cancel: 'Hủy', confirm: 'Xác nhận' },

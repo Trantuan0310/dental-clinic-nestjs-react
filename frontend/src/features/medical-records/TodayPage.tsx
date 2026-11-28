@@ -65,9 +65,9 @@ export default function TodayPage() {
       checked_in: 'border-cyan-300 bg-cyan-50 dark:border-cyan-700 dark:bg-cyan-950',
       in_progress: 'border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-950',
       completed: 'border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950',
-      cancelled: 'border-red-300 bg-red-50 opacity-50 dark:border-red-800 dark:bg-red-950',
-      no_show: 'border-red-300 bg-red-50 opacity-50 dark:border-red-800 dark:bg-red-950',
-      left: 'border-orange-300 bg-orange-50 opacity-50 dark:border-orange-700 dark:bg-orange-950',
+      cancelled: 'border-red-300 bg-red-50 opacity-80 dark:border-red-800 dark:bg-red-950',
+      no_show: 'border-red-300 bg-red-50 opacity-80 dark:border-red-800 dark:bg-red-950',
+      left: 'border-orange-300 bg-orange-50 opacity-80 dark:border-orange-700 dark:bg-orange-950',
     };
     return colors[status] || 'border-gray-300 bg-white dark:border-surface-600 dark:bg-surface-800';
   };

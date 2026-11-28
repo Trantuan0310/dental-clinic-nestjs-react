@@ -253,6 +253,33 @@ html.dark .text-primary-600:not([class*='dark:text-']):not(.keep-light, .keep-li
   }
 }
 
+
+/* Plain <select>s (filters written without the Select component) used the
+   browser's own arrow and looked unlike every other dropdown. Same chevron as
+   components/ui/Select, drawn as a background so no markup changes. */
+select:not(.appearance-none):not([multiple]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem;
+  padding-right: 2.25rem;
+}
+html.dark select:not(.appearance-none):not([multiple]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+
+/* Phones: a table inside a horizontal scroller kept shrinking to the screen,
+   wrapping text one word per line (roles, message log). Give it a working
+   width and let the scroller do its job. */
+@media (max-width: 640px) {
+  .overflow-x-auto > table,
+  .overflow-x-auto > div > table {
+    min-width: 36rem;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .payment-confirmation {
     animation: payment-confirmation-in 350ms ease-out both;

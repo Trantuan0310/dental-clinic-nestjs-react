@@ -116,10 +116,12 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
 
       // For dynamic segments (UUIDs, IDs), show abbreviated form
       const segment = segments[i];
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(segment)) {
-        labelKey = isLast ? 'details' : 'id';
-      } else if (/^\d+$/.test(segment)) {
-        labelKey = isLast ? 'details' : 'id';
+      // An id in the middle ("/patients/:id/edit") is the record's own page,
+      // so it reads "Chi tiết" and links there, not a bare "ID".
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(segment) || /^\d+$/.test(segment)) {
+        labelKey = 'details';
+      } else if (segment === 'edit') {
+        labelKey = 'edit';
       } else if (isLast && ROUTE_LABELS[accumulated] === undefined) {
         labelKey = getLabel(accumulated);
       }
