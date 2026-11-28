@@ -756,7 +756,7 @@ export class MedicalRecordsService {
             });
             if (!before || before.deletedAt) {
               throw new EncounterNotClosableException(
-                `Inventory item ${usage.inventoryItemId} not found`,
+                'Không tìm thấy vật tư đã chọn',
               );
             }
 

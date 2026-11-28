@@ -173,7 +173,7 @@ export class DentistsService {
       current.user.status === 'DEACTIVATED'
     ) {
       throw new EmployeeValidationException(
-        'Reinstate the employee and the account before reactivating the dentist',
+        'Hãy kích hoạt lại nhân viên và tài khoản trước khi kích hoạt lại bác sĩ',
       );
     }
     const updated = await this.prisma.dentistProfile.update({

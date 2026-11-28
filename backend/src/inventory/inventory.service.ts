@@ -438,7 +438,7 @@ export class InventoryService {
           after = before.plus(dto.quantity);
         } else {
           throw new StockMovementInvalidException(
-            'StockAdjustmentDto requires either `newQuantity` (absolute) or `quantity` (delta)',
+            'Cần nhập số lượng mới hoặc số lượng thay đổi',
           );
         }
         if (after.isNegative()) {

@@ -600,7 +600,7 @@ export class PayrollService {
     const end = new Date(dto.periodEnd);
 
     if (end <= start) {
-      throw new PayrollValidationException('periodEnd must be after periodStart');
+      throw new PayrollValidationException('Ngày cuối kỳ phải sau ngày đầu kỳ');
     }
 
     // BR-PAY-023: snapshot PayrollConfig at creation time. Future computes for this
@@ -636,7 +636,7 @@ export class PayrollService {
       });
       if (overlap) {
         throw new PeriodOverlapException(
-          `Period [${overlap.periodStart.toISOString().slice(0, 10)}, ${overlap.periodEnd.toISOString().slice(0, 10)}] already exists`,
+          `Trùng ngày với kỳ lương đã có [${overlap.periodStart.toISOString().slice(0, 10)}, ${overlap.periodEnd.toISOString().slice(0, 10)}]`,
         );
       }
       return tx.payrollPeriod.create({
@@ -709,7 +709,7 @@ export class PayrollService {
     if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     if (!isComputable(period.status)) {
       throw new PayrollStateException(
-        `Cannot compute period in status ${period.status}. Only DRAFT or REVIEWING allowed.`,
+        `Chỉ tính lương khi kỳ đang nháp hoặc đang rà soát (hiện: ${period.status})`,
       );
     }
     // An adjustment period holds only differences to a paid period;
@@ -1813,7 +1813,7 @@ export class PayrollService {
     if (!periodPrecheck) throw new PayrollNotFoundException('PayrollPeriod', periodId);
     if (!isAdjustable(periodPrecheck.status)) {
       throw new PayrollStateException(
-        `Cannot add adjustment in status ${periodPrecheck.status}. Only DRAFT/REVIEWING allowed.`,
+        `Chỉ thêm điều chỉnh khi kỳ lương đang nháp hoặc đang rà soát (hiện: ${periodPrecheck.status})`,
       );
     }
 
@@ -1860,7 +1860,7 @@ export class PayrollService {
         if (!period) throw new PayrollNotFoundException('PayrollPeriod', periodId);
         if (!isAdjustable(period.status)) {
           throw new PayrollStateException(
-            `Cannot add adjustment in status ${period.status}. Only DRAFT/REVIEWING allowed.`,
+            `Chỉ thêm điều chỉnh khi kỳ lương đang nháp hoặc đang rà soát (hiện: ${period.status})`,
           );
         }
 
@@ -2051,7 +2051,7 @@ export class PayrollService {
     });
     if (locked.count === 0) {
       throw new PayrollStateException(
-        `Payroll period ${periodId} was changed by someone else — reload and try again`,
+        'Kỳ lương vừa được người khác thay đổi — tải lại rồi thử lại',
       );
     }
     const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
@@ -2160,7 +2160,7 @@ export class PayrollService {
     });
     if (approved.count === 0) {
       throw new PayrollStateException(
-        `Payroll period ${periodId} was changed by someone else — reload and try again`,
+        'Kỳ lương vừa được người khác thay đổi — tải lại rồi thử lại',
       );
     }
     const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
@@ -2207,7 +2207,7 @@ export class PayrollService {
     });
     if (paid.count === 0) {
       throw new PayrollStateException(
-        `Payroll period ${periodId} was changed by someone else — reload and try again`,
+        'Kỳ lương vừa được người khác thay đổi — tải lại rồi thử lại',
       );
     }
     const updated = await this.prisma.payrollPeriod.findUniqueOrThrow({
@@ -2277,7 +2277,7 @@ export class PayrollService {
     // R2-4: defense-in-depth admin check (controller also enforces via @Permissions).
     if (!actorPermissions.includes('payroll.admin')) {
       throw new PayrollForbiddenException(
-        'Only users with payroll.admin permission can open adjustment periods.',
+        'Chỉ người có quyền quản trị lương mới mở được kỳ điều chỉnh',
       );
     }
 
@@ -2299,7 +2299,7 @@ export class PayrollService {
       original.status === PayrollPeriodStatus.LOCKED;
     if (!allowed) {
       throw new PayrollStateException(
-        `Adjustment period can only be opened from PAID or LOCKED, got ${original.status}`,
+        `Chỉ mở được kỳ điều chỉnh từ kỳ đã khóa hoặc đã chi trả (hiện: ${original.status})`,
       );
     }
 
@@ -2467,7 +2467,7 @@ export class PayrollService {
       );
     if (!isViewableByDentist(lineItem.period.status)) {
       throw new PayrollStateException(
-        `Period not yet viewable (status=${lineItem.period.status}). Only APPROVED+ allowed.`,
+        `Phiếu lương chưa được xem (kỳ lương mới ở trạng thái ${lineItem.period.status}, cần đã duyệt)`,
       );
     }
     return lineItem;

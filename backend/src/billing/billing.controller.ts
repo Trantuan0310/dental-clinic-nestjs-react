@@ -250,9 +250,9 @@ export class BillingController {
     const parsedPage = Number(page);
     const parsedSize = Number(pageSize);
     if (!Number.isInteger(parsedPage) || parsedPage < 1 || !Number.isInteger(parsedSize) || parsedSize < 1) {
-      throw new BadRequestException('page and pageSize must be positive integers');
+      throw new BadRequestException('Trang và số dòng mỗi trang phải là số nguyên dương');
     }
-    if (!['all', 'free', 'actionable'].includes(scope)) throw new BadRequestException('scope must be all, free, or actionable');
+    if (!['all', 'free', 'actionable'].includes(scope)) throw new BadRequestException('Phạm vi lọc không hợp lệ');
     return this.billing.listEncountersMissingInvoice(parsedPage, Math.min(parsedSize, 50), summary === 'true', scope as 'all' | 'free' | 'actionable');
   }
 

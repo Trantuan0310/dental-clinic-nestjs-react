@@ -15,7 +15,7 @@ export class HealthController {
       await this.prisma.$queryRaw`SELECT 1`;
       return { status: 'ok' };
     } catch {
-      throw new ServiceUnavailableException('Database unavailable');
+      throw new ServiceUnavailableException('Cơ sở dữ liệu tạm thời không truy cập được');
     }
   }
   @Get()

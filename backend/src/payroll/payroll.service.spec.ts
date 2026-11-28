@@ -216,7 +216,7 @@ describe('PayrollService — period lifecycle (integration)', () => {
       (prisma.payrollPeriod.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
       await expect(service.lockPeriod('period-1', 'user-1')).rejects.toThrow(
-        /changed by someone else/,
+        /vừa được người khác thay đổi/,
       );
       expect(prisma.payrollPeriod.findUniqueOrThrow).not.toHaveBeenCalled();
     });

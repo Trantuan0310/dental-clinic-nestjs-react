@@ -59,7 +59,7 @@ describe('payroll state machine', () => {
   describe('assertTransition', () => {
     it('throws on invalid transition', () => {
       expect(() => assertTransition(PayrollPeriodStatus.LOCKED, PayrollPeriodStatus.DRAFT)).toThrow(
-        /Invalid payroll period transition/,
+        /Không thể chuyển kỳ lương/,
       );
     });
 

@@ -67,7 +67,7 @@ export const assertTransition = (
     // failure instead of "this period was already paid". Mirrors how
     // ShiftRegistrationService reports the same situation.
     throw new PayrollStateException(
-      `Invalid payroll period transition: cannot transition from ${currentStatus} to ${expectedStatus}`,
+      `Không thể chuyển kỳ lương từ ${currentStatus} sang ${expectedStatus}`,
     );
   }
 };

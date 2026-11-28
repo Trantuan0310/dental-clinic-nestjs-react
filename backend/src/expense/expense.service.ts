@@ -137,7 +137,7 @@ export class ExpenseService {
     });
 
     if (!expense || expense.deletedAt) {
-      throw new NotFoundException(`Expense ${id} not found`);
+      throw new NotFoundException('Không tìm thấy khoản chi');
     }
 
     return this.formatExpense(expense);
@@ -170,11 +170,11 @@ export class ExpenseService {
     const existing = await this.prisma.expense.findUnique({ where: { id } });
 
     if (!existing || existing.deletedAt) {
-      throw new NotFoundException(`Expense ${id} not found`);
+      throw new NotFoundException('Không tìm thấy khoản chi');
     }
 
     if (existing.status !== ExpenseStatus.DRAFT) {
-      throw new BadRequestException('Only DRAFT expenses can be updated');
+      throw new BadRequestException('Chỉ sửa được khoản chi đang ở trạng thái nháp');
     }
 
     // Same optimistic-lock guard as transition() — a field edit racing a
@@ -195,7 +195,7 @@ export class ExpenseService {
     });
 
     if (claimed.count === 0) {
-      throw new ConflictException(`Expense ${id} was modified concurrently — reload and try again`);
+      throw new ConflictException('Khoản chi vừa được người khác thay đổi — tải lại rồi thử lại');
     }
 
     const updated = await this.prisma.expense.findUniqueOrThrow({
@@ -212,7 +212,7 @@ export class ExpenseService {
     const existing = await this.prisma.expense.findUnique({ where: { id } });
 
     if (!existing || existing.deletedAt) {
-      throw new NotFoundException(`Expense ${id} not found`);
+      throw new NotFoundException('Không tìm thấy khoản chi');
     }
 
     if (
@@ -265,7 +265,7 @@ export class ExpenseService {
     const existing = await this.prisma.expense.findUnique({ where: { id } });
 
     if (!existing || existing.deletedAt) {
-      throw new NotFoundException(`Expense ${id} not found`);
+      throw new NotFoundException('Không tìm thấy khoản chi');
     }
 
     // This guard used to block ANY transition once status was APPROVED —
@@ -273,7 +273,7 @@ export class ExpenseService {
     // (APPROVED -> REIMBURSED), making markReimbursed() 409 on every call.
     if (!VALID_EXPENSE_TRANSITIONS[existing.status].includes(newStatus)) {
       throw new ConflictException(
-        `Cannot transition expense from ${existing.status} to ${newStatus}`,
+        `Không thể chuyển khoản chi từ ${existing.status} sang ${newStatus}`,
       );
     }
 
@@ -303,7 +303,7 @@ export class ExpenseService {
     });
 
     if (claimed.count === 0) {
-      throw new ConflictException(`Expense ${id} was modified concurrently — reload and try again`);
+      throw new ConflictException('Khoản chi vừa được người khác thay đổi — tải lại rồi thử lại');
     }
 
     const updated = await this.prisma.expense.findUniqueOrThrow({

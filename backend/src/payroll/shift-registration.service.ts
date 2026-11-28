@@ -91,7 +91,7 @@ export class ShiftRegistrationService {
 
     // Time validation
     if (dto.startTime >= dto.endTime) {
-      throw new ShiftPastDateException('endTime must be strictly after startTime');
+      throw new ShiftPastDateException('Giờ kết thúc phải sau giờ bắt đầu');
     }
 
     // A1-17: no shift on a closed day, inside approved time-off, or for an
@@ -126,7 +126,7 @@ export class ShiftRegistrationService {
 
       if (newStart < wsEnd && newEnd > wsStart) {
         throw new ShiftConflictException(
-          `Overlaps with existing working schedule (${this.minutesToHhmm(wsStart)}-${this.minutesToHhmm(wsEnd)})`,
+          `Trùng với lịch làm việc cố định (${this.minutesToHhmm(wsStart)}-${this.minutesToHhmm(wsEnd)})`,
         );
       }
     }
@@ -220,7 +220,7 @@ export class ShiftRegistrationService {
     });
     if (result.count === 0) {
       throw new ShiftConflictException(
-        'Shift registration was changed by someone else — reload and try again',
+        'Đăng ký ca vừa được người khác thay đổi — tải lại rồi thử lại',
       );
     }
     const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
@@ -254,7 +254,7 @@ export class ShiftRegistrationService {
     });
     if (result.count === 0) {
       throw new ShiftConflictException(
-        'Shift registration was changed by someone else — reload and try again',
+        'Đăng ký ca vừa được người khác thay đổi — tải lại rồi thử lại',
       );
     }
     const updated = await this.prisma.shiftRegistration.findUniqueOrThrow({ where: { id } });
@@ -287,7 +287,7 @@ export class ShiftRegistrationService {
 
     if (!canTransitionShift(shift.status, ShiftRegistrationStatus.CANCELLED)) {
       throw new ShiftRegistrationNotCancellableException(
-        `Cannot cancel shift in status ${shift.status}`,
+        `Không thể hủy ca đang ở trạng thái ${shift.status}`,
       );
     }
 
@@ -344,7 +344,7 @@ export class ShiftRegistrationService {
       });
       if (cancelResult.count === 0) {
         throw new ShiftConflictException(
-          'Shift registration was changed by someone else — reload and try again',
+          'Đăng ký ca vừa được người khác thay đổi — tải lại rồi thử lại',
         );
       }
       return tx.shiftRegistration.findUniqueOrThrow({ where: { id } });

@@ -753,7 +753,7 @@ describe('PayrollService — Major fix coverage (M#1, M#2, M#6, M#7, M#8, M#9)',
           'user-no-admin',
           ['payroll.period.adjust'], // missing payroll.admin
         ),
-      ).rejects.toThrow(/payroll\.admin permission/);
+      ).rejects.toThrow(/quyền quản trị lương/);
       // No DB call should have been made.
       expect(prisma.payrollPeriod.findUnique).not.toHaveBeenCalled();
     });

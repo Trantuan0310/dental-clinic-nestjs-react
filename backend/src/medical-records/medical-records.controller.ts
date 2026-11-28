@@ -103,7 +103,7 @@ export class MedicalRecordsController {
   @ApiOperation({ summary: 'Start encounter for appointment (BR-MR-001)' })
   async start(@Body() dto: StartEncounterDto, @User() actor: JwtPayload) {
     if (!dto.appointmentId) {
-      throw new BadRequestException('appointmentId required');
+      throw new BadRequestException('Thiếu lịch hẹn');
     }
     return { data: await this.mr.startEncounterForAppointment(dto.appointmentId, actor) };
   }

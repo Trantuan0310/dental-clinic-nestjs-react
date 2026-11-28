@@ -50,7 +50,7 @@ export class PermissionsGuard implements CanActivate {
 
     if (!hasPermission) {
       throw new ForbiddenException(
-        `Access denied: Missing one of required permissions: ${requiredPermissions.join(', ')}`,
+        `Bạn không có quyền thực hiện thao tác này (cần một trong các quyền: ${requiredPermissions.join(', ')})`,
       );
     }
 

@@ -80,7 +80,7 @@ export async function recordConsent(
     notice.purpose.length > 100 ||
     notice.version.length > 100
   ) {
-    throw new BadRequestException('A versioned consent notice is required');
+    throw new BadRequestException('Cần chọn bản nội dung đồng thuận có phiên bản');
   }
   const idempotencyKey = createHash('sha256')
     .update(JSON.stringify([channel, subject, notice.purpose, notice.version]))

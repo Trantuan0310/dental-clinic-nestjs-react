@@ -212,7 +212,7 @@ export class EmployeesService {
   async update(id: string, dto: UpdateEmployeeDto, actor: JwtPayload, meta: RequestMeta) {
     const current = await this.findOrThrow(id);
     if (current.employmentStatus === 'TERMINATED') {
-      throw new EmployeeValidationException('A terminated employee cannot be edited');
+      throw new EmployeeValidationException('Không thể sửa nhân viên đã nghỉ việc');
     }
     this.validateContact(dto);
     const hireDate = dto.hireDate ? toDateOnly(dto.hireDate) : current.hireDate;
@@ -223,7 +223,7 @@ export class EmployeesService {
     this.validateDob(dob ? dob.toISOString() : null, hireDate);
     if (current.dentistProfile && dto.employeeType && dto.employeeType !== 'DENTIST') {
       throw new EmployeeValidationException(
-        'Employee has a dentist profile; deactivate it before changing the employee type',
+        'Nhân viên đang có hồ sơ bác sĩ; hãy ngừng hồ sơ bác sĩ trước khi đổi loại nhân viên',
       );
     }
 
@@ -461,7 +461,7 @@ export class EmployeesService {
   async linkAccount(id: string, dto: LinkAccountDto, actor: JwtPayload, meta: RequestMeta) {
     const current = await this.findOrThrow(id);
     if (current.employmentStatus === 'TERMINATED') {
-      throw new EmployeeValidationException('A terminated employee cannot get an account');
+      throw new EmployeeValidationException('Nhân viên đã nghỉ việc không thể được cấp tài khoản');
     }
     if (current.userId) {
       throw new StaffLinkConflictException('Nhân viên đã có tài khoản');
@@ -476,7 +476,7 @@ export class EmployeesService {
     let inviteSent: boolean | null = null;
     if (userId) {
       const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
-      if (!user) throw new EmployeeValidationException(`User ${userId} not found`);
+      if (!user) throw new EmployeeValidationException('Không tìm thấy tài khoản đã chọn');
       if (user.deactivatedAt) {
         throw new EmployeeValidationException(
           'Tài khoản này đã bị vô hiệu hóa; kích hoạt lại ở trang Người dùng trước khi gắn',
@@ -663,7 +663,7 @@ export class EmployeesService {
     }
     if (!current.userId) {
       throw new DentistProfileNotAllowedException(
-        'Employee needs a login account before becoming a dentist',
+        'Cần cấp tài khoản đăng nhập trước khi tạo hồ sơ bác sĩ',
       );
     }
     if (current.dentistProfile) {
