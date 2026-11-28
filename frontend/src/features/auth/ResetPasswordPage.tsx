@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { PASSWORD_MAX_LENGTH, passwordProblem } from '@/lib/passwordPolicy';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
 import { authApi } from '@/features/auth/authApi';
@@ -23,7 +24,10 @@ export default function ResetPasswordPage() {
 
   const schema = z
     .object({
-      newPassword: z.string().min(8, t('auth.resetPassword.errors.minLength')),
+      newPassword: z.string().superRefine((v, ctx) => {
+        const problem = passwordProblem(v);
+        if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: t(problem) });
+      }),
       confirmPassword: z.string().min(1, t('auth.resetPassword.errors.required')),
     })
     .refine((v) => v.newPassword === v.confirmPassword, {
@@ -92,8 +96,10 @@ export default function ResetPasswordPage() {
               type="password"
               autoComplete="new-password"
               placeholder="••••••••"
+              maxLength={PASSWORD_MAX_LENGTH}
               {...register('newPassword')}
               error={errors.newPassword?.message}
+              hint={t('uiEntry.account.passwordRulesShort')}
               required
             />
             <Input

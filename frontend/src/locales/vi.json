@@ -139,7 +139,7 @@
       "missingToken": "Liên kết không hợp lệ. Vui lòng dùng lại email được gửi tới bạn.",
       "errors": {
         "required": "Vui lòng nhập mật khẩu",
-        "minLength": "Mật khẩu phải có ít nhất 8 ký tự",
+        "minLength": "Mật khẩu phải có từ 8 đến 128 ký tự",
         "mismatch": "Mật khẩu xác nhận không khớp"
       }
     },

@@ -21,7 +21,7 @@ test('my account page validates a password change', async ({ page }) => {
   await next.fill('short1');
   await again.fill('short1');
   await submit.click();
-  await expect(page.getByText('Mật khẩu phải có ít nhất 8 ký tự')).toBeVisible();
+  await expect(page.getByText('Mật khẩu phải có từ 8 đến 128 ký tự')).toBeVisible();
 
   await next.fill('NewPass2026');
   await again.fill('NewPass2027');

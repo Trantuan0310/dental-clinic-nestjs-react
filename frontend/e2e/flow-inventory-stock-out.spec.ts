@@ -54,18 +54,27 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     const firstRow = adminPage.locator('tbody tr').first();
     await expect(firstRow, 'Inventory list should have at least one seeded item').toBeVisible({ timeout: 15_000 });
     const itemName = (await firstRow.locator('td').nth(1).textContent())?.trim() ?? '';
-    await firstRow.click();
+    // The item page shows only the latest movements, so count them by the
+    // API's total (the page's own request) rather than the rows on screen —
+    // a database with more than one page of history would otherwise never
+    // show a new row.
+    const movementTotal = async (open: () => Promise<unknown>) => {
+      const [res] = await Promise.all([
+        adminPage.waitForResponse((r) => r.url().includes('/inventory/movements') && r.url().includes('inventoryItemId=') && r.ok()),
+        open(),
+      ]);
+      return ((await res.json()) as { total: number }).total;
+    };
+    const movementRowsBefore = await movementTotal(() => firstRow.click());
     await adminPage.waitForLoadState('networkidle');
 
     // `text-4xl` is a one-off class on this page — only the big stock-count
     // <p> in the "Tồn kho" sidebar card uses it (InventoryItemDetailPage.tsx)
-    // — and the movement list's `space-y-2` wrapper is likewise unique to
-    // the "Lịch sử xuất nhập" card body, so both can be targeted directly
-    // without fragile ancestor-climbing from the card's heading text.
+    // — so it can be targeted directly without fragile ancestor-climbing
+    // from the card's heading text.
     const stockNumber = adminPage.locator('p.text-4xl');
     await expect(stockNumber).toBeVisible({ timeout: 10_000 });
     const beforeQty = Number((await stockNumber.textContent())?.trim());
-    const movementRowsBefore = await adminPage.locator('.space-y-2 > div').count();
     expect(Number.isFinite(beforeQty), `Could not parse a numeric stock level for "${itemName}"`).toBe(true);
 
     // ---- Create a minimal checked-in patient + appointment (receptionist) ----
@@ -204,11 +213,10 @@ test('inventory stock decrements when an encounter using it is closed', async ({
     // ---- Re-check the same inventory item ----
     await adminPage.goto('/inventory');
     await adminPage.waitForLoadState('networkidle');
-    await adminPage.locator('tbody tr', { hasText: itemName }).first().click();
+    const movementRowsAfter = await movementTotal(() => adminPage.locator('tbody tr', { hasText: itemName }).first().click());
     await adminPage.waitForLoadState('networkidle');
     await expect(stockNumber).toBeVisible({ timeout: 10_000 });
     const afterQty = Number((await stockNumber.textContent())?.trim());
-    const movementRowsAfter = await adminPage.locator('.space-y-2 > div').count();
 
     console.log(
       `[flow-inventory] item="${itemName}" qty ${beforeQty} -> ${afterQty}, ` +

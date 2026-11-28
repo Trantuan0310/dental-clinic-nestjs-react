@@ -10,15 +10,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { getRoleLabel } from '@/lib/nav';
 import { authApi } from './authApi';
 import { useTranslation } from 'react-i18next';
+import { PASSWORD_MAX_LENGTH, passwordProblem } from '@/lib/passwordPolicy';
 
-// Mirrors AuthService.validatePasswordStrength so most mistakes show before submit.
-function passwordProblem(password: string, email: string): string | null {
-  if (password.length < 8) return 'uiEntry.account.passwordLength';
-  if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) return 'uiEntry.account.passwordLettersNumbers';
-  const local = email.split('@')[0]?.toLowerCase();
-  if (local && password.toLowerCase().includes(local)) return 'uiEntry.account.passwordEmail';
-  return null;
-}
 
 /** "Tài khoản của tôi": who is signed in, and changing the password. */
 export default function MyAccountPage() {
@@ -89,6 +82,7 @@ export default function MyAccountPage() {
               label={t('uiEntry.account.currentPassword')}
               type="password"
               autoComplete="current-password"
+              maxLength={PASSWORD_MAX_LENGTH}
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               required
@@ -97,6 +91,7 @@ export default function MyAccountPage() {
               label={t('uiEntry.account.newPassword')}
               type="password"
               autoComplete="new-password"
+              maxLength={PASSWORD_MAX_LENGTH}
               value={next}
               onChange={(e) => setNext(e.target.value)}
               required

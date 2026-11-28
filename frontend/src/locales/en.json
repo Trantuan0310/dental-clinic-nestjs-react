@@ -139,7 +139,7 @@
       "missingToken": "Invalid link. Please use the link sent to your email again.",
       "errors": {
         "required": "Please enter a password",
-        "minLength": "Password must be at least 8 characters",
+        "minLength": "Password must be 8 to 128 characters",
         "mismatch": "Passwords do not match"
       }
     },

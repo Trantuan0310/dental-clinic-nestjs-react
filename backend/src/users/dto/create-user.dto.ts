@@ -18,11 +18,6 @@ export class CreateUserDto {
   @MaxLength(255)
   email: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  password?: string;
-
   @ApiProperty()
   @IsString()
   fullName: string;

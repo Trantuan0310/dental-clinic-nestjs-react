@@ -1,3 +1,8 @@
+import {
+  PASSWORD_LENGTH_MESSAGE,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from './password-policy';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -801,8 +806,8 @@ export class AuthService {
   }
 
   private validatePasswordStrength(password: string, email: string): void {
-    if (password.length < 8) {
-      throw new PasswordTooWeakException('Mật khẩu phải có ít nhất 8 ký tự');
+    if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+      throw new PasswordTooWeakException(PASSWORD_LENGTH_MESSAGE);
     }
 
     const hasLetter = /[a-zA-Z]/.test(password);
