@@ -107,6 +107,7 @@ function EmployeeForm({
     >
       <Input
         label={t('uiWorkforce.fullName')}
+        placeholder={t('uiCommon.placeholders.fullName')}
         required
         minLength={2}
         maxLength={200}
@@ -142,6 +143,7 @@ function EmployeeForm({
         />
         <Input
           label={t('uiWorkforce.phone')}
+          placeholder={t('uiCommon.placeholders.phone')}
           type="tel"
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -149,6 +151,7 @@ function EmployeeForm({
         />
         <Input
           label={t('uiWorkforce.contactEmail')}
+          placeholder={t('uiCommon.placeholders.email')}
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -157,6 +160,7 @@ function EmployeeForm({
       </div>
       <Input
         label={t('uiWorkforce.address')}
+        placeholder={t('uiCommon.placeholders.address')}
         value={form.address}
         onChange={(e) => setForm({ ...form, address: e.target.value })}
         maxLength={500}
@@ -177,6 +181,7 @@ function EmployeeForm({
       )}
       <Textarea
         label={t('uiWorkforce.notes')}
+        placeholder={t('uiCommon.placeholders.notes')}
         rows={2}
         value={form.notes}
         onChange={(e) => setForm({ ...form, notes: e.target.value })}

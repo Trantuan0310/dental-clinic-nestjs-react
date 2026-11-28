@@ -190,6 +190,7 @@ export function PatientHistoryCard({ patientId }: { patientId: string }) {
             <Textarea
               key={key}
               label={t(`uiClinical.${labelKey}`)}
+              placeholder={t(`uiCommon.placeholders.${labelKey}`)}
               rows={3}
               value={draft[key]}
               onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}

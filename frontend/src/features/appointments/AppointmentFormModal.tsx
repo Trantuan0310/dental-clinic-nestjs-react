@@ -535,6 +535,7 @@ export function AppointmentFormModal({
               <div>
               <label className="label">{t('uiScheduling.gender')}</label>
                 <Select
+                  aria-label={t('uiScheduling.gender')}
                   value={newPatientGender}
                   onChange={(e) => {
                     setNewPatientGender(e.target.value as Gender);
@@ -832,8 +833,9 @@ export function AppointmentFormModal({
             />
 
             <div>
-              <label className="label">{t('uiScheduling.internalNote')}</label>
+              <label className="label" htmlFor="appointment-internal-note">{t('uiScheduling.internalNote')}</label>
               <textarea
+                id="appointment-internal-note"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}

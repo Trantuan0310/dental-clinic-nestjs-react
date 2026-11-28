@@ -5,7 +5,10 @@ import { queryClient } from '@/lib/queryClient';
 import { AppRoutes } from '@/routes/AppRoutes';
 import { AppToaster } from '@/components/ui/Toast';
 import '@/locales';
+import { installNativeValidationMessages } from '@/lib/nativeValidation';
 import '@/index.css';
+
+installNativeValidationMessages();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

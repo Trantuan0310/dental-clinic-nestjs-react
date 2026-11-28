@@ -87,6 +87,7 @@ export function DentistProfileForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <Input
             label={t('uiWorkforce.licenseNumber')}
+            placeholder={t('uiCommon.placeholders.licenseNumber')}
             value={form.licenseNumber}
             onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })}
             maxLength={50}

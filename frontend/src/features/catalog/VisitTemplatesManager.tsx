@@ -72,6 +72,7 @@ function TemplateForm({ template, onClose }: { template?: VisitTemplate; onClose
       {(services.isError || inventory.isError) && <Alert variant="error">{l('error')}</Alert>}
       <Input
         label={l('name')}
+        placeholder={t('uiCommon.placeholders.templateName')}
         required
         minLength={2}
         maxLength={200}
@@ -89,6 +90,7 @@ function TemplateForm({ template, onClose }: { template?: VisitTemplate; onClose
         <Textarea
           key={field}
           label={l(field)}
+          placeholder={t(`uiCommon.placeholders.${field}`)}
           maxLength={field === 'objective' ? 8000 : field === 'plan' ? 4000 : 2000}
           value={form.soap[field]}
           onChange={e => setForm({ ...form, soap: { ...form.soap, [field]: e.target.value } })}

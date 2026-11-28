@@ -111,6 +111,7 @@ function ServiceForm({
       </div>
       <Input
         label={t('uiWorkforce.serviceName')}
+        placeholder={t('uiCommon.placeholders.serviceName')}
         required
         minLength={2}
         maxLength={200}
@@ -184,6 +185,7 @@ function ServiceForm({
       />
       <Textarea
         label={t('uiWorkforce.serviceDescription')}
+        placeholder={t('uiCommon.placeholders.serviceDescription')}
         rows={2}
         value={form.description}
         onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -238,6 +240,7 @@ function CategoryForm({
     >
       <Input
         label={t('uiWorkforce.groupCode')}
+        placeholder={t('uiCommon.placeholders.groupCode')}
         required
         disabled={!!category}
         pattern="[A-Za-z0-9][A-Za-z0-9_\-]{1,29}"
@@ -245,7 +248,7 @@ function CategoryForm({
         value={code}
         onChange={(e) => setCode(e.target.value)}
       />
-      <Input label={t('uiWorkforce.groupName')} required minLength={2} value={name} onChange={(e) => setName(e.target.value)} />
+      <Input label={t('uiWorkforce.groupName')} placeholder={t('uiCommon.placeholders.groupName')} required minLength={2} value={name} onChange={(e) => setName(e.target.value)} />
       <Input
         label={t('uiWorkforce.displayOrder')}
         type="number"
